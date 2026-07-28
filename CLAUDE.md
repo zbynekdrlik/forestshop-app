@@ -12,9 +12,8 @@ Machine **dev1**, `~/devel/forestshop/forestshop_app`. Sibling of
 `forestshop/parovanie_produktov` — a separate repo; never edit one from the
 other's session.
 
-New directory: no code, no git history, no GitHub remote yet. Until that
-changes, the statusline `Issues` counter, Discord run-cards and the `gh`-driven
-watchdog jobs stay silent — they resolve the project from `git remote`.
+Repo: `zbynekdrlik/forestshop-app` (private). Two-branch flow — `main`
+(production) + `dev` (work). No application code yet.
 
 ## Playbook router
 
