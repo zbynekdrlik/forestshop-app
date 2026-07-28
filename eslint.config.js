@@ -13,6 +13,7 @@ export default tseslint.config(
             "apps/api/*.config.ts",
             "apps/api/tests/*.ts",
             "apps/api/tests/helpers/*.ts",
+            "scripts/*.ts",
           ],
           defaultProject: "apps/api/tsconfig.eslint.json",
         },
