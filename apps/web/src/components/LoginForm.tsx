@@ -9,10 +9,14 @@ export function LoginForm({ onLoggedIn }: { onLoggedIn: () => void }): JSX.Eleme
   async function submit(e: SyntheticEvent): Promise<void> {
     e.preventDefault();
     setError("");
-    if (await postLogin(email, password)) {
-      onLoggedIn();
-    } else {
-      setError("Nesprávny e-mail alebo heslo");
+    try {
+      if (await postLogin(email, password)) {
+        onLoggedIn();
+      } else {
+        setError("Nesprávny e-mail alebo heslo");
+      }
+    } catch {
+      setError("Prihlásenie zlyhalo — server neodpovedal");
     }
   }
 
