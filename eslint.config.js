@@ -2,7 +2,7 @@ import js from "@eslint/js";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["**/dist/**", "**/node_modules/**", "**/*.config.js"] },
+  { ignores: ["**/dist/**", "**/dist-types/**", "**/node_modules/**", "**/*.config.js"] },
   js.configs.recommended,
   ...tseslint.configs.strictTypeChecked,
   {
@@ -13,9 +13,16 @@ export default tseslint.config(
             "apps/api/*.config.ts",
             "apps/api/tests/*.ts",
             "apps/api/tests/helpers/*.ts",
+            "apps/web/*.config.ts",
             "scripts/*.ts",
           ],
           defaultProject: "apps/api/tsconfig.eslint.json",
+          // The monorepo now has two packages, each with a handful of standalone
+          // config/test-helper files that fall back to the default project (see
+          // allowDefaultProject above). More packages/tasks will add a few more.
+          // This is the documented escape hatch for that growth, not a workaround
+          // for a bug — https://tseslint.com/allowdefaultproject-glob-too-wide
+          maximumDefaultProjectFileMatchCount_THIS_WILL_SLOW_DOWN_LINTING: 20,
         },
         tsconfigRootDir: import.meta.dirname,
       },

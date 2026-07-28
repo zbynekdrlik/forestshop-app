@@ -8,10 +8,12 @@ node_modules/
 .DS_Store
 *.log
 dist/
+dist-types/
 build/
 .idea/
 .vscode/
 *.tsbuildinfo
 playwright-report/
 test-results/
+.playwright-mcp/
 .superpowers/
