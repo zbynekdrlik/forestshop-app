@@ -12,7 +12,7 @@ Machine **dev1**, `~/devel/forestshop/forestshop_app`. Sibling of
 `forestshop/parovanie_produktov` — a separate repo; never edit one from the
 other's session.
 
-Repo: `zbynekdrlik/forestshop-app` (private). Two-branch flow — `main`
+Repo: `zbynekdrlik/forestshop-app` (public). Two-branch flow — `main`
 (production) + `dev` (work). No application code yet.
 
 ## Playbook router
