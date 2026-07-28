@@ -7,7 +7,17 @@ export default tseslint.config(
   ...tseslint.configs.strictTypeChecked,
   {
     languageOptions: {
-      parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname },
+      parserOptions: {
+        projectService: {
+          allowDefaultProject: [
+            "apps/api/*.config.ts",
+            "apps/api/tests/*.ts",
+            "apps/api/tests/helpers/*.ts",
+          ],
+          defaultProject: "apps/api/tsconfig.eslint.json",
+        },
+        tsconfigRootDir: import.meta.dirname,
+      },
     },
     rules: {
       "@typescript-eslint/no-explicit-any": "error",

@@ -7,13 +7,19 @@
     "test": "vitest run src",
     "test:integration": "vitest run tests",
     "start": "tsx src/index.ts",
-    "build": "tsc -b"
+    "build": "tsc -b",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate"
   },
   "dependencies": {
+    "drizzle-orm": "^0.38.0",
+    "pg": "^8.13.0",
     "zod": "^3.24.0"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
+    "@types/pg": "^8.11.0",
+    "drizzle-kit": "^0.30.0",
     "vitest": "^3.0.0"
   }
 }
