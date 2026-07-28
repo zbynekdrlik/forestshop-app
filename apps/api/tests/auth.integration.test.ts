@@ -1,6 +1,7 @@
 import { afterEach, expect, it } from "vitest";
 import { login, logout, resolveSession } from "../src/modules/auth/service.js";
 import { hashPassword } from "../src/modules/auth/passwords.js";
+import { SESSION_TTL_MS } from "../src/modules/auth/sessions.js";
 import { auditEvents, users } from "../src/db/schema.js";
 import { withCleanDb } from "./helpers/db.js";
 
@@ -49,7 +50,7 @@ it("odmietne nesprávne heslo a nevytvorí reláciu", async () => {
   expect(session).toBeNull();
 });
 
-it("expirovaná relácia neplatí", async () => {
+it("relácia platí tesne pred expiráciou a neplatí presne v okamihu expirácie", async () => {
   const ctx = await withCleanDb();
   close = ctx.close;
   await seed(ctx.db);
@@ -59,8 +60,10 @@ it("expirovaná relácia neplatí", async () => {
     password: HESLO,
     now: NOW,
   });
-  const neskor = new Date(NOW.getTime() + 31 * 24 * 60 * 60 * 1000);
-  await expect(resolveSession(ctx.db, session?.token ?? "", neskor)).resolves.toBeNull();
+  const expiresAt = session?.expiresAt ?? new Date(NOW.getTime() + SESSION_TTL_MS);
+  const tesnePred = new Date(expiresAt.getTime() - 1);
+  await expect(resolveSession(ctx.db, session?.token ?? "", tesnePred)).resolves.not.toBeNull();
+  await expect(resolveSession(ctx.db, session?.token ?? "", expiresAt)).resolves.toBeNull();
 });
 
 it("odhlásenie zruší reláciu", async () => {
@@ -73,7 +76,7 @@ it("odhlásenie zruší reláciu", async () => {
     password: HESLO,
     now: NOW,
   });
-  await logout(ctx.db, session?.token ?? "");
+  await logout(ctx.db, session?.token ?? "", NOW);
   await expect(resolveSession(ctx.db, session?.token ?? "", NOW)).resolves.toBeNull();
 });
 
