@@ -11,3 +11,7 @@ dist/
 build/
 .idea/
 .vscode/
+*.tsbuildinfo
+playwright-report/
+test-results/
+.superpowers/

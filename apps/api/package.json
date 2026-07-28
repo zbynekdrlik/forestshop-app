@@ -1,0 +1,19 @@
+{
+  "name": "@forestshop/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run src",
+    "test:integration": "vitest run tests",
+    "start": "tsx src/index.ts",
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "vitest": "^3.0.0"
+  }
+}

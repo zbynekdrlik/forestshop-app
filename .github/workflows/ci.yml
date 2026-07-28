@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 10 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm test
+
+  version-check:
+    if: github.ref_name != 'main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verzia na dev musí byť vyššia než na main
+        run: |
+          dev_v=$(node -p "require('./package.json').version")
+          git fetch origin main --quiet
+          main_v=$(git show origin/main:package.json 2>/dev/null | node -p "JSON.parse(require('fs').readFileSync(0,'utf8')).version" || echo "0.0.0")
+          echo "dev=$dev_v main=$main_v"
+          if [ "$dev_v" = "$main_v" ] || [ "$(printf '%s\n%s\n' "$main_v" "$dev_v" | sort -V | tail -1)" != "$dev_v" ]; then
+            echo "::error::verzia na dev ($dev_v) musí byť vyššia než na main ($main_v)"
+            exit 1
+          fi
