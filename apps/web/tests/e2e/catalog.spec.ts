@@ -24,7 +24,7 @@ test("manažér vidí stav katalógu, vyhľadá variant a konzola je čistá", a
   await page.getByRole("button", { name: "Prihlásiť sa" }).click();
 
   await expect(page.getByTestId("snapshot")).toContainText("Posledný import: prijatý");
-  await expect(page.getByTestId("counts")).toContainText("Variantov: 35");
+  await expect(page.getByTestId("counts")).toContainText("Variantov v katalógu (vrátane chýbajúcich): 35");
   await expect(page.getByTestId("total")).toHaveText("Nájdených: 35");
 
   await page.getByLabel("Kód alebo názov").fill("40237/3XL");

@@ -64,7 +64,7 @@ function describeIngestOutcome(result: CatalogIngestOutcome): Notice {
     case "accepted":
       return {
         kind: "info",
-        text: `Import bol úspešný — ${String(result.variantCount)} variantov, ${String(result.productCount)} produktov, ${String(result.missingCount)} chýbajúcich, ${String(result.issueCount)} anomálií.`,
+        text: `Import bol úspešný — export obsahoval ${String(result.variantCount)} variantov, ${String(result.productCount)} produktov, ${String(result.missingCount)} novo chýbajúcich, ${String(result.issueCount)} anomálií.`,
       };
     case "rejected":
       return { kind: "warning", text: `Import bol zamietnutý — dôvod: ${result.reason}` };
@@ -196,9 +196,9 @@ export function CatalogPage({
       {statsError !== "" && <p role="alert">{statsError}</p>}
       {stats !== null && (
         <p data-testid="counts">
-          Variantov: {stats.variantCount} · produktov: {stats.productCount} · skladom:{" "}
-          {stats.sellable} · vypredaných: {stats.outOfStock} · ukončených: {stats.discontinued} ·
-          chýbajúcich: {stats.missing}
+          Variantov v katalógu (vrátane chýbajúcich): {stats.variantCount} · produktov:{" "}
+          {stats.productCount} · skladom: {stats.sellable} · vypredaných: {stats.outOfStock} ·
+          ukončených: {stats.discontinued} · chýbajúcich: {stats.missing}
         </p>
       )}
 
