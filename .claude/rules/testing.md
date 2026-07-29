@@ -56,17 +56,26 @@ paths:
   DVOCH súčasne prihlásených používateľov (napr. rôzne role), použi JEDEN
   spoločný `withCleanDb()`/`createApp()` a prihlás sa POD KAŽDÝM
   používateľom zvlášť, nie dva samostatné `boot()` volania.
-- **Lokálne integračné testy sa navzájom rušia, keď bežia SÚBEŽNE proti tej
-  istej zdieľanej lokálnej Postgres inštancii** (viac agentov/terminálov
-  naraz) — `withCleanDb()`'s `TRUNCATE` z jedného procesu môže zasiahnuť
-  rozbehnutý test druhého procesu (`duplicate key value violates unique
-  constraint "users_email_unique"`, `insert or update on table "sessions"
-  violates foreign key constraint`). Nie je to chyba v testovanej appke ani
-  v konkrétnom teste — over si to spustením TOHO ISTÉHO súboru izolovane
-  (žiadny iný `vitest`/`test:integration` beh naraz) skôr, než začneš
-  ladiť. CI je bezpečné (každý job má vlastný efemérny Postgres kontajner).
-  Sledované ako issue #7 (cross-cutting oprava — per-proces izolácia DB —
-  zatiaľ neriešená).
+- **Lokálne integračné testy sa už NErušia, keď bežia SÚBEŽNE proti tej istej
+  zdieľanej lokálnej Postgres inštancii** (viac agentov/terminálov naraz) —
+  vyriešené v issue #7. `withCleanDb()` (`tests/helpers/db.ts`) berie session
+  `pg_advisory_lock` na VLASTNOM, samostatnom `pg.Client` pripojení (zámok je
+  per-backend-session, nie per-pool — zdieľaný `drizzle` pool by ho mohol
+  vziať na jednom pripojení a odomykať volanie poslať na inom) hneď na
+  začiatku, pred TRUNCATE, a uvoľní ho až v `close()` — takže druhý súbežný
+  proces na tej istej `DATABASE_URL` počká, kým prvý celý test doskončí,
+  namiesto toho, aby sa jeho TRUNCATE prekryl s bežiacim testom. Kľúč
+  (`TEST_DB_ISOLATION_LOCK_KEY = 787_878_100`, exportovaný z `db.ts`) je
+  ZÁMERNE odlišný od `INGEST_ADVISORY_LOCK_KEY` (787_878_001,
+  `ingest.ts`) — `pg_advisory_lock`/`pg_advisory_xact_lock` zdieľajú JEDEN
+  priestor kľúčov bez ohľadu na to, ktorá funkcia zámok vzala, takže KAŽDÝ
+  ĎALŠÍ advisory zámok pridaný do tohto repa musí dostať svoj vlastný,
+  nekolidujúci literál — over oba existujúce kľúče, než pridáš tretí. Beh
+  `withCleanDb()` sa preto navzájom SERIALIZUJE (nie paralelizuje) naprieč
+  procesmi — v CI to nič nemení (každý job má vlastný efemérny Postgres
+  kontajner, zámok tam nikdy nesúperí). Regresný test:
+  `tests/db-isolation-lock.integration.test.ts` (deterministicky cez
+  `pg_try_advisory_lock`, nie časovaním skutočnej TRUNCATE-kolízie).
 - **`insertTestSnapshot`'s (`tests/helpers/catalog.ts`) predvolený `fetchedAt`
   je pre KAŽDÉ volanie ten istý literál**, ak ho neprepíšeš — dva snapshoty
   vložené bez explicitného `fetchedAt` majú teda ZHODNÝ čas, a dopyt, ktorý

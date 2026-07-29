@@ -5,6 +5,10 @@ paths:
   - ".nvmrc"
   - ".npmrc"
   - "docker-compose.yml"
+  - "tsconfig.json"
+  - "tsconfig.base.json"
+  - "scripts/tsconfig.json"
+  - "apps/api/tests/tsconfig.json"
 ---
 
 # Local development environment
@@ -27,3 +31,17 @@ paths:
 - Bežný lokálny cyklus: `docker compose up -d postgres` (port 5433) →
   `pnpm --filter @forestshop/api db:migrate` → `pnpm test` /
   `pnpm test:integration` / `pnpm --filter @forestshop/web e2e`.
+- **Vzor pre "priečinok mimo hlavného `tsc -b` composite grafu, ale chcem naň
+  plnú prísnu kontrolu typov"** (najprv `scripts/`, potom `apps/api/tests/`
+  — issue #4): nový SAMOSTATNÝ, nekompozitný tsconfig (`extends` spoločný
+  `tsconfig.base.json`, `composite: false`, `declaration: false`,
+  `noEmit: true`, vlastný `include`), pridaný do root `package.json`'s
+  `typecheck` ako ĎALŠIE `&& tsc -p <priečinok>/tsconfig.json` (NIE ako
+  `references` v `tsc -b`'s grafe). Dôvod: `apps/api/tsconfig.json` má
+  `outDir: dist`, ktorý ide priamo do produkčného Docker image — pridanie
+  ďalšieho priečinka do TOHO istého kompozitného projektu by riskovalo únik
+  (test/skript) súborov do `dist`; samostatný `noEmit` projekt to riziko úplne
+  vylučuje. Pri tomto vzore VŽDY zároveň odstráň dotknuté globy z
+  `eslint.config.js`'s `allowDefaultProject` — necháš ich tam, ESLint padne
+  na "was included by allowDefaultProject but also was found in the project
+  service" (project service si nový reálny `tsconfig.json` nájde sám).
