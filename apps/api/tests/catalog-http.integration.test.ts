@@ -3,9 +3,9 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { afterEach, expect, it } from "vitest";
-import { products, sessions, users, variants } from "../src/db/schema.js";
+import { sessions, users, variants } from "../src/db/schema.js";
 import { createApp } from "../src/http/app.js";
 import { resetLoginRateLimit } from "../src/http/login-rate-limit.js";
 import { SESSION_COOKIE } from "../src/http/middleware.js";
@@ -129,21 +129,18 @@ it("neplatná session (falošný alebo expirovaný token) vráti 401 na všetký
 });
 
 it("vráti prehľad katalógu", async () => {
-  const { app, cookie, db } = await boot({ role: "manazer", seed: true });
-  // `productCount` sa nehardkóduje — produktová identita sa práve mení
-  // (kód pred lomkou → `guid`), takže presný počet produktov z fixtúry sa
-  // môže zmeniť. Derivuje sa z databázy, nie z čísla zapamätaného pri písaní
-  // testu (review task-6-fix-1).
-  const productCountRows = await db
-    .select({ productCount: sql<number>`count(*)`.mapWith(Number) })
-    .from(products);
-  const productCount = productCountRows[0]?.productCount ?? 0;
-
+  const { app, cookie } = await boot({ role: "manazer", seed: true });
+  // `productCount` je teraz pripnutý na hodnotu odvodenú PRIAMO z fixtúry (8
+  // distinct `guid` naprieč jej 35 riadkami — final-wave-b, položka 6):
+  // predtým sa derivoval dopytom nad `products`, teda z tej istej tabuľky,
+  // ktorú endpoint sám číta — čo test robilo tautologickým (zlá implementácia
+  // by prešla rovnako ako dobrá). Identita produktu (`guid`) je teraz
+  // usadená, takže sa dá pinnúť na skutočné číslo.
   const res = await app.request("/api/catalog/stats", { headers: { cookie } });
   expect(res.status).toBe(200);
   expect(await res.json()).toMatchObject({
     variantCount: 35,
-    productCount,
+    productCount: 8,
     sellable: 6,
     outOfStock: 4,
     discontinued: 25,
@@ -259,22 +256,18 @@ it("filter 'missing' vráti len variant so zaznamenaným missingSince, nezávisl
 });
 
 it("vráti detail variantu a 404 pre neznámy kód", async () => {
-  const { app, cookie, db } = await boot({ role: "manazer", seed: true });
+  const { app, cookie } = await boot({ role: "manazer", seed: true });
 
-  // `productKey` sa nehardkóduje — produktová identita sa práve mení (kód
-  // pred lomkou → `guid`), takže sa derivuje priamo z databázy, nie z
-  // hodnoty zapamätanej pri písaní testu (review task-6-fix-1).
-  const [ocakavanyVariant] = await db
-    .select({ productKey: variants.productKey })
-    .from(variants)
-    .where(eq(variants.code, "40237/3XL"));
-  if (ocakavanyVariant === undefined) throw new Error("testovací variant sa v seede nenašiel");
-
+  // `productKey` je teraz pripnutý na `guid` skutočne prítomný vo fixtúre pre
+  // skupinu "40237" (final-wave-b, položka 6) — predtým sa derivoval dopytom
+  // nad `variants`, teda z tej istej tabuľky, ktorú endpoint sám číta, čo
+  // test robilo tautologickým. Identita produktu (`guid`) je teraz usadená,
+  // takže sa dá pinnúť na skutočnú hodnotu z fixtúry.
   const detail = await app.request("/api/catalog/variants/40237%2F3XL", { headers: { cookie } });
   expect(detail.status).toBe(200);
   expect(await detail.json()).toMatchObject({
     code: "40237/3XL",
-    productKey: ocakavanyVariant.productKey,
+    productKey: "0a486205-d9e7-11e0-92ec-e1ef0b66e031",
     sizeLabel: "3XL",
     price: "62.76",
     currency: "EUR",
