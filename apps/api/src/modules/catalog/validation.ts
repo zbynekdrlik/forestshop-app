@@ -84,7 +84,14 @@ export function judgeSnapshot(
     return { verdict: "accepted" };
   }
 
-  const floor = Math.floor(candidate.previousAccepted.rowCount * limits.previousRowRatio);
+  // Podlaha je MAXIMUM z pomerovej hranice a absolútneho minima, nikdy len
+  // pomerová hranica samotná — inak sa dá ratchetnúť smerom k nule cez opakované
+  // prijaté, mierne klesajúce exporty (14014 → 11211 → … → 1 → 0), pretože
+  // floor(1 * 0.8) === 0 a prázdny export by prešiel presne cez túto bránu (#286).
+  const floor = Math.max(
+    Math.floor(candidate.previousAccepted.rowCount * limits.previousRowRatio),
+    limits.absoluteMinRows,
+  );
   if (candidate.rowCount < floor) {
     return {
       verdict: "rejected",
