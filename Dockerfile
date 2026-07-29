@@ -27,6 +27,17 @@ ARG APP_VERSION
 ARG APP_COMMIT
 ENV APP_VERSION=$APP_VERSION APP_COMMIT=$APP_COMMIT
 EXPOSE 3000
+# Raw-snapshot dir (CATALOG_RAW_DIR, docker-compose.prod.yml's `catalog-raw`
+# named volume) must exist and be owned by `node` BEFORE the volume is first
+# attached — a real production incident (F1 final-wave-a, item 8): the first
+# import downloaded 57 MB fine, then failed writing it because Docker
+# initializes a brand-new named volume's content/ownership by COPYING
+# whatever already exists at that path in the image at the moment the
+# container starts. Without this, the mount point is created root-owned, and
+# `USER node` below can never write into it. Creating it here (still root,
+# before dropping privileges) means any FRESH volume on any new host inherits
+# `node:node` ownership from the image, not root.
+RUN mkdir -p /data/catalog-raw && chown -R node:node /data/catalog-raw
 # `node` is the non-root user (uid 1000) baked into the base image. node_modules
 # above stays root-owned (installed before this point), which is fine — pnpm
 # leaves it world-readable, and the app only ever needs to READ it, never write.
