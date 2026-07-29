@@ -17,3 +17,7 @@ playwright-report/
 test-results/
 .playwright-mcp/
 .superpowers/
+# Surové gzipnuté snapshoty katalógového exportu (raw-store.ts) — dôkazový
+# materiál na disku, nikdy v git histórii (54 MB export by ju nafúkol a export
+# URL môže uniknúť v nezredigovanom logu, keby ho niekto omylom pridal).
+/data/
