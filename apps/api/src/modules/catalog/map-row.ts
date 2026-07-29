@@ -3,6 +3,7 @@ import { parseDate, parseDecimalComma } from "./money.js";
 
 export type IngestIssueKind =
   | "empty_code"
+  | "empty_guid"
   | "duplicate_code"
   | "invalid_money"
   | "missing_currency"
@@ -20,7 +21,12 @@ export interface RowIssue {
  *  `lastSeenSnapshotId`/`missingSince` (tie dopĺňa ingest, Task 5). */
 export interface VariantRecord {
   readonly code: string;
+  // Identita produktu — export's `guid`, nikdy prefix `code` pred lomkou
+  // (review task-5-fix-1, CRITICAL #1). FK hodnota do `product.key`.
   readonly productKey: string;
+  // Tá istá hodnota ako `productKey`, uložená AJ priamo na riadku variantu —
+  // pozri komentár pri stĺpci `guid` v `schema-catalog.ts`.
+  readonly guid: string;
   readonly sizeLabel: string | null;
   readonly pairCode: string | null;
   readonly name: string;
@@ -43,9 +49,16 @@ export interface VariantRecord {
 }
 
 /**
- * Identita variantu je `code`. Identita produktu je časť pred prvou lomkou —
- * `pairCode` sa na to použiť NEDÁ, je to len poradové číslo od Shoptetu a pri
- * ~2 700 jednovariantných produktoch je prázdne.
+ * Identita variantu je `code`. Vrátený `productKey` (prefix pred lomkou) UŽ
+ * NIE JE identita produktu (review task-5-fix-1, CRITICAL #1) — na reálnom
+ * exporte sa v oboch smeroch mýlil: zlučoval nesúvisiace produkty pod rovnaký
+ * prefix (282 produktov pod "997") a rozdeľoval jeden produkt naprieč
+ * viacerými prefixmi (napr. "B13/S" a "B23/S", ten istý `guid`). Identita
+ * produktu je export's `guid` — pozri `mapRow` nižšie. Táto funkcia teraz
+ * slúži len na odvodenie `sizeLabel` a na detekciu kódu začínajúceho lomkou
+ * (čo je stále anomália samotného kódu). `pairCode` sa na identitu použiť
+ * NEDÁ, je to len poradové číslo od Shoptetu a pri ~2 700 jednovariantných
+ * produktoch je prázdne.
  */
 export function splitCode(code: string): { readonly productKey: string; readonly sizeLabel: string | null } {
   const slash = code.indexOf("/");
@@ -87,13 +100,21 @@ export function mapRow(row: Readonly<Record<string, string>>): {
     return { record: null, issues };
   }
 
-  const { productKey, sizeLabel } = splitCode(code);
-  if (productKey === "") {
-    // Kód začínajúci lomkou (napr. "/M") by inak vyrobil produkt s prázdnym
-    // textovým primary key — databáza prázdny reťazec príjme, takže by sa pod
-    // ním ticho zoskupili nesúvisiace varianty. Zaobchádzame s tým rovnako ako
-    // s úplne prázdnym kódom vyššie.
+  const { productKey: codePrefix, sizeLabel } = splitCode(code);
+  if (codePrefix === "") {
+    // Kód začínajúci lomkou (napr. "/M") — anomália samotného kódu, nezávisle
+    // od toho, že identita produktu je dnes `guid`, nie tento prefix.
+    // Zaobchádzame s tým rovnako ako s úplne prázdnym kódom vyššie.
     issues.push({ kind: "empty_code", code, detail: { name } });
+    return { record: null, issues };
+  }
+
+  // Identita produktu je export's `guid` (review task-5-fix-1, CRITICAL #1) —
+  // nemá fallback na `code`/`codePrefix`, presne ako prázdny `code` vyššie:
+  // vymyslený náhradný kľúč by ticho zoskupil nesúvisiace varianty pod ním.
+  const guid = (row["guid"] ?? "").trim();
+  if (guid === "") {
+    issues.push({ kind: "empty_guid", code, detail: { name } });
     return { record: null, issues };
   }
 
@@ -152,7 +173,8 @@ export function mapRow(row: Readonly<Record<string, string>>): {
   return {
     record: {
       code,
-      productKey,
+      productKey: guid,
+      guid,
       sizeLabel,
       pairCode: textOrNull((row["pairCode"] ?? "").trim()),
       name,

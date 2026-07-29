@@ -19,6 +19,7 @@ export const snapshotVerdict = pgEnum("snapshot_verdict", ["accepted", "rejected
 export const variantState = pgEnum("variant_state", ["sellable", "out_of_stock", "discontinued"]);
 export const ingestIssueKind = pgEnum("ingest_issue_kind", [
   "empty_code",
+  "empty_guid",
   "duplicate_code",
   "invalid_money",
   "missing_currency",
@@ -61,6 +62,15 @@ export const catalogSnapshots = pgTable(
   ],
 );
 
+// Identita produktu je export's `guid` (task-5-fix-1, review CRITICAL #1) —
+// stabilný identifikátor zo Shoptetu, jeden na produkt, nesený na každom riadku.
+// `key` PRIMÁRNE nesie práve `guid`. Predtým to bola časť `code` pred prvou
+// lomkou, čo bolo v oboch smeroch chybné: zlučovalo úplne nesúvisiace produkty
+// zdieľajúce ten istý prefix (na reálnom exporte 282 produktov pod prefixom
+// "997") a zároveň ticho rozdeľovalo jeden produkt naprieč viacerými kľúčmi
+// (napr. "B13/S" a "B23/S", ten istý `guid`, iný prefix). `pairCode` sa na
+// identitu použiť nedá — je to len poradové číslo od Shoptetu, prideľované
+// nanovo pri každom exporte.
 export const products = pgTable(
   "product",
   {
@@ -83,9 +93,17 @@ export const variants = pgTable(
     // číslo od Shoptetu a pri ~2 700 jednovariantných produktoch je prázdne, takže
     // sa ukladá ako pozorovaná vlastnosť, nikdy ako kľúč.
     code: text("code").primaryKey(),
+    // FK na `product.key`, teda na `guid` — pozri komentár pri `products` vyššie.
     productKey: text("product_key")
       .notNull()
       .references(() => products.key, { onDelete: "cascade" }),
+    // Ten istý `guid` ako `productKey`, ale uložený PRIAMO na riadku variantu,
+    // nezávisle od FK. Surový identifikátor zo zdroja sa nedá spätne
+    // zrekonštruovať z ničoho iného v databáze — ak by sa niekedy menil model
+    // zoskupovania produktov (to, na čo `productKey` odkazuje), tento stĺpec
+    // zostáva nedotknutým dôkazom pôvodnej hodnoty z exportu, rovnaká filozofia
+    // ako gzipnuté surové bajty v `raw-store.ts`.
+    guid: text("guid").notNull(),
     sizeLabel: text("size_label"),
     pairCode: text("pair_code"),
     name: text("name").notNull(),
@@ -114,6 +132,7 @@ export const variants = pgTable(
   },
   (t) => [
     index("variant_product_idx").on(t.productKey),
+    index("variant_guid_idx").on(t.guid),
     index("variant_state_idx").on(t.state),
     index("variant_name_idx").on(t.name),
     // „Suma bez meny neexistuje" (návrh, kap. 4) vynútené databázou, nie kódom.

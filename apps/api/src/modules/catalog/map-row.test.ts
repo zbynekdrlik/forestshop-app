@@ -18,6 +18,7 @@ function fixtureRow(code: string): Readonly<Record<string, string>> {
 function bareRow(overrides: Record<string, string> = {}): Record<string, string> {
   return {
     code: "TEST/1",
+    guid: "guid-test-0001",
     pairCode: "",
     name: "Testovací produkt",
     supplier: "",
@@ -61,7 +62,8 @@ describe("mapRow nad reálnymi riadkami fixtúry", () => {
     expect(issues).toEqual([]);
     expect(record).toMatchObject({
       code: "40237/3XL",
-      productKey: "40237",
+      productKey: "0a486205-d9e7-11e0-92ec-e1ef0b66e031",
+      guid: "0a486205-d9e7-11e0-92ec-e1ef0b66e031",
       sizeLabel: "3XL",
       pairCode: "1",
       name: "Nohavice FOREST 1003",
@@ -85,7 +87,8 @@ describe("mapRow nad reálnymi riadkami fixtúry", () => {
     const { record } = mapRow(fixtureRow("40287"));
     expect(record).toMatchObject({
       code: "40287",
-      productKey: "40287",
+      productKey: "d63e07c9-3c48-11e6-8a3b-0cc47a6c92bc",
+      guid: "d63e07c9-3c48-11e6-8a3b-0cc47a6c92bc",
       sizeLabel: null,
       pairCode: null,
       name: "Čiapka Polar FOREST",
@@ -94,6 +97,29 @@ describe("mapRow nad reálnymi riadkami fixtúry", () => {
       stock: -111,
       state: "sellable",
     });
+  });
+
+  // CRITICAL (task-5-fix-1): identita produktu je `guid`, nie prefix `code` pred
+  // lomkou — `splitCode` (prefix) sa na reálnom exporte v oboch smeroch mýlil:
+  // zlučoval nesúvisiace produkty pod rovnaký prefix a rozdeľoval jeden produkt
+  // naprieč viacerými prefixmi. `productKey` (a nový stĺpec `guid`) musia byť
+  // odvodené z `row["guid"]`, nikdy z `code`.
+  it("productKey je guid z riadku, nie prefix code pred lomkou — aj keď sa prefixy zhodujú", () => {
+    const a = mapRow(bareRow({ code: "AAA/1", guid: "guid-shared" })).record;
+    const b = mapRow(bareRow({ code: "BBB/2", guid: "guid-shared" })).record;
+    // Rôzne prefixy, ten istý guid → ten istý productKey (predtým by sa toto
+    // ticho rozdelilo na dva produkty, čo je presne opravovaný under-merge).
+    expect(a?.productKey).toBe("guid-shared");
+    expect(b?.productKey).toBe("guid-shared");
+    expect(a?.productKey).toBe(b?.productKey);
+  });
+
+  it("rovnaký prefix code, iný guid → iný productKey (predtým by sa ticho zlúčili)", () => {
+    const a = mapRow(bareRow({ code: "997/1", guid: "guid-a" })).record;
+    const b = mapRow(bareRow({ code: "997/2", guid: "guid-b" })).record;
+    expect(a?.productKey).toBe("guid-a");
+    expect(b?.productKey).toBe("guid-b");
+    expect(a?.productKey).not.toBe(b?.productKey);
   });
 
   it("zmapuje akciovú cenu aj s dátumom od", () => {
@@ -132,6 +158,14 @@ describe("mapRow — anomálie", () => {
     const { record, issues } = mapRow(bareRow({ code: "/M" }));
     expect(record).toBeNull();
     expect(issues).toEqual([{ kind: "empty_code", code: "/M", detail: { name: "Testovací produkt" } }]);
+  });
+
+  // CRITICAL (task-5-fix-1): `guid` je identita produktu, takže prázdny `guid`
+  // sa zaobchádza rovnako ako prázdny `code` — žiadny fallback, žiadny záznam.
+  it("prázdny guid nevyrobí záznam, ale vyrobí problém", () => {
+    const { record, issues } = mapRow(bareRow({ guid: "" }));
+    expect(record).toBeNull();
+    expect(issues).toEqual([{ kind: "empty_guid", code: "TEST/1", detail: { name: "Testovací produkt" } }]);
   });
 
   it("nečitateľná suma sa zahodí a zapíše sa problém", () => {

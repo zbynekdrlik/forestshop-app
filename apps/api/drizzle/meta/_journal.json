@@ -22,6 +22,13 @@
       "when": 1785320568505,
       "tag": "0002_exotic_nebula",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1785327773365,
+      "tag": "0003_glossy_thaddeus_ross",
+      "breakpoints": true
     }
   ]
 }
