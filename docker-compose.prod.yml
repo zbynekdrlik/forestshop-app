@@ -34,6 +34,17 @@ services:
       DATABASE_URL: postgres://forestshop:${POSTGRES_PASSWORD}@postgres:5432/forestshop
       PORT: 3000
       SESSION_COOKIE_SECURE: "true"
+      # Zámerne BEZ `:?` (na rozdiel od POSTGRES_PASSWORD/CF_TUNNEL_TOKEN nižšie) —
+      # `env.ts` (F0) má SHOPTET_EXPORT_URL ako `.optional()`, appka bez neho beží,
+      # len ručný import vráti 503. Bare kľúč preberá hodnotu z `/srv/forestshop/.env`,
+      # KEĎ tam je; keď nie je (dnešný stav dev2), premenná sa v kontajneri vôbec
+      # nenastaví — nie prázdny reťazec, ktorý by `z.string().url()` odmietol a appku
+      # zhodil pri štarte. Povinný `:?` by tu pri každom deployi na dev2 padal, kým
+      # operátor tajomstvo nedoplní (issue #8).
+      SHOPTET_EXPORT_URL:
+      CATALOG_RAW_DIR: /data/catalog-raw
+    volumes:
+      - catalog-raw:/data/catalog-raw
     ports:
       - "127.0.0.1:8901:3000"
     logging: *default-logging
@@ -47,3 +58,4 @@ services:
 
 volumes:
   pgdata:
+  catalog-raw:
