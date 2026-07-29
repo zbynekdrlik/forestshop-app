@@ -1,5 +1,15 @@
 import { sql } from "drizzle-orm";
-import { check, index, integer, pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import {
+  check,
+  index,
+  integer,
+  pgEnum,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from "drizzle-orm/pg-core";
 import { variants } from "./schema-catalog.js";
 
 // Stav riadku objednávky ako automat (návrh, kap. 4): objednané → čaká sa →
@@ -60,5 +70,11 @@ export const orderLines = pgTable(
     index("order_line_variant_idx").on(t.variantCode),
     index("order_line_state_idx").on(t.state),
     check("order_line_quantity_positive_ck", sql`${t.quantity} > 0`),
+    // Importer (#21) potrebuje idempotentný upsert po dvojici objednávka+variant
+    // — Shoptet niekedy vráti ten istý produkt v tej istej objednávke na dvoch
+    // riadkoch (rozdelené množstvo), ktoré importer sčíta do JEDNÉHO riadku.
+    // Bez tohto indexu by `onConflictDoUpdate` nemal na čom rozpoznať re-import
+    // toho istého riadku a duplicitne by vkladal nové UUID pri každom behu.
+    uniqueIndex("order_line_order_variant_uq").on(t.orderId, t.variantCode),
   ],
 );

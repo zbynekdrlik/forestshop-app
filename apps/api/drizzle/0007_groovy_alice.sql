@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "order_line_order_variant_uq" ON "order_line" USING btree ("order_id","variant_code");
