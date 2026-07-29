@@ -125,8 +125,11 @@ paths:
   len tenký alias.** Kanonická implementácia žije v `apps/api/src/cli/
   catalog-prune-raw.ts` (súčasť `apps/api`'s vlastného `tsc -b`), skompiluje sa
   do `apps/api/dist/cli/catalog-prune-raw.js` a BEŽÍ V PRODUKCII (`.claude/rules/
-  deploy.md`) — `docker compose exec app node apps/api/dist/cli/
-  catalog-prune-raw.js`. Dôvod: dev2 má `scripts/` len ako `rsync`-nutú kópiu BEZ
+  deploy.md`) — `docker compose -f docker-compose.prod.yml exec app node
+  apps/api/dist/cli/catalog-prune-raw.js` (bez `-f docker-compose.prod.yml` by
+  compose na dev2 siahol po vývojovom `docker-compose.yml`). Overené naživo na
+  dev2 2026-07-29 po nasadení v0.2.0: `Zmazaných surových súborov: 0 (staršie
+  než 30 dní).` + `{"removed":0}`. Dôvod: dev2 má `scripts/` len ako `rsync`-nutú kópiu BEZ
   `node_modules` (final-wave-b, položka 2), takže `tsx scripts/catalog-prune-raw.ts`
   tam nemá ako bežať — bez skompilovanej verzie v obraze retencia v produkcii
   nemala žiadny spôsob spustenia a `catalog-raw` zväzok rástol donekonečna.
