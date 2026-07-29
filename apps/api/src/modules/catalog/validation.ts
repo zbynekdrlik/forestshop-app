@@ -105,16 +105,17 @@ function formatThousands(n: number): string {
 
 /**
  * Slovak count agreement for "poškodený riadok": 1 → singular
- * (`poškodený riadok`), 2–4 → paucal (`poškodené riadky`), everything else
- * (0, 5+, and the 11–14 teens within any hundred, which take the plural form
- * even though they end in 1–4) → plural genitive (`poškodených riadkov`).
+ * (`poškodený riadok`), the LITERAL counts 2, 3, 4 → paucal (`poškodené
+ * riadky`), everything else (0, 5+, and every count ≥ 10 including 22, 23,
+ * 24, 32, 102 …) → plural genitive (`poškodených riadkov`). Unlike
+ * Russian/Polish, Slovak does NOT re-derive the form from the last one or two
+ * digits — the paucal applies only to the number itself being 2, 3 or 4, so
+ * 22 takes the genitive plural exactly like 21 or 25.
  */
 function formatMalformedRows(n: number): string {
   const count = Math.trunc(n);
-  const mod100 = Math.abs(count) % 100;
-  const mod10 = Math.abs(count) % 10;
   if (count === 1) return "1 poškodený riadok";
-  if (mod10 >= 2 && mod10 <= 4 && !(mod100 >= 12 && mod100 <= 14)) {
+  if (count === 2 || count === 3 || count === 4) {
     return `${String(count)} poškodené riadky`;
   }
   return `${String(count)} poškodených riadkov`;

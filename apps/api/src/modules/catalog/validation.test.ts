@@ -125,12 +125,16 @@ describe("judgeSnapshot", () => {
   });
 
   // "1" ako holý podreťazec by prešiel aj nesprávnym tvarom ("1 poškodených
-  // riadkov"), takže sa pripína celá fráza — 1 = jednotné číslo, 2-4 = malé
-  // množstvo, 5+ = množné (genitív).
+  // riadkov"), takže sa pripína celá fráza — 1 = jednotné číslo, LITERÁLNE 2-4 =
+  // malé množstvo (paucal), všetko ostatné vrátane 22/23/24/32/102 = množné
+  // (genitív) — slovenčina paucal neopakuje podľa poslednej číslice ako
+  // ruština/poľština, takže 22 musí dopadnúť rovnako ako 21 alebo 25.
   it.each([
     [1, "1 poškodený riadok"],
+    [2, "2 poškodené riadky"],
     [3, "3 poškodené riadky"],
     [5, "5 poškodených riadkov"],
+    [22, "22 poškodených riadkov"],
   ] as const)(
     "skloňuje počet poškodených riadkov v slovenčine: %i → %s",
     (malformedRowCount, expectedPhrase) => {
