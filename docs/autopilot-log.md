@@ -98,3 +98,66 @@ RED→GREEN test names, key decisions, and the shared PR.
   errors).
 - Two per-ticket Discord cards fired (`notify --run-card`, one per issue,
   both confirmed delivered).
+
+## 2026-07-29 — #10 (self-service change-password screen + endpoint)
+
+- Version bumped `55e2a97`→`4c86e4a` (0.3.0-dev.5 → 0.3.0-dev.6) as the first
+  commit, before any feature code.
+- Design posted BEFORE the implementation commit: root cause (only
+  `modules/auth/service.ts`'s `login`/`logout`/`resolveSession` existed —
+  no way to change an existing password other than
+  `scripts/create-user.ts` or a manual DB `UPDATE` on dev2), chosen approach
+  (`changePassword()` reusing `hashPassword`/`verifyPassword`/`hashToken`/
+  `record()`, everything inside one `db.transaction` — same pattern as
+  `catalog/ingest.ts`/`scheduler.ts`; new `POST /api/me/password` kept
+  directly in `http/app.ts` next to `/api/login`/`/api/logout`/`/api/me`
+  rather than a new routes file; new `MIN_NEW_PASSWORD_LENGTH = 8` in
+  `passwords.ts`, the first real password-length floor in the repo),
+  rejected alternatives (a separate `http/password-routes.ts` — unjustified
+  for one endpoint this size; sending the new password twice to the
+  server — match-checking is a pure client-side concern).
+  Posted to #10 (`issuecomment-5121796661`).
+- Single feature commit `b740502` (`Closes #10`): `modules/auth/
+  change-password.ts`, `POST /api/me/password`, web `passwordApi.ts` +
+  `ChangePasswordForm.tsx` wired into `App.tsx` for every logged-in role,
+  full test coverage (service-level `change-password.integration.test.ts`,
+  HTTP-level additions to `http.integration.test.ts`, web unit tests, and a
+  real two-browser-context Playwright e2e case appended to `login.spec.ts`).
+  No RED/GREEN split — new capability, not a regression fix
+  (`tdd-workflow.md`'s "features: tests mandatory, order flexible" path).
+- `record()` (`modules/audit/service.ts`) widened from taking the full
+  `Database` type to `Pick<Database, "insert">`, so it can be called with a
+  `db.transaction()` callback's `tx` too (a `PgTransaction` lacks
+  `Database`'s own `$client` property) — pure widening, verified every
+  existing caller (`catalog-routes.ts`, `auth/service.ts`) still passes the
+  full `Database`, which structurally satisfies the narrower type.
+- **Deliberate HTTP-status choice:** "wrong old password" returns 200
+  `{ok:false, error}`, not a 4xx — same family as `/api/catalog/ingest`'s
+  200 `{status:"busy"}` for a non-error domain outcome. A 4xx would make
+  Chromium log a "Failed to load resource" console entry, which would have
+  broken `testing.md`'s hard rule against widening the single documented
+  e2e console exception (unauthenticated `/api/me` 401) to any more
+  paths/codes. Discovered by writing the two-browser-context e2e test with
+  console monitoring FIRST at 400 and watching it fail on exactly this —
+  switched to 200 and updated the HTTP integration test + web unit test to
+  match.
+- Independent code-review subagent dispatched (`superpowers:
+  requesting-code-review`): 0 Critical/Important; one Minor accepted as-is
+  (`MIN_NEW_PASSWORD_LENGTH = 8` duplicated between `passwords.ts` and
+  `ChangePasswordForm.tsx` — no shared package exists between `apps/api`/
+  `apps/web` yet, and removing the client-side pre-check would reopen the
+  same console-noise problem the 200-status design avoided).
+- Shared PR: **#18** (`dev` → `main`), merged `6cd0f7bb`. CI: all 5 jobs
+  green (check, integration, e2e, docker-build, version-check) on both the
+  push-triggered and PR-triggered runs.
+- Deployed + verified on https://forestshop-novy.newlevel.media
+  (v0.3.0-dev.6 in DOM footer): wrong-old-password rejected with the
+  expected message and zero console errors/warnings; successful change
+  accepted using the LIVE owner account (`vychod@varos.sk`); logged out and
+  confirmed the OLD password (`sokol-bystrina-jaseb-898`) now fails login
+  while the temporary new one succeeds; changed the password back to
+  `sokol-bystrina-jaseb-898` and confirmed via a final logout+login that it
+  is restored exactly. Console during the whole live check showed only the
+  already-documented `/api/me`/`/api/login` 401 patterns (expected,
+  deliberate test actions), no genuine errors.
+- Per-ticket Discord card fired (`notify --run-card`, confirmed delivered).

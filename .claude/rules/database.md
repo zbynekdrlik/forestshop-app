@@ -50,3 +50,15 @@ paths:
   prechádza bez varovania). Kým sa obe knižnice nezarovnajú na rovnakú
   generáciu, každú vygenerovanú `.sql` migráciu si pred commitom prečítaj —
   neber jej obsah len na základe toho, že `db:generate` prebehlo bez chyby.
+- **Funkcia, ktorá má bežať AJ na top-level `db`, AJ vnútri `db.transaction(async (tx) => ...)`,
+  nesmie typovať svoj parameter ako `Database`** (`db/client.ts`'s
+  `NodePgDatabase<schema> & {$client: Pool}`) — `tx` je `PgTransaction`,
+  ktorý zdieľa spoločného predka (`PgDatabase`) a má rovnaký `.insert()`/
+  `.select()`/`.update()`/`.delete()` tvar, ale CHÝBA mu `$client`, takže
+  `tsc` (s `exactOptionalPropertyTypes: true`) odmietne `tx` ako argument
+  typu `Database`. Fix: zúž parameter na `Pick<Database, "insert">` (alebo
+  ktorákoľvek metóda skutočne potrebná) namiesto celého `Database` — to je
+  presne to, čo `modules/audit/service.ts`'s `record()` robí (`AuditExecutor`
+  typ), aby ho bolo možné volať `record(tx, ...)` vnútri transakcie
+  (#10, `changePassword`). Rovnaký test pri KAŽDEJ ďalšej zdieľanej funkcii:
+  potrebuje volajúci naozaj CELÝ `Database`, alebo len pár metód?
