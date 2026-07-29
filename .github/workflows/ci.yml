@@ -49,6 +49,32 @@ jobs:
       - run: pnpm --filter @forestshop/api db:migrate
       - run: pnpm --filter @forestshop/api test:integration
 
+  e2e:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: forestshop
+          POSTGRES_PASSWORD: forestshop
+          POSTGRES_DB: forestshop
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U forestshop" --health-interval 5s
+          --health-timeout 3s --health-retries 20
+    env:
+      DATABASE_URL: postgres://forestshop:forestshop@127.0.0.1:5432/forestshop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 10 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @forestshop/api db:migrate
+      - run: pnpm --filter @forestshop/web exec playwright install --with-deps chromium
+      - run: pnpm --filter @forestshop/web e2e
+
   version-check:
     if: github.ref_name != 'main'
     runs-on: ubuntu-latest
