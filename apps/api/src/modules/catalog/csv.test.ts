@@ -87,7 +87,7 @@ describe("parseShoptetCsv nad reálnou fixtúrou", () => {
     expect(first?.["code"]).toBe("40237/3XL");
     expect(first?.["pairCode"]).toBe("1");
     expect(first?.["name"]).toBe("Nohavice FOREST 1003");
-    expect(first?.["price"]).toBe("67,00");
+    expect(first?.["price"]).toBe("62,76");
     expect(first?.["currency"]).toBe("EUR");
     expect(first?.["stock"]).toBe("-11");
     expect(first?.["availabilityInStock"]).toBe("Predaj výrobku skončil");

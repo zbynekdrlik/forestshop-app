@@ -127,7 +127,7 @@ it("prijme fixtúru a naplní produkty aj varianty", async () => {
     productKey: "0a486205-d9e7-11e0-92ec-e1ef0b66e031",
     guid: "0a486205-d9e7-11e0-92ec-e1ef0b66e031",
     sizeLabel: "3XL",
-    price: "67.00",
+    price: "62.76",
     currency: "EUR",
     stock: -11,
     state: "discontinued",

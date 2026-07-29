@@ -69,9 +69,9 @@ describe("mapRow nad reálnymi riadkami fixtúry", () => {
       name: "Nohavice FOREST 1003",
       supplier: null,
       currency: "EUR",
-      price: "67.00",
-      standardPrice: "71.00",
-      purchasePrice: "32.68",
+      price: "62.76",
+      standardPrice: "66.08",
+      purchasePrice: "34.27",
       actionPrice: null,
       actionFrom: null,
       percentVat: "23",
@@ -92,7 +92,7 @@ describe("mapRow nad reálnymi riadkami fixtúry", () => {
       sizeLabel: null,
       pairCode: null,
       name: "Čiapka Polar FOREST",
-      price: "9.00",
+      price: "14.62",
       currency: "EUR",
       stock: -111,
       state: "sellable",
@@ -126,7 +126,7 @@ describe("mapRow nad reálnymi riadkami fixtúry", () => {
     const { record } = mapRow(fixtureRow("40269/3XL"));
     expect(record).toMatchObject({
       code: "40269/3XL",
-      actionPrice: "48.00",
+      actionPrice: "46.99",
       actionFrom: "2021-03-14",
       actionUntil: null,
     });
@@ -143,7 +143,7 @@ describe("mapRow nad reálnymi riadkami fixtúry", () => {
   });
 
   it("zapíše dodávateľa, keď ho export uvádza", () => {
-    expect(mapRow(fixtureRow("4859/46")).record?.supplier).toBe("BETALOV");
+    expect(mapRow(fixtureRow("4859/46")).record?.supplier).toBe("DODAVATEL-TEST-1");
   });
 });
 

@@ -33,9 +33,9 @@ it("uloží snapshot, produkt a variant a prečíta ich späť", async () => {
     pairCode: "1",
     name: "Nohavice FOREST 1003",
     currency: "EUR",
-    price: "67.00",
-    standardPrice: "71.00",
-    purchasePrice: "32.68",
+    price: "62.76",
+    standardPrice: "66.08",
+    purchasePrice: "34.27",
     actionPrice: null,
     actionFrom: null,
     actionUntil: null,
@@ -55,7 +55,7 @@ it("uloží snapshot, produkt a variant a prečíta ich späť", async () => {
 
   const rows = await ctx.db.select().from(variants);
   expect(rows).toHaveLength(1);
-  expect(rows[0]?.price).toBe("67.00");
+  expect(rows[0]?.price).toBe("62.76");
   expect(rows[0]?.state).toBe("discontinued");
 });
 
@@ -81,7 +81,7 @@ it("odmietne sumu bez meny (CHECK)", async () => {
       pairCode: null,
       name: "Čiapka Polar FOREST",
       currency: null, // suma je, mena nie → CHECK musí zabrať
-      price: "9.00",
+      price: "14.62",
       standardPrice: null,
       purchasePrice: null,
       actionPrice: null,
@@ -125,7 +125,7 @@ it("odmietne prázdny reťazec ako menu, keď je suma vyplnená (CHECK)", async 
       pairCode: null,
       name: "Šál FOREST",
       currency: "", // prázdny reťazec nie je NULL — CHECK ho musí odmietnuť rovnako prísne
-      price: "67.00",
+      price: "55.00",
       standardPrice: null,
       purchasePrice: null,
       actionPrice: null,
@@ -167,8 +167,8 @@ it("odmietne druhý variant s rovnakým kódom", async () => {
     pairCode: null,
     name: "ThermVisia objímka",
     currency: "EUR",
-    price: "1249.00",
-    standardPrice: "1249.00",
+    price: "1043.82",
+    standardPrice: "1043.82",
     purchasePrice: null,
     actionPrice: null,
     actionFrom: null,
