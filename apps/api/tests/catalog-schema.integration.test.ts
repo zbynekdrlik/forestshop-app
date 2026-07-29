@@ -28,6 +28,7 @@ it("uloží snapshot, produkt a variant a prečíta ich späť", async () => {
   await ctx.db.insert(variants).values({
     code: "40237/3XL",
     productKey: "40237",
+    guid: "40237",
     sizeLabel: "3XL",
     pairCode: "1",
     name: "Nohavice FOREST 1003",
@@ -75,6 +76,7 @@ it("odmietne sumu bez meny (CHECK)", async () => {
     ctx.db.insert(variants).values({
       code: "40287",
       productKey: "40287",
+      guid: "40287",
       sizeLabel: null,
       pairCode: null,
       name: "Čiapka Polar FOREST",
@@ -118,6 +120,7 @@ it("odmietne prázdny reťazec ako menu, keď je suma vyplnená (CHECK)", async 
     ctx.db.insert(variants).values({
       code: "40288",
       productKey: "40288",
+      guid: "40288",
       sizeLabel: null,
       pairCode: null,
       name: "Šál FOREST",
@@ -159,6 +162,7 @@ it("odmietne druhý variant s rovnakým kódom", async () => {
   const variant = {
     code: "278",
     productKey: "278",
+    guid: "278",
     sizeLabel: null,
     pairCode: null,
     name: "ThermVisia objímka",
@@ -255,6 +259,7 @@ it("dovolí variant bez meny, keď žiadna suma nie je vyplnená (CHECK to má p
   await ctx.db.insert(variants).values({
     code: "40289",
     productKey: "40289",
+    guid: "40289",
     sizeLabel: null,
     pairCode: null,
     name: "Ponožky FOREST",

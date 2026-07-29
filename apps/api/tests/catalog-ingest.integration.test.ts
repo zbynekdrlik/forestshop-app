@@ -8,6 +8,7 @@ import { afterEach, expect, it } from "vitest";
 import { catalogSnapshots, ingestIssues, products, variants } from "../src/db/schema.js";
 import { ingestCatalog, type ExportFetcher } from "../src/modules/catalog/ingest.js";
 import { DEFAULT_SNAPSHOT_LIMITS } from "../src/modules/catalog/validation.js";
+import { insertTestSnapshot } from "./helpers/catalog.js";
 import { withCleanDb } from "./helpers/db.js";
 
 const FIXTURE = readFileSync(
@@ -45,6 +46,34 @@ function splitRecords(csv: Buffer): { header: Buffer; records: Buffer[] } {
   const [header, ...records] = parts;
   if (header === undefined) throw new Error("Fixtúra je prázdna");
   return { header, records };
+}
+
+/**
+ * Nájde prvý výskyt `fieldMarker` (čisto ASCII, teda kódovanie nehrá rolu) PO
+ * `recordCodeMarker` a vloží tam presne jeden bajt 0x00 — reálny Postgres na
+ * NUL bajt v `text` stĺpci spoľahlivo a deterministicky vyhodí
+ * "invalid byte sequence for encoding "UTF8"" (overené naživo proti lokálnej
+ * databáze), čo je presne materializačné zlyhanie potrebné pre Important #5.
+ */
+function injectNulByteAfter(csv: Buffer, recordCodeMarker: string, fieldMarker: string): Buffer {
+  const recordStart = csv.indexOf(Buffer.from(recordCodeMarker, "ascii"));
+  if (recordStart === -1) throw new Error(`Marker záznamu "${recordCodeMarker}" sa vo fixtúre nenašiel`);
+  const fieldOffset = csv.indexOf(Buffer.from(fieldMarker, "ascii"), recordStart);
+  if (fieldOffset === -1) throw new Error(`Marker poľa "${fieldMarker}" sa po zázname nenašiel`);
+  const cut = fieldOffset + fieldMarker.length;
+  return Buffer.concat([csv.subarray(0, cut), Buffer.from([0x00]), csv.subarray(cut)]);
+}
+
+/**
+ * Nahradí PRVÉ pole (`code`) v surových bajtoch záznamu prázdnym reťazcom —
+ * predpokladá, že pole je jednoducho zacitované, bez escapovaných úvodzoviek
+ * vnútri (platí pre všetky kódy v tejto fixtúre).
+ */
+function blankFirstField(record: Buffer): Buffer {
+  const text = record.toString("latin1");
+  const match = /^"[^"]*";/.exec(text);
+  if (match === null) throw new Error(`Neočakávaný tvar záznamu: ${text.slice(0, 30)}`);
+  return Buffer.from('"";' + text.slice(match[0].length), "latin1");
 }
 
 let close: (() => Promise<void>) | undefined;
@@ -93,7 +122,10 @@ it("prijme fixtúru a naplní produkty aj varianty", async () => {
 
   const [nohavice] = await db.select().from(variants).where(eq(variants.code, "40237/3XL"));
   expect(nohavice).toMatchObject({
-    productKey: "40237",
+    // Identita produktu je `guid` (review task-5-fix-1, CRITICAL #1), nikdy
+    // prefix `code` pred lomkou.
+    productKey: "0a486205-d9e7-11e0-92ec-e1ef0b66e031",
+    guid: "0a486205-d9e7-11e0-92ec-e1ef0b66e031",
     sizeLabel: "3XL",
     price: "67.00",
     currency: "EUR",
@@ -178,6 +210,25 @@ it("variant, ktorý z exportu zmizne, sa nemaže — len sa označí odkedy chý
   expect(zmiznuty?.missingSince).toEqual(NESKOR);
   const [ostal] = await db.select().from(variants).where(eq(variants.code, "40287"));
   expect(ostal?.missingSince).toBeNull();
+
+  // Important #5, prvá odrážka (review task-5-fix-1): variant, ktorý sa
+  // VRÁTI do exportu, musí prestať byť chýbajúci — jeden znak zlý v
+  // dvadsaťpoľovom upserte to potichu a natrvalo pokazí. Tretí import s CELOU
+  // pôvodnou fixtúrou (skupina "40237" je späť) — bajt-navyše (nezacitovaný
+  // koncový riadok, `parseDelimited` ho ticho ignoruje) mení sha256 oproti
+  // PRVÉMU importu, inak by ho dedup (rovnaký obsah = duplicate) zastavil
+  // skôr, než by sa dalo overiť značenie `missingSince`.
+  const NAJNESKOR = new Date("2026-07-31T10:00:00Z");
+  const treti = await ingestCatalog(db, {
+    fetchExport: fetcherOf(Buffer.concat([FIXTURE, Buffer.from("\n")])),
+    now: NAJNESKOR,
+    rawDir: dir,
+    limits: TEST_LIMITS,
+  });
+  expect(treti).toMatchObject({ status: "accepted", variantCount: 35, missingCount: 0 });
+
+  const [vratil] = await db.select().from(variants).where(eq(variants.code, "40237/3XL"));
+  expect(vratil?.missingSince).toBeNull();
 });
 
 it("odmietnutý export sa zapíše a katalóg zostane nedotknutý (#281)", async () => {
@@ -250,4 +301,186 @@ it("duplicitný kód v exporte nezhodí import, len sa zapíše ako anomália", 
   const issues = await db.select().from(ingestIssues);
   expect(issues).toHaveLength(1);
   expect(issues[0]).toMatchObject({ kind: "duplicate_code", code: "40237/3XL", at: NOW });
+});
+
+// CRITICAL #2 (review task-5-fix-1): surové bajty sa ukladajú PRED
+// parsovaním, takže aj pretrhnuté sťahovanie (súbor sa skončí vnútri
+// zacitovanej bunky) musí nechať dôkaz — nikdy nesmie uniknúť ako výnimka.
+it("stiahnutie pretrhnuté vnútri zacitovanej bunky sa zapíše ako rejected s dôkazom, nikdy nevyhodí výnimku", async () => {
+  const { db, dir } = await boot();
+  const { header, records } = splitRecords(FIXTURE);
+  const prvyZaznam = records[0];
+  if (prvyZaznam === undefined) throw new Error("Fixtúra nemá žiadne záznamy");
+  // Odrezané na 30 % dĺžky prvého záznamu — jeho popis je veľký zacitovaný
+  // HTML blok, takže rez tam spoľahlivo padne vnútri otvorenej úvodzovky
+  // (overené naživo nad touto fixtúrou).
+  const utnute = Buffer.concat([header, prvyZaznam.subarray(0, Math.floor(prvyZaznam.length * 0.3))]);
+
+  // Samotné `await` (bez try/catch) je dôkaz, že toto NEVYHODÍ — keby
+  // `ingestCatalog` nechal výnimku uniknúť, vitest by test zhodil ako
+  // neošetrené zamietnutie promisu.
+  const result = await ingestCatalog(db, {
+    fetchExport: fetcherOf(utnute),
+    now: NOW,
+    rawDir: dir,
+    limits: TEST_LIMITS,
+  });
+
+  expect(result.status).toBe("rejected");
+  expect(result.status === "rejected" && result.reason).toContain("nedal prečítať");
+  expect(result.status === "rejected" && result.reason).toContain(
+    "Katalóg zostáva nezmenený, import môžete kedykoľvek zopakovať.",
+  );
+
+  const [snapshot] = await db.select().from(catalogSnapshots);
+  expect(snapshot?.verdict).toBe("rejected");
+  expect(snapshot?.rawPath).toMatch(/\.csv\.gz$/);
+  expect(await db.select().from(variants)).toHaveLength(0);
+});
+
+// Important #3 (review task-5-fix-1): brána dostávala len `rowCount`
+// (rozparsované riadky), nie počet POUŽITEĽNÝCH záznamov — export, ktorého
+// `code` je prázdny na KAŽDOM riadku, tak prešiel a blanketový update by
+// označil CELÝ katalóg ako chýbajúci (#277/#286 v novej podobe).
+it("export, ktorého code je prázdny na každom riadku, sa odmietne — inak by blanketový update vymazal celý katalóg", async () => {
+  const { db, dir } = await boot();
+  await ingestCatalog(db, {
+    fetchExport: fetcherOf(FIXTURE),
+    now: NOW,
+    rawDir: dir,
+    limits: TEST_LIMITS,
+  });
+
+  const { header, records } = splitRecords(FIXTURE);
+  const bezKodov = Buffer.concat([header, ...records.map(blankFirstField)]);
+
+  const result = await ingestCatalog(db, {
+    fetchExport: fetcherOf(bezKodov),
+    now: NESKOR,
+    rawDir: dir,
+    limits: TEST_LIMITS,
+  });
+
+  expect(result.status).toBe("rejected");
+  expect(result.status === "rejected" && result.reason).toContain("použiteľný");
+  expect(result.status === "rejected" && result.reason).toContain(
+    "Katalóg zostáva nezmenený, import môžete kedykoľvek zopakovať.",
+  );
+  // Katalóg z prvého importu zostal nedotknutý — presne to, čo #277/#286
+  // nedokázali.
+  expect(await db.select().from(variants)).toHaveLength(35);
+  const [nohavice] = await db.select().from(variants).where(eq(variants.code, "40237/3XL"));
+  expect(nohavice?.missingSince).toBeNull();
+});
+
+// Important #4 (review task-5-fix-1): dva súbežné importy ROVNAKÉHO obsahu.
+// Zámok serializuje ich transakcie; druhý, po commite prvého, narazí na
+// `catalog_snapshot_accepted_sha_uq` a MUSÍ sa preložiť na `duplicate`, nie na
+// uniknutú (nezachytenú) výnimku, ktorá by HTTP vrstve unikla ako 500.
+it("dva súbežné importy rovnakého obsahu — presne jeden accepted, druhý duplicate, žiadna neošetrená chyba", async () => {
+  const { db, dir } = await boot();
+
+  const [a, b] = await Promise.all([
+    ingestCatalog(db, { fetchExport: fetcherOf(FIXTURE), now: NOW, rawDir: dir, limits: TEST_LIMITS }),
+    ingestCatalog(db, { fetchExport: fetcherOf(FIXTURE), now: NOW, rawDir: dir, limits: TEST_LIMITS }),
+  ]);
+
+  const statuses = [a.status, b.status].sort();
+  expect(statuses).toEqual(["accepted", "duplicate"]);
+  expect(await db.select().from(catalogSnapshots)).toHaveLength(1);
+  expect(await db.select().from(variants)).toHaveLength(35);
+  expect(await db.select().from(products)).toHaveLength(8);
+});
+
+// Important #5, druhá odrážka (review task-5-fix-1): zlyhanie UPROSTRED
+// materializácie (napr. reálna DB chyba) transakciu ROLLBACKNE — aj riadok
+// `catalog_snapshot`, ktorý mala zapísať. Bez opravy by uložené surové bajty
+// (zapísané ešte PRED transakciou) zostali navždy bez záznamu, čo by naň
+// ukazoval. NUL bajt (0x00) v `text` stĺpci spoľahlivo vyhodí reálnu Postgres
+// chybu — overené naživo proti lokálnej databáze pred písaním tohto testu.
+it("zlyhanie materializácie zapíše dôkazový (rejected) záznam a katalóg zostane nedotknutý", async () => {
+  const { db, dir } = await boot();
+  await ingestCatalog(db, {
+    fetchExport: fetcherOf(FIXTURE),
+    now: NOW,
+    rawDir: dir,
+    limits: TEST_LIMITS,
+  });
+
+  const otravena = injectNulByteAfter(FIXTURE, '"40287";"";"', "Polar FOREST");
+
+  await expect(
+    ingestCatalog(db, {
+      fetchExport: fetcherOf(otravena),
+      now: NESKOR,
+      rawDir: dir,
+      limits: TEST_LIMITS,
+    }),
+  ).rejects.toThrow();
+
+  // Katalóg z prvého importu zostal nedotknutý.
+  expect(await db.select().from(variants)).toHaveLength(35);
+  const [nohavice] = await db.select().from(variants).where(eq(variants.code, "40287"));
+  expect(nohavice?.lastSeenAt).toEqual(NOW);
+
+  // Dôkazový záznam existuje — druhý snapshot, rejected, s rawPath ukazujúcim
+  // na uložené (otrávené) bajty, dôvod v slovenčine s dôsledkovou vetou.
+  const snapshots = await db.select().from(catalogSnapshots).orderBy(catalogSnapshots.fetchedAt);
+  expect(snapshots).toHaveLength(2);
+  const zlyhany = snapshots[1];
+  expect(zlyhany?.verdict).toBe("rejected");
+  expect(zlyhany?.rawPath).toMatch(/\.csv\.gz$/);
+  expect(zlyhany?.rejectionReason).toContain(
+    "Katalóg zostáva nezmenený, import môžete kedykoľvek zopakovať.",
+  );
+});
+
+// Minor (review task-5-fix-1): služba dôveruje `sourceLabel` od AKÉHOKOĽVEK
+// vstreknutého fetchera — ručne napísaný fetcher (napr. budúci alternatívny
+// zdroj), ktorý zabudne zavolať `redactUrl`, nesmie dostať živý prihlasovací
+// údaj do databázy.
+it("sourceLabel s neprekrytým hashom od ručne napísaného fetchera sa prekryje aj v službe", async () => {
+  const { db, dir } = await boot();
+  const hendrolovanyFetcher: ExportFetcher = () =>
+    Promise.resolve({
+      body: FIXTURE,
+      sourceLabel: "https://www.forestshop.sk/export/products.csv?hash=zive-tajomstvo",
+    });
+
+  await ingestCatalog(db, { fetchExport: hendrolovanyFetcher, now: NOW, rawDir: dir, limits: TEST_LIMITS });
+
+  const [snapshot] = await db.select().from(catalogSnapshots);
+  expect(snapshot?.sourceLabel).toBe("https://www.forestshop.sk/export/products.csv?hash=***");
+  expect(snapshot?.sourceLabel).not.toContain("zive-tajomstvo");
+});
+
+// Minor (review task-5-fix-1): dva prijaté snapshoty s ROVNAKÝM `fetchedAt`
+// (napr. vstreknuté `now` v teste, alebo dva importy v tej istej milisekunde)
+// museli predtým vrátiť poradie, ktoré Postgres negarantuje — `id` ako druhý,
+// stabilný tie-break robí výber deterministickým pri každom behu.
+it("dva prijaté snapshoty s rovnakým fetchedAt sa vyhodnotia vždy rovnako (stabilný tie-break)", async () => {
+  const { db, dir } = await boot();
+  const zdielanyCas = new Date("2026-07-28T09:00:00Z");
+  const idNizky = await insertTestSnapshot(db, { fetchedAt: zdielanyCas, rowCount: 40 });
+  const idVysoky = await insertTestSnapshot(db, { fetchedAt: zdielanyCas, rowCount: 1_000 });
+
+  // `orderBy(desc(fetchedAt), desc(id))` — vyššie (textovo) UUID vyhráva.
+  const vitaz = idNizky > idVysoky ? idNizky : idVysoky;
+  const vitaznyRowCount = vitaz === idNizky ? 40 : 1_000;
+  const ocakavanaHranica = Math.max(
+    Math.floor(vitaznyRowCount * TEST_LIMITS.previousRowRatio),
+    TEST_LIMITS.absoluteMinRows,
+  );
+
+  // Fixtúra má 35 riadkov — výsledok MUSÍ zodpovedať hranici odvodenej z
+  // riadku, ktorý tie-break vyberie ako "predchádzajúci prijatý", nie z toho
+  // druhého (inak by bol test krehký/nedeterministický).
+  const result = await ingestCatalog(db, {
+    fetchExport: fetcherOf(FIXTURE),
+    now: NOW,
+    rawDir: dir,
+    limits: TEST_LIMITS,
+  });
+
+  expect(result.status).toBe(35 < ocakavanaHranica ? "rejected" : "accepted");
 });

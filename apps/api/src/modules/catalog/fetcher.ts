@@ -12,6 +12,22 @@ export function redactUrl(url: string): string {
   return parsed.toString();
 }
 
+/**
+ * Bezpečná obálka nad `redactUrl` pre volanie zo SLUŽBY (`ingest.ts`), nie len
+ * z `createHttpExportFetcher` — `ExportFetcher` je vstrekované rozhranie, takže
+ * ingest dôveruje `sourceLabel` od AKÉHOKOĽVEK dodaného fetchera (test, alebo
+ * budúci ručne písaný zdroj). Keď `label` nie je platná URL (napr. testovací
+ * popisok "fixtúra"), `redactUrl` by vyhodil — tu sa taký prípad ticho vráti
+ * nezmenený, keďže nejde o URL, ktorá by mohla niesť `hash`.
+ */
+export function redactSourceLabel(label: string): string {
+  try {
+    return redactUrl(label);
+  } catch {
+    return label;
+  }
+}
+
 export interface HttpExportFetcherOptions {
   readonly url: string;
   readonly timeoutMs?: number;

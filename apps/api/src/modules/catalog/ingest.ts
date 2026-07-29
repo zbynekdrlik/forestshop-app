@@ -4,6 +4,7 @@ import type { Database } from "../../db/client.js";
 import { catalogSnapshots, ingestIssues, products, variants } from "../../db/schema.js";
 import { log } from "../../logger.js";
 import { decodeCp1250, parseDelimited } from "./csv.js";
+import { redactSourceLabel } from "./fetcher.js";
 import { mapRow, type RowIssue, type VariantRecord } from "./map-row.js";
 import { storeRawSnapshot } from "./raw-store.js";
 import {
@@ -14,10 +15,37 @@ import {
   type SnapshotLimits,
 } from "./validation.js";
 
+// Zámok je JEDEN pevný kľúč, NIE odvodený z obsahu (review task-5-fix-1,
+// dôležité #4) — serializuje VŠETKY súbežné importy voči tejto databáze,
+// nielen tie s rovnakým obsahom. Bez toho by dva importy RÔZNYCH bajtov mohli
+// bežať súbežne a ten, čo commitne neskôr, by blanketovým UPDATE-om
+// (nižšie, "missing") označil čerstvo zapísané varianty toho druhého ako
+// chýbajúce. `pg_advisory_xact_lock` sa uvoľní automaticky na konci
+// transakcie (COMMIT aj ROLLBACK), takže nepotrebuje explicitné odomknutie.
+const INGEST_ADVISORY_LOCK_KEY = 787_878_001;
+
+// SQLSTATE 23505 = unique_violation. Používa sa na odchytenie súbehu dvoch
+// importov ROVNAKÉHO obsahu: aj so zámokom vyššie je toto druhá poistka —
+// ak by prvý import commitol tesne pred týmto INSERT-om, tento INSERT do
+// `catalog_snapshot` narazí na `catalog_snapshot_accepted_sha_uq` namiesto
+// toho, aby ho úvodná kontrola duplicity (ktorá beží MIMO transakcie, teda
+// pred zámokom) stihla zachytiť.
+function isUniqueViolation(error: unknown, constraint: string): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === "23505" &&
+    "constraint" in error &&
+    error.constraint === constraint
+  );
+}
+
 /**
- * 14 014 variantov × 21 stĺpcov = ~294 000 parametrov na jeden INSERT, čo je ďaleko
- * nad limitom 65 535 parametrov na príkaz v protokole Postgresu. 500 riadkov na dávku
- * dá ~10 500 parametrov — bezpečne pod limitom a stále len ~29 príkazov na import.
+ * 14 014 variantov × 25 stĺpcov (tabuľka `variant`, task-5-fix-1 pridal `guid`)
+ * = ~350 350 parametrov na jeden INSERT, čo je ďaleko nad limitom 65 535
+ * parametrov na príkaz v protokole Postgresu. 500 riadkov na dávku dá ~12 500
+ * parametrov — bezpečne pod limitom a stále len ~29 príkazov na import.
  * Všetky dávky bežia v JEDNEJ transakcii, takže import prejde celý alebo vôbec.
  */
 export const INGEST_BATCH_SIZE = 500;
@@ -42,6 +70,11 @@ export type CatalogIngestResult =
       readonly snapshotId: string;
       readonly variantCount: number;
       readonly productCount: number;
+      // Počet variantov NOVO označených ako chýbajúce PRI TOMTO importe (tie,
+      // ktoré predtým `missingSince: null` mali a teraz ho stratili) — NIE
+      // celkový počet chýbajúcich variantov v katalógu. API vrstva, ktorá toto
+      // pole zobrazuje, si na "celkový počet chýbajúcich" musí spočítať
+      // vlastný dopyt (`missingSince IS NOT NULL`), toto pole na to neslúži.
       readonly missingCount: number;
       readonly issueCount: number;
     }
@@ -165,11 +198,17 @@ export async function ingestCatalog(
     }
   }
 
+  // `orderBy` má DVA kľúče (minor, review task-5-fix-1): samotné `fetchedAt`
+  // by pri dvoch snapshotoch so ZHODNÝM časom (napr. vstreknuté `now` v teste,
+  // alebo dva importy v tej istej milisekunde) vrátilo poradie, ktoré Postgres
+  // negarantuje — `id` ako druhý, stabilný kľúč robí výber deterministickým
+  // (vždy ten istý riadok pri opakovanom behu), aj keď samotná hodnota `id`
+  // (náhodné UUID) nenesie žiadny časový význam.
   const [previous] = await db
     .select({ rowCount: catalogSnapshots.rowCount })
     .from(catalogSnapshots)
     .where(eq(catalogSnapshots.verdict, "accepted"))
-    .orderBy(desc(catalogSnapshots.fetchedAt))
+    .orderBy(desc(catalogSnapshots.fetchedAt), desc(catalogSnapshots.id))
     .limit(1);
 
   // Zlyhané parsovanie je VŽDY "rejected" a nikdy nejde cez `judgeSnapshot` — nemá
@@ -178,147 +217,266 @@ export async function ingestCatalog(
   // nie druhý literál, ktorý by sa mohol nenápadne rozísť pri budúcej zmene
   // znenia. #286 platí rovnako pre zlyhané parsovanie ako pre každé iné
   // odmietnutie.
+  //
+  // Dôvod pre PREVÁDZKOVATEĽA je PEVNÁ slovenská veta (minor, review
+  // task-5-fix-1) — surová `parseErrorMessage` sa do nej NIKDY neinterpoluje
+  // (môže byť anglická/technická, z internej knižnice). Surová správa sa
+  // loguje samostatne nižšie (`log.warn`, pole `parseError`), nikdy sa
+  // nezobrazuje prevádzkovateľovi.
   const judgement: SnapshotJudgement =
     parseErrorMessage !== null
       ? {
           verdict: "rejected",
-          reason: `Export sa nedal prečítať: ${parseErrorMessage} ${CONSEQUENCE}`,
+          reason: `Export sa nedal prečítať — súbor je pravdepodobne neúplný alebo poškodený. ${CONSEQUENCE}`,
         }
       : judgeSnapshot(
-          { columns, rowCount, byteSize, malformedRowCount, previousAccepted: previous ?? null },
+          {
+            columns,
+            rowCount,
+            byteSize,
+            malformedRowCount,
+            // Použiteľné = rozparsované ZÁZNAMY, ktoré vyrobili DB riadok
+            // (task-5-fix-1, dôležité #3) — `records.length` už vylučuje
+            // riadky s prázdnym `code`/`guid` aj duplicity, presne to, čo sa
+            // nakoniec zapíše do `variant`.
+            usableRecordCount: records.length,
+            previousAccepted: previous ?? null,
+          },
           options.limits ?? DEFAULT_SNAPSHOT_LIMITS,
         );
 
-  return await db.transaction(async (tx): Promise<CatalogIngestResult> => {
-    const [snapshot] = await tx
-      .insert(catalogSnapshots)
-      .values({
-        fetchedAt: options.now,
-        sourceLabel: download.sourceLabel,
-        contentSha256,
-        byteSize,
-        rowCount,
-        // Pri zlyhanom parsovaní je `columns` prázdne pole — nevieme, aké stĺpce
-        // export mal, ale záznam sa aj tak zapisuje (s `rawPath`), aby sa dal
-        // pokazený export spätne preskúmať.
-        columns: [...columns],
-        verdict: judgement.verdict,
-        rejectionReason: judgement.verdict === "rejected" ? judgement.reason : null,
-        rawPath,
-        variantCount: judgement.verdict === "accepted" ? records.length : null,
-        productCount: judgement.verdict === "accepted" ? productValues.size : null,
-        issueCount: judgement.verdict === "accepted" ? issues.length : null,
-      })
-      .returning({ id: catalogSnapshots.id });
-    if (snapshot === undefined) throw new Error("Snapshot sa nepodarilo zapísať");
-    const snapshotId = snapshot.id;
+  let result: CatalogIngestResult;
+  try {
+    result = await db.transaction(async (tx): Promise<CatalogIngestResult> => {
+      // Zámok MUSÍ byť prvý príkaz v transakcii (review task-5-fix-1, dôležité
+      // #4) — pozri komentár pri `INGEST_ADVISORY_LOCK_KEY` vyššie.
+      await tx.execute(sql`select pg_advisory_xact_lock(${INGEST_ADVISORY_LOCK_KEY})`);
 
-    if (judgement.verdict === "rejected") {
-      log.warn(
-        { snapshotId, reason: judgement.reason, rowCount, byteSize, columns: columns.length },
-        "export odmietnutý — katalóg zostáva na poslednom prijatom snapshote",
+      const [snapshot] = await tx
+        .insert(catalogSnapshots)
+        .values({
+          fetchedAt: options.now,
+          // Služba dôveruje `sourceLabel` od AKÉHOKOĽVEK vstreknutého fetchera
+          // (minor, review task-5-fix-1) — prekrytie tu je druhá poistka, nie
+          // len v `createHttpExportFetcher`; na už prekrytej URL je no-op.
+          sourceLabel: redactSourceLabel(download.sourceLabel),
+          contentSha256,
+          byteSize,
+          rowCount,
+          // Pri zlyhanom parsovaní je `columns` prázdne pole — nevieme, aké stĺpce
+          // export mal, ale záznam sa aj tak zapisuje (s `rawPath`), aby sa dal
+          // pokazený export spätne preskúmať.
+          columns: [...columns],
+          verdict: judgement.verdict,
+          rejectionReason: judgement.verdict === "rejected" ? judgement.reason : null,
+          rawPath,
+          variantCount: judgement.verdict === "accepted" ? records.length : null,
+          productCount: judgement.verdict === "accepted" ? productValues.size : null,
+          issueCount: judgement.verdict === "accepted" ? issues.length : null,
+        })
+        .returning({ id: catalogSnapshots.id });
+      if (snapshot === undefined) throw new Error("Snapshot sa nepodarilo zapísať");
+      const snapshotId = snapshot.id;
+
+      if (judgement.verdict === "rejected") {
+        log.warn(
+          {
+            snapshotId,
+            reason: judgement.reason,
+            rowCount,
+            byteSize,
+            columns: columns.length,
+            // Surová správa z parsera (môže byť anglická/technická) sa loguje
+            // TU, samostatne — `judgement.reason` (uložený do DB, zobrazený
+            // prevádzkovateľovi) ju už neobsahuje (minor, review task-5-fix-1).
+            ...(parseErrorMessage !== null ? { parseError: parseErrorMessage } : {}),
+          },
+          "export odmietnutý — katalóg zostáva na poslednom prijatom snapshote",
+        );
+        return { status: "rejected", snapshotId, reason: judgement.reason };
+      }
+
+      for (const batch of chunk([...productValues.entries()], INGEST_BATCH_SIZE)) {
+        await tx
+          .insert(products)
+          .values(
+            batch.map(([key, value]) => ({
+              key,
+              name: value.name,
+              supplier: value.supplier,
+              firstSeenAt: options.now,
+              lastSeenAt: options.now,
+              lastSeenSnapshotId: snapshotId,
+            })),
+          )
+          .onConflictDoUpdate({
+            target: products.key,
+            set: {
+              name: sql`excluded.name`,
+              supplier: sql`excluded.supplier`,
+              lastSeenAt: options.now,
+              lastSeenSnapshotId: snapshotId,
+            },
+          });
+      }
+
+      for (const batch of chunk(records, INGEST_BATCH_SIZE)) {
+        await tx
+          .insert(variants)
+          .values(
+            batch.map((record) => ({
+              // Polia sa vypisujú EXPLICITNE, nie `...record` (minor, review
+              // task-5-fix-1) — `record.supplier` patrí stĺpcu `product`, nie
+              // `variant`; predtým to fungovalo len preto, že ORM neznáme
+              // kľúče ticho zahodí.
+              code: record.code,
+              productKey: record.productKey,
+              guid: record.guid,
+              sizeLabel: record.sizeLabel,
+              pairCode: record.pairCode,
+              name: record.name,
+              currency: record.currency,
+              price: record.price,
+              standardPrice: record.standardPrice,
+              purchasePrice: record.purchasePrice,
+              actionPrice: record.actionPrice,
+              actionFrom: record.actionFrom,
+              actionUntil: record.actionUntil,
+              percentVat: record.percentVat,
+              includingVat: record.includingVat,
+              stock: record.stock,
+              availabilityInStockText: record.availabilityInStockText,
+              availabilityOutOfStockText: record.availabilityOutOfStockText,
+              availabilityText: record.availabilityText,
+              productVisibility: record.productVisibility,
+              state: record.state,
+              firstSeenAt: options.now,
+              lastSeenAt: options.now,
+              lastSeenSnapshotId: snapshotId,
+              missingSince: null,
+            })),
+          )
+          .onConflictDoUpdate({
+            target: variants.code,
+            set: {
+              productKey: sql`excluded.product_key`,
+              guid: sql`excluded.guid`,
+              sizeLabel: sql`excluded.size_label`,
+              pairCode: sql`excluded.pair_code`,
+              name: sql`excluded.name`,
+              currency: sql`excluded.currency`,
+              price: sql`excluded.price`,
+              standardPrice: sql`excluded.standard_price`,
+              purchasePrice: sql`excluded.purchase_price`,
+              actionPrice: sql`excluded.action_price`,
+              actionFrom: sql`excluded.action_from`,
+              actionUntil: sql`excluded.action_until`,
+              percentVat: sql`excluded.percent_vat`,
+              includingVat: sql`excluded.including_vat`,
+              stock: sql`excluded.stock`,
+              availabilityInStockText: sql`excluded.availability_in_stock_text`,
+              availabilityOutOfStockText: sql`excluded.availability_out_of_stock_text`,
+              availabilityText: sql`excluded.availability_text`,
+              productVisibility: sql`excluded.product_visibility`,
+              state: sql`excluded.state`,
+              lastSeenAt: options.now,
+              lastSeenSnapshotId: snapshotId,
+              // Variant, ktorý sa vrátil, prestáva chýbať.
+              missingSince: null,
+            },
+          });
+      }
+
+      const missing = await tx
+        .update(variants)
+        .set({ missingSince: options.now })
+        .where(and(ne(variants.lastSeenSnapshotId, snapshotId), isNull(variants.missingSince)))
+        .returning({ code: variants.code });
+
+      for (const batch of chunk(issues, INGEST_BATCH_SIZE)) {
+        await tx
+          .insert(ingestIssues)
+          .values(batch.map((issue) => ({ ...issue, snapshotId, at: options.now })));
+      }
+
+      log.info(
+        {
+          snapshotId,
+          variantCount: records.length,
+          productCount: productValues.size,
+          missingCount: missing.length,
+          issueCount: issues.length,
+          rowCount,
+          byteSize,
+        },
+        "katalóg naimportovaný",
       );
-      return { status: "rejected", snapshotId, reason: judgement.reason };
-    }
 
-    for (const batch of chunk([...productValues.entries()], INGEST_BATCH_SIZE)) {
-      await tx
-        .insert(products)
-        .values(
-          batch.map(([key, value]) => ({
-            key,
-            name: value.name,
-            supplier: value.supplier,
-            firstSeenAt: options.now,
-            lastSeenAt: options.now,
-            lastSeenSnapshotId: snapshotId,
-          })),
-        )
-        .onConflictDoUpdate({
-          target: products.key,
-          set: {
-            name: sql`excluded.name`,
-            supplier: sql`excluded.supplier`,
-            lastSeenAt: options.now,
-            lastSeenSnapshotId: snapshotId,
-          },
-        });
-    }
-
-    for (const batch of chunk(records, INGEST_BATCH_SIZE)) {
-      await tx
-        .insert(variants)
-        .values(
-          batch.map((record) => ({
-            ...record,
-            firstSeenAt: options.now,
-            lastSeenAt: options.now,
-            lastSeenSnapshotId: snapshotId,
-            missingSince: null,
-          })),
-        )
-        .onConflictDoUpdate({
-          target: variants.code,
-          set: {
-            productKey: sql`excluded.product_key`,
-            sizeLabel: sql`excluded.size_label`,
-            pairCode: sql`excluded.pair_code`,
-            name: sql`excluded.name`,
-            currency: sql`excluded.currency`,
-            price: sql`excluded.price`,
-            standardPrice: sql`excluded.standard_price`,
-            purchasePrice: sql`excluded.purchase_price`,
-            actionPrice: sql`excluded.action_price`,
-            actionFrom: sql`excluded.action_from`,
-            actionUntil: sql`excluded.action_until`,
-            percentVat: sql`excluded.percent_vat`,
-            includingVat: sql`excluded.including_vat`,
-            stock: sql`excluded.stock`,
-            availabilityInStockText: sql`excluded.availability_in_stock_text`,
-            availabilityOutOfStockText: sql`excluded.availability_out_of_stock_text`,
-            availabilityText: sql`excluded.availability_text`,
-            productVisibility: sql`excluded.product_visibility`,
-            state: sql`excluded.state`,
-            lastSeenAt: options.now,
-            lastSeenSnapshotId: snapshotId,
-            // Variant, ktorý sa vrátil, prestáva chýbať.
-            missingSince: null,
-          },
-        });
-    }
-
-    const missing = await tx
-      .update(variants)
-      .set({ missingSince: options.now })
-      .where(and(ne(variants.lastSeenSnapshotId, snapshotId), isNull(variants.missingSince)))
-      .returning({ code: variants.code });
-
-    for (const batch of chunk(issues, INGEST_BATCH_SIZE)) {
-      await tx
-        .insert(ingestIssues)
-        .values(batch.map((issue) => ({ ...issue, snapshotId, at: options.now })));
-    }
-
-    log.info(
-      {
+      return {
+        status: "accepted",
         snapshotId,
         variantCount: records.length,
         productCount: productValues.size,
         missingCount: missing.length,
         issueCount: issues.length,
-        rowCount,
-        byteSize,
-      },
-      "katalóg naimportovaný",
-    );
+      };
+    });
+  } catch (error) {
+    // Súbeh dvoch importov ROVNAKÉHO obsahu (dôležité #4): zámok vyššie ich
+    // serializuje, no toto je druhá poistka — ak by druhý predsa len vošiel
+    // do INSERT-u tesne po commite prvého, narazí na
+    // `catalog_snapshot_accepted_sha_uq` a preloží sa na normálny `duplicate`
+    // výsledok, nie na uniknutú výnimku.
+    if (isUniqueViolation(error, "catalog_snapshot_accepted_sha_uq")) {
+      const [existing] = await db
+        .select({ id: catalogSnapshots.id })
+        .from(catalogSnapshots)
+        .where(
+          and(
+            eq(catalogSnapshots.contentSha256, contentSha256),
+            eq(catalogSnapshots.verdict, "accepted"),
+          ),
+        )
+        .limit(1);
+      if (existing !== undefined) {
+        log.info(
+          { snapshotId: existing.id, contentSha256 },
+          "súbežný import rovnakého obsahu — preložené na duplicate",
+        );
+        return { status: "duplicate", snapshotId: existing.id };
+      }
+    }
 
-    return {
-      status: "accepted",
-      snapshotId,
-      variantCount: records.length,
-      productCount: productValues.size,
-      missingCount: missing.length,
-      issueCount: issues.length,
-    };
-  });
+    // Materializácia (INSERT/UPDATE produktov, variantov, missing-marking)
+    // zlyhala z INÉHO dôvodu (dôležité #5) — transakcia sa ROLLBACKOL, takže
+    // aj riadok `catalog_snapshot`, ktorý mala zapísať, je preč. Bez tohto by
+    // uložené surové bajty (`rawPath`, zapísané ešte PRED touto transakciou)
+    // zostali navždy bez záznamu, čo by naň ukazoval — dôkaz na disku, no nič
+    // v databáze. Zápis beží MIMO zlyhanej transakcie (v novej, autonómnej) —
+    // tá pôvodná je už len na ROLLBACK. Partial unique index pokrýva len
+    // `verdict = 'accepted'`, takže tento `rejected` zápis s tým istým
+    // `contentSha256` nemôže naraziť naň.
+    const reason = `Materializácia katalógu zlyhala. ${CONSEQUENCE}`;
+    const rawErrorMessage = error instanceof Error ? error.message : String(error);
+    log.error(
+      { contentSha256, rawPath, rawErrorMessage },
+      "materializácia katalógu zlyhala — zapisujem dôkazový záznam",
+    );
+    await db.insert(catalogSnapshots).values({
+      fetchedAt: options.now,
+      sourceLabel: redactSourceLabel(download.sourceLabel),
+      contentSha256,
+      byteSize,
+      rowCount,
+      columns: [...columns],
+      verdict: "rejected",
+      rejectionReason: reason,
+      rawPath,
+      variantCount: null,
+      productCount: null,
+      issueCount: null,
+    });
+    throw error;
+  }
+  return result;
 }
