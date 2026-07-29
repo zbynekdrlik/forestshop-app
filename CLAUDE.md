@@ -18,3 +18,9 @@ Repo: `zbynekdrlik/forestshop-app` (public). Two-branch flow — `main`
 ## Playbook router
 
 Per-area rules live in `.claude/rules/<area>.md` with `paths:` frontmatter.
+- local dev (Node/pnpm/ports) → `.claude/rules/local-dev.md`
+- database / Docker (Postgres 18 PGDATA, migrations) → `.claude/rules/database.md`
+- tests (unit vs integration split, e2e setup) → `.claude/rules/testing.md`
+- CI gotchas (pnpm action, Vite host binding) → `.claude/rules/ci.md`
+- deployment on dev2 → `.claude/rules/deploy.md`
+- backups / restore → `.claude/rules/backups.md`
