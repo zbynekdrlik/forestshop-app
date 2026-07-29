@@ -70,11 +70,13 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @forestshop/api db:migrate
       - run: pnpm --filter @forestshop/web exec playwright install --with-deps chromium
-      - name: DIAGNOSTIC (temporary, will be removed) - probe API boot in isolation
-        working-directory: apps/api
+      - name: DIAGNOSTIC (temporary, will be removed) - probe exact webServer command in isolation
+        working-directory: apps/web
+        env:
+          SESSION_COOKIE_SECURE: "false"
         run: |
           set -x
-          SESSION_COOKIE_SECURE=false pnpm exec tsx src/index.ts > /tmp/api-diag.log 2>&1 &
+          (pnpm exec tsx ../../scripts/e2e-setup.ts && pnpm --filter @forestshop/api start) > /tmp/api-diag.log 2>&1 &
           API_PID=$!
           for i in $(seq 1 45); do
             if curl -sf -o /dev/null http://127.0.0.1:3000/api/version; then
@@ -85,13 +87,15 @@ jobs:
           done
           echo "--- ss -tlnp ---"
           ss -tlnp || true
+          echo "--- ps auxf ---"
+          ps auxf || true
           echo "--- curl -v ---"
           curl -v http://127.0.0.1:3000/api/version || true
-          echo "--- curl -v via ::1 ---"
-          curl -v "http://[::1]:3000/api/version" || true
           echo "--- api-diag.log ---"
           cat /tmp/api-diag.log
-          kill "$API_PID" || true
+          pkill -f "tsx src/index.ts" || true
+          pkill -f "e2e-setup.ts" || true
+          kill "$API_PID" 2>/dev/null || true
           wait "$API_PID" 2>/dev/null || true
       - run: pnpm --filter @forestshop/web e2e
 
