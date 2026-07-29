@@ -44,6 +44,28 @@ it("tlačidlo sa počas prebiehajúcej požiadavky vypne a druhý klik nevyšle 
   expect(postLogin).toHaveBeenCalledTimes(1);
 });
 
+it("po neúspešnom prihlásení vyprázdni heslo, e-mail ponechá", async () => {
+  postLogin.mockResolvedValue(false);
+
+  render(<LoginForm onLoggedIn={() => {}} />);
+  vyplnAOdošli();
+
+  await screen.findByRole("alert");
+  expect(screen.getByLabelText<HTMLInputElement>("E-mail").value).toBe("a@b.sk");
+  expect(screen.getByLabelText<HTMLInputElement>("Heslo").value).toBe("");
+});
+
+it("keď server neodpovedal, vyprázdni heslo, e-mail ponechá", async () => {
+  postLogin.mockRejectedValue(new Error("network"));
+
+  render(<LoginForm onLoggedIn={() => {}} />);
+  vyplnAOdošli();
+
+  await screen.findByRole("alert");
+  expect(screen.getByLabelText<HTMLInputElement>("E-mail").value).toBe("a@b.sk");
+  expect(screen.getByLabelText<HTMLInputElement>("Heslo").value).toBe("");
+});
+
 it("po úspešnom prihlásení zavolá onLoggedIn presne raz", async () => {
   postLogin.mockResolvedValue(true);
   const onLoggedIn = vi.fn();

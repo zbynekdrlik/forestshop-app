@@ -26,12 +26,16 @@ set -euo pipefail
 # nevypisuje, len sa kopíruje ako súbor.
 #
 # OBNOVA na úplne novom stroji (dev2 je preč) — presný postup:
-#   1. Zisti posledný STAMP:  ssh dev1 'ls -1 ~/backups/forestshop/forestshop-*.dump | sort | tail -1'
+#   1. Zisti posledný STAMP (dev1 = newlevel@100.104.8.125 — POZOR, bare meno
+#      "dev1" sa v tomto prostredí nedá spoľahlivo vyriešiť, presne z toho
+#      istého dôvodu, prečo BACKUP_HOST nižšie používa Tailscale IP; použi ju
+#      aj tu, nie bare meno):
+#        ssh newlevel@100.104.8.125 'ls -1 ~/backups/forestshop/forestshop-*.dump | sort | tail -1'
 #   2. Stiahni z dev1 VŠETKY tri súbory pre ten STAMP + heslo (heslo sa
 #      nemení medzi behmi, stačí raz):
-#        scp dev1:~/backups/forestshop/forestshop-<STAMP>.dump .
-#        scp dev1:~/backups/forestshop/forestshop-<STAMP>.env.gpg .   # alebo .env.age, ak sa používa age
-#        scp dev1:~/backups/forestshop/.backup-passphrase .           # len pri gpg režime
+#        scp newlevel@100.104.8.125:~/backups/forestshop/forestshop-<STAMP>.dump .
+#        scp newlevel@100.104.8.125:~/backups/forestshop/forestshop-<STAMP>.env.gpg .   # alebo .env.age, ak sa používa age
+#        scp newlevel@100.104.8.125:~/backups/forestshop/.backup-passphrase .           # len pri gpg režime
 #   3. Rozšifruj .env:
 #        - cez gpg (predvolený režim, žiadny súkromný kľúč netreba):
 #            gpg --batch --passphrase-file .backup-passphrase \

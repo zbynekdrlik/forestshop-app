@@ -16,9 +16,11 @@ export function LoginForm({ onLoggedIn }: { onLoggedIn: () => void }): JSX.Eleme
       if (await postLogin(email, password)) {
         onLoggedIn();
       } else {
+        setPassword("");
         setError("Nesprávny e-mail alebo heslo");
       }
     } catch {
+      setPassword("");
       setError("Prihlásenie zlyhalo — server neodpovedal");
     } finally {
       setSubmitting(false);

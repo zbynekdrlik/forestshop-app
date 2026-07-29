@@ -9,7 +9,7 @@ export interface AppVersion {
   readonly commit: string;
 }
 
-let cached: AppVersion | undefined;
+let cachedVersion: string | undefined;
 
 export function appVersion(): AppVersion {
   const envVersion = process.env["APP_VERSION"];
@@ -17,13 +17,10 @@ export function appVersion(): AppVersion {
   if (envVersion !== undefined && envVersion !== "") {
     return { version: envVersion, commit };
   }
-  cached ??= {
-    version: pkgSchema.parse(
-      JSON.parse(
-        readFileSync(fileURLToPath(new URL("../../../package.json", import.meta.url)), "utf8"),
-      ),
-    ).version,
-    commit,
-  };
-  return { version: cached.version, commit };
+  cachedVersion ??= pkgSchema.parse(
+    JSON.parse(
+      readFileSync(fileURLToPath(new URL("../../../package.json", import.meta.url)), "utf8"),
+    ),
+  ).version;
+  return { version: cachedVersion, commit };
 }

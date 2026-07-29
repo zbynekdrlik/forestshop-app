@@ -7,6 +7,11 @@ export async function withCleanDb(): Promise<{ db: Database; close: () => Promis
     throw new Error("Integračné testy potrebujú DATABASE_URL na testovaciu databázu");
   }
   const { db, pool } = createDb(url);
-  await db.execute(sql`TRUNCATE TABLE audit_events, sessions, users RESTART IDENTITY CASCADE`);
+  try {
+    await db.execute(sql`TRUNCATE TABLE audit_events, sessions, users RESTART IDENTITY CASCADE`);
+  } catch (err) {
+    await pool.end();
+    throw err;
+  }
   return { db, close: () => pool.end() };
 }
