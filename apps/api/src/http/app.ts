@@ -6,6 +6,7 @@ import type { Database } from "../db/client.js";
 import { log } from "../logger.js";
 import { login, logout } from "../modules/auth/service.js";
 import { appVersion } from "../version.js";
+import { registerCatalogRoutes, type RunIngest } from "./catalog-routes.js";
 import { checkLoginRateLimit, clientIp } from "./login-rate-limit.js";
 import { SESSION_COOKIE, requireUser, type AppBindings } from "./middleware.js";
 import { requireSameOrigin } from "./origin-check.js";
@@ -15,7 +16,10 @@ const loginSchema = z.object({
   password: z.string().min(1),
 });
 
-export function createApp(db: Database, options: { cookieSecure: boolean }): Hono<AppBindings> {
+export function createApp(
+  db: Database,
+  options: { readonly cookieSecure: boolean; readonly runIngest?: RunIngest },
+): Hono<AppBindings> {
   const app = new Hono<AppBindings>();
 
   app.use("*", async (c, next) => {
@@ -65,6 +69,8 @@ export function createApp(db: Database, options: { cookieSecure: boolean }): Hon
   });
 
   app.get("/api/me", requireUser(db), (c) => c.json(c.get("user")));
+
+  registerCatalogRoutes(app, db, options.runIngest);
 
   // Musí byť registrovaný AŽ PO všetkých skutočných /api/* trasách vyššie — Hono
   // vyberá presnejšiu zhodu, takže tie majú prednosť a sem sa dostane len to, čo
