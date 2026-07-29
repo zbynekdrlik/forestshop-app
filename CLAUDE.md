@@ -13,7 +13,9 @@ Machine **dev1**, `~/devel/forestshop/forestshop_app`. Sibling of
 other's session.
 
 Repo: `zbynekdrlik/forestshop-app` (public). Two-branch flow — `main`
-(production) + `dev` (work). No application code yet.
+(production) + `dev` (work). Fáza F0 (základ) je hotová: pnpm workspace
+`apps/api` (Hono + Drizzle + PostgreSQL) a `apps/web` (React + Vite),
+nasadenie na dev2 cez GHCR a Cloudflare tunel.
 
 ## Playbook router
 
