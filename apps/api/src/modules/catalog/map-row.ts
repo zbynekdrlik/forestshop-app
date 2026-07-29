@@ -168,6 +168,10 @@ export function mapRow(row: Readonly<Record<string, string>>): {
   const inStockText = row["availabilityInStock"] ?? "";
   const outOfStockText = row["availabilityOutOfStock"] ?? "";
   const productVisibility = row["productVisibility"] ?? "";
+  // Nepretrváva vo `VariantRecord`/DB — ovplyvňuje LEN odvodenie `state` nižšie
+  // (rovnaká úvaha ako u `productVisibility`, ktorá sa ukladá, no `variantVisibility`
+  // samo o sebe nemá žiadneho ďalšieho konzumenta po importe).
+  const variantVisibility = row["variantVisibility"] ?? "";
   const availability = { stock, inStockText, outOfStockText };
 
   return {
@@ -193,7 +197,7 @@ export function mapRow(row: Readonly<Record<string, string>>): {
       availabilityOutOfStockText: outOfStockText,
       availabilityText: effectiveAvailabilityText(availability),
       productVisibility,
-      state: deriveVariantState({ ...availability, productVisibility }),
+      state: deriveVariantState({ ...availability, productVisibility, variantVisibility }),
     },
     issues,
   };
