@@ -22,7 +22,13 @@ import {
 // (nižšie, "missing") označil čerstvo zapísané varianty toho druhého ako
 // chýbajúce. `pg_advisory_xact_lock` sa uvoľní automaticky na konci
 // transakcie (COMMIT aj ROLLBACK), takže nepotrebuje explicitné odomknutie.
-const INGEST_ADVISORY_LOCK_KEY = 787_878_001;
+// Exportované len pre test (`catalog-ingest.integration.test.ts`, review
+// final-wave-a položka 3) — test drží tento istý zámok manuálne
+// (`pg_advisory_lock`, session-scoped) z druhého pripojenia, aby deterministicky
+// (bez spoliehania sa na časovanie) dokázal, že brána prijatia teraz číta
+// predchádzajúci prijatý snapshot AŽ PO získaní zámku, nie pred otvorením
+// transakcie.
+export const INGEST_ADVISORY_LOCK_KEY = 787_878_001;
 
 // SQLSTATE 23505 = unique_violation. Používa sa na odchytenie súbehu dvoch
 // importov ROVNAKÉHO obsahu: aj so zámokom vyššie je toto druhá poistka —
@@ -198,59 +204,72 @@ export async function ingestCatalog(
     }
   }
 
-  // `orderBy` má DVA kľúče (minor, review task-5-fix-1): samotné `fetchedAt`
-  // by pri dvoch snapshotoch so ZHODNÝM časom (napr. vstreknuté `now` v teste,
-  // alebo dva importy v tej istej milisekunde) vrátilo poradie, ktoré Postgres
-  // negarantuje — `id` ako druhý, stabilný kľúč robí výber deterministickým
-  // (vždy ten istý riadok pri opakovanom behu), aj keď samotná hodnota `id`
-  // (náhodné UUID) nenesie žiadny časový význam.
-  const [previous] = await db
-    .select({ rowCount: catalogSnapshots.rowCount })
-    .from(catalogSnapshots)
-    .where(eq(catalogSnapshots.verdict, "accepted"))
-    .orderBy(desc(catalogSnapshots.fetchedAt), desc(catalogSnapshots.id))
-    .limit(1);
-
-  // Zlyhané parsovanie je VŽDY "rejected" a nikdy nejde cez `judgeSnapshot` — nemá
-  // zmysel posudzovať stĺpce/počet riadkov, ktoré sa nepodarilo zistiť. Veta o
-  // dôsledku je tá istá `CONSEQUENCE`, ktorú importujeme z `validation.ts` —
-  // nie druhý literál, ktorý by sa mohol nenápadne rozísť pri budúcej zmene
-  // znenia. #286 platí rovnako pre zlyhané parsovanie ako pre každé iné
-  // odmietnutie.
-  //
-  // Dôvod pre PREVÁDZKOVATEĽA je PEVNÁ slovenská veta (minor, review
-  // task-5-fix-1) — surová `parseErrorMessage` sa do nej NIKDY neinterpoluje
-  // (môže byť anglická/technická, z internej knižnice). Surová správa sa
-  // loguje samostatne nižšie (`log.warn`, pole `parseError`), nikdy sa
-  // nezobrazuje prevádzkovateľovi.
-  const judgement: SnapshotJudgement =
-    parseErrorMessage !== null
-      ? {
-          verdict: "rejected",
-          reason: `Export sa nedal prečítať — súbor je pravdepodobne neúplný alebo poškodený. ${CONSEQUENCE}`,
-        }
-      : judgeSnapshot(
-          {
-            columns,
-            rowCount,
-            byteSize,
-            malformedRowCount,
-            // Použiteľné = rozparsované ZÁZNAMY, ktoré vyrobili DB riadok
-            // (task-5-fix-1, dôležité #3) — `records.length` už vylučuje
-            // riadky s prázdnym `code`/`guid` aj duplicity, presne to, čo sa
-            // nakoniec zapíše do `variant`.
-            usableRecordCount: records.length,
-            previousAccepted: previous ?? null,
-          },
-          options.limits ?? DEFAULT_SNAPSHOT_LIMITS,
-        );
-
   let result: CatalogIngestResult;
   try {
     result = await db.transaction(async (tx): Promise<CatalogIngestResult> => {
       // Zámok MUSÍ byť prvý príkaz v transakcii (review task-5-fix-1, dôležité
       // #4) — pozri komentár pri `INGEST_ADVISORY_LOCK_KEY` vyššie.
       await tx.execute(sql`select pg_advisory_xact_lock(${INGEST_ADVISORY_LOCK_KEY})`);
+
+      // Predchádzajúci prijatý snapshot (základ brány) sa číta AŽ TU — HNEĎ PO
+      // získaní zámku, nie pred otvorením transakcie (review final-wave-a,
+      // položka 3, Important #6). Dva súbežné importy (napr. tlačidlo na webe
+      // a príkazový riadok naraz) by inak mohli oba čítať ROVNAKÝ (starý)
+      // základ, hoci jeden z nich medzitým commitne nový, väčší — malý export,
+      // ktorý by postupne (jeden po druhom) bol odmietnutý, by tak mohol
+      // prejsť, a po commite by blanketový update označil tisíce variantov
+      // toho druhého ako chýbajúce. Zámok serializuje VŠETKY súbežné importy
+      // (pozri komentár pri `INGEST_ADVISORY_LOCK_KEY` vyššie), takže výber tu
+      // — na tej istej transakcii, hneď po získaní zámku — vidí VŽDY posledný
+      // skutočne commitnutý stav, nikdy stav spred neho.
+      //
+      // `orderBy` má DVA kľúče (minor, review task-5-fix-1): samotné
+      // `fetchedAt` by pri dvoch snapshotoch so ZHODNÝM časom (napr. vstreknuté
+      // `now` v teste, alebo dva importy v tej istej milisekunde) vrátilo
+      // poradie, ktoré Postgres negarantuje — `id` ako druhý, stabilný kľúč
+      // robí výber deterministickým (vždy ten istý riadok pri opakovanom
+      // behu), aj keď samotná hodnota `id` (náhodné UUID) nenesie žiadny
+      // časový význam.
+      const [previous] = await tx
+        .select({ rowCount: catalogSnapshots.rowCount })
+        .from(catalogSnapshots)
+        .where(eq(catalogSnapshots.verdict, "accepted"))
+        .orderBy(desc(catalogSnapshots.fetchedAt), desc(catalogSnapshots.id))
+        .limit(1);
+
+      // Zlyhané parsovanie je VŽDY "rejected" a nikdy nejde cez `judgeSnapshot` — nemá
+      // zmysel posudzovať stĺpce/počet riadkov, ktoré sa nepodarilo zistiť. Veta o
+      // dôsledku je tá istá `CONSEQUENCE`, ktorú importujeme z `validation.ts` —
+      // nie druhý literál, ktorý by sa mohol nenápadne rozísť pri budúcej zmene
+      // znenia. #286 platí rovnako pre zlyhané parsovanie ako pre každé iné
+      // odmietnutie.
+      //
+      // Dôvod pre PREVÁDZKOVATEĽA je PEVNÁ slovenská veta (minor, review
+      // task-5-fix-1) — surová `parseErrorMessage` sa do nej NIKDY neinterpoluje
+      // (môže byť anglická/technická, z internej knižnice). Surová správa sa
+      // loguje samostatne nižšie (`log.warn`, pole `parseError`), nikdy sa
+      // nezobrazuje prevádzkovateľovi.
+      const judgement: SnapshotJudgement =
+        parseErrorMessage !== null
+          ? {
+              verdict: "rejected",
+              reason: `Export sa nedal prečítať — súbor je pravdepodobne neúplný alebo poškodený. ${CONSEQUENCE}`,
+            }
+          : judgeSnapshot(
+              {
+                columns,
+                rowCount,
+                byteSize,
+                malformedRowCount,
+                // Použiteľné = rozparsované ZÁZNAMY, ktoré vyrobili DB riadok
+                // (task-5-fix-1, dôležité #3) — `records.length` už vylučuje
+                // riadky s prázdnym `code`/`guid` aj duplicity, presne to, čo sa
+                // nakoniec zapíše do `variant`.
+                usableRecordCount: records.length,
+                previousAccepted: previous ?? null,
+              },
+              options.limits ?? DEFAULT_SNAPSHOT_LIMITS,
+            );
 
       const [snapshot] = await tx
         .insert(catalogSnapshots)
