@@ -1,16 +1,21 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
 import { sessions, users } from "../src/db/schema.js";
 import { hashPassword } from "../src/modules/auth/passwords.js";
 import type { CatalogIngestResult } from "../src/modules/catalog/ingest.js";
+import { ORDERS_EXPORT_URL_NOT_CONFIGURED, type OrdersIngestResult } from "../src/modules/orders/ingest.js";
 import {
   CATALOG_IMPORT_JOB_NAME,
+  ORDERS_IMPORT_JOB_NAME,
   PRUNE_RAW_EXPORTS_JOB_NAME,
+  PRUNE_RAW_ORDERS_JOB_NAME,
   SESSION_CLEANUP_JOB_NAME,
   catalogImportJob,
+  ordersImportJob,
   pruneRawExportsJob,
+  pruneRawOrdersJob,
   sessionCleanupJob,
 } from "../src/modules/scheduler/jobs.js";
 import { insertTestSnapshot } from "./helpers/catalog.js";
@@ -103,4 +108,46 @@ it("sessionCleanupJob deleguje na cleanupExpiredSessions — zmaže expirovanú,
 
   const zostavajuce = await ctx.db.select({ tokenHash: sessions.tokenHash }).from(sessions);
   expect(zostavajuce).toEqual([{ tokenHash: "platna" }]);
+});
+
+it("ordersImportJob bez nakonfigurovaného runOrdersIngest VYHODÍ (zachytí ho scheduler.ts, zapíše ako failure)", async () => {
+  const job = ordersImportJob(undefined);
+  expect(job.name).toBe(ORDERS_IMPORT_JOB_NAME);
+  await expect(job.run({} as never, NOW)).rejects.toThrow(ORDERS_EXPORT_URL_NOT_CONFIGURED);
+});
+
+it("ordersImportJob s nakonfigurovaným runOrdersIngest naň deleguje a vráti jeho výsledok ako detail", async () => {
+  const fakeResult: OrdersIngestResult = {
+    status: "accepted",
+    orderCount: 2,
+    lineCount: 3,
+    skippedItemCount: 0,
+    pseudoItemCount: 0,
+    issueCount: 0,
+    rawPath: "/tmp/fake.csv.gz",
+  };
+  let receivedNow: Date | undefined;
+  const job = ordersImportJob((now) => {
+    receivedNow = now;
+    return Promise.resolve(fakeResult);
+  });
+
+  const outcome = await job.run({} as never, NOW);
+  expect(outcome).toEqual({ detail: fakeResult });
+  expect(receivedNow).toBe(NOW);
+});
+
+it("pruneRawOrdersJob deleguje na existujúci pruneRawOrders — starý surový súbor objednávok sa naozaj zmaže", async () => {
+  dir = await mkdtemp(join(tmpdir(), "forestshop-scheduler-orders-"));
+  const staryPath = join(dir, "stary.csv.gz");
+  const novyPath = join(dir, "novy.csv.gz");
+  await writeFile(staryPath, "stary");
+  await writeFile(novyPath, "novy");
+  await utimes(staryPath, DAVNO, DAVNO);
+  await utimes(novyPath, NOW, NOW);
+
+  const job = pruneRawOrdersJob(dir, 30);
+  expect(job.name).toBe(PRUNE_RAW_ORDERS_JOB_NAME);
+  const outcome = await job.run({} as never, NOW);
+  expect(outcome).toEqual({ detail: { removed: 1 } });
 });

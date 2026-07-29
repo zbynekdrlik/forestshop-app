@@ -11,6 +11,7 @@ import { appVersion } from "../version.js";
 import { registerCatalogRoutes, type RunIngest } from "./catalog-routes.js";
 import { checkLoginRateLimit, clientIp } from "./login-rate-limit.js";
 import { SESSION_COOKIE, requireUser, type AppBindings } from "./middleware.js";
+import { registerOrdersRoutes, type RunOrdersIngest } from "./orders-routes.js";
 import { requireSameOrigin } from "./origin-check.js";
 import { registerSchedulerRoutes } from "./scheduler-routes.js";
 
@@ -26,7 +27,11 @@ const changePasswordSchema = z.object({
 
 export function createApp(
   db: Database,
-  options: { readonly cookieSecure: boolean; readonly runIngest?: RunIngest },
+  options: {
+    readonly cookieSecure: boolean;
+    readonly runIngest?: RunIngest;
+    readonly runOrdersIngest?: RunOrdersIngest;
+  },
 ): Hono<AppBindings> {
   const app = new Hono<AppBindings>();
 
@@ -115,6 +120,7 @@ export function createApp(
   );
 
   registerCatalogRoutes(app, db, options.runIngest);
+  registerOrdersRoutes(app, db, options.runOrdersIngest);
   registerSchedulerRoutes(app, db);
 
   // Musí byť registrovaný AŽ PO všetkých skutočných /api/* trasách vyššie — Hono

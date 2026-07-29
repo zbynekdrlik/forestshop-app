@@ -55,12 +55,28 @@ paths:
   (víkendy, sezónnosť) než počet produktov v katalógu.
 - **Advisory zámok kľúč `787_878_003`** (`INGEST_ORDERS_ADVISORY_LOCK_KEY`)
   — ďalší v registri `.claude/rules/scheduler.md`, nikdy nehádaj nový.
-- **Žiadna HTTP trasa ani plánovač zatiaľ neexistuje** (#22/#23 sú
-  samostatné tickety) — jediný spôsob, ako import spustiť, je
-  `pnpm orders:ingest` (lokálne/CI) alebo `node apps/api/dist/cli/
-  orders-ingest.js` (produkcia, rovnaký vzor ako `catalog-prune-raw`,
-  pozri `.claude/rules/deploy.md`) — `SHOPTET_ORDERS_URL`/`DATABASE_URL`
-  musia byť nastavené v prostredí.
+- **Nočný beh + retencia + HTTP rozhranie existujú (#22/#28/#23).**
+  `ordersImportJob` (01:45 UTC) + `pruneRawOrdersJob` (02:00 UTC) sú
+  registrované v scheduleri (`index.ts`) vedľa katalógových jobov — registrácia
+  advisory zámkov aj časov je v `.claude/rules/scheduler.md`. Čítanie/ručný
+  refresh ide cez `GET /api/orders/open`, `GET /api/orders/:id`,
+  `POST /api/orders/ingest` (`http/orders-routes.ts` + `modules/orders/
+  queries.ts`) — rovnaký štýl ako katalógové trasy. CLI (`pnpm orders:ingest`
+  / `node apps/api/dist/cli/orders-ingest.js`) zostáva ako lokálny/CI vstupný
+  bod aj núdzové produkčné tlačidlo, keď appka bežiaci proces z nejakého
+  dôvodu nemá zmysel reštartovať.
+- **`product.supplier` je NEPOVINNÝ stĺpec** (`text("supplier")`, bez
+  `.notNull()`, `schema-catalog.ts`) — Shoptet export niekedy nesie prázdnu
+  hodnotu (`map-row.ts`'s `textOrNull`). `modules/orders/queries.ts`'s
+  zoskupenie "Na objednanie" podľa dodávateľa preto mapuje `null` na
+  čitateľný zástupný kľúč (`"(bez dodávateľa)"`), nikdy netriedi/nezoskupuje
+  priamo podľa `null`.
+- **Retencia surových exportov objednávok (`pruneRawOrders`,
+  `modules/orders/raw-prune.ts`) je ČISTO súborová (mtime), nie DB-riadená**
+  ako katalógova `pruneRawSnapshots` — objednávky nemajú snapshotovú tabuľku
+  (pozri vyššie), takže neexistuje DB riadok, cez ktorý by sa dala pohnať. Na
+  rozdiel od katalógu preto NEEXISTUJE výnimka "posledný prijatý sa nikdy
+  nemaže" — každý súbor sa posudzuje rovnako, len podľa veku.
 - **Fixtúra (`fixtures/orders-sample.csv`) je ručne vyrobená z reálnej
   67-stĺpcovej hlavičky** (nie výrez reálneho exportu ako katalóg — export
   objednávok nesie mená a e-maily zákazníkov, tie sa nekomitujú), cp1250

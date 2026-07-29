@@ -17,9 +17,11 @@
 import { createDb } from "../db/client.js";
 import { loadEnv } from "../env.js";
 import { computeImportWindow, createHttpOrdersExportFetcher } from "../modules/orders/fetcher.js";
-import { ingestOrders, type OrdersIngestResult } from "../modules/orders/ingest.js";
-
-const WINDOW_DAYS = 90;
+import {
+  DEFAULT_ORDERS_IMPORT_WINDOW_DAYS,
+  ingestOrders,
+  type OrdersIngestResult,
+} from "../modules/orders/ingest.js";
 
 function popis(result: OrdersIngestResult): string {
   switch (result.status) {
@@ -41,7 +43,7 @@ if (env.SHOPTET_ORDERS_URL === undefined) {
 }
 
 const now = new Date();
-const { dateFrom, dateUntil } = computeImportWindow(now, WINDOW_DAYS);
+const { dateFrom, dateUntil } = computeImportWindow(now, DEFAULT_ORDERS_IMPORT_WINDOW_DAYS);
 
 const { db, pool } = createDb(env.DATABASE_URL);
 let result: OrdersIngestResult;

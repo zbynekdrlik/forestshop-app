@@ -9,7 +9,15 @@ import { createApp } from "./http/app.js";
 import { log } from "./logger.js";
 import { createHttpExportFetcher } from "./modules/catalog/fetcher.js";
 import { ingestCatalog } from "./modules/catalog/ingest.js";
-import { catalogImportJob, pruneRawExportsJob, sessionCleanupJob } from "./modules/scheduler/jobs.js";
+import { computeImportWindow, createHttpOrdersExportFetcher } from "./modules/orders/fetcher.js";
+import { DEFAULT_ORDERS_IMPORT_WINDOW_DAYS, ingestOrders, type RunOrdersIngest } from "./modules/orders/ingest.js";
+import {
+  catalogImportJob,
+  ordersImportJob,
+  pruneRawExportsJob,
+  pruneRawOrdersJob,
+  sessionCleanupJob,
+} from "./modules/scheduler/jobs.js";
 import { startScheduler } from "./modules/scheduler/scheduler.js";
 import { appVersion } from "./version.js";
 
@@ -39,19 +47,46 @@ const runIngest =
           rawDir: env.CATALOG_RAW_DIR,
         });
 
-const app = createApp(
-  db,
-  runIngest === undefined
-    ? { cookieSecure: env.SESSION_COOKIE_SECURE }
-    : { cookieSecure: env.SESSION_COOKIE_SECURE, runIngest },
-);
+// Rovnaká úvaha ako katalógov `runIngest` vyššie: `SHOPTET_ORDERS_URL` je
+// nepovinná (env.ts) — bez nej appka beží ďalej, len ručný/nočný import
+// objednávok vráti/zaloguje "nenakonfigurované". Okno sa počíta AŽ VNÚTRI
+// closure (z `now`, ktoré dostane až v čase behu), nikdy vopred — rovnaká
+// disciplína ako `cli/orders-ingest.ts`.
+const ordersUrl = env.SHOPTET_ORDERS_URL;
+const runOrdersIngest: RunOrdersIngest | undefined =
+  ordersUrl === undefined
+    ? undefined
+    : (now: Date) => {
+        const { dateFrom, dateUntil } = computeImportWindow(now, DEFAULT_ORDERS_IMPORT_WINDOW_DAYS);
+        return ingestOrders(db, {
+          fetchExport: createHttpOrdersExportFetcher({ url: ordersUrl, dateFrom, dateUntil }),
+          now,
+          rawDir: env.ORDERS_RAW_DIR,
+          windowStart: dateFrom,
+          windowEnd: dateUntil,
+        });
+      };
 
-// F2 (#12/#3): nočný import katalógu, mazanie starých surových exportov a
-// mazanie expirovaných relácií — dnes len ručne spúšťané. `catalogImportJob`
-// dostáva `runIngest` (môže byť `undefined`, keď SHOPTET_EXPORT_URL nie je
-// nastavené — job to zaznamená ako "failure" s vysvetlením, nikdy sa
+const app = createApp(db, {
+  cookieSecure: env.SESSION_COOKIE_SECURE,
+  ...(runIngest === undefined ? {} : { runIngest }),
+  ...(runOrdersIngest === undefined ? {} : { runOrdersIngest }),
+});
+
+// F2 (#12/#3) + F3 (#22/#28): nočný import katalógu/objednávok, mazanie
+// starých surových exportov (katalóg aj objednávky) a mazanie expirovaných
+// relácií — dnes len ručne spúšťané pre objednávky mimo tohto nočného behu
+// cez `POST /api/orders/ingest` (#23). `catalogImportJob`/`ordersImportJob`
+// dostávajú svoj `run*Ingest` (môže byť `undefined`, keď zodpovedajúca URL
+// nie je nastavená — job to zaznamená ako "failure" s vysvetlením, nikdy sa
 // nepreskočí ticho).
-startScheduler(db, [catalogImportJob(runIngest), pruneRawExportsJob(), sessionCleanupJob()]);
+startScheduler(db, [
+  catalogImportJob(runIngest),
+  pruneRawExportsJob(),
+  sessionCleanupJob(),
+  ordersImportJob(runOrdersIngest),
+  pruneRawOrdersJob(env.ORDERS_RAW_DIR),
+]);
 
 // `@hono/node-server`'s `serveStatic` prints its OWN `console.error` on every
 // call whose `root` doesn't exist — unconditionally, once per process start.

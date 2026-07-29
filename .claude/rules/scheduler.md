@@ -19,10 +19,18 @@ paths:
   `executeJob` ich odchytí a zapíše ako `job_run.status = "failure"`.
 - **Rozvrh je len denná hodina:minúta v UTC (`DailySchedule`), žiadny cron
   výraz.** `isDue()` (`scheduler.ts`) je čistá funkcia — nová úloha dostáva
-  vlastný `{ hourUtc, minuteUtc }`; zvoľ ho aspoň 15 min od existujúcich
-  troch (01:00 import, 01:15 prune, 01:30 session-cleanup), aby sa
-  neprekrývali zbytočne (nie je to tvrdá závislosť, len aby operátor v
-  logoch/`job_run` vedel odlíšiť poradie).
+  vlastný `{ hourUtc, minuteUtc }`; zvoľ ho aspoň 15 min od existujúcich, aby
+  sa neprekrývali zbytočne (nie je to tvrdá závislosť, len aby operátor v
+  logoch/`job_run` vedel odlíšiť poradie). Dnes zaregistrované: 01:00 import
+  katalógu, 01:15 mazanie surových exportov katalógu, 01:30 mazanie relácií,
+  01:45 import objednávok (`ordersImportJob`, #22), 02:00 mazanie surových
+  exportov objednávok (`pruneRawOrdersJob`, #28).
+- **Job NEPOTREBUJE vlastný advisory zámok, keď buď (a) volaná business
+  funkcia už berie svoj vlastný vnútri seba** (`catalogImportJob`/
+  `ordersImportJob` → `ingestCatalog`/`ingestOrders`), **alebo (b) sa vôbec
+  nedotýka databázy** (`pruneRawOrdersJob` → čisto súborová `pruneRawOrders`,
+  #28) — `tick()`'s `SCHEDULER_ADVISORY_LOCK_KEY` už serializuje samotné
+  vloženie "running" riadku, viac netreba.
 - **Nová advisory zámok kľúč VŽDY over proti existujúcim, nikdy nehádaj.**
   `pg_advisory_lock`/`pg_advisory_xact_lock` zdieľajú JEDEN priestor kľúčov
   bez ohľadu na funkciu (rovnaké upozornenie ako `testing.md`). Dnes
@@ -30,6 +38,8 @@ paths:
   `787_878_002` (`SCHEDULER_ADVISORY_LOCK_KEY`, `scheduler.ts`),
   `787_878_003` (`INGEST_ORDERS_ADVISORY_LOCK_KEY`, `orders/ingest.ts`, #21),
   `787_878_100` (`TEST_DB_ISOLATION_LOCK_KEY`, `tests/helpers/db.ts`).
+  `ordersImportJob`/`pruneRawOrdersJob` (#22/#28) nepridali žiadny nový kľúč
+  (pozri bod vyššie).
 - **`tick()`'s zámok chráni LEN kontrolu splatnosti + vloženie "running"
   riadku, NIE celý beh úlohy.** `job.run()` beží AŽ PO commite transakcie so
   zámkom, mimo neho — dlho bežiaci job (napr. 54 MB import katalógu) tak

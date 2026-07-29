@@ -1,11 +1,15 @@
 import { cleanupExpiredSessions } from "../auth/sessions.js";
 import type { RunIngest } from "../catalog/ingest.js";
 import { pruneRawSnapshots } from "../catalog/raw-store.js";
+import { ORDERS_EXPORT_URL_NOT_CONFIGURED, type RunOrdersIngest } from "../orders/ingest.js";
+import { pruneRawOrders } from "../orders/raw-prune.js";
 import type { ScheduledJob } from "./types.js";
 
 export const CATALOG_IMPORT_JOB_NAME = "catalog-import";
 export const PRUNE_RAW_EXPORTS_JOB_NAME = "prune-raw-exports";
 export const SESSION_CLEANUP_JOB_NAME = "session-cleanup";
+export const ORDERS_IMPORT_JOB_NAME = "orders-import";
+export const PRUNE_RAW_ORDERS_JOB_NAME = "prune-raw-orders";
 
 // Rovnaká hláška ako `catalog-routes.ts`'s 503 pri ručnom importe bez
 // nakonfigurovaného SHOPTET_EXPORT_URL — operátor vidí to isté vysvetlenie na
@@ -53,6 +57,48 @@ export function sessionCleanupJob(): ScheduledJob {
     schedule: { hourUtc: 1, minuteUtc: 30 },
     async run(db, now) {
       const result = await cleanupExpiredSessions(db, now);
+      return { detail: result };
+    },
+  };
+}
+
+/**
+ * Nočný import objednávok (#22) — rovnaký vzor ako `catalogImportJob`, volá
+ * EXISTUJÚCI `ingestOrders` (cez `runOrdersIngest` closure z `index.ts`),
+ * nič sa nereimplementuje. Žiadny nový advisory lock na tejto úrovni —
+ * `ingestOrders` (`orders/ingest.ts`) už berie svoj vlastný
+ * (`INGEST_ORDERS_ADVISORY_LOCK_KEY`) vnútri seba, presne ako
+ * `catalogImportJob` nepridáva zámok navyše. Keď `SHOPTET_ORDERS_URL` nie je
+ * nakonfigurované, job VYHODÍ — `scheduler.ts` to zapíše ako "failure" s
+ * touto správou, namiesto toho, aby beh ticho preskočil bez záznamu.
+ */
+export function ordersImportJob(runOrdersIngest: RunOrdersIngest | undefined): ScheduledJob {
+  return {
+    name: ORDERS_IMPORT_JOB_NAME,
+    // Ďalší voľný 15-minútový slot v registri (01:00 import katalógu, 01:15
+    // mazanie surových exportov katalógu, 01:30 mazanie relácií).
+    schedule: { hourUtc: 1, minuteUtc: 45 },
+    async run(_db, now) {
+      if (runOrdersIngest === undefined) throw new Error(ORDERS_EXPORT_URL_NOT_CONFIGURED);
+      const result = await runOrdersIngest(now);
+      return { detail: result };
+    },
+  };
+}
+
+/**
+ * Mazanie surových exportov objednávok starších než `keepDays` (#28) — volá
+ * existujúci `pruneRawOrders` (čisto súborová retencia, objednávky nemajú
+ * snapshotovú tabuľku, na rozdiel od katalógu). Žiadny DB prístup, teda ani
+ * žiadny advisory lock.
+ */
+export function pruneRawOrdersJob(rawDir: string, keepDays = 30): ScheduledJob {
+  return {
+    name: PRUNE_RAW_ORDERS_JOB_NAME,
+    // Ďalší voľný slot po `ordersImportJob` (01:45).
+    schedule: { hourUtc: 2, minuteUtc: 0 },
+    async run(_db, now) {
+      const result = await pruneRawOrders(rawDir, { keepDays, now });
       return { detail: result };
     },
   };
