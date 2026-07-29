@@ -43,10 +43,12 @@ paths:
   (`parovanie_produktov`, rozhodnutie z 2026-07-22, issue #120 v tamojšom
   repe) — presmerovanie DNS na nový systém by ho ticho odpojilo. Cloudflare
   tunnel pre tento projekt (`forestshop-app`, samostatný od súrodenca) je
-  pripravený a pripojený; samotný DNS `A`/`CNAME` záznam čaká na rozhodnutie
-  vlastníka projektu, kým doména patrí ktorému systému (issue #5).
+  pripravený a pripojený.
+  **Rozhodnuté majiteľom 2026-07-29: hlavné meno prevezme tento systém až vo
+  fáze F6**, keď sa stará appka vypína — dovtedy sa `forestshop.newlevel.media`
+  nechá starému projektu (issue #5 je teraz úloha pre F6, nie otvorená otázka).
 
-- **Dočasný verejný hostname (kým sa nerozhodne issue #5):
+- **Dočasný verejný hostname (do fázy F6, issue #5):
   `forestshop-novy.newlevel.media`.** Beží na samostatnom tunneli
   `forestshop-app` (id `e0cdc5bf-fbc8-45de-b1f7-f4c0b2a9b0dc`), ingress
   `forestshop-novy.newlevel.media` → `http://app:3000` (popri pôvodnom
