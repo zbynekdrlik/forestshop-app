@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { redactSourceLabel, redactUrl } from "./fetcher.js";
 
 describe("redactUrl", () => {
-  it("prekryje prihlasovací hash, ostatné parametre nechá", () => {
+  it("prekryje prihlasovací hash, neškodné parametre nechá (allowlist)", () => {
     expect(
       redactUrl("https://www.forestshop.sk/export/products.csv?patternId=14&partnerId=3&hash=tajne123"),
     ).toBe("https://www.forestshop.sk/export/products.csv?patternId=14&partnerId=3&hash=***");
@@ -12,8 +12,31 @@ describe("redactUrl", () => {
     expect(redactUrl("https://e.sk/x.csv?HASH=tajne")).toBe("https://e.sk/x.csv?HASH=***");
   });
 
-  it("URL bez hashu nechá nezmenenú", () => {
-    expect(redactUrl("https://e.sk/x.csv?a=1")).toBe("https://e.sk/x.csv?a=1");
+  it("URL bez query stringu nechá nezmenenú", () => {
+    expect(redactUrl("https://e.sk/x.csv")).toBe("https://e.sk/x.csv");
+  });
+
+  // Bránu treba obrátiť (review final-wave-a, položka 2): predtým sa prekrýval
+  // LEN parameter menom presne "hash" a všetko ostatné sa vracalo nedotknuté.
+  // Táto URL je dnes nakonfigurovaná so skutočným `hash`, takže nič dnes
+  // neunikalo — ale rovnaký kód sa neskôr namieri na iný Shoptet export a ten
+  // môže niesť prihlasovací údaj pod iným menom (napr. `token`). Prekrytá musí
+  // byť hodnota KAŽDÉHO query parametra okrem malého allowlistu neškodných
+  // (`patternId`, `partnerId`).
+  it("prekryje AKÝKOĽVEK neznámy query parameter (napr. token), nielen hash", () => {
+    expect(redactUrl("https://e.sk/x.csv?token=zive-tajomstvo")).toBe("https://e.sk/x.csv?token=***");
+  });
+
+  it("allowlistované parametre (patternId, partnerId) ostanú viditeľné aj bez hash/token vedľa nich", () => {
+    expect(redactUrl("https://e.sk/x.csv?patternId=14&partnerId=3")).toBe(
+      "https://e.sk/x.csv?patternId=14&partnerId=3",
+    );
+  });
+
+  it("prekryje viacero neznámych parametrov naraz, allowlist nechá", () => {
+    expect(redactUrl("https://e.sk/x.csv?patternId=14&token=abc&secret=xyz")).toBe(
+      "https://e.sk/x.csv?patternId=14&token=***&secret=***",
+    );
   });
 });
 
