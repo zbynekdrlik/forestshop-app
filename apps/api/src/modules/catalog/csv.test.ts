@@ -35,6 +35,36 @@ describe("parseDelimited", () => {
   it("zachová koncové prázdne pole a nevyrobí prázdny riadok navyše", () => {
     expect([...parseDelimited('a;b;\r\n')]).toEqual([["a", "b", ""]]);
   });
+
+  // Dnes súbor, ktorý sa skončí vnútri zacitovanej bunky, tichým omylom vyrobí
+  // vierohodne vyzerajúci skrátený riadok namiesto chyby — presne ten typ
+  // poškodenia, ktorý je end-to-end neviditeľný (item 2/#malformedRowCount).
+  it("vyhodí chybu, keď súbor skončí vnútri zacitovanej bunky (nedokončená úvodzovka)", () => {
+    expect(() => [...parseDelimited('"a";"nedokončené')]).toThrow(/zacitovanej bunky/);
+  });
+
+  it("zacitovaná bunka môže obsahovať oddeľovač", () => {
+    expect([...parseDelimited('"a;b";"c"\r\n')]).toEqual([["a;b", "c"]]);
+  });
+
+  it("zdvojená úvodzovka hneď na začiatku bunky", () => {
+    expect([...parseDelimited('"""start";"other"\r\n')]).toEqual([['"start', "other"]]);
+  });
+
+  it("zdvojená úvodzovka na samom konci bunky", () => {
+    expect([...parseDelimited('"end""";"other"\r\n')]).toEqual([['end"', "other"]]);
+  });
+
+  it("koniec súboru bez ukončujúceho zalomenia riadku", () => {
+    expect([...parseDelimited("a;b;c")]).toEqual([["a", "b", "c"]]);
+  });
+
+  it("osamelé CR (bez LF) ukončuje riadok rovnako ako CRLF", () => {
+    expect([...parseDelimited("a;b\rc;d\r")]).toEqual([
+      ["a", "b"],
+      ["c", "d"],
+    ]);
+  });
 });
 
 describe("parseShoptetCsv nad reálnou fixtúrou", () => {

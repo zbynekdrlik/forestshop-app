@@ -65,6 +65,15 @@ export function* parseDelimited(text: string, delimiter = ";"): Generator<string
     i += 1;
   }
 
+  if (inQuotes) {
+    // A quoted cell that never closes means the file was cut off mid-download or
+    // mid-write — without this check the loop above would happily yield a
+    // plausible-looking truncated row instead of surfacing the corruption.
+    throw new Error(
+      "Súbor sa skončil vnútri zacitovanej bunky — export je neúplný a nedá sa spoľahlivo rozparsovať.",
+    );
+  }
+
   if (started || field !== "" || row.length > 0) {
     row.push(field);
     yield row;
