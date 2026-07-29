@@ -127,6 +127,41 @@ describe("judgeSnapshot", () => {
   it("malformedRowCount: 0 neprekáža prijatiu", () => {
     expect(judgeSnapshot(candidate({ malformedRowCount: 0 }))).toEqual({ verdict: "accepted" });
   });
+
+  // Pomerová hranica (previous 14014 * 0.8 = floor 11211) je dnes testovaná len
+  // nepriamo (#277 s rowCount 3000). Zámena `<` za `<=` by prešla celou sadou —
+  // treba pripnúť presné hodnoty na oboch stranách hranice.
+  it.each([
+    [11_210, "rejected"],
+    [11_211, "accepted"],
+    [11_212, "accepted"],
+  ] as const)("hranica pomeru: %i riadkov pri predchádzajúcich 14014 → %s", (rowCount, expected) => {
+    const judgement = judgeSnapshot(candidate({ rowCount }));
+    expect(judgement.verdict).toBe(expected);
+  });
+
+  // Poradie stĺpcov v exporte NIE JE garantované Shoptetom a gate ho zámerne
+  // nekontroluje — kontrola je `Array.prototype.includes`, nie porovnanie polí.
+  // Bez tohto testu by prepis na poradovo-citlivú kontrolu prešiel celou sadou a
+  // zablokoval by každý nočný import v deň, keď Shoptet stĺpce preusporiada.
+  it("poradie stĺpcov nehrá rolu — zamiešaný zoznam je prijatý", () => {
+    const shuffled = [...FULL_COLUMNS].reverse();
+    expect(judgeSnapshot(candidate({ columns: shuffled }))).toEqual({ verdict: "accepted" });
+  });
+
+  // Existujúce #286 testy menia byteSize AJ rowCount naraz, takže by ich odmietla
+  // aj samotná pomerová hranica riadkov — dôvod je pripnutý len podreťazcom.
+  // Tieto dva prípady izolujú bajtovú kontrolu: počet riadkov aj predchádzajúci
+  // prijatý import zostávajú zdravé, takže odmietnuť môže JEDINE bajtová brána.
+  it("bajtová brána izolovane: prázdne telo je odmietnuté aj pri zdravom počte riadkov", () => {
+    const judgement = judgeSnapshot(candidate({ byteSize: 0 }));
+    expect(judgement.verdict === "rejected" && judgement.reason).toContain("prázdny");
+  });
+
+  it("bajtová brána izolovane: príliš malé telo je odmietnuté aj pri zdravom počte riadkov", () => {
+    const judgement = judgeSnapshot(candidate({ byteSize: 512 }));
+    expect(judgement.verdict === "rejected" && judgement.reason).toContain("bajtov");
+  });
 });
 
 // Každé porovnanie s NaN je false, takže bez explicitnej kontroly prejde každou
