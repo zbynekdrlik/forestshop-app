@@ -8,6 +8,19 @@ paths:
 
 # Deployment (dev2)
 
+- **Nepovinná premenná v `environment:` bloku patrí bez `:?`, ako holý kľúč
+  (`SHOPTET_EXPORT_URL:`, žiadna hodnota) — NIE `${VAR:?chyba}`.** Bare kľúč
+  preberá hodnotu z `/srv/forestshop/.env`, keď tam je, a keď nie je, premenná
+  sa v kontajneri VÔBEC nenastaví (over: `docker compose config`) — presne to,
+  čo očakáva `.optional()` v `env.ts`. `${VAR:?chyba}` (ako pri
+  `POSTGRES_PASSWORD`/`CF_TUNNEL_TOKEN` nižšie) je správne LEN pre premenné bez
+  ktorých appka nemá zmysel spúšťať — na nepovinnej premennej by `up -d` padal
+  pri KAŽDOM deployi, kým operátor tajomstvo nedoplní (presne tento prípad:
+  `SHOPTET_EXPORT_URL`, F1 Task 8, issue #8 — appka bez neho beží ďalej, len
+  ručný import vráti 503). Nikdy `${VAR:-}` (prázdny reťazec) ako náhrada za
+  bare kľúč — to premennú v kontajneri NASTAVÍ na `""`, čo `z.string().url()`
+  v `env.ts` odmietne a appku pri štarte zhodí, hoci samotná premenná je
+  deklarovaná ako nepovinná.
 - **Kam sa nasadzuje:** `/srv/forestshop` na dev2 (vlastník `newlevel`).
   Obsahuje `.env` (mode 600 — `POSTGRES_PASSWORD`, `CF_TUNNEL_TOKEN`),
   `docker-compose.prod.yml` (kopírovaný z repa pri každom deploy) a
