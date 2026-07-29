@@ -45,6 +45,11 @@ export interface SnapshotCandidate {
   readonly columns: readonly string[];
   readonly rowCount: number;
   readonly byteSize: number;
+  // Riadky, kde počet polí po rozparsovaní nesedí s počtom stĺpcov v hlavičke —
+  // typicky jedna nezacitovaná úvodzovka v popise, ktorá rozdelí jeden riadok na
+  // dva plné prázdnych polí. Počet riadkov len stúpne o jeden a ľahko prejde
+  // pomerovou hranicou, takže poškodenie treba odmietnuť samostatne.
+  readonly malformedRowCount: number;
   readonly previousAccepted: { readonly rowCount: number } | null;
 }
 
@@ -71,6 +76,13 @@ export function judgeSnapshot(
     return {
       verdict: "rejected",
       reason: `V exporte chýbajú povinné stĺpce: ${missing.join(", ")}.`,
+    };
+  }
+
+  if (candidate.malformedRowCount > 0) {
+    return {
+      verdict: "rejected",
+      reason: `Export obsahuje ${String(candidate.malformedRowCount)} poškodených riadkov (počet polí nesedí s hlavičkou).`,
     };
   }
 

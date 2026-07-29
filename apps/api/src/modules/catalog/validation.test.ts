@@ -13,6 +13,7 @@ function candidate(overrides: Partial<SnapshotCandidate> = {}): SnapshotCandidat
     columns: overrides.columns ?? FULL_COLUMNS,
     rowCount: overrides.rowCount ?? 14_014,
     byteSize: overrides.byteSize ?? 56_340_420,
+    malformedRowCount: overrides.malformedRowCount ?? 0,
     // `??` would treat an explicitly passed `null` (no previous snapshot) the
     // same as "not provided", silently reverting it to the default — checking
     // for `undefined` keeps an explicit `previousAccepted: null` intact.
@@ -109,5 +110,19 @@ describe("judgeSnapshot", () => {
   it("absolútna hranica platí aj keď je pomerová hranica nižšia (posledný prijatý mal 600, teraz 500)", () => {
     const judgement = judgeSnapshot(candidate({ rowCount: 500, previousAccepted: { rowCount: 600 } }));
     expect(judgement.verdict).toBe("rejected");
+  });
+
+  // Jedno nevyvážené úvodzovky v popise rozdelí riadok na dva — obidva plné
+  // prázdnych polí. Počet riadkov len stúpne o jeden, čo pokojne prejde
+  // pomerovou hranicou, takže poškodenie je inak neviditeľné. Gate musí toto
+  // odmietnuť samostatne, nie spoliehať sa na to, že sa prejaví v počte riadkov.
+  it("odmietne export s poškodenými riadkami, aj keď je všetko ostatné v poriadku", () => {
+    const judgement = judgeSnapshot(candidate({ malformedRowCount: 1 }));
+    expect(judgement.verdict).toBe("rejected");
+    expect(judgement.verdict === "rejected" && judgement.reason).toContain("1");
+  });
+
+  it("malformedRowCount: 0 neprekáža prijatiu", () => {
+    expect(judgeSnapshot(candidate({ malformedRowCount: 0 }))).toEqual({ verdict: "accepted" });
   });
 });
