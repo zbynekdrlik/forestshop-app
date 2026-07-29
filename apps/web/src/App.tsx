@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type JSX } from "react";
 import { fetchMe, postLogout, type Me } from "./api.js";
+import { CatalogPage } from "./components/CatalogPage.js";
 import { Footer } from "./components/Footer.js";
 import { LoginForm } from "./components/LoginForm.js";
 
@@ -71,6 +72,7 @@ export function App(): JSX.Element {
         Odhlásiť sa
       </button>
       {logoutError !== "" && <p role="alert">{logoutError}</p>}
+      <CatalogPage />
       <Footer />
     </main>
   );
