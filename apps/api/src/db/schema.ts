@@ -45,3 +45,4 @@ export const usersRelations = relations(users, ({ many }) => ({
 
 export * from "./schema-catalog.js";
 export * from "./schema-scheduler.js";
+export * from "./schema-orders.js";

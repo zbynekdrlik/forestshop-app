@@ -43,6 +43,13 @@
       "when": 1785345851423,
       "tag": "0005_jittery_gideon",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1785360575937,
+      "tag": "0006_goofy_strong_guy",
+      "breakpoints": true
     }
   ]
 }
