@@ -26,7 +26,7 @@ const pageParam = z.preprocess(
 
 const variantsQuery = z.object({
   q: z.string().max(200).default(""),
-  state: z.enum(["all", "sellable", "out_of_stock", "discontinued"]).default("all"),
+  state: z.enum(["all", "sellable", "out_of_stock", "discontinued", "missing"]).default("all"),
   page: pageParam,
   pageSize: z.coerce.number().int().min(1).max(200).default(50),
 });

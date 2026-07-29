@@ -232,6 +232,32 @@ it("odmietne neplatný parameter stavu", async () => {
   expect((await app.request("/api/catalog/variants?state=hocico", { headers: { cookie } })).status).toBe(400);
 });
 
+// Important (review final-wave-a, položka 6): variant, ktorý zmizol z
+// exportu, sa v čítacej ceste doteraz nedal nájsť — pole sa síce vyberalo a
+// typovalo, ale nikdy sa nezobrazovalo ani nedalo filtrovať. `missing` je
+// PSEUDO-stav (nie hodnota stĺpca `state`) — filtruje podľa `missingSince IS
+// NOT NULL`, nezávisle od toho, aký `state` mal variant naposledy.
+it("filter 'missing' vráti len variant so zaznamenaným missingSince, nezávisle od jeho state", async () => {
+  const { app, cookie, db } = await boot({ role: "manazer", seed: true });
+
+  await db.update(variants).set({ missingSince: NOW }).where(eq(variants.code, "40287"));
+
+  const res = await app.request("/api/catalog/variants?state=missing", { headers: { cookie } });
+  expect(res.status).toBe(200);
+  const telo = (await res.json()) as {
+    total: number;
+    items: { code: string; missingSince: string | null }[];
+  };
+  expect(telo.total).toBe(1);
+  expect(telo.items[0]).toMatchObject({ code: "40287", missingSince: NOW.toISOString() });
+
+  // Ostatné filtre zostávajú nedotknuté — "missing" nie je skutočná hodnota
+  // stĺpca `state`, takže `state=sellable` naďalej vidí ten istý počet ako
+  // predtým (variant "40287" je "sellable", stále sa počíta tam AJ v "missing").
+  const skladom = await app.request("/api/catalog/variants?state=sellable", { headers: { cookie } });
+  expect((await skladom.json()) as { total: number }).toMatchObject({ total: 6 });
+});
+
 it("vráti detail variantu a 404 pre neznámy kód", async () => {
   const { app, cookie, db } = await boot({ role: "manazer", seed: true });
 

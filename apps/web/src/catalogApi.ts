@@ -1,6 +1,8 @@
 import { z } from "zod";
 
-export type CatalogState = "all" | "sellable" | "out_of_stock" | "discontinued";
+// "missing" je PSEUDO-stav (review final-wave-a, položka 6) — filtruje podľa
+// `missingSince`, nie podľa skutočnej hodnoty stĺpca `state`.
+export type CatalogState = "all" | "sellable" | "out_of_stock" | "discontinued" | "missing";
 
 const snapshotSchema = z.object({
   id: z.string(),

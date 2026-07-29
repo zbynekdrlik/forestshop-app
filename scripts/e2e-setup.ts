@@ -48,4 +48,15 @@ if (vysledok.status !== "accepted") {
   throw new Error(`E2E fixtúra nebola prijatá: ${JSON.stringify(vysledok)}`);
 }
 
+// Presne jeden variant sa priamo (mimo `ingestCatalog`) označí ako chýbajúci —
+// E2E tak overí aj čítaciu cestu chýbajúceho variantu (review final-wave-a,
+// položka 6), nielen prípad "všetko je aktuálne". "40287" je jednovariantný
+// produkt so stavom "sellable" (map-row.test.ts) — filter podľa "sellable"
+// tak zostáva 6 aj s ním, presne ako pred touto zmenou. Konštantný literál bez
+// interpolácie (rovnaký dôvod ako TRUNCATE vyššie — priamy import z
+// "drizzle-orm", vrátane `eq`/query buildera, hlási v tomto samostatnom
+// skripte mimo TS projektu apps/api falošné @typescript-eslint/no-unsafe-*),
+// bezpečný presne preto, že reťazec nikdy nenesie vonkajší vstup.
+await db.execute("UPDATE variant SET missing_since = now() WHERE code = '40287'");
+
 await pool.end();

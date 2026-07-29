@@ -230,6 +230,7 @@ export function CatalogPage({
           <option value="sellable">Skladom</option>
           <option value="out_of_stock">Vypredané</option>
           <option value="discontinued">Predaj skončil</option>
+          <option value="missing">Chýbajúce</option>
         </select>
         <button type="submit">Hľadať</button>
       </form>
@@ -262,7 +263,17 @@ export function CatalogPage({
                 <td>{item.code}</td>
                 <td>{item.name}</td>
                 <td>{item.sizeLabel ?? "—"}</td>
-                <td>{STATE_LABELS[item.state]}</td>
+                <td>
+                  {STATE_LABELS[item.state]}
+                  {item.missingSince !== null && (
+                    <>
+                      {" "}
+                      <strong data-testid={`missing-${item.code}`}>
+                        (chýba od {new Date(item.missingSince).toLocaleDateString("sk-SK")})
+                      </strong>
+                    </>
+                  )}
+                </td>
                 <td>{item.stock}</td>
                 <td>{item.price === null ? "—" : `${item.price} ${item.currency ?? ""}`}</td>
                 <td>{item.availabilityText === "" ? "—" : item.availabilityText}</td>

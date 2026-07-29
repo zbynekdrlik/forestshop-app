@@ -172,6 +172,51 @@ it("staršia, ale pomalšia odpoveď hľadania neprepíše novší, rýchlejší
   expect(screen.getByTestId("variant-40237/3XL")).not.toBeNull();
 });
 
+// Important (review final-wave-a, položka 6): variant, ktorý zmizol z
+// exportu, sa v tabuľke doteraz nedal odlíšiť od živého — pole `missingSince`
+// sa vyberalo aj typovalo, ale nikdy sa nezobrazovalo.
+it("chýbajúci variant (missingSince) je v riadku odlíšený od živého, aj kedy chýba", async () => {
+  fetchCatalogStats.mockResolvedValue(ACCEPTED_STATS);
+  searchCatalogVariants.mockResolvedValue({
+    total: 1,
+    items: [{ ...VARIANT_A, missingSince: "2026-07-30T09:00:00.000Z" }],
+  });
+
+  render(<CatalogPage role="manazer" onSessionExpired={() => {}} />);
+
+  const riadok = await screen.findByTestId("variant-40237/3XL");
+  expect(riadok.textContent).toContain("chýba od");
+  expect(screen.getByTestId("missing-40237/3XL")).not.toBeNull();
+});
+
+it("živý variant (missingSince: null) nenesie žiadnu chýbajúcu značku", async () => {
+  fetchCatalogStats.mockResolvedValue(ACCEPTED_STATS);
+  searchCatalogVariants.mockResolvedValue({ total: 1, items: [VARIANT_A] });
+
+  render(<CatalogPage role="manazer" onSessionExpired={() => {}} />);
+
+  await screen.findByTestId("variant-40237/3XL");
+  expect(screen.queryByTestId("missing-40237/3XL")).toBeNull();
+});
+
+it("výber filtra 'Chýbajúce' vyhľadá so state=missing", async () => {
+  fetchCatalogStats.mockResolvedValue(ACCEPTED_STATS);
+  searchCatalogVariants.mockResolvedValue({ total: 0, items: [] });
+
+  render(<CatalogPage role="manazer" onSessionExpired={() => {}} />);
+  await waitFor(() => {
+    expect(searchCatalogVariants).toHaveBeenCalledTimes(1);
+  });
+
+  expect(screen.getByRole("option", { name: "Chýbajúce" })).not.toBeNull();
+  fireEvent.change(screen.getByLabelText("Stav"), { target: { value: "missing" } });
+  fireEvent.click(screen.getByRole("button", { name: "Hľadať" }));
+
+  await waitFor(() => {
+    expect(searchCatalogVariants).toHaveBeenLastCalledWith({ q: "", state: "missing", page: 1 });
+  });
+});
+
 it("import 'accepted' zobrazí úspešnú hlášku s počtami", async () => {
   fetchCatalogStats.mockResolvedValue(ACCEPTED_STATS);
   searchCatalogVariants.mockResolvedValue({ total: 0, items: [] });

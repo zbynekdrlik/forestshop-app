@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, isNotNull, or, sql, type SQL } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
 import { catalogSnapshots, products, variants } from "../../db/schema.js";
 import type { VariantState } from "./availability.js";
@@ -62,7 +62,11 @@ export interface CatalogStats {
 
 export interface VariantSearchInput {
   readonly q: string;
-  readonly state: VariantState | "all";
+  // "missing" je PSEUDO-stav (review final-wave-a, položka 6) — nie je to
+  // hodnota stĺpca `variant.state`, filtruje podľa `missingSince IS NOT
+  // NULL` nezávisle od toho, aký `state` mal variant naposledy pred tým, ako
+  // zmizol z exportu.
+  readonly state: VariantState | "all" | "missing";
   readonly page: number;
   readonly pageSize: number;
 }
@@ -152,7 +156,8 @@ export async function searchVariants(
     const byCodeOrName = or(sql`${variants.code} ILIKE ${pattern}`, sql`${variants.name} ILIKE ${pattern}`);
     if (byCodeOrName !== undefined) filters.push(byCodeOrName);
   }
-  if (input.state !== "all") filters.push(eq(variants.state, input.state));
+  if (input.state === "missing") filters.push(isNotNull(variants.missingSince));
+  else if (input.state !== "all") filters.push(eq(variants.state, input.state));
   const where = filters.length === 0 ? undefined : and(...filters);
 
   const [totals] = await db
