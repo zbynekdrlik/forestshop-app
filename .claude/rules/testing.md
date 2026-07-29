@@ -96,6 +96,19 @@ paths:
   testovaný kód sa spoľahlivo zasekne presne na mieste zámku, kým ho
   manuálne neuvoľníš (`pg_advisory_unlock`). Pozri
   `catalog-ingest-lock.integration.test.ts`.
+- **Nová "koreňová" tabuľka (nemá FK smerujúce DO žiadnej z tabuliek, ktoré už
+  `withCleanDb()`'s TRUNCATE zoznam vypisuje) sa musí do toho zoznamu pridať
+  RUČNE — `TRUNCATE ... CASCADE` sa šíri len JEDNÝM smerom.** `TRUNCATE
+  variant CASCADE` automaticky vyprázdni aj `order_line` (lebo `order_line`
+  referencuje `variant`), ale NEvyprázdni `order` (rodič `order_line`) —
+  cascade ide smerom "čo odkazuje NA truncatovanú tabuľku", nikdy opačne. Bez
+  explicitného pridania `order`/`order_line` do zoznamu v `tests/helpers/db.ts`
+  by riadky `order` ticho prežívali medzi testami (#20). Test to hneď
+  nevyhodí ako zlyhanie — prejaví sa až ako nevysvetliteľné medzi-testové
+  dáta v tabuľke, ktorá vyzerá "nezávislá". Vzor: `"order"` je rezervované
+  SQL kľúčové slovo, v raw SQL literáli (`sql\`TRUNCATE TABLE ...\``) MUSÍ byť
+  ručne uvodzovkované (`"order"`) — drizzle-ove query buildre to robia
+  automaticky, priamy SQL string nie.
 - **Standalone skript v `scripts/*.ts` (mimo TS projektu `apps/api`) hlási
   falošné `@typescript-eslint/no-unsafe-*` na AKÝKOĽVEK priamy import z
   `"drizzle-orm"`** — nielen na tagovanú šablónu `sql` (ako pôvodne
