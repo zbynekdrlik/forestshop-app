@@ -1,3 +1,9 @@
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
 services:
   postgres:
     image: postgres:18-alpine
@@ -17,6 +23,7 @@ services:
       interval: 10s
       timeout: 3s
       retries: 20
+    logging: *default-logging
 
   app:
     image: ghcr.io/zbynekdrlik/forestshop-app:${IMAGE_TAG:-latest}
@@ -29,12 +36,14 @@ services:
       SESSION_COOKIE_SECURE: "true"
     ports:
       - "127.0.0.1:8901:3000"
+    logging: *default-logging
 
   cloudflared:
     image: cloudflare/cloudflared:latest
     restart: unless-stopped
     command: tunnel --no-autoupdate run --token ${CF_TUNNEL_TOKEN:?chyba CF_TUNNEL_TOKEN}
     depends_on: [app]
+    logging: *default-logging
 
 volumes:
   pgdata:
