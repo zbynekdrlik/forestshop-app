@@ -5,6 +5,7 @@ paths:
   - "apps/web/src/catalogApi.ts"
   - "apps/web/src/components/CatalogPage.tsx"
   - "scripts/catalog-*.ts"
+  - "apps/api/src/cli/catalog-*.ts"
 ---
 
 # Katalóg zo Shoptetu
@@ -31,6 +32,17 @@ paths:
   text sa ukladá nezmenený, stav (`sellable`/`out_of_stock`/`discontinued`) sa z neho
   ODVODZUJE v `availability.ts`. Nový text pribudne → doplň pravidlo AJ test tam,
   nikdy nie „opravou" uloženého textu.
+- **`variantVisibility` je per-variantný prepínač, NEZÁVISLÝ od `productVisibility`**
+  (final-wave-b, položka 5.3 — rozhodnuté POUŽIŤ ho, nie len nechať ako
+  štrukturálny/povinný stĺpec bez efektu). Skutočné hodnoty v exporte: "0"
+  (Shoptet vypol PRÁVE TENTO variant, napr. jednu veľkosť z radu), "1", alebo
+  prázdny reťazec (~2 700 jednovariantných produktov ho často nevypĺňa —
+  prázdny sa berie ako viditeľný, nikdy ako vypnutý). `deriveVariantState`
+  (`availability.ts`) ho zohľadňuje AŽ PO silnejších signáloch (text/
+  `productVisibility` hovoriaci "discontinued") — "0" vynúti aspoň
+  `out_of_stock`, nikdy neprebíja `discontinued`. Nepretrváva vo `variant`
+  tabuľke — ovplyvňuje len odvodenie `state` pri importe, žiadny ďalší
+  konzument ho po importe nepotrebuje.
 - **Brána prijatia (`validation.ts`) je to, čo drží #277, #281 a #286 mimo.** Kontroluje
   v poradí: neprázdnosť a minimálnu veľkosť, prítomnosť povinných STĹPCOV (vrátane
   `guid` od review task-5-fix-1 — identita produktu, odmietne sa rovnako ako
@@ -43,6 +55,31 @@ paths:
   dala ratchetnúť smerom k nule cez opakované, mierne klesajúce prijaté exporty
   (napr. 1 → 0, lebo floor(1 × 0,8) = 0) — presne to bol incident #286, dosiahnutý
   cez bránu postavenú na to, aby mu zabránila. Nikdy sem nepridávaj „fail-open" vetvu.
+- **Úplne PRVÝ import sa nemá voči čomu overiť — je to dôvera pri prvom použití
+  (trust-on-first-use), nie chyba brány.** Bez predchádzajúceho prijatého snapshotu
+  platí len absolútna podlaha (`absoluteMinRows`); skrátený alebo len čiastočný
+  prvý export ju pokojne prejde a stane sa ZÁKLADOM pre KAŽDÉ ďalšie porovnanie
+  (pomerová hranica sa odvodzuje práve od neho). Toto je NAJHODNOTNEJŠIA
+  prevádzková inštrukcia celej fázy: prvý prijatý import musí človek vizuálne
+  skontrolovať (napr. cez `/api/catalog/snapshots` + náhľad pár variantov na
+  stránke) — brána sama chybný prvý import zachytiť nevie, a žiadny neskorší
+  import ju už nezachráni, len na nej stavia ďalej.
+- **Anomálie z ODMIETNUTÉHO exportu sa NEZAPÍŠU — sú vypočítané a zahodené.**
+  `ingestCatalog` (`ingest.ts`) vracia `rejected` verdikt PRED vložením do
+  `ingest_issue` (ten insert je až za `if (judgement.verdict === "rejected") { …
+  return …; }`), takže po odmietnutí neostáva žiadny riadok anomálie — jediný
+  dôkaz je gzipnutý surový súbor v `CATALOG_RAW_DIR` (pozri nižšie), na ktorý
+  treba shell prístup k Docker zväzku. Nehľadaj anomálie odmietnutého importu v
+  `ingest_issue` — tam nikdy neboli.
+- **Konflikt DODÁVATEĽA v rámci produktovej skupiny je TICHO first-wins —
+  nevyrába anomáliu.** `ingestCatalog`'s slučka cez `productValues` kontroluje
+  LEN nezhodu `name` (vyrobí `product_name_conflict`); nezhodu `supplier` medzi
+  riadkami toho istého `productKey` nekontroluje vôbec — vyhráva ten dodávateľ,
+  ktorý sa v exporte objaví PRVÝ, ostatné sa ticho zahodia. Žiadny anomáliový
+  druh preň dnes neexistuje. Párovanie produktov v neskoršej fáze bude kľúčovať
+  podľa dodávateľa, takže toto pravidlo je dôležité poznať VOPRED — ak sa niekedy
+  pridá `ingestIssueKind` pre konflikt dodávateľa, riaď sa rovnakým vzorom ako
+  `product_name_conflict`.
 - **Testy nikdy nesťahujú zo Shoptetu.** Sťahovanie je za `ExportFetcher`, testy dodajú
   vlastný. Fixtúra `apps/api/src/modules/catalog/fixtures/shoptet-sample.csv` je 35
   riadkov vyrezaných z reálneho exportu (celé skupiny 40237, 40269, 40287, 60055, 278,
@@ -79,9 +116,23 @@ paths:
 - **CLI vstupné body (`pnpm catalog:ingest`, `pnpm catalog:prune-raw`) hlásia
   poctivo.** `catalog:ingest` končí nenulovým exit kódom LEN pri `rejected` verdikte
   (nikdy pri `duplicate` — to je legitímny no-op úspech, katalóg je aktuálny);
-  operátor sa má spoliehať na `$?`, nie len na text výstupu. Obe skripty vypisujú
-  jednu ľudskú slovenskú vetu AJ jeden JSON riadok (strojovo spracovateľný) — bez
-  nastaveného `SHOPTET_EXPORT_URL` skript zlyhá nahlas hneď na štarte, nikdy ticho.
+  operátor sa má spoliehať na `$?`, nie len na text výstupu (final-wave-b, položka
+  1 — pripnuté testom, ktorý skutočný skript spúšťa ako podproces cez `tsx`, nie
+  len funkciu pod ním). Obe skripty vypisujú jednu ľudskú slovenskú vetu AJ jeden
+  JSON riadok (strojovo spracovateľný) — bez nastaveného `SHOPTET_EXPORT_URL`
+  skript zlyhá nahlas hneď na štarte, nikdy ticho.
+- **`catalog:prune-raw` má DVE kópie, zámerne — `scripts/catalog-prune-raw.ts` je
+  len tenký alias.** Kanonická implementácia žije v `apps/api/src/cli/
+  catalog-prune-raw.ts` (súčasť `apps/api`'s vlastného `tsc -b`), skompiluje sa
+  do `apps/api/dist/cli/catalog-prune-raw.js` a BEŽÍ V PRODUKCII (`.claude/rules/
+  deploy.md`) — `docker compose exec app node apps/api/dist/cli/
+  catalog-prune-raw.js`. Dôvod: dev2 má `scripts/` len ako `rsync`-nutú kópiu BEZ
+  `node_modules` (final-wave-b, položka 2), takže `tsx scripts/catalog-prune-raw.ts`
+  tam nemá ako bežať — bez skompilovanej verzie v obraze retencia v produkcii
+  nemala žiadny spôsob spustenia a `catalog-raw` zväzok rástol donekonečna.
+  `catalog:ingest` túto duplicitu NEPOTREBUJE — import beží aj cez tlačidlo na
+  webe (`POST /api/catalog/ingest`, priamo v bežiacom procese appky), takže
+  `scripts/catalog-ingest.ts` zostáva len pohodlný LOKÁLNY/CI vstupný bod.
 - **`SHOPTET_EXPORT_URL` je tajomstvo** (prihlasovací `hash` je v query parametri). Do
   databázy ani do logov nesmie ísť celá — vždy cez `redactUrl`. V repe nikdy nie je.
   Na dev2 zatiaľ nie je nastavené (issue #8) — appka bez neho beží ďalej (premenná je
