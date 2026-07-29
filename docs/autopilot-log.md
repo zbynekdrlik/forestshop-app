@@ -194,3 +194,49 @@ RED→GREEN test names, key decisions, and the shared PR.
   second time — counts stayed identical (idempotent upsert confirmed on
   real production data).
 - Per-ticket Discord card fired (`notify --run-card`, confirmed delivered).
+
+## #22 + #28 + #23 — Bundled batch: orders scheduler, raw-export retention, read API (F3)
+
+- Version bump `a1bf750` (0.3.0-dev.10 → 0.3.0-dev.11). Design comments
+  posted BEFORE first code commit on all three tickets:
+  [#22](https://github.com/zbynekdrlik/forestshop-app/issues/22#issuecomment-5124103095),
+  [#28](https://github.com/zbynekdrlik/forestshop-app/issues/28#issuecomment-5124103303),
+  [#23](https://github.com/zbynekdrlik/forestshop-app/issues/23#issuecomment-5124103512).
+- Commit `c35c0b2` (#22+#28): `ordersImportJob` (01:45 UTC) + `pruneRawOrdersJob`
+  (02:00 UTC) in `modules/scheduler/jobs.ts`, wired in `index.ts`; new
+  `modules/orders/raw-prune.ts` (pure filesystem mtime retention — orders have
+  no snapshot table); shared `RunOrdersIngest` type + `DEFAULT_ORDERS_IMPORT_WINDOW_DAYS`
+  moved into `modules/orders/ingest.ts`. Tests: `raw-prune.test.ts` (unit, 4
+  cases), `scheduler-jobs.integration.test.ts` additions (delegation tests
+  for both new jobs).
+- Commit `b2fd182` (#23): `modules/orders/queries.ts`
+  (`listOpenOrderLinesBySupplier` grouped at LINE level, `getOrderDetail`) +
+  `http/orders-routes.ts` (`GET /api/orders/open`, `GET /api/orders/:id`,
+  `POST /api/orders/ingest`) — same style as `catalog-routes.ts`. 12 new
+  integration tests (`orders-http.integration.test.ts`): auth/role/CSRF/
+  in-flight/503/502/audit paths + grouping/detail correctness.
+- Independent code-review subagent dispatched (`general-purpose`, diff
+  5228c8e7..d30943e): 1 Important (nullable `product.supplier` → `"(bez
+  dodávateľa)"` fallback was unverified — no test exercised it) + 2 Minor
+  (a `stat()` TOCTOU race in `raw-prune.ts` could fail the whole nightly job
+  on a concurrently-deleted file; the ingest audit payload was wider than
+  catalog's narrowed equivalent). All three fixed in commit `85f3d56`: added
+  the null-supplier regression test (both `listOpenOrderLinesBySupplier` and
+  `getOrderDetail`), guarded `stat()` with an ENOENT skip + its own
+  `vi.mock`-based regression test, narrowed the audit payload to
+  `{status, orderCount, lineCount}`/`{status, reason}`.
+- Shared PR: **#29** (`dev` → `main`), merged `601734a`. CI: all jobs green
+  (check, integration, e2e, docker-build, version-check) on both push and
+  PR runs, across all three push cycles (initial, playbook-docs-only,
+  review-fixes).
+- Deployed + verified on https://forestshop-novy.newlevel.media
+  (v0.3.0-dev.11 in DOM footer, `/api/version` commit matches `601734a0`):
+  the scheduler had ALREADY run `orders-import` (524 orders/864 lines) and
+  `prune-raw-orders` (`{"removed":0}`) live overnight, both "Úspešná" in the
+  Plánovač table — direct production confirmation of #22/#28 with zero
+  manual trigger. `GET /api/orders/open` (live, authenticated) returned 41
+  suppliers / 864 total lines (exact match to the scheduler's own
+  `lineCount`), `GET /api/orders/:id` returned a full order detail. Zero
+  console errors (only the sanctioned unauthenticated `/api/me` 401).
+- Per-ticket Discord cards fired for #22, #28, #23 (`notify --run-card`,
+  all confirmed delivered).

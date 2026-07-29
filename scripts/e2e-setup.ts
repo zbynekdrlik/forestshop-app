@@ -9,7 +9,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { createDb } from "../apps/api/src/db/client.js";
-import { users } from "../apps/api/src/db/schema.js";
+import { orderLines, orders, users } from "../apps/api/src/db/schema.js";
 import { hashPassword } from "../apps/api/src/modules/auth/passwords.js";
 import { ingestCatalog } from "../apps/api/src/modules/catalog/ingest.js";
 import { DEFAULT_SNAPSHOT_LIMITS } from "../apps/api/src/modules/catalog/validation.js";
@@ -22,8 +22,14 @@ const { db, pool } = createDb();
 // ale vyhne sa priamemu importu z "drizzle-orm" v tomto samostatnom skripte mimo
 // TS projektu apps/api — ESLint-ova type-aware kontrola vtedy nevie spoľahlivo
 // odvodiť typ tagovanej šablóny a hlási falošné @typescript-eslint/no-unsafe-*.
+// `order_line, "order"` sú pridané RUČNE (`.claude/rules/testing.md` #20) —
+// `TRUNCATE variant CASCADE` by síce strhol `order_line` (referencuje
+// `variant.code`), ale NIE `order` (rodič `order_line`, cascade ide len jedným
+// smerom) — bez ručného pridania by riadky `order` z predchádzajúceho E2E
+// behu ticho prežívali. `"order"` je rezervované SQL kľúčové slovo, musí byť
+// uvodzované ručne v priamom SQL stringu.
 await db.execute(
-  "TRUNCATE TABLE ingest_issue, variant, product, catalog_snapshot, job_run, audit_events, sessions, users RESTART IDENTITY CASCADE",
+  'TRUNCATE TABLE ingest_issue, variant, product, catalog_snapshot, job_run, audit_events, sessions, users, order_line, "order" RESTART IDENTITY CASCADE',
 );
 await db.insert(users).values({
   email: "e2e@forestshop.sk",
@@ -58,5 +64,46 @@ if (vysledok.status !== "accepted") {
 // skripte mimo TS projektu apps/api falošné @typescript-eslint/no-unsafe-*),
 // bezpečný presne preto, že reťazec nikdy nenesie vonkajší vstup.
 await db.execute("UPDATE variant SET missing_since = now() WHERE code = '40287'");
+
+// F3 (#24): dve otvorené objednávky nad UŽ naimportovanými fixtúrovými
+// variantmi — žiadne ručné vkladanie produktu/variantu netreba, E2E tak
+// overuje zoskupenie "Na objednanie" (#23) nad skutočne naimportovanými
+// dátami. "4859/46" má v exporte reálneho dodávateľa ("DODAVATEL-TEST-1",
+// map-row.test.ts), "40287" ho nemá (`product.supplier` je `null`) —
+// zámerne pokrýva OBE vetvy zoskupenia podľa dodávateľa, vrátane zástupného
+// kľúča "(bez dodávateľa)" (`modules/orders/queries.ts`).
+const [objednavkaAlfa] = await db
+  .insert(orders)
+  .values({
+    externalOrderId: "9001",
+    customerName: "E2E Zákazník Alfa",
+    comment: "Zavolať pred doručením",
+    placedAt: new Date("2026-07-20T10:00:00Z"),
+  })
+  .returning();
+if (objednavkaAlfa === undefined) throw new Error("E2E objednávka (dodávateľ) sa nepodarila vložiť");
+await db.insert(orderLines).values({
+  orderId: objednavkaAlfa.id,
+  variantCode: "4859/46",
+  quantity: 2,
+  state: "caka_sa",
+});
+
+const [objednavkaBezDodavatela] = await db
+  .insert(orders)
+  .values({
+    externalOrderId: "9002",
+    customerName: "E2E Zákazník Bez dodávateľa",
+    placedAt: new Date("2026-07-21T09:00:00Z"),
+  })
+  .returning();
+if (objednavkaBezDodavatela === undefined) {
+  throw new Error("E2E objednávka (bez dodávateľa) sa nepodarila vložiť");
+}
+await db.insert(orderLines).values({
+  orderId: objednavkaBezDodavatela.id,
+  variantCode: "40287",
+  quantity: 1,
+});
 
 await pool.end();
