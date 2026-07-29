@@ -1,7 +1,21 @@
 import { access, mkdir, mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
+
+// Čiastočný mock — `stat` je jediná exportovaná funkcia, ktorú tento súbor
+// potrebuje ovládať (simulácia rasovej podmienky "súbor zmizol MEDZI
+// readdir a stat"). Priamy `vi.spyOn(fsPromises, "stat")` na natívnom ESM
+// module zlyhá ("Module namespace is not configurable in ESM") — `vi.mock`
+// s `importOriginal` je jediný spôsob, ako v ESM prostredí nahradiť JEDEN
+// export a ostatné (`readdir`/`rm`) nechať skutočné.
+const { stat: mockedStat } = vi.hoisted(() => ({ stat: vi.fn() }));
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs/promises")>();
+  mockedStat.mockImplementation(actual.stat);
+  return { ...actual, stat: mockedStat };
+});
+
 import { pruneRawOrders } from "./raw-prune.js";
 
 const NOW = new Date("2026-07-30T10:00:00Z");
@@ -56,6 +70,30 @@ it("prejde adresár rekurzívne — súbory v podadresároch YYYY/MM (storeRawSn
 it("chýbajúci adresár (žiadny import ešte nebežal) sa berie ako 'nič na zmazanie', nie chyba", async () => {
   const neexistujuci = join(tmpdir(), `forestshop-orders-prune-neexistuje-${String(Date.now())}`);
   await expect(pruneRawOrders(neexistujuci, { keepDays: 30, now: NOW })).resolves.toEqual({ removed: 0 });
+});
+
+it("súbor, ktorý zmizne MEDZI readdir a stat (súbežné mazanie mimo appky), sa ticho preskočí — nepadne celý beh (review finding)", async () => {
+  dir = await mkdtemp(join(tmpdir(), "forestshop-orders-prune-"));
+  const prvy = join(dir, "prvy.csv.gz");
+  const druhy = join(dir, "druhy.csv.gz");
+  await writeFile(prvy, "a");
+  await writeFile(druhy, "b");
+  await utimes(prvy, DAVNO, DAVNO);
+  await utimes(druhy, DAVNO, DAVNO);
+
+  const enoent = new Error("ENOENT") as NodeJS.ErrnoException;
+  enoent.code = "ENOENT";
+  // `mockImplementationOnce` zasiahne PRVÉ volanie `stat` bez ohľadu na to, v
+  // akom poradí `readdir` súbory vráti (POSIX to negarantuje) — test je preto
+  // zámerne nezávislý od toho, ktorý z dvoch súborov "zmizne".
+  mockedStat.mockImplementationOnce(() => Promise.reject(enoent));
+
+  const result = await pruneRawOrders(dir, { keepDays: 30, now: NOW });
+  // Presne JEDEN súbor sa naozaj zmazal (ten, čo prešiel `stat` normálne) —
+  // beh nesmie spadnúť na tom, ktorý "zmizol", ani ho omylom nepočítať.
+  expect(result).toEqual({ removed: 1 });
+  const presneJedenOstal = (await existuje(prvy)) !== (await existuje(druhy));
+  expect(presneJedenOstal).toBe(true);
 });
 
 it("súbor presne na hranici keepDays (mtime rovný cutoffu) sa nezmaže — hranica je ostro 'starší než', nie 'starý alebo rovný'", async () => {

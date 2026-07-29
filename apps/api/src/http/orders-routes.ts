@@ -84,13 +84,18 @@ export function registerOrdersRoutes(
         }
         // Audit sa zapisuje PO dobehnutí importu, nie pred ním — nesie tak
         // skutočný výsledok, nielen úmysel ho spustiť (rovnaký vzor ako
-        // katalóg).
+        // katalóg). Dáta sú ZÚŽENÉ (nie celý `result`) — rovnaká disciplína
+        // ako katalógov `{ status, snapshotId }`: `rawPath` je cesta na
+        // serverovom disku, do audit záznamu (čitateľného cez API) nepatrí.
         await record(db, {
           at: now,
           actorUserId: user.userId,
           action: "orders.ingest.trigger",
           entity: "order",
-          data: result,
+          data:
+            result.status === "accepted"
+              ? { status: result.status, orderCount: result.orderCount, lineCount: result.lineCount }
+              : { status: result.status, reason: result.reason },
         });
         log.info({ actorUserId: user.userId, status: result.status }, "ručný import objednávok");
         return c.json(result);

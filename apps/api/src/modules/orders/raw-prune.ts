@@ -50,7 +50,18 @@ export async function pruneRawOrders(
 
   let removed = 0;
   for (const file of files) {
-    const info = await stat(file);
+    let info;
+    try {
+      info = await stat(file);
+    } catch (error) {
+      // Súbor zmizol MEDZI `readdir` a `stat` (napr. súbežné ručné upratanie
+      // na disku) — rovnaká "už je preč, netreba nič robiť" disciplína ako
+      // `rm(..., { force: true })` nižšie. Bez tohto by táto rasová podmienka
+      // zhodila celý nočný beh na `job_run.status = "failure"` namiesto toho,
+      // aby jeden zmiznutý súbor jednoducho preskočila.
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+      throw error;
+    }
     if (info.mtime.getTime() < cutoff) {
       await rm(file, { force: true });
       removed += 1;

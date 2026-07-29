@@ -9,12 +9,15 @@ import { insertTestSnapshot } from "./catalog.js";
  * preskočia, `orders/ingest.ts`'s `knownVariantCodes` kontrola). Nepovinný
  * `supplier` (#23) — testy zoskupenia "Na objednanie" podľa dodávateľa
  * potrebujú aspoň dvoch RÔZNYCH dodávateľov, predvolená hodnota zostáva
- * rovnaká ako doteraz, takže existujúce volania sa nemenia.
+ * rovnaká ako doteraz, takže existujúce volania sa nemenia. `null` je
+ * explicitne povolené (nie len string) — `product.supplier` je v schéme
+ * nepovinný stĺpec (`.claude/rules/orders.md`) a `queries.ts`'s zoskupenie
+ * musí zvládnuť aj tento prípad.
  */
 export async function insertTestVariant(
   db: Database,
   code: string,
-  supplier = "Test dodávateľ",
+  supplier: string | null = "Test dodávateľ",
 ): Promise<void> {
   const snapshotId = await insertTestSnapshot(db);
   await db.insert(products).values({

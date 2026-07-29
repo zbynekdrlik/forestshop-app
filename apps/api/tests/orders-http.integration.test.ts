@@ -99,6 +99,32 @@ it("vráti otvorené objednávky zoskupené podľa dodávateľa, riadky zostupne
   expect(beta?.lines[0]).toMatchObject({ externalOrderId: "1002", variantCode: "B-1", quantity: 5 });
 });
 
+// Review finding: `product.supplier` je nepovinný stĺpec (Shoptet export
+// niekedy nesie prázdnu hodnotu, `map-row.ts`'s `textOrNull`) — bez tohto
+// testu by regresia zlomeného `?? NEZNAMY_DODAVATEL` fallbacku (napr.
+// omylom pridané non-null tvrdenie) prešla ticho.
+it("riadok bez dodávateľa (product.supplier je null) sa zoskupí pod čitateľný zástupný kľúč, nielen na 'null'", async () => {
+  const { app, cookie, db } = await boot("manazer");
+  await insertTestVariant(db, "N-1", null);
+
+  const [objednavka] = await db
+    .insert(orders)
+    .values({ externalOrderId: "3001", customerName: "Zákazník bez dodávateľa", placedAt: new Date("2026-07-05T00:00:00Z") })
+    .returning();
+  if (objednavka === undefined) throw new Error("insert zlyhal");
+  await db.insert(orderLines).values({ orderId: objednavka.id, variantCode: "N-1", quantity: 1 });
+
+  const openRes = await app.request("/api/orders/open", { headers: { cookie } });
+  const openTelo = (await openRes.json()) as { suppliers: { supplier: string; lines: unknown[] }[] };
+  const bezDodavatela = openTelo.suppliers.find((s) => s.supplier === "(bez dodávateľa)");
+  expect(bezDodavatela).toBeDefined();
+  expect(bezDodavatela?.lines).toHaveLength(1);
+
+  const detailRes = await app.request(`/api/orders/${objednavka.id}`, { headers: { cookie } });
+  const detailTelo = (await detailRes.json()) as { lines: { supplier: string }[] };
+  expect(detailTelo.lines[0]?.supplier).toBe("(bez dodávateľa)");
+});
+
 it("vráti detail objednávky so všetkými riadkami, 404 pre neznáme id, 400 pre neplatné id", async () => {
   const { app, cookie, db } = await boot("manazer");
   await insertTestVariant(db, "A-1", "Dodávateľ Alfa");
