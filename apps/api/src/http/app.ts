@@ -4,6 +4,8 @@ import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { z } from "zod";
 import type { Database } from "../db/client.js";
 import { log } from "../logger.js";
+import { changePassword } from "../modules/auth/change-password.js";
+import { MIN_NEW_PASSWORD_LENGTH } from "../modules/auth/passwords.js";
 import { login, logout } from "../modules/auth/service.js";
 import { appVersion } from "../version.js";
 import { registerCatalogRoutes, type RunIngest } from "./catalog-routes.js";
@@ -15,6 +17,11 @@ import { registerSchedulerRoutes } from "./scheduler-routes.js";
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
+});
+
+const changePasswordSchema = z.object({
+  oldPassword: z.string().min(1),
+  newPassword: z.string().min(MIN_NEW_PASSWORD_LENGTH),
 });
 
 export function createApp(
@@ -70,6 +77,42 @@ export function createApp(
   });
 
   app.get("/api/me", requireUser(db), (c) => c.json(c.get("user")));
+
+  app.post(
+    "/api/me/password",
+    // Rovnaká CSRF disciplína ako `/api/logout` a import katalógu
+    // (`origin-check.ts`) — ide o stavovo-meniacu požiadavku nad
+    // autentifikovaným cookie session-om.
+    requireSameOrigin(),
+    requireUser(db),
+    zValidator("json", changePasswordSchema),
+    async (c) => {
+      const body = c.req.valid("json");
+      const user = c.get("user");
+      const now = new Date();
+      const result = await changePassword(db, {
+        userId: user.userId,
+        oldPassword: body.oldPassword,
+        newPassword: body.newPassword,
+        currentSessionToken: getCookie(c, SESSION_COOKIE) ?? "",
+        now,
+      });
+      // Zámerne 200 aj pre "zlé staré heslo" — je to bežný, očakávaný
+      // DOMÉNOVÝ výsledok (rovnaká rodina rozhodnutí ako `/api/catalog/ingest`
+      // vraciace 200 `{status: "busy"}`/"rejected" pre iný nechybový výsledok
+      // importu), nie chyba na úrovni HTTP. Chromium loguje "Failed to load
+      // resource" do konzoly pre KAŽDÝ fetch s 4xx/5xx bez ohľadu na to, či ho
+      // JS odchytí — pri 4xx by to pri zlom starom hesle (bežná, očakávaná
+      // používateľská chyba, nie výnimočný stav) porušilo pravidlo čistej
+      // konzoly (`testing.md` zakazuje rozširovať jedinú dnes povolenú
+      // výnimku o ďalšie cesty/kódy). 401 zostáva vyhradené pre skutočnú
+      // stratu relácie (`requireUser` vyššie v reťazci), 403 pre CSRF.
+      if (result === "wrong_old_password") {
+        return c.json({ ok: false, error: "Nesprávne staré heslo" });
+      }
+      return c.json({ ok: true });
+    },
+  );
 
   registerCatalogRoutes(app, db, options.runIngest);
   registerSchedulerRoutes(app, db);
