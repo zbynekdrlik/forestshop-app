@@ -91,7 +91,40 @@ export function registerCatalogRoutes(
       try {
         const now = new Date();
         const user = c.get("user");
-        const result = await runIngest(now);
+        let result: CatalogIngestResult;
+        try {
+          result = await runIngest(now);
+        } catch (error) {
+          // Stiahnutie exportu zlyhalo úplne (vypršaný prihlasovací údaj, 502
+          // od Shoptetu, timeout) — fetcher vyhodí PRED akýmkoľvek zápisom, teda
+          // pred `ingest.ts`'s vlastným snapshot/audit/anomáliovým záznamom.
+          // Predtým to táto trasa nechytala vôbec: prehliadač dostal generický
+          // 500 a operátor mal k dispozícii len riadok v kontajnerovom logu —
+          // toto je jediná trieda zlyhania vo fáze, ktorá nezanechala ŽIADEN
+          // záznam, a v reálnej prevádzke aj najpravdepodobnejšia (review
+          // final-wave-a, položka 4). Surová (možno anglická/technická) chyba
+          // sa loguje TU, samostatne — nikdy sa neinterpoluje do hlášky pre
+          // operátora ani do auditového záznamu, rovnaká disciplína ako pri
+          // materializačnom zlyhaní v `ingest.ts`.
+          const rawErrorMessage = error instanceof Error ? error.message : String(error);
+          log.error(
+            { actorUserId: user.userId, rawErrorMessage },
+            "stiahnutie exportu katalógu zlyhalo",
+          );
+          await record(db, {
+            at: now,
+            actorUserId: user.userId,
+            action: "catalog.ingest.trigger",
+            entity: "catalog_snapshot",
+            data: { status: "fetch_failed" },
+          });
+          // 502 ("stiahnutie od Shoptetu zlyhalo"), nie 500 ("tento server je
+          // rozbitý") — rovnaká sémantika ako zlá brána k inému serveru.
+          return c.json(
+            { error: "Export zo Shoptetu sa nepodarilo stiahnuť. Skúste import o chvíľu zopakovať." },
+            502,
+          );
+        }
         // Audit sa zapisuje PO dobehnutí importu, nie pred ním — nesie tak
         // skutočný výsledok (status + snapshotId), nielen úmysel spustiť
         // (review task-6-fix-1). `snapshotId` má aj "rejected"/"duplicate"

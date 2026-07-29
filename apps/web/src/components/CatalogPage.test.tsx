@@ -224,6 +224,26 @@ it("import 'duplicate' oznámi, že sa nič nezmenilo", async () => {
   expect(outcome.textContent).toContain("nezmenil");
 });
 
+// Review final-wave-a, položka 4: keď sa export nedá vôbec stiahnuť, server
+// vráti 502 s jasnou slovenskou hláškou namiesto generického zlyhania.
+// `triggerCatalogIngest` (catalogApi.ts) v tom prípade odmietne s `Error`
+// nesúcou práve túto hlášku — stránka ju musí zobraziť rovnako, ako pri
+// každej inej chybe importu.
+it("keď sa export nedá stiahnuť, zobrazí hlášku servera ako alert", async () => {
+  fetchCatalogStats.mockResolvedValue(ACCEPTED_STATS);
+  searchCatalogVariants.mockResolvedValue({ total: 0, items: [] });
+  triggerCatalogIngest.mockRejectedValue(
+    new Error("Export zo Shoptetu sa nepodarilo stiahnuť. Skúste import o chvíľu zopakovať."),
+  );
+
+  render(<CatalogPage role="manazer" onSessionExpired={() => {}} />);
+  fireEvent.click(await screen.findByRole("button", { name: "Stiahnuť a naimportovať export" }));
+
+  const outcome = await screen.findByTestId("import-outcome");
+  expect(outcome.getAttribute("role")).toBe("alert");
+  expect(outcome.textContent).toContain("nepodarilo stiahnuť");
+});
+
 it("import 'busy' oznámi, že import už beží", async () => {
   fetchCatalogStats.mockResolvedValue(ACCEPTED_STATS);
   searchCatalogVariants.mockResolvedValue({ total: 0, items: [] });
