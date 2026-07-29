@@ -90,7 +90,12 @@ jobs:
           git fetch origin main --quiet
           main_v=$(git show origin/main:package.json 2>/dev/null | node -p "JSON.parse(require('fs').readFileSync(0,'utf8')).version" || echo "0.0.0")
           echo "dev=$dev_v main=$main_v"
-          if [ "$dev_v" = "$main_v" ] || [ "$(printf '%s\n%s\n' "$main_v" "$dev_v" | sort -V | tail -1)" != "$dev_v" ]; then
+          # `sort -V` NIE je semver: predvydania radí NAD finálnu verziu
+          # (0.2.0 < 0.2.0-dev.1), takže táto brána padala vždy, keď na main
+          # zostala -dev verzia. Radenie robí knižnica semver (pinutá verzia),
+          # ktorá pozná prednosť predvydaní; posledný riadok je najvyššia verzia.
+          highest=$(npx --yes semver@7.6.3 "$main_v" "$dev_v" | tail -1)
+          if [ "$dev_v" = "$main_v" ] || [ "$highest" != "$dev_v" ]; then
             echo "::error::verzia na dev ($dev_v) musí byť vyššia než na main ($main_v)"
             exit 1
           fi
