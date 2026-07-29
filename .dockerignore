@@ -4,7 +4,7 @@
 .git
 data
 *.png
-playwright-report
-test-results
+**/playwright-report
+**/test-results
 .env
 .superpowers
