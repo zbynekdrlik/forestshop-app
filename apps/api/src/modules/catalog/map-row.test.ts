@@ -48,6 +48,8 @@ describe("splitCode", () => {
     ["BR1611", "BR1611", null],
     ["AB/", "AB", null],
     ["A/B/C", "A", "B/C"],
+    ["", "", null],
+    [" 40237/3XL ", " 40237", "3XL "],
   ])("„%s\" → %s + %s", (code, productKey, sizeLabel) => {
     expect(splitCode(code)).toEqual({ productKey, sizeLabel });
   });
@@ -126,6 +128,12 @@ describe("mapRow — anomálie", () => {
     expect(issues).toEqual([{ kind: "empty_code", code: "", detail: { name: "Testovací produkt" } }]);
   });
 
+  it("kód začínajúci lomkou (prázdny productKey) nevyrobí záznam, ale vyrobí problém", () => {
+    const { record, issues } = mapRow(bareRow({ code: "/M" }));
+    expect(record).toBeNull();
+    expect(issues).toEqual([{ kind: "empty_code", code: "/M", detail: { name: "Testovací produkt" } }]);
+  });
+
   it("nečitateľná suma sa zahodí a zapíše sa problém", () => {
     const { record, issues } = mapRow(bareRow({ price: "n/a", currency: "EUR" }));
     expect(record?.price).toBeNull();
@@ -136,9 +144,29 @@ describe("mapRow — anomálie", () => {
 
   it("suma bez meny sa zahodí celá — inak by ju odmietol CHECK v databáze", () => {
     const { record, issues } = mapRow(bareRow({ price: "10,00", standardPrice: "12,00", currency: "" }));
-    expect(record).toMatchObject({ currency: null, price: null, standardPrice: null });
+    expect(record).toMatchObject({
+      currency: null,
+      price: null,
+      standardPrice: null,
+      purchasePrice: null,
+      actionPrice: null,
+    });
     expect(issues).toEqual([
-      { kind: "missing_currency", code: "TEST/1", detail: { price: "10,00" } },
+      { kind: "missing_currency", code: "TEST/1", detail: { price: "10,00", standardPrice: "12,00" } },
+    ]);
+  });
+
+  it("suma bez meny, keď jedinou prítomnou sumou je purchasePrice, sa tiež zahodí celá", () => {
+    const { record, issues } = mapRow(bareRow({ purchasePrice: "32,68", currency: "" }));
+    expect(record).toMatchObject({
+      currency: null,
+      price: null,
+      standardPrice: null,
+      purchasePrice: null,
+      actionPrice: null,
+    });
+    expect(issues).toEqual([
+      { kind: "missing_currency", code: "TEST/1", detail: { purchasePrice: "32,68" } },
     ]);
   });
 
@@ -150,9 +178,76 @@ describe("mapRow — anomálie", () => {
     ]);
   });
 
+  it("desatinný a preto nie striktne celočíselný sklad sa berie ako 0 a zapíše sa problém", () => {
+    const { record, issues } = mapRow(bareRow({ stock: "3.9" }));
+    expect(record?.stock).toBe(0);
+    expect(issues).toEqual([
+      { kind: "invalid_stock", code: "TEST/1", detail: { raw: "3.9" } },
+    ]);
+  });
+
+  it("sklad so zvyškovým textom ('12abc') sa berie ako 0 a zapíše sa problém", () => {
+    const { record, issues } = mapRow(bareRow({ stock: "12abc" }));
+    expect(record?.stock).toBe(0);
+    expect(issues).toEqual([
+      { kind: "invalid_stock", code: "TEST/1", detail: { raw: "12abc" } },
+    ]);
+  });
+
   it("prázdny sklad je 0 a nie je to anomália", () => {
     const { record, issues } = mapRow(bareRow({ stock: "" }));
     expect(record?.stock).toBe(0);
     expect(issues).toEqual([]);
+  });
+
+  it("includingVat '0' sa mapuje na false", () => {
+    const { record } = mapRow(bareRow({ includingVat: "0" }));
+    expect(record?.includingVat).toBe(false);
+  });
+});
+
+describe("mapRow — číselné hranice stĺpcov (mimo rozsah = anomália, riadok prežije)", () => {
+  it("cena presne na hranici numeric(12,2) prejde", () => {
+    const { record, issues } = mapRow(bareRow({ price: "9999999999,00", currency: "EUR" }));
+    expect(issues).toEqual([]);
+    expect(record?.price).toBe("9999999999.00");
+  });
+
+  it("cena za hranicou numeric(12,2) sa zahodí ako anomália, riadok stále vyrobí záznam", () => {
+    const { record, issues } = mapRow(bareRow({ price: "12345678901234,00", currency: "EUR" }));
+    expect(record).not.toBeNull();
+    expect(record?.price).toBeNull();
+    expect(issues).toEqual([
+      { kind: "invalid_money", code: "TEST/1", detail: { field: "price", raw: "12345678901234,00" } },
+    ]);
+  });
+
+  it("percentVat presne na hranici numeric(5,2) prejde", () => {
+    const { record, issues } = mapRow(bareRow({ percentVat: "999,99" }));
+    expect(issues).toEqual([]);
+    expect(record?.percentVat).toBe("999.99");
+  });
+
+  it("percentVat za hranicou numeric(5,2) sa zahodí ako anomália a zapíše sa problém", () => {
+    const { record, issues } = mapRow(bareRow({ percentVat: "1000" }));
+    expect(record).not.toBeNull();
+    expect(record?.percentVat).toBeNull();
+    expect(issues).toEqual([
+      { kind: "invalid_money", code: "TEST/1", detail: { field: "percentVat", raw: "1000" } },
+    ]);
+  });
+
+  it("sklad presne na hranici int4 prejde", () => {
+    const { record, issues } = mapRow(bareRow({ stock: "2147483647" }));
+    expect(issues).toEqual([]);
+    expect(record?.stock).toBe(2147483647);
+  });
+
+  it("sklad za hranicou int4 sa berie ako 0 a zapíše sa problém", () => {
+    const { record, issues } = mapRow(bareRow({ stock: "2147483648" }));
+    expect(record?.stock).toBe(0);
+    expect(issues).toEqual([
+      { kind: "invalid_stock", code: "TEST/1", detail: { raw: "2147483648" } },
+    ]);
   });
 });

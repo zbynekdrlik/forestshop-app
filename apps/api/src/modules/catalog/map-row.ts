@@ -15,8 +15,9 @@ export interface RowIssue {
   readonly detail: Record<string, string>;
 }
 
-/** Polia zodpovedajú 1:1 stĺpcom tabuľky `variant` okrem `firstSeenAt`/`lastSeenAt`/
- *  `lastSeenSnapshotId`/`missingSince`, ktoré dopĺňa ingest (Task 5). */
+/** Polia zodpovedajú 1:1 stĺpcom tabuľky `variant`, okrem: `supplier` (ten je
+ *  stĺpec tabuľky `product`, Task 5 ho tam zapíše) a `firstSeenAt`/`lastSeenAt`/
+ *  `lastSeenSnapshotId`/`missingSince` (tie dopĺňa ingest, Task 5). */
 export interface VariantRecord {
   readonly code: string;
   readonly productKey: string;
@@ -57,6 +58,22 @@ function textOrNull(raw: string): string | null {
   return raw === "" ? null : raw;
 }
 
+// `percent_vat` je `numeric(5, 2)` — najviac 3 číslice pred desatinnou čiarkou
+// (999.99). Nie je súčasťou `variant_money_needs_currency_ck` — DPH sadzba nie
+// je jednou zo štyroch súm, ktoré ten CHECK stráži — takže zostáva mimo
+// menovej brány nižšie, aj keď sa parsuje rovnakým parserom a rovnakou
+// anomáliou (`invalid_money`).
+const PERCENT_VAT_MAX_INTEGER_DIGITS = 3;
+
+// `stock` je stĺpec `integer` (Postgres int4).
+const STOCK_MIN = -2_147_483_648;
+const STOCK_MAX = 2_147_483_647;
+// Striktne celé číslo — `Number.parseInt` by inak ticho prijal "12abc" ako 12
+// alebo "3.9" ako 3, bez akejkoľvek anomálie.
+const STRICT_INTEGER_RE = /^-?\d+$/;
+
+const AMOUNT_FIELDS = ["price", "standardPrice", "purchasePrice", "actionPrice"] as const;
+
 export function mapRow(row: Readonly<Record<string, string>>): {
   readonly record: VariantRecord | null;
   readonly issues: readonly RowIssue[];
@@ -70,9 +87,19 @@ export function mapRow(row: Readonly<Record<string, string>>): {
     return { record: null, issues };
   }
 
-  const money = (field: string): string | null => {
+  const { productKey, sizeLabel } = splitCode(code);
+  if (productKey === "") {
+    // Kód začínajúci lomkou (napr. "/M") by inak vyrobil produkt s prázdnym
+    // textovým primary key — databáza prázdny reťazec príjme, takže by sa pod
+    // ním ticho zoskupili nesúvisiace varianty. Zaobchádzame s tým rovnako ako
+    // s úplne prázdnym kódom vyššie.
+    issues.push({ kind: "empty_code", code, detail: { name } });
+    return { record: null, issues };
+  }
+
+  const money = (field: string, maxIntegerDigits?: number): string | null => {
     const raw = row[field] ?? "";
-    const parsed = parseDecimalComma(raw);
+    const parsed = parseDecimalComma(raw, maxIntegerDigits);
     if (raw.trim() !== "" && parsed === null) {
       issues.push({ kind: "invalid_money", code, detail: { field, raw } });
     }
@@ -83,31 +110,37 @@ export function mapRow(row: Readonly<Record<string, string>>): {
   let standardPrice = money("standardPrice");
   let purchasePrice = money("purchasePrice");
   let actionPrice = money("actionPrice");
-  let currency = textOrNull((row["currency"] ?? "").trim());
+  const currency = textOrNull((row["currency"] ?? "").trim());
 
   // „Suma bez meny neexistuje" — radšej zahodíme sumy, než by transakcia spadla na
   // CHECK `variant_money_needs_currency_ck` a zhodila celý import kvôli jednému riadku.
   if (currency === null && (price ?? standardPrice ?? purchasePrice ?? actionPrice) !== null) {
-    issues.push({
-      kind: "missing_currency",
-      code,
-      detail: { price: row["price"] ?? "" },
-    });
+    const presentAmounts: Record<string, string> = {};
+    for (const field of AMOUNT_FIELDS) {
+      const raw = (row[field] ?? "").trim();
+      if (raw !== "") presentAmounts[field] = raw;
+    }
+    issues.push({ kind: "missing_currency", code, detail: presentAmounts });
     price = null;
     standardPrice = null;
     purchasePrice = null;
     actionPrice = null;
-    currency = null;
   }
+
+  const percentVat = money("percentVat", PERCENT_VAT_MAX_INTEGER_DIGITS);
 
   const rawStock = (row["stock"] ?? "").trim();
   let stock = 0;
   if (rawStock !== "") {
-    const parsed = Number.parseInt(rawStock, 10);
-    if (Number.isNaN(parsed)) {
+    if (!STRICT_INTEGER_RE.test(rawStock)) {
       issues.push({ kind: "invalid_stock", code, detail: { raw: rawStock } });
     } else {
-      stock = parsed;
+      const parsed = Number.parseInt(rawStock, 10);
+      if (parsed < STOCK_MIN || parsed > STOCK_MAX) {
+        issues.push({ kind: "invalid_stock", code, detail: { raw: rawStock } });
+      } else {
+        stock = parsed;
+      }
     }
   }
 
@@ -115,7 +148,6 @@ export function mapRow(row: Readonly<Record<string, string>>): {
   const outOfStockText = row["availabilityOutOfStock"] ?? "";
   const productVisibility = row["productVisibility"] ?? "";
   const availability = { stock, inStockText, outOfStockText };
-  const { productKey, sizeLabel } = splitCode(code);
 
   return {
     record: {
@@ -132,7 +164,7 @@ export function mapRow(row: Readonly<Record<string, string>>): {
       actionPrice,
       actionFrom: parseDate(row["actionFrom"] ?? ""),
       actionUntil: parseDate(row["actionUntil"] ?? ""),
-      percentVat: parseDecimalComma(row["percentVat"] ?? ""),
+      percentVat,
       includingVat: (row["includingVat"] ?? "") === "" ? null : (row["includingVat"] ?? "") === "1",
       stock,
       availabilityInStockText: inStockText,
