@@ -27,3 +27,4 @@ Per-area rules live in `.claude/rules/<area>.md` with `paths:` frontmatter.
 - deployment on dev2 → `.claude/rules/deploy.md`
 - backups / restore → `.claude/rules/backups.md`
 - katalóg zo Shoptetu (import, snapshoty, dostupnosť) → `.claude/rules/catalog.md`
+- plánovač úloh (F2 — nočné joby, job_run, advisory zámok) → `.claude/rules/scheduler.md`

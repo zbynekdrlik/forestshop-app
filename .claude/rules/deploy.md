@@ -145,3 +145,31 @@ paths:
   beží aj cez tlačidlo na webe (`POST /api/catalog/ingest`, priamo v bežiacom
   procese appky), takže `scripts/catalog-ingest.ts` zostáva len pohodlný LOKÁLNY/CI
   vstupný bod, nie produkčná nutnosť.
+
+- **`deploy` job (self-hosted dev2) môže raz za čas zlyhať na `failed to
+  extract layer ... link ... no such file or directory` počas `docker
+  compose pull app`** (pozorované 2026-07-29, PR #16 — žiadna zmena
+  závislostí v tom PR, čiže nešlo o obsah image, ale o lokálny
+  containerd/overlayfs stav na dev2). Cesta z chyby ukazuje na hardlink
+  VNÚTRI runtime obrazovej vrstvy — `runtime` štádium (`Dockerfile`) inštaluje
+  produkčné závislosti ČERSTVO (`RUN pnpm install --filter @forestshop/api
+  --prod`), čo napečie pnpm-ov hardlinkovaný content-addressable store
+  (`/root/.local/share/pnpm/store/v10/...`) do TEJ ISTEJ vrstvy ako
+  `node_modules` — ak sa pri sťahovaní/extrakcii na dev2 poškodí/vynechá
+  jeden blob v containerd content-store, hardlink naň zlyhá.
+  **Diagnostika (bez zásahu do bežiacich kontajnerov iných projektov na
+  zdieľanom dev2):**
+  ```bash
+  ssh newlevel@dev2 "sudo ctr --address /run/containerd/containerd.sock -n moby snapshots ls | grep <snapshot-id z chybovej hlášky>"
+  ssh newlevel@dev2 "sudo ctr --address /run/containerd/containerd.sock -n moby content ls | grep <chýbajúci sha256 prefix z chybovej hlášky>"
+  ```
+  (`ctr` bez `--address`/`-n moby` sa pripája na iný — prázdny — namespace a
+  nič neukáže; docker's vlastný containerd socket je `/run/containerd/
+  containerd.sock`, nie `/var/run/docker/containerd/containerd.sock`.)
+  Ak zlyhaný snapshot aj chýbajúci blob už nie sú v zozname, docker/containerd
+  si to už samo vyčistilo (rollback po zlyhanej extrakcii) — nie je čo mazať,
+  `docker system prune -f` nepomôže (0B reclaimed, korupcia nie je na úrovni
+  bežných "unused images"). V tomto prípade stačí `gh run rerun <run-id>
+  --failed` — čerstvý pull znova stiahne vrstvu od nuly. Ak sa to isté zopakuje
+  DRUHÝKRÁT za sebou, už to nie je transientný jav — over `docker system df`
+  (miesto na disku) a zváž reštart `containerd`/`docker` služby na dev2.
