@@ -1,6 +1,6 @@
 import { cleanupExpiredSessions } from "../auth/sessions.js";
+import type { RunIngest } from "../catalog/ingest.js";
 import { pruneRawSnapshots } from "../catalog/raw-store.js";
-import type { RunIngest } from "../../http/catalog-routes.js";
 import type { ScheduledJob } from "./types.js";
 
 export const CATALOG_IMPORT_JOB_NAME = "catalog-import";
