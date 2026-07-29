@@ -6,18 +6,22 @@ import {
   type SnapshotCandidate,
 } from "./validation.js";
 
-const FULL_COLUMNS = [...REQUIRED_COLUMNS, "description", "guid"];
+const FULL_COLUMNS = [...REQUIRED_COLUMNS, "description"];
 
 function candidate(overrides: Partial<SnapshotCandidate> = {}): SnapshotCandidate {
   // `??` would treat an explicitly passed `null` (e.g. a deliberately invalid
   // `columns: null` or "no previous snapshot") the same as "not provided",
   // silently reverting it to the default — checking for `undefined` keeps an
   // explicit `null` override intact, for every field, not just previousAccepted.
+  const rowCount = overrides.rowCount ?? 14_014;
   return {
     columns: overrides.columns !== undefined ? overrides.columns : FULL_COLUMNS,
-    rowCount: overrides.rowCount ?? 14_014,
+    rowCount,
     byteSize: overrides.byteSize ?? 56_340_420,
     malformedRowCount: overrides.malformedRowCount ?? 0,
+    // Default = rowCount (pomer 1.0) — testy, ktoré tento gate nemierajú,
+    // ho tak nikdy neaktivujú náhodou.
+    usableRecordCount: overrides.usableRecordCount ?? rowCount,
     previousAccepted:
       overrides.previousAccepted !== undefined ? overrides.previousAccepted : { rowCount: 14_014 },
   };
@@ -36,6 +40,14 @@ describe("judgeSnapshot", () => {
     );
     expect(judgement.verdict).toBe("rejected");
     expect(judgement.verdict === "rejected" && judgement.reason).toContain("supplier");
+  });
+
+  // CRITICAL (task-5-fix-1): `guid` je odteraz identita produktu, takže export
+  // bez neho sa musí odmietnuť rovnako ako export bez `supplier` (#281).
+  it("odmietne export bez povinného stĺpca guid — je to identita produktu (task-5-fix-1)", () => {
+    const judgement = judgeSnapshot(candidate({ columns: FULL_COLUMNS.filter((c) => c !== "guid") }));
+    expect(judgement.verdict).toBe("rejected");
+    expect(judgement.verdict === "rejected" && judgement.reason).toContain("guid");
   });
 
   it("v dôvode vymenuje všetky chýbajúce stĺpce naraz", () => {
@@ -147,6 +159,38 @@ describe("judgeSnapshot", () => {
     expect(judgeSnapshot(candidate({ malformedRowCount: 0 }))).toEqual({ verdict: "accepted" });
   });
 
+  // Important #3 (review task-5-fix-1): export, ktorý sa celý rozparsuje (rowCount
+  // zostáva zdravé), no takmer žiadny riadok nevyrobí použiteľný záznam (napr.
+  // prázdny `code` na každom riadku) — inak prejde hlavičkovou aj pomerovou
+  // kontrolou a blanketový update potom označí CELÝ katalóg ako chýbajúci.
+  describe("usableRecordCount — použiteľné záznamy voči rozparsovaným riadkom", () => {
+    it("odmietne export, kde ani jeden riadok nevyrobil použiteľný záznam", () => {
+      const judgement = judgeSnapshot(candidate({ usableRecordCount: 0 }));
+      expect(judgement.verdict).toBe("rejected");
+      expect(judgement.verdict === "rejected" && judgement.reason).toContain("použiteľný");
+      expect(judgement.verdict === "rejected" && judgement.reason).toContain(
+        "Katalóg zostáva nezmenený, import môžete kedykoľvek zopakovať.",
+      );
+    });
+
+    // rowCount 14014 * 0.8 = floor 11211, presne tá istá hranica ako previousRowRatio.
+    it.each([
+      [11_210, "rejected"],
+      [11_211, "accepted"],
+    ] as const)("hranica použiteľných záznamov: %i z 14014 riadkov → %s", (usableRecordCount, expected) => {
+      const judgement = judgeSnapshot(candidate({ usableRecordCount }));
+      expect(judgement.verdict).toBe(expected);
+    });
+
+    it("dobrý export (usableRecordCount === rowCount) nikdy tento gate neaktivuje", () => {
+      expect(
+        judgeSnapshot(
+          candidate({ rowCount: 1_000, usableRecordCount: 1_000, previousAccepted: null }),
+        ),
+      ).toEqual({ verdict: "accepted" });
+    });
+  });
+
   // Pomerová hranica (previous 14014 * 0.8 = floor 11211) je dnes testovaná len
   // nepriamo (#277 s rowCount 3000). Zámena `<` za `<=` by prešla celou sadou —
   // treba pripnúť presné hodnoty na oboch stranách hranice.
@@ -229,6 +273,7 @@ describe("judgeSnapshot — každý dôvod odmietnutia hovorí, čo sa stalo s k
     ["príliš malé telo", candidate({ byteSize: 512 })],
     ["chýbajúci stĺpec", candidate({ columns: FULL_COLUMNS.filter((c) => c !== "supplier") })],
     ["poškodené riadky", candidate({ malformedRowCount: 3 })],
+    ["takmer žiadne použiteľné záznamy", candidate({ usableRecordCount: 0 })],
     ["skrátený export", candidate({ rowCount: 3_000 })],
     ["prvý import pod hranicou", candidate({ previousAccepted: null, rowCount: 5 })],
     ["neplatný vstup", candidate({ byteSize: NaN })],

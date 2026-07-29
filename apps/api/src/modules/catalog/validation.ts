@@ -10,6 +10,9 @@
 // from mutating this shared array and changing the gate's behaviour process-wide.
 export const REQUIRED_COLUMNS: readonly string[] = Object.freeze([
   "code",
+  // Identita produktu (review task-5-fix-1, CRITICAL #1) — bez neho sa export
+  // nedá spracovať vôbec, rovnako ako bez `supplier` (#281).
+  "guid",
   "pairCode",
   "name",
   "supplier",
@@ -55,6 +58,13 @@ export interface SnapshotCandidate {
   // dva plné prázdnych polí. Počet riadkov len stúpne o jeden a ľahko prejde
   // pomerovou hranicou, takže poškodenie treba odmietnuť samostatne.
   readonly malformedRowCount: number;
+  // Počet riadkov, ktoré sa rozparsovali AJ vyrobili použiteľný záznam (review
+  // task-5-fix-1, dôležité #3). Predtým brána dostávala len `rowCount`
+  // (rozparsované riadky) — export, ktorého `code` je prázdny na KAŽDOM riadku,
+  // tak prešiel hlavičkovou aj pomerovou kontrolou (rowCount sa nezmenil), bol
+  // prijatý, a blanketový „označ všetko mimo tohto snapshotu ako chýbajúce"
+  // update potom označil CELÝ katalóg ako chýbajúci — #277/#286 v novej podobe.
+  readonly usableRecordCount: number;
   readonly previousAccepted: { readonly rowCount: number } | null;
 }
 
@@ -80,6 +90,7 @@ function candidateIsValid(candidate: SnapshotCandidate): boolean {
   if (!isFiniteNumber(candidate.rowCount)) return false;
   if (!isFiniteNumber(candidate.byteSize)) return false;
   if (!isFiniteNumber(candidate.malformedRowCount)) return false;
+  if (!isFiniteNumber(candidate.usableRecordCount)) return false;
   // `!=` (nie `!==`) zámerne — `previousAccepted: undefined` (pole úplne chýba
   // za behu, alebo ho stratí JSON round-trip) sa má správať rovnako ako `null`
   // (prvý import), nikdy nedereferencovať `.rowCount` na `undefined`. Rovnaká
@@ -159,6 +170,19 @@ export function judgeSnapshot(
   if (candidate.malformedRowCount > 0) {
     return rejected(
       `Export obsahuje ${formatMalformedRows(candidate.malformedRowCount)} (počet polí nesedí s hlavičkou).`,
+    );
+  }
+
+  // Rovnaká podlaha ako pomerová hranica nižšie (`previousRowRatio`), no tu sa
+  // porovnáva POUŽITEĽNÝ počet voči ROZPARSOVANÉMU počtu na TOMTO exporte —
+  // nezávisle od histórie. Export, ktorý prejde hlavičkovou aj (prípadnou)
+  // pomerovou kontrolou, no takmer žiadny jeho riadok sa nedal použiť (napr.
+  // prázdny `code` na každom riadku), inak prejde ako prijatý a blanketový
+  // update potom označí celý katalóg ako chýbajúci (#277/#286 v novej podobe).
+  const usableFloor = Math.floor(candidate.rowCount * limits.previousRowRatio);
+  if (candidate.usableRecordCount < usableFloor) {
+    return rejected(
+      `Export má ${String(candidate.rowCount)} riadkov, ale len ${String(candidate.usableRecordCount)} z nich sa dalo spracovať na použiteľný záznam.`,
     );
   }
 
