@@ -1,11 +1,16 @@
 import { afterEach, expect, it } from "vitest";
 import { createApp } from "../src/http/app.js";
+import { resetLoginRateLimit } from "../src/http/login-rate-limit.js";
 import { hashPassword } from "../src/modules/auth/passwords.js";
 import { users } from "../src/db/schema.js";
 import { withCleanDb } from "./helpers/db.js";
 
 let close: (() => Promise<void>) | undefined;
-afterEach(async () => { await close?.(); close = undefined; });
+afterEach(async () => {
+  await close?.();
+  close = undefined;
+  resetLoginRateLimit();
+});
 
 const HESLO = "test-heslo-abc";     // testovacie údaje, nie tajomstvo
 const ZLE_HESLO = "nespravne";
@@ -70,4 +75,54 @@ it("telo bez e-mailu vráti 400", async () => {
     body: JSON.stringify({ password: ZLE_HESLO }),
   });
   expect(res.status).toBe(400);
+});
+
+it("neznáma /api/* cesta vráti JSON 404 namiesto SPA fallbacku", async () => {
+  const app = await boot();
+  const res = await app.request("/api/neexistuje");
+  expect(res.status).toBe(404);
+  const body = (await res.json()) as { error: string };
+  expect(typeof body.error).toBe("string");
+});
+
+it("11. pokus o prihlásenie z tej istej IP a e-mailu je odmietnutý (429), iná IP/e-mail nie je ovplyvnená", async () => {
+  const app = await boot();
+  const attempt = (ip: string, email: string) =>
+    app.request("/api/login", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-forwarded-for": ip },
+      body: JSON.stringify({ email, password: ZLE_HESLO }),
+    });
+
+  for (let i = 0; i < 10; i++) {
+    const res = await attempt("203.0.113.1", "manazer@forestshop.sk");
+    expect(res.status).toBe(401); // zlé heslo, ale nie limitované
+  }
+  const eleventh = await attempt("203.0.113.1", "manazer@forestshop.sk");
+  expect(eleventh.status).toBe(429);
+
+  const inaIp = await attempt("203.0.113.2", "manazer@forestshop.sk");
+  expect(inaIp.status).toBe(401);
+
+  const inyEmail = await attempt("203.0.113.1", "iny@forestshop.sk");
+  expect(inyEmail.status).toBe(401);
+});
+
+it("odhlásenie s cudzím Origin je odmietnuté (403), rovnaký pôvod prejde", async () => {
+  const app = await boot();
+
+  const cudzi = await app.request("/api/logout", {
+    method: "POST",
+    headers: { origin: "https://utocnik.example", host: "forestshop.example" },
+  });
+  expect(cudzi.status).toBe(403);
+
+  const rovnaky = await app.request("/api/logout", {
+    method: "POST",
+    headers: { origin: "https://forestshop.example", host: "forestshop.example" },
+  });
+  expect(rovnaky.status).toBe(200);
+
+  const bezHlaviciek = await app.request("/api/logout", { method: "POST" });
+  expect(bezHlaviciek.status).toBe(200);
 });
