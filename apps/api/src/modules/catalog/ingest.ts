@@ -56,6 +56,19 @@ function isUniqueViolation(error: unknown, constraint: string): boolean {
  */
 export const INGEST_BATCH_SIZE = 500;
 
+// Štítky pre `validation.ts`'s "najčastejšia príčina" v dôvode odmietnutia —
+// LEN pre druhy anomálií, ktoré SPÔSOBIA, že riadok nevyrobí použiteľný
+// záznam (`records.length` ho nezapočíta). `missing_currency`/`invalid_money`/
+// `invalid_stock`/`product_name_conflict` naopak stále vyrobia zapísaný
+// záznam (len s vynulovaným/zahodeným poľom) — korelačne teda NEPATRIA sem,
+// ich pomenovanie ako "prevažujúcej príčiny nepoužiteľnosti" by prevádzkovateľa
+// zavádzalo.
+const UNUSABLE_ISSUE_LABELS: Readonly<Partial<Record<RowIssue["kind"], string>>> = Object.freeze({
+  empty_code: "prázdny kód",
+  empty_guid: "prázdny guid (identita produktu)",
+  duplicate_code: "duplicitný kód",
+});
+
 export interface ExportDownload {
   readonly body: Buffer;
   readonly sourceLabel: string;
@@ -197,6 +210,16 @@ export async function ingestCatalog(
     parseErrorMessage = error instanceof Error ? error.message : String(error);
   }
 
+  // Rozpiska príčin nepoužiteľnosti pre `judgeSnapshot`'s "najčastejšia príčina"
+  // (validation.ts) — počíta LEN druhy z `UNUSABLE_ISSUE_LABELS` vyššie, nikdy
+  // celý `issues`. Pri zlyhanom parsovaní je `issues` prázdne, takže je to no-op.
+  const unusableReasonCounts: Record<string, number> = {};
+  for (const issue of issues) {
+    const label = UNUSABLE_ISSUE_LABELS[issue.kind];
+    if (label === undefined) continue;
+    unusableReasonCounts[label] = (unusableReasonCounts[label] ?? 0) + 1;
+  }
+
   // Beží bez ohľadu na úspech parsovania — pri zlyhaní je `records` prázdne pole,
   // takže je to no-op (nič sa neprepočítava druhýkrát).
   const productValues = new Map<string, { name: string; supplier: string | null }>();
@@ -277,6 +300,7 @@ export async function ingestCatalog(
                 // riadky s prázdnym `code`/`guid` aj duplicity, presne to, čo sa
                 // nakoniec zapíše do `variant`.
                 usableRecordCount: records.length,
+                unusableReasonCounts,
                 previousAccepted: previous ?? null,
               },
               options.limits ?? DEFAULT_SNAPSHOT_LIMITS,
