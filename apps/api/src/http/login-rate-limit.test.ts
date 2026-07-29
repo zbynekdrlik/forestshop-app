@@ -15,7 +15,8 @@ describe("checkLoginRateLimit — strop na počet záznamov", () => {
     resetLoginRateLimit();
     const extra = 2_000;
     for (let i = 0; i < MAX_ENTRIES + extra; i++) {
-      checkLoginRateLimit(`198.51.100.${i % 250}.${Math.floor(i / 250)}`, `pouzivatel-${i}@x.sk`, BASE);
+      const ip = `198.51.100.${String(i % 250)}.${String(Math.floor(i / 250))}`;
+      checkLoginRateLimit(ip, `pouzivatel-${String(i)}@x.sk`, BASE);
     }
     const counts = rateLimitEntryCountsForTest();
     expect(counts.pair).toBeLessThanOrEqual(MAX_ENTRIES);
@@ -28,18 +29,18 @@ describe("checkLoginRateLimit — limit na IP nezávislý od e-mailu", () => {
     resetLoginRateLimit();
     const ip = "203.0.113.50";
     for (let i = 0; i < IP_MAX_ATTEMPTS; i++) {
-      expect(checkLoginRateLimit(ip, `obeta-${i}@x.sk`, BASE)).toBe(true);
+      expect(checkLoginRateLimit(ip, `obeta-${String(i)}@x.sk`, BASE)).toBe(true);
     }
     // (IP_MAX_ATTEMPTS + 1)-vy pokus, opäť s NOVÝM e-mailom — per-e-mail limit by
     // ho nezachytil (každý e-mail sa použil len raz), musí zasiahnuť IP limit.
-    expect(checkLoginRateLimit(ip, `obeta-${IP_MAX_ATTEMPTS}@x.sk`, BASE)).toBe(false);
+    expect(checkLoginRateLimit(ip, `obeta-${String(IP_MAX_ATTEMPTS)}@x.sk`, BASE)).toBe(false);
   });
 
   it("iná IP nie je ovplyvnená sprejovaním na prvej IP", () => {
     resetLoginRateLimit();
     const ip = "203.0.113.51";
     for (let i = 0; i < IP_MAX_ATTEMPTS + 5; i++) {
-      checkLoginRateLimit(ip, `obeta-${i}@x.sk`, BASE);
+      checkLoginRateLimit(ip, `obeta-${String(i)}@x.sk`, BASE);
     }
     expect(checkLoginRateLimit("203.0.113.52", "iny@x.sk", BASE)).toBe(true);
   });

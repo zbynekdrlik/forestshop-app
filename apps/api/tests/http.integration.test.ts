@@ -108,6 +108,35 @@ it("11. pokus o prihlásenie z tej istej IP a e-mailu je odmietnutý (429), iná
   expect(inyEmail.status).toBe(401);
 });
 
+it("sprejovanie mnohých rôznych e-mailov z JEDNEJ IP narazí na samostatný IP limit", async () => {
+  const app = await boot();
+  const attempt = (ip: string, email: string) =>
+    app.request("/api/login", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-forwarded-for": ip },
+      body: JSON.stringify({ email, password: ZLE_HESLO }),
+    });
+
+  const ip = "203.0.113.9";
+  // 30 pokusov, KAŽDÝ s iným e-mailom — per-(IP, e-mail) limit (10) sa tu
+  // nikdy neuplatní, lebo žiadny e-mail sa nezopakuje.
+  for (let i = 0; i < 30; i++) {
+    const res = await attempt(ip, `neznamy-${String(i)}@forestshop.sk`);
+    expect(res.status).toBe(401);
+  }
+  const dalsi = await attempt(ip, "neznamy-30@forestshop.sk");
+  expect(dalsi.status).toBe(429);
+
+  // odpoveď na 429 neprezrádza, či e-mail existuje — rovnaké telo ako pri
+  // limite na (IP, e-mail) pár vyššie.
+  const body = (await dalsi.json()) as { error: string };
+  expect(body.error).toBe("Priveľa pokusov o prihlásenie. Skúste to znova o pár minút.");
+
+  // iná IP nie je ovplyvnená sprejovaním na prvej
+  const inaIp = await attempt("203.0.113.10", "neznamy-0@forestshop.sk");
+  expect(inaIp.status).toBe(401);
+});
+
 it("odhlásenie s cudzím Origin je odmietnuté (403), rovnaký pôvod prejde", async () => {
   const app = await boot();
 
