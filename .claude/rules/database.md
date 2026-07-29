@@ -44,3 +44,9 @@ paths:
   zostáva kompatibilné (interný `compatibilityVersion` check prejde). Ak
   pribudne ďalší `schema-*.ts` súbor s re-exportom, over `db:generate` hneď —
   ak `drizzle-kit` opäť klesol pod `^0.31.0`, toto je presne ten istý pád.
+- **`drizzle-kit` (`^0.31.x`) je jeden release generation pred `drizzle-orm`
+  (`^0.38.x`)** — review F1 Task 1 na to upozornil ako zvyškové riziko, nie
+  ako aktuálnu chybu (`compatibilityVersion` check pri `db:generate` zatiaľ
+  prechádza bez varovania). Kým sa obe knižnice nezarovnajú na rovnakú
+  generáciu, každú vygenerovanú `.sql` migráciu si pred commitom prečítaj —
+  neber jej obsah len na základe toho, že `db:generate` prebehlo bez chyby.
