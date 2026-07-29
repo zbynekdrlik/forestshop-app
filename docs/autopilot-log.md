@@ -161,3 +161,36 @@ RED→GREEN test names, key decisions, and the shared PR.
   already-documented `/api/me`/`/api/login` 401 patterns (expected,
   deliberate test actions), no genuine errors.
 - Per-ticket Discord card fired (`notify --run-card`, confirmed delivered).
+
+## #21 — Import objednávok zo Shoptetu (F3)
+
+- Version bump `39a2436` (0.3.0-dev.8 → 0.3.0-dev.9), design comment posted
+  BEFORE first code commit (https://github.com/zbynekdrlik/forestshop-app/issues/21#issuecomment-5123773711).
+- Feature commit `4bc570e`: `modules/orders/{fetcher,parser,ingest}.ts` +
+  unit tests (`parser.test.ts` 24, `fetcher.test.ts` 9) + integration tests
+  (`orders-ingest.integration.test.ts` 8, `orders-ingest-lock.integration.test.ts`
+  1), migration `0007_groovy_alice.sql` (unique index `order_line_order_variant_uq`),
+  `cli/orders-ingest.ts` + `scripts/orders-ingest.ts`, `env.ts`/
+  `docker-compose.prod.yml`/`Dockerfile` for `SHOPTET_ORDERS_URL`/`ORDERS_RAW_DIR`.
+- Playbook commit `f95863d`: new `.claude/rules/orders.md` (pseudo-item
+  filtering, duplicate-line summing, DST-aware datetime parsing, comment/
+  state preservation, no-snapshot-table acceptance gate).
+- Fix commit `3421bb2`: an adversarial review fork caught a literal NUL
+  byte (0x00) that had landed in a template-literal Map key instead of a
+  space — harmless functionally but made `git diff`/`gh pr diff` render the
+  whole file as binary, defeating review. Fixed + hardened by switching to
+  a Map-nested-in-Map key (no string-concatenation separator at all).
+- Shared PR: **#27** (`dev` → `main`), merged `5228c8e`. CI: all jobs green
+  (check, integration, e2e, docker-build, version-check) on push and PR
+  runs, both before and after the NUL-byte fix.
+- Deployed + verified on https://forestshop-novy.newlevel.media
+  (v0.3.0-dev.9 in DOM footer, `/api/version` commit matches `5228c8e7`):
+  zero console errors. Installed `SHOPTET_ORDERS_URL` in `/srv/forestshop/.env`
+  (mode 600), restarted the app container, ran
+  `docker compose exec app node apps/api/dist/cli/orders-ingest.js` against
+  the REAL Shoptet export — 524 orders / 864 order_line rows written
+  (51 unknown-variant items skipped, 1046 shipping/billing/discount pseudo
+  items ignored), confirmed via `psql` row counts. Re-ran the same import a
+  second time — counts stayed identical (idempotent upsert confirmed on
+  real production data).
+- Per-ticket Discord card fired (`notify --run-card`, confirmed delivered).
