@@ -95,4 +95,19 @@ describe("judgeSnapshot", () => {
     const judgement = judgeSnapshot(candidate({ byteSize: 0, rowCount: 0, columns: [] }));
     expect(judgement.verdict === "rejected" && judgement.reason).toContain("prázdny");
   });
+
+  // CRITICAL: hranica odvodená z posledného prijatého importu sa použije SAMOSTATNE,
+  // bez absolútneho minima ako podlahy — takže sa dá ratchetnúť až na nulu
+  // (14014 → 11211 → 8968 → … → 1 → 0), a keď posledný prijatý mal 1 riadok,
+  // floor(1 * 0.8) === 0, takže aj prázdny export (0 riadkov) prejde. Presne
+  // scenár #286, tentoraz cez bránu, ktorá ho mala zastaviť.
+  it("floor nesmie erodovať k nule — 0 riadkov s posledným prijatým = 1 riadok musí byť odmietnuté", () => {
+    const judgement = judgeSnapshot(candidate({ rowCount: 0, previousAccepted: { rowCount: 1 } }));
+    expect(judgement.verdict).toBe("rejected");
+  });
+
+  it("absolútna hranica platí aj keď je pomerová hranica nižšia (posledný prijatý mal 600, teraz 500)", () => {
+    const judgement = judgeSnapshot(candidate({ rowCount: 500, previousAccepted: { rowCount: 600 } }));
+    expect(judgement.verdict).toBe("rejected");
+  });
 });
