@@ -175,6 +175,11 @@ export function CatalogPage({
           kind: "warning",
           text: err instanceof Error ? err.message : "Import sa nepodarilo spustiť.",
         });
+        // Aj na chybovej ceste — predtým stránka po zlyhanom importe zostala
+        // ukazovať PREDCHÁDZAJÚCI prijatý snapshot, hoci v databáze medzitým
+        // pribudol nový dôkazový (rejected) záznam (review final-wave-a,
+        // položka 7).
+        loadStats();
       })
       .finally(() => {
         setBusy(false);

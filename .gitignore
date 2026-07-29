@@ -20,4 +20,12 @@ test-results/
 # Surové gzipnuté snapshoty katalógového exportu (raw-store.ts) — dôkazový
 # materiál na disku, nikdy v git histórii (54 MB export by ju nafúkol a export
 # URL môže uniknúť v nezredigovanom logu, keby ho niekto omylom pridal).
-/data/
+# `**/` (nie `/data/`, review final-wave-a, položka 7): `CATALOG_RAW_DIR`
+# (env.ts) je predvolene cwd-relatívne `./data/catalog-raw` — appka spustená
+# z vlastného balíčkového adresára (`apps/api`, presne to, čo `pnpm --filter
+# @forestshop/api start` robí) zapisuje do `apps/api/data/catalog-raw`, čo
+# koreňovo-ukotvený vzor `/data/` vôbec nepokrýval.
+**/data/
+# Lokálny pnpm store (`.pnpm-store/`, ak je nakonfigurovaný store-dir mimo
+# globálneho) — build artefakt, nikdy v git histórii.
+.pnpm-store/

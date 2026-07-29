@@ -1,5 +1,22 @@
-import { describe, expect, it } from "vitest";
-import { redactSourceLabel, redactUrl } from "./fetcher.js";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { createHttpExportFetcher, redactSourceLabel, redactUrl } from "./fetcher.js";
+
+/** Vytvorí `Response` so streamovaným telom o presne `sizeBytes` bajtoch, po `chunkSize`-och. */
+function responseOfSize(sizeBytes: number, chunkSize = 1_000): Response {
+  let sent = 0;
+  const stream = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      if (sent >= sizeBytes) {
+        controller.close();
+        return;
+      }
+      const size = Math.min(chunkSize, sizeBytes - sent);
+      controller.enqueue(new Uint8Array(size).fill(65));
+      sent += size;
+    },
+  });
+  return new Response(stream, { status: 200 });
+}
 
 describe("redactUrl", () => {
   it("prekryje prihlasovací hash, neškodné parametre nechá (allowlist)", () => {
@@ -59,5 +76,38 @@ describe("redactSourceLabel", () => {
   it("už prekrytú URL (od createHttpExportFetcher) nechá nezmenenú — je idempotentná", () => {
     const already = redactUrl("https://e.sk/x.csv?hash=povodne");
     expect(redactSourceLabel(already)).toBe(already);
+  });
+});
+
+// Important (review final-wave-a, položka 7): fetcher predtým bufferoval
+// celú odpoveď (`Buffer.from(await response.arrayBuffer())`) bez akéhokoľvek
+// stropu — pokazený alebo nepriateľský server, ktorý pošle oveľa viac než
+// reálny 57 MB export, by mohol vyčerpať pamäť kontajnera. Strop musí byť
+// dosť veľkorysý pre reálny export, ale prekročenie sa má preložiť na
+// bežné ODMIETNUTIE (chybu, ktorú `ingestCatalog`/HTTP vrstva vie zachytiť
+// a zapísať — review final-wave-a, položka 4), nikdy na pád procesu.
+describe("createHttpExportFetcher — strop veľkosti", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("stiahne export pod stropom bez problémov", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(responseOfSize(5_000)));
+    const fetcher = createHttpExportFetcher({ url: "https://e.sk/x.csv", maxBytes: 10_000 });
+    const download = await fetcher();
+    expect(download.body.byteLength).toBe(5_000);
+  });
+
+  it("odmietne (vyhodí), keď stiahnutý export prekročí strop — nikdy nepokračuje v bufferovaní donekonečna", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(responseOfSize(20_000)));
+    const fetcher = createHttpExportFetcher({ url: "https://e.sk/x.csv", maxBytes: 10_000 });
+    await expect(fetcher()).rejects.toThrow(/veľkosť/);
+  });
+
+  it("export presne na hranici stropu prejde (hranica je vrátane)", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(responseOfSize(10_000)));
+    const fetcher = createHttpExportFetcher({ url: "https://e.sk/x.csv", maxBytes: 10_000 });
+    const download = await fetcher();
+    expect(download.body.byteLength).toBe(10_000);
   });
 });

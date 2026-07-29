@@ -412,3 +412,38 @@ it("snapshoty so zhodným fetchedAt majú stabilné (deterministické) sekundár
   expect(prvyData.items.map((i) => i.id)).toEqual(ocakavanePoradie);
   expect(druhyData.items.map((i) => i.id)).toEqual(prvyData.items.map((i) => i.id));
 });
+
+// Smaller correctness item (review final-wave-a, položka 7): `/api/catalog/stats`
+// vyberá "posledný snapshot" pre hlavičkovú vetu stránky triedením LEN podľa
+// `fetchedAt` — bez sekundárneho tie-breaku `desc(id)`, ktorý `listSnapshots`
+// (aj `ingest.ts`) má. Dva snapshoty so ZHODNÝM `fetchedAt` (rovnaká
+// milisekunda, alebo vstreknuté `now` v teste) by inak dostali poradie, ktoré
+// Postgres negarantuje.
+it("prehľad (stats) vyberie 'posledný snapshot' rovnakým stabilným tie-breakom ako zoznam snapshotov", async () => {
+  const ctx = await withCleanDb();
+  close = ctx.close;
+  await ctx.db.insert(users).values({
+    email: "manazer@forestshop.sk",
+    passwordHash: await hashPassword(HESLO),
+    displayName: "Manažér",
+    role: "manazer",
+  });
+
+  const zhodnyCas = new Date("2026-07-20T09:00:00Z");
+  const idA = await insertTestSnapshot(ctx.db, { fetchedAt: zhodnyCas, rowCount: 10 });
+  const idB = await insertTestSnapshot(ctx.db, { fetchedAt: zhodnyCas, rowCount: 11 });
+  // Rovnaký vzorec ako `listSnapshots`/`ingest.ts`: `desc(fetchedAt), desc(id)`.
+  const ocakavanyVitaz = idA > idB ? idA : idB;
+
+  const app = createApp(ctx.db, { cookieSecure: false });
+  const login = await app.request("/api/login", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ email: "manazer@forestshop.sk", password: HESLO }),
+  });
+  const cookie = (login.headers.get("set-cookie") ?? "").split(";")[0] ?? "";
+
+  const res = await app.request("/api/catalog/stats", { headers: { cookie } });
+  const telo = (await res.json()) as { lastSnapshot: { id: string } | null };
+  expect(telo.lastSnapshot?.id).toBe(ocakavanyVitaz);
+});

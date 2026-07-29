@@ -289,6 +289,28 @@ it("keď sa export nedá stiahnuť, zobrazí hlášku servera ako alert", async 
   expect(outcome.textContent).toContain("nepodarilo stiahnuť");
 });
 
+// Smaller correctness item (review final-wave-a, položka 7): po ZLYHANOM
+// importe stránka predtým neobnovila riadok so snapshotom — ostal ukazovať
+// PREDCHÁDZAJÚCI prijatý import, hoci v databáze medzitým pribudol nový
+// dôkazový (rejected) záznam. Prehľad (`loadStats`) sa musí znova načítať aj
+// na chybovej ceste, nielen po úspešnom výsledku importu.
+it("po zlyhanom importe sa prehľad (snapshot line) obnoví znova, nezostane na starom", async () => {
+  fetchCatalogStats.mockResolvedValueOnce(ACCEPTED_STATS).mockResolvedValueOnce(REJECTED_STATS);
+  searchCatalogVariants.mockResolvedValue({ total: 0, items: [] });
+  triggerCatalogIngest.mockRejectedValue(new Error("Import sa nepodarilo spustiť."));
+
+  render(<CatalogPage role="manazer" onSessionExpired={() => {}} />);
+  await screen.findByTestId("snapshot");
+
+  fireEvent.click(await screen.findByRole("button", { name: "Stiahnuť a naimportovať export" }));
+  await screen.findByTestId("import-outcome");
+
+  await waitFor(() => {
+    expect(fetchCatalogStats).toHaveBeenCalledTimes(2);
+  });
+  await screen.findByTestId("rejection-alert");
+});
+
 it("import 'busy' oznámi, že import už beží", async () => {
   fetchCatalogStats.mockResolvedValue(ACCEPTED_STATS);
   searchCatalogVariants.mockResolvedValue({ total: 0, items: [] });

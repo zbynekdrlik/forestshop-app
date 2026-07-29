@@ -42,9 +42,49 @@ export function redactSourceLabel(label: string): string {
   }
 }
 
+// Reálny export má ~57 MB. Strop je zámerne veľkorysý voči tomu (takmer
+// štvornásobok), aby normálny rast katalógu naň nenarazil, ale konečný —
+// pokazený alebo nepriateľský server, ktorý by inak posielal dáta donekonečna,
+// nesmie vyčerpať pamäť kontajnera (review final-wave-a, položka 7).
+export const DEFAULT_MAX_EXPORT_BYTES = 200 * 1024 * 1024;
+
 export interface HttpExportFetcherOptions {
   readonly url: string;
   readonly timeoutMs?: number;
+  readonly maxBytes?: number;
+}
+
+/**
+ * Číta telo odpovede PO ČASTIACH a priebežne sčitáva veľkosť — `Buffer.from(await
+ * response.arrayBuffer())` by celé telo najprv bufferovalo bez ohľadu na strop,
+ * takže strop kontroluje až PO tom, čo pamäť už bola vyčerpaná. Táto funkcia
+ * zruší čítanie (`reader.cancel()`) HNEĎ, ako súčet prekročí strop, a vyhodí
+ * bežnú chybu — nikdy nenechá proces spadnúť na pamäť.
+ */
+async function readBounded(response: Response, maxBytes: number): Promise<Buffer> {
+  // `Response.body` je (bez `dom` libu, len `@types/node`'s `undici-types`)
+  // typovaný ako `ReadableStream` bez generika, teda efektívne
+  // `ReadableStream<any>` — cast na `Uint8Array` je bezpečný, `fetch` telo
+  // odpovede vždy strieamuje bajty, nikdy nič iné.
+  const reader = response.body?.getReader() as ReadableStreamDefaultReader<Uint8Array> | undefined;
+  if (reader === undefined) {
+    return Buffer.from(await response.arrayBuffer());
+  }
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel();
+      throw new Error(
+        `Stiahnutý export prekročil povolenú veľkosť ${String(maxBytes)} bajtov — stiahnutie bolo zastavené.`,
+      );
+    }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks);
 }
 
 export function createHttpExportFetcher(options: HttpExportFetcherOptions): ExportFetcher {
@@ -59,7 +99,7 @@ export function createHttpExportFetcher(options: HttpExportFetcherOptions): Expo
         throw new Error(`Stiahnutie exportu zlyhalo so stavom ${String(response.status)}`);
       }
       return {
-        body: Buffer.from(await response.arrayBuffer()),
+        body: await readBounded(response, options.maxBytes ?? DEFAULT_MAX_EXPORT_BYTES),
         sourceLabel: redactUrl(options.url),
       };
     } finally {

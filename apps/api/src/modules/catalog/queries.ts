@@ -233,10 +233,14 @@ export async function catalogStats(db: Database): Promise<CatalogStats> {
     .select({ total: sql<number>`count(*)`.mapWith(Number) })
     .from(products);
 
+  // Sekundárne triedenie `desc(id)` — rovnaký tie-break ako `listSnapshots`
+  // aj `ingest.ts` (review final-wave-a, položka 7). Dva snapshoty so
+  // ZHODNÝM `fetchedAt` by inak mali poradie, ktoré Postgres negarantuje, a
+  // práve TENTO dopyt živí hlavičkovú vetu stránky.
   const [snapshot] = await db
     .select(snapshotColumns)
     .from(catalogSnapshots)
-    .orderBy(desc(catalogSnapshots.fetchedAt))
+    .orderBy(desc(catalogSnapshots.fetchedAt), desc(catalogSnapshots.id))
     .limit(1);
 
   return {

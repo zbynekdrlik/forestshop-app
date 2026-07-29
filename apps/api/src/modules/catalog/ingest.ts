@@ -501,21 +501,36 @@ export async function ingestCatalog(
       { contentSha256, rawPath, rawErrorMessage },
       "materializácia katalógu zlyhala — zapisujem dôkazový záznam",
     );
-    await db.insert(catalogSnapshots).values({
-      fetchedAt: options.now,
-      lastConfirmedAt: options.now,
-      sourceLabel: redactSourceLabel(download.sourceLabel),
-      contentSha256,
-      byteSize,
-      rowCount,
-      columns: [...columns],
-      verdict: "rejected",
-      rejectionReason: reason,
-      rawPath,
-      variantCount: null,
-      productCount: null,
-      issueCount: null,
-    });
+    // Tento zápis je SAMOSTATNE ohradený (review final-wave-a, položka 7) —
+    // beží mimo akejkoľvek transakcie, takže vlastné zlyhanie (napr. výpadok
+    // spojenia) by inak nahradilo PÔVODNÚ chybu (skutočný dôvod
+    // materializačného zlyhania, ktorý má z `ingestCatalog` uniknúť) tou z
+    // tohto dôkazového zápisu. Zlyhanie dôkazového zápisu sa loguje
+    // samostatne a PÔVODNÁ chyba unikne bez ohľadu naň.
+    try {
+      await db.insert(catalogSnapshots).values({
+        fetchedAt: options.now,
+        lastConfirmedAt: options.now,
+        sourceLabel: redactSourceLabel(download.sourceLabel),
+        contentSha256,
+        byteSize,
+        rowCount,
+        columns: [...columns],
+        verdict: "rejected",
+        rejectionReason: reason,
+        rawPath,
+        variantCount: null,
+        productCount: null,
+        issueCount: null,
+      });
+    } catch (evidenceError) {
+      const rawEvidenceErrorMessage =
+        evidenceError instanceof Error ? evidenceError.message : String(evidenceError);
+      log.error(
+        { contentSha256, rawPath, rawEvidenceErrorMessage },
+        "dôkazový záznam o zlyhanej materializácii sa tiež nepodarilo zapísať",
+      );
+    }
     throw error;
   }
   return result;
