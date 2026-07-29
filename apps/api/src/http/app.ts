@@ -10,6 +10,7 @@ import { registerCatalogRoutes, type RunIngest } from "./catalog-routes.js";
 import { checkLoginRateLimit, clientIp } from "./login-rate-limit.js";
 import { SESSION_COOKIE, requireUser, type AppBindings } from "./middleware.js";
 import { requireSameOrigin } from "./origin-check.js";
+import { registerSchedulerRoutes } from "./scheduler-routes.js";
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -71,6 +72,7 @@ export function createApp(
   app.get("/api/me", requireUser(db), (c) => c.json(c.get("user")));
 
   registerCatalogRoutes(app, db, options.runIngest);
+  registerSchedulerRoutes(app, db);
 
   // Musí byť registrovaný AŽ PO všetkých skutočných /api/* trasách vyššie — Hono
   // vyberá presnejšiu zhodu, takže tie majú prednosť a sem sa dostane len to, čo
