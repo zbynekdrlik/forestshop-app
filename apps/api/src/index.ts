@@ -11,8 +11,11 @@ const env = loadEnv();
 const { db } = createDb(env.DATABASE_URL);
 
 // Migrácie beží aplikácia sama pri štarte — nasadenie tak nemá druhý, samostatne
-// zlyhateľný krok, a databáza nikdy nebeží so schémou staršou než kód, ktorý ju číta.
-// `migrate` drží zámok, takže súbežný štart dvoch inštancií je bezpečný.
+// zlyhateľný krok. Drizzle spúšťa každú migráciu vo VLASTNEJ transakcii, takže
+// databáza nikdy neobslúži polovične-aplikovanú schému — no žiadny advisory lock
+// sa pritom nedrží: dva súčasne štartujúce procesy môžu naraz spustiť tú istú DDL
+// a jeden z nich zlyhá na kolízii (napr. "already exists"). Nasadenie beží ako
+// jedna inštancia (docker-compose.prod.yml), takže to dnes nehrozí.
 await migrate(db, { migrationsFolder: fileURLToPath(new URL("../drizzle", import.meta.url)) });
 
 const app = createApp(db, { cookieSecure: env.SESSION_COOKIE_SECURE });
