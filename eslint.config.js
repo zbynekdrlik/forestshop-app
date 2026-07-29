@@ -23,7 +23,10 @@ export default tseslint.config(
           // allowDefaultProject above). More packages/tasks will add a few more.
           // This is the documented escape hatch for that growth, not a workaround
           // for a bug — https://tseslint.com/allowdefaultproject-glob-too-wide
-          maximumDefaultProjectFileMatchCount_THIS_WILL_SLOW_DOWN_LINTING: 20,
+          // F1 pridáva ďalšie samostatné testy/skripty mimo TS projektov
+          // (apps/api/tests/*.ts, scripts/*.ts). Pri 20 by lint spadol na strope,
+          // nie na skutočnej chybe.
+          maximumDefaultProjectFileMatchCount_THIS_WILL_SLOW_DOWN_LINTING: 40,
         },
         tsconfigRootDir: import.meta.dirname,
       },
