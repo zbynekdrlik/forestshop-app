@@ -1,4 +1,4 @@
-import { access, mkdtemp, rm } from "node:fs/promises";
+import { access, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { desc, eq } from "drizzle-orm";
@@ -90,4 +90,58 @@ it("nikdy nezmaže surový súbor posledného prijatého snapshotu", async () =>
 
   expect(await pruneRawSnapshots(ctx.db, { keepDays: 30, now: NOW })).toEqual({ removed: 0 });
   expect(await existuje(jediny.path)).toBe(true);
+});
+
+it("nezlyhá, keď súbor na disku už chýba — cestu v databáze napriek tomu vyčistí", async () => {
+  const ctx = await withCleanDb();
+  close = ctx.close;
+  dir = await mkdtemp(join(tmpdir(), "forestshop-prune-"));
+
+  // Databáza ukazuje na cestu, ktorá na disku nikdy nevznikla (napr. súbor bol
+  // zmazaný mimo appky, alebo predošlý beh retencie zmazal súbor a spadol PRED
+  // vynulovaním `raw_path`) — `rm(..., { force: true })` sa s tým musí
+  // vyrovnať ticho, nie vyhodením výnimky. Musí ísť o snapshot, ktorý NIE JE
+  // najnovší prijatý (inak by ho chránilo pravidlo z predošlého testu), preto
+  // je tu aj druhý, novší prijatý snapshot so skutočným súborom.
+  const fantom = join(dir, "neexistuje.csv.gz");
+  const id = await insertTestSnapshot(ctx.db, {
+    fetchedAt: DAVNO,
+    contentSha256: "e".repeat(64),
+    verdict: "accepted",
+    rejectionReason: null,
+  });
+  await ctx.db.update(catalogSnapshots).set({ rawPath: fantom }).where(eq(catalogSnapshots.id, id));
+  const novy = await snapshotSoSuborom(ctx.db, { dir, at: VCERA, sha: "h".repeat(64), verdict: "accepted" });
+
+  await expect(pruneRawSnapshots(ctx.db, { keepDays: 30, now: NOW })).resolves.toEqual({
+    removed: 1,
+  });
+  const [row] = await ctx.db
+    .select({ rawPath: catalogSnapshots.rawPath })
+    .from(catalogSnapshots)
+    .where(eq(catalogSnapshots.id, id));
+  expect(row?.rawPath).toBeNull();
+  expect(await existuje(novy.path)).toBe(true);
+});
+
+it("nedotkne sa súboru na disku, o ktorom databáza nič nevie", async () => {
+  const ctx = await withCleanDb();
+  close = ctx.close;
+  dir = await mkdtemp(join(tmpdir(), "forestshop-prune-"));
+
+  // Osirotený súbor bez zodpovedajúceho riadku v databáze (napr. zápis surových
+  // bajtov prebehol, no k zápisu riadku `catalog_snapshot` z akéhokoľvek dôvodu
+  // nikdy nedošlo) — retencia prechádza LEN riadkami databázy, nikdy adresárom
+  // na disku, takže taký súbor nikdy nezmaže ani na neho nenarazí.
+  const sirota = join(dir, "osirotene.csv.gz");
+  await writeFile(sirota, "obsah");
+  const stary = await snapshotSoSuborom(ctx.db, { dir, at: DAVNO, sha: "f".repeat(64), verdict: "accepted" });
+  const novy = await snapshotSoSuborom(ctx.db, { dir, at: VCERA, sha: "g".repeat(64), verdict: "accepted" });
+
+  const result = await pruneRawSnapshots(ctx.db, { keepDays: 30, now: NOW });
+
+  expect(result.removed).toBe(1);
+  expect(await existuje(stary.path)).toBe(false);
+  expect(await existuje(novy.path)).toBe(true);
+  expect(await existuje(sirota)).toBe(true);
 });
