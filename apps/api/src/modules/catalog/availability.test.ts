@@ -26,6 +26,12 @@ describe("effectiveAvailabilityText", () => {
   it("keď sú prázdne obidva, vráti prázdny reťazec", () => {
     expect(effectiveAvailabilityText({ stock: -15, inStockText: "", outOfStockText: "" })).toBe("");
   });
+
+  it("pri kladnom sklade a prázdnom texte pre skladom siahne po texte pre vypredané", () => {
+    expect(
+      effectiveAvailabilityText({ stock: 5, inStockText: "", outOfStockText: "Vypredané" }),
+    ).toBe("Vypredané");
+  });
 });
 
 describe("deriveVariantState — skutočné reťazce z exportu", () => {
@@ -40,11 +46,15 @@ describe("deriveVariantState — skutočné reťazce z exportu", () => {
     ["60055/8 — Vypredané", -1, "Predaj výrobku skončil", "Vypredané", "detailOnly", "out_of_stock"],
     ["278 — Není skladem", 0, "", "Není skladem", "detailOnly", "out_of_stock"],
     ["malé není skladem", 0, "", "není skladem", "visible", "out_of_stock"],
+    ["diakritika-free variant 'neni skladem'", 0, "", "neni skladem", "visible", "out_of_stock"],
     ["Momentálne nedostupné", 0, "", "Momentálne nedostupné", "visible", "out_of_stock"],
     ["40237/L — obidva texty prázdne, záporný sklad", -15, "", "", "visible", "out_of_stock"],
     ["prázdne texty, kladný sklad", 4, "", "", "visible", "sellable"],
     ["40237/3XL — Predaj výrobku skončil", -11, "Predaj výrobku skončil", "Predaj výrobku skončil", "visible", "discontinued"],
-    ["60035/3XL — hidden", 0, "Predaj výrobku skončil", "Predaj výrobku skončil", "hidden", "discontinued"],
+    ["text obsahuje oba markery naraz — vypredané aj skončilo", -1, "", "Vypredané, predaj výrobku skončil", "visible", "discontinued"],
+    // "hidden" texty zámerne NEobsahujú "skon"/"vypredan" — inak by test prešiel
+    // aj po odstránení "hidden" z HIDDEN_VISIBILITIES (pravidlo by sa nepripol).
+    ["60035/3XL — hidden", 0, "Skladom", "Skladom", "hidden", "discontinued"],
     ["BR1611 — blocked so Skladom", -2, "Skladom", "Skladom", "blocked", "discontinued"],
     ["cashDeskOnly so Skladom", 7, "Skladom", "Skladom", "cashDeskOnly", "discontinued"],
     ["blockUnregistered so Skladom", 7, "Skladom", "Skladom", "blockUnregistered", "discontinued"],
