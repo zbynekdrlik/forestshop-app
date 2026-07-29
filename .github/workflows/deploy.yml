@@ -4,10 +4,20 @@ on:
   push:
     branches: [main]
 
+# Two quick merges to main can otherwise run two deploy jobs concurrently, and a
+# `docker compose pull` + `up -d` from the OLDER run finishing last would overwrite
+# the newer image on dev2. Never cancel a deploy mid-flight (cancel-in-progress:
+# false) — queue instead, so every push still gets fully deployed, in order.
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: ubuntu-latest
     permissions: { contents: read, packages: write }
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
     steps:
       - uses: actions/checkout@v4
       - uses: docker/login-action@v3
@@ -31,6 +41,10 @@ jobs:
   deploy:
     needs: build
     runs-on: [self-hosted, dev2]
+    env:
+      # Pin pull + up to the version THIS run just built — never the mutable
+      # `:latest` tag, which a second, faster deploy could repoint mid-flight.
+      IMAGE_TAG: ${{ needs.build.outputs.version }}
     steps:
       - uses: actions/checkout@v4
       - name: Nasadiť (migrácie si aplikácia spustí sama pri štarte)
