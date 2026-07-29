@@ -76,7 +76,8 @@ describe("judgeSnapshot", () => {
   it("pri prvom importe použije absolútnu spodnú hranicu", () => {
     expect(judgeSnapshot(candidate({ previousAccepted: null, rowCount: 999 }))).toEqual({
       verdict: "rejected",
-      reason: "Export má 999 riadkov, minimum pre prvý import je 1000.",
+      reason:
+        "Export má 999 riadkov, minimum pre prvý import je 1000. Katalóg zostáva nezmenený, import môžete kedykoľvek zopakovať.",
     });
     expect(judgeSnapshot(candidate({ previousAccepted: null, rowCount: 1_000 }))).toEqual({
       verdict: "accepted",
@@ -160,5 +161,33 @@ describe("judgeSnapshot — zlyhá uzavreto (fail closed) na neplatný vstup", (
     expect(() => judgeSnapshot(candidate({ columns: null as unknown as string[] }))).not.toThrow();
     const judgement = judgeSnapshot(candidate({ columns: null as unknown as string[] }));
     expect(judgement.verdict).toBe("rejected");
+  });
+});
+
+// #286 spôsobil výpadok práve preto, lebo nič v dôvode odmietnutia nepovedalo
+// prevádzkovateľovi to najdôležitejšie: že katalóg NEBOL prepísaný a dáta sú
+// v poriadku. Downstream automatizácie preto hlásili úspech, hoci dáta zmizli.
+describe("judgeSnapshot — každý dôvod odmietnutia hovorí, čo sa stalo s katalógom", () => {
+  const CONSEQUENCE = "Katalóg zostáva nezmenený, import môžete kedykoľvek zopakovať.";
+
+  it.each([
+    ["prázdne telo", candidate({ byteSize: 0, rowCount: 0 })],
+    ["príliš malé telo", candidate({ byteSize: 512 })],
+    ["chýbajúci stĺpec", candidate({ columns: FULL_COLUMNS.filter((c) => c !== "supplier") })],
+    ["poškodené riadky", candidate({ malformedRowCount: 3 })],
+    ["skrátený export", candidate({ rowCount: 3_000 })],
+    ["prvý import pod hranicou", candidate({ previousAccepted: null, rowCount: 5 })],
+    ["neplatný vstup", candidate({ byteSize: NaN })],
+  ] as const)("%s → dôvod obsahuje dôsledok pre katalóg", (_popis, cand) => {
+    const judgement = judgeSnapshot(cand);
+    expect(judgement.verdict === "rejected" && judgement.reason).toContain(CONSEQUENCE);
+  });
+});
+
+describe("judgeSnapshot — bajtová hranica je čitateľná, nie holé číslo", () => {
+  it("formátuje minByteSize s medzerami po tisícoch namiesto 1000000", () => {
+    const judgement = judgeSnapshot(candidate({ byteSize: 512 }));
+    expect(judgement.verdict === "rejected" && judgement.reason).toContain("1 000 000");
+    expect(judgement.verdict === "rejected" && judgement.reason).not.toContain("1000000");
   });
 });

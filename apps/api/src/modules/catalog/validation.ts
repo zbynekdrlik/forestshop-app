@@ -89,48 +89,54 @@ function limitsAreValid(limits: SnapshotLimits): boolean {
   );
 }
 
+/** `1000000` → `"1 000 000"` — a bare integer is not readable in an operator-facing message. */
+function formatThousands(n: number): string {
+  return Math.trunc(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+}
+
+// #286 stalo sa výpadkom presne preto, lebo žiadny dôvod odmietnutia nepovedal
+// prevádzkovateľovi to najdôležitejšie: že katalóg NEBOL prepísaný. Downstream
+// automatizácie preto hlásili úspech, hoci dáta zmizli. Každý dôvod preto MUSÍ
+// túto vetu niesť — pridáva sa na jednom mieste, nie v každom `return` zvlášť.
+const CONSEQUENCE = "Katalóg zostáva nezmenený, import môžete kedykoľvek zopakovať.";
+
+function rejected(reason: string): SnapshotJudgement {
+  return { verdict: "rejected", reason: `${reason} ${CONSEQUENCE}` };
+}
+
 export function judgeSnapshot(
   candidate: SnapshotCandidate,
   limits: SnapshotLimits = DEFAULT_SNAPSHOT_LIMITS,
 ): SnapshotJudgement {
   if (!candidateIsValid(candidate) || !limitsAreValid(limits)) {
-    return {
-      verdict: "rejected",
-      reason: "Údaje o stiahnutom exporte sú neplatné, import sa nevykonal.",
-    };
+    return rejected("Údaje o stiahnutom exporte sú neplatné, import sa nevykonal.");
   }
 
   if (candidate.byteSize === 0) {
-    return { verdict: "rejected", reason: "Stiahnutý súbor je prázdny (0 bajtov)." };
+    return rejected("Stiahnutý súbor je prázdny (0 bajtov).");
   }
   if (candidate.byteSize < limits.minByteSize) {
-    return {
-      verdict: "rejected",
-      reason: `Stiahnutý súbor má len ${String(candidate.byteSize)} bajtov, minimum je ${String(limits.minByteSize)}.`,
-    };
+    return rejected(
+      `Stiahnutý súbor má len ${String(candidate.byteSize)} bajtov, minimum je ${formatThousands(limits.minByteSize)} bajtov.`,
+    );
   }
 
   const missing = REQUIRED_COLUMNS.filter((column) => !candidate.columns.includes(column));
   if (missing.length > 0) {
-    return {
-      verdict: "rejected",
-      reason: `V exporte chýbajú povinné stĺpce: ${missing.join(", ")}.`,
-    };
+    return rejected(`V exporte chýbajú povinné stĺpce: ${missing.join(", ")}.`);
   }
 
   if (candidate.malformedRowCount > 0) {
-    return {
-      verdict: "rejected",
-      reason: `Export obsahuje ${String(candidate.malformedRowCount)} poškodených riadkov (počet polí nesedí s hlavičkou).`,
-    };
+    return rejected(
+      `Export obsahuje ${String(candidate.malformedRowCount)} poškodených riadkov (počet polí nesedí s hlavičkou).`,
+    );
   }
 
   if (candidate.previousAccepted === null) {
     if (candidate.rowCount < limits.absoluteMinRows) {
-      return {
-        verdict: "rejected",
-        reason: `Export má ${String(candidate.rowCount)} riadkov, minimum pre prvý import je ${String(limits.absoluteMinRows)}.`,
-      };
+      return rejected(
+        `Export má ${String(candidate.rowCount)} riadkov, minimum pre prvý import je ${String(limits.absoluteMinRows)}.`,
+      );
     }
     return { verdict: "accepted" };
   }
@@ -144,10 +150,9 @@ export function judgeSnapshot(
     limits.absoluteMinRows,
   );
   if (candidate.rowCount < floor) {
-    return {
-      verdict: "rejected",
-      reason: `Export má ${String(candidate.rowCount)} riadkov, minimum odvodené z posledného prijatého snapshotu (${String(candidate.previousAccepted.rowCount)} riadkov) je ${String(floor)}.`,
-    };
+    return rejected(
+      `Export má ${String(candidate.rowCount)} riadkov, minimum odvodené z posledného prijatého importu (${String(candidate.previousAccepted.rowCount)} riadkov) je ${String(floor)}.`,
+    );
   }
 
   return { verdict: "accepted" };
