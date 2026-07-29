@@ -1,0 +1,48 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions: { contents: read, packages: write }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/zbynekdrlik/forestshop-app:${{ steps.meta.outputs.version }}
+            ghcr.io/zbynekdrlik/forestshop-app:latest
+          build-args: |
+            APP_VERSION=${{ steps.meta.outputs.version }}
+            APP_COMMIT=${{ github.sha }}
+
+  deploy:
+    needs: build
+    runs-on: [self-hosted, dev2]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Nasadiť (migrácie si aplikácia spustí sama pri štarte)
+        working-directory: /srv/forestshop
+        run: |
+          cp "$GITHUB_WORKSPACE/docker-compose.prod.yml" .
+          docker compose -f docker-compose.prod.yml pull app
+          docker compose -f docker-compose.prod.yml up -d
+      - name: Overiť verziu na živej stránke
+        run: |
+          sleep 5
+          live=$(curl -fsS https://forestshop.newlevel.media/api/version | node -p "JSON.parse(require('fs').readFileSync(0,'utf8')).version")
+          want=$(node -p "require('./package.json').version")
+          echo "live=$live want=$want"
+          [ "$live" = "$want" ] || { echo "::error::nasadená verzia $live sa nezhoduje s $want"; exit 1; }
