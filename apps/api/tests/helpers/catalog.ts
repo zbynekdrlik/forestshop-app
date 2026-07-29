@@ -22,7 +22,10 @@ export async function insertTestSnapshot(
     .values({
       fetchedAt: overrides.fetchedAt ?? new Date("2026-07-29T10:00:00Z"),
       sourceLabel: overrides.sourceLabel ?? "test",
-      contentSha256: overrides.contentSha256 ?? "sha-test-1",
+      // Unikátne pre každé volanie — inak dva testy vkladajúce accepted snapshot
+      // bez override narazia na `catalog_snapshot_accepted_sha_uq`, ktorý je
+      // navrhnutý presne na to, aby to odhalil (nie testovacia chyba).
+      contentSha256: overrides.contentSha256 ?? `sha-test-${crypto.randomUUID()}`,
       byteSize: overrides.byteSize ?? 1_000,
       rowCount: overrides.rowCount ?? 10,
       columns: overrides.columns ?? ["code", "name"],

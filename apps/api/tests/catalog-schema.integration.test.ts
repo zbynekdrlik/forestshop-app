@@ -183,7 +183,9 @@ it("odmietne druhý variant s rovnakým kódom", async () => {
     missingSince: null,
   };
   await ctx.db.insert(variants).values(variant);
-  await expect(ctx.db.insert(variants).values(variant)).rejects.toThrow();
+  await expect(ctx.db.insert(variants).values(variant)).rejects.toThrow(
+    /duplicate key value violates unique constraint "variant_pkey"/,
+  );
 });
 
 it("odmietne iný verdikt než accepted/rejected", async () => {
@@ -195,7 +197,7 @@ it("odmietne iný verdikt než accepted/rejected", async () => {
         (fetched_at, source_label, content_sha256, byte_size, row_count, columns, verdict)
       VALUES (now(), 'test', 'sha-x', 10, 10, '["code"]'::jsonb, 'maybe')
     `),
-  ).rejects.toThrow();
+  ).rejects.toThrow(/invalid input value for enum snapshot_verdict/);
 });
 
 it("prijatý snapshot nesmie mať dôvod odmietnutia a odmietnutý ho mať musí", async () => {
@@ -207,4 +209,78 @@ it("prijatý snapshot nesmie mať dôvod odmietnutia a odmietnutý ho mať musí
   await expect(
     insertTestSnapshot(ctx.db, { verdict: "accepted", rejectionReason: "nemá tu byť", contentSha256: "sha-a" }),
   ).rejects.toThrow(/catalog_snapshot_reason_ck/);
+});
+
+it("odmietne druhý PRIJATÝ snapshot s rovnakým obsahovým hashom", async () => {
+  const ctx = await withCleanDb();
+  close = ctx.close;
+  await insertTestSnapshot(ctx.db, { verdict: "accepted", contentSha256: "sha-dup-accepted" });
+  await expect(
+    insertTestSnapshot(ctx.db, { verdict: "accepted", contentSha256: "sha-dup-accepted" }),
+  ).rejects.toThrow(/catalog_snapshot_accepted_sha_uq/);
+});
+
+it("dovolí dva ODMIETNUTÉ snapshoty s rovnakým obsahovým hashom (index je len na accepted)", async () => {
+  const ctx = await withCleanDb();
+  close = ctx.close;
+  const first = await insertTestSnapshot(ctx.db, {
+    verdict: "rejected",
+    rejectionReason: "prázdny export",
+    contentSha256: "sha-dup-rejected",
+  });
+  const second = await insertTestSnapshot(ctx.db, {
+    verdict: "rejected",
+    rejectionReason: "prázdny export",
+    contentSha256: "sha-dup-rejected",
+  });
+  expect(first).not.toBe(second);
+});
+
+it("dovolí variant bez meny, keď žiadna suma nie je vyplnená (CHECK to má povoliť)", async () => {
+  const ctx = await withCleanDb();
+  close = ctx.close;
+  const snapshotId = await insertTestSnapshot(ctx.db);
+  await ctx.db.insert(products).values({
+    key: "40289",
+    name: "Ponožky FOREST",
+    supplier: null,
+    firstSeenAt: NOW,
+    lastSeenAt: NOW,
+    lastSeenSnapshotId: snapshotId,
+  });
+
+  // Presne to, čo mapper vyprodukuje, keď parsovanie peňazí zlyhá — currency aj
+  // všetky 4 sumy NULL. Ak by niekto CHECK zjednodušil na holé `currency IS NOT
+  // NULL`, tento insert by začal padať a ďalšia úloha by narazila na stenu.
+  await ctx.db.insert(variants).values({
+    code: "40289",
+    productKey: "40289",
+    sizeLabel: null,
+    pairCode: null,
+    name: "Ponožky FOREST",
+    currency: null,
+    price: null,
+    standardPrice: null,
+    purchasePrice: null,
+    actionPrice: null,
+    actionFrom: null,
+    actionUntil: null,
+    percentVat: null,
+    includingVat: null,
+    stock: 0,
+    availabilityInStockText: "Skladom",
+    availabilityOutOfStockText: "Skladom",
+    availabilityText: "Skladom",
+    productVisibility: "detailOnly",
+    state: "sellable",
+    firstSeenAt: NOW,
+    lastSeenAt: NOW,
+    lastSeenSnapshotId: snapshotId,
+    missingSince: null,
+  });
+
+  const rows = await ctx.db.select().from(variants);
+  expect(rows).toHaveLength(1);
+  expect(rows[0]?.currency).toBeNull();
+  expect(rows[0]?.price).toBeNull();
 });
