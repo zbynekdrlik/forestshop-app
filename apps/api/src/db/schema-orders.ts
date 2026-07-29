@@ -25,6 +25,11 @@ export const orderLineState = pgEnum("order_line_state", [
   "nedostupne",
 ]);
 
+// Odvodené priamo z `enumValues`, nie ručne prepísaná duplicitná únia — nová
+// hodnota pridaná do `orderLineState` vyššie sa tak prejaví aj tu bez rizika
+// rozídenia (#23, `modules/orders/queries.ts` + `http/orders-routes.ts`).
+export type OrderLineState = (typeof orderLineState.enumValues)[number];
+
 // Identita objednávky je Shoptet-ovo číslo objednávky (`externalOrderId`) —
 // budúci importer (#21) ho potrebuje na idempotentné párovanie, rovnaký vzor
 // ako `catalog_snapshot.content_sha256` unique. Cena/mena na riadku sa

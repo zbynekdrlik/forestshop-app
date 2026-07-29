@@ -6,14 +6,21 @@ import { insertTestSnapshot } from "./catalog.js";
  * Vloží presne jeden produkt + variant, na ktoré sa dá referencovať z
  * `order_line` — orders-ingest testy potrebujú aspoň jeden ZNÁMY variant, aby
  * import mohol skutočne zapísať riadok (neznáme varianty sa inak ticho
- * preskočia, `orders/ingest.ts`'s `knownVariantCodes` kontrola).
+ * preskočia, `orders/ingest.ts`'s `knownVariantCodes` kontrola). Nepovinný
+ * `supplier` (#23) — testy zoskupenia "Na objednanie" podľa dodávateľa
+ * potrebujú aspoň dvoch RÔZNYCH dodávateľov, predvolená hodnota zostáva
+ * rovnaká ako doteraz, takže existujúce volania sa nemenia.
  */
-export async function insertTestVariant(db: Database, code: string): Promise<void> {
+export async function insertTestVariant(
+  db: Database,
+  code: string,
+  supplier = "Test dodávateľ",
+): Promise<void> {
   const snapshotId = await insertTestSnapshot(db);
   await db.insert(products).values({
     key: code,
     name: `Test produkt ${code}`,
-    supplier: "Test dodávateľ",
+    supplier,
     firstSeenAt: new Date("2026-01-01T00:00:00Z"),
     lastSeenAt: new Date("2026-01-01T00:00:00Z"),
     lastSeenSnapshotId: snapshotId,
