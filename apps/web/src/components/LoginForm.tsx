@@ -5,9 +5,12 @@ export function LoginForm({ onLoggedIn }: { onLoggedIn: () => void }): JSX.Eleme
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   async function submit(e: SyntheticEvent): Promise<void> {
     e.preventDefault();
+    if (submitting) return; // dvojklik/opakovaný Enter počas prebiehajúcej požiadavky
+    setSubmitting(true);
     setError("");
     try {
       if (await postLogin(email, password)) {
@@ -17,6 +20,8 @@ export function LoginForm({ onLoggedIn }: { onLoggedIn: () => void }): JSX.Eleme
       }
     } catch {
       setError("Prihlásenie zlyhalo — server neodpovedal");
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -27,7 +32,7 @@ export function LoginForm({ onLoggedIn }: { onLoggedIn: () => void }): JSX.Eleme
       <input id="email" type="email" value={email} onChange={(e) => { setEmail(e.target.value); }} required />
       <label htmlFor="password">Heslo</label>
       <input id="password" type="password" value={password} onChange={(e) => { setPassword(e.target.value); }} required />
-      <button type="submit">Prihlásiť sa</button>
+      <button type="submit" disabled={submitting}>Prihlásiť sa</button>
       {error !== "" && <p role="alert">{error}</p>}
     </form>
   );
