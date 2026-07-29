@@ -86,3 +86,20 @@ paths:
   databázy ani do logov nesmie ísť celá — vždy cez `redactUrl`. V repe nikdy nie je.
   Na dev2 zatiaľ nie je nastavené (issue #8) — appka bez neho beží ďalej (premenná je
   v `env.ts` `.optional()`), len ručný import vráti 503.
+- **`redactUrl` (`fetcher.ts`) prekrýva ALLOWLISTOM, nie denylistom** (review
+  final-wave-a, položka 2) — prekryje HODNOTU KAŽDÉHO query parametra okrem
+  malého zoznamu známych neškodných (`patternId`, `partnerId`); pôvodne to
+  bolo naopak (prekrýval sa len parameter menom presne `hash`). Nový export s
+  prihlasovacím údajom pod INÝM menom parametra sa tak prekryje automaticky —
+  nikdy nepridávaj ďalší parameter do allowlistu bez istoty, že nenesie
+  tajomstvo.
+- **`fetcher.ts`'s `readBounded` číta telo odpovede PO ČASTIACH cez
+  `response.body.getReader()`, nikdy `Buffer.from(await
+  response.arrayBuffer())`** — to druhé by celé telo najprv zbufferovalo bez
+  ohľadu na strop (`DEFAULT_MAX_EXPORT_BYTES`, 200 MB voči reálnemu ~57 MB
+  exportu), takže by strop kontroloval AŽ PO vyčerpaní pamäte. Typovací
+  detail: bez `dom` libu (`tsconfig`'s `"types": ["node"]`) je
+  `Response.body` typovaný cez `undici-types` ako `ReadableStream` BEZ
+  generika (efektívne `<any>`) — `getReader()` treba pretypovať na
+  `ReadableStreamDefaultReader<Uint8Array>`, inak ESLint hlási
+  `@typescript-eslint/no-unsafe-*` na každom `value`/`byteLength`.

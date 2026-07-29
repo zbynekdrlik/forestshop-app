@@ -67,3 +67,31 @@ paths:
   ladiť. CI je bezpečné (každý job má vlastný efemérny Postgres kontajner).
   Sledované ako issue #7 (cross-cutting oprava — per-proces izolácia DB —
   zatiaľ neriešená).
+- **`insertTestSnapshot`'s (`tests/helpers/catalog.ts`) predvolený `fetchedAt`
+  je pre KAŽDÉ volanie ten istý literál**, ak ho neprepíšeš — dva snapshoty
+  vložené bez explicitného `fetchedAt` majú teda ZHODNÝ čas, a dopyt, ktorý
+  vyberá "posledný snapshot" (`desc(fetchedAt), desc(id)`), sa potom rozhodne
+  podľa NÁHODNÉHO UUID tie-breaku, nie podľa poradia vloženia. Test, ktorý
+  chce overiť "vyhrá TENTO konkrétny snapshot", MUSÍ dať oboch volaniam
+  RÔZNY, explicitne rastúci `fetchedAt` (`NOW`/`NESKOR` alebo podobne) —
+  inak je nedeterministický nezávisle od toho, či je testovaný kód správny
+  (final-wave-a review, položka 3 aj 7 — presne takto vyzeral falošne
+  nestály test lock-regresie, kým sa fetchedAt rozišiel).
+- **Postgres advisory zámok (`pg_advisory_lock`/`pg_advisory_xact_lock`)
+  zdieľa JEDEN priestor kľúčov bez ohľadu na to, ktorá z dvoch funkcií ho
+  vzala** — session-scoped aj transakčná verzia sa navzájom blokujú, keď majú
+  rovnaký číselný kľúč. To umožňuje DETERMINISTICKY (bez spoliehania sa na
+  časovanie/`setTimeout` závody) otestovať kód chránený `pg_advisory_xact_lock`
+  v transakcii: z DRUHÉHO pripojenia (`new pg.Client(...)`) zavolaj
+  `pg_advisory_lock($1)` s tým istým kľúčom PRED spustením testovaného kódu —
+  testovaný kód sa spoľahlivo zasekne presne na mieste zámku, kým ho
+  manuálne neuvoľníš (`pg_advisory_unlock`). Pozri
+  `catalog-ingest-lock.integration.test.ts`.
+- **Standalone skript v `scripts/*.ts` (mimo TS projektu `apps/api`) hlási
+  falošné `@typescript-eslint/no-unsafe-*` na AKÝKOĽVEK priamy import z
+  `"drizzle-orm"`** — nielen na tagovanú šablónu `sql` (ako pôvodne
+  zdokumentované), ale aj na obyčajné funkcie ako `eq`. ESLint-ova
+  type-aware kontrola tam nevie spoľahlivo odvodiť typy. Obchádzka:
+  parametrizovaný/konštantný raw SQL reťazec priamo do `db.execute(...)`
+  (rovnaký vzor ako existujúci `TRUNCATE` v `scripts/e2e-setup.ts`), nie
+  query builder.

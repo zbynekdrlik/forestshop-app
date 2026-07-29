@@ -96,3 +96,26 @@ paths:
        doplniť oprávnenie `SSL and Certificates:Edit` a zapnúť Total TLS
        (`PATCH /zones/{zone}/acm/total_tls`) alebo objednať Advanced
        Certificate, inak TLS handshake opäť zlyhá.
+
+- **Docker inicializuje ČERSTVÝ named volume kopírovaním obsahu (aj
+  vlastníctva) z toho, čo v obraze UŽ existuje na tej istej ceste v momente
+  prvého pripojenia volume-u** — ak `Dockerfile` cieľový adresár (napr.
+  `/data/catalog-raw`, `docker-compose.prod.yml`'s `catalog-raw` volume)
+  nikdy nevytvorí, Docker vytvorí mount point ako `root:root` a `USER node`
+  (nižšie v obraze) doň nikdy nezapíše — presne reálny produkčný incident
+  (F1 final-wave-a, položka 8: prvý import stiahol 57 MB a spadol na zápis).
+  Fix: `RUN mkdir -p <cesta> && chown -R node:node <cesta>` PRED `USER node`.
+  Over TÝMTO vzorom (jednorazovo, mimo Tier-0 zákazu "docker build projektového
+  obrazu" — malý zahoditeľný alpine testovací obraz + čerstvý named volume):
+
+  ```bash
+  docker build -t verify:tmp - <<'EOF'
+  FROM node:24-alpine
+  RUN mkdir -p /data/x && chown -R node:node /data/x
+  USER node
+  CMD ["sh","-c","ls -ld /data/x && touch /data/x/p && echo OK"]
+  EOF
+  docker volume create verify-vol
+  docker run --rm -v verify-vol:/data/x verify:tmp   # očakávaj: node:node, OK
+  docker rmi verify:tmp && docker volume rm verify-vol
+  ```
