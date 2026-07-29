@@ -42,3 +42,5 @@ export const auditEvents = pgTable(
 export const usersRelations = relations(users, ({ many }) => ({
   sessions: many(sessions),
 }));
+
+export * from "./schema-catalog.js";

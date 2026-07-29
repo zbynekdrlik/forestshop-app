@@ -1,0 +1,276 @@
+import { useCallback, useEffect, useRef, useState, type SyntheticEvent, type JSX } from "react";
+import type { Me } from "../api.js";
+import {
+  CatalogUnauthorizedError,
+  fetchCatalogStats,
+  searchCatalogVariants,
+  triggerCatalogIngest,
+  type CatalogIngestOutcome,
+  type CatalogState,
+  type CatalogStats,
+  type VariantSummary,
+} from "../catalogApi.js";
+
+const STATE_LABELS: Record<VariantSummary["state"], string> = {
+  sellable: "Skladom",
+  out_of_stock: "Vypredané",
+  discontinued: "Predaj skončil",
+};
+
+// Rovnaké dve role, ktoré server vyžaduje pre `POST /api/catalog/ingest`
+// (`requireRole("admin", "manazer")` v `catalog-routes.ts`) — server ostáva
+// skutočnou bránou, toto len skrýva tlačidlo pre role, ktoré by aj tak dostali 403.
+const IMPORT_ROLES: ReadonlySet<Me["role"]> = new Set(["admin", "manazer"]);
+
+interface Notice {
+  readonly kind: "info" | "warning";
+  readonly text: string;
+}
+
+function SnapshotLine({ stats }: { readonly stats: CatalogStats }): JSX.Element {
+  const snapshot = stats.lastSnapshot;
+  if (snapshot === null) {
+    return <p data-testid="snapshot">Katalóg zatiaľ nebol importovaný.</p>;
+  }
+
+  const fetchedAtLabel = new Date(snapshot.fetchedAt).toLocaleString("sk-SK");
+  const anomaliesLabel = snapshot.issueCount === null ? "—" : String(snapshot.issueCount);
+  const zdrojAAnomalie = `zdroj: ${snapshot.sourceLabel}, anomálií: ${anomaliesLabel}`;
+
+  if (snapshot.verdict === "rejected") {
+    // Samostatný, nezameniteľný alert — odmietnutý import nezapíše žiadne riadky,
+    // takže čísla nižšie (v `data-testid="counts"`) sú z PREDCHÁDZAJÚCEHO importu,
+    // nie z tohto pokusu. To musí byť z tejto vety jasné, inak stránka ticho
+    // klame, že je všetko v poriadku.
+    return (
+      <p data-testid="rejection-alert" role="alert">
+        Posledný import bol <strong>zamietnutý</strong> ({fetchedAtLabel}) — dôvod:{" "}
+        {snapshot.rejectionReason}. Čísla nižšie pochádzajú z predchádzajúceho prijatého importu.
+        ({zdrojAAnomalie})
+      </p>
+    );
+  }
+
+  return (
+    <p data-testid="snapshot">
+      Posledný import: <strong>prijatý</strong> ({fetchedAtLabel}) — {snapshot.rowCount} riadkov,{" "}
+      {snapshot.columnCount} stĺpcov ({zdrojAAnomalie})
+    </p>
+  );
+}
+
+function describeIngestOutcome(result: CatalogIngestOutcome): Notice {
+  switch (result.status) {
+    case "accepted":
+      return {
+        kind: "info",
+        text: `Import bol úspešný — ${String(result.variantCount)} variantov, ${String(result.productCount)} produktov, ${String(result.missingCount)} chýbajúcich, ${String(result.issueCount)} anomálií.`,
+      };
+    case "rejected":
+      return { kind: "warning", text: `Import bol zamietnutý — dôvod: ${result.reason}` };
+    case "duplicate":
+      return {
+        kind: "info",
+        text: "Export sa od posledného importu nezmenil — katalóg zostáva nezmenený.",
+      };
+    case "busy":
+      return {
+        kind: "warning",
+        text: "Import už prebieha na pozadí — počkajte, kým sa dokončí, a skúste to znova.",
+      };
+  }
+}
+
+export function CatalogPage({
+  role,
+  onSessionExpired,
+}: {
+  readonly role: Me["role"];
+  readonly onSessionExpired: () => void;
+}): JSX.Element {
+  const [stats, setStats] = useState<CatalogStats | null>(null);
+  const [statsLoaded, setStatsLoaded] = useState(false);
+  const [statsError, setStatsError] = useState("");
+  const [items, setItems] = useState<readonly VariantSummary[]>([]);
+  const [total, setTotal] = useState(0);
+  const [searchLoaded, setSearchLoaded] = useState(false);
+  const [query, setQuery] = useState("");
+  const [state, setState] = useState<CatalogState>("all");
+  const [searchError, setSearchError] = useState("");
+  const [importOutcome, setImportOutcome] = useState<Notice | null>(null);
+  const [busy, setBusy] = useState(false);
+  // Len najnovšia požiadavka smie zapísať výsledok — širšie hľadanie je
+  // pomalšie (neindexovaný ILIKE nad celým katalógom), takže staršia, ale
+  // širšia odpoveď môže dorásť neskôr než novšia, užšia. Bez tohto poradia
+  // dokončenia by sa vykreslil zastaraný výsledok nad novým textom hľadania.
+  const searchSeq = useRef(0);
+
+  const loadStats = useCallback(() => {
+    fetchCatalogStats()
+      .then((s) => {
+        setStats(s);
+        setStatsLoaded(true);
+      })
+      .catch((err: unknown) => {
+        setStatsLoaded(true);
+        if (err instanceof CatalogUnauthorizedError) {
+          onSessionExpired();
+          return;
+        }
+        setStatsError("Prehľad katalógu sa nepodarilo načítať.");
+      });
+  }, [onSessionExpired]);
+
+  const search = useCallback(
+    (q: string, s: CatalogState) => {
+      const seq = (searchSeq.current += 1);
+      setSearchError("");
+      searchCatalogVariants({ q, state: s, page: 1 })
+        .then((result) => {
+          if (seq !== searchSeq.current) return; // medzitým prišla novšia požiadavka
+          setItems(result.items);
+          setTotal(result.total);
+          setSearchLoaded(true);
+        })
+        .catch((err: unknown) => {
+          if (seq !== searchSeq.current) return;
+          setSearchLoaded(true);
+          if (err instanceof CatalogUnauthorizedError) {
+            onSessionExpired();
+            return;
+          }
+          setItems([]);
+          setTotal(0);
+          setSearchError("Vyhľadávanie zlyhalo — server neodpovedal.");
+        });
+    },
+    [onSessionExpired],
+  );
+
+  useEffect(() => {
+    loadStats();
+    search("", "all");
+  }, [loadStats, search]);
+
+  function submit(event: SyntheticEvent): void {
+    event.preventDefault();
+    search(query, state);
+  }
+
+  function runIngest(): void {
+    setBusy(true);
+    setImportOutcome(null);
+    triggerCatalogIngest()
+      .then((result) => {
+        setImportOutcome(describeIngestOutcome(result));
+        loadStats();
+        search(query, state);
+      })
+      .catch((err: unknown) => {
+        if (err instanceof CatalogUnauthorizedError) {
+          onSessionExpired();
+          return;
+        }
+        setImportOutcome({
+          kind: "warning",
+          text: err instanceof Error ? err.message : "Import sa nepodarilo spustiť.",
+        });
+      })
+      .finally(() => {
+        setBusy(false);
+      });
+  }
+
+  const canImport = IMPORT_ROLES.has(role);
+  const showingAll = total === 0 || items.length >= total;
+
+  return (
+    <section>
+      <h2>Katalóg</h2>
+      {!statsLoaded ? <p>Načítavam prehľad…</p> : stats !== null && <SnapshotLine stats={stats} />}
+      {statsError !== "" && <p role="alert">{statsError}</p>}
+      {stats !== null && (
+        <p data-testid="counts">
+          Variantov: {stats.variantCount} · produktov: {stats.productCount} · skladom:{" "}
+          {stats.sellable} · vypredaných: {stats.outOfStock} · ukončených: {stats.discontinued} ·
+          chýbajúcich: {stats.missing}
+        </p>
+      )}
+
+      {canImport && (
+        <button type="button" onClick={runIngest} disabled={busy}>
+          {busy ? "Importujem…" : "Stiahnuť a naimportovať export"}
+        </button>
+      )}
+      {importOutcome !== null && (
+        <p role={importOutcome.kind === "warning" ? "alert" : "status"} data-testid="import-outcome">
+          {importOutcome.text}
+        </p>
+      )}
+
+      <form onSubmit={submit}>
+        <label htmlFor="catalog-q">Kód alebo názov</label>
+        <input
+          id="catalog-q"
+          type="search"
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+          }}
+        />
+        <label htmlFor="catalog-state">Stav</label>
+        <select
+          id="catalog-state"
+          value={state}
+          onChange={(e) => {
+            setState(e.target.value as CatalogState);
+          }}
+        >
+          <option value="all">Všetky</option>
+          <option value="sellable">Skladom</option>
+          <option value="out_of_stock">Vypredané</option>
+          <option value="discontinued">Predaj skončil</option>
+        </select>
+        <button type="submit">Hľadať</button>
+      </form>
+
+      {searchError !== "" && <p role="alert">{searchError}</p>}
+      <p data-testid="total">
+        {showingAll
+          ? `Nájdených: ${String(total)}`
+          : `Nájdených: ${String(total)} (zobrazených prvých ${String(items.length)})`}
+      </p>
+
+      {searchLoaded && total === 0 ? (
+        <p data-testid="empty-results">Hľadaniu nezodpovedá žiadny variant.</p>
+      ) : (
+        <table>
+          <thead>
+            <tr>
+              <th>Kód</th>
+              <th>Názov</th>
+              <th>Veľkosť</th>
+              <th>Stav</th>
+              <th>Sklad</th>
+              <th>Cena</th>
+              <th>Dostupnosť podľa Shoptetu</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((item) => (
+              <tr key={item.code} data-testid={`variant-${item.code}`}>
+                <td>{item.code}</td>
+                <td>{item.name}</td>
+                <td>{item.sizeLabel ?? "—"}</td>
+                <td>{STATE_LABELS[item.state]}</td>
+                <td>{item.stock}</td>
+                <td>{item.price === null ? "—" : `${item.price} ${item.currency ?? ""}`}</td>
+                <td>{item.availabilityText === "" ? "—" : item.availabilityText}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </section>
+  );
+}

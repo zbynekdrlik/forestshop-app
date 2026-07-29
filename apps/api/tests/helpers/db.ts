@@ -8,7 +8,9 @@ export async function withCleanDb(): Promise<{ db: Database; close: () => Promis
   }
   const { db, pool } = createDb(url);
   try {
-    await db.execute(sql`TRUNCATE TABLE audit_events, sessions, users RESTART IDENTITY CASCADE`);
+    await db.execute(
+      sql`TRUNCATE TABLE ingest_issue, variant, product, catalog_snapshot, audit_events, sessions, users RESTART IDENTITY CASCADE`,
+    );
   } catch (err) {
     await pool.end();
     throw err;

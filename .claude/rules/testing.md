@@ -40,3 +40,30 @@ paths:
   neodfiltruje ani nič nezachytí). **Rozširovanie tejto výnimky na ďalšie
   cesty/kódy je zakázané** — každá ďalšia console error/warning musí byť
   vyriešená v appke, nie skrytá v teste.
+- **Integračný test-súbor, ktorý volá `POST /api/login` viackrát, MUSÍ v
+  `afterEach` zavolať `resetLoginRateLimit()`** (`src/http/login-rate-
+  limit.ts`) — jeho počítadlo je modul-level singleton zdieľaný medzi
+  všetkými testami v behu (aj naprieč súbormi, keďže `fileParallelism:
+  false` drží všetko v jednom procese). Bez resetu sa počet prihlásení
+  hromadí a niekde okolo 10. volania v poradí dostane 401/429 test, ktorý s
+  rate-limitom vôbec nesúvisí — vyzerá to ako náhodné zlyhanie ďaleko od
+  skutočnej príčiny. Vzor je v `http.integration.test.ts` aj
+  `catalog-http*.integration.test.ts`.
+- **Dva `boot()`-štýl helpery volané v JEDNOM teste sa navzájom prepíšu**,
+  ak každý interne volá `withCleanDb()` — druhé volanie TRUNCATE-uje tie
+  isté zdieľané tabuľky (vrátane `sessions`), takže zneplatní session
+  vytvorenú prvým volaním skôr, než sa stihne použiť. Keď test potrebuje
+  DVOCH súčasne prihlásených používateľov (napr. rôzne role), použi JEDEN
+  spoločný `withCleanDb()`/`createApp()` a prihlás sa POD KAŽDÝM
+  používateľom zvlášť, nie dva samostatné `boot()` volania.
+- **Lokálne integračné testy sa navzájom rušia, keď bežia SÚBEŽNE proti tej
+  istej zdieľanej lokálnej Postgres inštancii** (viac agentov/terminálov
+  naraz) — `withCleanDb()`'s `TRUNCATE` z jedného procesu môže zasiahnuť
+  rozbehnutý test druhého procesu (`duplicate key value violates unique
+  constraint "users_email_unique"`, `insert or update on table "sessions"
+  violates foreign key constraint`). Nie je to chyba v testovanej appke ani
+  v konkrétnom teste — over si to spustením TOHO ISTÉHO súboru izolovane
+  (žiadny iný `vitest`/`test:integration` beh naraz) skôr, než začneš
+  ladiť. CI je bezpečné (každý job má vlastný efemérny Postgres kontajner).
+  Sledované ako issue #7 (cross-cutting oprava — per-proces izolácia DB —
+  zatiaľ neriešená).

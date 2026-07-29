@@ -8,6 +8,19 @@ paths:
 
 # Deployment (dev2)
 
+- **Nepovinná premenná v `environment:` bloku patrí bez `:?`, ako holý kľúč
+  (`SHOPTET_EXPORT_URL:`, žiadna hodnota) — NIE `${VAR:?chyba}`.** Bare kľúč
+  preberá hodnotu z `/srv/forestshop/.env`, keď tam je, a keď nie je, premenná
+  sa v kontajneri VÔBEC nenastaví (over: `docker compose config`) — presne to,
+  čo očakáva `.optional()` v `env.ts`. `${VAR:?chyba}` (ako pri
+  `POSTGRES_PASSWORD`/`CF_TUNNEL_TOKEN` nižšie) je správne LEN pre premenné bez
+  ktorých appka nemá zmysel spúšťať — na nepovinnej premennej by `up -d` padal
+  pri KAŽDOM deployi, kým operátor tajomstvo nedoplní (presne tento prípad:
+  `SHOPTET_EXPORT_URL`, F1 Task 8, issue #8 — appka bez neho beží ďalej, len
+  ručný import vráti 503). Nikdy `${VAR:-}` (prázdny reťazec) ako náhrada za
+  bare kľúč — to premennú v kontajneri NASTAVÍ na `""`, čo `z.string().url()`
+  v `env.ts` odmietne a appku pri štarte zhodí, hoci samotná premenná je
+  deklarovaná ako nepovinná.
 - **Kam sa nasadzuje:** `/srv/forestshop` na dev2 (vlastník `newlevel`).
   Obsahuje `.env` (mode 600 — `POSTGRES_PASSWORD`, `CF_TUNNEL_TOKEN`),
   `docker-compose.prod.yml` (kopírovaný z repa pri každom deploy) a
@@ -43,10 +56,12 @@ paths:
   (`parovanie_produktov`, rozhodnutie z 2026-07-22, issue #120 v tamojšom
   repe) — presmerovanie DNS na nový systém by ho ticho odpojilo. Cloudflare
   tunnel pre tento projekt (`forestshop-app`, samostatný od súrodenca) je
-  pripravený a pripojený; samotný DNS `A`/`CNAME` záznam čaká na rozhodnutie
-  vlastníka projektu, kým doména patrí ktorému systému (issue #5).
+  pripravený a pripojený.
+  **Rozhodnuté majiteľom 2026-07-29: hlavné meno prevezme tento systém až vo
+  fáze F6**, keď sa stará appka vypína — dovtedy sa `forestshop.newlevel.media`
+  nechá starému projektu (issue #5 je teraz úloha pre F6, nie otvorená otázka).
 
-- **Dočasný verejný hostname (kým sa nerozhodne issue #5):
+- **Dočasný verejný hostname (do fázy F6, issue #5):
   `forestshop-novy.newlevel.media`.** Beží na samostatnom tunneli
   `forestshop-app` (id `e0cdc5bf-fbc8-45de-b1f7-f4c0b2a9b0dc`), ingress
   `forestshop-novy.newlevel.media` → `http://app:3000` (popri pôvodnom

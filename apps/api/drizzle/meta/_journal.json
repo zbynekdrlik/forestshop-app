@@ -8,6 +8,27 @@
       "when": 1785278766038,
       "tag": "0000_broad_tigra",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1785319718710,
+      "tag": "0001_ordinary_red_wolf",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1785320568505,
+      "tag": "0002_exotic_nebula",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1785327773365,
+      "tag": "0003_glossy_thaddeus_ross",
+      "breakpoints": true
     }
   ]
 }

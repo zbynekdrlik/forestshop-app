@@ -1,0 +1,5 @@
+# The Shoptet CSV fixture is carved byte-for-byte from a real cp1250, CRLF
+# export (see .superpowers/sdd/.../task-2-brief.md Step 1). Tests assert on
+# that exact CRLF layout — a future checkout with core.autocrlf=true must
+# never be allowed to silently rewrite it.
+apps/api/src/modules/catalog/fixtures/*.csv -text -diff

@@ -30,3 +30,23 @@ paths:
   schému), ale dve súčasne štartujúce inštancie by si mohli pretekať o rovnaké
   DDL. Netýka sa dnešného deploy flow (beží vždy presne jedna inštancia) —
   ak sa niekedy pridá druhá replika appky, toto sa musí doriešiť pred tým.
+- **`drizzle-kit` 0.30.x nevie `db:generate`/`db:migrate`, keď jeden
+  `src/db/schema*.ts` súbor cez `export * from "./other.js"` odkazuje na iný
+  (napr. `schema.ts` re-exportuje `schema-catalog.ts`).** Jeho zabudovaný
+  `esbuild-register` loader rieši `require()` čisto podľa Node-ovho klasického
+  CJS resolvera — pri explicitnom `.js` (nutnom kvôli
+  `verbatimModuleSyntax`/natívnemu ESM v `dist/`) nehľadá sesterský `.ts`
+  súbor, takže padne na `MODULE_NOT_FOUND`, hoci `vitest`/`tsx` ten istý import
+  bez problémov vyriešia. Fix: bump `drizzle-kit` na `^0.31.0` (vyriešené v
+  0.31.10) — vymenil si interný TS loader a `.js → .ts` sesterský import
+  vyrieši správne. Je to len devDependency (CLI, nie runtime `migrate()` v
+  `index.ts`), takže bump nemení produkčné správanie; `drizzle-orm ^0.38.0`
+  zostáva kompatibilné (interný `compatibilityVersion` check prejde). Ak
+  pribudne ďalší `schema-*.ts` súbor s re-exportom, over `db:generate` hneď —
+  ak `drizzle-kit` opäť klesol pod `^0.31.0`, toto je presne ten istý pád.
+- **`drizzle-kit` (`^0.31.x`) je jeden release generation pred `drizzle-orm`
+  (`^0.38.x`)** — review F1 Task 1 na to upozornil ako zvyškové riziko, nie
+  ako aktuálnu chybu (`compatibilityVersion` check pri `db:generate` zatiaľ
+  prechádza bez varovania). Kým sa obe knižnice nezarovnajú na rovnakú
+  generáciu, každú vygenerovanú `.sql` migráciu si pred commitom prečítaj —
+  neber jej obsah len na základe toho, že `db:generate` prebehlo bez chyby.

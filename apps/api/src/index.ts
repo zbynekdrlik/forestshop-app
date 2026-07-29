@@ -5,6 +5,8 @@ import { fileURLToPath } from "node:url";
 import { createDb } from "./db/client.js";
 import { loadEnv } from "./env.js";
 import { createApp } from "./http/app.js";
+import { createHttpExportFetcher } from "./modules/catalog/fetcher.js";
+import { ingestCatalog } from "./modules/catalog/ingest.js";
 import { appVersion } from "./version.js";
 
 const env = loadEnv();
@@ -18,7 +20,27 @@ const { db } = createDb(env.DATABASE_URL);
 // jedna inštancia (docker-compose.prod.yml), takže to dnes nehrozí.
 await migrate(db, { migrationsFolder: fileURLToPath(new URL("../drizzle", import.meta.url)) });
 
-const app = createApp(db, { cookieSecure: env.SESSION_COOKIE_SECURE });
+// `SHOPTET_EXPORT_URL` je nepovinná (env.ts) — bez nej appka beží ďalej, len
+// ručný import vráti 503 (catalog-routes.ts). `exactOptionalPropertyTypes` je
+// zapnuté, preto sa `runIngest` do `createApp` odovzdáva ako CHÝBAJÚCI kľúč,
+// nikdy ako explicitné `undefined`.
+const exportUrl = env.SHOPTET_EXPORT_URL;
+const runIngest =
+  exportUrl === undefined
+    ? undefined
+    : (now: Date) =>
+        ingestCatalog(db, {
+          fetchExport: createHttpExportFetcher({ url: exportUrl }),
+          now,
+          rawDir: env.CATALOG_RAW_DIR,
+        });
+
+const app = createApp(
+  db,
+  runIngest === undefined
+    ? { cookieSecure: env.SESSION_COOKIE_SECURE }
+    : { cookieSecure: env.SESSION_COOKIE_SECURE, runIngest },
+);
 
 app.use("/*", serveStatic({ root: "./public" }));
 app.get("*", serveStatic({ path: "./public/index.html" }));

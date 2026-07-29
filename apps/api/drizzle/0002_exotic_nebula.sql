@@ -1,0 +1,2 @@
+ALTER TABLE "variant" DROP CONSTRAINT "variant_money_needs_currency_ck";--> statement-breakpoint
+ALTER TABLE "variant" ADD CONSTRAINT "variant_money_needs_currency_ck" CHECK (("variant"."currency" IS NOT NULL AND "variant"."currency" != '') OR ("variant"."price" IS NULL AND "variant"."standard_price" IS NULL AND "variant"."purchase_price" IS NULL AND "variant"."action_price" IS NULL));
