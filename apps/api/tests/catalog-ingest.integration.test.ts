@@ -175,6 +175,39 @@ it("ten istý obsah sa druhýkrát nespracuje", async () => {
   expect(await db.select().from(catalogSnapshots)).toHaveLength(1);
 });
 
+// Important (review final-wave-a, položka 5): duplicitný import predtým
+// nezanechal ŽIADNU stopu, že kontrola prebehla — jediný ukazovateľ
+// čerstvosti (`fetchedAt`) zamrzol na prvom stiahnutí, hoci naplánovaný
+// import každú noc hlási úspech. `lastConfirmedAt` musí posunúť presne
+// TÝMTO — a nič iné na riadku sa nesmie zmeniť.
+it("duplicitný import posunie čas potvrdenia (lastConfirmedAt), nič iné na riadku sa nezmení", async () => {
+  const { db, dir } = await boot();
+  await ingestCatalog(db, { fetchExport: fetcherOf(FIXTURE), now: NOW, rawDir: dir, limits: TEST_LIMITS });
+
+  const [poPrvomImporte] = await db.select().from(catalogSnapshots);
+  expect(poPrvomImporte?.lastConfirmedAt).toEqual(NOW);
+
+  const result = await ingestCatalog(db, {
+    fetchExport: fetcherOf(FIXTURE),
+    now: NESKOR,
+    rawDir: dir,
+    limits: TEST_LIMITS,
+  });
+  expect(result.status).toBe("duplicate");
+
+  const [poDruhomImporte] = await db.select().from(catalogSnapshots);
+  expect(poDruhomImporte?.lastConfirmedAt).toEqual(NESKOR);
+  // Všetko OSTATNÉ na riadku ostáva presne také, ako po prvom importe —
+  // duplicitná kontrola nesmie prepísať nič iné než potvrdenie čerstvosti.
+  expect(poDruhomImporte).toMatchObject({
+    id: poPrvomImporte?.id,
+    fetchedAt: NOW,
+    rowCount: poPrvomImporte?.rowCount,
+    variantCount: poPrvomImporte?.variantCount,
+    verdict: "accepted",
+  });
+});
+
 it("variant, ktorý z exportu zmizne, sa nemaže — len sa označí odkedy chýba", async () => {
   const { db, dir } = await boot();
   await ingestCatalog(db, {

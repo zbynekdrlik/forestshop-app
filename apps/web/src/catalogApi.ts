@@ -5,6 +5,7 @@ export type CatalogState = "all" | "sellable" | "out_of_stock" | "discontinued";
 const snapshotSchema = z.object({
   id: z.string(),
   fetchedAt: z.string(),
+  lastConfirmedAt: z.string().nullable(),
   sourceLabel: z.string(),
   verdict: z.enum(["accepted", "rejected"]),
   rejectionReason: z.string().nullable(),

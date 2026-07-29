@@ -112,6 +112,17 @@ export async function ingestCatalog(
     )
     .limit(1);
   if (duplicate !== undefined) {
+    // Duplicitný import nezapíše žiadny nový riadok, ale MUSÍ zaznamenať, že
+    // kontrola prebehla — inak zostáva jediný ukazovateľ čerstvosti
+    // (`fetched_at`) navždy zamrznutý na prvom stiahnutí, zatiaľ čo naplánovaný
+    // import každú noc hlási úspech (review final-wave-a, položka 5; presne ten
+    // tvar historického výpadku, ktorému má táto fáza zabrániť). `fetchedAt`,
+    // `rowCount` a všetko ostatné na riadku ostáva nedotknuté — mení sa LEN
+    // `lastConfirmedAt`.
+    await db
+      .update(catalogSnapshots)
+      .set({ lastConfirmedAt: options.now })
+      .where(eq(catalogSnapshots.id, duplicate.id));
     log.info({ snapshotId: duplicate.id, contentSha256 }, "rovnaký export už bol prijatý");
     return { status: "duplicate", snapshotId: duplicate.id };
   }
@@ -275,6 +286,9 @@ export async function ingestCatalog(
         .insert(catalogSnapshots)
         .values({
           fetchedAt: options.now,
+          // Pri prvom zápise je "naposledy potvrdené" to isté ako "naposledy
+          // stiahnuté" — rozíde sa až prvým budúcim DUPLICITNÝM importom.
+          lastConfirmedAt: options.now,
           // Služba dôveruje `sourceLabel` od AKÉHOKOĽVEK vstreknutého fetchera
           // (minor, review task-5-fix-1) — prekrytie tu je druhá poistka, nie
           // len v `createHttpExportFetcher`; na už prekrytej URL je no-op.
@@ -458,6 +472,12 @@ export async function ingestCatalog(
         )
         .limit(1);
       if (existing !== undefined) {
+        // Rovnaká confirmation-only aktualizácia ako na hlavnej duplicitnej
+        // ceste vyššie — aj TENTO import overil, že katalóg je aktuálny.
+        await db
+          .update(catalogSnapshots)
+          .set({ lastConfirmedAt: options.now })
+          .where(eq(catalogSnapshots.id, existing.id));
         log.info(
           { snapshotId: existing.id, contentSha256 },
           "súbežný import rovnakého obsahu — preložené na duplicate",
@@ -483,6 +503,7 @@ export async function ingestCatalog(
     );
     await db.insert(catalogSnapshots).values({
       fetchedAt: options.now,
+      lastConfirmedAt: options.now,
       sourceLabel: redactSourceLabel(download.sourceLabel),
       contentSha256,
       byteSize,

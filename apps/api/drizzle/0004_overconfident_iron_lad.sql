@@ -1,0 +1,1 @@
+ALTER TABLE "catalog_snapshot" ADD COLUMN "last_confirmed_at" timestamp with time zone;

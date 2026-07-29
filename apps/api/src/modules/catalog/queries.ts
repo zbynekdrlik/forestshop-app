@@ -6,6 +6,10 @@ import type { VariantState } from "./availability.js";
 export interface SnapshotSummary {
   readonly id: string;
   readonly fetchedAt: string;
+  // Kedy sa naposledy PREVERILO, že tento snapshot je stále aktuálny — na
+  // duplicitnom importe sa posúva, `fetchedAt` nie (review final-wave-a,
+  // položka 5). `null` len pri riadkoch spred tejto migrácie.
+  readonly lastConfirmedAt: string | null;
   readonly sourceLabel: string;
   readonly verdict: "accepted" | "rejected";
   readonly rejectionReason: string | null;
@@ -71,6 +75,7 @@ export interface VariantSearchResult {
 const snapshotColumns = {
   id: catalogSnapshots.id,
   fetchedAt: catalogSnapshots.fetchedAt,
+  lastConfirmedAt: catalogSnapshots.lastConfirmedAt,
   sourceLabel: catalogSnapshots.sourceLabel,
   verdict: catalogSnapshots.verdict,
   rejectionReason: catalogSnapshots.rejectionReason,
@@ -82,10 +87,17 @@ const snapshotColumns = {
   issueCount: catalogSnapshots.issueCount,
 };
 
-type SnapshotRow = { readonly fetchedAt: Date } & Omit<SnapshotSummary, "fetchedAt">;
+type SnapshotRow = { readonly fetchedAt: Date; readonly lastConfirmedAt: Date | null } & Omit<
+  SnapshotSummary,
+  "fetchedAt" | "lastConfirmedAt"
+>;
 
 function toSnapshotSummary(row: SnapshotRow): SnapshotSummary {
-  return { ...row, fetchedAt: row.fetchedAt.toISOString() };
+  return {
+    ...row,
+    fetchedAt: row.fetchedAt.toISOString(),
+    lastConfirmedAt: row.lastConfirmedAt?.toISOString() ?? null,
+  };
 }
 
 export async function listSnapshots(db: Database, limit: number): Promise<readonly SnapshotSummary[]> {
