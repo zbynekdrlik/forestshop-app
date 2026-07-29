@@ -72,7 +72,7 @@ export function App(): JSX.Element {
         Odhlásiť sa
       </button>
       {logoutError !== "" && <p role="alert">{logoutError}</p>}
-      <CatalogPage />
+      <CatalogPage role={me.role} onSessionExpired={reload} />
       <Footer />
     </main>
   );

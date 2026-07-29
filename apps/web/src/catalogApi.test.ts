@@ -1,5 +1,10 @@
 import { expect, it, vi } from "vitest";
-import { fetchCatalogStats, searchCatalogVariants } from "./catalogApi.js";
+import {
+  CatalogUnauthorizedError,
+  fetchCatalogStats,
+  searchCatalogVariants,
+  triggerCatalogIngest,
+} from "./catalogApi.js";
 
 const STATS = {
   variantCount: 35,
@@ -57,4 +62,53 @@ it("zlyhá zrozumiteľne pri chybe servera", async () => {
   await expect(searchCatalogVariants({ q: "", state: "all", page: 1 })).rejects.toThrow(
     "Katalóg sa nepodarilo načítať",
   );
+});
+
+it("pri 401 vyhodí CatalogUnauthorizedError namiesto všeobecnej chyby", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("", { status: 401 })));
+  await expect(fetchCatalogStats()).rejects.toBeInstanceOf(CatalogUnauthorizedError);
+});
+
+it("odovzdá hlásenie servera namiesto všeobecnej hlášky, keď ho server pošle", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({ error: "Import katalógu nie je nakonfigurovaný (chýba SHOPTET_EXPORT_URL)" }),
+        { status: 503 },
+      ),
+    ),
+  );
+  await expect(triggerCatalogIngest()).rejects.toThrow(
+    "Import katalógu nie je nakonfigurovaný (chýba SHOPTET_EXPORT_URL)",
+  );
+});
+
+it("keď server nepošle telo s chybou, spustenie importu zlyhá so všeobecnou hláškou", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("", { status: 500 })));
+  await expect(triggerCatalogIngest()).rejects.toThrow("Import sa nepodarilo spustiť");
+});
+
+it("rozlíši každý výsledok importu vrátane 'busy', keď už jeden beží", async () => {
+  const cases = [
+    {
+      status: "accepted",
+      snapshotId: "s1",
+      variantCount: 35,
+      productCount: 8,
+      missingCount: 0,
+      issueCount: 2,
+    },
+    { status: "rejected", snapshotId: "s2", reason: "export je prázdny" },
+    { status: "duplicate", snapshotId: "s3" },
+    { status: "busy" },
+  ] as const;
+
+  for (const result of cases) {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(JSON.stringify(result), { status: 200 })),
+    );
+    await expect(triggerCatalogIngest()).resolves.toEqual(result);
+  }
 });

@@ -40,21 +40,72 @@ const variantSchema = z.object({
 });
 
 const searchSchema = z.object({ total: z.number(), items: z.array(variantSchema) });
-const ingestSchema = z.object({ status: z.string() });
+
+// Zrkadlí `CatalogIngestResult` z `apps/api/src/modules/catalog/ingest.ts` —
+// vrátane "busy" (súbežný import už beží, pridáva sa paralelne v Task 6).
+// Rozlíšená únia namiesto holého `{ status: string }`, aby stránka vedela pre
+// každý výsledok zobraziť vlastnú slovenskú hlášku namiesto ticho zahodených detailov.
+const ingestOutcomeSchema = z.discriminatedUnion("status", [
+  z.object({
+    status: z.literal("accepted"),
+    snapshotId: z.string(),
+    variantCount: z.number(),
+    productCount: z.number(),
+    missingCount: z.number(),
+    issueCount: z.number(),
+  }),
+  z.object({
+    status: z.literal("rejected"),
+    snapshotId: z.string(),
+    reason: z.string(),
+  }),
+  z.object({
+    status: z.literal("duplicate"),
+    snapshotId: z.string(),
+  }),
+  z.object({
+    status: z.literal("busy"),
+  }),
+]);
 
 export type CatalogStats = z.infer<typeof statsSchema>;
-export type CatalogSnapshot = z.infer<typeof snapshotSchema>;
 export type VariantSummary = z.infer<typeof variantSchema>;
+export type CatalogIngestOutcome = z.infer<typeof ingestOutcomeSchema>;
 
 export const PAGE_SIZE = 50;
 
-async function readJson(response: Response): Promise<unknown> {
-  if (!response.ok) throw new Error("Katalóg sa nepodarilo načítať");
+/**
+ * Relácia medzitým vypršala (401) — odlíšené od bežnej chyby, aby volajúci
+ * mohol vynútiť opätovné prihlásenie namiesto všeobecnej hlášky "nepodarilo
+ * sa načítať", ktorá by nechala používateľa na mŕtvom dashboarde.
+ */
+export class CatalogUnauthorizedError extends Error {
+  constructor() {
+    super("Neprihlásený");
+  }
+}
+
+const errorBodySchema = z.object({ error: z.string() });
+
+async function serverErrorMessage(response: Response, fallback: string): Promise<string> {
+  try {
+    const parsed = errorBodySchema.safeParse(await response.json());
+    if (parsed.success) return parsed.data.error;
+  } catch {
+    // Telo nie je platný JSON (alebo chýba) — použi všeobecnú hlášku.
+  }
+  return fallback;
+}
+
+async function readJson(response: Response, fallback: string): Promise<unknown> {
+  if (response.status === 401) throw new CatalogUnauthorizedError();
+  if (!response.ok) throw new Error(await serverErrorMessage(response, fallback));
   return await response.json();
 }
 
 export async function fetchCatalogStats(): Promise<CatalogStats> {
-  return statsSchema.parse(await readJson(await fetch("/api/catalog/stats")));
+  const response = await fetch("/api/catalog/stats");
+  return statsSchema.parse(await readJson(response, "Katalóg sa nepodarilo načítať"));
 }
 
 export async function searchCatalogVariants(input: {
@@ -68,11 +119,11 @@ export async function searchCatalogVariants(input: {
     page: String(input.page),
     pageSize: String(PAGE_SIZE),
   });
-  return searchSchema.parse(await readJson(await fetch(`/api/catalog/variants?${query.toString()}`)));
+  const response = await fetch(`/api/catalog/variants?${query.toString()}`);
+  return searchSchema.parse(await readJson(response, "Katalóg sa nepodarilo načítať"));
 }
 
-export async function triggerCatalogIngest(): Promise<z.infer<typeof ingestSchema>> {
+export async function triggerCatalogIngest(): Promise<CatalogIngestOutcome> {
   const response = await fetch("/api/catalog/ingest", { method: "POST" });
-  if (!response.ok) throw new Error("Import sa nepodarilo spustiť");
-  return ingestSchema.parse(await response.json());
+  return ingestOutcomeSchema.parse(await readJson(response, "Import sa nepodarilo spustiť"));
 }
