@@ -51,6 +51,10 @@ jobs:
         working-directory: /srv/forestshop
         run: |
           cp "$GITHUB_WORKSPACE/docker-compose.prod.yml" .
+          # scripts/ (zálohovanie, obnovovací drill) musí byť na dev2 vždy presne to,
+          # čo je v repozitári — inak sa tichým opomenutím rozíde od gitu naveky.
+          mkdir -p scripts
+          rsync -a --delete "$GITHUB_WORKSPACE/scripts/" scripts/
           docker compose -f docker-compose.prod.yml pull app
           docker compose -f docker-compose.prod.yml up -d
       - name: Overiť verziu na živej stránke
