@@ -33,18 +33,28 @@ export async function withCleanDb(): Promise<{ db: Database; close: () => Promis
       sql`TRUNCATE TABLE ingest_issue, variant, product, catalog_snapshot, audit_events, sessions, users RESTART IDENTITY CASCADE`,
     );
   } catch (err) {
-    await pool.end();
-    await lock.query("select pg_advisory_unlock($1)", [TEST_DB_ISOLATION_LOCK_KEY]);
-    await lock.end();
+    try {
+      await pool.end();
+    } finally {
+      await lock.query("select pg_advisory_unlock($1)", [TEST_DB_ISOLATION_LOCK_KEY]);
+      await lock.end();
+    }
     throw err;
   }
 
   return {
     db,
     close: async () => {
-      await pool.end();
-      await lock.query("select pg_advisory_unlock($1)", [TEST_DB_ISOLATION_LOCK_KEY]);
-      await lock.end();
+      try {
+        await pool.end();
+      } finally {
+        // Release the lock even if pool.end() throws — otherwise the
+        // dedicated lock connection (and the lock itself) would leak until
+        // the test process exits, blocking every other concurrent
+        // withCleanDb() for no good reason.
+        await lock.query("select pg_advisory_unlock($1)", [TEST_DB_ISOLATION_LOCK_KEY]);
+        await lock.end();
+      }
     },
   };
 }
