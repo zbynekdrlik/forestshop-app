@@ -1,0 +1,72 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+# Two quick merges to main can otherwise run two deploy jobs concurrently, and a
+# `docker compose pull` + `up -d` from the OLDER run finishing last would overwrite
+# the newer image on dev2. Never cancel a deploy mid-flight (cancel-in-progress:
+# false) — queue instead, so every push still gets fully deployed, in order.
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+env:
+  # Temporary public hostname while forestshop.newlevel.media still serves the
+  # older sibling project (parovanie_produktov) — decision pending issue #5.
+  # Switching to the final hostname later is a one-line change here.
+  LIVE_HOSTNAME: forestshop-novy.newlevel.media
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions: { contents: read, packages: write }
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/zbynekdrlik/forestshop-app:${{ steps.meta.outputs.version }}
+            ghcr.io/zbynekdrlik/forestshop-app:latest
+          build-args: |
+            APP_VERSION=${{ steps.meta.outputs.version }}
+            APP_COMMIT=${{ github.sha }}
+
+  deploy:
+    needs: build
+    runs-on: [self-hosted, dev2]
+    env:
+      # Pin pull + up to the version THIS run just built — never the mutable
+      # `:latest` tag, which a second, faster deploy could repoint mid-flight.
+      IMAGE_TAG: ${{ needs.build.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Nasadiť (migrácie si aplikácia spustí sama pri štarte)
+        working-directory: /srv/forestshop
+        run: |
+          cp "$GITHUB_WORKSPACE/docker-compose.prod.yml" .
+          # scripts/ (zálohovanie, obnovovací drill) musí byť na dev2 vždy presne to,
+          # čo je v repozitári — inak sa tichým opomenutím rozíde od gitu naveky.
+          mkdir -p scripts
+          rsync -a --delete "$GITHUB_WORKSPACE/scripts/" scripts/
+          docker compose -f docker-compose.prod.yml pull app
+          docker compose -f docker-compose.prod.yml up -d
+      - name: Overiť verziu na živej stránke
+        run: |
+          sleep 5
+          live=$(curl -fsS "https://${LIVE_HOSTNAME}/api/version" | node -p "JSON.parse(require('fs').readFileSync(0,'utf8')).version")
+          want=$(node -p "require('./package.json').version")
+          echo "live=$live want=$want"
+          [ "$live" = "$want" ] || { echo "::error::nasadená verzia $live sa nezhoduje s $want"; exit 1; }

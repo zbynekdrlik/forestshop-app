@@ -1,0 +1,49 @@
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: forestshop
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?chyba POSTGRES_PASSWORD}
+      POSTGRES_DB: forestshop
+      # postgres:18+ images default PGDATA to /var/lib/postgresql/<major>/docker;
+      # pin it back to the classic single-mount path so the named volume below works
+      # (rovnaký dôvod ako v docker-compose.yml pre lokálny vývoj).
+      PGDATA: /var/lib/postgresql/data
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U forestshop"]
+      interval: 10s
+      timeout: 3s
+      retries: 20
+    logging: *default-logging
+
+  app:
+    image: ghcr.io/zbynekdrlik/forestshop-app:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      DATABASE_URL: postgres://forestshop:${POSTGRES_PASSWORD}@postgres:5432/forestshop
+      PORT: 3000
+      SESSION_COOKIE_SECURE: "true"
+    ports:
+      - "127.0.0.1:8901:3000"
+    logging: *default-logging
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run --token ${CF_TUNNEL_TOKEN:?chyba CF_TUNNEL_TOKEN}
+    depends_on: [app]
+    logging: *default-logging
+
+volumes:
+  pgdata:

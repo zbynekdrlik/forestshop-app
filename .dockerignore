@@ -1,0 +1,10 @@
+**/node_modules
+**/dist
+**/*.tsbuildinfo
+.git
+data
+*.png
+**/playwright-report
+**/test-results
+.env
+.superpowers
