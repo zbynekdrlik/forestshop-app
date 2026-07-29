@@ -117,9 +117,11 @@ export const variants = pgTable(
     index("variant_state_idx").on(t.state),
     index("variant_name_idx").on(t.name),
     // „Suma bez meny neexistuje" (návrh, kap. 4) vynútené databázou, nie kódom.
+    // Prázdny reťazec sa počíta rovnako prísne ako NULL — `'' IS NOT NULL` je v
+    // Postgrese true, takže samotné `currency IS NOT NULL` by prázdnu menu prepustilo.
     check(
       "variant_money_needs_currency_ck",
-      sql`${t.currency} IS NOT NULL OR (${t.price} IS NULL AND ${t.standardPrice} IS NULL AND ${t.purchasePrice} IS NULL AND ${t.actionPrice} IS NULL)`,
+      sql`(${t.currency} IS NOT NULL AND ${t.currency} != '') OR (${t.price} IS NULL AND ${t.standardPrice} IS NULL AND ${t.purchasePrice} IS NULL AND ${t.actionPrice} IS NULL)`,
     ),
   ],
 );
