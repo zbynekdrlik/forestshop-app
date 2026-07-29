@@ -94,6 +94,23 @@ export type OrdersIngestResult =
     }
   | { readonly status: "rejected"; readonly reason: string; readonly rawPath: string | null };
 
+// Zdieľaný typ medzi `index.ts` (postaví closure z env premennej), `modules/
+// scheduler/jobs.ts` (#22) a `http/orders-routes.ts` (#23, ručné tlačidlo
+// "stiahnuť teraz") — patrí do `modules/`, nikdy do `http/` (rovnaký dôvod
+// ako katalógov `RunIngest`, `.claude/rules/scheduler.md`).
+export type RunOrdersIngest = (now: Date) => Promise<OrdersIngestResult>;
+
+// Rovnaká hláška, akú `catalog-routes.ts`/`scheduler/jobs.ts` používajú pre
+// chýbajúce `SHOPTET_EXPORT_URL` — zdieľaná JEDNA konštanta (nie kopírovaný
+// literál na dvoch miestach), aby sa hláška v `jobs.ts` aj `orders-routes.ts`
+// nikdy nerozišla.
+export const ORDERS_EXPORT_URL_NOT_CONFIGURED = "Import objednávok nie je nakonfigurovaný (chýba SHOPTET_ORDERS_URL)";
+
+// Posúvajúce sa 90-dňové okno (`fetcher.ts`'s `computeImportWindow`) — jedna
+// zdieľaná konštanta namiesto lokálnej `WINDOW_DAYS` duplikovanej v
+// `cli/orders-ingest.ts` aj v budúcom scheduler/HTTP volaní (#22/#23).
+export const DEFAULT_ORDERS_IMPORT_WINDOW_DAYS = 90;
+
 function chunk<T>(items: readonly T[], size: number): T[][] {
   const out: T[][] = [];
   for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
