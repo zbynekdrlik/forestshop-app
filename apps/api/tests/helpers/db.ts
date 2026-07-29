@@ -29,8 +29,13 @@ export async function withCleanDb(): Promise<{ db: Database; close: () => Promis
 
   const { db, pool } = createDb(url);
   try {
+    // "order_line"/"order" (order.ts) added explicitly, not left to CASCADE —
+    // order_line references variant (CASCADE from variant would clear it), but
+    // "order" itself has no FK into any of the other listed tables, so CASCADE
+    // never reaches it: without listing it here, rows would silently survive
+    // across tests. "order" is a reserved SQL keyword and must be quoted.
     await db.execute(
-      sql`TRUNCATE TABLE ingest_issue, variant, product, catalog_snapshot, job_run, audit_events, sessions, users RESTART IDENTITY CASCADE`,
+      sql`TRUNCATE TABLE ingest_issue, variant, product, catalog_snapshot, job_run, audit_events, sessions, users, order_line, "order" RESTART IDENTITY CASCADE`,
     );
   } catch (err) {
     try {
