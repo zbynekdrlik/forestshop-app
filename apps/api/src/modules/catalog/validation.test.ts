@@ -226,3 +226,15 @@ describe("judgeSnapshot — bajtová hranica je čitateľná, nie holé číslo"
     expect(judgement.verdict === "rejected" && judgement.reason).not.toContain("1000000");
   });
 });
+
+// `readonly` je len na úrovni typov (compile-time) — za behu vie ktorýkoľvek
+// konzument tie isté objekty zmutovať a zmeniť správanie brány pre celý proces.
+describe("konštanty modulu sú zmrazené za behu (nielen na úrovni typov)", () => {
+  it("REQUIRED_COLUMNS je Object.freeze", () => {
+    expect(Object.isFrozen(REQUIRED_COLUMNS)).toBe(true);
+  });
+
+  it("DEFAULT_SNAPSHOT_LIMITS je Object.freeze", () => {
+    expect(Object.isFrozen(DEFAULT_SNAPSHOT_LIMITS)).toBe(true);
+  });
+});

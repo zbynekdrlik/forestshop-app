@@ -6,7 +6,9 @@
  * identitu, cenu s menou, sklad a dostupnosť. Chýbajúci `supplier` bol príčinou
  * #281 — plnohodnotný export bez tohto stĺpca prešiel, lebo sa stĺpce nekontrolovali.
  */
-export const REQUIRED_COLUMNS: readonly string[] = [
+// `readonly` is compile-time only — Object.freeze stops any runtime consumer
+// from mutating this shared array and changing the gate's behaviour process-wide.
+export const REQUIRED_COLUMNS: readonly string[] = Object.freeze([
   "code",
   "pairCode",
   "name",
@@ -25,7 +27,7 @@ export const REQUIRED_COLUMNS: readonly string[] = [
   "availabilityOutOfStock",
   "productVisibility",
   "variantVisibility",
-];
+]);
 
 export interface SnapshotLimits {
   readonly minByteSize: number;
@@ -33,13 +35,13 @@ export interface SnapshotLimits {
   readonly previousRowRatio: number;
 }
 
-export const DEFAULT_SNAPSHOT_LIMITS: SnapshotLimits = {
+export const DEFAULT_SNAPSHOT_LIMITS: SnapshotLimits = Object.freeze({
   // Reálny export má ~56 MB; 1 MB je hranica „toto zjavne nie je celý katalóg".
   minByteSize: 1_000_000,
   // Použije sa LEN vtedy, keď ešte nie je z čoho odvodiť (prvý import).
   absoluteMinRows: 1_000,
   previousRowRatio: 0.8,
-};
+});
 
 export interface SnapshotCandidate {
   readonly columns: readonly string[];
