@@ -70,11 +70,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @forestshop/api db:migrate
       - run: pnpm --filter @forestshop/web exec playwright install --with-deps chromium
-      - name: pnpm --filter @forestshop/web e2e
-        working-directory: apps/web
-        env:
-          DEBUG: pw:webserver
-        run: pnpm exec playwright test
+      - run: pnpm --filter @forestshop/web e2e
 
   version-check:
     if: github.ref_name != 'main'
