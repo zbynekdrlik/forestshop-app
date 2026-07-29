@@ -25,7 +25,7 @@ const VARIANT_A = {
   name: "Nohavice FOREST 1003",
   state: "discontinued" as const,
   stock: 0,
-  price: "67.00",
+  price: "62.76",
   currency: "EUR",
   availabilityText: "Skladom u dodávateľa",
   missingSince: null,

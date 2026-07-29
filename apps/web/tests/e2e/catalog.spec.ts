@@ -34,7 +34,7 @@ test("manažér vidí stav katalógu, vyhľadá variant a konzola je čistá", a
   const riadok = page.getByTestId("variant-40237/3XL");
   await expect(riadok).toContainText("Nohavice FOREST 1003");
   await expect(riadok).toContainText("Predaj skončil");
-  await expect(riadok).toContainText("67.00 EUR");
+  await expect(riadok).toContainText("62.76 EUR");
 
   expect(chyby).toEqual([]);
 });

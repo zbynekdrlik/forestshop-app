@@ -250,7 +250,7 @@ it("vráti detail variantu a 404 pre neznámy kód", async () => {
     code: "40237/3XL",
     productKey: ocakavanyVariant.productKey,
     sizeLabel: "3XL",
-    price: "67.00",
+    price: "62.76",
     currency: "EUR",
     state: "discontinued",
     availabilityInStockText: "Predaj výrobku skončil",
