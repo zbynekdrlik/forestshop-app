@@ -125,7 +125,10 @@ function formatMalformedRows(n: number): string {
 // prevádzkovateľovi to najdôležitejšie: že katalóg NEBOL prepísaný. Downstream
 // automatizácie preto hlásili úspech, hoci dáta zmizli. Každý dôvod preto MUSÍ
 // túto vetu niesť — pridáva sa na jednom mieste, nie v každom `return` zvlášť.
-const CONSEQUENCE = "Katalóg zostáva nezmenený, import môžete kedykoľvek zopakovať.";
+// Exportované, aby ju mohli zdieľať aj odmietnutia mimo `judgeSnapshot` (napr.
+// zlyhané parsovanie v `ingestCatalog`, Task 5) namiesto duplikovania toho
+// istého reťazca ako druhého literálu, ktorý by sa mohol nenápadne rozísť.
+export const CONSEQUENCE = "Katalóg zostáva nezmenený, import môžete kedykoľvek zopakovať.";
 
 function rejected(reason: string): SnapshotJudgement {
   return { verdict: "rejected", reason: `${reason} ${CONSEQUENCE}` };
