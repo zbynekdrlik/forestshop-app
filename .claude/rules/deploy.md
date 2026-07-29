@@ -44,4 +44,40 @@ paths:
   repe) — presmerovanie DNS na nový systém by ho ticho odpojilo. Cloudflare
   tunnel pre tento projekt (`forestshop-app`, samostatný od súrodenca) je
   pripravený a pripojený; samotný DNS `A`/`CNAME` záznam čaká na rozhodnutie
-  vlastníka projektu, kým doména patrí ktorému systému.
+  vlastníka projektu, kým doména patrí ktorému systému (issue #5).
+
+- **Dočasný verejný hostname (kým sa nerozhodne issue #5):
+  `forestshop-novy.newlevel.media`.** Beží na samostatnom tunneli
+  `forestshop-app` (id `e0cdc5bf-fbc8-45de-b1f7-f4c0b2a9b0dc`), ingress
+  `forestshop-novy.newlevel.media` → `http://app:3000` (popri pôvodnom
+  `forestshop.newlevel.media` ingress pravidle na tom istom tuneli — obe
+  smerujú na tú istú appku, líšia sa len menom). CNAME záznam vytvorený v
+  zóne `newlevel.media` (`b9019ca...`), `proxied: true`.
+  - **Prečo nie `novy.forestshop.newlevel.media` (pôvodne zamýšľaný tvar)?**
+    Cloudflare Universal SSL certifikát tejto zóny pokrýva len
+    `newlevel.media` + `*.newlevel.media` (jedna úroveň wildcard) — overené
+    `openssl s_client` + SAN výpisom certifikátu. Hostname o dve úrovne pod
+    apexom preto pri TLS handshake padá (`sslv3 alert handshake failure`).
+    Riešenie by vyžadovalo Cloudflare Total TLS / Advanced Certificate Manager
+    (samostatné oprávnenie `SSL and Certificates:Edit` na API tokene — token
+    použitý v F0 má len Tunnel Write + DNS Write + Zone Read + Account
+    Settings Read a na `/acm/total_tls` aj `/ssl/certificate_packs` vracia
+    autorizačnú chybu). Namiesto rozširovania oprávnení tokenu pre dočasný
+    hostname bol zvolený tvar o jednu úroveň nižšie (`forestshop-novy.` priamo
+    pod `newlevel.media`), ktorý sedí do existujúceho wildcard certifikátu bez
+    ďalších zásahov.
+  - **Prepnutie na finálny hostname po rozhodnutí issue #5:**
+    1. Zmeniť `LIVE_HOSTNAME` v `.github/workflows/deploy.yml` (jeden riadok).
+    2. Ak finálny hostname má byť opäť `forestshop.newlevel.media` (t.j. tento
+       projekt preberie meno): zmazať/presmerovať pôvodný záznam u súrodenca
+       (mimo tohto repa) a v CNAME zázname tejto appky prepísať `name` na
+       `forestshop.newlevel.media` (alebo pridať nový záznam a zmazať dočasný
+       `forestshop-novy`).
+    3. Ak finálny hostname zostáva iný ale je jednoúrovňový pod
+       `newlevel.media` → žiadny certifikátový problém, len DNS CNAME + ingress
+       hostname update cez Cloudflare API (rovnaký postup ako vyššie).
+    4. Ak sa má použiť viacúrovňový tvar ako pôvodne zamýšľaný
+       `novy.forestshop.newlevel.media` → najprv treba na Cloudflare API tokene
+       doplniť oprávnenie `SSL and Certificates:Edit` a zapnúť Total TLS
+       (`PATCH /zones/{zone}/acm/total_tls`) alebo objednať Advanced
+       Certificate, inak TLS handshake opäť zlyhá.

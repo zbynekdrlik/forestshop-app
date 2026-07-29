@@ -12,6 +12,12 @@ concurrency:
   group: deploy
   cancel-in-progress: false
 
+env:
+  # Temporary public hostname while forestshop.newlevel.media still serves the
+  # older sibling project (parovanie_produktov) — decision pending issue #5.
+  # Switching to the final hostname later is a one-line change here.
+  LIVE_HOSTNAME: forestshop-novy.newlevel.media
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -60,7 +66,7 @@ jobs:
       - name: Overiť verziu na živej stránke
         run: |
           sleep 5
-          live=$(curl -fsS https://forestshop.newlevel.media/api/version | node -p "JSON.parse(require('fs').readFileSync(0,'utf8')).version")
+          live=$(curl -fsS "https://${LIVE_HOSTNAME}/api/version" | node -p "JSON.parse(require('fs').readFileSync(0,'utf8')).version")
           want=$(node -p "require('./package.json').version")
           echo "live=$live want=$want"
           [ "$live" = "$want" ] || { echo "::error::nasadená verzia $live sa nezhoduje s $want"; exit 1; }
