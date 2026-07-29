@@ -11,8 +11,6 @@ export default tseslint.config(
         projectService: {
           allowDefaultProject: [
             "apps/api/*.config.ts",
-            "apps/api/tests/*.ts",
-            "apps/api/tests/helpers/*.ts",
             "apps/web/*.config.ts",
             "apps/web/tests/e2e/*.ts",
             // "scripts/*.ts" REMOVED (final-wave-b, item 1/issue #4) — scripts/
@@ -20,6 +18,10 @@ export default tseslint.config(
             // `pnpm typecheck`), so typescript-eslint's project service finds it
             // on its own; leaving the glob here errors ("was included by
             // allowDefaultProject but also was found in the project service").
+            //
+            // "apps/api/tests/*.ts" + "apps/api/tests/helpers/*.ts" REMOVED
+            // (issue #4, remaining half) — same reason: apps/api/tests/ now has
+            // its own real tsconfig.json, wired into `pnpm typecheck`.
           ],
           defaultProject: "apps/api/tsconfig.eslint.json",
           // The monorepo now has two packages, each with a handful of standalone
