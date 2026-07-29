@@ -72,6 +72,13 @@ jobs:
       - run: pnpm --filter @forestshop/web exec playwright install --with-deps chromium
       - run: pnpm --filter @forestshop/web e2e
 
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Zostaviť produkčný Docker obraz (deployment cesta musí prejsť pred mergom)
+        run: docker build --build-arg APP_VERSION=ci --build-arg APP_COMMIT=${{ github.sha }} .
+
   version-check:
     if: github.ref_name != 'main'
     runs-on: ubuntu-latest
