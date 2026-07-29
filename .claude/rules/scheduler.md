@@ -26,8 +26,9 @@ paths:
 - **Nová advisory zámok kľúč VŽDY over proti existujúcim, nikdy nehádaj.**
   `pg_advisory_lock`/`pg_advisory_xact_lock` zdieľajú JEDEN priestor kľúčov
   bez ohľadu na funkciu (rovnaké upozornenie ako `testing.md`). Dnes
-  obsadené: `787_878_001` (`INGEST_ADVISORY_LOCK_KEY`, `ingest.ts`),
+  obsadené: `787_878_001` (`INGEST_ADVISORY_LOCK_KEY`, `catalog/ingest.ts`),
   `787_878_002` (`SCHEDULER_ADVISORY_LOCK_KEY`, `scheduler.ts`),
+  `787_878_003` (`INGEST_ORDERS_ADVISORY_LOCK_KEY`, `orders/ingest.ts`, #21),
   `787_878_100` (`TEST_DB_ISOLATION_LOCK_KEY`, `tests/helpers/db.ts`).
 - **`tick()`'s zámok chráni LEN kontrolu splatnosti + vloženie "running"
   riadku, NIE celý beh úlohy.** `job.run()` beží AŽ PO commite transakcie so

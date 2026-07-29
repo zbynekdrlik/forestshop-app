@@ -1,6 +1,6 @@
 {
   "name": "forestshop",
-  "version": "0.3.0-dev.8",
+  "version": "0.3.0-dev.9",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.0.0",
@@ -13,7 +13,8 @@
     "test": "pnpm -r test",
     "test:integration": "pnpm --filter @forestshop/api test:integration",
     "catalog:ingest": "tsx scripts/catalog-ingest.ts",
-    "catalog:prune-raw": "tsx scripts/catalog-prune-raw.ts"
+    "catalog:prune-raw": "tsx scripts/catalog-prune-raw.ts",
+    "orders:ingest": "tsx scripts/orders-ingest.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",

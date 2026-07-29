@@ -43,8 +43,13 @@ services:
       # operátor tajomstvo nedoplní (issue #8).
       SHOPTET_EXPORT_URL:
       CATALOG_RAW_DIR: /data/catalog-raw
+      # Rovnaká úvaha ako SHOPTET_EXPORT_URL vyššie — `.optional()` v `env.ts`
+      # (#21), bare kľúč preberá `/srv/forestshop/.env`, keď tam je.
+      SHOPTET_ORDERS_URL:
+      ORDERS_RAW_DIR: /data/orders-raw
     volumes:
       - catalog-raw:/data/catalog-raw
+      - orders-raw:/data/orders-raw
     ports:
       - "127.0.0.1:8901:3000"
     logging: *default-logging
@@ -59,3 +64,4 @@ services:
 volumes:
   pgdata:
   catalog-raw:
+  orders-raw:
