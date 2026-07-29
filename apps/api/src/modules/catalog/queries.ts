@@ -92,9 +92,22 @@ export async function listSnapshots(db: Database, limit: number): Promise<readon
   const rows = await db
     .select(snapshotColumns)
     .from(catalogSnapshots)
-    .orderBy(desc(catalogSnapshots.fetchedAt))
+    // Sekundárne triedenie podľa `id` — dva snapshoty so zhodným `fetchedAt`
+    // (rovnaká milisekunda) by inak mali nedefinované poradie a "posledný
+    // snapshot" by bol pri opakovanom volaní nestabilný (review task-6-fix-1).
+    .orderBy(desc(catalogSnapshots.fetchedAt), desc(catalogSnapshots.id))
     .limit(limit);
   return rows.map(toSnapshotSummary);
+}
+
+// LIKE/ILIKE berie `%` a `_` ako žolíky. Bez escapovania jeden podčiarkovník
+// alebo percento vo vyhľadávanom výraze urobí zo vzoru prakticky "čokoľvek" —
+// dopyt tak preskenuje a spočíta celý katalóg namiesto pár riadkov (review
+// task-6-fix-1). Postgres berie spätnú lomku ako escape znak pre LIKE/ILIKE bez
+// ďalšej konfigurácie — preto sa escapuje aj ona sama, a to PRVÁ, inak by
+// escapovanie znaku escapovalo escape.
+function escapeLikePattern(value: string): string {
+  return value.replace(/[\\%_]/g, (ch) => `\\${ch}`);
 }
 
 const summaryColumns = {
@@ -123,7 +136,7 @@ export async function searchVariants(
   const filters: SQL[] = [];
   if (input.q !== "") {
     // ILIKE nad `code` aj `name` — manažér hľadá raz kód, raz slovo z názvu.
-    const pattern = `%${input.q}%`;
+    const pattern = `%${escapeLikePattern(input.q)}%`;
     const byCodeOrName = or(sql`${variants.code} ILIKE ${pattern}`, sql`${variants.name} ILIKE ${pattern}`);
     if (byCodeOrName !== undefined) filters.push(byCodeOrName);
   }
