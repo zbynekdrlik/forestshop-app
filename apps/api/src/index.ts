@@ -9,6 +9,8 @@ import { createApp } from "./http/app.js";
 import { log } from "./logger.js";
 import { createHttpExportFetcher } from "./modules/catalog/fetcher.js";
 import { ingestCatalog } from "./modules/catalog/ingest.js";
+import { catalogImportJob, pruneRawExportsJob, sessionCleanupJob } from "./modules/scheduler/jobs.js";
+import { startScheduler } from "./modules/scheduler/scheduler.js";
 import { appVersion } from "./version.js";
 
 const env = loadEnv();
@@ -43,6 +45,13 @@ const app = createApp(
     ? { cookieSecure: env.SESSION_COOKIE_SECURE }
     : { cookieSecure: env.SESSION_COOKIE_SECURE, runIngest },
 );
+
+// F2 (#12/#3): nočný import katalógu, mazanie starých surových exportov a
+// mazanie expirovaných relácií — dnes len ručne spúšťané. `catalogImportJob`
+// dostáva `runIngest` (môže byť `undefined`, keď SHOPTET_EXPORT_URL nie je
+// nastavené — job to zaznamená ako "failure" s vysvetlením, nikdy sa
+// nepreskočí ticho).
+startScheduler(db, [catalogImportJob(runIngest), pruneRawExportsJob(), sessionCleanupJob()]);
 
 // `@hono/node-server`'s `serveStatic` prints its OWN `console.error` on every
 // call whose `root` doesn't exist — unconditionally, once per process start.

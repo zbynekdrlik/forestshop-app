@@ -100,6 +100,13 @@ export type CatalogIngestResult =
   | { readonly status: "rejected"; readonly snapshotId: string; readonly reason: string }
   | { readonly status: "duplicate"; readonly snapshotId: string };
 
+// Žije tu (modules/catalog), nie v http/catalog-routes.ts, kde bol pôvodne
+// definovaný — F2 scheduler (`modules/scheduler/jobs.ts`) ho tiež potrebuje a
+// `modules/` importujúce z `http/` by obrátilo bežný smer závislostí v repe
+// (http závisí od modules, nikdy naopak). `catalog-routes.ts` ho odtiaľto
+// re-exportuje, aby `http/app.ts` nemusel meniť svoj import.
+export type RunIngest = (now: Date) => Promise<CatalogIngestResult>;
+
 function chunk<T>(items: readonly T[], size: number): T[][] {
   const out: T[][] = [];
   for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));

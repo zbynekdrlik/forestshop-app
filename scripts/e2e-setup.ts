@@ -23,7 +23,7 @@ const { db, pool } = createDb();
 // TS projektu apps/api — ESLint-ova type-aware kontrola vtedy nevie spoľahlivo
 // odvodiť typ tagovanej šablóny a hlási falošné @typescript-eslint/no-unsafe-*.
 await db.execute(
-  "TRUNCATE TABLE ingest_issue, variant, product, catalog_snapshot, audit_events, sessions, users RESTART IDENTITY CASCADE",
+  "TRUNCATE TABLE ingest_issue, variant, product, catalog_snapshot, job_run, audit_events, sessions, users RESTART IDENTITY CASCADE",
 );
 await db.insert(users).values({
   email: "e2e@forestshop.sk",

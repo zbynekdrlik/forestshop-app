@@ -3,6 +3,7 @@ import { fetchMe, postLogout, type Me } from "./api.js";
 import { CatalogPage } from "./components/CatalogPage.js";
 import { Footer } from "./components/Footer.js";
 import { LoginForm } from "./components/LoginForm.js";
+import { SchedulerSection } from "./components/SchedulerSection.js";
 
 export function App(): JSX.Element {
   const [me, setMe] = useState<Me | null>(null);
@@ -73,6 +74,7 @@ export function App(): JSX.Element {
       </button>
       {logoutError !== "" && <p role="alert">{logoutError}</p>}
       <CatalogPage role={me.role} onSessionExpired={reload} />
+      <SchedulerSection role={me.role} onSessionExpired={reload} />
       <Footer />
     </main>
   );

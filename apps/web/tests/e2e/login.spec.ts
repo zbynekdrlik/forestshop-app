@@ -25,6 +25,12 @@ test("manažér sa prihlási, vidí svoje meno a verziu, konzola je čistá", as
   await expect(page.getByTestId("greeting")).toContainText("E2E Manažér");
   await expect(page.getByTestId("version")).toHaveText(/^v\d+\.\d+\.\d+/);
 
+  // F2 (#12/#3): manažér vidí sekciu "Plánovač" — e2e-setup.ts nespúšťa žiaden
+  // tick, takže `job_run` je prázdna a musí sa zobraziť informačná veta, nie
+  // holá/rozbitá tabuľka.
+  await expect(page.getByRole("heading", { name: "Plánovač" })).toBeVisible();
+  await expect(page.getByTestId("scheduler-empty")).toHaveText("Žiadny beh zatiaľ nie je zaznamenaný.");
+
   await page.getByRole("button", { name: "Odhlásiť sa" }).click();
   await expect(page.getByRole("heading", { name: "Prihlásenie" })).toBeVisible();
 

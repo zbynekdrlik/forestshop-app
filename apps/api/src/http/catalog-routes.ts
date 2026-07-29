@@ -4,7 +4,7 @@ import { z } from "zod";
 import type { Database } from "../db/client.js";
 import { log } from "../logger.js";
 import { record } from "../modules/audit/service.js";
-import type { CatalogIngestResult } from "../modules/catalog/ingest.js";
+import type { CatalogIngestResult, RunIngest } from "../modules/catalog/ingest.js";
 import { catalogStats, getVariant, listSnapshots, searchVariants } from "../modules/catalog/queries.js";
 import { requireRole, requireUser, type AppBindings } from "./middleware.js";
 import { requireSameOrigin } from "./origin-check.js";
@@ -33,7 +33,9 @@ const variantsQuery = z.object({
 
 const variantParam = z.object({ code: z.string().min(1).max(100) });
 
-export type RunIngest = (now: Date) => Promise<CatalogIngestResult>;
+// Re-exportované, aby `http/app.ts` nemusel meniť svoj import — kanonická
+// definícia žije v `modules/catalog/ingest.ts` (viď komentár tam).
+export type { RunIngest };
 
 export function registerCatalogRoutes(
   app: Hono<AppBindings>,
