@@ -3,6 +3,7 @@ import type { Database } from "../../src/db/client.js";
 
 export interface TestSnapshot {
   readonly fetchedAt: Date;
+  readonly lastConfirmedAt: Date | null;
   readonly sourceLabel: string;
   readonly contentSha256: string;
   readonly byteSize: number;
@@ -21,6 +22,7 @@ export async function insertTestSnapshot(
     .insert(catalogSnapshots)
     .values({
       fetchedAt: overrides.fetchedAt ?? new Date("2026-07-29T10:00:00Z"),
+      lastConfirmedAt: overrides.lastConfirmedAt ?? overrides.fetchedAt ?? new Date("2026-07-29T10:00:00Z"),
       sourceLabel: overrides.sourceLabel ?? "test",
       // Unikátne pre každé volanie — inak dva testy vkladajúce accepted snapshot
       // bez override narazia na `catalog_snapshot_accepted_sha_uq`, ktorý je

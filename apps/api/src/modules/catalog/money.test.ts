@@ -45,6 +45,20 @@ describe("parseDecimalComma — medza celočíselnej časti (numeric(precision, 
   it("vlastný limit — za hranicou sa zahodí", () => {
     expect(parseDecimalComma("1000", 3)).toBeNull();
   });
+
+  // Zľava vypchané nuly nie sú skutočné číslice — databáza by "007,50" prijala
+  // rovnako ako "7,50" (numeric ich normalizuje), takže sa nesmú počítať do
+  // limitu. Pred opravou dĺžka reťazca "007" (3 znaky) prehrala aj tam, kde
+  // skutočná hodnota (7) do limitu pohodlne patrí.
+  it("nulami vypchaná celočíselná časť sa meria podľa SKUTOČNÉHO počtu číslic, nie podľa dĺžky reťazca", () => {
+    expect(parseDecimalComma("007,50", 1)).toBe("7.50");
+    expect(parseDecimalComma("0999,99", 3)).toBe("999.99"); // presne na hranici aj po odstránení nuly
+    expect(parseDecimalComma("0,00", 1)).toBe("0.00"); // samotná nula zostáva 1 číslica, nie 0
+  });
+
+  it("nulami vypchaná hodnota sa aj tak zahodí, keď SKUTOČNÝ počet číslic prekročí limit", () => {
+    expect(parseDecimalComma("0100,00", 2)).toBeNull(); // "100" → 3 skutočné číslice, nad limitom 2
+  });
 });
 
 describe("parseDate", () => {

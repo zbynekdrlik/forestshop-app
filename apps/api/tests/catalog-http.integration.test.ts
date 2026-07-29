@@ -3,9 +3,9 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { afterEach, expect, it } from "vitest";
-import { products, sessions, users, variants } from "../src/db/schema.js";
+import { sessions, users, variants } from "../src/db/schema.js";
 import { createApp } from "../src/http/app.js";
 import { resetLoginRateLimit } from "../src/http/login-rate-limit.js";
 import { SESSION_COOKIE } from "../src/http/middleware.js";
@@ -129,21 +129,18 @@ it("neplatná session (falošný alebo expirovaný token) vráti 401 na všetký
 });
 
 it("vráti prehľad katalógu", async () => {
-  const { app, cookie, db } = await boot({ role: "manazer", seed: true });
-  // `productCount` sa nehardkóduje — produktová identita sa práve mení
-  // (kód pred lomkou → `guid`), takže presný počet produktov z fixtúry sa
-  // môže zmeniť. Derivuje sa z databázy, nie z čísla zapamätaného pri písaní
-  // testu (review task-6-fix-1).
-  const productCountRows = await db
-    .select({ productCount: sql<number>`count(*)`.mapWith(Number) })
-    .from(products);
-  const productCount = productCountRows[0]?.productCount ?? 0;
-
+  const { app, cookie } = await boot({ role: "manazer", seed: true });
+  // `productCount` je teraz pripnutý na hodnotu odvodenú PRIAMO z fixtúry (8
+  // distinct `guid` naprieč jej 35 riadkami — final-wave-b, položka 6):
+  // predtým sa derivoval dopytom nad `products`, teda z tej istej tabuľky,
+  // ktorú endpoint sám číta — čo test robilo tautologickým (zlá implementácia
+  // by prešla rovnako ako dobrá). Identita produktu (`guid`) je teraz
+  // usadená, takže sa dá pinnúť na skutočné číslo.
   const res = await app.request("/api/catalog/stats", { headers: { cookie } });
   expect(res.status).toBe(200);
   expect(await res.json()).toMatchObject({
     variantCount: 35,
-    productCount,
+    productCount: 8,
     sellable: 6,
     outOfStock: 4,
     discontinued: 25,
@@ -232,25 +229,47 @@ it("odmietne neplatný parameter stavu", async () => {
   expect((await app.request("/api/catalog/variants?state=hocico", { headers: { cookie } })).status).toBe(400);
 });
 
-it("vráti detail variantu a 404 pre neznámy kód", async () => {
+// Important (review final-wave-a, položka 6): variant, ktorý zmizol z
+// exportu, sa v čítacej ceste doteraz nedal nájsť — pole sa síce vyberalo a
+// typovalo, ale nikdy sa nezobrazovalo ani nedalo filtrovať. `missing` je
+// PSEUDO-stav (nie hodnota stĺpca `state`) — filtruje podľa `missingSince IS
+// NOT NULL`, nezávisle od toho, aký `state` mal variant naposledy.
+it("filter 'missing' vráti len variant so zaznamenaným missingSince, nezávisle od jeho state", async () => {
   const { app, cookie, db } = await boot({ role: "manazer", seed: true });
 
-  // `productKey` sa nehardkóduje — produktová identita sa práve mení (kód
-  // pred lomkou → `guid`), takže sa derivuje priamo z databázy, nie z
-  // hodnoty zapamätanej pri písaní testu (review task-6-fix-1).
-  const [ocakavanyVariant] = await db
-    .select({ productKey: variants.productKey })
-    .from(variants)
-    .where(eq(variants.code, "40237/3XL"));
-  if (ocakavanyVariant === undefined) throw new Error("testovací variant sa v seede nenašiel");
+  await db.update(variants).set({ missingSince: NOW }).where(eq(variants.code, "40287"));
 
+  const res = await app.request("/api/catalog/variants?state=missing", { headers: { cookie } });
+  expect(res.status).toBe(200);
+  const telo = (await res.json()) as {
+    total: number;
+    items: { code: string; missingSince: string | null }[];
+  };
+  expect(telo.total).toBe(1);
+  expect(telo.items[0]).toMatchObject({ code: "40287", missingSince: NOW.toISOString() });
+
+  // Ostatné filtre zostávajú nedotknuté — "missing" nie je skutočná hodnota
+  // stĺpca `state`, takže `state=sellable` naďalej vidí ten istý počet ako
+  // predtým (variant "40287" je "sellable", stále sa počíta tam AJ v "missing").
+  const skladom = await app.request("/api/catalog/variants?state=sellable", { headers: { cookie } });
+  expect((await skladom.json()) as { total: number }).toMatchObject({ total: 6 });
+});
+
+it("vráti detail variantu a 404 pre neznámy kód", async () => {
+  const { app, cookie } = await boot({ role: "manazer", seed: true });
+
+  // `productKey` je teraz pripnutý na `guid` skutočne prítomný vo fixtúre pre
+  // skupinu "40237" (final-wave-b, položka 6) — predtým sa derivoval dopytom
+  // nad `variants`, teda z tej istej tabuľky, ktorú endpoint sám číta, čo
+  // test robilo tautologickým. Identita produktu (`guid`) je teraz usadená,
+  // takže sa dá pinnúť na skutočnú hodnotu z fixtúry.
   const detail = await app.request("/api/catalog/variants/40237%2F3XL", { headers: { cookie } });
   expect(detail.status).toBe(200);
   expect(await detail.json()).toMatchObject({
     code: "40237/3XL",
-    productKey: ocakavanyVariant.productKey,
+    productKey: "0a486205-d9e7-11e0-92ec-e1ef0b66e031",
     sizeLabel: "3XL",
-    price: "67.00",
+    price: "62.76",
     currency: "EUR",
     state: "discontinued",
     availabilityInStockText: "Predaj výrobku skončil",
@@ -385,4 +404,39 @@ it("snapshoty so zhodným fetchedAt majú stabilné (deterministické) sekundár
 
   expect(prvyData.items.map((i) => i.id)).toEqual(ocakavanePoradie);
   expect(druhyData.items.map((i) => i.id)).toEqual(prvyData.items.map((i) => i.id));
+});
+
+// Smaller correctness item (review final-wave-a, položka 7): `/api/catalog/stats`
+// vyberá "posledný snapshot" pre hlavičkovú vetu stránky triedením LEN podľa
+// `fetchedAt` — bez sekundárneho tie-breaku `desc(id)`, ktorý `listSnapshots`
+// (aj `ingest.ts`) má. Dva snapshoty so ZHODNÝM `fetchedAt` (rovnaká
+// milisekunda, alebo vstreknuté `now` v teste) by inak dostali poradie, ktoré
+// Postgres negarantuje.
+it("prehľad (stats) vyberie 'posledný snapshot' rovnakým stabilným tie-breakom ako zoznam snapshotov", async () => {
+  const ctx = await withCleanDb();
+  close = ctx.close;
+  await ctx.db.insert(users).values({
+    email: "manazer@forestshop.sk",
+    passwordHash: await hashPassword(HESLO),
+    displayName: "Manažér",
+    role: "manazer",
+  });
+
+  const zhodnyCas = new Date("2026-07-20T09:00:00Z");
+  const idA = await insertTestSnapshot(ctx.db, { fetchedAt: zhodnyCas, rowCount: 10 });
+  const idB = await insertTestSnapshot(ctx.db, { fetchedAt: zhodnyCas, rowCount: 11 });
+  // Rovnaký vzorec ako `listSnapshots`/`ingest.ts`: `desc(fetchedAt), desc(id)`.
+  const ocakavanyVitaz = idA > idB ? idA : idB;
+
+  const app = createApp(ctx.db, { cookieSecure: false });
+  const login = await app.request("/api/login", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ email: "manazer@forestshop.sk", password: HESLO }),
+  });
+  const cookie = (login.headers.get("set-cookie") ?? "").split(";")[0] ?? "";
+
+  const res = await app.request("/api/catalog/stats", { headers: { cookie } });
+  const telo = (await res.json()) as { lastSnapshot: { id: string } | null };
+  expect(telo.lastSnapshot?.id).toBe(ocakavanyVitaz);
 });

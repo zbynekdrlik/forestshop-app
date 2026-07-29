@@ -24,6 +24,11 @@ function candidate(overrides: Partial<SnapshotCandidate> = {}): SnapshotCandidat
     usableRecordCount: overrides.usableRecordCount ?? rowCount,
     previousAccepted:
       overrides.previousAccepted !== undefined ? overrides.previousAccepted : { rowCount: 14_014 },
+    // `exactOptionalPropertyTypes` odlišuje "kľúč chýba" od "kľúč je explicitne
+    // undefined" — voliteľné pole sa preto pridáva len keď ho override skutočne dodal.
+    ...(overrides.unusableReasonCounts !== undefined
+      ? { unusableReasonCounts: overrides.unusableReasonCounts }
+      : {}),
   };
 }
 
@@ -188,6 +193,46 @@ describe("judgeSnapshot", () => {
           candidate({ rowCount: 1_000, usableRecordCount: 1_000, previousAccepted: null }),
         ),
       ).toEqual({ verdict: "accepted" });
+    });
+
+    // Smaller item (final-wave-b): dôvod predtým povedal LEN koľko riadkov je
+    // nepoužiteľných, nikdy PREČO — prevádzkovateľ nevedel, či ide o prázdne
+    // kódy, prázdne guidy alebo duplicity, bez ručného prezerania surového súboru.
+    describe("dôvod pomenuje prevažujúcu príčinu, keď jedna dominuje", () => {
+      it("jedna príčina tvorí väčšinu nepoužiteľných riadkov → dôvod ju menuje", () => {
+        const judgement = judgeSnapshot(
+          candidate({
+            rowCount: 1_000,
+            usableRecordCount: 0,
+            previousAccepted: null,
+            unusableReasonCounts: { "prázdny kód": 900, "duplicitný kód": 100 },
+          }),
+        );
+        expect(judgement.verdict === "rejected" && judgement.reason).toContain(
+          "Najčastejšia príčina: prázdny kód.",
+        );
+      });
+
+      it("žiadna príčina netvorí aspoň polovicu → dôvod žiadnu nemenuje", () => {
+        const judgement = judgeSnapshot(
+          candidate({
+            rowCount: 1_000,
+            usableRecordCount: 0,
+            previousAccepted: null,
+            unusableReasonCounts: { "prázdny kód": 300, "prázdny guid": 300, "duplicitný kód": 300 },
+          }),
+        );
+        expect(judgement.verdict === "rejected" && judgement.reason).not.toContain(
+          "Najčastejšia príčina",
+        );
+      });
+
+      it("bez unusableReasonCounts (nevyplnené) dôvod ostáva ako predtým, bez zmienky o príčine", () => {
+        const judgement = judgeSnapshot(candidate({ usableRecordCount: 0 }));
+        expect(judgement.verdict === "rejected" && judgement.reason).not.toContain(
+          "Najčastejšia príčina",
+        );
+      });
     });
   });
 

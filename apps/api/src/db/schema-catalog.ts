@@ -35,6 +35,15 @@ export const catalogSnapshots = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull(),
+    // Kedy sa naposledy PREVERILO, že tento snapshot je stále aktuálny — nie
+    // to isté ako `fetchedAt` (kedy boli tieto konkrétne bajty PRVÝ raz
+    // stiahnuté a zapísané). Duplicitný import (rovnaký obsah) posúva TOTO
+    // pole, nikdy `fetchedAt`; jedine tak vie F2 postaviť alarm na
+    // "posledná kontrola bola príliš dávno", nezávisle od toho, kedy sa
+    // katalóg naposledy REÁLNE zmenil (review final-wave-a, položka 5).
+    // Nullable len kvôli starším riadkom spred tejto migrácie — každý nový
+    // zápis (prijatý aj odmietnutý) ho nastavuje hneď.
+    lastConfirmedAt: timestamp("last_confirmed_at", { withTimezone: true }),
     sourceLabel: text("source_label").notNull(),
     contentSha256: text("content_sha256").notNull(),
     byteSize: integer("byte_size").notNull(),

@@ -61,8 +61,84 @@ describe("deriveVariantState — skutočné reťazce z exportu", () => {
   ];
 
   it.each(cases)("%s", (_popis, stock, inStockText, outOfStockText, productVisibility, expected) => {
-    expect(deriveVariantState({ stock, inStockText, outOfStockText, productVisibility })).toBe(
-      expected,
-    );
+    expect(
+      deriveVariantState({ stock, inStockText, outOfStockText, productVisibility, variantVisibility: "1" }),
+    ).toBe(expected);
+  });
+});
+
+// `variantVisibility` je per-variantný prepínač NEZÁVISLÝ od `productVisibility`
+// (ten je na úrovni CELÉHO produktu) — "0" znamená, že TENTO KONKRÉTNY variant bol
+// v Shoptete vypnutý jednotlivo. Skutočné pozorované hodnoty v exporte sú "0", "1"
+// alebo prázdny reťazec (jednovariantné produkty ho často vôbec nevypĺňajú) —
+// prázdny sa berie rovnako ako "1" (viditeľný), nikdy ako vypnutý.
+describe("deriveVariantState — variantVisibility vypína JEDNOTLIVÝ variant nezávisle od produktu", () => {
+  it("variantVisibility '0' zhodí inak predajný variant na vypredaný", () => {
+    expect(
+      deriveVariantState({
+        stock: 5,
+        inStockText: "Skladom",
+        outOfStockText: "",
+        productVisibility: "visible",
+        variantVisibility: "0",
+      }),
+    ).toBe("out_of_stock");
+  });
+
+  it("variantVisibility '1' nechá stav nedotknutý (predajný zostáva predajný)", () => {
+    expect(
+      deriveVariantState({
+        stock: 5,
+        inStockText: "Skladom",
+        outOfStockText: "",
+        productVisibility: "visible",
+        variantVisibility: "1",
+      }),
+    ).toBe("sellable");
+  });
+
+  it("prázdny variantVisibility (jednovariantné produkty ho často nevypĺňajú) sa berie ako viditeľný", () => {
+    expect(
+      deriveVariantState({
+        stock: 5,
+        inStockText: "Skladom",
+        outOfStockText: "",
+        productVisibility: "visible",
+        variantVisibility: "",
+      }),
+    ).toBe("sellable");
+  });
+
+  it("variantVisibility '0' NEPREBÍJA silnejší signál 'discontinued' (text aj produktová viditeľnosť)", () => {
+    expect(
+      deriveVariantState({
+        stock: 5,
+        inStockText: "Predaj výrobku skončil",
+        outOfStockText: "",
+        productVisibility: "visible",
+        variantVisibility: "0",
+      }),
+    ).toBe("discontinued");
+    expect(
+      deriveVariantState({
+        stock: 5,
+        inStockText: "Skladom",
+        outOfStockText: "",
+        productVisibility: "hidden",
+        variantVisibility: "0",
+      }),
+    ).toBe("discontinued");
+  });
+
+  it("variantVisibility '0' na variante, ktorý by aj tak bol vypredaný, nemení nič", () => {
+    expect(
+      deriveVariantState({
+        stock: 0,
+        inStockText: "",
+        outOfStockText: "Vypredané",
+        productVisibility: "visible",
+        variantVisibility: "0",
+      }),
+    ).toBe("out_of_stock");
   });
 });

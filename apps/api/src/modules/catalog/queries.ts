@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, isNotNull, or, sql, type SQL } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
 import { catalogSnapshots, products, variants } from "../../db/schema.js";
 import type { VariantState } from "./availability.js";
@@ -6,6 +6,10 @@ import type { VariantState } from "./availability.js";
 export interface SnapshotSummary {
   readonly id: string;
   readonly fetchedAt: string;
+  // Kedy sa naposledy PREVERILO, že tento snapshot je stále aktuálny — na
+  // duplicitnom importe sa posúva, `fetchedAt` nie (review final-wave-a,
+  // položka 5). `null` len pri riadkoch spred tejto migrácie.
+  readonly lastConfirmedAt: string | null;
   readonly sourceLabel: string;
   readonly verdict: "accepted" | "rejected";
   readonly rejectionReason: string | null;
@@ -58,7 +62,11 @@ export interface CatalogStats {
 
 export interface VariantSearchInput {
   readonly q: string;
-  readonly state: VariantState | "all";
+  // "missing" je PSEUDO-stav (review final-wave-a, položka 6) — nie je to
+  // hodnota stĺpca `variant.state`, filtruje podľa `missingSince IS NOT
+  // NULL` nezávisle od toho, aký `state` mal variant naposledy pred tým, ako
+  // zmizol z exportu.
+  readonly state: VariantState | "all" | "missing";
   readonly page: number;
   readonly pageSize: number;
 }
@@ -71,6 +79,7 @@ export interface VariantSearchResult {
 const snapshotColumns = {
   id: catalogSnapshots.id,
   fetchedAt: catalogSnapshots.fetchedAt,
+  lastConfirmedAt: catalogSnapshots.lastConfirmedAt,
   sourceLabel: catalogSnapshots.sourceLabel,
   verdict: catalogSnapshots.verdict,
   rejectionReason: catalogSnapshots.rejectionReason,
@@ -82,10 +91,17 @@ const snapshotColumns = {
   issueCount: catalogSnapshots.issueCount,
 };
 
-type SnapshotRow = { readonly fetchedAt: Date } & Omit<SnapshotSummary, "fetchedAt">;
+type SnapshotRow = { readonly fetchedAt: Date; readonly lastConfirmedAt: Date | null } & Omit<
+  SnapshotSummary,
+  "fetchedAt" | "lastConfirmedAt"
+>;
 
 function toSnapshotSummary(row: SnapshotRow): SnapshotSummary {
-  return { ...row, fetchedAt: row.fetchedAt.toISOString() };
+  return {
+    ...row,
+    fetchedAt: row.fetchedAt.toISOString(),
+    lastConfirmedAt: row.lastConfirmedAt?.toISOString() ?? null,
+  };
 }
 
 export async function listSnapshots(db: Database, limit: number): Promise<readonly SnapshotSummary[]> {
@@ -140,7 +156,8 @@ export async function searchVariants(
     const byCodeOrName = or(sql`${variants.code} ILIKE ${pattern}`, sql`${variants.name} ILIKE ${pattern}`);
     if (byCodeOrName !== undefined) filters.push(byCodeOrName);
   }
-  if (input.state !== "all") filters.push(eq(variants.state, input.state));
+  if (input.state === "missing") filters.push(isNotNull(variants.missingSince));
+  else if (input.state !== "all") filters.push(eq(variants.state, input.state));
   const where = filters.length === 0 ? undefined : and(...filters);
 
   const [totals] = await db
@@ -216,10 +233,14 @@ export async function catalogStats(db: Database): Promise<CatalogStats> {
     .select({ total: sql<number>`count(*)`.mapWith(Number) })
     .from(products);
 
+  // Sekundárne triedenie `desc(id)` — rovnaký tie-break ako `listSnapshots`
+  // aj `ingest.ts` (review final-wave-a, položka 7). Dva snapshoty so
+  // ZHODNÝM `fetchedAt` by inak mali poradie, ktoré Postgres negarantuje, a
+  // práve TENTO dopyt živí hlavičkovú vetu stránky.
   const [snapshot] = await db
     .select(snapshotColumns)
     .from(catalogSnapshots)
-    .orderBy(desc(catalogSnapshots.fetchedAt))
+    .orderBy(desc(catalogSnapshots.fetchedAt), desc(catalogSnapshots.id))
     .limit(1);
 
   return {

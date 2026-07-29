@@ -24,6 +24,15 @@ paths:
   jobu znova objaví len na CI a nie lokálne, over TOTO ako prvé, predtým než
   sa timeout predlžuje — predlžovanie timeoutu by nič nevyriešilo (spojenie sa
   odmieta okamžite, nie pomaly).
+- **Verziu na porovnanie `dev` vs `main` NIKDY neraď cez `sort -V`.** GNU
+  `sort -V` radí predvydania NAD finálnu verziu (`0.2.0` < `0.2.0-dev.1`),
+  semver to má presne naopak. Po každom mergi zostane na `main` posledná
+  `-dev` verzia, takže brána `version-check` padala na správne zvýšenej verzii
+  (`dev=0.2.0 main=0.2.0-dev.1` → falošné zlyhanie). Radenie robí
+  `npx --yes semver@7.6.3 "$main_v" "$dev_v" | tail -1` (pinutá verzia,
+  posledný riadok = najvyššia). To isté platí pre akékoľvek ďalšie porovnanie
+  verzií v skriptoch — `sort -V` je použiteľné len tam, kde predvydania
+  nevznikajú.
 - Console-assert výnimka pre e2e testy (jediná povolená: neautentifikovaný
   `/api/me` 401) je popísaná v `.claude/rules/testing.md` — rozširovanie tejto
   výnimky je zakázané, nie len pri práci na CI configu.

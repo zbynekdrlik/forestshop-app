@@ -65,6 +65,12 @@ export interface SnapshotCandidate {
   // prijatý, a blanketový „označ všetko mimo tohto snapshotu ako chýbajúce"
   // update potom označil CELÝ katalóg ako chýbajúci — #277/#286 v novej podobe.
   readonly usableRecordCount: number;
+  // Prečo daný riadok NEVYROBIL použiteľný záznam — kľúč je ľudsky čitateľný
+  // (slovenský) popis príčiny (napr. "prázdny kód"), hodnota jej počet medzi
+  // nepoužiteľnými riadkami tohto exportu. Voliteľné (chýba, keď volajúci túto
+  // rozpisku nemá) — používa sa LEN na obohatenie dôvodu odmietnutia nižšie,
+  // nikdy na samotné rozhodnutie o verdikte.
+  readonly unusableReasonCounts?: Readonly<Record<string, number>>;
   readonly previousAccepted: { readonly rowCount: number } | null;
 }
 
@@ -112,6 +118,31 @@ function limitsAreValid(limits: SnapshotLimits): boolean {
 /** `1000000` → `"1 000 000"` — a bare integer is not readable in an operator-facing message. */
 function formatThousands(n: number): string {
   return Math.trunc(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+}
+
+/**
+ * Vyberie najčastejšiu príčinu spomedzi `unusableReasonCounts`, ale LEN keď
+ * tvorí aspoň polovicu nepoužiteľných riadkov (`unusableTotal`) — inak ide o
+ * rozptýlené drobné anomálie bez jednej prevažujúcej príčiny a pomenovanie
+ * jednej z nich by prevádzkovateľa zavádzalo. Bez počtov (nevyplnené) alebo
+ * pri nulovom/zápornom `unusableTotal` vráti `null` — dôvod potom zostáva bez
+ * zmienky o príčine, presne ako predtým.
+ */
+function dominantUnusableReason(
+  counts: Readonly<Record<string, number>> | undefined,
+  unusableTotal: number,
+): string | null {
+  if (counts === undefined || unusableTotal <= 0) return null;
+  let bestLabel: string | null = null;
+  let bestCount = 0;
+  for (const [label, count] of Object.entries(counts)) {
+    if (count > bestCount) {
+      bestCount = count;
+      bestLabel = label;
+    }
+  }
+  if (bestLabel === null || bestCount * 2 < unusableTotal) return null;
+  return bestLabel;
 }
 
 /**
@@ -181,8 +212,11 @@ export function judgeSnapshot(
   // update potom označí celý katalóg ako chýbajúci (#277/#286 v novej podobe).
   const usableFloor = Math.floor(candidate.rowCount * limits.previousRowRatio);
   if (candidate.usableRecordCount < usableFloor) {
+    const unusableTotal = candidate.rowCount - candidate.usableRecordCount;
+    const dominant = dominantUnusableReason(candidate.unusableReasonCounts, unusableTotal);
+    const dominantVeta = dominant === null ? "" : ` Najčastejšia príčina: ${dominant}.`;
     return rejected(
-      `Export má ${String(candidate.rowCount)} riadkov, ale len ${String(candidate.usableRecordCount)} z nich sa dalo spracovať na použiteľný záznam.`,
+      `Export má ${String(candidate.rowCount)} riadkov, ale len ${String(candidate.usableRecordCount)} z nich sa dalo spracovať na použiteľný záznam.${dominantVeta}`,
     );
   }
 

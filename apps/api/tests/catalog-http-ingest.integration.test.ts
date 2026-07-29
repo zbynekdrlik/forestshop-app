@@ -181,6 +181,49 @@ it("import exportu, ktorý sa nedá prečítať, je normálna 200 odpoveď so st
   expect((await res.json()) as { status: string }).toMatchObject({ status: "rejected" });
 });
 
+// Important (review final-wave-a, položka 4): keď stiahnutie exportu úplne
+// zlyhá (vypršaný prihlasovací údaj, 502 od Shoptetu, timeout), fetcher
+// vyhodí PRED akýmkoľvek zápisom — žiadny riadok snapshotu, teda ani dôkaz.
+// Predtým to trasa nechytala vôbec, takže prehliadač dostal generický 500 a
+// operátor mal k dispozícii len riadok v kontajnerovom logu. Toto je jediná
+// trieda zlyhania vo fáze, ktorá by inak nezanechala ŽIADNY záznam.
+it("keď sa export nedá vôbec stiahnuť, vráti sa jasná hláška (nie 500) a zapíše sa dôkaz o pokuse", async () => {
+  const ctx = await withCleanDb();
+  close = ctx.close;
+  await ctx.db.insert(users).values({
+    email: "manazer@forestshop.sk",
+    passwordHash: await hashPassword(HESLO),
+    displayName: "Manažér",
+    role: "manazer",
+  });
+  const runIngest = (): Promise<CatalogIngestResult> =>
+    Promise.reject(new Error("fetch failed: connect ECONNREFUSED"));
+  const app = createApp(ctx.db, { cookieSecure: false, runIngest });
+  const login = await app.request("/api/login", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ email: "manazer@forestshop.sk", password: HESLO }),
+  });
+  const cookie = (login.headers.get("set-cookie") ?? "").split(";")[0] ?? "";
+
+  const res = await app.request("/api/catalog/ingest", { method: "POST", headers: { cookie } });
+  // Nie 500 ("tento server je rozbitý") — 502 ("stiahnutie zo Shoptetu
+  // zlyhalo"), rovnaká sémantika ako pri zlej bráne k inému serveru.
+  expect(res.status).toBe(502);
+  const telo = (await res.json()) as { error: string };
+  expect(telo.error).toMatch(/stiahnuť/);
+  // Surová (možno anglická/technická) chyba sa NIKDY nezobrazuje operátorovi
+  // priamo — rovnaká disciplína ako `ingest.ts`'s materializačné zlyhanie.
+  expect(telo.error).not.toContain("ECONNREFUSED");
+
+  // Dôkaz o pokuse existuje — predtým bolo toto jediné miesto vo fáze, ktoré
+  // po zlyhaní nezanechalo NIČ (žiadny snapshot, žiadny audit, žiadnu anomáliu).
+  const udalosti = await ctx.db.select().from(auditEvents);
+  const udalost = udalosti.find((e) => e.action === "catalog.ingest.trigger");
+  expect(udalost).toBeDefined();
+  expect(udalost?.data).toMatchObject({ status: "fetch_failed" });
+});
+
 it("druhé súbežné spustenie importu vráti busy namiesto paralelného behu", async () => {
   const ctx = await withCleanDb();
   close = ctx.close;

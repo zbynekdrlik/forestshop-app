@@ -25,7 +25,7 @@ const VARIANT_A = {
   name: "Nohavice FOREST 1003",
   state: "discontinued" as const,
   stock: 0,
-  price: "67.00",
+  price: "62.76",
   currency: "EUR",
   availabilityText: "Skladom u dodávateľa",
   missingSince: null,
@@ -172,6 +172,51 @@ it("staršia, ale pomalšia odpoveď hľadania neprepíše novší, rýchlejší
   expect(screen.getByTestId("variant-40237/3XL")).not.toBeNull();
 });
 
+// Important (review final-wave-a, položka 6): variant, ktorý zmizol z
+// exportu, sa v tabuľke doteraz nedal odlíšiť od živého — pole `missingSince`
+// sa vyberalo aj typovalo, ale nikdy sa nezobrazovalo.
+it("chýbajúci variant (missingSince) je v riadku odlíšený od živého, aj kedy chýba", async () => {
+  fetchCatalogStats.mockResolvedValue(ACCEPTED_STATS);
+  searchCatalogVariants.mockResolvedValue({
+    total: 1,
+    items: [{ ...VARIANT_A, missingSince: "2026-07-30T09:00:00.000Z" }],
+  });
+
+  render(<CatalogPage role="manazer" onSessionExpired={() => {}} />);
+
+  const riadok = await screen.findByTestId("variant-40237/3XL");
+  expect(riadok.textContent).toContain("chýba od");
+  expect(screen.getByTestId("missing-40237/3XL")).not.toBeNull();
+});
+
+it("živý variant (missingSince: null) nenesie žiadnu chýbajúcu značku", async () => {
+  fetchCatalogStats.mockResolvedValue(ACCEPTED_STATS);
+  searchCatalogVariants.mockResolvedValue({ total: 1, items: [VARIANT_A] });
+
+  render(<CatalogPage role="manazer" onSessionExpired={() => {}} />);
+
+  await screen.findByTestId("variant-40237/3XL");
+  expect(screen.queryByTestId("missing-40237/3XL")).toBeNull();
+});
+
+it("výber filtra 'Chýbajúce' vyhľadá so state=missing", async () => {
+  fetchCatalogStats.mockResolvedValue(ACCEPTED_STATS);
+  searchCatalogVariants.mockResolvedValue({ total: 0, items: [] });
+
+  render(<CatalogPage role="manazer" onSessionExpired={() => {}} />);
+  await waitFor(() => {
+    expect(searchCatalogVariants).toHaveBeenCalledTimes(1);
+  });
+
+  expect(screen.getByRole("option", { name: "Chýbajúce" })).not.toBeNull();
+  fireEvent.change(screen.getByLabelText("Stav"), { target: { value: "missing" } });
+  fireEvent.click(screen.getByRole("button", { name: "Hľadať" }));
+
+  await waitFor(() => {
+    expect(searchCatalogVariants).toHaveBeenLastCalledWith({ q: "", state: "missing", page: 1 });
+  });
+});
+
 it("import 'accepted' zobrazí úspešnú hlášku s počtami", async () => {
   fetchCatalogStats.mockResolvedValue(ACCEPTED_STATS);
   searchCatalogVariants.mockResolvedValue({ total: 0, items: [] });
@@ -222,6 +267,48 @@ it("import 'duplicate' oznámi, že sa nič nezmenilo", async () => {
   const outcome = await screen.findByTestId("import-outcome");
   expect(outcome.getAttribute("role")).toBe("status");
   expect(outcome.textContent).toContain("nezmenil");
+});
+
+// Review final-wave-a, položka 4: keď sa export nedá vôbec stiahnuť, server
+// vráti 502 s jasnou slovenskou hláškou namiesto generického zlyhania.
+// `triggerCatalogIngest` (catalogApi.ts) v tom prípade odmietne s `Error`
+// nesúcou práve túto hlášku — stránka ju musí zobraziť rovnako, ako pri
+// každej inej chybe importu.
+it("keď sa export nedá stiahnuť, zobrazí hlášku servera ako alert", async () => {
+  fetchCatalogStats.mockResolvedValue(ACCEPTED_STATS);
+  searchCatalogVariants.mockResolvedValue({ total: 0, items: [] });
+  triggerCatalogIngest.mockRejectedValue(
+    new Error("Export zo Shoptetu sa nepodarilo stiahnuť. Skúste import o chvíľu zopakovať."),
+  );
+
+  render(<CatalogPage role="manazer" onSessionExpired={() => {}} />);
+  fireEvent.click(await screen.findByRole("button", { name: "Stiahnuť a naimportovať export" }));
+
+  const outcome = await screen.findByTestId("import-outcome");
+  expect(outcome.getAttribute("role")).toBe("alert");
+  expect(outcome.textContent).toContain("nepodarilo stiahnuť");
+});
+
+// Smaller correctness item (review final-wave-a, položka 7): po ZLYHANOM
+// importe stránka predtým neobnovila riadok so snapshotom — ostal ukazovať
+// PREDCHÁDZAJÚCI prijatý import, hoci v databáze medzitým pribudol nový
+// dôkazový (rejected) záznam. Prehľad (`loadStats`) sa musí znova načítať aj
+// na chybovej ceste, nielen po úspešnom výsledku importu.
+it("po zlyhanom importe sa prehľad (snapshot line) obnoví znova, nezostane na starom", async () => {
+  fetchCatalogStats.mockResolvedValueOnce(ACCEPTED_STATS).mockResolvedValueOnce(REJECTED_STATS);
+  searchCatalogVariants.mockResolvedValue({ total: 0, items: [] });
+  triggerCatalogIngest.mockRejectedValue(new Error("Import sa nepodarilo spustiť."));
+
+  render(<CatalogPage role="manazer" onSessionExpired={() => {}} />);
+  await screen.findByTestId("snapshot");
+
+  fireEvent.click(await screen.findByRole("button", { name: "Stiahnuť a naimportovať export" }));
+  await screen.findByTestId("import-outcome");
+
+  await waitFor(() => {
+    expect(fetchCatalogStats).toHaveBeenCalledTimes(2);
+  });
+  await screen.findByTestId("rejection-alert");
 });
 
 it("import 'busy' oznámi, že import už beží", async () => {

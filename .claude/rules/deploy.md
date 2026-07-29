@@ -4,6 +4,8 @@ paths:
   - "docker-compose.prod.yml"
   - "Dockerfile"
   - ".dockerignore"
+  - "apps/api/src/cli/**"
+  - "scripts/*.ts"
 ---
 
 # Deployment (dev2)
@@ -96,3 +98,50 @@ paths:
        doplniť oprávnenie `SSL and Certificates:Edit` a zapnúť Total TLS
        (`PATCH /zones/{zone}/acm/total_tls`) alebo objednať Advanced
        Certificate, inak TLS handshake opäť zlyhá.
+
+- **Docker inicializuje ČERSTVÝ named volume kopírovaním obsahu (aj
+  vlastníctva) z toho, čo v obraze UŽ existuje na tej istej ceste v momente
+  prvého pripojenia volume-u** — ak `Dockerfile` cieľový adresár (napr.
+  `/data/catalog-raw`, `docker-compose.prod.yml`'s `catalog-raw` volume)
+  nikdy nevytvorí, Docker vytvorí mount point ako `root:root` a `USER node`
+  (nižšie v obraze) doň nikdy nezapíše — presne reálny produkčný incident
+  (F1 final-wave-a, položka 8: prvý import stiahol 57 MB a spadol na zápis).
+  Fix: `RUN mkdir -p <cesta> && chown -R node:node <cesta>` PRED `USER node`.
+  Over TÝMTO vzorom (jednorazovo, mimo Tier-0 zákazu "docker build projektového
+  obrazu" — malý zahoditeľný alpine testovací obraz + čerstvý named volume):
+
+  ```bash
+  docker build -t verify:tmp - <<'EOF'
+  FROM node:24-alpine
+  RUN mkdir -p /data/x && chown -R node:node /data/x
+  USER node
+  CMD ["sh","-c","ls -ld /data/x && touch /data/x/p && echo OK"]
+  EOF
+  docker volume create verify-vol
+  docker run --rm -v verify-vol:/data/x verify:tmp   # očakávaj: node:node, OK
+  docker rmi verify:tmp && docker volume rm verify-vol
+  ```
+
+- **Retencia surových súborov (`.claude/rules/catalog.md`'s `pruneRawSnapshots`) beží
+  PRIAMO v produkčnom obraze — nie cez `scripts/`.** `scripts/catalog-ingest.ts` a
+  `scripts/catalog-prune-raw.ts` (spúšťané cez `pnpm catalog:*`, `tsx`) potrebujú
+  celý monorepo `node_modules` — na dev2 sú `scripts/` len ako `rsync`-nutá kópia
+  BEZ `node_modules` (final-wave-b, položka 2: prvý reálny produkčný import zapísal
+  surový súbor a nemal ho čo niekedy zmazať, zväzok `catalog-raw` by rástol
+  donekonečna). Kanonická implementácia preto žije v `apps/api/src/cli/
+  catalog-prune-raw.ts` — `scripts/catalog-prune-raw.ts` je odteraz len jej tenký
+  alias (`import "../apps/api/src/cli/catalog-prune-raw.js";`) pre lokálny
+  `pnpm catalog:prune-raw`. `apps/api`'s vlastný `tsc -b` ju skompiluje do
+  `apps/api/dist/cli/catalog-prune-raw.js`, ktorý Dockerfile UŽ kopíruje (celý
+  `apps/api/dist`) — žiadna zmena Dockerfile nebola potrebná. Príkaz na produkcii:
+
+  ```bash
+  ssh newlevel@dev2 'cd /srv/forestshop && docker compose -f docker-compose.prod.yml exec app node apps/api/dist/cli/catalog-prune-raw.js'
+  ```
+
+  Vypíše jednu ľudskú vetu aj JSON riadok (`{"removed": N}`) — bezpečné spustiť
+  kedykoľvek (nemaže nič mladšie než 30 dní ani posledný prijatý súbor, pozri
+  `pruneRawSnapshots` v `raw-store.ts`). Import (`catalog-ingest`) toto NEPOTREBUJE —
+  beží aj cez tlačidlo na webe (`POST /api/catalog/ingest`, priamo v bežiacom
+  procese appky), takže `scripts/catalog-ingest.ts` zostáva len pohodlný LOKÁLNY/CI
+  vstupný bod, nie produkčná nutnosť.

@@ -127,7 +127,7 @@ it("prijme fixtúru a naplní produkty aj varianty", async () => {
     productKey: "0a486205-d9e7-11e0-92ec-e1ef0b66e031",
     guid: "0a486205-d9e7-11e0-92ec-e1ef0b66e031",
     sizeLabel: "3XL",
-    price: "67.00",
+    price: "62.76",
     currency: "EUR",
     stock: -11,
     state: "discontinued",
@@ -173,6 +173,39 @@ it("ten istý obsah sa druhýkrát nespracuje", async () => {
   expect(second.status).toBe("duplicate");
   expect(second.snapshotId).toBe(first.snapshotId);
   expect(await db.select().from(catalogSnapshots)).toHaveLength(1);
+});
+
+// Important (review final-wave-a, položka 5): duplicitný import predtým
+// nezanechal ŽIADNU stopu, že kontrola prebehla — jediný ukazovateľ
+// čerstvosti (`fetchedAt`) zamrzol na prvom stiahnutí, hoci naplánovaný
+// import každú noc hlási úspech. `lastConfirmedAt` musí posunúť presne
+// TÝMTO — a nič iné na riadku sa nesmie zmeniť.
+it("duplicitný import posunie čas potvrdenia (lastConfirmedAt), nič iné na riadku sa nezmení", async () => {
+  const { db, dir } = await boot();
+  await ingestCatalog(db, { fetchExport: fetcherOf(FIXTURE), now: NOW, rawDir: dir, limits: TEST_LIMITS });
+
+  const [poPrvomImporte] = await db.select().from(catalogSnapshots);
+  expect(poPrvomImporte?.lastConfirmedAt).toEqual(NOW);
+
+  const result = await ingestCatalog(db, {
+    fetchExport: fetcherOf(FIXTURE),
+    now: NESKOR,
+    rawDir: dir,
+    limits: TEST_LIMITS,
+  });
+  expect(result.status).toBe("duplicate");
+
+  const [poDruhomImporte] = await db.select().from(catalogSnapshots);
+  expect(poDruhomImporte?.lastConfirmedAt).toEqual(NESKOR);
+  // Všetko OSTATNÉ na riadku ostáva presne také, ako po prvom importe —
+  // duplicitná kontrola nesmie prepísať nič iné než potvrdenie čerstvosti.
+  expect(poDruhomImporte).toMatchObject({
+    id: poPrvomImporte?.id,
+    fetchedAt: NOW,
+    rowCount: poPrvomImporte?.rowCount,
+    variantCount: poPrvomImporte?.variantCount,
+    verdict: "accepted",
+  });
 });
 
 it("variant, ktorý z exportu zmizne, sa nemaže — len sa označí odkedy chýba", async () => {
@@ -433,6 +466,42 @@ it("zlyhanie materializácie zapíše dôkazový (rejected) záznam a katalóg z
   expect(zlyhany?.rejectionReason).toContain(
     "Katalóg zostáva nezmenený, import môžete kedykoľvek zopakovať.",
   );
+});
+
+// Smaller correctness item (review final-wave-a, položka 7): samotný
+// dôkazový zápis (vyššie) beží MIMO zlyhanej transakcie ako nechránený
+// `await db.insert(...)` — keby zlyhal AJ ON (napr. výpadok spojenia), jeho
+// vlastná výnimka by nahradila tú PÔVODNÚ (skutočný dôvod materializačného
+// zlyhania), ktorú `ingestCatalog` mal uniknúť. Cielený proxy zlyhá LEN na
+// tomto jednom volaní (`db.insert`, mimo transakcie) — `tx.insert` vnútri
+// transakcie je úplne iný objekt, takže samotná materializácia prebehne a
+// zlyhá presne ako v teste vyššie.
+it("keď zlyhá aj dôkazový zápis po zlyhaní materializácie, unikne PÔVODNÁ chyba, nie chyba z dôkazového zápisu", async () => {
+  const { db, dir } = await boot();
+  await ingestCatalog(db, {
+    fetchExport: fetcherOf(FIXTURE),
+    now: NOW,
+    rawDir: dir,
+    limits: TEST_LIMITS,
+  });
+
+  const otravena = injectNulByteAfter(FIXTURE, '"40287";"";"', "Polar FOREST");
+  const zlyhanieDokazu = new Error("dôkazový zápis zámerne zlyhal (simulácia výpadku spojenia)");
+  const zlyhavajuciDb = Object.create(db) as typeof db;
+  Object.defineProperty(zlyhavajuciDb, "insert", {
+    value: () => {
+      throw zlyhanieDokazu;
+    },
+  });
+
+  await expect(
+    ingestCatalog(zlyhavajuciDb, {
+      fetchExport: fetcherOf(otravena),
+      now: NESKOR,
+      rawDir: dir,
+      limits: TEST_LIMITS,
+    }),
+  ).rejects.toThrow(/invalid byte sequence/);
 });
 
 // Minor (review task-5-fix-1): služba dôveruje `sourceLabel` od AKÉHOKOĽVEK

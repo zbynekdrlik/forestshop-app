@@ -2,12 +2,16 @@
 // `numeric` (drizzle ich drží ako reťazec), takže sa nikde nedotknú `number` a
 // nemôžu stratiť presnosť — okrem zaokrúhlenia na presne 2 desatinné miesta, ktoré
 // si tento parser robí SÁM (reťazcovou/BigInt aritmetikou, nikdy cez `number`).
-// Shoptet bežne exportuje nákupné ceny so 4 desatinnými miestami; bez tohto
-// zaokrúhlenia by ich pri zápise do `numeric(_, 2)` stĺpca ticho zaokrúhlil až
-// samotný Postgres — a nemuselo by to byť „pol nahor od nuly", ktoré tu robíme,
-// aby uložená hodnota bola presne tá istá, akú vidí operátor. Mena je vždy vedľa
-// sumy — `variant.currency` a CHECK `variant_money_needs_currency_ck` (Task 1) to
-// vynucujú aj v databáze.
+// Pole je textové, Shoptet ho na presne 2 desatinné miesta gramaticky nijako
+// neviaže — v commitnutej fixtúre má KAŽDÁ nákupná cena presne 2 (žiadna
+// pozorovaná hodnota so 4 desatinnými miestami), zaokrúhlenie tu teda existuje
+// ako poistka pre prípad, že sa niekedy objaví hodnota s viacerými, nie preto,
+// že by sme také dnes v reálnych dátach videli. Bez tejto poistky by prípadnú
+// hodnotu s viac než 2 desatinnými miestami pri zápise do `numeric(_, 2)`
+// stĺpca ticho zaokrúhlil až samotný Postgres — a nemuselo by to byť „pol
+// nahor od nuly", ktoré tu robíme, aby uložená hodnota bola presne tá istá,
+// akú vidí operátor. Mena je vždy vedľa sumy — `variant.currency` a CHECK
+// `variant_money_needs_currency_ck` (Task 1) to vynucujú aj v databáze.
 
 // Peňažné stĺpce (`price`, `standard_price`, `purchase_price`, `action_price`) sú
 // `numeric(12, 2)` — najviac 10 číslic pred desatinnou čiarkou. Iné stĺpce s inou
@@ -71,12 +75,23 @@ export function parseDecimalComma(
   if (!DECIMAL_RE.test(cleaned)) return null;
 
   const rounded = roundToTwoDecimals(cleaned.replace(",", "."));
-  const unsigned = rounded.startsWith("-") ? rounded.slice(1) : rounded;
+  const negative = rounded.startsWith("-");
+  const unsigned = negative ? rounded.slice(1) : rounded;
   const unsignedDot = unsigned.indexOf(".");
-  const integerDigits = (unsignedDot === -1 ? unsigned : unsigned.slice(0, unsignedDot)).length;
-  if (integerDigits > maxIntegerDigits) return null;
+  const rawIntegerPart = unsignedDot === -1 ? unsigned : unsigned.slice(0, unsignedDot);
+  const fractionalPart = unsignedDot === -1 ? "" : unsigned.slice(unsignedDot);
+  // Zľava vypchané nuly ("007") nie sú skutočné číslice — Postgres by "007,50"
+  // uložil rovnako ako "7,50". Bez tohto odstránenia by dĺžka REŤAZCA (3)
+  // prehrala aj tam, kde skutočná hodnota (7) do limitu pohodlne patrí.
+  // Lookahead `(?=\d)` necháva samotnú nulu ("0") nedotknutú — inak by sa
+  // stratila úplne a nula by merala 0 číslic namiesto 1. Odstránenie sa
+  // premieta aj do VRÁTENEJ hodnoty (nielen do merania) — vypchatá nula by
+  // sa inak zobrazila operátorovi aj v UI, hoci v databáze aj tak zmizne
+  // (Postgres `numeric` ju pri uložení normalizuje).
+  const integerPart = rawIntegerPart.replace(/^0+(?=\d)/, "");
+  if (integerPart.length > maxIntegerDigits) return null;
 
-  return rounded;
+  return `${negative ? "-" : ""}${integerPart}${fractionalPart}`;
 }
 
 /** Vráti dátum v tvare YYYY-MM-DD pre `date` stĺpec, alebo null. */

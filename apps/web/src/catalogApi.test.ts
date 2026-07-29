@@ -16,6 +16,7 @@ const STATS = {
   lastSnapshot: {
     id: "s1",
     fetchedAt: "2026-07-29T10:00:00.000Z",
+    lastConfirmedAt: "2026-07-29T10:00:00.000Z",
     sourceLabel: "fixtúra",
     verdict: "accepted",
     rejectionReason: null,

@@ -64,7 +64,7 @@ function describeIngestOutcome(result: CatalogIngestOutcome): Notice {
     case "accepted":
       return {
         kind: "info",
-        text: `Import bol úspešný — ${String(result.variantCount)} variantov, ${String(result.productCount)} produktov, ${String(result.missingCount)} chýbajúcich, ${String(result.issueCount)} anomálií.`,
+        text: `Import bol úspešný — export obsahoval ${String(result.variantCount)} variantov, ${String(result.productCount)} produktov, ${String(result.missingCount)} novo chýbajúcich, ${String(result.issueCount)} anomálií.`,
       };
     case "rejected":
       return { kind: "warning", text: `Import bol zamietnutý — dôvod: ${result.reason}` };
@@ -175,6 +175,11 @@ export function CatalogPage({
           kind: "warning",
           text: err instanceof Error ? err.message : "Import sa nepodarilo spustiť.",
         });
+        // Aj na chybovej ceste — predtým stránka po zlyhanom importe zostala
+        // ukazovať PREDCHÁDZAJÚCI prijatý snapshot, hoci v databáze medzitým
+        // pribudol nový dôkazový (rejected) záznam (review final-wave-a,
+        // položka 7).
+        loadStats();
       })
       .finally(() => {
         setBusy(false);
@@ -191,9 +196,9 @@ export function CatalogPage({
       {statsError !== "" && <p role="alert">{statsError}</p>}
       {stats !== null && (
         <p data-testid="counts">
-          Variantov: {stats.variantCount} · produktov: {stats.productCount} · skladom:{" "}
-          {stats.sellable} · vypredaných: {stats.outOfStock} · ukončených: {stats.discontinued} ·
-          chýbajúcich: {stats.missing}
+          Variantov v katalógu (vrátane chýbajúcich): {stats.variantCount} · produktov:{" "}
+          {stats.productCount} · skladom: {stats.sellable} · vypredaných: {stats.outOfStock} ·
+          ukončených: {stats.discontinued} · chýbajúcich: {stats.missing}
         </p>
       )}
 
@@ -230,6 +235,7 @@ export function CatalogPage({
           <option value="sellable">Skladom</option>
           <option value="out_of_stock">Vypredané</option>
           <option value="discontinued">Predaj skončil</option>
+          <option value="missing">Chýbajúce</option>
         </select>
         <button type="submit">Hľadať</button>
       </form>
@@ -262,7 +268,17 @@ export function CatalogPage({
                 <td>{item.code}</td>
                 <td>{item.name}</td>
                 <td>{item.sizeLabel ?? "—"}</td>
-                <td>{STATE_LABELS[item.state]}</td>
+                <td>
+                  {STATE_LABELS[item.state]}
+                  {item.missingSince !== null && (
+                    <>
+                      {" "}
+                      <strong data-testid={`missing-${item.code}`}>
+                        (chýba od {new Date(item.missingSince).toLocaleDateString("sk-SK")})
+                      </strong>
+                    </>
+                  )}
+                </td>
                 <td>{item.stock}</td>
                 <td>{item.price === null ? "—" : `${item.price} ${item.currency ?? ""}`}</td>
                 <td>{item.availabilityText === "" ? "—" : item.availabilityText}</td>
