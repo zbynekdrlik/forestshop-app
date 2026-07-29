@@ -101,6 +101,49 @@ it("odmietne sumu bez meny (CHECK)", async () => {
   ).rejects.toThrow(/variant_money_needs_currency_ck/);
 });
 
+it("odmietne prázdny reťazec ako menu, keď je suma vyplnená (CHECK)", async () => {
+  const ctx = await withCleanDb();
+  close = ctx.close;
+  const snapshotId = await insertTestSnapshot(ctx.db);
+  await ctx.db.insert(products).values({
+    key: "40288",
+    name: "Šál FOREST",
+    supplier: null,
+    firstSeenAt: NOW,
+    lastSeenAt: NOW,
+    lastSeenSnapshotId: snapshotId,
+  });
+
+  await expect(
+    ctx.db.insert(variants).values({
+      code: "40288",
+      productKey: "40288",
+      sizeLabel: null,
+      pairCode: null,
+      name: "Šál FOREST",
+      currency: "", // prázdny reťazec nie je NULL — CHECK ho musí odmietnuť rovnako prísne
+      price: "67.00",
+      standardPrice: null,
+      purchasePrice: null,
+      actionPrice: null,
+      actionFrom: null,
+      actionUntil: null,
+      percentVat: null,
+      includingVat: null,
+      stock: 5,
+      availabilityInStockText: "Skladom",
+      availabilityOutOfStockText: "Skladom",
+      availabilityText: "Skladom",
+      productVisibility: "detailOnly",
+      state: "sellable",
+      firstSeenAt: NOW,
+      lastSeenAt: NOW,
+      lastSeenSnapshotId: snapshotId,
+      missingSince: null,
+    }),
+  ).rejects.toThrow(/variant_money_needs_currency_ck/);
+});
+
 it("odmietne druhý variant s rovnakým kódom", async () => {
   const ctx = await withCleanDb();
   close = ctx.close;
