@@ -38,7 +38,10 @@ export interface SnapshotLimits {
 export const DEFAULT_SNAPSHOT_LIMITS: SnapshotLimits = Object.freeze({
   // Reálny export má ~56 MB; 1 MB je hranica „toto zjavne nie je celý katalóg".
   minByteSize: 1_000_000,
-  // Použije sa LEN vtedy, keď ešte nie je z čoho odvodiť (prvý import).
+  // Podlaha NA KAŽDOM importe, nielen prvom — je spodná hranica pre
+  // `Math.max(pomerová hranica, absoluteMinRows)` nižšie. Samotná pomerová
+  // hranica by sa dala ratchetnúť k nule cez opakované, mierne klesajúce
+  // prijaté exporty (#286): floor(1 * 0.8) === 0.
   absoluteMinRows: 1_000,
   previousRowRatio: 0.8,
 });
@@ -77,7 +80,11 @@ function candidateIsValid(candidate: SnapshotCandidate): boolean {
   if (!isFiniteNumber(candidate.rowCount)) return false;
   if (!isFiniteNumber(candidate.byteSize)) return false;
   if (!isFiniteNumber(candidate.malformedRowCount)) return false;
-  if (candidate.previousAccepted !== null && !isFiniteNumber(candidate.previousAccepted.rowCount)) {
+  // `!=` (nie `!==`) zámerne — `previousAccepted: undefined` (pole úplne chýba
+  // za behu, alebo ho stratí JSON round-trip) sa má správať rovnako ako `null`
+  // (prvý import), nikdy nedereferencovať `.rowCount` na `undefined`. Rovnaká
+  // voľná kontrola je aj v `judgeSnapshot` nižšie — obe musia byť v zhode.
+  if (candidate.previousAccepted != null && !isFiniteNumber(candidate.previousAccepted.rowCount)) {
     return false;
   }
   return true;
@@ -94,6 +101,23 @@ function limitsAreValid(limits: SnapshotLimits): boolean {
 /** `1000000` → `"1 000 000"` — a bare integer is not readable in an operator-facing message. */
 function formatThousands(n: number): string {
   return Math.trunc(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+}
+
+/**
+ * Slovak count agreement for "poškodený riadok": 1 → singular
+ * (`poškodený riadok`), 2–4 → paucal (`poškodené riadky`), everything else
+ * (0, 5+, and the 11–14 teens within any hundred, which take the plural form
+ * even though they end in 1–4) → plural genitive (`poškodených riadkov`).
+ */
+function formatMalformedRows(n: number): string {
+  const count = Math.trunc(n);
+  const mod100 = Math.abs(count) % 100;
+  const mod10 = Math.abs(count) % 10;
+  if (count === 1) return "1 poškodený riadok";
+  if (mod10 >= 2 && mod10 <= 4 && !(mod100 >= 12 && mod100 <= 14)) {
+    return `${String(count)} poškodené riadky`;
+  }
+  return `${String(count)} poškodených riadkov`;
 }
 
 // #286 stalo sa výpadkom presne preto, lebo žiadny dôvod odmietnutia nepovedal
@@ -119,7 +143,7 @@ export function judgeSnapshot(
   }
   if (candidate.byteSize < limits.minByteSize) {
     return rejected(
-      `Stiahnutý súbor má len ${String(candidate.byteSize)} bajtov, minimum je ${formatThousands(limits.minByteSize)} bajtov.`,
+      `Stiahnutý súbor má len ${formatThousands(candidate.byteSize)} bajtov, minimum je ${formatThousands(limits.minByteSize)} bajtov.`,
     );
   }
 
@@ -130,11 +154,13 @@ export function judgeSnapshot(
 
   if (candidate.malformedRowCount > 0) {
     return rejected(
-      `Export obsahuje ${String(candidate.malformedRowCount)} poškodených riadkov (počet polí nesedí s hlavičkou).`,
+      `Export obsahuje ${formatMalformedRows(candidate.malformedRowCount)} (počet polí nesedí s hlavičkou).`,
     );
   }
 
-  if (candidate.previousAccepted === null) {
+  // `!=` — pozri komentár pri rovnakej kontrole v `candidateIsValid`: chýbajúci
+  // (`undefined`) predchádzajúci prijatý sa berie rovnako ako `null`.
+  if (candidate.previousAccepted == null) {
     if (candidate.rowCount < limits.absoluteMinRows) {
       return rejected(
         `Export má ${String(candidate.rowCount)} riadkov, minimum pre prvý import je ${String(limits.absoluteMinRows)}.`,

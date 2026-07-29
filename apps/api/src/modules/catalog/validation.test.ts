@@ -121,8 +121,23 @@ describe("judgeSnapshot", () => {
   it("odmietne export s poškodenými riadkami, aj keď je všetko ostatné v poriadku", () => {
     const judgement = judgeSnapshot(candidate({ malformedRowCount: 1 }));
     expect(judgement.verdict).toBe("rejected");
-    expect(judgement.verdict === "rejected" && judgement.reason).toContain("1");
+    expect(judgement.verdict === "rejected" && judgement.reason).toContain("1 poškodený riadok");
   });
+
+  // "1" ako holý podreťazec by prešiel aj nesprávnym tvarom ("1 poškodených
+  // riadkov"), takže sa pripína celá fráza — 1 = jednotné číslo, 2-4 = malé
+  // množstvo, 5+ = množné (genitív).
+  it.each([
+    [1, "1 poškodený riadok"],
+    [3, "3 poškodené riadky"],
+    [5, "5 poškodených riadkov"],
+  ] as const)(
+    "skloňuje počet poškodených riadkov v slovenčine: %i → %s",
+    (malformedRowCount, expectedPhrase) => {
+      const judgement = judgeSnapshot(candidate({ malformedRowCount }));
+      expect(judgement.verdict === "rejected" && judgement.reason).toContain(expectedPhrase);
+    },
+  );
 
   it("malformedRowCount: 0 neprekáža prijatiu", () => {
     expect(judgeSnapshot(candidate({ malformedRowCount: 0 }))).toEqual({ verdict: "accepted" });
@@ -224,6 +239,42 @@ describe("judgeSnapshot — bajtová hranica je čitateľná, nie holé číslo"
     const judgement = judgeSnapshot(candidate({ byteSize: 512 }));
     expect(judgement.verdict === "rejected" && judgement.reason).toContain("1 000 000");
     expect(judgement.verdict === "rejected" && judgement.reason).not.toContain("1000000");
+  });
+
+  // Pri tesnom podliezaní hranice (999 999 z 1 000 000) je neformátovaná strana
+  // presne tá, ktorá sa predtým nechávala ako holé číslo — "999999" vedľa
+  // "1 000 000" je nekonzistentné a ťažšie čitateľné.
+  it("formátuje aj skutočnú veľkosť súboru s medzerami, nielen hranicu", () => {
+    const judgement = judgeSnapshot(candidate({ byteSize: 999_999 }));
+    expect(judgement.verdict === "rejected" && judgement.reason).toContain("999 999");
+    expect(judgement.verdict === "rejected" && judgement.reason).not.toContain("999999");
+  });
+});
+
+describe("judgeSnapshot — previousAccepted: undefined sa nesmie dereferencovať do výnimky", () => {
+  // Bežné volanie vždy dodá `null` pri prvom importe. `undefined` nastane len
+  // vtedy, keď pole za behu úplne chýba (napr. stratené v JSON round-tripe) —
+  // no `SnapshotCandidate.previousAccepted !== undefined` v type systéme, takže
+  // treba prejsť cez `unknown`, presne ako pri `columns: null` vyššie.
+  it("previousAccepted: undefined sa správa rovnako ako null (prvý import), nevyhodí výnimku", () => {
+    const raw = {
+      ...candidate({ rowCount: 999 }),
+      previousAccepted: undefined,
+    } as unknown as SnapshotCandidate;
+
+    expect(() => judgeSnapshot(raw)).not.toThrow();
+    const judgement = judgeSnapshot(raw);
+    expect(judgement.verdict).toBe("rejected");
+    expect(judgement.verdict === "rejected" && judgement.reason).toContain("prvý import");
+  });
+
+  it("previousAccepted: undefined s dostatočným počtom riadkov je prijaté — rovnako ako null", () => {
+    const raw = {
+      ...candidate({ rowCount: 1_000 }),
+      previousAccepted: undefined,
+    } as unknown as SnapshotCandidate;
+
+    expect(judgeSnapshot(raw)).toEqual({ verdict: "accepted" });
   });
 });
 
