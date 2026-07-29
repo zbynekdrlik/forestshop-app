@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import pg from "pg";
 import { createDb, type Database } from "../../src/db/client.js";
 
 /**
@@ -15,6 +16,17 @@ export async function withCleanDb(): Promise<{ db: Database; close: () => Promis
   if (url === undefined || url === "") {
     throw new Error("Integračné testy potrebujú DATABASE_URL na testovaciu databázu");
   }
+
+  // pg_advisory_lock is per-SESSION (per backend connection), so it must be
+  // taken on its own dedicated connection, not through the pool `db` below
+  // shares across queries — held from here until close() releases it, so a
+  // second, concurrent withCleanDb() (another agent/terminal running
+  // `pnpm test:integration` against the same DATABASE_URL) blocks until this
+  // test's whole TRUNCATE-and-use span is done, instead of interleaving.
+  const lock = new pg.Client({ connectionString: url });
+  await lock.connect();
+  await lock.query("select pg_advisory_lock($1)", [TEST_DB_ISOLATION_LOCK_KEY]);
+
   const { db, pool } = createDb(url);
   try {
     await db.execute(
@@ -22,7 +34,17 @@ export async function withCleanDb(): Promise<{ db: Database; close: () => Promis
     );
   } catch (err) {
     await pool.end();
+    await lock.query("select pg_advisory_unlock($1)", [TEST_DB_ISOLATION_LOCK_KEY]);
+    await lock.end();
     throw err;
   }
-  return { db, close: () => pool.end() };
+
+  return {
+    db,
+    close: async () => {
+      await pool.end();
+      await lock.query("select pg_advisory_unlock($1)", [TEST_DB_ISOLATION_LOCK_KEY]);
+      await lock.end();
+    },
+  };
 }
