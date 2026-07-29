@@ -57,10 +57,49 @@ export type SnapshotJudgement =
   | { readonly verdict: "accepted" }
   | { readonly verdict: "rejected"; readonly reason: string };
 
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+/**
+ * Every comparison against `NaN` is `false`, so a caller passing `NaN` (or any
+ * other non-finite/non-array shape) would fall through every guard below and
+ * be silently ACCEPTED instead of rejected — the exact failure mode this checks
+ * against. `columns` failing `Array.isArray` also covers a `string`, which would
+ * otherwise satisfy every `Array.prototype.includes` check by substring match,
+ * and a `null` `columns`, which would otherwise throw a `TypeError` out of a
+ * function whose whole contract is to return a verdict, never throw.
+ */
+function candidateIsValid(candidate: SnapshotCandidate): boolean {
+  if (!Array.isArray(candidate.columns)) return false;
+  if (!isFiniteNumber(candidate.rowCount)) return false;
+  if (!isFiniteNumber(candidate.byteSize)) return false;
+  if (!isFiniteNumber(candidate.malformedRowCount)) return false;
+  if (candidate.previousAccepted !== null && !isFiniteNumber(candidate.previousAccepted.rowCount)) {
+    return false;
+  }
+  return true;
+}
+
+function limitsAreValid(limits: SnapshotLimits): boolean {
+  return (
+    isFiniteNumber(limits.minByteSize) &&
+    isFiniteNumber(limits.absoluteMinRows) &&
+    isFiniteNumber(limits.previousRowRatio)
+  );
+}
+
 export function judgeSnapshot(
   candidate: SnapshotCandidate,
   limits: SnapshotLimits = DEFAULT_SNAPSHOT_LIMITS,
 ): SnapshotJudgement {
+  if (!candidateIsValid(candidate) || !limitsAreValid(limits)) {
+    return {
+      verdict: "rejected",
+      reason: "Údaje o stiahnutom exporte sú neplatné, import sa nevykonal.",
+    };
+  }
+
   if (candidate.byteSize === 0) {
     return { verdict: "rejected", reason: "Stiahnutý súbor je prázdny (0 bajtov)." };
   }

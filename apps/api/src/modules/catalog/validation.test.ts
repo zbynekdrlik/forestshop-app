@@ -9,14 +9,15 @@ import {
 const FULL_COLUMNS = [...REQUIRED_COLUMNS, "description", "guid"];
 
 function candidate(overrides: Partial<SnapshotCandidate> = {}): SnapshotCandidate {
+  // `??` would treat an explicitly passed `null` (e.g. a deliberately invalid
+  // `columns: null` or "no previous snapshot") the same as "not provided",
+  // silently reverting it to the default — checking for `undefined` keeps an
+  // explicit `null` override intact, for every field, not just previousAccepted.
   return {
-    columns: overrides.columns ?? FULL_COLUMNS,
+    columns: overrides.columns !== undefined ? overrides.columns : FULL_COLUMNS,
     rowCount: overrides.rowCount ?? 14_014,
     byteSize: overrides.byteSize ?? 56_340_420,
     malformedRowCount: overrides.malformedRowCount ?? 0,
-    // `??` would treat an explicitly passed `null` (no previous snapshot) the
-    // same as "not provided", silently reverting it to the default — checking
-    // for `undefined` keeps an explicit `previousAccepted: null` intact.
     previousAccepted:
       overrides.previousAccepted !== undefined ? overrides.previousAccepted : { rowCount: 14_014 },
   };
@@ -124,5 +125,40 @@ describe("judgeSnapshot", () => {
 
   it("malformedRowCount: 0 neprekáža prijatiu", () => {
     expect(judgeSnapshot(candidate({ malformedRowCount: 0 }))).toEqual({ verdict: "accepted" });
+  });
+});
+
+// Každé porovnanie s NaN je false, takže bez explicitnej kontroly prejde každou
+// bránou — treba zlyhať UZAVRETO (rejected), nikdy potichu prijať alebo vyhodiť
+// nezachytenú výnimku z funkcie, ktorej zmluvou je vrátiť verdikt.
+describe("judgeSnapshot — zlyhá uzavreto (fail closed) na neplatný vstup", () => {
+  it("odmietne NaN v byteSize aj rowCount namiesto tichého prijatia", () => {
+    const judgement = judgeSnapshot(candidate({ byteSize: NaN, rowCount: NaN }));
+    expect(judgement.verdict).toBe("rejected");
+    expect(judgement.verdict === "rejected" && judgement.reason).toContain("neplatné");
+  });
+
+  it("odmietne neplatný previousRowRatio v limitoch", () => {
+    const judgement = judgeSnapshot(candidate(), {
+      ...DEFAULT_SNAPSHOT_LIMITS,
+      previousRowRatio: NaN,
+    });
+    expect(judgement.verdict).toBe("rejected");
+  });
+
+  // Reťazec spojený zo VŠETKÝCH povinných názvov obsahuje každý z nich ako podreťazec
+  // — `Array.prototype.includes` na poli by to odmietlo (nie je to pole vôbec), no
+  // `"reťazec".includes("meno")` sa správa ako podreťazcová zhoda a "vidí" všetky
+  // stĺpce naraz. Presne toto by bez kontroly typu tichým omylom prešlo cez bránu.
+  it("odmietne columns, ktoré nie sú pole, aj keď reťazec obsahuje všetky mená ako podreťazec", () => {
+    const columnsAsString = REQUIRED_COLUMNS.join(",");
+    const judgement = judgeSnapshot(candidate({ columns: columnsAsString as unknown as string[] }));
+    expect(judgement.verdict).toBe("rejected");
+  });
+
+  it("odmietne columns: null namiesto vyhodenia výnimky", () => {
+    expect(() => judgeSnapshot(candidate({ columns: null as unknown as string[] }))).not.toThrow();
+    const judgement = judgeSnapshot(candidate({ columns: null as unknown as string[] }));
+    expect(judgement.verdict).toBe("rejected");
   });
 });
