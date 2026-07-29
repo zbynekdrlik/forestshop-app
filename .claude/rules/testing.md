@@ -104,3 +104,18 @@ paths:
   parametrizovaný/konštantný raw SQL reťazec priamo do `db.execute(...)`
   (rovnaký vzor ako existujúci `TRUNCATE` v `scripts/e2e-setup.ts`), nie
   query builder.
+- **Chromium loguje "Failed to load resource" do konzoly pre KAŽDÝ `fetch()`
+  s odpoveďou 4xx/5xx, bez ohľadu na to, či ho JS odchytí** — nielen pre
+  `/api/me` 401 (jediná dnes zdokumentovaná výnimka vyššie). Endpoint, ktorého
+  BEŽNÝ, OČAKÁVANÝ domain-level neúspech (napr. "zlé staré heslo" pri zmene
+  hesla, #10) sa niekedy overuje aj cez Playwright s console-monitoringom,
+  preto NESMIE vracať 4xx za taký prípad — porušilo by to zákaz rozširovania
+  výnimky vyššie. Riešenie: vráť **200** s telom nesúcim výsledok
+  (`{ok: false, error: "..."}`), rovnaký vzor ako `/api/catalog/ingest`'s
+  200 `{status: "busy"}`/"rejected" pre iný nechybový výsledok importu — 4xx/5xx
+  si nechaj pre SKUTOČNÉ HTTP-úrovňové chyby (401 nie si prihlásený, 403 CSRF,
+  400 zle tvarovaný vstup, ktorý klient sám nedovolí odoslať). Pozri
+  `http/app.ts`'s `POST /api/me/password` a
+  `change-password.integration.test.ts`/`login.spec.ts`'s dvoj-kontextový
+  e2e test — presne takto sa to odhalilo (e2e test napísaný najprv na 4xx
+  zlyhal na tomto pravidle).
