@@ -154,9 +154,33 @@ paths:
   novo pridaný test.
 - **Playwright s viacerými workermi (predvolený počet, ako aj CI runner)
   môže byť nestály — všetky e2e spec súbory zdieľajú JEDEN bežiaci API
-  server aj JEDNU lokálnu Postgres inštanciu.** Sledované #25/#32:
-  `orders.spec.ts`'s prvý test niekedy zlyhá na chýbajúcom "Na
-  objednanie" nadpise (5s timeout) pri `--workers=2`, spoľahlivo prejde
-  pri `--workers=1`. Potvrdené ako PRE-EXISTING (reprodukované aj na
-  čistom `origin/dev` bez akejkoľvek súvisiacej zmeny) — sledované ako
-  samostatný issue **#32**, nie vec jedného konkrétneho spec súboru.
+  server aj JEDNU lokálnu Postgres inštanciu.** #32 (vyriešené): koreňová
+  príčina NEBOLA rate limiter ani Postgres pool exhaustion (vylúčené
+  priamym dôkazom — 9 volaní `/api/login` na celý beh, ďaleko pod
+  `MAX_ATTEMPTS=10`, žiadna `429`; všetky requesty 60-160ms), ale
+  `login.spec.ts`'s test zmeny hesla, ktorý DOČASNE mení SKUTOČNÉ heslo
+  ZDIEĽANÉHO e2e účtu (`e2e@forestshop.sk`) priamo v DB — súbežný
+  `POST /api/login` z iného spec súboru (`catalog.spec.ts`/
+  `orders.spec.ts`), bežiaci v inom workeri s naprogramovaným pôvodným
+  heslom, mohol spadnúť presne do okna medzi zmenou a vrátením hesla a
+  dostal skutočný `401`. **Všeobecné pravidlo:** ktorýkoľvek e2e test, čo
+  MUTUJE zdieľaný fixture (heslo, rolu, akékoľvek pole zdieľaného riadku),
+  ktorý ČÍTAJÚ aj iné súbežne bežiace spec súbory, potrebuje VLASTNÝ
+  izolovaný fixture riadok — nie zdieľať účet a spoliehať sa na časovanie.
+  Fix: `scripts/e2e-setup.ts` teraz seeduje DRUHÉHO, dedikovaného
+  používateľa (`e2e-heslo@forestshop.sk`) len pre `login.spec.ts`'s test
+  zmeny hesla — nikto iný sa pod ním neprihlasuje. Vynútenie sériového
+  behu (`--workers=1`/`describe.serial`) bolo zámerne zamietnuté ako
+  band-aid, ktorý by nechal presne túto mínu pre AKÝKOĽVEK budúci súbežný
+  test. Regresný dôkaz:
+  `apps/api/tests/e2e-setup-user-isolation.integration.test.ts` (spúšťa
+  SKUTOČNÝ `scripts/e2e-setup.ts` ako podproces, overuje izoláciu priamo
+  cez `login()`/`changePassword()`, mimo HTTP/rate-limitera).
+  **Debug technika pre budúci podobný flake:** `pino` logger tu má default
+  level `debug` (`logger.ts`), ale Playwright svojím `webServer`'s stdout
+  bežne nezobrazuje — spusti lokálnu reprodukciu s
+  `DEBUG=pw:webserver npx playwright test --workers=2`, aby sa JSON logy
+  API servera (vrátane `requestId`/`path`/`status`/`elapsedMs` pre KAŽDÝ
+  request) prepísali do vlastného výstupu; korelácia timestampov medzi
+  zlyhaním a týmito logmi je rýchlejšia cesta k skutočnej príčine než
+  hádanie z popisu symptómu.
