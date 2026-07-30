@@ -173,3 +173,12 @@ paths:
   --failed` — čerstvý pull znova stiahne vrstvu od nuly. Ak sa to isté zopakuje
   DRUHÝKRÁT za sebou, už to nie je transientný jav — over `docker system df`
   (miesto na disku) a zváž reštart `containerd`/`docker` služby na dev2.
+- **DRUHÝ pozorovaný transientný symptom TEJ ISTEJ triedy (#25, 2026-07-30):
+  `docker compose up -d` zlyhá na `Error response from daemon: No such
+  container: <hash>_forestshop-app-1` počas kroku "Recreate"** — opäť žiadna
+  zmena závislostí v danom PR, teda opäť lokálny containerd/docker stav na
+  dev2, nie obsah image. Rovnaká liečba ako vyššie: `gh run rerun <run-id>
+  --failed` (jeden rerun stačil, prešiel hneď). Ak sa PRI DEPLOJI objaví
+  INÁ hláška než "failed to extract layer", nepredpokladaj automaticky inú
+  príčinu — over najprv jednoduchým rerunom, až pri DRUHOM zlyhaní za sebou
+  rieš ako skutočný problém.

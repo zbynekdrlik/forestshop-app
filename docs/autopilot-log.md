@@ -284,3 +284,64 @@ RED→GREEN test names, key decisions, and the shared PR.
   "41 supplier groups, 864 lines" production figures. Zero console
   errors/warnings.
 - Per-ticket Discord card fired (`notify --run-card`, confirmed delivered).
+
+## #25 — Order line state change + audit history (F3)
+
+- Ticket was deliberately split at intake (owner comment recorded
+  2026-07-30): state-change is scoped/clear, "copy order" has no defined
+  output format. Copy-order moved to a new follow-up issue **#31**
+  (`Scope-gate: needs-user-decision`, label `needs-decision`); #25's body
+  rewritten to cover state-change only.
+- Design comments posted BEFORE first code commit:
+  [#25 (main rationale)](https://github.com/zbynekdrlik/forestshop-app/issues/25#issuecomment-5124750130),
+  [#25 (classifier-keyword supplement)](https://github.com/zbynekdrlik/forestshop-app/issues/25#issuecomment-5124899513)
+  — root cause: `order_line.state` (since #21) was READ-only, no write path
+  existed; chosen approach: narrow `POST /api/orders/lines/:lineId/state`
+  (same `requireSameOrigin()+requireUser+requireRole("admin","manazer")`
+  gate as `/api/orders/ingest`) backed by `modules/orders/state.ts`'s
+  `setOrderLineState()` — one transaction (update + `record()` audit,
+  same pattern as `changePassword`); rejected alternative: a general
+  `PATCH /api/orders/lines/:lineId` accepting arbitrary fields, rejected
+  because `quantity`/`variantCode` are importer-owned
+  (`.claude/rules/orders.md`) and a wide endpoint would let a manager
+  accidentally clobber them. No version bump needed — dev
+  (`0.3.0-dev.13`) was already ahead of main (`0.3.0-dev.12`).
+- Commit `7183ade`: new `apps/api/src/modules/orders/state.ts`, new route
+  in `orders-routes.ts`, `OrdersSection.tsx` gets a role-gated `<select>`
+  (admin/manazer, same `CAN_CHANGE_STATE_ROLES` pattern as `CatalogPage`'s
+  `IMPORT_ROLES`) with local-state update on success (no full refetch),
+  `ordersApi.ts`'s `updateOrderLineState()`. Select's `aria-label`
+  deliberately avoids the substring "stav" — it collided with
+  `catalog.spec.ts`'s `getByLabel("Stav")` (Playwright's default substring
+  match), caught by running the FULL e2e suite, not just the new spec.
+  Tests: 5 new integration tests (role gates, 404/400, CSRF) in
+  `orders-http.integration.test.ts`, 4 unit tests in `ordersApi.test.ts`,
+  4 unit tests in `OrdersSection.test.tsx`, 1 new Playwright e2e proving
+  the manager changes a line's state through the real UI and it persists
+  after reload (audit row content itself is asserted at the integration
+  level, per `.claude/rules/testing.md`'s two-tier split).
+- Filed **#32**: `tests/e2e/orders.spec.ts`'s FIRST test intermittently
+  fails under 2-worker Playwright runs (confirmed pre-existing —
+  reproduced on `origin/dev` `917242c` with none of this PR's changes,
+  disappears at `--workers=1`); likely all e2e specs racing the same
+  shared backend/Postgres. Out of scope for #25, left for investigation.
+- PR: **#33** (`dev` → `main`), merged `d49aaf5`. CI: all jobs green
+  (check, integration, e2e, docker-build, version-check) on both push and
+  PR runs.
+- Main-branch Deploy workflow run `30503448643` failed on its first
+  attempt (`docker compose up -d`: "No such container:
+  ..._forestshop-app-1" during container recreate — the same class of
+  transient dev2 containerd race documented in `.claude/rules/deploy.md`,
+  unrelated to this PR's content). `gh run rerun --failed` succeeded
+  immediately (one rerun, per `ci-monitoring.md`'s "one rerun acceptable
+  to rule out a transient").
+- Deployed + verified on https://forestshop-novy.newlevel.media
+  (v0.3.0-dev.13 in DOM footer, `/api/version` commit matches `d49aaf54`):
+  logged in as the real owner account (role `admin`), changed order
+  20261259's line (product "Poľovnícke kraťasy HART GOROSTA-SH") from
+  "Objednané" to "Čaká sa" via the live select, confirmed the DOM showed
+  the new value, reloaded the page and confirmed it PERSISTED (proves the
+  write+audit transaction committed), then restored it back to
+  "Objednané" (real production data, real customer order). Zero console
+  errors beyond the sanctioned unauthenticated `/api/me` 401.
+- Per-ticket Discord card fired (`notify --run-card`, confirmed delivered).
