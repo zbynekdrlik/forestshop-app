@@ -21,15 +21,30 @@ import { log } from "./logger.js";
 
 export interface ShutdownServer {
   close: (callback: (err?: Error) => void) => void;
+  /** Voliteľné — reálny http.Server ju má (Node 18.2+), testovacie fake objekty nemusia. */
+  closeIdleConnections?: () => void;
 }
 
 export interface ShutdownPool {
   end: () => Promise<void>;
 }
 
+export interface ShutdownScheduler {
+  stop: () => void;
+}
+
 export interface ShutdownDeps {
   server: ShutdownServer;
   pool: ShutdownPool;
+  /**
+   * Voliteľné — keď appka beží aj s naplánovanými úlohami (`startScheduler()`),
+   * `.stop()` sa zavolá HNEĎ na začiatku shutdownu, aby počas neho nezačal
+   * nový tick (issue 78 review, finding 1: appka bez tohto rizikovala, že
+   * `pool.end()` bude čakať na DB klienta vzatého rozbehnutou úlohou).
+   * `.stop()` len zruší budúci `setInterval` tick — UŽ bežiacu úlohu
+   * neprerušuje, tá sa dobehne (alebo ju odreže force-exit fallback).
+   */
+  scheduler?: ShutdownScheduler;
   /** Bounded fallback — force-exit ak sa graceful cesta nestihne včas (default 8s). */
   forceExitAfterMs?: number;
   /** Injektovateľné pre testy — reálny default volá process.exit(). */
@@ -39,6 +54,7 @@ export interface ShutdownDeps {
 export function createShutdownHandler({
   server,
   pool,
+  scheduler,
   forceExitAfterMs = 8000,
   exit = (code: number) => process.exit(code),
 }: ShutdownDeps): (signal: NodeJS.Signals) => void {
@@ -66,6 +82,15 @@ export function createShutdownHandler({
     }
     shuttingDown = true;
     log.info({ signal }, "prijatý ukončovací signál — spúšťam graceful shutdown");
+
+    if (scheduler) {
+      scheduler.stop();
+      log.info("plánovač zastavený — žiadny nový tick sa už nespustí");
+    }
+    // Nečaká na callback (na rozdiel od server.close() nižšie) — len urýchli
+    // bežný prípad (žiadne aktívne spojenia), aby server.close() nemusel
+    // čakať na idle keep-alive sokety a nespoliehal sa len na force-exit.
+    server.closeIdleConnections?.();
 
     const forceTimer = setTimeout(() => {
       log.error(

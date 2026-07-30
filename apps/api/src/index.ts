@@ -99,7 +99,7 @@ const app = createApp(db, {
 // dostávajú svoj `run*Ingest` (môže byť `undefined`, keď zodpovedajúca URL
 // nie je nastavená — job to zaznamená ako "failure" s vysvetlením, nikdy sa
 // nepreskočí ticho).
-startScheduler(db, [
+const scheduler = startScheduler(db, [
   catalogImportJob(runIngest),
   pruneRawExportsJob(),
   sessionCleanupJob(),
@@ -135,13 +135,8 @@ if (existsSync(publicDir)) {
 const server = serve({ fetch: app.fetch, port: env.PORT });
 console.log(JSON.stringify({ msg: "api beží", port: env.PORT, version: appVersion() }));
 
-// issue 78: appka nemala žiadny SIGTERM/SIGINT handler — v produkčnom
-// kontajneri (bez init procesu, appka je PID 1) jadro preto default
-// dispozíciu signálu vôbec neaplikovalo a appka SIGTERM úplne ignorovala,
-// kým ju Docker po stop_grace_period nezabil SIGKILLom (viď shutdown.ts pre
-// plné vysvetlenie aj docker-events dôkaz). Explicitný handler toto
-// obchádza — signál sa vždy doručí, bez ohľadu na PID.
-const shutdown = createShutdownHandler({ server, pool });
+// issue 78 — plné vysvetlenie prečo toto existuje je v shutdown.ts.
+const shutdown = createShutdownHandler({ server, pool, scheduler });
 process.on("SIGTERM", () => {
   shutdown("SIGTERM");
 });

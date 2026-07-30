@@ -77,6 +77,57 @@ describe("createShutdownHandler", () => {
     poolEnd = undefined;
   });
 
+  it("prebiehajúci request pri signáli sa dokončí normálne, server sa zavrie až potom", async () => {
+    const url = process.env["DATABASE_URL"];
+    if (url === undefined || url === "") {
+      throw new Error("Integračné testy potrebujú DATABASE_URL na testovaciu databázu");
+    }
+    const { pool } = createDb(url);
+    poolEnd = () => pool.end();
+
+    // Handler zámerne odpovie AŽ po malom oneskorení — simuluje request, ktorý
+    // ešte beží v momente, keď príde ukončovací signál. `server.close()` musí
+    // nechať TENTO request dobehnúť (nezruší ho), len prestane prijímať NOVÉ
+    // spojenia — presne toto správanie tento test dokazuje priamo, nielen
+    // odvodzuje z Node dokumentácie. `Connection: close` je nutné explicitne
+    // nastaviť — bez neho by keep-alive socket ostal otvorený a
+    // `server.close()`'s callback by čakal na Node-ov `keepAliveTimeout`
+    // (default 5s), namiesto toho, aby sa zavrel hneď po dokončení odpovede.
+    server = createServer((_req, res) => {
+      setTimeout(() => {
+        res.setHeader("Connection", "close");
+        res.end("ok");
+      }, 150);
+    });
+    const { port } = await new Promise<{ port: number }>((resolve) => {
+      server?.listen(0, () => {
+        const address = server?.address();
+        resolve({ port: typeof address === "object" && address !== null ? address.port : 0 });
+      });
+    });
+
+    const exit = vi.fn<(code: number) => void>();
+    const handler = createShutdownHandler({ server, pool, exit });
+
+    const responsePromise = fetch(`http://127.0.0.1:${port.toString()}/`);
+    // Signál príde krátko po odoslaní requestu, kým appka ešte odpovedá.
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    handler("SIGTERM");
+
+    const response = await responsePromise;
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe("ok");
+
+    await vi.waitFor(
+      () => {
+        expect(exit).toHaveBeenCalledWith(0);
+      },
+      { timeout: 3000 },
+    );
+    expect(server.listening).toBe(false);
+    poolEnd = undefined;
+  });
+
   it("vynúti exit(1), keď sa server.close() nestihne skončiť včas", async () => {
     const neverClosingServer = {
       close: () => {
