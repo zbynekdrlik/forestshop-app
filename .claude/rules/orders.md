@@ -208,3 +208,17 @@ paths:
   `isLineResolved`/`summarizeOrderLines` odtiaľ — nie novú vlastnú
   definíciu, riziko rozídenia (napr. počítať len podľa `state`, čo by
   ignorovalo `ordered=true` pri `state="objednane"`).
+- **Kanonické per-produktové zoskupenie naprieč riadkami DODÁVATEĽA (issue
+  62) je `apps/web/src/ordersSummary.ts`'s `computeVariantTotals`/
+  `formatVariantTotalChip`** — priamy náprotivok starej appky's
+  `groupQtyTotals`/`totalChipSpec` (`app.js:1918-1962`). Kľúčuje podľa
+  `variantCode` (kód UŽ nesie aj veľkosť), počíta nad CELOU (nefiltrovanou)
+  `group.lines` danej skupiny, nikdy nad pohľadom zúženým `hideResolved` —
+  volajúci (`OrdersSection.tsx`) posiela vždy `group.lines`. Chip sa smie
+  zobraziť LEN keď produkt má v skupine ≥2 riadky (`lineCount >= 2`). Ako
+  odvodená hodnota počítaná PRI KAŽDOM RENDRI (rovnaký vzor ako
+  `isLineResolved`/`summarizeOrderLines` vyššie) sa automaticky prepočíta na
+  akúkoľvek zmenu `suppliers` stavu — žiadny extra React stav, žiadny
+  imperatívny prepočítavací krok. ĎALŠIA funkcia potrebujúca "súčet toho
+  istého produktu v rámci dodávateľa" nech importuje odtiaľto, nie novú
+  vlastnú definíciu.

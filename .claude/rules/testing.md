@@ -273,3 +273,18 @@ paths:
   PRED testami, ktoré stav/`ordered`/`order_open_status` mutujú. Pri
   ďalšom teste, ktorý potrebuje pôvodné dáta, zváž POZÍCIU v súbore skôr
   než pridávanie nových fixtúrových riadkov k existujúcemu dodávateľovi.
+- **Test, ktorý potrebuje DVA riadky s TÝM ISTÝM `variantCode` v jednej
+  skupine dodávateľa (issue 62 — súčtový chip), nesmie ich pridať do
+  `DODAVATEL-TEST-1` ani `(bez dodávateľa)`** — `orders.spec.ts`'s úplne
+  prvý test (`E2E_FILTRE_EMAIL`) overuje PRESNÝ globálny počet riadkov
+  ("Všetci (N)", "Ostáva vybaviť X z N") naprieč VŠETKÝMI dodávateľmi, takže
+  pridanie čohokoľvek k existujúcej skupine ho ticho rozbije. Riešenie: NOVÁ,
+  dovtedy nepoužitá skupina dodávateľa — vezmi jeden nepoužívaný fixtúrový
+  variant (grep, že jeho kód sa nikde netestuje, `.claude/rules/catalog.md`'s
+  CSV-editačný vzor vyššie) a daj mu vo fixtúre nový `supplier` reťazec.
+  Global count assertions v prvom teste treba ZVÝŠIŤ presne o toľko nových
+  riadkov, koľko pridáš (a o zodpovedajúci "ostáva vybaviť"/bucket rozdiel,
+  podľa toho, v akom stave nové riadky sú) — spočítaj to explicitne, nehádaj.
+  Ako pri predchádzajúcom bode: nová skupina potrebuje aj VLASTNÝ izolovaný
+  e2e účet (balík je na hranici `MAX_ATTEMPTS=10`), nikdy ďalšie prihlásenie
+  pod zdieľaným `e2e@forestshop.sk`.
