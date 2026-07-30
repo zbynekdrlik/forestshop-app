@@ -182,7 +182,14 @@ it("manažér označí celú skupinu dodávateľa ako objednané naraz, JEDEN ag
   const bulkUdalosti = udalosti.filter((e) => e.action === "order_line.ordered.bulk_changed");
   expect(bulkUdalosti).toHaveLength(1);
   expect(bulkUdalosti[0]?.actorUserId).toBe(userId);
-  expect(bulkUdalosti[0]?.entityId).toBe("Dodávateľ Bulk");
+  // Review of PR 75, finding 1: hromadná akcia mutuje `order_line` riadky,
+  // nie e-mailový kontakt dodávateľa — entity musí byť rovnaké ako pri
+  // KAŽDEJ inej `order_line`-mutujúcej akcii (`state.ts:47,94`), inak by
+  // audit dopyt filtrovaný podľa `entity = "order_line"` túto hromadnú zmenu
+  // ticho vynechal. `entityId` ostáva `null` (žiadny JEDEN riadok) —
+  // dodávateľ je v `data` nižšie.
+  expect(bulkUdalosti[0]?.entity).toBe("order_line");
+  expect(bulkUdalosti[0]?.entityId).toBeNull();
   expect(bulkUdalosti[0]?.data).toMatchObject({
     supplier: "Dodávateľ Bulk",
     ordered: true,
