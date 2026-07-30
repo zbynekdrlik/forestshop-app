@@ -63,6 +63,7 @@ export function ChangePasswordForm({
         <input
           id="old-password"
           type="password"
+          autoComplete="current-password"
           value={oldPassword}
           onChange={(e) => { setOldPassword(e.target.value); }}
           required
@@ -71,6 +72,7 @@ export function ChangePasswordForm({
         <input
           id="new-password"
           type="password"
+          autoComplete="new-password"
           value={newPassword}
           onChange={(e) => { setNewPassword(e.target.value); }}
           required
@@ -79,6 +81,7 @@ export function ChangePasswordForm({
         <input
           id="new-password-confirm"
           type="password"
+          autoComplete="new-password"
           value={newPasswordConfirm}
           onChange={(e) => { setNewPasswordConfirm(e.target.value); }}
           required

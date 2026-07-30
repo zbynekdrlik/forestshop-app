@@ -327,3 +327,7 @@ it("dva variantné kódy toho istého produktu sa páruju NEZÁVISLE (unique na 
   expect(s?.state).toBe("potvrdene");
   expect(m?.state).toBe("navrhnute"); // druhá veľkosť zostáva nedotknutá
 });
+
+// Testy pre no-op re-potvrdenie (dva rôzni súbežní manažéri) sú v
+// `pairing-reconfirm.integration.test.ts` — vlastný súbor kvôli
+// `max-lines` ESLint pravidlu (400 riadkov), nie kvôli inej téme.

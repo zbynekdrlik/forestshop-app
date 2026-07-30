@@ -282,7 +282,17 @@ export function PairingSection({
                         <button
                           type="button"
                           data-testid={`confirm-${item.variantCode}`}
-                          disabled={item.supplierUrl === null || busyCode === item.variantCode}
+                          // Už potvrdený riadok (state "potvrdene") sa opravuje
+                          // len cez "✗ Zadať inú adresu" (rovno zapíše novú
+                          // adresu a potvrdí), nikdy opätovným kliknutím na
+                          // "✓ Potvrdiť" — server (`state.ts`) takéto opätovné
+                          // potvrdenie berie ako no-op a zachová PÔVODNÉHO
+                          // potvrdzujúceho, takže tlačidlo tu len predchádza
+                          // zbytočnému kliknutiu (review nález na PR 54,
+                          // issue 45), server ostáva skutočnou bránou.
+                          disabled={
+                            item.supplierUrl === null || item.state === "potvrdene" || busyCode === item.variantCode
+                          }
                           onClick={() => {
                             confirmAsIs(item);
                           }}

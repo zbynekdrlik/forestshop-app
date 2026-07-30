@@ -35,9 +35,10 @@ export async function confirmPairing(db: Database, input: ConfirmPairingInput): 
     // tomto repe): bez neho by dve súbežné potvrdenia TOHO ISTÉHO variantu
     // mohli obe prečítať tú istú (čoskoro zastaranú) uloženú adresu pred
     // tým, než druhá transakcia commitne svoj UPSERT. Zámok drží riadok len
-    // do konca TEJTO transakcie.
+    // do konca TEJTO transakcie. `state` sa číta popri `supplierUrl` kvôli
+    // no-op re-potvrdeniu nižšie.
     const [existing] = await tx
-      .select({ supplierUrl: pairings.supplierUrl })
+      .select({ supplierUrl: pairings.supplierUrl, state: pairings.state })
       .from(pairings)
       .where(eq(pairings.variantCode, input.variantCode))
       .for("update")
@@ -45,7 +46,23 @@ export async function confirmPairing(db: Database, input: ConfirmPairingInput): 
 
     const manualOverride = input.supplierUrl !== undefined;
     const finalUrl = manualOverride ? input.supplierUrl : (existing?.supplierUrl ?? null);
-    if (finalUrl === null || finalUrl === "") return "missing_url";
+    // Zod (`pairing-routes.ts`'s `confirmPairingBody`) vyžaduje
+    // `.trim().min(1).url()` na `supplierUrl`, a toto je JEDINÝ zápis do
+    // `pairings.supplier_url` v celej appke — takže uložená adresa je vždy
+    // buď `null`, alebo už overená neprázdna URL. Prázdny reťazec sem
+    // preto nikdy nemôže dôjsť (review nález na PR 54, issue 45).
+    if (finalUrl === null) return "missing_url";
+
+    // No-op re-potvrdenie (review nález na PR 54, issue 45): keď je riadok
+    // UŽ `potvrdene` a výsledná adresa sa oproti uloženej NEMENÍ, nebola
+    // urobená žiadna nová rozhodnutie — zachovaj PÔVODNÉHO potvrdzujúceho a
+    // jeho čas namiesto toho, aby ich ticho prepísal ktokoľvek, kto na už
+    // potvrdený riadok znova klikne (alebo zavolá API priamo). Skutočná
+    // ZMENA adresy (ručná oprava na inú adresu) JE nové rozhodnutie a ide
+    // normálnou cestou nižšie — aktualizuje potvrdzujúceho aj audit.
+    if (existing?.state === "potvrdene" && existing.supplierUrl === finalUrl) {
+      return "ok";
+    }
 
     // Upsert — funguje rovnako, či `pairing` riadok pre tento variant už
     // existuje (typicky po #46 auto-návrhu), alebo ešte vôbec neexistuje
