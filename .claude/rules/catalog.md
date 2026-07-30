@@ -157,3 +157,19 @@ paths:
   generika (efektívne `<any>`) — `getReader()` treba pretypovať na
   `ReadableStreamDefaultReader<Uint8Array>`, inak ESLint hlási
   `@typescript-eslint/no-unsafe-*` na každom `value`/`byteLength`.
+- **`internalNote` (odkaz na dodávateľa) je vlastnosť PRODUKTU, `externalCode`
+  (kód u dodávateľa) je vlastnosť VARIANTU — overené priamo na reálnom
+  exporte, nie predpoklad (issue 67).** Nad 14 014 riadkami: `internalNote`
+  bolo v rámci JEDNÉHO `guid` vždy zhodné (0 zo 4 519 produktov malo viac než
+  jednu hodnotu) → ide do `product.internal_note` (rovnaká first-wins cesta
+  ako `supplier`, `ingest.ts`'s `productValues` mapa). `externalCode` sa
+  naopak medzi veľkosťami TOHO ISTÉHO produktu bežne LÍŠI (napr. jeden
+  produkt mal `AJ26-L`/`AJ26-M`/`AJ26-S`/`AJ26-XL`) → ide priamo do
+  `variant.external_code`, rovnako ako `pairCode`. Extrakcia URL z
+  `internalNote` (tri tvary: holý odkaz / odkaz s popisom / žiadny odkaz) je
+  ČISTÁ funkcia `modules/catalog/supplier-link.ts`, volaná AŽ pri čítaní
+  (`orders/queries.ts`, `orders/mail.ts`) — žiadny ďalší odvodený stĺpec.
+  Test na KAŽDÉ ďalšie nové pole z exportu, o ktorom nie je jasné, či patrí
+  produktu alebo variantu: over na reálnych dátach (`python3` + `csv.DictReader`
+  nad `parovanie_produktov/data/backups/export_*.csv`, READ-ONLY), nikdy
+  nehádaj z názvu stĺpca.
