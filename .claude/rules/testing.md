@@ -132,3 +132,31 @@ paths:
   `change-password.integration.test.ts`/`login.spec.ts`'s dvoj-kontextový
   e2e test — presne takto sa to odhalilo (e2e test napísaný najprv na 4xx
   zlyhal na tomto pravidle).
+- **Playwright's `getByLabel`/`getByText` robia SUBSTRING zhodu (case-
+  insensitive), nie presnú, pokiaľ nedáš `{ exact: true }`** — nové
+  `aria-label` pridané do jednej sekcie môže tichým spôsobom kolidovať s
+  `getByLabel(...)` v INOM e2e súbore, ktorý beží na tej istej stránke
+  (celá appka je JEDNA stránka, `App.tsx` renderuje `CatalogPage` +
+  `OrdersSection` + `SchedulerSection` naraz). Zistené #25: nový
+  `aria-label={"Stav riadku " + ...}` na stavovom selecte v
+  `OrdersSection.tsx` kolidoval s `catalog.spec.ts`'s
+  `getByLabel("Stav")` (katalógov filter) — "strict mode violation:
+  resolved to 3 elements". Odhalilo sa AŽ pri behu CELÉHO e2e balíka
+  (`pnpm --filter @forestshop/web e2e`), nie len nového spec súboru — pri
+  pridávaní `aria-label`/`getByLabel` VŽDY spusti celý balík, nikdy len
+  nový spec súbor. **Oprav to na strane KOLÍDUJÚCEHO (existujúceho, užšieho)
+  labelu, nie obetovaním prístupnosti nového prvku** — code review na #25
+  upozornil, že prvá oprava (odstránenie slova "stav" z nového
+  `aria-label`u) by čítačke obrazovky vôbec neoznámila, čo nový select robí.
+  Skutočná oprava: existujúci `catalog.spec.ts` dostal
+  `getByLabel("Stav", { exact: true })`, nový select v `OrdersSection.tsx`
+  si ponechal plnohodnotný popis (`"Zmeniť stav riadku objednávky ..."`).
+  novo pridaný test.
+- **Playwright s viacerými workermi (predvolený počet, ako aj CI runner)
+  môže byť nestály — všetky e2e spec súbory zdieľajú JEDEN bežiaci API
+  server aj JEDNU lokálnu Postgres inštanciu.** Sledované #25/#32:
+  `orders.spec.ts`'s prvý test niekedy zlyhá na chýbajúcom "Na
+  objednanie" nadpise (5s timeout) pri `--workers=2`, spoľahlivo prejde
+  pri `--workers=1`. Potvrdené ako PRE-EXISTING (reprodukované aj na
+  čistom `origin/dev` bez akejkoľvek súvisiacej zmeny) — sledované ako
+  samostatný issue **#32**, nie vec jedného konkrétneho spec súboru.

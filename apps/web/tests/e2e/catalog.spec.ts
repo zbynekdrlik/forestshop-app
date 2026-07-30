@@ -46,7 +46,7 @@ test("filter podľa stavu zúži zoznam na predajné varianty", async ({ page })
   await page.getByRole("button", { name: "Prihlásiť sa" }).click();
 
   await expect(page.getByTestId("total")).toHaveText("Nájdených: 35");
-  await page.getByLabel("Stav").selectOption("sellable");
+  await page.getByLabel("Stav", { exact: true }).selectOption("sellable");
   await page.getByRole("button", { name: "Hľadať" }).click();
 
   await expect(page.getByTestId("total")).toHaveText("Nájdených: 6");
@@ -62,7 +62,7 @@ test("filter 'Chýbajúce' nájde presne označený variant a riadok ukazuje, od
   await page.getByRole("button", { name: "Prihlásiť sa" }).click();
 
   await expect(page.getByTestId("total")).toHaveText("Nájdených: 35");
-  await page.getByLabel("Stav").selectOption("missing");
+  await page.getByLabel("Stav", { exact: true }).selectOption("missing");
   await page.getByRole("button", { name: "Hľadať" }).click();
 
   await expect(page.getByTestId("total")).toHaveText("Nájdených: 1");

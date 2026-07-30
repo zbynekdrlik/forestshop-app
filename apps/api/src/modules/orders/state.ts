@@ -21,10 +21,19 @@ export async function setOrderLineState(
   input: SetOrderLineStateInput,
 ): Promise<SetOrderLineStateResult> {
   return db.transaction(async (tx) => {
+    // `.for("update")` — bez tohto by dve súbežné zmeny stavu TOHO ISTÉHO
+    // riadku mohli zapísať audit s neplatným `from` (druhá transakcia by
+    // prečítala stav PRED tým, než prvá commitla svoj UPDATE, nie tesne pred
+    // vlastným zápisom). Výsledný stĺpec `state` by bol aj tak správny
+    // (posledný zápis vyhráva), ale história ("z akého stavu do akého") by
+    // klamala. Zámok drží riadok len do konca TEJTO transakcie (rovnako
+    // krátko ako `changePassword`), druhá súbežná požiadavka počká na
+    // COMMIT prvej a prečíta si už aktuálny stav (code review finding, #25).
     const [line] = await tx
       .select({ orderId: orderLines.orderId, variantCode: orderLines.variantCode, state: orderLines.state })
       .from(orderLines)
       .where(eq(orderLines.id, input.lineId))
+      .for("update")
       .limit(1);
     if (line === undefined) return "not_found";
 

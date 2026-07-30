@@ -129,13 +129,15 @@ export function OrdersSection({
                   <td>
                     {canChangeState ? (
                       <select
-                        // Zámerne BEZ slova "stav" — Playwright's `getByLabel`
-                        // robí substring zhodu bez ohľadu na veľkosť písmen, takže
-                        // by kolidovalo s katalógovým `<label>Stav</label>`
-                        // (`CatalogPage.tsx`, `getByLabel("Stav")` v
-                        // `catalog.spec.ts`) a e2e test by dostal "strict mode
-                        // violation" (viacero zhôd).
-                        aria-label={`Riadok objednávky ${line.externalOrderId} / ${line.variantCode}`}
+                        // Code review finding (#25): pôvodne bez slova "stav"
+                        // v aria-labeli (obchádzka Playwright's substring
+                        // `getByLabel("Stav")` kolízie s katalógovým filtrom),
+                        // čo by čítačke obrazovky neoznámilo, čo tento prvok
+                        // robí. Skutočná oprava patrí na stranu KOLÍDUJÚCEHO
+                        // testu (`catalog.spec.ts` teraz používa
+                        // `{ exact: true }`), nie na obetovanie prístupnosti
+                        // tu — tento select smie mať plnohodnotný popis.
+                        aria-label={`Zmeniť stav riadku objednávky ${line.externalOrderId} / ${line.variantCode}`}
                         data-testid={`state-select-${line.lineId}`}
                         value={line.state}
                         disabled={busyLineId === line.lineId}
