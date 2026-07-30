@@ -86,6 +86,24 @@ paths:
   60035, BR1611, 4859), v cp1250 a s pôvodnou hlavičkou. Fixtúra má 35 riadkov, takže
   testy aj `scripts/e2e-setup.ts` posúvajú limity brány (`minByteSize: 1_000`,
   `absoluteMinRows: 10`) — pomer 0,8 zostáva rovnaký ako v produkcii.
+- **Bezpečná úprava JEDNÉHO poľa vo fixtúre (issue 62 — potreboval nový
+  `supplier` pre jeden rezervný variant, "60055/10") je BYTE-FOR-BYTE, nikdy
+  read-decode-write celého súboru.** Fixtúra má NEROVNOMERNÉ kvótovanie:
+  hlavičkový riadok je BEZ úvodzoviek (`code;pairCode;name;...`), ale KAŽDÝ
+  dátový riadok má KAŽDÉ pole zacitované (`"60055/10";"77";...`, aj polia bez
+  špeciálnych znakov) — `csv.writer(..., quoting=csv.QUOTE_ALL)` nad celým
+  súborom by preto ticho pridalo úvodzovky aj do hlavičky a rozišlo by sa od
+  bajtovej zhody. Bezpečný postup (python3, mimo appky): `csv.reader` cez
+  `cp1250`-dekódovaný text nájde cieľový riadok podľa `row[0] == kód`,
+  `csv.writer(..., quoting=csv.QUOTE_ALL, lineterminator='\r\n')` serializuje
+  LEN TEN JEDEN riadok naspäť (cp1250-encoded), over `raw.count(old_bytes) ==
+  1` PRED nahradením (dôkaz, že sa serializovaná podoba riadku zhoduje s tým,
+  čo je skutočne v súbore, a že je v súbore JEDINÝ raz) a `raw.replace(old,
+  new)` len na surových bajtoch — nikdy neprepisuj celý dekódovaný text a
+  neukladaj ho späť ako celok. Pri výbere KTORÝ nepoužitý variant zmeniť:
+  over `grep`-om, že jeho kód sa nikde v `apps/api/src/**/*.test.ts` ani
+  `apps/api/tests/**/*.test.ts` nespomína menovite (`60055/10` bol dovtedy
+  úplne netestovaný, na rozdiel od `60055/8`, ktorý map-row.test.ts používa).
 - **Import beží v jednej transakcii po dávkach 500 riadkov.** Väčšia dávka narazí na
   limit 65 535 parametrov na príkaz v protokole Postgresu (tabuľka `variant` má
   25 stĺpcov po pridaní `guid`, review task-5-fix-1). Ako PRVÝ príkaz v transakcii
