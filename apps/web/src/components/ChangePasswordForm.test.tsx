@@ -29,8 +29,22 @@ function odosli(): void {
   fireEvent.click(screen.getByRole("button", { name: "Zmeniť heslo" }));
 }
 
+// Issue 47 (komentár k zbaleniu): Chrome logoval accessibility hint kvôli
+// chýbajúcemu username poľu na tomto formulári — over, že skryté pole
+// existuje a nesie prihláseného používateľa (nikdy neide na server, viď
+// komentár pri props v `ChangePasswordForm.tsx`).
+it("nesie skryté autoComplete=\"username\" pole s e-mailom prihláseného používateľa", () => {
+  render(<ChangePasswordForm email="e2e@forestshop.sk" onSessionExpired={() => {}} />);
+
+  const usernameField = document.querySelector('input[name="username"]');
+  expect(usernameField).not.toBeNull();
+  expect(usernameField?.getAttribute("autocomplete")).toBe("username");
+  expect((usernameField as HTMLInputElement).value).toBe("e2e@forestshop.sk");
+  expect(usernameField?.hasAttribute("hidden")).toBe(true);
+});
+
 it("nezhodujúce sa potvrdenie nového hesla ukáže chybu a nezavolá server", () => {
-  render(<ChangePasswordForm onSessionExpired={() => {}} />);
+  render(<ChangePasswordForm email="manazer@forestshop.sk" onSessionExpired={() => {}} />);
   vyplnIba({ stareHeslo: "stare-heslo", noveHeslo: "nove-heslo-123", potvrdenie: "ine-heslo-456" });
   odosli();
 
@@ -39,7 +53,7 @@ it("nezhodujúce sa potvrdenie nového hesla ukáže chybu a nezavolá server", 
 });
 
 it("príliš krátke nové heslo ukáže chybu a nezavolá server", () => {
-  render(<ChangePasswordForm onSessionExpired={() => {}} />);
+  render(<ChangePasswordForm email="manazer@forestshop.sk" onSessionExpired={() => {}} />);
   vyplnIba({ stareHeslo: "stare-heslo", noveHeslo: "krat", potvrdenie: "krat" });
   odosli();
 
@@ -49,7 +63,7 @@ it("príliš krátke nové heslo ukáže chybu a nezavolá server", () => {
 
 it("úspešná zmena ukáže potvrdenie a vyprázdni polia", async () => {
   postChangePassword.mockResolvedValue({ ok: true });
-  render(<ChangePasswordForm onSessionExpired={() => {}} />);
+  render(<ChangePasswordForm email="manazer@forestshop.sk" onSessionExpired={() => {}} />);
   vyplnIba({ stareHeslo: "stare-heslo", noveHeslo: "nove-heslo-123", potvrdenie: "nove-heslo-123" });
   odosli();
 
@@ -61,7 +75,7 @@ it("úspešná zmena ukáže potvrdenie a vyprázdni polia", async () => {
 
 it("zlé staré heslo zo servera ukáže chybovú hlášku servera", async () => {
   postChangePassword.mockResolvedValue({ ok: false, error: "Nesprávne staré heslo" });
-  render(<ChangePasswordForm onSessionExpired={() => {}} />);
+  render(<ChangePasswordForm email="manazer@forestshop.sk" onSessionExpired={() => {}} />);
   vyplnIba({ stareHeslo: "zle-heslo", noveHeslo: "nove-heslo-123", potvrdenie: "nove-heslo-123" });
   odosli();
 
@@ -72,7 +86,7 @@ it("zlé staré heslo zo servera ukáže chybovú hlášku servera", async () =>
 it("keď relácia medzitým vypršala, zavolá onSessionExpired", async () => {
   postChangePassword.mockRejectedValue(new PasswordChangeUnauthorizedError());
   const onSessionExpired = vi.fn();
-  render(<ChangePasswordForm onSessionExpired={onSessionExpired} />);
+  render(<ChangePasswordForm email="manazer@forestshop.sk" onSessionExpired={onSessionExpired} />);
   vyplnIba({ stareHeslo: "stare-heslo", noveHeslo: "nove-heslo-123", potvrdenie: "nove-heslo-123" });
   odosli();
 
@@ -90,7 +104,7 @@ it("tlačidlo sa počas prebiehajúcej požiadavky vypne a druhý klik nevyšle 
       }),
   );
 
-  render(<ChangePasswordForm onSessionExpired={() => {}} />);
+  render(<ChangePasswordForm email="manazer@forestshop.sk" onSessionExpired={() => {}} />);
   vyplnIba({ stareHeslo: "stare-heslo", noveHeslo: "nove-heslo-123", potvrdenie: "nove-heslo-123" });
   odosli();
 

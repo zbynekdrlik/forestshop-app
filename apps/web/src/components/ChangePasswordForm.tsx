@@ -7,8 +7,19 @@ import { PasswordChangeUnauthorizedError, postChangePassword } from "../password
 const MIN_NEW_PASSWORD_LENGTH = 8;
 
 export function ChangePasswordForm({
+  email,
   onSessionExpired,
 }: {
+  // E-mail PRIHLÁSENÉHO používateľa (issue 47, komentár k zbaleniu) — nesie
+  // ho len skryté `autoComplete="username"` pole nižšie, aby Chrome prestal
+  // pri KAŽDOM načítaní logovať accessibility hint "Password forms should
+  // have (optionally hidden) username fields" (formulár mal predtým 3
+  // heslové polia a ŽIADNE meno používateľa — PR 56 doplnila len
+  // `autoComplete="current-password"`/`"new-password"` na samotné polia,
+  // toto rieši ZVYŠNÝ hint). Appka žiadny <form> na zmenu e-mailu nemá, takže
+  // toto pole nikdy nič neodošle na server ani ho nemení — čisto pre
+  // prehliadačov password manager.
+  readonly email: string;
   readonly onSessionExpired: () => void;
 }): JSX.Element {
   const [oldPassword, setOldPassword] = useState("");
@@ -59,6 +70,9 @@ export function ChangePasswordForm({
     <section>
       <h2>Zmena hesla</h2>
       <form onSubmit={(e) => { void submit(e); }}>
+        {/* Skryté, nikdy needituje/needosiela nič — len autoComplete="username"
+            pre prehliadačov password manager (viď komentár pri props vyššie). */}
+        <input type="text" name="username" autoComplete="username" value={email} readOnly hidden />
         <label htmlFor="old-password">Staré heslo</label>
         <input
           id="old-password"

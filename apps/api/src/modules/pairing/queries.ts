@@ -12,6 +12,16 @@ export interface PairingListItem {
   readonly variantCode: string;
   readonly variantName: string;
   readonly sizeLabel: string | null;
+  // `productKey`/`productName` (issue 47, F4 rozdelenie podľa veľkostí) —
+  // umožňuje frontendu zoskupiť plochý zoznam variantov podľa produktu, aby
+  // manažér videl/zadal JEDNU adresu pre VŠETKY veľkosti naraz namiesto
+  // opakovania toho istého N-krát. Zámerne BEZ akéhokoľvek nového stĺpca v
+  // `pairing`/novej migrácie — `pairing` je už dnes kľúčovaná per variant
+  // (veľkosť), takže "rozdelené/nerozdelené" sa ODVODZUJE na frontende z
+  // toho, či sa `supplierUrl` naprieč variantmi produktu zhoduje (viď
+  // `apps/web/src/pairingGroups.ts`), nikdy sa nepersistuje.
+  readonly productKey: string;
+  readonly productName: string;
   // `product.supplier` — INFORMATÍVNY reťazec zo Shoptet exportu (kto nám
   // produkt oficiálne dodáva), NIE cieľ párovania. Cieľ párovania je
   // `supplierUrl` nižšie (konkrétna adresa produktu u veľkoobchodného
@@ -44,6 +54,8 @@ const listColumns = {
   variantCode: variants.code,
   variantName: variants.name,
   sizeLabel: variants.sizeLabel,
+  productKey: products.key,
+  productName: products.name,
   productSupplier: products.supplier,
   supplierUrl: pairings.supplierUrl,
   pairingState: pairings.state,
@@ -55,6 +67,8 @@ type ListRow = {
   readonly variantCode: string;
   readonly variantName: string;
   readonly sizeLabel: string | null;
+  readonly productKey: string;
+  readonly productName: string;
   readonly productSupplier: string | null;
   readonly supplierUrl: string | null;
   readonly pairingState: PairingDisplayState | null;
@@ -67,6 +81,8 @@ function toItem(row: ListRow): PairingListItem {
     variantCode: row.variantCode,
     variantName: row.variantName,
     sizeLabel: row.sizeLabel,
+    productKey: row.productKey,
+    productName: row.productName,
     productSupplier: row.productSupplier,
     supplierUrl: row.supplierUrl,
     // Chýbajúci riadok (LEFT JOIN nenašiel zhodu) → `pairingState` je `null`

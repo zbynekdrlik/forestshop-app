@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type SyntheticEvent, type JSX } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type SyntheticEvent, type JSX } from "react";
 import type { Me } from "../api.js";
 import {
   confirmPairing,
@@ -7,11 +7,14 @@ import {
   type PairingItem,
   type PairingState,
 } from "../pairingApi.js";
-
-const STATE_LABELS: Record<PairingItem["state"], string> = {
-  navrhnute: "Navrhnuté",
-  potvrdene: "Potvrdené",
-};
+import {
+  assertBulkConfirmSucceeded,
+  groupPairingItems,
+  isGroupHomogeneous,
+  type ProductGroup,
+} from "../pairingGroups.js";
+import { PairingGroupRow } from "./PairingGroupRow.js";
+import { PairingVariantRow } from "./PairingVariantRow.js";
 
 // Rovnaké dve role, ktoré server vyžaduje pre `POST /api/pairing/confirm`
 // (`requireRole("admin", "manazer")`, `pairing-routes.ts`) — server ostáva
@@ -34,11 +37,23 @@ export function PairingSection({
   const [searchError, setSearchError] = useState("");
   const canConfirm = CAN_CONFIRM_ROLES.has(role);
 
-  // Ručné zadanie/oprava adresy pre PRÁVE JEDEN riadok naraz (rovnaký vzor
+  // Ručné zadanie/oprava adresy pre PRÁVE JEDEN variant naraz (rovnaký vzor
   // ako `OrdersSection`'s e-mailová úprava dodávateľa).
   const [editingCode, setEditingCode] = useState<string | null>(null);
   const [urlDraft, setUrlDraft] = useState("");
   const [busyCode, setBusyCode] = useState<string | null>(null);
+  // Bulk (per-produkt) obdoba vyššie — issue 47, F4 rozdelenie podľa
+  // veľkostí. Zámerne SAMOSTATNÝ stav (nie zdieľaný s `editingCode`/
+  // `busyCode`) — jednovariantný riadok aj naďalej beží presne pôvodnou
+  // cestou, bulk cesta pribúda popri nej, nikdy ju nenahrádza.
+  const [editingGroupKey, setEditingGroupKey] = useState<string | null>(null);
+  const [groupUrlDraft, setGroupUrlDraft] = useState("");
+  const [busyGroupKey, setBusyGroupKey] = useState<string | null>(null);
+  // Produkty, ktoré manažér RUČNE otvoril cez "✂ Rozdeliť na veľkosti" —
+  // prechodné (transient), nikdy sa nepersistuje (viď návrhový komentár na
+  // issue 47). Efektívne rozdelené produkty (rôzne adresy naprieč
+  // veľkosťami) sa zobrazujú rozdelené AJ BEZ prítomnosti tu.
+  const [manuallyOpenedGroups, setManuallyOpenedGroups] = useState<ReadonlySet<string>>(new Set());
   const [actionError, setActionError] = useState("");
 
   // Len najnovšia požiadavka smie zapísať výsledok — rovnaký dôvod ako
@@ -92,6 +107,8 @@ export function PairingSection({
   const refetch = useCallback(() => {
     search(query, state);
   }, [search, query, state]);
+
+  const groups = useMemo(() => groupPairingItems(items), [items]);
 
   // "✓ jedným klikom" — potvrdí aktuálne uloženú/navrhnutú adresu bez zmeny.
   const confirmAsIs = useCallback(
@@ -153,14 +170,177 @@ export function PairingSection({
     [refetch, onSessionExpired, urlDraft],
   );
 
+  // Bulk obdoby vyššie — issue 47: rovnaká akcia, len aplikovaná na VŠETKY
+  // varianty produktu naraz (paralelné volania existujúceho `POST /api/
+  // pairing/confirm`, žiadny nový backend endpoint). `refetch()` beží VŽDY,
+  // aj pri čiastočnom zlyhaní — časť veľkostí mohla prejsť.
+  const confirmGroupAsIs = useCallback(
+    (group: ProductGroup) => {
+      const url = group.variants[0]?.supplierUrl ?? null;
+      if (url === null) return;
+      setActionError("");
+      setBusyGroupKey(group.productKey);
+      const codes = group.variants.map((v) => v.variantCode);
+      Promise.allSettled(codes.map((code) => confirmPairing(code)))
+        .then((results) => {
+          refetch();
+          assertBulkConfirmSucceeded(codes, results);
+        })
+        .catch((err: unknown) => {
+          if (err instanceof PairingUnauthorizedError) {
+            onSessionExpired();
+            return;
+          }
+          setActionError(err instanceof Error ? err.message : "Potvrdenie sa nepodarilo.");
+        })
+        .finally(() => {
+          setBusyGroupKey(null);
+        });
+    },
+    [refetch, onSessionExpired],
+  );
+
+  const startEditGroup = useCallback((group: ProductGroup) => {
+    setEditingGroupKey(group.productKey);
+    setGroupUrlDraft(group.variants[0]?.supplierUrl ?? "");
+    setActionError("");
+  }, []);
+
+  const cancelEditGroup = useCallback(() => {
+    setEditingGroupKey(null);
+    setActionError("");
+  }, []);
+
+  const saveManualUrlForGroup = useCallback(
+    (group: ProductGroup) => {
+      setActionError("");
+      setBusyGroupKey(group.productKey);
+      const url = groupUrlDraft.trim();
+      const codes = group.variants.map((v) => v.variantCode);
+      Promise.allSettled(codes.map((code) => confirmPairing(code, url)))
+        .then((results) => {
+          setEditingGroupKey(null);
+          refetch();
+          assertBulkConfirmSucceeded(codes, results);
+        })
+        .catch((err: unknown) => {
+          if (err instanceof PairingUnauthorizedError) {
+            onSessionExpired();
+            return;
+          }
+          setActionError(err instanceof Error ? err.message : "Uloženie adresy sa nepodarilo.");
+        })
+        .finally(() => {
+          setBusyGroupKey(null);
+        });
+    },
+    [refetch, onSessionExpired, groupUrlDraft],
+  );
+
+  const openSplit = useCallback((productKey: string) => {
+    setManuallyOpenedGroups((prev) => new Set(prev).add(productKey));
+  }, []);
+
+  const closeSplit = useCallback((productKey: string) => {
+    setManuallyOpenedGroups((prev) => {
+      if (!prev.has(productKey)) return prev;
+      const next = new Set(prev);
+      next.delete(productKey);
+      return next;
+    });
+  }, []);
+
   const showingAll = total === 0 || items.length >= total;
+
+  // Jednovariantný produkt → presne dnešný riadok, nezmenené. Viacvariantný
+  // produkt s ROZDIELNYMI adresami ("efektívne rozdelený") alebo ručne
+  // otvorený cez "✂ Rozdeliť na veľkosti" → hlavičkový riadok produktu +
+  // rovnaký per-variantný riadok pre KAŽDÚ jeho veľkosť. Inak (homogénny,
+  // neotvorený) → jeden zbalený riadok s bulk akciami (issue 47).
+  function renderGroup(group: ProductGroup): readonly JSX.Element[] {
+    if (group.variants.length === 1) {
+      const only = group.variants[0];
+      if (only === undefined) return [];
+      return [
+        <PairingVariantRow
+          key={only.variantCode}
+          item={only}
+          canConfirm={canConfirm}
+          editingCode={editingCode}
+          urlDraft={urlDraft}
+          busyCode={busyCode}
+          onUrlDraftChange={setUrlDraft}
+          onStartEdit={startEdit}
+          onCancelEdit={cancelEdit}
+          onSaveManualUrl={saveManualUrl}
+          onConfirmAsIs={confirmAsIs}
+        />,
+      ];
+    }
+
+    const homogeneous = isGroupHomogeneous(group);
+    const split = !homogeneous || manuallyOpenedGroups.has(group.productKey);
+    if (!split) {
+      return [
+        <PairingGroupRow
+          key={group.productKey}
+          group={group}
+          canConfirm={canConfirm}
+          editingGroupKey={editingGroupKey}
+          groupUrlDraft={groupUrlDraft}
+          busyGroupKey={busyGroupKey}
+          onGroupUrlDraftChange={setGroupUrlDraft}
+          onStartEditGroup={startEditGroup}
+          onCancelEditGroup={cancelEditGroup}
+          onSaveManualUrlForGroup={saveManualUrlForGroup}
+          onConfirmGroupAsIs={confirmGroupAsIs}
+          onOpenSplit={openSplit}
+        />,
+      ];
+    }
+
+    return [
+      <tr key={`${group.productKey}-header`} data-testid={`pairing-group-header-${group.productKey}`}>
+        <td colSpan={canConfirm ? 8 : 7}>
+          <strong>{group.productName}</strong> — {String(group.variants.length)} veľkostí
+          {homogeneous && canConfirm && (
+            <button
+              type="button"
+              data-testid={`merge-${group.productKey}`}
+              onClick={() => {
+                closeSplit(group.productKey);
+              }}
+            >
+              ↩ Zlúčiť veľkosti
+            </button>
+          )}
+        </td>
+      </tr>,
+      ...group.variants.map((item) => (
+        <PairingVariantRow
+          key={item.variantCode}
+          item={item}
+          canConfirm={canConfirm}
+          editingCode={editingCode}
+          urlDraft={urlDraft}
+          busyCode={busyCode}
+          onUrlDraftChange={setUrlDraft}
+          onStartEdit={startEdit}
+          onCancelEdit={cancelEdit}
+          onSaveManualUrl={saveManualUrl}
+          onConfirmAsIs={confirmAsIs}
+        />
+      )),
+    ];
+  }
 
   return (
     <section>
       <h2>Kontrola párovania</h2>
       <p>
         Náš produkt oproti navrhnutej/zadanej adrese u dodávateľa — jedným klikom potvrďte zhodu,
-        alebo zadajte inú adresu ručne.
+        alebo zadajte inú adresu ručne. Produkt s viacerými veľkosťami môžete rozdeliť a nastaviť
+        každej veľkosti vlastnú adresu.
       </p>
 
       <form onSubmit={submit}>
@@ -230,91 +410,7 @@ export function PairingSection({
             </tr>
           </thead>
           <tbody>
-            {items.map((item) => (
-              <tr key={item.variantCode} data-testid={`pairing-${item.variantCode}`}>
-                <td>{item.variantCode}</td>
-                <td>{item.variantName}</td>
-                <td>{item.sizeLabel ?? "—"}</td>
-                <td>{item.productSupplier ?? "—"}</td>
-                <td>
-                  {editingCode === item.variantCode ? (
-                    <>
-                      <input
-                        aria-label={`Adresa u dodávateľa pre ${item.variantCode}`}
-                        type="url"
-                        value={urlDraft}
-                        disabled={busyCode === item.variantCode}
-                        onChange={(e) => {
-                          setUrlDraft(e.target.value);
-                        }}
-                      />
-                      <button
-                        type="button"
-                        disabled={busyCode === item.variantCode || urlDraft.trim() === ""}
-                        onClick={() => {
-                          saveManualUrl(item.variantCode);
-                        }}
-                      >
-                        Potvrdiť
-                      </button>
-                      <button type="button" disabled={busyCode === item.variantCode} onClick={cancelEdit}>
-                        Zrušiť
-                      </button>
-                    </>
-                  ) : item.supplierUrl === null ? (
-                    "—"
-                  ) : (
-                    <a href={item.supplierUrl} target="_blank" rel="noreferrer">
-                      {item.supplierUrl}
-                    </a>
-                  )}
-                </td>
-                <td>{STATE_LABELS[item.state]}</td>
-                <td>
-                  {item.confirmedByName === null
-                    ? "—"
-                    : `${item.confirmedByName} (${new Date(item.confirmedAt ?? "").toLocaleDateString("sk-SK")})`}
-                </td>
-                {canConfirm && (
-                  <td>
-                    {editingCode !== item.variantCode && (
-                      <>
-                        <button
-                          type="button"
-                          data-testid={`confirm-${item.variantCode}`}
-                          // Už potvrdený riadok (state "potvrdene") sa opravuje
-                          // len cez "✗ Zadať inú adresu" (rovno zapíše novú
-                          // adresu a potvrdí), nikdy opätovným kliknutím na
-                          // "✓ Potvrdiť" — server (`state.ts`) takéto opätovné
-                          // potvrdenie berie ako no-op a zachová PÔVODNÉHO
-                          // potvrdzujúceho, takže tlačidlo tu len predchádza
-                          // zbytočnému kliknutiu (review nález na PR 54,
-                          // issue 45), server ostáva skutočnou bránou.
-                          disabled={
-                            item.supplierUrl === null || item.state === "potvrdene" || busyCode === item.variantCode
-                          }
-                          onClick={() => {
-                            confirmAsIs(item);
-                          }}
-                        >
-                          ✓ Potvrdiť
-                        </button>
-                        <button
-                          type="button"
-                          data-testid={`reject-${item.variantCode}`}
-                          disabled={busyCode === item.variantCode}
-                          onClick={() => {
-                            startEdit(item);
-                          }}
-                        >
-                          ✗ Zadať inú adresu
-                        </button>
-                      </>
-                    )}
-                  </td>
-                )}
-              </tr>
-            ))}
+            {groups.flatMap((group) => renderGroup(group))}
           </tbody>
         </table>
       )}

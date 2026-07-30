@@ -29,6 +29,21 @@ const E2E_HESLO = "e2e-test-heslo"; // musí sa zhodovať s hodnotou v login.spe
 // ktorého heslo sa kedy mení — nikto iný sa pod ním neprihlasuje.
 const E2E_HESLO_ZMENA_EMAIL = "e2e-heslo@forestshop.sk"; // musí sa zhodovať s hodnotou v login.spec.ts
 
+// Issue 47 (F4 rozdelenie podľa veľkostí) — VLASTNÝ, IZOLOVANÝ účet pre
+// `pairing.spec.ts`'s test skupinového (bulk) párovania. Dôvod je INÝ ako pri
+// `E2E_HESLO_ZMENA_EMAIL` vyššie (tam ide o súbežnú MUTÁCIU hesla), ale
+// rovnaký mechanizmus rieši aj tento: `checkLoginRateLimit`
+// (`apps/api/src/http/login-rate-limit.ts`) počíta KAŽDÝ `POST /api/login`
+// (úspešný aj neúspešný) proti dvojici (IP, e-mail), max. 10 v 5-minútovom
+// okne — a CELÝ e2e beh zdieľa JEDEN dlho bežiaci API server proces. Nový
+// test (9 veľkostí naraz) pridal 3. prihlásenie pod `e2e@forestshop.sk` v
+// `pairing.spec.ts` a spolu so zvyškom balíka (catalog+login+orders+pairing)
+// to prekročilo 10 prihlásení pod TOU ISTOU dvojicou (IP, e-mail) — reálne
+// pozorované zlyhanie "Nesprávny e-mail alebo heslo" pri `--workers=2`, nie
+// flaka. Vlastný e-mail = vlastný rate-limit priestor, žiadny zásah do
+// bezpečnostného limitu.
+const E2E_SKUPINY_EMAIL = "e2e-skupiny@forestshop.sk"; // musí sa zhodovať s hodnotou v pairing.spec.ts
+
 const { db, pool } = createDb();
 // Konštantný literál bez interpolácie — obyčajný reťazec je tu rovnako bezpečný
 // ako `sql` tagovaná šablóna (tú používa ekvivalentný apps/api/tests/helpers/db.ts),
@@ -61,6 +76,12 @@ await db.insert(users).values({
 // SAMOSTATNÝM riadkom v `users`, izolovaným od zdieľaného účtu vyššie.
 await db.insert(users).values({
   email: E2E_HESLO_ZMENA_EMAIL,
+  passwordHash: await hashPassword(E2E_HESLO),
+  displayName: "E2E Manažér",
+  role: "manazer",
+});
+await db.insert(users).values({
+  email: E2E_SKUPINY_EMAIL,
   passwordHash: await hashPassword(E2E_HESLO),
   displayName: "E2E Manažér",
   role: "manazer",

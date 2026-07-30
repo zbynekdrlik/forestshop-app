@@ -579,4 +579,47 @@ nové heslo sa nikde v pushnutom obsahu nenachádza.
   ODSTRÁNENÝ priamo v produkčnej DB (`DELETE FROM pairing WHERE
   variant_code = '0.8331.MC9'`), aby v produkcii nezostala fingovaná
   adresa vyzerajúca ako reálne potvrdené párovanie.
+
+## Fixup review nálezov z PR #54 (bez GitHub issue — 2026-07-30)
+
+- Bez trackovacieho issue (dispatch inštrukcia): tri review nálezy z PR #54
+  (issue 45) — mŕtvy kód, skutočný defekt "krádež attribution" pri
+  opätovnom potvrdení, chýbajúce `autocomplete`.
+- **Skutočný defekt** (`state.ts`'s `confirmPairing()`): `onConflictDoUpdate`
+  bezohľadne prepisoval `confirmedBy`/`confirmedAt` pri KAŽDOM volaní —
+  druhý manažér kliknúci "✓ Potvrdiť" na už potvrdenom riadku ticho ukradol
+  attribution bez toho, aby urobil nové rozhodnutie. Oprava: no-op
+  re-potvrdenie (žiadny upsert, žiadny audit) presne keď je riadok už
+  `potvrdene` A výsledná adresa je NEZMENENÁ; skutočná zmena adresy zostáva
+  novým rozhodnutím (upsert + audit ako doteraz). Web strana: "✓ Potvrdiť"
+  teraz aj disabled pri `state === "potvrdene"` (UX vrstva, server ostáva
+  bránou).
+- Mŕtvy kód (`finalUrl === ""` vetva) odstránený — jediný zapisovač
+  `pairings.supplier_url` je táto istá funkcia, kŕmená len `null` alebo
+  zod-overenou neprázdnou URL.
+- RED→GREEN: `6e3f229` (red, nový integračný test v novom
+  `pairing-reconfirm.integration.test.ts` zlyhá proti pôvodnému kódu) →
+  `0562063` (green, oprava + mŕtvy kód). Nový súbor vznikol PRI red commite
+  kvôli `max-lines` (400) ESLint pravidlu — `pairing-http.integration.test.ts`
+  by inak prekročil limit; nie je to iná téma, len rozdelenie kvôli dĺžke.
+- `autoComplete="current-password"`/`"new-password"` pridané do
+  `ChangePasswordForm.tsx` (`43c4638`).
+- PR: **#56** (`dev` → `main`), merged `ce4a3ab`. CI all green (check,
+  integration, e2e, docker-build, version-check) na push aj pull_request
+  behu; main push CI `version-check` bežal `skipped` (očakávané — main-push
+  event, nie dev-vs-main porovnanie).
+- Deployed + verified na https://forestshop-novy.newlevel.media
+  (v0.3.0-dev.26, `/api/version` commit sedí s `ce4a3ab`). Produkcia mala v
+  čase overovania 0 potvrdených pairing riadkov (`#46` auto-kandidáti ešte
+  nepristali), takže disabled-stav "✓ Potvrdiť" na už potvrdenom riadku sa
+  overil rovnakým testovacím vzorom ako pri PR #54: reálny variant
+  `0.8331.MC9` → "✗ Zadať inú adresu" → testovacia adresa → "Potvrdiť" →
+  overené `confirmDisabled: true`, `rejectDisabled: false`, stĺpec
+  "Potvrdil" ukázal "Zbyněk (30. 7. 2026)"; konzola 0 chýb/0 varovaní
+  (jediná VERBOSE hláška je nesúvisiaci Chrome hint o chýbajúcom
+  username poli, nie o autocomplete). Testovací pairing riadok následne
+  ODSTRÁNENÝ priamo v produkčnej DB (rovnaký `DELETE FROM pairing WHERE
+  variant_code = '0.8331.MC9'` postup), variant overený späť v stave
+  "Navrhnuté" bez adresy.
+- Per-ticket Discord card fired (`notify --run-card`, confirmed delivered).
 - Per-ticket Discord card fired (`notify --run-card`, confirmed delivered).
