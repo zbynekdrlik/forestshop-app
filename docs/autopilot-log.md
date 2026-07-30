@@ -154,9 +154,9 @@ RED→GREEN test names, key decisions, and the shared PR.
   (v0.3.0-dev.6 in DOM footer): wrong-old-password rejected with the
   expected message and zero console errors/warnings; successful change
   accepted using the LIVE owner account (`vychod@varos.sk`); logged out and
-  confirmed the OLD password (`sokol-bystrina-jaseb-898`) now fails login
+  confirmed the OLD password (`<heslo — mimo repozitára>`) now fails login
   while the temporary new one succeeds; changed the password back to
-  `sokol-bystrina-jaseb-898` and confirmed via a final logout+login that it
+  `<heslo — mimo repozitára>` and confirmed via a final logout+login that it
   is restored exactly. Console during the whole live check showed only the
   already-documented `/api/me`/`/api/login` 401 patterns (expected,
   deliberate test actions), no genuine errors.
@@ -448,3 +448,34 @@ kontakt následne odstránený (`"hasEmail":false`). Žiadna PR/CI — pure
 config. Playbook: `orders.md` doplnený o (a) dvojkrokový UI send flow
 (náhľad → potvrdenie) a (b) že `MAIL_*` sú od teraz reálne nastavené +
 `MAIL_BCC` zatiaľ appka nepodporuje (vedomé, mimo rozsahu #38).
+
+## #40 — Živé heslo majiteľa v čistom texte v docs/autopilot-log.md
+
+Nález pred zverejnením repa: pri overovaní #18 (zmena hesla) sa do tohto
+logu zapísala skutočná hodnota živého hesla k účtu majiteľa
+(`vychod@varos.sk`) — v ~40 historických commitoch na `dev` aj `main`.
+Dizajnový komentár (príčina + zvolený prístup + zamietnutá alternatíva
+prepisu histórie) zapísaný na tiket PRED touto zmenou:
+https://github.com/zbynekdrlik/forestshop-app/issues/40#issuecomment-5128673051.
+
+Riešenie bez prepisovania histórie (`commit-conventions.md` to zakazuje):
+1. Heslo majiteľa ROTOVANÉ cez živé `POST /api/me/password` na
+   https://forestshop-novy.newlevel.media — overené: prihlásenie s NOVÝM
+   heslom 200, prihlásenie so STARÝM heslom teraz 401. Hodnota nikde
+   necommitovaná — `<heslo — mimo repozitára>`.
+2. `docs/autopilot-log.md` (riadky ~156-159): obe plaintextové výskyty
+   nahradené `<heslo — mimo repozitára>`.
+3. Nové pravidlo `.claude/rules/sensitive-values.md` (`paths:` na `docs/**`,
+   `.claude/**`; súbor sa NEvolá `secrets.md` — taký názov si vlastný
+   `block-sensitive-staging.sh` hook zamieňa za skutočný súbor s tajomstvami
+   a odmieta ho stagovať): skutočné heslá/tokeny/Shoptet `hash=` sa nikdy
+   nezapisujú do repozitára.
+4. `CLAUDE.md` už správne uvádzalo repo ako `(public)` (z predošlého
+   pokusu o zverejnenie, ktorý práve tento audit zastavil) — žiadna
+   zmena netreba, main session prepne viditeľnosť na verejnú hneď po
+   zlúčení tejto vetvy.
+
+Žiadna PR do `main` — zámerne zostáva na `dev`; main session koordinuje
+zverejnenie repa + obnovenie CI (GitHub Actions bolo blokované limitom
+účtu, #39) + merge. Grep diffu pred pushom potvrdil, že ani staré, ani
+nové heslo sa nikde v pushnutom obsahu nenachádza.

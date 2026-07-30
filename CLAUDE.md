@@ -29,3 +29,4 @@ Per-area rules live in `.claude/rules/<area>.md` with `paths:` frontmatter.
 - katalóg zo Shoptetu (import, snapshoty, dostupnosť) → `.claude/rules/catalog.md`
 - plánovač úloh (F2 — nočné joby, job_run, advisory zámok) → `.claude/rules/scheduler.md`
 - objednávky zo Shoptetu (F3 — import, sčítanie riadkov, pseudo-položky) → `.claude/rules/orders.md`
+- citlivé hodnoty (heslá/tokeny/hash= sa nikdy nepíšu do repa) → `.claude/rules/sensitive-values.md`
