@@ -428,3 +428,23 @@ nastavenie e-mailu pre reálneho dodávateľa (BETALOV) v produkcii — perzistu
 po reloade, náhľad správne agregoval 88 skutočných otvorených položiek
 (pluralizácia "88 položiek"), následne ZRUŠENÉ bez odoslania a e-mail vrátený
 na nenastavený; konzola čistá (len povolený `/api/me` 401).
+
+## #38 — Nastaviť odosielanie mailov na dev2 (MAIL_* v /srv/forestshop/.env)
+
+Čisto serverová konfigurácia, ŽIADNA zmena kódu (appka `env.ts` +
+`modules/mail/transport.ts` + `docker-compose.prod.yml` už plne
+podporovali `MAIL_HOST/PORT/USER/PASS/FROM` z #31/PR #37). Majiteľ
+rozhodol: rovnaká mailová schránka ako stará appka
+(`parovanie_produktov`), údaje z jej gitignorovaného `data/.mail_env`.
+`MAIL_HOST/PORT/USER/PASS/FROM` doplnené priamo na dev2 do
+`/srv/forestshop/.env` (mode 600) cez ssh stdin — hodnoty nikdy
+nevypísané do terminálu/logu. Kontajner reštartovaný (`docker compose up
+-d app`), zostal na `0.3.0-dev.17` (= main). Overené END-TO-END: dočasný
+`supplier_contact` pre BETALOV nastavený na majiteľovu vlastnú adresu
+(`vychod@varos.sk`), reálne odoslané cez UI ("Poslať objednávku
+e-mailom" → náhľad → "Odoslať"), server log potvrdil
+`"supplier":"BETALOV","status":"sent"` (skutočné SMTP, 1013 ms), dočasný
+kontakt následne odstránený (`"hasEmail":false`). Žiadna PR/CI — pure
+config. Playbook: `orders.md` doplnený o (a) dvojkrokový UI send flow
+(náhľad → potvrdenie) a (b) že `MAIL_*` sú od teraz reálne nastavené +
+`MAIL_BCC` zatiaľ appka nepodporuje (vedomé, mimo rozsahu #38).

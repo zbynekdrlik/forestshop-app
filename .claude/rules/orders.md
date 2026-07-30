@@ -130,3 +130,19 @@ paths:
   `testing.md`) — E2E overuje len nastavenie e-mailu + náhľad, skutočné
   odoslanie má integračný test s falošným transportom
   (`supplier-mail.integration.test.ts`).
+- **UI "✉️ Poslať objednávku e-mailom" je DVOJKROKOVÉ.** Prvý klik len
+  otvorí náhľad (komu/predmet/telo) s tlačidlami "Odoslať"/"Zrušiť" priamo
+  pod pôvodným tlačidlom — skutočný `POST .../order-mail/send` ide až po
+  druhom kliku na "Odoslať". Pri manuálnom/Playwright overovaní na živom
+  systéme na to netreba zabudnúť (#38, 2026-07-30) — jeden klik ešte nič
+  neodošle.
+- **`MAIL_HOST/PORT/USER/PASS/FROM` na dev2 sú od #38 (2026-07-30) reálne
+  nastavené** — appka odosiela cez ROVNAKÚ SMTP schránku ako stará appka
+  (`parovanie_produktov`, majiteľovo rozhodnutie), hodnoty prevzaté z jej
+  gitignorovaného `data/.mail_env`. Overené end-to-end reálnym mailom cez
+  dočasný `supplier_contact` kontakt nastavený na majiteľovu vlastnú
+  adresu, po overení znova odstránený. `MAIL_BCC` (BCC-vždy konvencia
+  starej appky) táto appka zatiaľ NEPODPORUJE vôbec (nie je v `env.ts` ani
+  `transport.ts`) — vedomé rozhodnutie mimo rozsahu #38, nie prehliadnutá
+  medzera; ak niekedy pribudne, ide do `env.ts` vedľa `MAIL_FROM` a
+  `createSmtpMailTransport`'s recipient zoznamu.
