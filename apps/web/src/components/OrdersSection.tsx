@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useState, type JSX } from "react";
 import type { Me } from "../api.js";
-import { computeVariantTotals, isLineResolved } from "../ordersSummary.js";
-import { OrderLineRow } from "./OrderLineRow.js";
+import { isLineResolved } from "../ordersSummary.js";
 import { OrderOpenStatusesPanel } from "./OrderOpenStatusesPanel.js";
 import { OrdersToolbar } from "./OrdersToolbar.js";
-import { SupplierActionsPanel } from "./SupplierActionsPanel.js";
+import { SupplierOrderGroup } from "./SupplierOrderGroup.js";
 import {
+  assignOrderLineSupplier as assignOrderLineSupplierApi,
   fetchOpenOrders,
   fetchSupplierOrderMailPreview,
+  NEZNAMY_DODAVATEL,
   OrdersUnauthorizedError,
   sendSupplierOrderMail,
   setSupplierEmail,
@@ -163,6 +164,33 @@ export function OrdersSection({
         });
     },
     [onSessionExpired],
+  );
+
+  // issue 63: ručné priradenie dodávateľa riadku bez dodávateľa. PLNÝ refetch
+  // po úspechu (nie lokálna oprava) — priradenie mení SKUPINU riadku
+  // (`ordersApi.ts`'s `assignOrderLineSupplier` komentár vysvetľuje prečo).
+  const [busySupplierLineId, setBusySupplierLineId] = useState<string | null>(null);
+
+  const assignSupplier = useCallback(
+    (lineId: string, supplier: string) => {
+      setStateError("");
+      setBusySupplierLineId(lineId);
+      assignOrderLineSupplierApi(lineId, supplier)
+        .then(() => {
+          load();
+        })
+        .catch((err: unknown) => {
+          if (err instanceof OrdersUnauthorizedError) {
+            onSessionExpired();
+            return;
+          }
+          setStateError(err instanceof Error ? err.message : "Priradenie dodávateľa sa nepodarilo.");
+        })
+        .finally(() => {
+          setBusySupplierLineId(null);
+        });
+    },
+    [load, onSessionExpired],
   );
 
   // Hromadné označenie/zrušenie CELEJ skupiny dodávateľa naraz (stará appka's
@@ -336,6 +364,13 @@ export function OrdersSection({
     0,
   );
 
+  // issue 63: UŽ známe pravopisy dodávateľov (bez zástupného
+  // "(bez dodávateľa)") pre `<datalist>` našepkávanie — z toho, čo appka UŽ
+  // má načítané (`suppliers`), žiadna nová GET trasa netreba. `Set` odstráni
+  // prípadné duplicity (viac skupín s tým istým zobrazovaným pravopisom by
+  // dnes nemalo nastať, ale je to lacná poistka).
+  const knownSuppliers = [...new Set(suppliers.map((g) => g.supplier).filter((s) => s !== NEZNAMY_DODAVATEL))].sort();
+
   return (
     <section className="orders-section">
       {!loaded && <p>Načítavam otvorené objednávky…</p>}
@@ -361,82 +396,47 @@ export function OrdersSection({
             : "Tento dodávateľ je vybavený — vybavené riadky sú skryté."}
         </p>
       )}
-      {filteredGroups.map((group) => {
-        const visibleLines = hideResolved ? group.lines.filter((line) => !isLineResolved(line)) : group.lines;
-        if (visibleLines.length === 0) return null;
-        // issue 62: súčty sa počítajú nad CELOU (nefiltrovanou) skupinou
-        // dodávateľa, nikdy nad `visibleLines` — chip nesmie zmiznúť/zmeniť
-        // hodnotu len preto, že prepínač "skryť vybavené" skryl sesterský
-        // riadok toho istého produktu (`.claude/rules/orders.md`'s zámer
-        // pre `outstandingOf` v starej appke).
-        const variantTotals = computeVariantTotals(group.lines);
-        return (
-          <div key={group.supplier} className="order-group" data-testid={`supplier-${group.supplier}`}>
-            <SupplierActionsPanel
-              group={group}
-              canChangeState={canChangeState}
-              editingEmailSupplier={editingEmailSupplier}
-              emailDraft={emailDraft}
-              emailBusy={emailBusy}
-              emailError={emailError}
-              onEmailDraftChange={setEmailDraft}
-              onStartEditEmail={startEditEmail}
-              onSaveEmail={saveEmail}
-              onCancelEditEmail={cancelEditEmail}
-              busyOrderedSupplier={busyOrderedSupplier}
-              busyOrderedLineId={busyOrderedLineId}
-              onToggleGroupOrdered={toggleGroupOrdered}
-              onCopyOrderToClipboard={copyOrderToClipboard}
-              previewSupplier={previewSupplier}
-              preview={preview}
-              previewError={previewError}
-              sendBusy={sendBusy}
-              sendResult={sendResult}
-              onOpenPreview={openPreview}
-              onClosePreview={closePreview}
-              onConfirmSend={confirmSend}
-            />
-            <table className="orders-table">
-              <thead>
-                <tr>
-                  {/* issue 60: odškrtávacie políčko — JEDINÉ miesto na obrazovke,
-                      ktoré sa smie volať "Objednané" (viď `STATE_LABELS`
-                      a stĺpec dátumu nižšie, obe premenované, aby nekolidovali). */}
-                  <th>Objednané</th>
-                  <th>Objednávka</th>
-                  <th>Zákazník</th>
-                  <th>Kód</th>
-                  <th>Produkt</th>
-                  <th>Veľkosť</th>
-                  <th>Množstvo</th>
-                  <th>Dodávateľ</th>
-                  <th>Stav</th>
-                  <th>Dátum objednávky</th>
-                  <th>Komentár</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visibleLines.map((line) => (
-                  <OrderLineRow
-                    key={line.lineId}
-                    line={line}
-                    canChangeState={canChangeState}
-                    busyLineId={busyLineId}
-                    busyOrderedLineId={busyOrderedLineId}
-                    // Review of PR 75, finding 6: kým hromadná akcia pre TOHTO
-                    // dodávateľa beží, žiadny riadok jeho skupiny sa nesmie dať
-                    // meniť per-riadkovo naraz.
-                    supplierBusy={busyOrderedSupplier === group.supplier}
-                    variantTotal={variantTotals.get(line.variantCode)}
-                    onChangeState={changeState}
-                    onChangeOrdered={changeOrdered}
-                  />
-                ))}
-              </tbody>
-            </table>
-          </div>
-        );
-      })}
+      {/* issue 63: JEDEN zdieľaný datalist pre všetky priraďovacie polia
+          (`OrderLineRow.tsx`'s `list="known-suppliers"`) — voľba dodávateľa
+          sa nemení podľa skupiny/riadku, takže stačí jeden globálny zoznam. */}
+      <datalist id="known-suppliers">
+        {knownSuppliers.map((supplier) => (
+          <option key={supplier} value={supplier} />
+        ))}
+      </datalist>
+      {filteredGroups.map((group) => (
+        <SupplierOrderGroup
+          key={group.supplier}
+          group={group}
+          hideResolved={hideResolved}
+          canChangeState={canChangeState}
+          busyLineId={busyLineId}
+          busyOrderedLineId={busyOrderedLineId}
+          busyOrderedSupplier={busyOrderedSupplier}
+          busySupplierLineId={busySupplierLineId}
+          onChangeState={changeState}
+          onChangeOrdered={changeOrdered}
+          onAssignSupplier={assignSupplier}
+          editingEmailSupplier={editingEmailSupplier}
+          emailDraft={emailDraft}
+          emailBusy={emailBusy}
+          emailError={emailError}
+          onEmailDraftChange={setEmailDraft}
+          onStartEditEmail={startEditEmail}
+          onSaveEmail={saveEmail}
+          onCancelEditEmail={cancelEditEmail}
+          onToggleGroupOrdered={toggleGroupOrdered}
+          onCopyOrderToClipboard={copyOrderToClipboard}
+          previewSupplier={previewSupplier}
+          preview={preview}
+          previewError={previewError}
+          sendBusy={sendBusy}
+          sendResult={sendResult}
+          onOpenPreview={openPreview}
+          onClosePreview={closePreview}
+          onConfirmSend={confirmSend}
+        />
+      ))}
     </section>
   );
 }

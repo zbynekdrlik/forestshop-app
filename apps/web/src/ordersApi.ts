@@ -29,7 +29,18 @@ const orderLineSchema = z.object({
   supplierUrl: z.string().regex(/^https?:\/\//).nullable(),
   supplierNote: z.string().nullable(),
   externalCode: z.string().nullable(),
+  // issue 63: `true`, keď `product.supplier` je v katalógu `null` — presne
+  // tie riadky appka nechá manažéra ručne priradiť dodávateľovi.
+  // `manualSupplierOverride` je aktuálne uložené priradenie, `null` keď
+  // zatiaľ žiadne nie je.
+  supplierAssignable: z.boolean(),
+  manualSupplierOverride: z.string().nullable(),
 });
+
+// issue 63: zrkadlí `queries.ts`'s `NEZNAMY_DODAVATEL` — musí byť IDENTICKÝ
+// reťazec, aby autocomplete (`OrdersSection.tsx`) vedel vylúčiť zástupnú
+// skupinu zo zoznamu známych dodávateľov.
+export const NEZNAMY_DODAVATEL = "(bez dodávateľa)";
 
 // Zrkadlí `OrdersIngestResult` z `apps/api/src/modules/orders/ingest.ts` —
 // rovnaký vzor ako katalógov `ingestOutcomeSchema` (`catalogApi.ts`). Na
@@ -166,6 +177,20 @@ export async function updateOrderLineOrdered(lineId: string, ordered: boolean): 
     body: JSON.stringify({ ordered }),
   });
   await readJson(response, "Zmena príznaku objednané sa nepodarila");
+}
+
+// issue 63: ručné priradenie dodávateľa riadku, ktorého `product.supplier` je
+// `null`. Platí pre celý PRODUKT (server-strana `assignOrderLineSupplier`),
+// nie len tento jeden riadok — volajúci (`OrdersSection.tsx`) preto po
+// úspechu robí PLNÝ refetch (`fetchOpenOrders`), nie lokálnu opravu stavu:
+// riadok mení SKUPINU, rovnaký dôvod ako `PairingSection.tsx` po potvrdení.
+export async function assignOrderLineSupplier(lineId: string, supplier: string): Promise<void> {
+  const response = await fetch(`/api/orders/lines/${lineId}/supplier`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ supplier }),
+  });
+  await readJson(response, "Priradenie dodávateľa sa nepodarilo");
 }
 
 const setSupplierLinesOrderedResultSchema = z.object({ ok: z.literal(true), ordered: z.boolean(), lineCount: z.number() });

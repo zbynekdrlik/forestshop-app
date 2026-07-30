@@ -11,7 +11,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { variants } from "./schema-catalog.js";
+import { products, variants } from "./schema-catalog.js";
 
 // Stav riadku objednávky ako automat (návrh, kap. 4): objednané → čaká sa →
 // skladom → nedostupné. Zámerne PROSTÝ enum na `order_line.state`, nie
@@ -87,6 +87,30 @@ export const orderOpenStatuses = pgTable("order_open_status", {
 export const supplierContacts = pgTable("supplier_contact", {
   supplier: text("supplier").primaryKey(),
   email: text("email"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// issue 63: ručné priradenie dodávateľa k produktu, ktorého `product.supplier`
+// je `null` (Shoptet export ho nenesie). Kľúčované PRODUKTOM (`product.key`),
+// NIE variantom — `product.supplier` je vlastnosť CELÉHO produktu naprieč
+// veľkosťami (`schema-catalog.ts`'s komentár k `products.supplier`), presne
+// to, čo "platí aj pre ďalšie riadky toho istého tovaru" (ticket) žiada bez
+// ďalšieho "rozšír na súrodencov" kroku pri zápise — čítanie ho vyrieši
+// automaticky cez JOIN na `productKey`. Samostatná tabuľka (nie priamy zápis
+// do `product.supplier`) preto, lebo nočný katalógový re-import
+// (`catalog/ingest.ts`) `product.supplier` VŽDY prepíše podľa Shoptet
+// exportu — priamy zápis by prežil len do ďalšieho importu. Efektívny
+// dodávateľ je všade `coalesce(product.supplier, override.supplier)`
+// (`modules/orders/supplier-key.ts`) — override je FALLBACK pre "zatiaľ bez
+// dodávateľa", nikdy trvalý pin: keď Shoptet raz dodá reálnu hodnotu, tá
+// vyhráva. `ON DELETE CASCADE` — produkt sa reálne nikdy nemaže (rovnaký
+// vzor ako `variant`), ale keby niekedy áno, osamotený override riadok bez
+// zmyslu nemá dôvod prežiť.
+export const productSupplierOverrides = pgTable("product_supplier_override", {
+  productKey: text("product_key")
+    .primaryKey()
+    .references(() => products.key, { onDelete: "cascade" }),
+  supplier: text("supplier").notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

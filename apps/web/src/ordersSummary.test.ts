@@ -100,6 +100,20 @@ it("formatVariantTotalChip vráti null, keď produkt má v skupine LEN jeden ria
   expect(formatVariantTotalChip(vt)).toBeNull();
 });
 
+// issue 63 (nález pri kontrole issue 62): chip sa doteraz rozhodoval LEN
+// podľa `lineCount < 2`, nie podľa zvyšku — opakovaný produkt, ktorý je UŽ
+// celý vybavený, by preto navždy visel s "Σ spolu 0 ks".
+it("formatVariantTotalChip vráti null, keď je produkt s ≥2 riadkami UŽ CELÝ vybavený (remaining === 0)", () => {
+  const totals = computeVariantTotals([
+    variantLine("4859/46", 3, "objednane", true), // odškrtnutý → vybavený
+    variantLine("4859/46", 2, "skladom", false), // posunutý stav → vybavený
+  ]);
+  const vt = totals.get("4859/46");
+  if (vt === undefined) throw new Error("4859/46 musí byť v mape");
+  expect(vt.remaining).toBe(0);
+  expect(formatVariantTotalChip(vt)).toBeNull();
+});
+
 it("formatVariantTotalChip s ≥2 riadkami vráti text so ZOSTÁVAJÚCIM množstvom a tooltip s CELKOVÝM aj zostávajúcim", () => {
   const totals = computeVariantTotals([
     variantLine("4859/46", 3, "objednane", false),

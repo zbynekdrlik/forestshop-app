@@ -8,6 +8,7 @@ import { record } from "../modules/audit/service.js";
 import { ORDERS_EXPORT_URL_NOT_CONFIGURED, type OrdersIngestResult, type RunOrdersIngest } from "../modules/orders/ingest.js";
 import { listKnownStatusNames, listOpenStatusNames, replaceOpenStatusNames } from "../modules/orders/open-statuses.js";
 import { getOrderDetail, listOpenOrderLinesBySupplier } from "../modules/orders/queries.js";
+import { assignOrderLineSupplier } from "../modules/orders/supplier-assignment.js";
 import { setOrderLineOrdered, setOrderLineState } from "../modules/orders/state.js";
 import { requireRole, requireUser, type AppBindings } from "./middleware.js";
 import { requireSameOrigin } from "./origin-check.js";
@@ -20,6 +21,10 @@ const orderLineParam = z.object({ lineId: z.string().uuid() });
 const orderLineStateBody = z.object({ state: z.enum(orderLineState.enumValues) });
 // issue 60: odškrtávacie políčko "objednané u dodávateľa".
 const orderLineOrderedBody = z.object({ ordered: z.boolean() });
+// issue 63: ručné priradenie dodávateľa — orezané + neprázdne; case sa
+// NEFOLDUJE (presne to, čo manažér napísal, sa uloží, `supplier-key.ts`'s
+// komentár k `normalizeSupplierKeyJs` vysvetľuje prečo).
+const orderLineSupplierBody = z.object({ supplier: z.string().trim().min(1) });
 // issue 59: `min(1)` len zachytí zjavne prázdny request skôr, než sa vôbec
 // dostane k `replaceOpenStatusNames` — SKUTOČNÉ čistenie (normalizácia,
 // orezanie prázdnych/duplicít po trime) beží až v module, lebo "['   ']"
@@ -142,6 +147,32 @@ export function registerOrdersRoutes(
       }
       log.info({ actorUserId: user.userId, lineId, ordered }, "zmena príznaku objednané riadku objednávky");
       return c.json({ ok: true as const, ordered });
+    },
+  );
+
+  // issue 63: ručné priradenie dodávateľa riadku, ktorého `product.supplier`
+  // je v katalógu `null` — platí pre celý PRODUKT (`assignOrderLineSupplier`),
+  // nie len tento jeden riadok. Rovnaké oprávnenie ako zvyšok zápisov v
+  // tomto súbore.
+  app.post(
+    "/api/orders/lines/:lineId/supplier",
+    requireSameOrigin(),
+    requireUser(db),
+    requireRole("admin", "manazer"),
+    zValidator("param", orderLineParam),
+    zValidator("json", orderLineSupplierBody),
+    async (c) => {
+      const { lineId } = c.req.valid("param");
+      const { supplier } = c.req.valid("json");
+      const user = c.get("user");
+      const now = new Date();
+
+      const result = await assignOrderLineSupplier(db, { lineId, supplier, actorUserId: user.userId, now });
+      if (result === "not_found") {
+        return c.json({ error: "Riadok objednávky sa nenašiel" }, 404);
+      }
+      log.info({ actorUserId: user.userId, lineId, supplier }, "ručné priradenie dodávateľa riadku objednávky");
+      return c.json({ ok: true as const, supplier });
     },
   );
 

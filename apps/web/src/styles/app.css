@@ -749,6 +749,28 @@ tr:last-child td {
   font-size: var(--fs-text-xs);
   color: var(--fs-ink-faint);
 }
+/* issue 63: ručné priradenie dodávateľa riadku bez dodávateľa — vstup +
+   uložiť, rovnaký vizuálny jazyk ako `.ord-state-select`/`.btn.sm`. `flex` +
+   `flex-wrap: wrap` (NIE `white-space: nowrap`) — bez zalomenia by vstup +
+   tlačidlo pri užšom stĺpci pretiekli VIZUÁLNE do susedného stĺpca "Stav" a
+   jeho `<select>` (neskôr v DOM-e, teda navrchu) by kradol kliky mierené na
+   toto tlačidlo (zistené reálnym Playwright behom — `locator.click` padalo
+   na "select ... intercepts pointer events", nie flaka). */
+.ord-supplier-assign {
+  display: flex;
+  align-items: center;
+  gap: var(--fs-space-1);
+  flex-wrap: wrap;
+  max-width: 160px;
+}
+.ord-supplier-assign-input {
+  width: 110px;
+  padding: var(--fs-space-1) var(--fs-space-2);
+  border: 1px solid var(--fs-border);
+  border-radius: var(--fs-radius-sm);
+  font: inherit;
+  font-size: var(--fs-text-sm);
+}
 
 /* issue 59: nastavenie otvorených stavov objednávok — rovnaký vizuálny
    jazyk ako `.autostatus`/`.mail-preview` vyššie (karta na svetlom podklade),
