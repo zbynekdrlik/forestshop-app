@@ -362,7 +362,9 @@ export function OrdersSection({
                         Odkaz na dodávateľa
                       </a>
                     ) : line.supplierNote !== null ? (
-                      <span className="ord-supplier-note">{line.supplierNote}</span>
+                      <span className="ord-supplier-note" title={line.supplierNote}>
+                        {line.supplierNote}
+                      </span>
                     ) : line.externalCode === null ? (
                       "—"
                     ) : null}
