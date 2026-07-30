@@ -1,7 +1,8 @@
-import { asc, desc, eq } from "drizzle-orm";
+import { asc, desc, eq, inArray } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
 import { orderLines, orders, products, supplierContacts, variants, type OrderLineState } from "../../db/schema.js";
 import { extractSupplierLink } from "../catalog/supplier-link.js";
+import { listOpenStatusNames } from "./open-statuses.js";
 
 export interface OpenOrderLine {
   readonly lineId: string;
@@ -51,11 +52,18 @@ export const NEZNAMY_DODAVATEL = "(bez dodávateľa)";
 // Zoskupenie je na ÚROVNI RIADKA objednávky, nie na úrovni objednávky —
 // jedna objednávka môže obsahovať položky od VIACERÝCH dodávateľov
 // (`docs/stara-appka-inventar.md` bod 1: "Otvorené objednávky zoskupené
-// podľa dodávateľa"). "Otvorená" v v1 znamená VŠETKY riadky objednávok —
-// `order_line.state` (objednane/caka_sa/skladom/nedostupne) zatiaľ nemá
-// žiadny "hotový/zatvorený" stav (ten príde až s #25), takže nič dnes riadok
-// z tohto zoznamu neodstráni.
+// podľa dodávateľa"). `order_line.state` (objednane/caka_sa/skladom/
+// nedostupne) je appkou/manažérom riadený automat NEZÁVISLÝ od tohto
+// filtra — "otvorená" tu (issue 59) znamená, že SAMOTNÁ OBJEDNÁVKA má v
+// Shoptete jeden z nastavených stavov (`order.status_name`,
+// `open-statuses.ts`), rovnaký zámer ako stará appka's `to_order`. Bez
+// nastaveného stavu (čo `replaceOpenStatusNames` nedovolí) by dopyt nemal
+// podľa čoho filtrovať — vtedy sa vráti prázdny zoznam namiesto behu
+// `inArray` s prázdnym poľom.
 export async function listOpenOrderLinesBySupplier(db: Database): Promise<readonly SupplierOpenOrders[]> {
+  const openStatuses = await listOpenStatusNames(db);
+  if (openStatuses.length === 0) return [];
+
   const rows = await db
     .select({
       lineId: orderLines.id,
@@ -77,6 +85,7 @@ export async function listOpenOrderLinesBySupplier(db: Database): Promise<readon
     .innerJoin(orders, eq(orders.id, orderLines.orderId))
     .innerJoin(variants, eq(variants.code, orderLines.variantCode))
     .innerJoin(products, eq(products.key, variants.productKey))
+    .where(inArray(orders.statusName, [...openStatuses]))
     // Sekundárne triedenie podľa najnovšej objednávky ako prvej v rámci
     // dodávateľa — rovnaký zámer ako katalógov `desc(fetchedAt), desc(id)`
     // tie-break, len tu na `placedAt`/`lineId`, aby poradie bolo stabilné aj

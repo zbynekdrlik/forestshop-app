@@ -1,6 +1,8 @@
 import { sql } from "drizzle-orm";
 import pg from "pg";
 import { createDb, type Database } from "../../src/db/client.js";
+import { orderOpenStatuses } from "../../src/db/schema.js";
+import { DEFAULT_ORDER_OPEN_STATUS } from "../../src/modules/orders/open-statuses.js";
 
 /**
  * Distinct advisory-lock key for serializing `withCleanDb()` across
@@ -41,9 +43,19 @@ export async function withCleanDb(): Promise<{ db: Database; close: () => Promis
     // the supplier NAME string, no FK at all. "pairing" (#44) DOES have an FK
     // into "variant" so `TRUNCATE variant CASCADE` already reaches it — listed
     // explicitly anyway for the same self-documenting reason "order_line" is.
+    // "order_open_status" (issue 59) is the SAME situation again — no FK in
+    // either direction (keyed on a free-text status name) — CASCADE never
+    // reaches it.
     await db.execute(
-      sql`TRUNCATE TABLE ingest_issue, variant, product, catalog_snapshot, job_run, audit_events, sessions, users, order_line, "order", supplier_contact, pairing, supplier RESTART IDENTITY CASCADE`,
+      sql`TRUNCATE TABLE ingest_issue, variant, product, catalog_snapshot, job_run, audit_events, sessions, users, order_line, "order", supplier_contact, pairing, supplier, order_open_status RESTART IDENTITY CASCADE`,
     );
+    // issue 59: `order_open_status` is a NEW table with real production
+    // content (the migration seeds it) — TRUNCATE alone would leave every
+    // test starting from an EMPTY set, silently blanking `listOpenOrderLinesBySupplier`
+    // for every test that relies on the default open behavior (nearly all of
+    // them). Re-seed the same default the migration writes on a fresh
+    // install, so each test starts from the identical "just migrated" state.
+    await db.insert(orderOpenStatuses).values({ statusName: DEFAULT_ORDER_OPEN_STATUS });
   } catch (err) {
     try {
       await pool.end();

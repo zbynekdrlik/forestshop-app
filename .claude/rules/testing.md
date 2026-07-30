@@ -206,3 +206,18 @@ paths:
   request) prepísali do vlastného výstupu; korelácia timestampov medzi
   zlyhaním a týmito logmi je rýchlejšia cesta k skutočnej príčine než
   hádanie z popisu symptómu.
+- **`toContainText`/`toHaveText` na riadku/kontajneri, ktorý obsahuje NATÍVNY
+  `<select>`, je tautológia, ak kontrolovaný text zodpovedá jednému z VŽDY
+  vykreslených `<option>` popisiek** — všetky možnosti `<select>`u sú v DOM
+  strome PRÍTOMNÉ ako deti bez ohľadu na to, ktorá je aktuálne vybraná
+  (issue 72, `orders.spec.ts`'s test zmeny stavu). Taká kontrola PREJDE aj
+  keď sa zmena nikdy neuloží — nikdy nečaká na skutočné dokončenie async
+  zápisu, takže pod pomalším CI behom môže `page.reload()` predbehnúť ešte
+  neuzavretý PATCH a NASLEDUJÚCA (skutočná) kontrola po reloade náhodne
+  zlyhá. Namiesto kontroly textu okolo selectu vždy over PRIAMO
+  `expect(select).toHaveValue("...")` — to skutočne čaká na lokálny
+  optimistický update (ktorý nastáva AŽ po vyriešení promisu zápisu), takže
+  zaručuje, že zápis je potvrdený PRED ďalším krokom testu (napr. reloadom).
+  Pri pridávaní/úprave e2e testu okolo AKÉHOKOĽVEK `<select>`u v tejto appke
+  vždy skontroluj, či asercia naozaj testuje VYBRANÚ hodnotu, nie len
+  prítomnosť textu niekde v okolí.

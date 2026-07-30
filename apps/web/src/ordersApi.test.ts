@@ -2,7 +2,9 @@ import { expect, it, vi } from "vitest";
 import {
   OrdersUnauthorizedError,
   fetchOpenOrders,
+  fetchOpenStatusesConfig,
   fetchSupplierOrderMailPreview,
+  saveOpenStatuses,
   sendSupplierOrderMail,
   setSupplierEmail,
   triggerOrdersIngest,
@@ -258,4 +260,61 @@ it("triggerOrdersIngest zlyhá zrozumiteľne, keď export nie je nakonfigurovan�
     ),
   );
   await expect(triggerOrdersIngest()).rejects.toThrow("Import objednávok nie je nakonfigurovaný");
+});
+
+// issue 59: nastavenie otvorených stavov objednávok.
+
+it("fetchOpenStatusesConfig prečíta nastavené aj distinct videné stavy", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ statuses: ["Vybavuje sa"], knownStatuses: ["Vybavená", "Vybavuje sa"] }), {
+        status: 200,
+      }),
+    ),
+  );
+  await expect(fetchOpenStatusesConfig()).resolves.toEqual({
+    statuses: ["Vybavuje sa"],
+    knownStatuses: ["Vybavená", "Vybavuje sa"],
+  });
+});
+
+it("fetchOpenStatusesConfig pri 401 vyhodí OrdersUnauthorizedError", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("", { status: 401 })));
+  await expect(fetchOpenStatusesConfig()).rejects.toBeInstanceOf(OrdersUnauthorizedError);
+});
+
+it("saveOpenStatuses pošle PUT s telom { statuses } a vráti očistený zoznam zo servera", async () => {
+  const fetchMock = vi.fn().mockResolvedValue(
+    new Response(JSON.stringify({ ok: true, statuses: ["Vybavuje sa", "Osob. odber"] }), { status: 200 }),
+  );
+  vi.stubGlobal("fetch", fetchMock);
+
+  await expect(saveOpenStatuses(["  Vybavuje sa  ", "Osob. odber"])).resolves.toEqual(["Vybavuje sa", "Osob. odber"]);
+
+  expect(fetchMock).toHaveBeenCalledWith(
+    "/api/orders/open-statuses",
+    expect.objectContaining({
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ statuses: ["  Vybavuje sa  ", "Osob. odber"] }),
+    }),
+  );
+});
+
+it("saveOpenStatuses pri prázdnom zozname (400) vráti slovenskú hlášku z tela odpovede", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: "Zoznam stavov nesmie ostať prázdny — musí obsahovať aspoň jeden stav." }), {
+        status: 400,
+      }),
+    ),
+  );
+  await expect(saveOpenStatuses([])).rejects.toThrow("Zoznam stavov nesmie ostať prázdny");
+});
+
+it("saveOpenStatuses pri 401 vyhodí OrdersUnauthorizedError", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("", { status: 401 })));
+  await expect(saveOpenStatuses(["Vybavuje sa"])).rejects.toBeInstanceOf(OrdersUnauthorizedError);
 });

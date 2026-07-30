@@ -40,6 +40,15 @@ function fetcherOf(body: Buffer): OrdersExportFetcher {
   return () => Promise.resolve({ body, sourceLabel: "fixtúra" });
 }
 
+// POZOR (issue 59): vrátený Buffer je UTF-8, ale `ingestOrders` VŽDY dekóduje
+// vstup ako windows-1250 (`decodeCp1250`, rovnaký zámer ako skutočný
+// Shoptet export) — akýkoľvek non-ASCII znak (diakritika) v `rows` tu preto
+// vyjde na druhej strane pokazený (mojibake), lebo dva rôzne bajty UTF-8
+// znaku sa dekódujú AKO DVA samostatné cp1250 znaky. Testy nad touto
+// funkciou preto musia byť ASCII-only (rovnaký dôvod, prečo existujúce
+// testy nikdy nepoužili diakritiku priamo tu) — skutočná diakritika sa
+// testuje cez commitnutú fixtúru (`fixtures/orders-sample.csv`), ktorá JE
+// natívne cp1250 na disku.
 function buildCsv(header: readonly string[], rows: readonly Record<string, string>[]): Buffer {
   const esc = (v: string): string => `"${v.replaceAll('"', '""')}"`;
   const lines = [header.map(esc).join(";") + ";"];
@@ -49,7 +58,7 @@ function buildCsv(header: readonly string[], rows: readonly Record<string, strin
   return Buffer.from(lines.join("\r\n") + "\r\n", "utf-8");
 }
 
-const HEADER = ["code", "date", "billFullName", "deliveryFullName", "itemName", "itemAmount", "itemCode"] as const;
+const HEADER = ["code", "date", "statusName", "billFullName", "deliveryFullName", "itemName", "itemAmount", "itemCode"] as const;
 
 it("prijme fixtúru: reálne položky zapíše, duplicitný riadok sčíta, pseudo-položky aj neznámy variant preskočí", async () => {
   const { db, dir } = await boot();
@@ -84,8 +93,35 @@ it("prijme fixtúru: reálne položky zapíše, duplicitný riadok sčíta, pseu
 
   const order1 = await db.select().from(orders).where(eq(orders.externalOrderId, "20300001"));
   expect(order1[0]?.customerName).toBe("Ján Novák");
+  // issue 59: fixtúra nesie order 20300001 v stave "Vybavuje sa" (otvorená),
+  // 20300002 v stave "Vybavená" (uzavretá) — presne to appka teraz ukladá.
+  expect(order1[0]?.statusName).toBe("Vybavuje sa");
   const order2 = await db.select().from(orders).where(eq(orders.externalOrderId, "20300002"));
   expect(order2[0]?.customerName).toBe("Eva Malá"); // fallback na deliveryFullName
+  expect(order2[0]?.statusName).toBe("Vybavená");
+});
+
+// issue 59: `status_name` je VŽDY Shoptetovo pole (na rozdiel od `comment`/
+// `order_line.state` v teste vyššie) — re-import ho MUSÍ osviežiť, inak by
+// objednávka prejdená v Shoptete z "Vybavuje sa" na "Vybavená" navždy
+// zostala v appke ako otvorená.
+it("objednávka nesie stav zo Shoptetu a re-import ho osvieži, keď sa v Shoptete zmení", async () => {
+  const { db, dir } = await boot();
+  await insertTestVariant(db, "40237/XL");
+
+  const otvorena = buildCsv(HEADER, [
+    { code: "9101", date: "2026-07-01 10:00:00", statusName: "Vybavuje sa", billFullName: "X", itemName: "Y", itemAmount: "1", itemCode: "40237/XL" },
+  ]);
+  await ingestOrders(db, { fetchExport: fetcherOf(otvorena), now: NOW, rawDir: dir, windowStart: WINDOW_START, windowEnd: WINDOW_END });
+  const [prvyRead] = await db.select().from(orders).where(eq(orders.externalOrderId, "9101"));
+  expect(prvyRead?.statusName).toBe("Vybavuje sa");
+
+  const uzavreta = buildCsv(HEADER, [
+    { code: "9101", date: "2026-07-01 10:00:00", statusName: "Vybavena", billFullName: "X", itemName: "Y", itemAmount: "1", itemCode: "40237/XL" },
+  ]);
+  await ingestOrders(db, { fetchExport: fetcherOf(uzavreta), now: NOW, rawDir: dir, windowStart: WINDOW_START, windowEnd: WINDOW_END });
+  const [druhyRead] = await db.select().from(orders).where(eq(orders.externalOrderId, "9101"));
+  expect(druhyRead?.statusName).toBe("Vybavena");
 });
 
 it("re-import tej istej fixtúry je idempotentný — žiadne duplicitné riadky, množstvo ostáva rovnaké", async () => {

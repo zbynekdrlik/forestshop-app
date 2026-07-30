@@ -6,6 +6,7 @@ import { orderLineState } from "../db/schema.js";
 import { log } from "../logger.js";
 import { record } from "../modules/audit/service.js";
 import { ORDERS_EXPORT_URL_NOT_CONFIGURED, type OrdersIngestResult, type RunOrdersIngest } from "../modules/orders/ingest.js";
+import { listKnownStatusNames, listOpenStatusNames, replaceOpenStatusNames } from "../modules/orders/open-statuses.js";
 import { getOrderDetail, listOpenOrderLinesBySupplier } from "../modules/orders/queries.js";
 import { setOrderLineState } from "../modules/orders/state.js";
 import { requireRole, requireUser, type AppBindings } from "./middleware.js";
@@ -17,6 +18,11 @@ const orderLineParam = z.object({ lineId: z.string().uuid() });
 // schémou, `schema-orders.ts`) — nikdy ručne prepísaná únia, ktorá by sa mohla
 // rozísť pri pridaní ďalšieho stavu.
 const orderLineStateBody = z.object({ state: z.enum(orderLineState.enumValues) });
+// issue 59: `min(1)` len zachytí zjavne prázdny request skôr, než sa vôbec
+// dostane k `replaceOpenStatusNames` — SKUTOČNÉ čistenie (normalizácia,
+// orezanie prázdnych/duplicít po trime) beží až v module, lebo "['   ']"
+// prejde touto schémou, ale po očistení je to prázdny zoznam.
+const openStatusesBody = z.object({ statuses: z.array(z.string()).min(1).max(50) });
 
 // Re-exportované, aby `http/app.ts` nemusel meniť svoj import — kanonická
 // definícia žije v `modules/orders/ingest.ts` (rovnaký vzor ako katalógov
@@ -33,6 +39,42 @@ export function registerOrdersRoutes(
   // vidieť otvorené objednávky, len SPÚŠŤANIE importu (nižšie) je vyhradené.
   app.get("/api/orders/open", requireUser(db), async (c) =>
     c.json({ suppliers: await listOpenOrderLinesBySupplier(db) }),
+  );
+
+  // issue 59: nastavenie, ktoré Shoptet stavy sa počítajú ako "objednávka sa
+  // ešte vybavuje" (rozhoduje o obsahu `/api/orders/open` vyššie). MUSÍ byť
+  // zaregistrované PRED `/api/orders/:id` nižšie — Hono zhoduje trasy v
+  // poradí registrácie, takže parametrizovaná `:id` by inak "open-statuses"
+  // zožrala ako svoj parameter (zlyhala by na neplatnom UUID) skôr, než by
+  // sa vôbec dostalo k tejto konkrétnej ceste (zistené naživo, e2e beh).
+  //
+  // Čítanie má rovnaké oprávnenie ako zvyšok obrazovky (`requireUser`, žiadne
+  // obmedzenie roly) — vidieť nastavenie nie je citlivejšie než vidieť
+  // samotné otvorené objednávky.
+  app.get("/api/orders/open-statuses", requireUser(db), async (c) => {
+    const [statuses, knownStatuses] = await Promise.all([listOpenStatusNames(db), listKnownStatusNames(db)]);
+    return c.json({ statuses, knownStatuses });
+  });
+
+  // Zápis — rovnaké oprávnenie + CSRF disciplína ako zmena stavu riadku
+  // objednávky (`requireRole("admin", "manazer")`).
+  app.put(
+    "/api/orders/open-statuses",
+    requireSameOrigin(),
+    requireUser(db),
+    requireRole("admin", "manazer"),
+    zValidator("json", openStatusesBody),
+    async (c) => {
+      const { statuses } = c.req.valid("json");
+      const user = c.get("user");
+      const now = new Date();
+      const result = await replaceOpenStatusNames(db, { statuses, actorUserId: user.userId, now });
+      if (result.status === "empty") {
+        return c.json({ error: "Zoznam stavov nesmie ostať prázdny — musí obsahovať aspoň jeden stav." }, 400);
+      }
+      log.info({ actorUserId: user.userId, statuses: result.statuses }, "zmena nastavenia otvorených stavov objednávok");
+      return c.json({ ok: true as const, statuses: result.statuses });
+    },
   );
 
   app.get("/api/orders/:id", requireUser(db), zValidator("param", orderParam), async (c) => {

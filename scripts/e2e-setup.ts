@@ -9,10 +9,11 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { createDb } from "../apps/api/src/db/client.js";
-import { orderLines, orders, pairings, users } from "../apps/api/src/db/schema.js";
+import { orderLines, orderOpenStatuses, orders, pairings, users } from "../apps/api/src/db/schema.js";
 import { hashPassword } from "../apps/api/src/modules/auth/passwords.js";
 import { ingestCatalog } from "../apps/api/src/modules/catalog/ingest.js";
 import { DEFAULT_SNAPSHOT_LIMITS } from "../apps/api/src/modules/catalog/validation.js";
+import { DEFAULT_ORDER_OPEN_STATUS } from "../apps/api/src/modules/orders/open-statuses.js";
 
 const E2E_HESLO = "e2e-test-heslo"; // musí sa zhodovať s hodnotou v login.spec.ts/catalog.spec.ts/orders.spec.ts
 
@@ -53,6 +54,12 @@ const E2E_SKUPINY_EMAIL = "e2e-skupiny@forestshop.sk"; // musí sa zhodovať s h
 // e-mail), nie flaka. Vlastný e-mail = vlastný rate-limit priestor.
 const E2E_NAV_EMAIL = "e2e-nav@forestshop.sk"; // musí sa zhodovať s hodnotou v nav.spec.ts
 
+// issue 59: rovnaký mechanizmus a dôvod ako `E2E_NAV_EMAIL`/`E2E_SKUPINY_EMAIL`
+// vyššie — balík je UŽ na hranici `MAX_ATTEMPTS` (komentár vyššie), takže
+// nový test (nastavenie otvorených stavov) dostáva VLASTNÝ izolovaný účet
+// namiesto ďalšieho prihlásenia pod zdieľaným `e2e@forestshop.sk`.
+const E2E_OTVORENE_STAVY_EMAIL = "e2e-otvorene-stavy@forestshop.sk"; // musí sa zhodovať s hodnotou v orders.spec.ts
+
 const { db, pool } = createDb();
 // Konštantný literál bez interpolácie — obyčajný reťazec je tu rovnako bezpečný
 // ako `sql` tagovaná šablóna (tú používa ekvivalentný apps/api/tests/helpers/db.ts),
@@ -71,9 +78,16 @@ const { db, pool } = createDb();
 // reťazcom mena dodávateľa, žiadny FK. "pairing" (#44) FK do "variant" má, takže
 // by ho CASCADE strhol aj bez uvedenia — pridané ručne kvôli tej istej
 // sebadokumentujúcej dôslednosti ako "order_line".
+// "order_open_status" (issue 59) je rovnaký prípad ako "supplier_contact"/
+// "supplier" vyššie v komentári tesne pod TRUNCATE — kľúčovaný voľným
+// textom stavu, žiadny FK, CASCADE ho nikdy nestrhne.
 await db.execute(
-  'TRUNCATE TABLE ingest_issue, variant, product, catalog_snapshot, job_run, audit_events, sessions, users, order_line, "order", supplier_contact, pairing, supplier RESTART IDENTITY CASCADE',
+  'TRUNCATE TABLE ingest_issue, variant, product, catalog_snapshot, job_run, audit_events, sessions, users, order_line, "order", supplier_contact, pairing, supplier, order_open_status RESTART IDENTITY CASCADE',
 );
+// Rovnaký dôvod ako `tests/helpers/db.ts`: bez tohto by "Na objednanie" bolo
+// v CELOM e2e behu prázdne pre KAŽDÚ objednávku (žiadny nastavený otvorený
+// stav). Reseeduje presne to, čo produkčná migrácia zapíše na čerstvej DB.
+await db.insert(orderOpenStatuses).values({ statusName: DEFAULT_ORDER_OPEN_STATUS });
 await db.insert(users).values({
   email: "e2e@forestshop.sk",
   passwordHash: await hashPassword(E2E_HESLO),
@@ -97,6 +111,12 @@ await db.insert(users).values({
 });
 await db.insert(users).values({
   email: E2E_NAV_EMAIL,
+  passwordHash: await hashPassword(E2E_HESLO),
+  displayName: "E2E Manažér",
+  role: "manazer",
+});
+await db.insert(users).values({
+  email: E2E_OTVORENE_STAVY_EMAIL,
   passwordHash: await hashPassword(E2E_HESLO),
   displayName: "E2E Manažér",
   role: "manazer",
@@ -136,12 +156,17 @@ await db.execute("UPDATE variant SET missing_since = now() WHERE code = '40287'"
 // map-row.test.ts), "40287" ho nemá (`product.supplier` je `null`) —
 // zámerne pokrýva OBE vetvy zoskupenia podľa dodávateľa, vrátane zástupného
 // kľúča "(bez dodávateľa)" (`modules/orders/queries.ts`).
+// issue 59: `statusName` explicitne na predvolený otvorený stav — nie
+// preto, že by inak neplatilo (DB `default` na stĺpci je tá istá hodnota),
+// ale aby to bolo tu VIDIEŤ, prečo tieto objednávky vôbec zostávajú v
+// zozname "Na objednanie" po pridaní filtra podľa stavu.
 const [objednavkaAlfa] = await db
   .insert(orders)
   .values({
     externalOrderId: "9001",
     customerName: "E2E Zákazník Alfa",
     comment: "Zavolať pred doručením",
+    statusName: DEFAULT_ORDER_OPEN_STATUS,
     placedAt: new Date("2026-07-20T10:00:00Z"),
   })
   .returning();
@@ -158,6 +183,7 @@ const [objednavkaBezDodavatela] = await db
   .values({
     externalOrderId: "9002",
     customerName: "E2E Zákazník Bez dodávateľa",
+    statusName: DEFAULT_ORDER_OPEN_STATUS,
     placedAt: new Date("2026-07-21T09:00:00Z"),
   })
   .returning();
@@ -168,6 +194,40 @@ await db.insert(orderLines).values({
   orderId: objednavkaBezDodavatela.id,
   variantCode: "40287",
   quantity: 1,
+});
+
+// issue 59: TRETIA objednávka, zámerne v stave MIMO predvoleného otvoreného
+// zoznamu ("E2E-Uzavreta" — vymyslený, testovo-vyhradený literál, nikdy
+// nekolidujúci so skutočným Shoptet stavom) — `orders.spec.ts` ňou dokazuje,
+// že (a) sa NEUKÁŽE, kým nie je jej stav v nastavenom zozname, a (b) po
+// pridaní stavu cez nastavenie priamo v UI sa objaví, bez reloadu. Pridáva
+// sa (nikdy nenahrádza) do zdieľaného zoznamu — bezpečné voči súbežne
+// bežiacim iným e2e spec súborom presne z rovnakého dôvodu ako
+// `frontend-design.md`'s zdieľaný `e2e@forestshop.sk` účet.
+const [objednavkaUzavreta] = await db
+  .insert(orders)
+  .values({
+    externalOrderId: "9003",
+    customerName: "E2E Zákazník Uzavretá",
+    statusName: "E2E-Uzavreta",
+    placedAt: new Date("2026-07-22T09:00:00Z"),
+  })
+  .returning();
+if (objednavkaUzavreta === undefined) throw new Error("E2E objednávka (uzavretá) sa nepodarila vložiť");
+await db.insert(orderLines).values({
+  orderId: objednavkaUzavreta.id,
+  variantCode: "40287",
+  quantity: 3,
+  // `state: "skladom"` (NIE predvolené "objednane") — `mail.ts`'s
+  // `loadOutstandingLines` agreguje LEN riadky v stave "objednane" naprieč
+  // VŠETKÝMI objednávkami toho istého dodávateľa, bez ohľadu na
+  // `order.status_name` (mail agregácia a Shoptet-ov stav objednávky sú
+  // zámerne nezávislé, viď `.claude/rules/orders.md`). Default "objednane"
+  // by preto TÚTO objednávku prisčítal do "(bez dodávateľa)" mailového
+  // náhľadu (1 ks → 4 ks) a rozbil `orders.spec.ts`'s existujúci mailový
+  // test, hoci s "Na objednanie" zoznamom (predmet TOHTO ticketu) to
+  // nemá nič spoločné.
+  state: "skladom",
 });
 
 // F4 (#45): jeden UŽ NAVRHNUTÝ (nepotvrdený) pairing kandidát — simuluje to,

@@ -181,3 +181,55 @@ test("manažér nastaví e-mail dodávateľa a uvidí náhľad mailu so správne
 
   expect(chyby).toEqual([]);
 });
+
+// issue 59: VLASTNÝ izolovaný účet (nie zdieľaný `e2e@forestshop.sk`) —
+// balík je už na hranici `MAX_ATTEMPTS=10` (viď `scripts/e2e-setup.ts`'s
+// komentár k `E2E_NAV_EMAIL`), ďalšie prihlásenie pod zdieľaným účtom by ho
+// prekročilo.
+const E2E_OTVORENE_STAVY_EMAIL = "e2e-otvorene-stavy@forestshop.sk";
+
+// `scripts/e2e-setup.ts` zakladá TRETIU objednávku (9003, zákazník "E2E
+// Zákazník Uzavretá") so stavom "E2E-Uzavreta" — zámerne MIMO predvoleného
+// otvoreného zoznamu ("Vybavuje sa"). Test dokazuje OBE polovice ticketu
+// naraz: (a) uzavretá objednávka sa v "Na objednanie" vôbec neukáže, (b) po
+// pridaní jej stavu cez nastavenie priamo v UI sa objaví bez reloadu —
+// presne "zoznam reaguje na zmenu nastavenia".
+test("uzavretá objednávka sa v 'Na objednanie' neukáže, kým sa jej stav nepridá do nastavenia, konzola je čistá", async ({ page }) => {
+  const chyby: string[] = [];
+  page.on("console", (m) => {
+    if ((m.type() === "error" || m.type() === "warning") && !jeOcakavane(m)) chyby.push(m.text());
+  });
+  page.on("pageerror", (e) => {
+    chyby.push(e.message);
+  });
+
+  await page.goto("/?tab=orders");
+  await page.getByLabel("E-mail").fill(E2E_OTVORENE_STAVY_EMAIL);
+  await page.getByLabel("Heslo").fill(E2E_HESLO);
+  await page.getByRole("button", { name: "Prihlásiť sa" }).click();
+  await expect(page.getByRole("heading", { name: "Na objednanie" })).toBeVisible();
+
+  const skupinaBezDodavatela = page.getByTestId("supplier-(bez dodávateľa)");
+  await expect(skupinaBezDodavatela).toBeVisible();
+  await expect(skupinaBezDodavatela).not.toContainText("E2E Zákazník Uzavretá");
+
+  const panel = page.getByTestId("order-open-statuses-panel");
+  await panel.getByRole("button", { name: "⚙️ Nastavenie stavov objednávok" }).click();
+  const textarea = panel.getByTestId("order-open-statuses-textarea");
+  await expect(textarea).toHaveValue("Vybavuje sa");
+
+  // Pridáva sa (nikdy nenahrádza) k existujúcemu zoznamu — 9001/9002 (stav
+  // "Vybavuje sa") musia zostať viditeľné aj po uložení.
+  await textarea.fill("Vybavuje sa\nE2E-Uzavreta");
+  await panel.getByRole("button", { name: "💾 Uložiť" }).click();
+  await expect(panel.getByRole("status")).toContainText("Uložené");
+
+  await expect(skupinaBezDodavatela).toContainText("E2E Zákazník Uzavretá");
+  // Pôvodné objednávky (default stav) ostávajú viditeľné — pridanie stavu do
+  // zoznamu nikdy neodstráni iný, už nastavený stav.
+  await expect(skupinaBezDodavatela).toContainText("E2E Zákazník Bez dodávateľa");
+  const skupinaTest1 = page.getByTestId("supplier-DODAVATEL-TEST-1");
+  await expect(skupinaTest1).toContainText("9001");
+
+  expect(chyby).toEqual([]);
+});

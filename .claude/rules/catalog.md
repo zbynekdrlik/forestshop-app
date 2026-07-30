@@ -173,3 +173,16 @@ paths:
   produktu alebo variantu: over na reálnych dátach (`python3` + `csv.DictReader`
   nad `parovanie_produktov/data/backups/export_*.csv`, READ-ONLY), nikdy
   nehádaj z názvu stĺpca.
+- **Orezávanie koncovej interpunkcie z extrahovanej URL (`supplier-link.ts`)
+  NESMIE orezať zatváraciu zátvorku naslepo — tá môže byť SÚČASŤOU samotnej
+  URL** (issue 72: `https://shop.example.com/a_(b)` je reálny tvar URL, nie
+  len "(pozri https://...)" obalený odkaz). Riešenie: `trimTrailingPunctuation()`
+  ráta výskyty otváracej/zatváracej zátvorky KAŽDÉHO typu (`()`, `[]`, `{}`)
+  priamo v kandidátnej URL a zatváraciu orezáva LEN keď sú nevyvážené (viac
+  zatváracích než otváracích — vtedy vieme, že bola prevzatá z obalujúceho
+  textu). Zámerné zjednodušenie: počet výskytov, nie poradie/zásobník —
+  nerozlíši osamotenú `)` PRED skutočným párom (`"https://x.com/)a(b)"`), čo
+  sa v reálnych `internalNote` tvaroch (bodka/zátvorka vždy AŽ za odkazom)
+  nevyskytuje. Pri pridávaní ĎALŠIEHO typu koncovej interpunkcie/zátvorky do
+  tejto funkcie vždy over na reálnom skladovom pare (napr. z `huntingshop.eu`)
+  cez `python3` + `csv.DictReader`, nie len na vymyslenom príklade.

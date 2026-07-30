@@ -44,11 +44,37 @@ export const orders = pgTable(
     // Manažérov voľný komentár k objednávke (stará appka, obrazovka "Na
     // objednanie" — potvrdené v docs/stara-appka-inventar.md, bod 1).
     comment: text("comment"),
+    // issue 59: Shoptet-ov stav objednávky (napr. "Vybavuje sa"/"Vybavená"),
+    // opakovaný na KAŽDOM riadku exportu tej istej objednávky — importer
+    // (`modules/orders/ingest.ts`) berie prvý výskyt, rovnaký vzor ako
+    // `customerName`/`placedAt`, a OSVIEŽUJE ho pri re-importe (na rozdiel od
+    // `comment`/`order_line.state` nižšie, toto pole je VŽDY Shoptetovo,
+    // nikdy appkou/manažérom vlastnené). Rozhoduje, či sa objednávka ukáže v
+    // "Na objednanie" (`modules/orders/queries.ts` + `modules/orders/
+    // open-statuses.ts`). DB `default` je LEN záchranná sieť pre ručne
+    // vložené riadky (testy/fixtúry) — produkčný import vždy zapíše
+    // skutočnú hodnotu z exportu, nikdy sa nespolieha na tento default.
+    statusName: text("status_name").notNull().default("Vybavuje sa"),
     placedAt: timestamp("placed_at", { withTimezone: true }).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("order_placed_at_idx").on(t.placedAt)],
 );
+
+// issue 59: ktoré Shoptet stavy sa počítajú ako "objednávka sa ešte
+// vybavuje" — jediný nastaviteľný zoznam, ktorý táto appka potrebuje.
+// Stará appka (`parovanie_produktov`) má na tom istom mieste ŠTYRI zoznamy
+// (`to_order`/`terminal`/`known_open`/`cancelled` + "impact preview" pred
+// uložením) — tie ostatné tri existujú LEN kvôli funkciám, ktoré táto appka
+// (zatiaľ) nemá vôbec: mazanie starých značiek podľa stavu, pripomienkové
+// e-maily zákazníkom, Pošta automatizácia. Kopírovať ich sem by bola
+// neaktívna zložitosť bez jediného volajúceho (MVP filozofia, zavrhnutá
+// alternatíva v návrhovom komentári na #59) — pribudnú samostatne, ak
+// niektorá z tých funkcií niekedy vznikne.
+export const orderOpenStatuses = pgTable("order_open_status", {
+  statusName: text("status_name").primaryKey(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 // E-mailový kontakt na dodávateľa (#31) — nová dátová položka, ktorá v
 // starej appke nikdy neexistovala (dodávateľ tam bol len názov, viď komentár

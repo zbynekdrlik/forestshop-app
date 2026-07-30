@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type JSX } from "react";
 import type { Me } from "../api.js";
+import { OrderOpenStatusesPanel } from "./OrderOpenStatusesPanel.js";
 import {
   fetchOpenOrders,
   fetchSupplierOrderMailPreview,
@@ -238,6 +239,7 @@ export function OrdersSection({
       {!loaded && <p>Načítavam otvorené objednávky…</p>}
       {error !== "" && <p role="alert">{error}</p>}
       {stateError !== "" && <p role="alert">{stateError}</p>}
+      {canChangeState && <OrderOpenStatusesPanel onSessionExpired={onSessionExpired} onSaved={load} />}
       {loaded && totalLines === 0 && (
         <p className="empty" data-testid="orders-empty">Zatiaľ nie sú žiadne otvorené objednávky.</p>
       )}
