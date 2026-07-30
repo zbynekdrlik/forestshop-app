@@ -80,7 +80,7 @@ export function App(): JSX.Element {
       <OrdersSection role={me.role} onSessionExpired={reload} />
       <PairingSection role={me.role} onSessionExpired={reload} />
       <SchedulerSection role={me.role} onSessionExpired={reload} />
-      <ChangePasswordForm onSessionExpired={reload} />
+      <ChangePasswordForm email={me.email} onSessionExpired={reload} />
       <Footer />
     </main>
   );
