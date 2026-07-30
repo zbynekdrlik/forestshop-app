@@ -249,3 +249,27 @@ paths:
   potvrdí. Pri pridávaní e2e testu okolo AKÉHOKOĽVEK kontrolovaného
   checkboxu v tejto appke použi `.click()` + `expect().toBeChecked()`, nikdy
   `.check()`/`.uncheck()` priamo.
+- **`@typescript-eslint/restrict-template-expressions` zakazuje `number` v
+  šablónovom literáli** (`` `${count}` `` v `.ts`/`.tsx`, vrátane JSX textu
+  zapísaného ako šablóna) — zistené issue 61 (`OrdersToolbar.tsx`'s chip
+  popisky "Dodávateľ (N)", `ordersSummary.ts`'s formátovanie súhrnu). Fix je
+  `` `${String(pocet)}` ``, nie `eslint-disable` ani presun na obyčajnú JSX
+  interpoláciu (`{pocet} ks` mimo šablóny eslint nerieši, ale v komponente s
+  viacslovným textom okolo čísla by to vytvorilo viac samostatných text-node
+  uzlov s nepredvídateľným whitespace správaním — šablóna + `String()` je
+  jednoduchšie aj čitateľnejšie).
+- **Nový e2e test do súboru so ZDIEĽANÝMI seedovanými dátami (`scripts/
+  e2e-setup.ts`) môže potrebovať konkrétnu POZÍCIU v súbore, nie len
+  VLASTNÝ izolovaný účet.** Vlastný účet (vzor vyššie, `E2E_HESLO_ZMENA_
+  EMAIL` a ďalšie) rieši LEN rate-limit priestor — dáta (`order`/`order_
+  line`/`order_open_status`) sú GLOBÁLNE, zdieľané naprieč VŠETKÝMI účtami
+  v tom istom súbore, a testy v jednom súbore bežia sekvenčne (jeden
+  worker na súbor). Issue 61 (`orders.spec.ts`) potreboval overiť PÔVODNÉ,
+  ešte-nezmutované seedované dáta (DODAVATEL-TEST-1 v "caka_sa",
+  "(bez dodávateľa)" v predvolenom "objednane") — namiesto pridávania
+  DALŠÍCH riadkov/dodávateľov (čo by rozbilo existujúce testy, ktoré
+  spoliehajú na PRESNÝ počet riadkov danej skupiny, napr. "DODAVATEL-
+  TEST-1 má vždy presne 1 riadok") bol nový test vložený ako PRVÝ v súbore,
+  PRED testami, ktoré stav/`ordered`/`order_open_status` mutujú. Pri
+  ďalšom teste, ktorý potrebuje pôvodné dáta, zváž POZÍCIU v súbore skôr
+  než pridávanie nových fixtúrových riadkov k existujúcemu dodávateľovi.

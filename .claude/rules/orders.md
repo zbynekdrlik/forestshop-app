@@ -198,3 +198,13 @@ paths:
   do tej istej transakcie s `.for("update")`) je zdokumentovaný v
   `.claude/rules/database.md` (Postgres `FOR UPDATE` bez `OF` zoznamu
   zamyká celý JOIN, nielen primárnu tabuľku).
+- **Kanonická definícia "vybavený riadok" (issue 61) je
+  `apps/web/src/ordersSummary.ts`'s `isLineResolved` — `ordered || state !==
+  "objednane"`.** Priamy náprotivok starej appky's `isHandled` (`ORDERED ||
+  WAITING || INSTOCK || UNAVAIL`) — nový `ordered` nahrádza jej `ORDERED`,
+  tri ne-predvolené `state` hodnoty nahrádzajú `WAITING`/`INSTOCK`/
+  `UNAVAIL`. Ktorákoľvek ĎALŠIA funkcia, čo potrebuje "je tento riadok
+  vybavený/hotový" (napr. budúci dashboard, ďalší filter), nech importuje
+  `isLineResolved`/`summarizeOrderLines` odtiaľ — nie novú vlastnú
+  definíciu, riziko rozídenia (napr. počítať len podľa `state`, čo by
+  ignorovalo `ordered=true` pri `state="objednane"`).
