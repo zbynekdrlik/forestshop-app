@@ -91,3 +91,15 @@ paths:
   POLOVIČNÚ kombináciu (jeden stĺpec vyplnený, druhý null), nielen pre "oba
   vyplnené v zlom stave" a "oba prázdne v zlom stave" — presne tá tretia
   kombinácia je to, čo bare rovnosť tichο prepúšťa.
+- **`onDelete: "set null"` na FK stĺpci, ktorý je súčasťou CHECKu viažuceho
+  ho na `state` (vzor vyššie), NEMUSÍ reálne nikdy nastať** — ak CHECK
+  vyžaduje ten stĺpec NOT NULL práve vtedy, keď je `state` v danom stave, set
+  null vždy poruší CHECK skôr, než sa uplatní, takže Postgres delete odmietne
+  s CHECK-violation namiesto FK-violation. Zistené code review na PR #50
+  (`pairing.confirmed_by`, deklarované "set null" ako mirror
+  `audit_events.actor_user_id`, ale `pairing_confirmation_ck` to nikdy
+  nedovolí) — oprava bola zmeniť FK na `onDelete: "restrict"` (skutočné
+  správanie sa nezmenilo, len sa zosúladil deklarovaný zámer s realitou).
+  Test na KAŽDÚ ďalšiu takúto FK+CHECK kombináciu: over, či `onDelete` reálne
+  vie nastať v STAVE, kde CHECK vyžaduje ten stĺpec vyplnený — ak nie,
+  `restrict` je pravdivejší popis než `set null`/`cascade`.
