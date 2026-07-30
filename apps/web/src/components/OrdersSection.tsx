@@ -427,6 +427,10 @@ export function OrdersSection({
                   canChangeState={canChangeState}
                   busyLineId={busyLineId}
                   busyOrderedLineId={busyOrderedLineId}
+                  // Review of PR 75, finding 6: kým hromadná akcia pre TOHTO
+                  // dodávateľa beží, žiadny riadok jeho skupiny sa nesmie dať
+                  // meniť per-riadkovo naraz.
+                  supplierBusy={busyOrderedSupplier === group.supplier}
                   onChangeState={changeState}
                   onChangeOrdered={changeOrdered}
                 />
