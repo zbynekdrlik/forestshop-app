@@ -67,12 +67,20 @@ export const pairings = pgTable(
   (t) => [
     index("pairing_state_idx").on(t.state),
     // Automat vynútený databázou, nie len kódom (rovnaký vzor ako
-    // `catalog_snapshot_reason_ck`): `confirmed_by`/`confirmed_at` sú buď OBA
-    // null (state navrhnute), alebo OBA vyplnené (state potvrdene) — nikdy
-    // napoly potvrdený riadok.
+    // `catalog_snapshot_reason_ck`, ale rozšírený na DVA stĺpce naraz):
+    // `confirmed_by`/`confirmed_at` sú buď OBA null (state navrhnute), alebo
+    // OBA vyplnené (state potvrdene) — nikdy napoly potvrdený riadok.
+    // POZOR: jednoduché `(state = 'potvrdene') = (confirmed_by IS NOT NULL AND
+    // confirmed_at IS NOT NULL)` (vzor jedného stĺpca z catalog_snapshot) TU
+    // NESTAČÍ — pri state≠potvrdene stačí, aby čo i len JEDEN z dvoch stĺpcov
+    // bol null, aby pravá strana bola false, takže "navrhnute" s vyplneným
+    // len confirmed_by (confirmed_at null) by prešlo (overené naživo proti
+    // Postgresu, code review na PR #50). Explicitný dvojsmerný OR nižšie
+    // vyžaduje OBA stĺpce zhodne — žiadna polovičná kombinácia neprejde.
     check(
       "pairing_confirmation_ck",
-      sql`(${t.state} = 'potvrdene') = (${t.confirmedBy} IS NOT NULL AND ${t.confirmedAt} IS NOT NULL)`,
+      sql`(${t.state} = 'potvrdene' AND ${t.confirmedBy} IS NOT NULL AND ${t.confirmedAt} IS NOT NULL)
+        OR (${t.state} != 'potvrdene' AND ${t.confirmedBy} IS NULL AND ${t.confirmedAt} IS NULL)`,
     ),
   ],
 );

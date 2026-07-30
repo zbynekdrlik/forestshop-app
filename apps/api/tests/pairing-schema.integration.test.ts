@@ -238,6 +238,39 @@ it("odmietne 'navrhnute' S vyplneným confirmed_by/confirmed_at (CHECK, opačný
   ).rejects.toThrow(/pairing_confirmation_ck/);
 });
 
+it("odmietne 'navrhnute' s POLOVIČNE vyplneným confirmed_by/confirmed_at (CHECK, medzera nájdená code review na PR #50)", async () => {
+  const ctx = await withCleanDb();
+  close = ctx.close;
+  await insertTestVariant(ctx.db, "40245/5XL");
+  const userId = await insertTestUser(ctx.db, "manazer-polovicny-1@forestshop.sk");
+  // Jednoduchý jednostĺpcový CHECK vzor (rovnaký ako catalog_snapshot_reason_ck)
+  // by TOTO prepustil — pri state≠potvrdene stačí, aby ČO I LEN JEDEN z dvoch
+  // stĺpcov bol null. Explicitný dvojsmerný OR v schema-pairing.ts to musí
+  // odmietnuť rovnako prísne ako úplne vyplnený opačný smer vyššie.
+  await expect(
+    ctx.db.insert(pairings).values({
+      variantCode: "40245/5XL",
+      state: "navrhnute",
+      confirmedBy: userId,
+      confirmedAt: null,
+    }),
+  ).rejects.toThrow(/pairing_confirmation_ck/);
+});
+
+it("odmietne 'navrhnute' s vyplneným LEN confirmed_at (CHECK, opačná polovica)", async () => {
+  const ctx = await withCleanDb();
+  close = ctx.close;
+  await insertTestVariant(ctx.db, "40246/6XL");
+  await expect(
+    ctx.db.insert(pairings).values({
+      variantCode: "40246/6XL",
+      state: "navrhnute",
+      confirmedBy: null,
+      confirmedAt: NOW,
+    }),
+  ).rejects.toThrow(/pairing_confirmation_ck/);
+});
+
 it("NEzmaže pairing, keď sa zmaže potvrdzujúci používateľ — len stratí odkaz (onDelete: set null)", async () => {
   const ctx = await withCleanDb();
   close = ctx.close;

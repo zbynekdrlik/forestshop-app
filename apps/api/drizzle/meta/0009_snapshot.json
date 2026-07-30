@@ -1,5 +1,5 @@
 {
-  "id": "7b0ee6ef-18cb-46aa-8ece-ba20ace61d2a",
+  "id": "0ee5031b-8575-4307-9bb4-90a8e9fa5a92",
   "prevId": "857b5a63-4cc9-4e15-8183-c4763524d0c1",
   "version": "7",
   "dialect": "postgresql",
@@ -1222,7 +1222,7 @@
       "checkConstraints": {
         "pairing_confirmation_ck": {
           "name": "pairing_confirmation_ck",
-          "value": "(\"pairing\".\"state\" = 'potvrdene') = (\"pairing\".\"confirmed_by\" IS NOT NULL AND \"pairing\".\"confirmed_at\" IS NOT NULL)"
+          "value": "(\"pairing\".\"state\" = 'potvrdene' AND \"pairing\".\"confirmed_by\" IS NOT NULL AND \"pairing\".\"confirmed_at\" IS NOT NULL)\n        OR (\"pairing\".\"state\" != 'potvrdene' AND \"pairing\".\"confirmed_by\" IS NULL AND \"pairing\".\"confirmed_at\" IS NULL)"
         }
       },
       "isRLSEnabled": false

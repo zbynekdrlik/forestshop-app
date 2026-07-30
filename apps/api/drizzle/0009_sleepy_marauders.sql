@@ -8,7 +8,8 @@ CREATE TABLE "pairing" (
 	"confirmed_at" timestamp with time zone,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "pairing_variant_code_unique" UNIQUE("variant_code"),
-	CONSTRAINT "pairing_confirmation_ck" CHECK (("pairing"."state" = 'potvrdene') = ("pairing"."confirmed_by" IS NOT NULL AND "pairing"."confirmed_at" IS NOT NULL))
+	CONSTRAINT "pairing_confirmation_ck" CHECK (("pairing"."state" = 'potvrdene' AND "pairing"."confirmed_by" IS NOT NULL AND "pairing"."confirmed_at" IS NOT NULL)
+        OR ("pairing"."state" != 'potvrdene' AND "pairing"."confirmed_by" IS NULL AND "pairing"."confirmed_at" IS NULL))
 );
 --> statement-breakpoint
 CREATE TABLE "supplier" (
