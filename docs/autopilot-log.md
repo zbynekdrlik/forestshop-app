@@ -240,3 +240,47 @@ RED→GREEN test names, key decisions, and the shared PR.
   console errors (only the sanctioned unauthenticated `/api/me` 401).
 - Per-ticket Discord cards fired for #22, #28, #23 (`notify --run-card`,
   all confirmed delivered).
+
+## #24 — "Na objednanie" tab (F3, read-only v1)
+
+- Design comment posted BEFORE first code commit:
+  [#24](https://github.com/zbynekdrlik/forestshop-app/issues/24#issuecomment-5124541486)
+  (root cause: manager needs the old app's daily "Na objednanie" screen;
+  chosen approach: flat per-supplier table straight off the already-live
+  `GET /api/orders/open`, no client reshaping; rejected alternative:
+  per-order `GET /api/orders/:id` fetch + nested tree, since `/open` already
+  carries every field this ticket needs on the line itself). No version
+  bump needed — dev (`0.3.0-dev.12`) was already ahead of main
+  (`0.3.0-dev.11`) from the previous cycle's bump.
+- Commit `9e8d156`: new `apps/web/src/ordersApi.ts` + `apps/web/src/
+  components/OrdersSection.tsx` (mirrors `schedulerApi.ts`/
+  `SchedulerSection.tsx` conventions — zod schema, `OrdersUnauthorizedError`,
+  session-expiry handling), wired into `App.tsx`. No role gate on visibility
+  (the read route has none, unlike scheduler). `scripts/e2e-setup.ts` now
+  seeds two open orders over already-imported fixture variants (one with a
+  real supplier, one with `null` → exercises the "(bez dodávateľa)"
+  fallback) so `orders.spec.ts` runs against real ingested data, not
+  hand-inserted rows. Also added `order_line, "order"` to the e2e TRUNCATE
+  list (`.claude/rules/testing.md` #20 pattern — `order` doesn't cascade
+  from `variant`). Feature ticket, no RED/GREEN regression pair (not a bug
+  fix) — tests added same-commit per `tdd-workflow.md`'s feature path:
+  4 unit tests (`ordersApi.test.ts`), 5 unit tests (`OrdersSection.test.tsx`),
+  1 Playwright e2e (`orders.spec.ts`) with the standard console-zero-errors
+  assertion.
+- Independent code-review subagent dispatched (`general-purpose`, diff
+  `601734a..9e8d156`): 0 Critical, 0 Warning. 2 Suggestions — this
+  autopilot-log entry (addressed here) and a note that neither
+  `OrdersSection` nor `SchedulerSection` offers a manual refresh/retry after
+  a transient load error (pre-existing pattern, not introduced by this
+  change, no action taken). Overall assessment: ready to merge.
+- PR: **#30** (`dev` → `main`), merged `2d8c4e7`. CI: all jobs green (check,
+  integration, e2e, docker-build; version-check skipped on main as
+  expected) on both push and PR runs.
+- Deployed + verified on https://forestshop-novy.newlevel.media
+  (v0.3.0-dev.12 in DOM footer, `/api/version` commit matches `2d8c4e7a`):
+  logged-in session showed the "Na objednanie" heading with 41 real
+  supplier groups and real order lines (e.g. BETALOV group, order 20261259,
+  product "Poľovnícke kraťasy HART GOROSTA-SH") — matches the issue's
+  "41 supplier groups, 864 lines" production figures. Zero console
+  errors/warnings.
+- Per-ticket Discord card fired (`notify --run-card`, confirmed delivered).

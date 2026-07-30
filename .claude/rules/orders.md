@@ -77,6 +77,24 @@ paths:
   (pozri vyššie), takže neexistuje DB riadok, cez ktorý by sa dala pohnať. Na
   rozdiel od katalógu preto NEEXISTUJE výnimka "posledný prijatý sa nikdy
   nemaže" — každý súbor sa posudzuje rovnako, len podľa veku.
+- **`scripts/e2e-setup.ts` má VLASTNÝ, SAMOSTATNÝ `TRUNCATE` zoznam od
+  `apps/api/tests/helpers/db.ts`** (#24) — pridanie novej "koreňovej"
+  tabuľky (`.claude/rules/testing.md`'s `order`/`order_line` pravidlo,
+  #20) treba urobiť na OBOCH miestach, nie len v integračných testoch.
+  E2E-setup pôvodne `order`/`order_line` vôbec netruncatoval (objednávky
+  vtedy ešte neexistovali) — pri prvom pridaní objednávkových dát do E2E
+  (#24) to bolo treba doplniť ručne, rovnakým vzorom (`order_line,
+  "order"` s ručne uvodzovaným rezervovaným slovom).
+- **E2E objednávkové dáta (#24) sedia na UŽ naimportovaných katalógových
+  fixtúrových variantoch, nie na ručne vloženom produkte/variante** —
+  žiadne volanie `insertTestVariant`-ekvivalentu netreba. Dva variantné kódy
+  z `apps/api/src/modules/catalog/fixtures/shoptet-sample.csv` majú známe,
+  overené hodnoty užitočné pre ďalšie objednávkové E2E testy: `"4859/46"`
+  (`product.supplier = "DODAVATEL-TEST-1"`, názov "Nohavice Hart Wild-T",
+  `sizeLabel = "46"`) a `"40287"` (`supplier = null` → zoskupí sa pod
+  "(bez dodávateľa)", názov "Čiapka Polar FOREST", `sizeLabel = null`,
+  jednovariantný). Over cez `map-row.test.ts`, ak fixtúra niekedy zmení
+  obsah.
 - **Fixtúra (`fixtures/orders-sample.csv`) je ručne vyrobená z reálnej
   67-stĺpcovej hlavičky** (nie výrez reálneho exportu ako katalóg — export
   objednávok nesie mená a e-maily zákazníkov, tie sa nekomitujú), cp1250
