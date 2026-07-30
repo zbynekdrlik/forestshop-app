@@ -142,6 +142,20 @@ it("tlačidlo ✓ Potvrdiť je disabled, keď variant nemá žiadnu navrhnutú a
   expect((tlacidlo as HTMLButtonElement).disabled).toBe(true);
 });
 
+// Review nález na PR 54 (issue 45): opätovné kliknutie na "✓ Potvrdiť" na UŽ
+// potvrdenom riadku by (predtým) ticho prepísalo pôvodného potvrdzujúceho —
+// oprava adresy patrí výhradne "✗ Zadať inú adresu", ktoré ostáva enabled.
+it("tlačidlo ✓ Potvrdiť je disabled na UŽ potvrdenom riadku, ✗ Zadať inú adresu ostáva enabled", async () => {
+  searchPairings.mockResolvedValue({ total: 1, items: [POTVRDENY] });
+
+  render(<PairingSection role="manazer" onSessionExpired={() => {}} />);
+
+  const potvrdit = await screen.findByTestId("confirm-40238/M");
+  const zadatInu = await screen.findByTestId("reject-40238/M");
+  expect((potvrdit as HTMLButtonElement).disabled).toBe(true);
+  expect((zadatInu as HTMLButtonElement).disabled).toBe(false);
+});
+
 it("✗ Zadať inú adresu otvorí formulár, uloženie pošle novú adresu a potvrdí", async () => {
   const POTVRDENY_S_NOVOU_ADRESOU = {
     ...BEZ_ADRESY,
