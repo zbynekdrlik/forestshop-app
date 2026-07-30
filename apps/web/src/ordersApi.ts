@@ -20,7 +20,10 @@ const orderLineSchema = z.object({
   // issue 67: odkaz na tovar u dodávateľa (`supplierUrl`, `null` keď v
   // exporte nie je odkaz) + surový text pre plain-text fallback
   // (`supplierNote`) + kód tovaru u dodávateľa (`externalCode`).
-  supplierUrl: z.string().nullable(),
+  // issue 70: `href` bezpečnosť by nemala závisieť LEN od backendovho
+  // `extractSupplierLink` regexu — schéma tu overuje http(s) schému
+  // nezávisle, ako druhá vrstva.
+  supplierUrl: z.string().regex(/^https?:\/\//).nullable(),
   supplierNote: z.string().nullable(),
   externalCode: z.string().nullable(),
 });
