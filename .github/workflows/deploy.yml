@@ -33,6 +33,16 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - id: meta
         run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+      # Bez tohto kroku buildx použije predvolený builder s driverom `docker`
+      # (naviazaný na lokálny daemon runnera), ktorý nevie nahrať obraz do
+      # registra PRIAMO počas zostavovania — najprv ho uloží do daemona a až
+      # potom spustí samostatný `docker push`. Tento dvojkrokový spôsob je
+      # zdokumentovane menej spoľahlivý pri viacvrstvových obrazoch a viacerých
+      # tagoch naraz a bol príčinou `ERROR: failed to build: unknown blob` pri
+      # nahrávaní na ghcr.io (run 30529745338, issue #42). Vlastný builder s
+      # driverom `docker-container` nahráva natívnym BuildKit exportérom
+      # jedným krokom (push=true priamo v build kroku).
+      - uses: docker/setup-buildx-action@v3
       - uses: docker/build-push-action@v6
         with:
           context: .
