@@ -1,4 +1,4 @@
-import type { JSX } from "react";
+import { useEffect, useState, type JSX } from "react";
 import type { OrderLine } from "../ordersApi.js";
 import { formatVariantTotalChip, type VariantTotal } from "../ordersSummary.js";
 
@@ -24,8 +24,10 @@ export function OrderLineRow({
   busyOrderedLineId,
   supplierBusy,
   variantTotal,
+  busySupplierLineId,
   onChangeState,
   onChangeOrdered,
+  onAssignSupplier,
 }: {
   readonly line: OrderLine;
   readonly canChangeState: boolean;
@@ -46,10 +48,31 @@ export function OrderLineRow({
   // skupinu bežal, čo krátkodobo rozhádzalo optimistický UI (posledný zápis
   // vyhrá, žiadna strata dát, len zmätočné UX).
   readonly supplierBusy: boolean;
+  // issue 63: riadok, ktorého ručné priradenie dodávateľa PRÁVE TERAZ ukladá
+  // (needitovateľné, kým sa neskončí).
+  readonly busySupplierLineId: string | null;
   readonly onChangeState: (lineId: string, newState: OrderLine["state"]) => void;
   readonly onChangeOrdered: (lineId: string, ordered: boolean) => void;
+  readonly onAssignSupplier: (lineId: string, supplier: string) => void;
 }): JSX.Element {
   const qtyChip = variantTotal !== undefined ? formatVariantTotalChip(variantTotal) : null;
+
+  // issue 63: lokálny koncept vstupu — controlled, ale RESETOVANÝ z props
+  // vždy, keď server potvrdí novú hodnotu (`line.manualSupplierOverride`
+  // sa zmení po úspešnom uložení + refetchi, `OrdersSection.tsx`'s
+  // `assignSupplier`). Bez tohto by po uložení zostal v poli VIDIEŤ starý
+  // koncept, keď riadok NEZMENÍ skupinu (rovnaký pravopis po normalizácii).
+  const [supplierDraft, setSupplierDraft] = useState(line.manualSupplierOverride ?? "");
+  useEffect(() => {
+    setSupplierDraft(line.manualSupplierOverride ?? "");
+  }, [line.manualSupplierOverride]);
+  const supplierBusyHere = busySupplierLineId === line.lineId;
+  const saveSupplier = (): void => {
+    const trimmed = supplierDraft.trim();
+    if (trimmed === "") return;
+    onAssignSupplier(line.lineId, trimmed);
+  };
+
   return (
     <tr
       className={"order-row state-" + line.state + (line.ordered ? " ordered" : "")}
@@ -102,6 +125,46 @@ export function OrderLineRow({
           "—"
         ) : null}
         {line.externalCode !== null && <div className="ord-supplier-code">kód {line.externalCode}</div>}
+      </td>
+      <td className="ord-supplier-assign" data-testid={`supplier-assign-cell-${line.lineId}`}>
+        {line.supplierAssignable ? (
+          <>
+            <input
+              type="text"
+              // Jeden zdieľaný `<datalist id="known-suppliers">` (rendrovaný
+              // raz v `OrdersSection.tsx`, z UŽ načítaných skupín) — žiadna
+              // nová GET trasa netreba len na našepkávanie.
+              list="known-suppliers"
+              className="ord-supplier-assign-input"
+              data-testid={`supplier-assign-input-${line.lineId}`}
+              aria-label={`Priradiť dodávateľa riadku objednávky ${line.externalOrderId} / ${line.variantCode}`}
+              placeholder="priradiť dodávateľa…"
+              value={supplierDraft}
+              disabled={supplierBusyHere}
+              onChange={(e) => {
+                setSupplierDraft(e.target.value);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  saveSupplier();
+                }
+              }}
+            />
+            <button
+              type="button"
+              className="btn sm good"
+              data-testid={`supplier-assign-save-${line.lineId}`}
+              aria-label={`Uložiť priradenie dodávateľa riadku objednávky ${line.externalOrderId} / ${line.variantCode}`}
+              disabled={supplierBusyHere || supplierDraft.trim() === ""}
+              onClick={saveSupplier}
+            >
+              💾
+            </button>
+          </>
+        ) : (
+          "—"
+        )}
       </td>
       <td>
         {canChangeState ? (

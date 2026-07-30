@@ -52,6 +52,8 @@ const LINE_STARA = {
   supplierUrl: null,
   supplierNote: null,
   externalCode: null,
+  supplierAssignable: false,
+  manualSupplierOverride: null,
 };
 
 const LINE_NOVA = {
@@ -70,6 +72,8 @@ const LINE_NOVA = {
   supplierUrl: null,
   supplierNote: null,
   externalCode: null,
+  supplierAssignable: false,
+  manualSupplierOverride: null,
 };
 
 afterEach(() => {
