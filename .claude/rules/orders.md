@@ -247,3 +247,25 @@ paths:
   Shoptet raz dodá reálnu hodnotu, tá prebije ručné priradenie, nikdy
   naopak (ticket to žiada explicitne: priradenie je pre riadok BEZ
   dodávateľa, nie trvalý pin).
+- **Pravidlo vypočítané na ČÍTACEJ strane (`supplierAssignable` v tomto
+  súbore) sa NIKDY nesmie spoliehať na to, že ho vynúti len FRONTEND.**
+  Issue 86 (nezávislý audit po issue 63): `supplier-assignment.ts`'s
+  `assignOrderLineSupplier` mala pôvodný SELECT len cez `variants`, vôbec
+  nejoinovala `products` — takže nemala ako overiť, že produkt naozaj nemá
+  dodávateľa, hoci presne TÚTO podmienku frontend (`OrderLineRow.tsx`)
+  používal na skrytie/zobrazenie vstupu. Zabudnutá otvorená stránka, priame
+  API volanie, alebo súbeh s nočným importom katalógu mohli zapísať
+  dormantný override aj pre produkt so skutočným dodávateľom. Fix: SELECT
+  join na `products`, podmienka vyhodnotená VNÚTRI TEJ ISTEJ transakcie ako
+  upsert, nový návratový stav namapovaný na HTTP 409. Test na KAŽDÝ ďalší
+  zápis, ktorého "kedy sa smie použiť" je odvodené od nejakého čítacieho
+  dopytu/vypočítaného poľa: over, či ZÁPISOVÁ funkcia tú istú podmienku
+  overuje SAMA, nie len že ju UI pred odoslaním skryje.
+- **`apps/web/src/ordersApi.ts`'s `readJson`/`serverErrorMessage` zobrazí
+  ĽUBOVOĽNÉ `{error: "..."}` telo pri ĽUBOVOĽNOM ne-200 HTTP stave** (401 je
+  jediná špeciálna výnimka, `OrdersUnauthorizedError`) — pridanie NOVÉHO
+  HTTP stavu na existujúcej trase (napr. 409 pri issue 86) preto nepotrebuje
+  ŽIADNU zmenu frontendu, hláška sa zobrazí cez existujúci `stateError`
+  banner automaticky. Pri pridávaní ďalšieho chybového stavu na už
+  používanú zápisovú trasu najprv over, či `readJson` volajúcej funkcie už
+  nerieši všeobecný prípad — často áno.
