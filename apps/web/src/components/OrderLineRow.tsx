@@ -1,5 +1,6 @@
 import type { JSX } from "react";
 import type { OrderLine } from "../ordersApi.js";
+import { formatVariantTotalChip, type VariantTotal } from "../ordersSummary.js";
 
 // issue 60: `objednane` je VÝCHODISKOVÝ stav riadku (pred tým, než sa
 // čokoľvek stane), NIE potvrdenie, že manažér objednal — preto sa nazýva
@@ -22,6 +23,7 @@ export function OrderLineRow({
   busyLineId,
   busyOrderedLineId,
   supplierBusy,
+  variantTotal,
   onChangeState,
   onChangeOrdered,
 }: {
@@ -29,6 +31,13 @@ export function OrderLineRow({
   readonly canChangeState: boolean;
   readonly busyLineId: string | null;
   readonly busyOrderedLineId: string | null;
+  // issue 62: súčet kusov tohto istého `variantCode` naprieč VŠETKÝMI
+  // riadkami dodávateľa tohto riadku (`OrdersSection.tsx`'s
+  // `computeVariantTotals(group.lines)`, nad NEFILTROVANOU skupinou) —
+  // `undefined`, keď produkt v tejto skupine nemá k dispozícii súčet
+  // (defenzívne, v praxi vždy nájdené, keďže mapa sa staví z tých istých
+  // riadkov, z ktorých pochádza aj tento `line`).
+  readonly variantTotal: VariantTotal | undefined;
   // Review of PR 75, finding 6: TRUE, keď práve prebieha hromadné "označiť/
   // zrušiť skupinu ako objednané" PRE DODÁVATEĽA tohto riadku
   // (`OrdersSection.tsx`'s `busyOrderedSupplier === group.supplier`) —
@@ -40,6 +49,7 @@ export function OrderLineRow({
   readonly onChangeState: (lineId: string, newState: OrderLine["state"]) => void;
   readonly onChangeOrdered: (lineId: string, ordered: boolean) => void;
 }): JSX.Element {
+  const qtyChip = variantTotal !== undefined ? formatVariantTotalChip(variantTotal) : null;
   return (
     <tr
       className={"order-row state-" + line.state + (line.ordered ? " ordered" : "")}
@@ -62,7 +72,14 @@ export function OrderLineRow({
       <td>{line.variantCode}</td>
       <td>{line.variantName}</td>
       <td>{line.sizeLabel ?? "—"}</td>
-      <td className="ord-qty">{line.quantity} ks</td>
+      <td className="ord-qty">
+        {line.quantity} ks
+        {qtyChip !== null && (
+          <span className="qty-total-chip" data-testid={`qty-total-${line.lineId}`} title={qtyChip.title}>
+            {qtyChip.text}
+          </span>
+        )}
+      </td>
       <td className="ord-supplier-cell" data-testid={`supplier-link-${line.lineId}`}>
         {line.supplierUrl !== null ? (
           <a

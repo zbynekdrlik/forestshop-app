@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type JSX } from "react";
 import type { Me } from "../api.js";
-import { isLineResolved } from "../ordersSummary.js";
+import { computeVariantTotals, isLineResolved } from "../ordersSummary.js";
 import { OrderLineRow } from "./OrderLineRow.js";
 import { OrderOpenStatusesPanel } from "./OrderOpenStatusesPanel.js";
 import { OrdersToolbar } from "./OrdersToolbar.js";
@@ -364,6 +364,12 @@ export function OrdersSection({
       {filteredGroups.map((group) => {
         const visibleLines = hideResolved ? group.lines.filter((line) => !isLineResolved(line)) : group.lines;
         if (visibleLines.length === 0) return null;
+        // issue 62: súčty sa počítajú nad CELOU (nefiltrovanou) skupinou
+        // dodávateľa, nikdy nad `visibleLines` — chip nesmie zmiznúť/zmeniť
+        // hodnotu len preto, že prepínač "skryť vybavené" skryl sesterský
+        // riadok toho istého produktu (`.claude/rules/orders.md`'s zámer
+        // pre `outstandingOf` v starej appke).
+        const variantTotals = computeVariantTotals(group.lines);
         return (
           <div key={group.supplier} className="order-group" data-testid={`supplier-${group.supplier}`}>
             <SupplierActionsPanel
@@ -421,6 +427,7 @@ export function OrdersSection({
                     // dodávateľa beží, žiadny riadok jeho skupiny sa nesmie dať
                     // meniť per-riadkovo naraz.
                     supplierBusy={busyOrderedSupplier === group.supplier}
+                    variantTotal={variantTotals.get(line.variantCode)}
                     onChangeState={changeState}
                     onChangeOrdered={changeOrdered}
                   />

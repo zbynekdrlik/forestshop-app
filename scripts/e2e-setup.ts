@@ -77,6 +77,14 @@ const E2E_OBJEDNANE_EMAIL = "e2e-objednane@forestshop.sk"; // musí sa zhodovať
 // dôležité, nie náhodné.
 const E2E_FILTRE_EMAIL = "e2e-filtre@forestshop.sk"; // musí sa zhodovať s hodnotou v orders.spec.ts
 
+// issue 62: rovnaký mechanizmus a dôvod ako `E2E_OTVORENE_STAVY_EMAIL`/
+// `E2E_OBJEDNANE_EMAIL` vyššie — balík je UŽ na hranici `MAX_ATTEMPTS`
+// (10, komentár vyššie pri `E2E_NAV_EMAIL`), takže nový test (súčet kusov
+// toho istého produktu naprieč objednávkami dodávateľa) dostáva VLASTNÝ
+// izolovaný účet namiesto ďalšieho prihlásenia pod zdieľaným
+// `e2e@forestshop.sk`.
+const E2E_SUCET_EMAIL = "e2e-sucet@forestshop.sk"; // musí sa zhodovať s hodnotou v orders.spec.ts
+
 const { db, pool } = createDb();
 // Konštantný literál bez interpolácie — obyčajný reťazec je tu rovnako bezpečný
 // ako `sql` tagovaná šablóna (tú používa ekvivalentný apps/api/tests/helpers/db.ts),
@@ -146,6 +154,12 @@ await db.insert(users).values({
 });
 await db.insert(users).values({
   email: E2E_FILTRE_EMAIL,
+  passwordHash: await hashPassword(E2E_HESLO),
+  displayName: "E2E Manažér",
+  role: "manazer",
+});
+await db.insert(users).values({
+  email: E2E_SUCET_EMAIL,
   passwordHash: await hashPassword(E2E_HESLO),
   displayName: "E2E Manažér",
   role: "manazer",
@@ -257,6 +271,49 @@ await db.insert(orderLines).values({
   // test, hoci s "Na objednanie" zoznamom (predmet TOHTO ticketu) to
   // nemá nič spoločné.
   state: "skladom",
+});
+
+// Issue 62: DVE ĎALŠIE objednávky od DVOCH rôznych zákazníkov nad TÝM ISTÝM
+// variantom ("60055/10", supplier v CSV fixtúre nastavený na nový, dovtedy
+// nepoužitý "DODAVATEL-TEST-2" — `apps/api/src/modules/catalog/fixtures/
+// shoptet-sample.csv`) — zámerne NOVÝ dodávateľ, nie DODAVATEL-TEST-1 ani
+// "(bez dodávateľa)", ktorých presné počty riadkov iné testy v
+// `orders.spec.ts` overujú ("Všetci (2)" a pod. — pridanie riadku do
+// existujúcej skupiny by ich tichým spôsobom rozbilo). Obe objednávky
+// zostávajú vo VÝCHODISKOVOM stave ("objednane"/nevybavené) — súčet
+// "Σ spolu" (issue 62) tak pri prvom vykreslení ukazuje CELÉ dopytované
+// množstvo ako zostávajúce (3 + 2 = 5 ks), presne to, čo e2e test tohto
+// ticketu overuje pred aj po prepnutí stavu jedného z riadkov.
+const [objednavkaSucetPrva] = await db
+  .insert(orders)
+  .values({
+    externalOrderId: "9004",
+    customerName: "E2E Zákazník Súčet Prvá",
+    statusName: DEFAULT_ORDER_OPEN_STATUS,
+    placedAt: new Date("2026-07-23T09:00:00Z"),
+  })
+  .returning();
+if (objednavkaSucetPrva === undefined) throw new Error("E2E objednávka (súčet, prvá) sa nepodarila vložiť");
+await db.insert(orderLines).values({
+  orderId: objednavkaSucetPrva.id,
+  variantCode: "60055/10",
+  quantity: 3,
+});
+
+const [objednavkaSucetDruha] = await db
+  .insert(orders)
+  .values({
+    externalOrderId: "9005",
+    customerName: "E2E Zákazník Súčet Druhá",
+    statusName: DEFAULT_ORDER_OPEN_STATUS,
+    placedAt: new Date("2026-07-24T09:00:00Z"),
+  })
+  .returning();
+if (objednavkaSucetDruha === undefined) throw new Error("E2E objednávka (súčet, druhá) sa nepodarila vložiť");
+await db.insert(orderLines).values({
+  orderId: objednavkaSucetDruha.id,
+  variantCode: "60055/10",
+  quantity: 2,
 });
 
 // F4 (#45): jeden UŽ NAVRHNUTÝ (nepotvrdený) pairing kandidát — simuluje to,
