@@ -268,7 +268,13 @@ test("manažér odškrtne riadok ako objednaný a hromadne označí/zruší cel�
   await expect(riadok).not.toHaveClass(/ordered/);
 
   // Per riadok — odškrtnutie stlmí CELÝ riadok a pretrvá po obnovení stránky.
-  await checkbox.check();
+  // `.click()`, NIE `.check()` — `.check()` si sám ihneď po kliku overí stav,
+  // no zápis je async (POST na server), takže by na pomalšom CI behu zlyhal
+  // presne rovnakým dôvodom ako `<select>` v teste vyššie
+  // (`.claude/rules/testing.md`): `expect(...).toBeChecked()` nižšie SKUTOČNE
+  // čaká (opakovane skúša), kým sa lokálny optimistický update po vyriešení
+  // promisu prejaví.
+  await checkbox.click();
   await expect(checkbox).toBeChecked();
   await expect(riadok).toHaveClass(/ordered/);
   await expect(page.getByRole("alert")).toHaveCount(0);
