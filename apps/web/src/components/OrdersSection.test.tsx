@@ -123,8 +123,13 @@ it("riadok s odkazom na dodávateľa zobrazí klikateľný odkaz aj kód dodáva
   render(<OrdersSection role="citanie" onSessionExpired={() => {}} />);
 
   const bunka = await screen.findByTestId(`supplier-link-${LINE_STARA.lineId}`);
-  const odkaz = within(bunka).getByRole<HTMLAnchorElement>("link", { name: "Odkaz na dodávateľa" });
+  // issue 70: aria-label nesie názov produktu, aby riadky nemali rovnaké
+  // prístupné meno — viditeľný text ostáva "Odkaz na dodávateľa".
+  const odkaz = within(bunka).getByRole<HTMLAnchorElement>("link", {
+    name: `Odkaz na dodávateľa — ${LINE_STARA.variantName}`,
+  });
   expect(odkaz.getAttribute("href")).toBe("https://www.huntingshop.eu/wild-t-green-nohavice");
+  expect(odkaz.getAttribute("rel")).toBe("noreferrer noopener");
   expect(bunka.textContent).toContain("OB832");
 });
 
@@ -146,6 +151,21 @@ it("riadok bez akéhokoľvek údaja o dodávateľovi zobrazí pomlčku", async (
 
   const bunka = await screen.findByTestId(`supplier-link-${LINE_STARA.lineId}`);
   expect(bunka.textContent).toBe("—");
+});
+
+// issue 70 (code review nález po PR 69): pomlčka sa doteraz potláčala len
+// vtedy, keď bol vyplnený `supplierUrl` alebo `supplierNote` — riadok LEN s
+// `externalCode` (bez odkazu aj bez poznámky) dostal zbytočnú pomlčku hneď
+// vedľa kódu.
+it("riadok len s kódom dodávateľa (bez odkazu aj poznámky) nezobrazí pomlčku", async () => {
+  const riadokLenSKodom = { ...LINE_STARA, supplierUrl: null, supplierNote: null, externalCode: "OB832" };
+  fetchOpenOrders.mockResolvedValue([{ supplier: "Dodávateľ Alfa", lines: [riadokLenSKodom], email: null }]);
+
+  render(<OrdersSection role="citanie" onSessionExpired={() => {}} />);
+
+  const bunka = await screen.findByTestId(`supplier-link-${LINE_STARA.lineId}`);
+  expect(bunka.textContent).not.toContain("—");
+  expect(bunka.textContent).toContain("OB832");
 });
 
 it("pri 401 zavolá onSessionExpired namiesto zobrazenia všeobecnej chyby", async () => {

@@ -58,6 +58,24 @@ it("odmietne odpoveď s neplatným tvarom", async () => {
   await expect(fetchOpenOrders()).rejects.toThrow();
 });
 
+// issue 70 (code review nález po PR 69): `href` bezpečnosť by nemala
+// závisieť LEN od backendovho `extractSupplierLink` regexu — schéma na
+// strane frontendu overuje, že `supplierUrl` je naozaj http(s) odkaz.
+it("odmietne odpoveď, kde supplierUrl nezačína http(s)://", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          suppliers: [{ supplier: "X", lines: [{ ...LINE, supplierUrl: "javascript:alert(1)" }], email: null }],
+        }),
+        { status: 200 },
+      ),
+    ),
+  );
+  await expect(fetchOpenOrders()).rejects.toThrow();
+});
+
 it("pri 401 vyhodí OrdersUnauthorizedError namiesto všeobecnej chyby", async () => {
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("", { status: 401 })));
   await expect(fetchOpenOrders()).rejects.toBeInstanceOf(OrdersUnauthorizedError);

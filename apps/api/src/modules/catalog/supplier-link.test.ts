@@ -47,4 +47,32 @@ describe("extractSupplierLink", () => {
       note: "http://example.com/x",
     });
   });
+
+  // issue 70 (code review nálezy po PR 69): `internalNote` je ručne písaný
+  // voľný text, takže URL je bežne nasledovaná koncovou interpunkciou alebo
+  // uzatvorená v zátvorke — tá sa nesmie stať súčasťou `href`.
+  it("odkaz nasledovaný bodkou → bodka sa neberie ako súčasť url", () => {
+    expect(
+      extractSupplierLink("Dodavatel odkaz: https://shop.example.com/produkt-x-2026."),
+    ).toEqual({
+      url: "https://shop.example.com/produkt-x-2026",
+      note: "Dodavatel odkaz: https://shop.example.com/produkt-x-2026.",
+    });
+  });
+
+  it("odkaz v zátvorke → uzatváracia zátvorka sa neberie ako súčasť url", () => {
+    expect(extractSupplierLink("(pozri https://shop.example.com/x)")).toEqual({
+      url: "https://shop.example.com/x",
+      note: "(pozri https://shop.example.com/x)",
+    });
+  });
+
+  it("poznámka s viacerými odkazmi → zoberie prvý výskyt (zámerné, first-match)", () => {
+    expect(
+      extractSupplierLink("Primárny https://a.example.com/prvy, záložný https://b.example.com/druhy"),
+    ).toEqual({
+      url: "https://a.example.com/prvy",
+      note: "Primárny https://a.example.com/prvy, záložný https://b.example.com/druhy",
+    });
+  });
 });

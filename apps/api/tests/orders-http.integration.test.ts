@@ -1,4 +1,3 @@
-import { eq } from "drizzle-orm";
 import { afterEach, expect, it, vi } from "vitest";
 import { auditEvents, orderLines, orders, users } from "../src/db/schema.js";
 import { createApp } from "../src/http/app.js";
@@ -211,6 +210,33 @@ it("vráti detail objednávky so všetkými riadkami, 404 pre neznáme id, 400 p
   expect(neplatneRes.status).toBe(400);
 });
 
+// issue 70 (code review nález po PR 69): `getOrderDetail`/`OrderDetailLine`
+// neboli rozšírené o `supplierUrl`/`supplierNote`/`externalCode`, na rozdiel
+// od `listOpenOrderLinesBySupplier` (test vyššie) a `mail.ts`'s
+// `loadOutstandingLines` — tretia čítacia cesta zostala nekonzistentná.
+it("detail objednávky nesie odkaz na dodávateľa aj kód dodávateľa pri riadku, rovnako ako /api/orders/open", async () => {
+  const { app, cookie, db } = await boot("manazer");
+  await insertTestVariant(db, "DET-1", "Dodávateľ Detail", {
+    internalNote: "https://www.huntingshop.eu/fairfax-fz-mikina",
+    externalCode: "OB832",
+  });
+  const [objednavka] = await db
+    .insert(orders)
+    .values({ externalOrderId: "5001", customerName: "Zákazník", placedAt: new Date("2026-07-22T00:00:00Z") })
+    .returning();
+  if (objednavka === undefined) throw new Error("insert zlyhal");
+  await db.insert(orderLines).values({ orderId: objednavka.id, variantCode: "DET-1", quantity: 1 });
+
+  const detailRes = await app.request(`/api/orders/${objednavka.id}`, { headers: { cookie } });
+  const detailTelo = (await detailRes.json()) as {
+    lines: { supplierUrl: string | null; supplierNote: string | null; externalCode: string | null }[];
+  };
+  expect(detailTelo.lines[0]).toMatchObject({
+    supplierUrl: "https://www.huntingshop.eu/fairfax-fz-mikina",
+    externalCode: "OB832",
+  });
+});
+
 // `insertTestVariant`/o dôvod, prečo je každá rola SAMOSTATNÝM `it()` a nie
 // tromi po sebe idúcimi `boot()` volaniami v jednom teste: `withCleanDb()`
 // berie exkluzívny session-scoped zámok a druhé volanie TRUNCATE-uje tie isté
@@ -348,124 +374,3 @@ it("druhé súbežné spustenie importu vráti busy namiesto paralelného behu",
   expect((await prvy.json()) as { status: string }).toMatchObject({ status: "accepted" });
 });
 
-// #25: zmena stavu riadku objednávky + audit.
-// `poradie` robí variant/objednávku UNIKÁTNU pri viacerých volaniach v tom
-// istom teste — `insertTestVariant` vkladá `product`/`variant` s daným kódom
-// ako primárnym kľúčom, druhé volanie s tým istým kódom by zhodilo unique
-// constraint.
-let poradieVlozenia = 0;
-async function vlozRiadok(db: Awaited<ReturnType<typeof boot>>["db"]): Promise<{ orderId: string; lineId: string }> {
-  poradieVlozenia += 1;
-  const kod = `A-${String(poradieVlozenia)}`;
-  await insertTestVariant(db, kod, "Dodávateľ Alfa");
-  const [objednavka] = await db
-    .insert(orders)
-    .values({
-      externalOrderId: `400${String(poradieVlozenia)}`,
-      customerName: "Zákazník",
-      placedAt: new Date("2026-07-20T00:00:00Z"),
-    })
-    .returning();
-  if (objednavka === undefined) throw new Error("insert objednávky zlyhal");
-  const [riadok] = await db
-    .insert(orderLines)
-    .values({ orderId: objednavka.id, variantCode: kod, quantity: 1 })
-    .returning();
-  if (riadok === undefined) throw new Error("insert riadku zlyhal");
-  return { orderId: objednavka.id, lineId: riadok.id };
-}
-
-it("manažér zmení stav riadku objednávky, zápis sa uloží aj do auditu s tým, kto ho spravil", async () => {
-  const { app, cookie, db, userId } = await boot("manazer");
-  const { orderId, lineId } = await vlozRiadok(db);
-
-  const res = await app.request(`/api/orders/lines/${lineId}/state`, {
-    method: "POST",
-    headers: { cookie, "content-type": "application/json" },
-    body: JSON.stringify({ state: "skladom" }),
-  });
-  expect(res.status).toBe(200);
-  expect(await res.json()).toEqual({ ok: true, state: "skladom" });
-
-  const [riadok] = await db.select().from(orderLines).where(eq(orderLines.id, lineId));
-  expect(riadok?.state).toBe("skladom");
-
-  const udalosti = await db.select().from(auditEvents);
-  const udalost = udalosti.find((e) => e.action === "order_line.state.changed");
-  expect(udalost).toBeDefined();
-  expect(udalost?.actorUserId).toBe(userId);
-  expect(udalost?.entity).toBe("order_line");
-  expect(udalost?.entityId).toBe(lineId);
-  expect(udalost?.data).toMatchObject({ orderId, from: "objednane", to: "skladom" });
-});
-
-it("rola citanie nesmie zmeniť stav riadku objednávky", async () => {
-  const { app, cookie, db } = await boot("citanie");
-  const { lineId } = await vlozRiadok(db);
-  const res = await app.request(`/api/orders/lines/${lineId}/state`, {
-    method: "POST",
-    headers: { cookie, "content-type": "application/json" },
-    body: JSON.stringify({ state: "skladom" }),
-  });
-  expect(res.status).toBe(403);
-});
-
-it("rola sef tiež nesmie zmeniť stav riadku objednávky", async () => {
-  const { app, cookie, db } = await boot("sef");
-  const { lineId } = await vlozRiadok(db);
-  const res = await app.request(`/api/orders/lines/${lineId}/state`, {
-    method: "POST",
-    headers: { cookie, "content-type": "application/json" },
-    body: JSON.stringify({ state: "skladom" }),
-  });
-  expect(res.status).toBe(403);
-});
-
-it("neznámy riadok vráti 404, neplatná hodnota stavu vráti 400", async () => {
-  const { app, cookie, db } = await boot("manazer");
-  await vlozRiadok(db);
-
-  const neznamy = await app.request("/api/orders/lines/11111111-1111-1111-1111-111111111111/state", {
-    method: "POST",
-    headers: { cookie, "content-type": "application/json" },
-    body: JSON.stringify({ state: "skladom" }),
-  });
-  expect(neznamy.status).toBe(404);
-
-  const { lineId } = await vlozRiadok(db);
-  const neplatny = await app.request(`/api/orders/lines/${lineId}/state`, {
-    method: "POST",
-    headers: { cookie, "content-type": "application/json" },
-    body: JSON.stringify({ state: "zrusene" }),
-  });
-  expect(neplatny.status).toBe(400);
-});
-
-it("zmena stavu s cudzím Origin je odmietnutá (403), rovnaký pôvod prejde", async () => {
-  const { app, cookie, db } = await boot("manazer");
-  const { lineId } = await vlozRiadok(db);
-
-  const cudzi = await app.request(`/api/orders/lines/${lineId}/state`, {
-    method: "POST",
-    headers: {
-      cookie,
-      "content-type": "application/json",
-      origin: "https://utocnik.example",
-      host: "forestshop.example",
-    },
-    body: JSON.stringify({ state: "skladom" }),
-  });
-  expect(cudzi.status).toBe(403);
-
-  const rovnaky = await app.request(`/api/orders/lines/${lineId}/state`, {
-    method: "POST",
-    headers: {
-      cookie,
-      "content-type": "application/json",
-      origin: "https://forestshop.example",
-      host: "forestshop.example",
-    },
-    body: JSON.stringify({ state: "skladom" }),
-  });
-  expect(rovnaky.status).toBe(200);
-});

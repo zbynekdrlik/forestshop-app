@@ -17,6 +17,11 @@ Repo: `zbynekdrlik/forestshop-app` (public). Two-branch flow — `main`
 `apps/api` (Hono + Drizzle + PostgreSQL) a `apps/web` (React + Vite),
 nasadenie na dev2 cez GHCR a Cloudflare tunel.
 
+**`gh issue view <N>` (bez `--json`) na tomto repe padá** (`GraphQL: Projects
+(classic) is being deprecated…`) — použi `gh issue view <N> --json
+body,title,state,labels,comments` namiesto toho (žiadne Projects polia sa
+nepýtajú, takže to prejde).
+
 ## Playbook router
 
 Per-area rules live in `.claude/rules/<area>.md` with `paths:` frontmatter.

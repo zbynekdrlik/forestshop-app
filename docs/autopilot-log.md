@@ -653,3 +653,37 @@ nové heslo sa nikde v pushnutom obsahu nenachádza.
   (docs-only, rides the next feature PR; required its own version bump to
   `0.3.0-dev.29` after CI's version-check correctly caught the omission).
 - Per-ticket Discord card fired (`notify --run-card`, confirmed delivered).
+
+## Issue 67 — supplier link + supplier code from Shoptet export (2026-07-30)
+
+- Verified on the real export (14 014 rows, read-only): `internalNote` is
+  guid-consistent (0/4519 products had >1 distinct value) → product-level;
+  `externalCode` genuinely differs between sizes of the same product (e.g.
+  one product had `AJ26-L`/`AJ26-M`/`AJ26-S`/`AJ26-XL`) → variant-level.
+- Design comment posted BEFORE first commit:
+  https://github.com/zbynekdrlik/forestshop-app/issues/67#issuecomment-5132315183
+- Migration `0011_medical_ronan.sql`: `product.internal_note` + `variant.external_code`
+  (both nullable text). `map-row.ts`/`ingest.ts` capture both; new pure
+  `modules/catalog/supplier-link.ts` (`extractSupplierLink`) extracts the URL
+  out of a labelled note AT READ TIME (no extra derived column) — used by
+  `orders/queries.ts` (OrdersSection) and `orders/mail.ts` (copied/mailed text,
+  which already had the `[code, …].filter(Boolean).join(' | ')` mechanism
+  prepared per `.claude/rules/orders.md`, just missing the data source).
+- Tests: `supplier-link.test.ts` (unit, 8 cases covering the three real
+  shapes + edges), `map-row.test.ts` (+4), `mail.test.ts` (+2 new format
+  cases), `orders-http.integration.test.ts` (+1, all three shapes end to
+  end), `supplier-mail.integration.test.ts` (+1), `OrdersSection.test.tsx`
+  (+3), e2e `orders.spec.ts` assertion added against the real fixture link
+  (huntingshop.eu, `4859/46`, `externalCode: OB832`).
+- Commit `3564df2` (feature, single commit — greenfield feature, no bug-fix
+  RED/GREEN needed) on `dev`; PR **#69** (`dev` → `main`), merged `a602cd7`.
+  CI all green (version-check, check, integration 186/186, docker-build,
+  e2e 14/14). Local: typecheck + lint + unit (400) + integration (186) +
+  e2e (14) all green before push.
+- Deployed + verified on https://forestshop-novy.newlevel.media
+  (v0.3.0-dev.30, matches DOM). Triggered a live catalog re-import
+  (14 066 variants, 4 533 products, 0 anomalies) so the new columns
+  populated for real data, then confirmed real `huntingshop.eu` links +
+  supplier codes (e.g. "OB041 / XHGOSH") render on real "Na objednanie"
+  rows, clickable, correct `href`. Console: 0 errors/0 warnings.
+- Per-ticket Discord card fired (`notify --run-card`, confirmed delivered).

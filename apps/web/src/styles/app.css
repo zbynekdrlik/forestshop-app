@@ -648,12 +648,22 @@ tr:last-child td {
 }
 /* issue 67: odkaz/kód dodávateľa pri riadku objednávky. */
 .ord-supplier-cell {
-  white-space: nowrap;
+  max-width: 220px;
 }
 .ord-supplier-link {
   font-weight: var(--fs-weight-medium);
 }
+/* issue 70: `supplierNote` je voľný text neobmedzenej dĺžky (na rozdiel od
+   krátkych popiskov, kde je `nowrap` bez orezania bezpečný) — orezáva sa
+   rovnakým vzorom ako `.folder-head .ftitle`/`.usermenu-btn span:first-child`,
+   `title` nesie celý text pre prípad potreby. */
 .ord-supplier-note {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
   color: var(--fs-ink-muted);
 }
 .ord-supplier-code {

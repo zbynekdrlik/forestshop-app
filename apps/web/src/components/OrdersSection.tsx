@@ -352,14 +352,22 @@ export function OrdersSection({
                   <td className="ord-qty">{line.quantity} ks</td>
                   <td className="ord-supplier-cell" data-testid={`supplier-link-${line.lineId}`}>
                     {line.supplierUrl !== null ? (
-                      <a href={line.supplierUrl} target="_blank" rel="noreferrer" className="ord-supplier-link">
+                      <a
+                        href={line.supplierUrl}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                        className="ord-supplier-link"
+                        aria-label={`Odkaz na dodávateľa — ${line.variantName}`}
+                      >
                         Odkaz na dodávateľa
                       </a>
                     ) : line.supplierNote !== null ? (
-                      <span className="ord-supplier-note">{line.supplierNote}</span>
-                    ) : (
+                      <span className="ord-supplier-note" title={line.supplierNote}>
+                        {line.supplierNote}
+                      </span>
+                    ) : line.externalCode === null ? (
                       "—"
-                    )}
+                    ) : null}
                     {line.externalCode !== null && <div className="ord-supplier-code">kód {line.externalCode}</div>}
                   </td>
                   <td>
