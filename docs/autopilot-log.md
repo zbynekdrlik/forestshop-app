@@ -1082,3 +1082,86 @@ nové heslo sa nikde v pushnutom obsahu nenachádza.
   and PR `#82`; main CI + Deploy green on merge `04435a5`; live
   `/api/version` matched (`0.3.0-dev.42` @ `04435a5`).
 - Shared PR: `#82`.
+
+## Issue 63 — Na objednanie: ručné priradenie dodávateľa k riadku bez dodávateľa
+
+- Design comment posted BEFORE any code (root cause: `product.supplier`
+  is the only source of truth for grouping and is `null` exactly when
+  Shoptet doesn't carry it — nothing survives a nightly catalog
+  re-import, and grouping was exact-string, not case/whitespace
+  tolerant). Verified live against production DB first: exactly 3 open
+  order lines with no supplier (matching the ticket), plus real
+  case-duplicate supplier names already in the catalog
+  (`HUNTING24`/`Hunting24`, `Werra`/`WERRA`, `L.A. Team`/`L.A. TEAM`).
+- New `product_supplier_override` table (migration 0014), keyed by
+  `product_key` (not variant) so one assignment applies to every sibling
+  size. Effective supplier everywhere is `coalesce(product.supplier,
+  override.supplier)` (`modules/orders/supplier-key.ts`'s
+  `effectiveSupplierSql`) — a fallback, never a permanent pin: a later
+  real Shoptet value wins. Case/whitespace-insensitive grouping
+  (`normalizedSupplierKeySql`/`normalizeSupplierKeyJs`) applied on ALL
+  THREE read paths that group/filter by supplier
+  (`listOpenOrderLinesBySupplier`, `listOpenOrderLineIdsForSupplier` —
+  bulk "ordered" toggle, and `mail.ts`'s `loadOutstandingLines`) — missing
+  any one of the three would silently under-reach a merged group.
+  Canonical display spelling on a merge: most-frequent raw spelling
+  (`pickCanonicalSupplierSpelling`), tie-broken alphabetically.
+- New `POST /api/orders/lines/:lineId/supplier` (assignOrderLineSupplier)
+  upserts the override for the line's product. Frontend: inline text
+  input + shared `<datalist id="known-suppliers">` (built from the
+  already-loaded `/api/orders/open` groups, no new GET route) on any line
+  where `supplierAssignable` (i.e. `product.supplier === null`). Save
+  triggers a full refetch (line changes GROUP, same reasoning as
+  `PairingSection`'s refetch-after-confirm). Extracted
+  `SupplierOrderGroup.tsx` from `OrdersSection.tsx` (same mechanical
+  reason as the earlier `OrderLineRow`/`SupplierActionsPanel`
+  extractions — no line-count headroom left for the new state/callback).
+- Two real bugs found and fixed during implementation (both documented in
+  `.claude/rules/database.md`/`testing.md`): (1) `\s` inside a drizzle
+  `sql` JS template literal silently loses its backslash (JS doesn't
+  recognize `\s` as an escape, so the SQL text sent to Postgres was
+  `'s+'`, not `'\s+'`) — fixed with `\\s+`, caught via `.toSQL()` +
+  direct DB probing, not by inspection. (2) `insertTestVariantForProduct`
+  test helper's `options.supplier ?? "Test dodávateľ"` silently ignored
+  an explicitly-passed `null` (no prior test needed a shared-product
+  fixture with no supplier) — fixed to `"supplier" in options ? ... :
+  ...`. (3) The new `.ord-supplier-assign` table cell's input+button
+  visually overflowed into the neighbouring "Stav" column under
+  `white-space: nowrap`, whose `<select>` (later in the DOM) then stole
+  Playwright clicks meant for the save button — fixed with `display:
+  flex; flex-wrap: wrap` instead of `nowrap`.
+- Small fold-in fix from a comment on the same ticket:
+  `formatVariantTotalChip` (issue 62) now also hides the chip when
+  `remaining === 0`, not just `lineCount < 2` — own unit test.
+- Tests: unit (`supplier-key.test.ts` — normalization + canonical-spelling
+  picking, `ordersSummary.test.ts` — chip hide), integration
+  (`orders-supplier-assignment.integration.test.ts` — persistence,
+  propagation to a sibling size, case/whitespace merge reaching a bulk
+  action AND the mail aggregation, 403/404/400), e2e (new fixture: order
+  9006, variants `60035/L`/`60035/M` — two sizes of the same product,
+  both with no supplier in the CSV fixture — new isolated
+  `e2e-priradenie@forestshop.sk` account, positioned LAST in
+  `orders.spec.ts` since it permanently moves those lines out of
+  "(bez dodávateľa)"). Updated the file's pre-existing exact-count/text
+  assertions the new global fixture lines shifted (first test's chip
+  counts + summary, the mail-preview test's aggregated item count/body,
+  a row locator that became ambiguous once "(bez dodávateľa)" grew past
+  1 line), plus `exact: true` on an existing "Uložiť" button locator that
+  started colliding (substring match) with the new per-line save
+  button's aria-label.
+- Verified live on production (`https://forestshop-novy.newlevel.media`):
+  assigned a real no-supplier line (`20261228 / 40258/XL`) to a
+  throwaway test supplier via Playwright — row moved groups immediately
+  ("(bez dodávateľa)" 3→2, new group appeared, "Všetci" stayed 39),
+  survived a reload, console stayed at 0 errors/0 warnings throughout.
+  Deleted the test override row directly in `product_supplier_override`
+  afterward and reloaded — line returned to "(bez dodávateľa) (3)"
+  exactly; production data confirmed restored (39 open lines, 0 marked
+  ordered).
+- Commits: `6fcc039` (version bump 0.3.0-dev.44) → `8a9e18c` (migration)
+  → `ead8ae3` (backend) → `b2a006d` (frontend) → `2b5b0e2` (chip fix) →
+  `ec9bd8d` (e2e).
+- CI green (version-check/check/integration/e2e/docker-build) on `dev`
+  push and PR `#84`; main CI + Deploy green on merge `3e66505`; live
+  `/api/version` matched (`0.3.0-dev.44` @ `3e66505`).
+- Shared PR: `#84`.

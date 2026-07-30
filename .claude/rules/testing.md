@@ -288,3 +288,29 @@ paths:
   Ako pri predchádzajúcom bode: nová skupina potrebuje aj VLASTNÝ izolovaný
   e2e účet (balík je na hranici `MAX_ATTEMPTS=10`), nikdy ďalšie prihlásenie
   pod zdieľaným `e2e@forestshop.sk`.
+- **`options.field ?? "predvolená hodnota"` v testovom helperi TICHO
+  ignoruje výslovne zadané `field: null`** — `??` fallbackuje na `null` AJ
+  `undefined` rovnako, takže volajúci, ktorý chce SKUTOČNÉ `null` (nie len
+  "nezadal som to"), dostane predvolenú hodnotu namiesto neho. Zistené
+  issue 63 (`tests/helpers/orders.ts`'s `insertTestVariantForProduct`,
+  `supplier: options.supplier ?? "Test dodávateľ"` — žiadny existujúci test
+  dovtedy nepotreboval zdieľaný produkt BEZ dodávateľa, takže sa to
+  neprejavilo skôr). Fix: `"pole" in options ? options.pole :
+  predvolená` — rozlíši "kľúč vôbec nezadaný" od "zadané ako null".
+  Rovnaký test pri KAŽDOM ďalšom helperi s `nullable` voliteľným poľom a
+  `??` defaultom: potrebuje niekedy volajúci vynútiť `null` PROTI
+  defaultu? Ak áno, `??` to nedovolí.
+- **Wide inline obsah (vstup + tlačidlo) v úzkom `<td>` bez zalomenia
+  (`white-space: nowrap`) môže VIZUÁLNE pretiecť do SUSEDNÉHO stĺpca a
+  ukradnúť Playwright kliky mierené na prvok v ňom** — `locator.click()`
+  padá opakovane na "`<iný prvok>` ... intercepts pointer events" (nie
+  flaka, deterministicky, kým sa CSS neopraví). Zistené issue 63
+  (`.ord-supplier-assign` stĺpec — vstup 140px + tlačidlo pri `nowrap`
+  pretiekli do susedného stĺpca "Stav", ktorého `<select>` (neskôr v DOM-e,
+  teda navrchu) potom kradol kliky na tlačidlo pod ním). Fix: `display:
+  flex; flex-wrap: wrap` na bunke namiesto `white-space: nowrap` — obsah sa
+  zalomí VNÚTRI bunky (rastie výška riadku), nikdy nepretečie do
+  suseda. Rovnaký test pri KAŽDOM ďalšom stĺpci s viacerými inline
+  ovládacími prvkami v jednej `<td>`: over reálnym Playwright behom (nie
+  len vizuálne v prehliadači na širokej obrazovke), že klik na KAŽDÝ prvok
+  skutočne trafí TEN prvok, nie souseda pod ním po pretečení.

@@ -215,10 +215,35 @@ paths:
   `variantCode` (kód UŽ nesie aj veľkosť), počíta nad CELOU (nefiltrovanou)
   `group.lines` danej skupiny, nikdy nad pohľadom zúženým `hideResolved` —
   volajúci (`OrdersSection.tsx`) posiela vždy `group.lines`. Chip sa smie
-  zobraziť LEN keď produkt má v skupine ≥2 riadky (`lineCount >= 2`). Ako
-  odvodená hodnota počítaná PRI KAŽDOM RENDRI (rovnaký vzor ako
-  `isLineResolved`/`summarizeOrderLines` vyššie) sa automaticky prepočíta na
-  akúkoľvek zmenu `suppliers` stavu — žiadny extra React stav, žiadny
-  imperatívny prepočítavací krok. ĎALŠIA funkcia potrebujúca "súčet toho
-  istého produktu v rámci dodávateľa" nech importuje odtiaľto, nie novú
-  vlastnú definíciu.
+  zobraziť LEN keď produkt má v skupine ≥2 riadky (`lineCount >= 2`) A ešte
+  zostáva niečo objednať (`remaining > 0`, issue 63 — pôvodne sa rozhodovalo
+  LEN podľa `lineCount`, takže celý vybavený opakovaný produkt navždy
+  ukazoval "Σ spolu 0 ks"). Ako odvodená hodnota počítaná PRI KAŽDOM RENDRI
+  (rovnaký vzor ako `isLineResolved`/`summarizeOrderLines` vyššie) sa
+  automaticky prepočíta na akúkoľvek zmenu `suppliers` stavu — žiadny extra
+  React stav, žiadny imperatívny prepočítavací krok. ĎALŠIA funkcia
+  potrebujúca "súčet toho istého produktu v rámci dodávateľa" nech
+  importuje odtiaľto, nie novú vlastnú definíciu.
+- **Efektívny dodávateľ riadku (issue 63) je `apps/api/src/modules/orders/
+  supplier-key.ts`'s `effectiveSupplierSql`** — `coalesce(product.supplier,
+  product_supplier_override.supplier)`, LEFT JOIN na novú tabuľku
+  `product_supplier_override` (kľúčovanú `product.key`, migrácia 0014).
+  Toto (nie holé `products.supplier`) je odvtedy jediný správny zdroj
+  "aký dodávateľ patrí tomuto riadku" na VŠETKÝCH troch čítacích cestách —
+  `queries.ts`'s `listOpenOrderLinesBySupplier` +
+  `listOpenOrderLineIdsForSupplier` (hromadná akcia) a `mail.ts`'s
+  `loadOutstandingLines`. Zoskupenie/porovnanie je NAVYŠE
+  case/whitespace-insensitive (`normalizedSupplierKeySql`/
+  `normalizeSupplierKeyJs`, priamy náprotivok legacy `supKey`) — dva
+  pravopisy toho istého mena (case/medzery) sú VŽDY jedna skupina, aj keď
+  jeden pochádza z katalógu a druhý z ručného priradenia. Zobrazovaný
+  pravopis pri zlúčení: `pickCanonicalSupplierSpelling` (najčastejší podľa
+  počtu riadkov, remíza → abecedne). ĎALŠIA funkcia, ktorá potrebuje "aký
+  dodávateľ", nech použije `effectiveSupplierSql` (SQL strana) alebo číta z
+  už vrátenej `SupplierOpenOrders.supplier`/`OpenOrderLine.
+  manualSupplierOverride`, nikdy priamo `products.supplier` — to by ticho
+  ignorovalo ručné priradenie a nezlúčilo by rozdielne pravopisy.
+  Override je zámerne len FALLBACK (ľavá strana `coalesce` vyhráva) — keď
+  Shoptet raz dodá reálnu hodnotu, tá prebije ručné priradenie, nikdy
+  naopak (ticket to žiada explicitne: priradenie je pre riadok BEZ
+  dodávateľa, nie trvalý pin).
