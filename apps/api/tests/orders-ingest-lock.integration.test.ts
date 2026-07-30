@@ -15,7 +15,7 @@ const WINDOW_START = new Date("2020-01-01T00:00:00Z");
 const WINDOW_END = new Date("2030-01-01T00:00:00Z");
 const NOW = new Date("2026-07-30T10:00:00Z");
 
-const HEADER = ["code", "date", "billFullName", "itemName", "itemAmount", "itemCode"] as const;
+const HEADER = ["code", "date", "statusName", "billFullName", "itemName", "itemAmount", "itemCode"] as const;
 
 function buildCsv(rows: readonly Record<string, string>[]): Buffer {
   const esc = (v: string): string => `"${v.replaceAll('"', '""')}"`;

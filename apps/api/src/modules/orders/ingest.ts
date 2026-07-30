@@ -190,13 +190,14 @@ export async function ingestOrders(db: Database, options: OrdersIngestOptions): 
   // `${externalOrderId}:${variantCode}`) — zámerne, aby žiadna voľba
   // oddeľovača (dvojbodka, medzera, akýkoľvek znak) nemohla teoreticky
   // kolidovať s obsahom niektorého z oboch reťazcov.
-  const orderInfo = new Map<string, { customerName: string; placedAt: Date }>();
+  const orderInfo = new Map<string, { customerName: string; placedAt: Date; statusName: string }>();
   const lineTotals = new Map<string, Map<string, { externalOrderId: string; variantCode: string; quantity: number }>>();
   for (const candidate of candidates) {
     if (!orderInfo.has(candidate.externalOrderId)) {
       orderInfo.set(candidate.externalOrderId, {
         customerName: candidate.customerName,
         placedAt: candidate.placedAt,
+        statusName: candidate.statusName,
       });
     }
     let byVariant = lineTotals.get(candidate.externalOrderId);
@@ -274,6 +275,7 @@ export async function ingestOrders(db: Database, options: OrdersIngestOptions): 
             batch.map(([externalOrderId, info]) => ({
               externalOrderId,
               customerName: info.customerName,
+              statusName: info.statusName,
               placedAt: info.placedAt,
             })),
           )
@@ -281,9 +283,13 @@ export async function ingestOrders(db: Database, options: OrdersIngestOptions): 
             target: orders.externalOrderId,
             // `comment` sa ZÁMERNE nedáva do SET — je to manažérovo vlastné
             // pole (nikdy nepochádza zo Shoptetu, `schema-orders.ts`), re-import
-            // ho nesmie prepísať/vynulovať.
+            // ho nesmie prepísať/vynulovať. `status_name` (issue 59) je presný
+            // OPAK — je to VŽDY Shoptetovo pole, re-import ho preto MUSÍ
+            // osviežiť (objednávka prejde "Vybavuje sa" → "Vybavená" len tak,
+            // že ju appka pri ďalšom importe znova uvidí).
             set: {
               customerName: sql`excluded.customer_name`,
+              statusName: sql`excluded.status_name`,
               placedAt: sql`excluded.placed_at`,
             },
           })

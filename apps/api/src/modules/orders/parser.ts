@@ -90,6 +90,11 @@ export const REQUIRED_ORDER_COLUMNS: readonly string[] = Object.freeze([
   "itemName",
   "itemAmount",
   "itemCode",
+  // issue 59: bez tohto stĺpca appka nemá podľa čoho rozhodnúť, ktoré
+  // objednávky patria do "Na objednanie" — chýbajúci stĺpec preto odmieta
+  // CELÝ import nahlas (rovnaká disciplína ako zvyšok zoznamu), nikdy ticho
+  // nezapíše polovičné dáta bez stavu.
+  "statusName",
 ]);
 
 function toRecord(columns: readonly string[], values: readonly string[]): Record<string, string> {
@@ -195,9 +200,24 @@ export interface OrderRowIssue {
 export interface OrderLineCandidate {
   readonly externalOrderId: string;
   readonly customerName: string;
+  // issue 59: Shoptet-ov stav objednávky, normalizovaný (`normalizeStatusName`).
+  readonly statusName: string;
   readonly placedAt: Date;
   readonly variantCode: string;
   readonly quantity: number;
+}
+
+/**
+ * issue 59: `statusName` je voľný text, ktorý si obchod nastavuje priamo v
+ * Shoptete, a appka ho porovnáva na DVOCH miestach — raz z exportu (tu),
+ * raz z toho, čo správca zapíše do `order_open_status` (`open-statuses.ts`).
+ * NFC normalizácia + orez sú nutné, aby oba zdroje porovnávali v ROVNAKEJ
+ * forme (rovnaký dôvod ako stará appka's `norm_status`, `export_helpers.py`):
+ * "Vybavuje sa" vložené zo zdroja, ktorý rozkladá diakritiku, vyzerá na
+ * obrazovke identicky, ale je bajtovo iné a nezhodovalo by sa s ničím.
+ */
+export function normalizeStatusName(value: string): string {
+  return value.normalize("NFC").trim();
 }
 
 function customerNameOf(row: Readonly<Record<string, string>>): string {
@@ -262,6 +282,7 @@ export function mapOrderRow(row: Readonly<Record<string, string>>): {
     record: {
       externalOrderId,
       customerName: customerNameOf(row),
+      statusName: normalizeStatusName(row["statusName"] ?? ""),
       placedAt,
       variantCode,
       quantity,

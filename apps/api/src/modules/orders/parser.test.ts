@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   decodeCp1250,
   mapOrderRow,
+  normalizeStatusName,
   parseDelimited,
   parseShopLocalDateTime,
   parseShoptetOrdersCsv,
@@ -66,6 +67,37 @@ describe("mapOrderRow — reálna položka", () => {
     expect(mapped.record?.variantCode).toBe("40237/XL");
     expect(mapped.record?.quantity).toBe(2);
     expect(mapped.record?.customerName).toBe("Ján Novák");
+    // issue 59: fixtúra nesie order 20300001 v stave "Vybavuje sa".
+    expect(mapped.record?.statusName).toBe("Vybavuje sa");
+  });
+
+  // issue 59: normalizácia (NFC + orez) musí bežať aj v `mapOrderRow`, nie
+  // len v `normalizeStatusName` samostatne — inak by porovnanie s
+  // `order_open_status` (nastavené presne cez rovnakú funkciu,
+  // `open-statuses.ts`) mohlo zlyhať na medzere/inej Unicode forme.
+  it("statusName sa normalizuje (orez medzier)", () => {
+    const mapped = mapOrderRow({
+      code: "20300004",
+      date: "2026-06-16 08:00:00",
+      statusName: "  Vybavuje sa  ",
+      billFullName: "X",
+      itemName: "Y",
+      itemAmount: "1",
+      itemCode: "40238/M",
+    });
+    expect(mapped.record?.statusName).toBe("Vybavuje sa");
+  });
+
+  it("chýbajúci stĺpec statusName na riadku → prázdny reťazec (nikdy nevyhodí)", () => {
+    const mapped = mapOrderRow({
+      code: "20300005",
+      date: "2026-06-16 08:00:00",
+      billFullName: "X",
+      itemName: "Y",
+      itemAmount: "1",
+      itemCode: "40238/M",
+    });
+    expect(mapped.record?.statusName).toBe("");
   });
 
   it("customerName spadne na deliveryFullName, keď je billFullName prázdne", () => {
@@ -158,5 +190,32 @@ describe("parseShopLocalDateTime", () => {
   it("vráti null pre nerozpoznateľný tvar", () => {
     expect(parseShopLocalDateTime("nie je dátum")).toBeNull();
     expect(parseShopLocalDateTime("2026-07-15")).toBeNull();
+  });
+});
+
+// issue 59: rovnaká normalizácia ako stará appka's `norm_status`
+// (`export_helpers.py`) — musí byť rovnaká na oboch stranách porovnania
+// (export vs. `order_open_status`), inak sa zhoda nikdy nenájde.
+describe("normalizeStatusName", () => {
+  it("orezáva okolité medzery", () => {
+    expect(normalizeStatusName("  Vybavuje sa  ")).toBe("Vybavuje sa");
+  });
+
+  it("NFC-normalizuje rozlozenu diakritiku na zlozenu formu", () => {
+    // holé "a" + SAMOSTATNY kombinujuci accent (U+0301, NFD) vyzera
+    // identicky ako zlozene "a s dlzňom" (NFC), je to vsak BAJTOVO INY retazec.
+    const nfd = "Vybaven" + "á";
+    expect(nfd).not.toBe("Vybavená");
+    expect(normalizeStatusName(nfd)).toBe("Vybavená");
+  });
+
+  it("prázdny reťazec ostáva prázdny", () => {
+    expect(normalizeStatusName("")).toBe("");
+  });
+});
+
+describe("REQUIRED_ORDER_COLUMNS", () => {
+  it("obsahuje statusName (issue 59) — bez neho appka nemá podľa čoho filtrovať 'Na objednanie'", () => {
+    expect(REQUIRED_ORDER_COLUMNS).toContain("statusName");
   });
 });
