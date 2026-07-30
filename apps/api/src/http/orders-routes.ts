@@ -23,8 +23,11 @@ const orderLineStateBody = z.object({ state: z.enum(orderLineState.enumValues) }
 const orderLineOrderedBody = z.object({ ordered: z.boolean() });
 // issue 63: ručné priradenie dodávateľa — orezané + neprázdne; case sa
 // NEFOLDUJE (presne to, čo manažér napísal, sa uloží, `supplier-key.ts`'s
-// komentár k `normalizeSupplierKeyJs` vysvetľuje prečo).
-const orderLineSupplierBody = z.object({ supplier: z.string().trim().min(1) });
+// komentár k `normalizeSupplierKeyJs` vysvetľuje prečo). `.max(200)` (issue 86,
+// nezávislý audit): rovnaká horná hranica ako ostatné voľné textové vstupy
+// v projekte (`catalog-routes.ts`, `pairing-routes.ts`) — hodnota sa neskôr
+// vkladá aj do mailu dodávateľovi, chýbajúci limit bol prehliadnutá medzera.
+const orderLineSupplierBody = z.object({ supplier: z.string().trim().min(1).max(200) });
 // issue 59: `min(1)` len zachytí zjavne prázdny request skôr, než sa vôbec
 // dostane k `replaceOpenStatusNames` — SKUTOČNÉ čistenie (normalizácia,
 // orezanie prázdnych/duplicít po trime) beží až v module, lebo "['   ']"
@@ -170,6 +173,12 @@ export function registerOrdersRoutes(
       const result = await assignOrderLineSupplier(db, { lineId, supplier, actorUserId: user.userId, now });
       if (result === "not_found") {
         return c.json({ error: "Riadok objednávky sa nenašiel" }, 404);
+      }
+      // issue 86: produkt medzitým dostal dodávateľa v katalógu (súbeh s
+      // importom, alebo zabudnutá otvorená stránka) — ručné priradenie sa už
+      // netýka tohto riadku, `assignOrderLineSupplier` nič nezapísala.
+      if (result === "already_has_supplier") {
+        return c.json({ error: "Produkt už má dodávateľa v katalógu — ručné priradenie nie je možné" }, 409);
       }
       log.info({ actorUserId: user.userId, lineId, supplier }, "ručné priradenie dodávateľa riadku objednávky");
       return c.json({ ok: true as const, supplier });
