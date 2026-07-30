@@ -34,8 +34,12 @@ export async function withCleanDb(): Promise<{ db: Database; close: () => Promis
     // "order" itself has no FK into any of the other listed tables, so CASCADE
     // never reaches it: without listing it here, rows would silently survive
     // across tests. "order" is a reserved SQL keyword and must be quoted.
+    // "supplier_contact" (#31) has NO foreign key at all (keyed on the
+    // supplier NAME string, not an id) — CASCADE never reaches it from any
+    // direction, so it must be listed explicitly too, same reasoning as
+    // "order" above.
     await db.execute(
-      sql`TRUNCATE TABLE ingest_issue, variant, product, catalog_snapshot, job_run, audit_events, sessions, users, order_line, "order" RESTART IDENTITY CASCADE`,
+      sql`TRUNCATE TABLE ingest_issue, variant, product, catalog_snapshot, job_run, audit_events, sessions, users, order_line, "order", supplier_contact RESTART IDENTITY CASCADE`,
     );
   } catch (err) {
     try {

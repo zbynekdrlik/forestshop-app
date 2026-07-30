@@ -50,6 +50,19 @@ export const orders = pgTable(
   (t) => [index("order_placed_at_idx").on(t.placedAt)],
 );
 
+// E-mailový kontakt na dodávateľa (#31) — nová dátová položka, ktorá v
+// starej appke nikdy neexistovala (dodávateľ tam bol len názov, viď komentár
+// na tickete). Kľúčovaný PRESNE tým istým reťazcom, aký `queries.ts`'s
+// zoskupenie "Na objednanie" už dnes zobrazuje ako `supplier` (vrátane
+// zástupného "(bez dodávateľa)"), nie priamo na `product.supplier` (to je
+// `null` pre zástupnú skupinu, nie ten čitateľný reťazec) — manažér tak vie
+// nastaviť kontakt aj pre skupinu bez dodávateľa, keby to niekedy potreboval.
+export const supplierContacts = pgTable("supplier_contact", {
+  supplier: text("supplier").primaryKey(),
+  email: text("email"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const orderLines = pgTable(
   "order_line",
   {

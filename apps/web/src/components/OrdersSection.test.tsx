@@ -1,18 +1,29 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { OrdersSection } from "./OrdersSection.js";
 
-const { fetchOpenOrders, updateOrderLineState } = vi.hoisted(() => ({
-  fetchOpenOrders: vi.fn(),
-  updateOrderLineState: vi.fn(),
-}));
+const { fetchOpenOrders, updateOrderLineState, setSupplierEmail, fetchSupplierOrderMailPreview, sendSupplierOrderMail } =
+  vi.hoisted(() => ({
+    fetchOpenOrders: vi.fn(),
+    updateOrderLineState: vi.fn(),
+    setSupplierEmail: vi.fn(),
+    fetchSupplierOrderMailPreview: vi.fn(),
+    sendSupplierOrderMail: vi.fn(),
+  }));
 
 // `OrdersUnauthorizedError` ostáva SKUTOČNÁ trieda z reálneho modulu — rovnaký
 // dôvod ako `SchedulerSection.test.tsx`'s `SchedulerUnauthorizedError`:
 // `instanceof` v komponente musí fungovať aj v teste.
 vi.mock("../ordersApi.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../ordersApi.js")>();
-  return { ...actual, fetchOpenOrders, updateOrderLineState };
+  return {
+    ...actual,
+    fetchOpenOrders,
+    updateOrderLineState,
+    setSupplierEmail,
+    fetchSupplierOrderMailPreview,
+    sendSupplierOrderMail,
+  };
 });
 
 const { OrdersUnauthorizedError } = await import("../ordersApi.js");
@@ -61,7 +72,7 @@ it("keď zatiaľ nie sú žiadne otvorené objednávky, zobrazí informačnú ve
 
 it("zoskupí riadky podľa dodávateľa a zobrazí produkt, veľkosť, množstvo a stav", async () => {
   fetchOpenOrders.mockResolvedValue([
-    { supplier: "Dodávateľ Alfa", lines: [LINE_NOVA, LINE_STARA] },
+    { supplier: "Dodávateľ Alfa", lines: [LINE_NOVA, LINE_STARA], email: null },
   ]);
 
   render(<OrdersSection role="citanie" onSessionExpired={() => {}} />);
@@ -83,7 +94,7 @@ it("zoskupí riadky podľa dodávateľa a zobrazí produkt, veľkosť, množstvo
 });
 
 it("chýbajúcu veľkosť a komentár zobrazí ako pomlčku", async () => {
-  fetchOpenOrders.mockResolvedValue([{ supplier: "Dodávateľ Alfa", lines: [LINE_NOVA] }]);
+  fetchOpenOrders.mockResolvedValue([{ supplier: "Dodávateľ Alfa", lines: [LINE_NOVA], email: null }]);
 
   render(<OrdersSection role="citanie" onSessionExpired={() => {}} />);
 
@@ -117,7 +128,7 @@ it("keď načítanie zlyhá inou chybou, zobrazí vlastnú slovenskú hlášku",
 // #25: zmena stavu riadku — rola "sef" ostáva na čistom texte, presne ako
 // "citanie" vyššie (rovnaká brána ako server, žiadny select pre neprivilegovanú rolu).
 it("rola sef nevidí select na zmenu stavu, len text", async () => {
-  fetchOpenOrders.mockResolvedValue([{ supplier: "Dodávateľ Alfa", lines: [LINE_STARA] }]);
+  fetchOpenOrders.mockResolvedValue([{ supplier: "Dodávateľ Alfa", lines: [LINE_STARA], email: null }]);
 
   render(<OrdersSection role="sef" onSessionExpired={() => {}} />);
 
@@ -126,7 +137,7 @@ it("rola sef nevidí select na zmenu stavu, len text", async () => {
 });
 
 it("rola manazer vidí select a zmena stavu sa prejaví lokálne bez nového načítania", async () => {
-  fetchOpenOrders.mockResolvedValue([{ supplier: "Dodávateľ Alfa", lines: [LINE_STARA] }]);
+  fetchOpenOrders.mockResolvedValue([{ supplier: "Dodávateľ Alfa", lines: [LINE_STARA], email: null }]);
   updateOrderLineState.mockResolvedValue(undefined);
 
   render(<OrdersSection role="manazer" onSessionExpired={() => {}} />);
@@ -150,7 +161,7 @@ it("rola manazer vidí select a zmena stavu sa prejaví lokálne bez nového na�
 });
 
 it("zlyhaná zmena stavu zobrazí slovenskú hlášku zo servera a stav sa nezmení", async () => {
-  fetchOpenOrders.mockResolvedValue([{ supplier: "Dodávateľ Alfa", lines: [LINE_STARA] }]);
+  fetchOpenOrders.mockResolvedValue([{ supplier: "Dodávateľ Alfa", lines: [LINE_STARA], email: null }]);
   updateOrderLineState.mockRejectedValue(new Error("Riadok objednávky sa nenašiel"));
 
   render(<OrdersSection role="manazer" onSessionExpired={() => {}} />);
@@ -166,7 +177,7 @@ it("zlyhaná zmena stavu zobrazí slovenskú hlášku zo servera a stav sa nezme
 });
 
 it("zmena stavu pri 401 zavolá onSessionExpired namiesto zobrazenia chyby", async () => {
-  fetchOpenOrders.mockResolvedValue([{ supplier: "Dodávateľ Alfa", lines: [LINE_STARA] }]);
+  fetchOpenOrders.mockResolvedValue([{ supplier: "Dodávateľ Alfa", lines: [LINE_STARA], email: null }]);
   updateOrderLineState.mockRejectedValue(new OrdersUnauthorizedError());
   const onSessionExpired = vi.fn();
 
@@ -180,4 +191,115 @@ it("zmena stavu pri 401 zavolá onSessionExpired namiesto zobrazenia chyby", asy
     expect(onSessionExpired).toHaveBeenCalledTimes(1);
   });
   expect(screen.queryByRole("alert")).toBeNull();
+});
+
+// #31: e-mailový kontakt dodávateľa + odoslanie objednávky mailom.
+
+it("rola citanie nevidí tlačidlá na úpravu e-mailu ani odoslanie mailom, len text", async () => {
+  fetchOpenOrders.mockResolvedValue([{ supplier: "Dodávateľ Alfa", lines: [LINE_STARA], email: null }]);
+
+  render(<OrdersSection role="citanie" onSessionExpired={() => {}} />);
+
+  await screen.findByTestId(`order-line-${LINE_STARA.lineId}`);
+  expect(screen.queryByRole("button", { name: "Upraviť e-mail" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "✉️ Poslať objednávku e-mailom" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "📋 Kopírovať objednávku" })).toBeNull();
+});
+
+it("manažér nastaví e-mail dodávateľa cez formulár, zobrazenie sa aktualizuje bez refetchu", async () => {
+  fetchOpenOrders.mockResolvedValue([{ supplier: "Dodávateľ Alfa", lines: [LINE_STARA], email: null }]);
+  setSupplierEmail.mockResolvedValue(undefined);
+
+  render(<OrdersSection role="manazer" onSessionExpired={() => {}} />);
+
+  await screen.findByTestId(`order-line-${LINE_STARA.lineId}`);
+  expect(screen.getByText("E-mail dodávateľa: nenastavený")).toBeTruthy();
+
+  fireEvent.click(screen.getByRole("button", { name: "Upraviť e-mail" }));
+  fireEvent.change(screen.getByLabelText("E-mail dodávateľa Dodávateľ Alfa"), {
+    target: { value: "alfa@dodavatel.example" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Uložiť" }));
+
+  await waitFor(() => {
+    expect(setSupplierEmail).toHaveBeenCalledWith("Dodávateľ Alfa", "alfa@dodavatel.example");
+  });
+  await waitFor(() => {
+    expect(screen.getByText("E-mail dodávateľa: alfa@dodavatel.example")).toBeTruthy();
+  });
+  expect(fetchOpenOrders).toHaveBeenCalledTimes(1);
+});
+
+it("bez e-mailu je tlačidlo na odoslanie mailom disabled s vysvetlením", async () => {
+  fetchOpenOrders.mockResolvedValue([{ supplier: "Dodávateľ Alfa", lines: [LINE_STARA], email: null }]);
+
+  render(<OrdersSection role="manazer" onSessionExpired={() => {}} />);
+
+  const tlacidlo = await screen.findByRole("button", { name: "✉️ Poslať objednávku e-mailom" });
+  expect(tlacidlo.hasAttribute("disabled")).toBe(true);
+  expect(screen.getByText("Pre odoslanie mailom treba najprv nastaviť e-mail dodávateľa.")).toBeTruthy();
+});
+
+it("s e-mailom a otvorenou položkou manažér otvorí náhľad, potvrdí a mail sa odošle", async () => {
+  fetchOpenOrders.mockResolvedValue([
+    { supplier: "Dodávateľ Alfa", lines: [LINE_STARA], email: "alfa@dodavatel.example" },
+  ]);
+  fetchSupplierOrderMailPreview.mockResolvedValue({
+    supplier: "Dodávateľ Alfa",
+    to: "alfa@dodavatel.example",
+    subject: "Objednávka — Dodávateľ Alfa (1 položka)",
+    body: "Objednávka — Dodávateľ Alfa (1 položka)\nA-1 | 3XL | 2 ks",
+    itemCount: 1,
+  });
+  sendSupplierOrderMail.mockResolvedValue({ ok: true });
+
+  render(<OrdersSection role="manazer" onSessionExpired={() => {}} />);
+
+  const posluTlacidlo = await screen.findByRole("button", { name: "✉️ Poslať objednávku e-mailom" });
+  expect(posluTlacidlo.hasAttribute("disabled")).toBe(false);
+  fireEvent.click(posluTlacidlo);
+
+  await waitFor(() => {
+    expect(fetchSupplierOrderMailPreview).toHaveBeenCalledWith("Dodávateľ Alfa");
+  });
+  const nahlad = await screen.findByTestId("mail-preview-Dodávateľ Alfa");
+  expect(nahlad.textContent).toContain("alfa@dodavatel.example");
+  expect(nahlad.textContent).toContain("Objednávka — Dodávateľ Alfa (1 položka)");
+
+  fireEvent.click(screen.getByRole("button", { name: "Odoslať" }));
+
+  await waitFor(() => {
+    expect(sendSupplierOrderMail).toHaveBeenCalledWith("Dodávateľ Alfa");
+  });
+  await waitFor(() => {
+    expect(screen.getByRole("status").textContent).toContain("odoslaná");
+  });
+  expect(screen.queryByTestId("mail-preview-Dodávateľ Alfa")).toBeNull();
+});
+
+it("kopírovanie objednávky do schránky použije text náhľadu", async () => {
+  fetchOpenOrders.mockResolvedValue([
+    { supplier: "Dodávateľ Alfa", lines: [LINE_STARA], email: "alfa@dodavatel.example" },
+  ]);
+  fetchSupplierOrderMailPreview.mockResolvedValue({
+    supplier: "Dodávateľ Alfa",
+    to: "alfa@dodavatel.example",
+    subject: "Objednávka — Dodávateľ Alfa (1 položka)",
+    body: "Objednávka — Dodávateľ Alfa (1 položka)\nA-1 | 3XL | 2 ks",
+    itemCount: 1,
+  });
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  Object.assign(navigator, { clipboard: { writeText } });
+
+  render(<OrdersSection role="manazer" onSessionExpired={() => {}} />);
+
+  const kopirovat = await screen.findByRole("button", { name: "📋 Kopírovať objednávku" });
+  fireEvent.click(kopirovat);
+
+  await waitFor(() => {
+    expect(writeText).toHaveBeenCalledWith("Objednávka — Dodávateľ Alfa (1 položka)\nA-1 | 3XL | 2 ks");
+  });
+  await waitFor(() => {
+    expect(screen.getByRole("status").textContent).toContain("schránky");
+  });
 });

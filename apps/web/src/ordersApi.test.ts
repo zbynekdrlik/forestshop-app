@@ -1,5 +1,12 @@
 import { expect, it, vi } from "vitest";
-import { OrdersUnauthorizedError, fetchOpenOrders, updateOrderLineState } from "./ordersApi.js";
+import {
+  OrdersUnauthorizedError,
+  fetchOpenOrders,
+  fetchSupplierOrderMailPreview,
+  sendSupplierOrderMail,
+  setSupplierEmail,
+  updateOrderLineState,
+} from "./ordersApi.js";
 
 const LINE = {
   lineId: "11111111-1111-1111-1111-111111111111",
@@ -15,18 +22,21 @@ const LINE = {
   state: "objednane" as const,
 };
 
-it("prečíta otvorené objednávky zoskupené podľa dodávateľa", async () => {
+it("prečíta otvorené objednávky zoskupené podľa dodávateľa, vrátane e-mailu dodávateľa", async () => {
   vi.stubGlobal(
     "fetch",
     vi
       .fn()
       .mockResolvedValue(
-        new Response(JSON.stringify({ suppliers: [{ supplier: "Dodávateľ Alfa", lines: [LINE] }] }), {
-          status: 200,
-        }),
+        new Response(
+          JSON.stringify({ suppliers: [{ supplier: "Dodávateľ Alfa", lines: [LINE], email: "alfa@example.com" }] }),
+          { status: 200 },
+        ),
       ),
   );
-  await expect(fetchOpenOrders()).resolves.toEqual([{ supplier: "Dodávateľ Alfa", lines: [LINE] }]);
+  await expect(fetchOpenOrders()).resolves.toEqual([
+    { supplier: "Dodávateľ Alfa", lines: [LINE], email: "alfa@example.com" },
+  ]);
 });
 
 it("odmietne odpoveď s neplatným tvarom", async () => {
@@ -35,9 +45,10 @@ it("odmietne odpoveď s neplatným tvarom", async () => {
     vi
       .fn()
       .mockResolvedValue(
-        new Response(JSON.stringify({ suppliers: [{ supplier: "X", lines: [{ ...LINE, quantity: "1" }] }] }), {
-          status: 200,
-        }),
+        new Response(
+          JSON.stringify({ suppliers: [{ supplier: "X", lines: [{ ...LINE, quantity: "1" }], email: null }] }),
+          { status: 200 },
+        ),
       ),
   );
   await expect(fetchOpenOrders()).rejects.toThrow();
@@ -92,4 +103,77 @@ it("updateOrderLineState bez tela odpovede použije všeobecnú hlášku", async
   await expect(updateOrderLineState("11111111-1111-1111-1111-111111111111", "skladom")).rejects.toThrow(
     "Zmena stavu sa nepodarila",
   );
+});
+
+// #31: e-mailový kontakt dodávateľa + odoslanie objednávky mailom.
+
+it("setSupplierEmail pošle PUT s URL-enkódovaným menom dodávateľa a telom { email }", async () => {
+  const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ ok: true, email: "a@b.sk" }), { status: 200 }));
+  vi.stubGlobal("fetch", fetchMock);
+
+  await setSupplierEmail("Dodávateľ Alfa", "a@b.sk");
+
+  expect(fetchMock).toHaveBeenCalledWith(
+    "/api/suppliers/Dod%C3%A1vate%C4%BE%20Alfa/email",
+    expect.objectContaining({ method: "PUT", body: JSON.stringify({ email: "a@b.sk" }) }),
+  );
+});
+
+it("setSupplierEmail s null pošle prázdny reťazec (zmazanie kontaktu)", async () => {
+  const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ ok: true, email: null }), { status: 200 }));
+  vi.stubGlobal("fetch", fetchMock);
+
+  await setSupplierEmail("Dodávateľ Alfa", null);
+
+  expect(fetchMock).toHaveBeenCalledWith(
+    expect.any(String),
+    expect.objectContaining({ body: JSON.stringify({ email: "" }) }),
+  );
+});
+
+it("fetchSupplierOrderMailPreview prečíta náhľad predmetu/tela/adresáta", async () => {
+  const preview = { supplier: "Dodávateľ Alfa", to: "a@b.sk", subject: "Objednávka — Dodávateľ Alfa (1 položka)", body: "...", itemCount: 1 };
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify(preview), { status: 200 })));
+  await expect(fetchSupplierOrderMailPreview("Dodávateľ Alfa")).resolves.toEqual(preview);
+});
+
+it("sendSupplierOrderMail vráti ok:true po úspešnom odoslaní", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue(new Response(JSON.stringify({ ok: true, to: "a@b.sk", itemCount: 2 }), { status: 200 })),
+  );
+  await expect(sendSupplierOrderMail("Dodávateľ Alfa")).resolves.toEqual({ ok: true });
+});
+
+it("sendSupplierOrderMail vráti ok:false s hláškou, keď server odpovie ok:false (200)", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ ok: false, error: "Pre tohto dodávateľa nie je nastavený e-mail." }), { status: 200 }),
+      ),
+  );
+  await expect(sendSupplierOrderMail("Dodávateľ Alfa")).resolves.toEqual({
+    ok: false,
+    error: "Pre tohto dodávateľa nie je nastavený e-mail.",
+  });
+});
+
+it("sendSupplierOrderMail pri 502 (zlyhané SMTP) vráti ok:false namiesto vyhodenia výnimky", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ error: "Odoslanie e-mailu zlyhalo. Skúste to znova o chvíľu." }), { status: 502 })),
+  );
+  await expect(sendSupplierOrderMail("Dodávateľ Alfa")).resolves.toEqual({
+    ok: false,
+    error: "Odoslanie e-mailu zlyhalo. Skúste to znova o chvíľu.",
+  });
+});
+
+it("sendSupplierOrderMail pri 401 vyhodí OrdersUnauthorizedError", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("", { status: 401 })));
+  await expect(sendSupplierOrderMail("Dodávateľ Alfa")).rejects.toBeInstanceOf(OrdersUnauthorizedError);
 });

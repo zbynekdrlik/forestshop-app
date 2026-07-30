@@ -22,6 +22,8 @@ const orderLineSchema = z.object({
 const supplierGroupSchema = z.object({
   supplier: z.string(),
   lines: z.array(orderLineSchema),
+  // E-mailový kontakt dodávateľa (#31), `null` keď zatiaľ nenastavený.
+  email: z.string().nullable(),
 });
 
 const openOrdersSchema = z.object({ suppliers: z.array(supplierGroupSchema) });
@@ -77,4 +79,53 @@ export async function updateOrderLineState(
     body: JSON.stringify({ state }),
   });
   await readJson(response, "Zmena stavu sa nepodarila");
+}
+
+// #31: e-mailový kontakt dodávateľa + odoslanie objednávky mailom.
+export async function setSupplierEmail(supplier: string, email: string | null): Promise<void> {
+  const response = await fetch(`/api/suppliers/${encodeURIComponent(supplier)}/email`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ email: email ?? "" }),
+  });
+  await readJson(response, "Nastavenie e-mailu sa nepodarilo");
+}
+
+const orderMailPreviewSchema = z.object({
+  supplier: z.string(),
+  to: z.string().nullable(),
+  subject: z.string(),
+  body: z.string(),
+  itemCount: z.number(),
+});
+
+export type OrderMailPreview = z.infer<typeof orderMailPreviewSchema>;
+
+export async function fetchSupplierOrderMailPreview(supplier: string): Promise<OrderMailPreview> {
+  const response = await fetch(`/api/suppliers/${encodeURIComponent(supplier)}/order-mail`);
+  return orderMailPreviewSchema.parse(await readJson(response, "Náhľad mailu sa nepodarilo načítať"));
+}
+
+const sendOrderMailResultSchema = z.object({
+  ok: z.boolean(),
+  error: z.string().optional(),
+});
+
+/**
+ * Odoslanie prebehlo — `ok` hovorí, či mail reálne odišiel. Na rozdiel od
+ * `readJson` NEhádže na 502/503 (nenakonfigurovaný mailer/zlyhané SMTP) —
+ * tie sú tu rovnocenné "no_email"/"no_items" doménovým výsledkom (odlišné len
+ * HTTP kódom, `http/supplier-routes.ts`), UI ich zobrazuje rovnako ako chybu
+ * poslania, nie ako neočakávanú výnimku.
+ */
+export async function sendSupplierOrderMail(supplier: string): Promise<{ ok: boolean; error?: string }> {
+  const response = await fetch(`/api/suppliers/${encodeURIComponent(supplier)}/order-mail/send`, {
+    method: "POST",
+  });
+  if (response.status === 401) throw new OrdersUnauthorizedError();
+  if (!response.ok) {
+    return { ok: false, error: await serverErrorMessage(response, "Odoslanie objednávky mailom sa nepodarilo") };
+  }
+  const telo = sendOrderMailResultSchema.parse(await response.json());
+  return { ok: telo.ok, ...(telo.error === undefined ? {} : { error: telo.error }) };
 }

@@ -47,6 +47,15 @@ services:
       # (#21), bare kľúč preberá `/srv/forestshop/.env`, keď tam je.
       SHOPTET_ORDERS_URL:
       ORDERS_RAW_DIR: /data/orders-raw
+      # Odosielanie objednávky dodávateľovi mailom (#31) — rovnaká úvaha ako
+      # SHOPTET_EXPORT_URL vyššie: `.optional()` v `env.ts`, bare kľúč
+      # preberá `/srv/forestshop/.env`, keď tam je; keď nie je, appka beží
+      # ďalej, len odoslanie mailom vráti 503.
+      MAIL_HOST:
+      MAIL_PORT:
+      MAIL_USER:
+      MAIL_PASS:
+      MAIL_FROM:
     volumes:
       - catalog-raw:/data/catalog-raw
       - orders-raw:/data/orders-raw

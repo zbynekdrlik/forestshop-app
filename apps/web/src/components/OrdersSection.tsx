@@ -2,9 +2,13 @@ import { useCallback, useEffect, useState, type JSX } from "react";
 import type { Me } from "../api.js";
 import {
   fetchOpenOrders,
+  fetchSupplierOrderMailPreview,
   OrdersUnauthorizedError,
+  sendSupplierOrderMail,
+  setSupplierEmail,
   updateOrderLineState,
   type OrderLine,
+  type OrderMailPreview,
   type SupplierOpenOrders,
 } from "../ordersApi.js";
 
@@ -22,9 +26,11 @@ const STATE_LABELS: Record<OrderLine["state"], string> = {
 // `CatalogPage`'s `IMPORT_ROLES`/`SchedulerSection`'s `SCHEDULER_ROLES`).
 const CAN_CHANGE_STATE_ROLES: ReadonlySet<Me["role"]> = new Set(["admin", "manazer"]);
 
-// #25: kopírovanie objednávky presunuté do #31 (otvorená otázka pre
-// majiteľa — presný výstup nie je definovaný), preto tu stále nie je žiadne
-// tlačidlo "kopírovať".
+// Riadky, ktoré ešte treba objednať u dodávateľa (rovnaký zámer ako stará
+// appka's `outstandingOf`/`!isHandled`, #31) — východiskový stav pred tým,
+// než manažér čokoľvek ručne posunie ďalej.
+const OUTSTANDING_STATE: OrderLine["state"] = "objednane";
+
 export function OrdersSection({
   role,
   onSessionExpired,
@@ -38,6 +44,19 @@ export function OrdersSection({
   const [stateError, setStateError] = useState("");
   const [busyLineId, setBusyLineId] = useState<string | null>(null);
   const canChangeState = CAN_CHANGE_STATE_ROLES.has(role);
+
+  // #31: e-mailový kontakt dodávateľa (editovateľný priamo v zozname).
+  const [editingEmailSupplier, setEditingEmailSupplier] = useState<string | null>(null);
+  const [emailDraft, setEmailDraft] = useState("");
+  const [emailBusy, setEmailBusy] = useState(false);
+  const [emailError, setEmailError] = useState("");
+
+  // #31: náhľad + potvrdenie pred odoslaním objednávky mailom.
+  const [previewSupplier, setPreviewSupplier] = useState<string | null>(null);
+  const [preview, setPreview] = useState<OrderMailPreview | null>(null);
+  const [previewError, setPreviewError] = useState("");
+  const [sendBusy, setSendBusy] = useState(false);
+  const [sendResult, setSendResult] = useState<{ readonly supplier: string; readonly message: string } | null>(null);
 
   const load = useCallback(() => {
     fetchOpenOrders()
@@ -86,6 +105,129 @@ export function OrdersSection({
     [onSessionExpired],
   );
 
+  // #31: úprava e-mailu dodávateľa.
+  const startEditEmail = useCallback((group: SupplierOpenOrders) => {
+    setEditingEmailSupplier(group.supplier);
+    setEmailDraft(group.email ?? "");
+    setEmailError("");
+  }, []);
+
+  const cancelEditEmail = useCallback(() => {
+    setEditingEmailSupplier(null);
+    setEmailError("");
+  }, []);
+
+  const saveEmail = useCallback(
+    (supplier: string) => {
+      setEmailBusy(true);
+      setEmailError("");
+      const novyEmail = emailDraft.trim() === "" ? null : emailDraft.trim();
+      setSupplierEmail(supplier, novyEmail)
+        .then(() => {
+          setSuppliers((current) =>
+            current.map((group) => (group.supplier === supplier ? { ...group, email: novyEmail } : group)),
+          );
+          setEditingEmailSupplier(null);
+        })
+        .catch((err: unknown) => {
+          if (err instanceof OrdersUnauthorizedError) {
+            onSessionExpired();
+            return;
+          }
+          setEmailError(err instanceof Error ? err.message : "Nastavenie e-mailu sa nepodarilo.");
+        })
+        .finally(() => {
+          setEmailBusy(false);
+        });
+    },
+    [emailDraft, onSessionExpired],
+  );
+
+  // #31: náhľad pred odoslaním — server prepočíta predmet/telo/adresáta zo
+  // skutočného aktuálneho stavu (nikdy sa nedôveruje tomu, čo je práve
+  // zobrazené na klientovi).
+  const openPreview = useCallback(
+    (supplier: string) => {
+      setPreviewSupplier(supplier);
+      setPreview(null);
+      setPreviewError("");
+      setSendResult(null);
+      fetchSupplierOrderMailPreview(supplier)
+        .then((p) => {
+          setPreview(p);
+        })
+        .catch((err: unknown) => {
+          if (err instanceof OrdersUnauthorizedError) {
+            onSessionExpired();
+            return;
+          }
+          setPreviewError(err instanceof Error ? err.message : "Náhľad mailu sa nepodarilo načítať.");
+        });
+    },
+    [onSessionExpired],
+  );
+
+  const closePreview = useCallback(() => {
+    setPreviewSupplier(null);
+    setPreview(null);
+    setPreviewError("");
+  }, []);
+
+  const confirmSend = useCallback(
+    (supplier: string) => {
+      setSendBusy(true);
+      sendSupplierOrderMail(supplier)
+        .then((result) => {
+          setSendResult({
+            supplier,
+            message: result.ok
+              ? `Objednávka bola odoslaná na ${preview?.to ?? "e-mail dodávateľa"}.`
+              : (result.error ?? "Odoslanie sa nepodarilo."),
+          });
+          if (result.ok) {
+            setPreviewSupplier(null);
+            setPreview(null);
+          }
+        })
+        .catch((err: unknown) => {
+          if (err instanceof OrdersUnauthorizedError) {
+            onSessionExpired();
+            return;
+          }
+          setSendResult({ supplier, message: err instanceof Error ? err.message : "Odoslanie sa nepodarilo." });
+        })
+        .finally(() => {
+          setSendBusy(false);
+        });
+    },
+    [onSessionExpired, preview],
+  );
+
+  const copyOrderToClipboard = useCallback(
+    (supplier: string) => {
+      fetchSupplierOrderMailPreview(supplier)
+        .then(async (p) => {
+          try {
+            await navigator.clipboard.writeText(p.body);
+            setSendResult({ supplier, message: "Text objednávky skopírovaný do schránky." });
+          } catch {
+            setSendResult({ supplier, message: "Kopírovanie do schránky sa nepodarilo." });
+          }
+        })
+        .catch((err: unknown) => {
+          if (err instanceof OrdersUnauthorizedError) {
+            onSessionExpired();
+            return;
+          }
+          setSendResult({
+            supplier,
+            message: err instanceof Error ? err.message : "Text objednávky sa nepodarilo pripraviť.",
+          });
+        });
+    },
+    [onSessionExpired],
+  );
+
   // `/api/orders/open` už zoraďuje riadky presne tak, ako majú byť zobrazené
   // (dodávateľ vzostupne, potom najnovšia objednávka prvá) — žiadne ďalšie
   // preskupovanie na klientovi.
@@ -103,6 +245,76 @@ export function OrdersSection({
       {suppliers.map((group) => (
         <div key={group.supplier} data-testid={`supplier-${group.supplier}`}>
           <h3>{group.supplier}</h3>
+          <div data-testid={`supplier-contact-${group.supplier}`}>
+            {editingEmailSupplier === group.supplier ? (
+              <>
+                <input
+                  aria-label={`E-mail dodávateľa ${group.supplier}`}
+                  type="email"
+                  value={emailDraft}
+                  disabled={emailBusy}
+                  onChange={(e) => {
+                    setEmailDraft(e.target.value);
+                  }}
+                />
+                <button type="button" disabled={emailBusy} onClick={() => { saveEmail(group.supplier); }}>
+                  Uložiť
+                </button>
+                <button type="button" disabled={emailBusy} onClick={cancelEditEmail}>
+                  Zrušiť
+                </button>
+                {emailError !== "" && <p role="alert">{emailError}</p>}
+              </>
+            ) : (
+              <>
+                <span>E-mail dodávateľa: {group.email ?? "nenastavený"}</span>
+                {canChangeState && (
+                  <button type="button" onClick={() => { startEditEmail(group); }}>
+                    Upraviť e-mail
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+          {canChangeState && (
+            <div>
+              <button type="button" onClick={() => { copyOrderToClipboard(group.supplier); }}>
+                📋 Kopírovať objednávku
+              </button>
+              <button
+                type="button"
+                disabled={group.email === null || !group.lines.some((l) => l.state === OUTSTANDING_STATE)}
+                title={
+                  group.email === null
+                    ? "Pre odoslanie mailom treba najprv nastaviť e-mail dodávateľa."
+                    : undefined
+                }
+                onClick={() => { openPreview(group.supplier); }}
+              >
+                ✉️ Poslať objednávku e-mailom
+              </button>
+              {group.email === null && <p>Pre odoslanie mailom treba najprv nastaviť e-mail dodávateľa.</p>}
+              {sendResult?.supplier === group.supplier && <p role="status">{sendResult.message}</p>}
+              {previewSupplier === group.supplier && (
+                <div data-testid={`mail-preview-${group.supplier}`}>
+                  {previewError !== "" && <p role="alert">{previewError}</p>}
+                  {preview !== null && (
+                    <>
+                      <p>Komu: {preview.to ?? "—"}</p>
+                      <p>Predmet: {preview.subject}</p>
+                      <pre>{preview.body}</pre>
+                      <button type="button" disabled={sendBusy} onClick={() => { confirmSend(group.supplier); }}>
+                        Odoslať
+                      </button>
+                      <button type="button" disabled={sendBusy} onClick={closePreview}>
+                        Zrušiť
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
           <table>
             <thead>
               <tr>
