@@ -43,6 +43,21 @@ export function createShutdownHandler({
   exit = (code: number) => process.exit(code),
 }: ShutdownDeps): (signal: NodeJS.Signals) => void {
   let shuttingDown = false;
+  // Chráni pred DVOJITÝM zavolaním `exit()` — force-exit timer aj graceful
+  // cesta (server.close → pool.end) mohli by teoreticky obe dobehnúť (napr.
+  // force timer vystrelí exit(1), a tesne nato sa aj pomalé pool.end()
+  // vyrieši a zavolá exit(0)). V produkcii je to neškodné (reálny
+  // process.exit() proces okamžite ukončí, žiadny ďalší JS kód sa nespustí),
+  // ale injektovaný `exit` v testoch NEukončuje nič — bez tejto stráže by ho
+  // teda šlo zavolať dvakrát s rôznym kódom.
+  let exited = false;
+  const exitOnce = (code: number) => {
+    if (exited) {
+      return;
+    }
+    exited = true;
+    exit(code);
+  };
 
   return (signal: NodeJS.Signals) => {
     if (shuttingDown) {
@@ -57,7 +72,7 @@ export function createShutdownHandler({
         { signal, forceExitAfterMs },
         "graceful shutdown neskončil včas — vynútený exit(1)",
       );
-      exit(1);
+      exitOnce(1);
     }, forceExitAfterMs);
     forceTimer.unref();
 
@@ -73,12 +88,12 @@ export function createShutdownHandler({
         .then(() => {
           log.info("DB pool zatvorený — shutdown dokončený");
           clearTimeout(forceTimer);
-          exit(0);
+          exitOnce(0);
         })
         .catch((poolErr: unknown) => {
           log.error({ err: poolErr }, "chyba pri zatváraní DB poolu počas shutdownu");
           clearTimeout(forceTimer);
-          exit(1);
+          exitOnce(1);
         });
     });
   };
