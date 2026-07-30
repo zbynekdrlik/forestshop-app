@@ -10,6 +10,77 @@ const E2E_HESLO = "e2e-test-heslo"; // účet existuje len v testovacej databáz
 const jeOcakavane = (m: ConsoleMessage): boolean =>
   m.location().url.includes("/api/me") && m.text().includes("401");
 
+// issue 61: VLASTNÝ izolovaný účet (`scripts/e2e-setup.ts`'s komentár k
+// `E2E_FILTRE_EMAIL` vysvetľuje dôvod aj poradie). Tento test je ZÁMERNE
+// PRVÝ v súbore — overuje PÔVODNÉ seedované dáta skôr, než ich testy nižšie
+// (zmena stavu, pridanie stavu do nastavenia, odškrtnutie "objednané")
+// zmutujú. `scripts/e2e-setup.ts`: DODAVATEL-TEST-1 má 1 riadok v stave
+// "caka_sa" (vybavený — posunutý za predvolený "objednane"), "(bez
+// dodávateľa)" má 1 riadok v predvolenom "objednane" (nevybavený).
+const E2E_FILTRE_EMAIL = "e2e-filtre@forestshop.sk";
+
+test("manažér filtruje podľa dodávateľa, vidí súhrn ostáva vybaviť a skryje vybavené riadky, ktoré ostanú skryté aj po obnovení stránky, konzola je čistá", async ({
+  page,
+}) => {
+  const chyby: string[] = [];
+  page.on("console", (m) => {
+    if ((m.type() === "error" || m.type() === "warning") && !jeOcakavane(m)) chyby.push(m.text());
+  });
+  page.on("pageerror", (e) => {
+    chyby.push(e.message);
+  });
+
+  await page.goto("/?tab=orders");
+  await page.getByLabel("E-mail").fill(E2E_FILTRE_EMAIL);
+  await page.getByLabel("Heslo").fill(E2E_HESLO);
+  await page.getByRole("button", { name: "Prihlásiť sa" }).click();
+  await expect(page.getByRole("heading", { name: "Na objednanie" })).toBeVisible();
+
+  await expect(page.getByTestId("supplier-chip-all")).toHaveText("Všetci (2)");
+  await expect(page.getByTestId("supplier-chip-DODAVATEL-TEST-1")).toHaveText("DODAVATEL-TEST-1 (1)");
+  await expect(page.getByTestId("supplier-chip-(bez dodávateľa)")).toHaveText("(bez dodávateľa) (1)");
+
+  const summary = page.getByTestId("orders-summary");
+  await expect(summary).toHaveText("Ostáva vybaviť 1 z 2 · Čaká sa 1");
+
+  // Klik na chip DODAVATEL-TEST-1 zúži zoznam len na jeho skupinu.
+  await page.getByTestId("supplier-chip-DODAVATEL-TEST-1").click();
+  await expect(page.getByTestId("supplier-DODAVATEL-TEST-1")).toBeVisible();
+  await expect(page.getByTestId("supplier-(bez dodávateľa)")).not.toBeVisible();
+  await expect(summary).toHaveText("DODAVATEL-TEST-1: ostáva vybaviť 0 z 1 · Čaká sa 1");
+
+  // Klik na "(bez dodávateľa)" prepne filter na druhého dodávateľa.
+  await page.getByTestId("supplier-chip-(bez dodávateľa)").click();
+  await expect(page.getByTestId("supplier-(bez dodávateľa)")).toBeVisible();
+  await expect(page.getByTestId("supplier-DODAVATEL-TEST-1")).not.toBeVisible();
+  await expect(summary).toHaveText("(bez dodávateľa): ostáva vybaviť 1 z 1");
+
+  // Späť na "Všetci" — obe skupiny opäť viditeľné.
+  await page.getByTestId("supplier-chip-all").click();
+  await expect(page.getByTestId("supplier-DODAVATEL-TEST-1")).toBeVisible();
+  await expect(page.getByTestId("supplier-(bez dodávateľa)")).toBeVisible();
+
+  // Skryť vybavené riadky — DODAVATEL-TEST-1 (celý vybavený, "caka_sa") zmizne,
+  // "(bez dodávateľa)" (má nevybavený riadok) ostáva viditeľný.
+  const toggle = page.getByTestId("orders-hide-resolved-toggle");
+  await expect(toggle).toHaveText("👁 Skryť vybavené");
+  await toggle.click();
+  await expect(page.getByTestId("supplier-DODAVATEL-TEST-1")).not.toBeVisible();
+  await expect(page.getByTestId("supplier-(bez dodávateľa)")).toBeVisible();
+
+  // Prepínač prežije obnovenie stránky (localStorage, issue 61's hlavná požiadavka).
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Na objednanie" })).toBeVisible();
+  await expect(page.getByTestId("orders-hide-resolved-toggle")).toHaveText("🙈 Vybavené skryté");
+  await expect(page.getByTestId("supplier-DODAVATEL-TEST-1")).not.toBeVisible();
+
+  // Vypnutie prepínača vráti skrytú skupinu späť.
+  await page.getByTestId("orders-hide-resolved-toggle").click();
+  await expect(page.getByTestId("supplier-DODAVATEL-TEST-1")).toBeVisible();
+
+  expect(chyby).toEqual([]);
+});
+
 test("manažér vidí otvorené objednávky zoskupené podľa dodávateľa, konzola je čistá", async ({ page }) => {
   const chyby: string[] = [];
   page.on("console", (m) => {

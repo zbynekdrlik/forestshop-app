@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useState, type JSX } from "react";
 import type { Me } from "../api.js";
+import { isLineResolved } from "../ordersSummary.js";
 import { OrderLineRow } from "./OrderLineRow.js";
 import { OrderOpenStatusesPanel } from "./OrderOpenStatusesPanel.js";
+import { OrdersToolbar } from "./OrdersToolbar.js";
+import { SupplierActionsPanel } from "./SupplierActionsPanel.js";
 import {
   fetchOpenOrders,
   fetchSupplierOrderMailPreview,
@@ -23,13 +26,20 @@ import {
 // `CatalogPage`'s `IMPORT_ROLES`/`SchedulerSection`'s `SCHEDULER_ROLES`).
 const CAN_CHANGE_STATE_ROLES: ReadonlySet<Me["role"]> = new Set(["admin", "manazer"]);
 
-// Riadky, ktoré ešte treba objednať u dodávateľa (rovnaký zámer ako stará
-// appka's `outstandingOf`/`!isHandled`, #31) — východiskový stav pred tým,
-// než manažér čokoľvek ručne posunie ďalej. Toto gejtuje LEN tlačidlo
-// "odoslať objednávku mailom" (server-strana `mail.ts` filtruje rovnako) —
-// je to NEZÁVISLÉ od nového `ordered` príznaku (issue 60) nižšie, mail sa dá
-// odoslať/skopírovať bez ohľadu na to, či je riadok už odškrtnutý.
-const OUTSTANDING_STATE: OrderLine["state"] = "objednane";
+// issue 61: kľúč pre prepínač "skryť vybavené riadky" — jediný stav, ktorý
+// má prežiť obnovenie stránky (issue to pýta výslovne LEN preň, výber
+// dodávateľa/chipu ostáva zámerne len klientský stav bez perzistencie).
+const HIDE_RESOLVED_STORAGE_KEY = "forestshop.orders.hideResolved";
+
+function readHideResolvedPreference(): boolean {
+  try {
+    return window.localStorage.getItem(HIDE_RESOLVED_STORAGE_KEY) === "1";
+  } catch {
+    // localStorage nedostupné (napr. prehliadač so zakázaným úložiskom) —
+    // prepínač jednoducho nezačne predvyplnený, nič nespadne.
+    return false;
+  }
+}
 
 export function OrdersSection({
   role,
@@ -44,6 +54,24 @@ export function OrdersSection({
   const [stateError, setStateError] = useState("");
   const [busyLineId, setBusyLineId] = useState<string | null>(null);
   const canChangeState = CAN_CHANGE_STATE_ROLES.has(role);
+
+  // issue 61: vybraný dodávateľ (chip) — `null` = "Všetci". Prepínač "skryť
+  // vybavené" sa naopak číta raz pri mount-e priamo z localStorage (lazy
+  // init), aby appka po reloade neblikla najprv nefiltrovaný zoznam.
+  const [selectedSupplier, setSelectedSupplier] = useState<string | null>(null);
+  const [hideResolved, setHideResolved] = useState<boolean>(readHideResolvedPreference);
+
+  const toggleHideResolved = useCallback(() => {
+    setHideResolved((current) => {
+      const next = !current;
+      try {
+        window.localStorage.setItem(HIDE_RESOLVED_STORAGE_KEY, next ? "1" : "0");
+      } catch {
+        // localStorage nedostupné — voľba ostáva platná len pre túto reláciu.
+      }
+      return next;
+    });
+  }, []);
 
   // #31: e-mailový kontakt dodávateľa (editovateľný priamo v zozname).
   const [editingEmailSupplier, setEditingEmailSupplier] = useState<string | null>(null);
@@ -296,6 +324,18 @@ export function OrdersSection({
   // preskupovanie na klientovi.
   const totalLines = suppliers.reduce((sum, group) => sum + group.lines.length, 0);
 
+  // issue 61: dodávatelia zúžení podľa vybraného chipu — hromadné akcie
+  // (`SupplierActionsPanel`) dostávajú vždy PLNÉ `group.lines` (nefiltrované
+  // podľa `hideResolved`), lebo server aj tak mutuje celú skupinu naraz;
+  // filtrovaný pohľad je len na to, ktoré RIADKY tabuľky sa vykreslia.
+  const filteredGroups = suppliers.filter(
+    (group) => selectedSupplier === null || group.supplier === selectedSupplier,
+  );
+  const visibleLinesCount = filteredGroups.reduce(
+    (sum, group) => sum + (hideResolved ? group.lines.filter((line) => !isLineResolved(line)).length : group.lines.length),
+    0,
+  );
+
   return (
     <section className="orders-section">
       {!loaded && <p>Načítavam otvorené objednávky…</p>}
@@ -305,151 +345,91 @@ export function OrdersSection({
       {loaded && totalLines === 0 && (
         <p className="empty" data-testid="orders-empty">Zatiaľ nie sú žiadne otvorené objednávky.</p>
       )}
-      {suppliers.map((group) => (
-        <div key={group.supplier} className="order-group" data-testid={`supplier-${group.supplier}`}>
-          <div className="toorder-supplier">
-            <span className="tosup-label">
-              {group.supplier} — {group.lines.length} {group.lines.length === 1 ? "riadok" : "riadky"}
-            </span>
-            <div className="tosup-contact" data-testid={`supplier-contact-${group.supplier}`}>
-              {editingEmailSupplier === group.supplier ? (
-                <>
-                  <input
-                    className="tosup-emailinput"
-                    aria-label={`E-mail dodávateľa ${group.supplier}`}
-                    type="email"
-                    value={emailDraft}
-                    disabled={emailBusy}
-                    onChange={(e) => {
-                      setEmailDraft(e.target.value);
-                    }}
+      {loaded && totalLines > 0 && (
+        <OrdersToolbar
+          suppliers={suppliers}
+          selectedSupplier={selectedSupplier}
+          onSelectSupplier={setSelectedSupplier}
+          hideResolved={hideResolved}
+          onToggleHideResolved={toggleHideResolved}
+        />
+      )}
+      {loaded && totalLines > 0 && hideResolved && visibleLinesCount === 0 && (
+        <p className="empty" data-testid="orders-hidden-empty">
+          {selectedSupplier === null
+            ? "Všetko vybavené — vybavené riadky sú skryté."
+            : "Tento dodávateľ je vybavený — vybavené riadky sú skryté."}
+        </p>
+      )}
+      {filteredGroups.map((group) => {
+        const visibleLines = hideResolved ? group.lines.filter((line) => !isLineResolved(line)) : group.lines;
+        if (visibleLines.length === 0) return null;
+        return (
+          <div key={group.supplier} className="order-group" data-testid={`supplier-${group.supplier}`}>
+            <SupplierActionsPanel
+              group={group}
+              canChangeState={canChangeState}
+              editingEmailSupplier={editingEmailSupplier}
+              emailDraft={emailDraft}
+              emailBusy={emailBusy}
+              emailError={emailError}
+              onEmailDraftChange={setEmailDraft}
+              onStartEditEmail={startEditEmail}
+              onSaveEmail={saveEmail}
+              onCancelEditEmail={cancelEditEmail}
+              busyOrderedSupplier={busyOrderedSupplier}
+              busyOrderedLineId={busyOrderedLineId}
+              onToggleGroupOrdered={toggleGroupOrdered}
+              onCopyOrderToClipboard={copyOrderToClipboard}
+              previewSupplier={previewSupplier}
+              preview={preview}
+              previewError={previewError}
+              sendBusy={sendBusy}
+              sendResult={sendResult}
+              onOpenPreview={openPreview}
+              onClosePreview={closePreview}
+              onConfirmSend={confirmSend}
+            />
+            <table className="orders-table">
+              <thead>
+                <tr>
+                  {/* issue 60: odškrtávacie políčko — JEDINÉ miesto na obrazovke,
+                      ktoré sa smie volať "Objednané" (viď `STATE_LABELS`
+                      a stĺpec dátumu nižšie, obe premenované, aby nekolidovali). */}
+                  <th>Objednané</th>
+                  <th>Objednávka</th>
+                  <th>Zákazník</th>
+                  <th>Kód</th>
+                  <th>Produkt</th>
+                  <th>Veľkosť</th>
+                  <th>Množstvo</th>
+                  <th>Dodávateľ</th>
+                  <th>Stav</th>
+                  <th>Dátum objednávky</th>
+                  <th>Komentár</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visibleLines.map((line) => (
+                  <OrderLineRow
+                    key={line.lineId}
+                    line={line}
+                    canChangeState={canChangeState}
+                    busyLineId={busyLineId}
+                    busyOrderedLineId={busyOrderedLineId}
+                    // Review of PR 75, finding 6: kým hromadná akcia pre TOHTO
+                    // dodávateľa beží, žiadny riadok jeho skupiny sa nesmie dať
+                    // meniť per-riadkovo naraz.
+                    supplierBusy={busyOrderedSupplier === group.supplier}
+                    onChangeState={changeState}
+                    onChangeOrdered={changeOrdered}
                   />
-                  <button type="button" className="btn sm good" disabled={emailBusy} onClick={() => { saveEmail(group.supplier); }}>
-                    Uložiť
-                  </button>
-                  <button type="button" className="btn sm ghost" disabled={emailBusy} onClick={cancelEditEmail}>
-                    Zrušiť
-                  </button>
-                  {emailError !== "" && <p role="alert">{emailError}</p>}
-                </>
-              ) : (
-                <>
-                  <span className="tosup-email">E-mail dodávateľa: {group.email ?? "nenastavený"}</span>
-                  {canChangeState && (
-                    <button type="button" className="btn sm ghost" onClick={() => { startEditEmail(group); }}>
-                      Upraviť e-mail
-                    </button>
-                  )}
-                </>
-              )}
-            </div>
-            {canChangeState && (
-              <div className="tosup-actions">
-                {/* issue 60: hromadné označenie/zrušenie CELEJ skupiny naraz —
-                    jedno tlačidlo, ktoré prepína smer podľa toho, či je skupina
-                    UŽ celá odškrtnutá (rovnaký zámer ako stará appka's
-                    `markGroupOrdered`/`allOrdered`). Review of PR 76, finding 5:
-                    mirror smeru fixu 6 (review of PR 75, finding 6) — tlačidlo
-                    musí byť needitovateľné AJ kým beží per-riadkový zápis pre
-                    NIEKTORÝ riadok TEJTO skupiny (`busyOrderedLineId`), nielen
-                    počas vlastného hromadného zápisu (`busyOrderedSupplier`).
-                    Bez toho by klik na tlačidlo tesne po odškrtnutí jedného
-                    riadku poslal hromadný zápis počítaný z ešte-neaktuálneho
-                    `ordered` (optimistický update toho riadku sa prejaví až po
-                    vyriešení jeho vlastného promisu). */}
-                <button
-                  type="button"
-                  className="btn sm ghost"
-                  disabled={
-                    busyOrderedSupplier === group.supplier ||
-                    (busyOrderedLineId !== null && group.lines.some((l) => l.lineId === busyOrderedLineId))
-                  }
-                  onClick={() => {
-                    toggleGroupOrdered(group.supplier, !group.lines.every((l) => l.ordered));
-                  }}
-                >
-                  {group.lines.every((l) => l.ordered) ? "↺ Zrušiť označenie skupiny" : "✔ Označiť skupinu ako objednané"}
-                </button>
-                <button type="button" className="btn sm ghost" onClick={() => { copyOrderToClipboard(group.supplier); }}>
-                  📋 Kopírovať objednávku
-                </button>
-                <button
-                  type="button"
-                  className="btn sm good"
-                  disabled={group.email === null || !group.lines.some((l) => l.state === OUTSTANDING_STATE)}
-                  title={
-                    group.email === null
-                      ? "Pre odoslanie mailom treba najprv nastaviť e-mail dodávateľa."
-                      : undefined
-                  }
-                  onClick={() => { openPreview(group.supplier); }}
-                >
-                  ✉️ Poslať objednávku e-mailom
-                </button>
-              </div>
-            )}
+                ))}
+              </tbody>
+            </table>
           </div>
-          {canChangeState && group.email === null && (
-            <p className="reenote">Pre odoslanie mailom treba najprv nastaviť e-mail dodávateľa.</p>
-          )}
-          {sendResult?.supplier === group.supplier && <p role="status">{sendResult.message}</p>}
-          {previewSupplier === group.supplier && (
-            <div className="mail-preview" data-testid={`mail-preview-${group.supplier}`}>
-              {previewError !== "" && <p role="alert">{previewError}</p>}
-              {preview !== null && (
-                <>
-                  <p>Komu: {preview.to ?? "—"}</p>
-                  <p>Predmet: {preview.subject}</p>
-                  <pre>{preview.body}</pre>
-                  <button type="button" className="btn sm good" disabled={sendBusy} onClick={() => { confirmSend(group.supplier); }}>
-                    Odoslať
-                  </button>
-                  <button type="button" className="btn sm ghost" disabled={sendBusy} onClick={closePreview}>
-                    Zrušiť
-                  </button>
-                </>
-              )}
-            </div>
-          )}
-          <table className="orders-table">
-            <thead>
-              <tr>
-                {/* issue 60: odškrtávacie políčko — JEDINÉ miesto na obrazovke,
-                    ktoré sa smie volať "Objednané" (viď `STATE_LABELS`
-                    a stĺpec dátumu nižšie, obe premenované, aby nekolidovali). */}
-                <th>Objednané</th>
-                <th>Objednávka</th>
-                <th>Zákazník</th>
-                <th>Kód</th>
-                <th>Produkt</th>
-                <th>Veľkosť</th>
-                <th>Množstvo</th>
-                <th>Dodávateľ</th>
-                <th>Stav</th>
-                <th>Dátum objednávky</th>
-                <th>Komentár</th>
-              </tr>
-            </thead>
-            <tbody>
-              {group.lines.map((line) => (
-                <OrderLineRow
-                  key={line.lineId}
-                  line={line}
-                  canChangeState={canChangeState}
-                  busyLineId={busyLineId}
-                  busyOrderedLineId={busyOrderedLineId}
-                  // Review of PR 75, finding 6: kým hromadná akcia pre TOHTO
-                  // dodávateľa beží, žiadny riadok jeho skupiny sa nesmie dať
-                  // meniť per-riadkovo naraz.
-                  supplierBusy={busyOrderedSupplier === group.supplier}
-                  onChangeState={changeState}
-                  onChangeOrdered={changeOrdered}
-                />
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ))}
+        );
+      })}
     </section>
   );
 }
