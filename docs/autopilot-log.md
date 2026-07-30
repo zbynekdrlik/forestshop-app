@@ -1004,3 +1004,42 @@ nové heslo sa nikde v pushnutom obsahu nenachádza.
   push and on the PR (`#79`) across all three pushes; local before each
   push: lint + typecheck clean.
 - Shared PR: `#79`.
+
+## Issue 61 — Na objednanie: supplier filters, remaining summary, hide-resolved toggle
+
+- Design comment posted on issue 61 before any code (root cause: no
+  filter/summary/toggle existed on "Na objednanie"; chosen approach: pure
+  client-side filter over the already-fully-loaded `/api/orders/open`
+  data, `isLineResolved = ordered || state !== "objednane"` as the direct
+  translation of the legacy app's `isHandled`; rejected alternative:
+  breakdown by `state` alone, which would silently drop `ordered=true`
+  lines still in the default state).
+- New pure logic module `apps/web/src/ordersSummary.ts`
+  (`isLineResolved`/`summarizeOrderLines`/`formatOrderSummaryText`, unit
+  tested in `ordersSummary.test.ts`) + `OrdersToolbar.tsx` (chips/summary/
+  toggle, unit tested) + `SupplierActionsPanel.tsx` (mechanical extraction
+  from `OrdersSection.tsx`, no behavior change — the file was already at
+  eslint's `max-lines: 400` cap before this feature).
+- Hide-resolved toggle persists via `localStorage`
+  (`forestshop.orders.hideResolved`); supplier-chip selection is
+  deliberately NOT persisted (issue only asked persistence for the
+  toggle). Group-level bulk actions (email, bulk "objednané", mail
+  preview/send) keep operating on the FULL unfiltered `group.lines` —
+  only the rendered table rows respect `hideResolved`.
+- New isolated e2e account (`e2e-filtre@forestshop.sk`) + a new
+  `orders.spec.ts` test placed FIRST in the file (not last, unlike the
+  other isolated-account tests) so it observes the pristine seeded data
+  before later tests in the same file mutate state/`ordered`/
+  `order_open_status` — see `.claude/rules/testing.md`.
+- Commits: `f27510e` (version bump 0.3.0-dev.40) → `98d767e`
+  (SupplierActionsPanel extraction) → `a4f1724` (feature + tests).
+- Verified live on `https://forestshop-novy.newlevel.media/?tab=orders`
+  against real production data (39 lines / 17 supplier groups): chips
+  narrow correctly, summary recomputes per active filter, hide-resolved
+  toggle hides a fully-resolved supplier and survives a reload — then the
+  test mutation (one line's "objednané" checkbox) was reverted, restoring
+  the data to its original state. Zero console errors/warnings throughout.
+- CI green (check/integration/e2e/docker-build/version-check) on `dev`
+  push and PR `#80`; main CI + Deploy green on merge `ed2b153`; live
+  `/api/version` matched (`0.3.0-dev.40` @ `ed2b153`).
+- Shared PR: `#80`.
