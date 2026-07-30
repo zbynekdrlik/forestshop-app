@@ -517,3 +517,66 @@ nové heslo sa nikde v pushnutom obsahu nenachádza.
 - Drobné postrehy z review (chýbajúci index na `pairing.confirmed_by`,
   case/whitespace normalizácia `supplier.name` joinu) zaznamenané na
   #46 a #48 pre budúce úlohy — žiadna zmena v tomto PR.
+
+## 2026-07-30 — #45 (F4: obrazovka "Kontrola párovania")
+
+- Verzia: `0.3.0-dev.23` → `0.3.0-dev.24`, commit `276fcd1` (prvý na `dev`,
+  pred design komentárom).
+- Design komentár (root cause + zvolený prístup + zamietnutá alternatíva
+  samostatnej "reject bez náhrady" trasy) zapísaný PRED prvým kódovým
+  commitom: https://github.com/zbynekdrlik/forestshop-app/issues/45#issuecomment-5129954514.
+- Nové `apps/api/src/modules/pairing/{queries,state}.ts` +
+  `http/pairing-routes.ts` (`GET /api/pairing`, `POST /api/pairing/confirm`)
+  + web `pairingApi.ts`/`PairingSection.tsx`, zapojené do `App.tsx` vedľa
+  `OrdersSection`. **LEFT JOIN, nie INNER** na `pairing` (dnes nemá ani jeden
+  riadok — automatické hľadanie kandidátov #46 ešte neexistuje) — chýbajúci
+  riadok sa zobrazí ako "navrhnuté" s prázdnou adresou, presne zodpovedá
+  DB automatu, a manažér tak môže párovať RUČNE od prvého dňa. Jedna funkcia
+  `confirmPairing()` pokrýva obe akcie starej appky ("✓"/"zamietni a zadaj
+  inú adresu ručne") podľa toho, či telo nesie `supplierUrl` override.
+  `variantCode` ide v TELE POST, nie v ceste (kódy nesú lomku, napr.
+  "40237/3XL" — existujúca `/api/catalog/variants/:code` trasa má tento istý
+  neoverený risk, ale z web klienta ju dnes nikto nevolá).
+- `escapeLikePattern` (`modules/catalog/queries.ts`) exportovaná na
+  zdieľanie s `pairing/queries.ts` namiesto duplicitnej kópie.
+- Nové labely v `PairingSection.tsx` ("Kód variantu alebo produktu", "Stav
+  párovania", tlačidlo "Filtrovať") zámerne ODLIŠNÉ od `CatalogPage.tsx`'s
+  "Kód alebo názov"/"Stav"/"Hľadať" — rovnaká trieda gotcha ako #25
+  (`getByLabel`/`getByRole` substring zhoda na tej istej stránke), tentokrát
+  vyriešená PRED mergom, nie až dodatočným review nálezom.
+- Testy: 15 integračných (`pairing-http.integration.test.ts` — LEFT JOIN,
+  filter podľa stavu, fulltext, potvrdenie s/bez ručnej adresy, 404/400,
+  role/CSRF), unit testy `pairingApi.test.ts`/`PairingSection.test.tsx`
+  (komponent po úspešnom potvrdení znova NAČÍTA stránku výsledkov —
+  `confirmedByName`/`confirmedAt` sú AUTORITATÍVNE zo servera, nie
+  odhadnuté klientom, rovnaký vzor ako `CatalogPage`'s `runIngest`), 2 nové
+  Playwright e2e (`pairing.spec.ts` — jeden LEFT JOIN prípad nad variantom
+  "4859/46" bez existujúceho pairing riadku, druhý s `scripts/e2e-setup.ts`'s
+  novým zámerne prednastaveným NEPOTVRDENÝM kandidátom pre "40287", jediný
+  spôsob, ako "✓ jedným klikom" overiť cez skutočný prehliadač skôr, než
+  #46 pristane).
+- Nezávislý code-review subagent dispatchnutý PRED pushom (celý diff): 0 🔴
+  0 🟡, dva 🔵 akceptované s odôvodnením (re-confirm bez varovania je
+  ZÁMERNÉ — presne slúži "priebežne kontrolovať a opravovať" z popisu
+  úlohy; `finalUrl === ""` obranná kontrola v `state.ts` je zámerne
+  ponechaná pre budúce volania funkcie mimo dnešnej HTTP trasy). Verdikt:
+  ready to merge.
+- PR: **#54** (`dev` → `main`), `Closes #45`, merged `64c21ce`. CI all
+  green (check, integration, e2e, docker-build, version-check) na push aj
+  pull_request behu.
+- Deployed + verified na https://forestshop-novy.newlevel.media
+  (v0.3.0-dev.24, `/api/version` commit sedí s `64c21cef`): prihlásený ako
+  skutočný vlastník (`vychod@varos.sk`, rola `admin`), obrazovka "Kontrola
+  párovania" ukázala všetkých 14 110 reálnych produkčných variantov ako
+  "Navrhnuté" (potvrdzuje LEFT JOIN dizajn na živých dátach — `pairing`
+  tabuľka je dnes prázdna), "✓ Potvrdiť" správne disabled bez adresy.
+  Funkčne overené: "✗ Zadať inú adresu" na reálnom variante
+  ("0.8331.MC9") → zadaná testovacia adresa → "Potvrdiť" → riadok sa
+  zmenil na "Potvrdené", stĺpec "Potvrdil" ukázal "Zbyněk (30. 7. 2026)"
+  (skutočný prihlásený účet), adresa sa vykreslila ako klikateľný odkaz;
+  konzola čistá (žiadna chyba nad rámec povolenej `/api/me` 401 pri
+  prvom neprihlásenom načítaní). Testovací pairing riadok následne
+  ODSTRÁNENÝ priamo v produkčnej DB (`DELETE FROM pairing WHERE
+  variant_code = '0.8331.MC9'`), aby v produkcii nezostala fingovaná
+  adresa vyzerajúca ako reálne potvrdené párovanie.
+- Per-ticket Discord card fired (`notify --run-card`, confirmed delivered).
