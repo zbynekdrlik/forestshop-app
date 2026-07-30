@@ -368,3 +368,31 @@ RED→GREEN test names, key decisions, and the shared PR.
   objednávky …") is live in the DOM, order 20261259's line still correctly
   shows "Objednané" (the earlier manual test restore held), zero console
   errors.
+
+## Issue #32: Playwright e2e s viacerými workermi bol občas nestály (orders.spec.ts prvý test)
+
+Root cause reprodukovaný priamo (5× `pnpm --filter @forestshop/web e2e --workers=2`,
+4/5 zlyhalo) a potvrdený koreláciou timestampov v pino debug logoch API servera:
+`scripts/e2e-setup.ts` seedoval JEDNÉHO zdieľaného e2e používateľa
+(`e2e@forestshop.sk`), pod ktorým sa prihlasovali VŠETKY tri spec súbory.
+`login.spec.ts`'s test zmeny hesla dočasne mení skutočné heslo tohto zdieľaného
+účtu v DB — súbežný `POST /api/login` z INÉHO spec súboru, bežiaceho v inom
+workeri, ktorý spadol presne do okna medzi zmenou a vrátením hesla, dostal
+skutočný 401 (nie 429 — rate limiter aj Postgres pool exhaustion boli vylúčené
+priamym dôkazom z logov: 9 volaní `/api/login` na beh, žiadna 429, latencie
+60-160ms). Design rationale posted on #32
+([comment](https://github.com/zbynekdrlik/forestshop-app/issues/32#issuecomment-5125363114))
+pred prvým kódovým commitom: `[red]` commit `293eba8` pridal regresný
+integračný test (`e2e-setup-user-isolation.integration.test.ts`, spúšťa SKUTOČNÝ
+`scripts/e2e-setup.ts` ako podproces + priamo overuje `login()`/`changePassword()`
+izoláciu — RED pred opravou), `[green]` commit `0ef14dd` dal `login.spec.ts`'s
+testu zmeny hesla VLASTNÝ izolovaný e2e účet (`e2e-heslo@forestshop.sk` v
+`scripts/e2e-setup.ts`). Zamietnutá alternatíva: vynútenie sériového behu
+(`--workers=1`/`describe.serial`) — band-aid, ktorý by nechal mínu pre
+akýkoľvek budúci súbežný test. Overené: 8/8 čistých behov `--workers=2` po
+oprave. PR **#35** (`dev` → `main`), merged `fdb5c0b`. CI all green (push aj
+pull_request run). Deployed + verified: https://forestshop-novy.newlevel.media
+`/api/version` vracia `{"version":"0.3.0-dev.15","commit":"fdb5c0b6..."}`,
+DOM footer ukazuje `v0.3.0-dev.15`, prihlásenie vlastníkovým účtom funguje,
+dashboard "Na objednanie" sa vykresľuje so skutočnými produkčnými dátami,
+konzola čistá (len povolený `/api/me` 401).
