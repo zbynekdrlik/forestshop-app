@@ -167,3 +167,19 @@ paths:
   `listOpenOrderLineIdsForSupplier` majú teraz `Pick<Database, "select">`
   namiesto celého `Database`, aby ich šlo volať aj s `tx` (`PgTransaction`
   nemá `Database`'s `$client`).
+- **`\s` (a KAŽDÝ iný jednopísmenový backslash-escape, ktorý JS
+  nepozná — `\d`, `\w`, ...) VNÚTRI drizzle's `sql` tagovaného šablónového
+  literálu TICHO STRATÍ backslash** — JS šablónové/reťazcové literály
+  neuznávajú `\s` ako escape sekvenciu, takže `` sql`... '\s+' ...` ``
+  reálne odošle na Postgres text `'s+'`, nie `'\s+'` (regex na
+  whitespace). Zistené issue 63 (`modules/orders/supplier-key.ts`'s
+  `normalizedSupplierKeySql`, `regexp_replace(..., '\s+', ' ', 'g')`) —
+  `.toSQL()` na dopyte ukázal presne túto tichú zmenu, funkcia preto
+  prestala zbierať viacnásobné medzery (namiesto zlúčenia dvoch pravopisov
+  dodávateľa do jednej skupiny nechala kľúč nezmenený). Fix: `\\s+`
+  (dvojitý backslash) — jediný spôsob, ako dostať doslovné `\s+` do SQL
+  textu z JS šablóny. Pri KAŽDOM ďalšom raw regexe/escape sekvencii vnútri
+  `sql` šablóny over `drizzle`'s `.toSQL().sql` (alebo `q.toSQL()`) priamo
+  proti reálnej DB predtým, než tomu dôveruješ — "vyzerá to ako správny SQL
+  text v zdrojáku" nestačí, JS parsing šablóny beží PRED tým, než sa
+  reťazec vôbec dostane k drizzle.
