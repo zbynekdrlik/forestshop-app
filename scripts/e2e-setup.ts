@@ -44,6 +44,15 @@ const E2E_HESLO_ZMENA_EMAIL = "e2e-heslo@forestshop.sk"; // musí sa zhodovať s
 // bezpečnostného limitu.
 const E2E_SKUPINY_EMAIL = "e2e-skupiny@forestshop.sk"; // musí sa zhodovať s hodnotou v pairing.spec.ts
 
+// Issue 57 (ľavé menu): rovnaký mechanizmus a dôvod ako `E2E_SKUPINY_EMAIL`
+// vyššie — nový `nav.spec.ts` pridal ĎALŠIE 2 prihlásenia pod zdieľaným
+// `e2e@forestshop.sk`, čo spolu so zvyškom balíka (catalog 3 + login 2 +
+// orders 3 + pairing 2 = 10, presne na hranici `MAX_ATTEMPTS`) prekročilo
+// limit 10 v 5-minútovom okne — reálne pozorované "Nesprávny e-mail alebo
+// heslo" na náhodnom neskoršom teste (11./12. pokus tej istej dvojice IP+
+// e-mail), nie flaka. Vlastný e-mail = vlastný rate-limit priestor.
+const E2E_NAV_EMAIL = "e2e-nav@forestshop.sk"; // musí sa zhodovať s hodnotou v nav.spec.ts
+
 const { db, pool } = createDb();
 // Konštantný literál bez interpolácie — obyčajný reťazec je tu rovnako bezpečný
 // ako `sql` tagovaná šablóna (tú používa ekvivalentný apps/api/tests/helpers/db.ts),
@@ -82,6 +91,12 @@ await db.insert(users).values({
 });
 await db.insert(users).values({
   email: E2E_SKUPINY_EMAIL,
+  passwordHash: await hashPassword(E2E_HESLO),
+  displayName: "E2E Manažér",
+  role: "manazer",
+});
+await db.insert(users).values({
+  email: E2E_NAV_EMAIL,
   passwordHash: await hashPassword(E2E_HESLO),
   displayName: "E2E Manažér",
   role: "manazer",

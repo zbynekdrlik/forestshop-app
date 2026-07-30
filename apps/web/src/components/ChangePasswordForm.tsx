@@ -68,41 +68,47 @@ export function ChangePasswordForm({
 
   return (
     <section>
-      <h2>Zmena hesla</h2>
+      <h3>Zmena hesla</h3>
       <form onSubmit={(e) => { void submit(e); }}>
         {/* Skryté, nikdy needituje/needosiela nič — len autoComplete="username"
             pre prehliadačov password manager (viď komentár pri props vyššie). */}
         <input type="text" name="username" autoComplete="username" value={email} readOnly hidden />
-        <label htmlFor="old-password">Staré heslo</label>
-        <input
-          id="old-password"
-          type="password"
-          autoComplete="current-password"
-          value={oldPassword}
-          onChange={(e) => { setOldPassword(e.target.value); }}
-          required
-        />
-        <label htmlFor="new-password">Nové heslo</label>
-        <input
-          id="new-password"
-          type="password"
-          autoComplete="new-password"
-          value={newPassword}
-          onChange={(e) => { setNewPassword(e.target.value); }}
-          required
-        />
-        <label htmlFor="new-password-confirm">Nové heslo znova</label>
-        <input
-          id="new-password-confirm"
-          type="password"
-          autoComplete="new-password"
-          value={newPasswordConfirm}
-          onChange={(e) => { setNewPasswordConfirm(e.target.value); }}
-          required
-        />
-        <button type="submit" disabled={submitting}>Zmeniť heslo</button>
+        <div className="field">
+          <label htmlFor="old-password">Staré heslo</label>
+          <input
+            id="old-password"
+            type="password"
+            autoComplete="current-password"
+            value={oldPassword}
+            onChange={(e) => { setOldPassword(e.target.value); }}
+            required
+          />
+        </div>
+        <div className="field">
+          <label htmlFor="new-password">Nové heslo</label>
+          <input
+            id="new-password"
+            type="password"
+            autoComplete="new-password"
+            value={newPassword}
+            onChange={(e) => { setNewPassword(e.target.value); }}
+            required
+          />
+        </div>
+        <div className="field">
+          <label htmlFor="new-password-confirm">Nové heslo znova</label>
+          <input
+            id="new-password-confirm"
+            type="password"
+            autoComplete="new-password"
+            value={newPasswordConfirm}
+            onChange={(e) => { setNewPasswordConfirm(e.target.value); }}
+            required
+          />
+        </div>
+        <button type="submit" className="btn sm good" disabled={submitting}>Zmeniť heslo</button>
         {error !== "" && <p role="alert">{error}</p>}
-        {success && <p data-testid="password-change-success">Heslo bolo úspešne zmenené</p>}
+        {success && <p role="status" data-testid="password-change-success">Heslo bolo úspešne zmenené</p>}
       </form>
     </section>
   );

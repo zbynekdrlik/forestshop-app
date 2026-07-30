@@ -28,14 +28,22 @@ export function LoginForm({ onLoggedIn }: { onLoggedIn: () => void }): JSX.Eleme
   }
 
   return (
-    <form onSubmit={(e) => { void submit(e); }}>
-      <h1>Prihlásenie</h1>
-      <label htmlFor="email">E-mail</label>
-      <input id="email" type="email" value={email} onChange={(e) => { setEmail(e.target.value); }} required />
-      <label htmlFor="password">Heslo</label>
-      <input id="password" type="password" value={password} onChange={(e) => { setPassword(e.target.value); }} required />
-      <button type="submit" disabled={submitting}>Prihlásiť sa</button>
-      {error !== "" && <p role="alert">{error}</p>}
-    </form>
+    <div className="auth-shell">
+      <form className="auth-card" onSubmit={(e) => { void submit(e); }}>
+        <h1>Prihlásenie</h1>
+        <div className="field">
+          <label htmlFor="email">E-mail</label>
+          <input id="email" type="email" value={email} onChange={(e) => { setEmail(e.target.value); }} required />
+        </div>
+        <div className="field">
+          <label htmlFor="password">Heslo</label>
+          <input id="password" type="password" value={password} onChange={(e) => { setPassword(e.target.value); }} required />
+        </div>
+        <div className="form-actions">
+          <button type="submit" className="btn good" disabled={submitting}>Prihlásiť sa</button>
+        </div>
+        {error !== "" && <p role="alert">{error}</p>}
+      </form>
+    </div>
   );
 }

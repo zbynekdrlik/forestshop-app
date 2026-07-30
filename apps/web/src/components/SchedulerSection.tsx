@@ -1,29 +1,12 @@
 import { useCallback, useEffect, useState, type JSX } from "react";
 import type { Me } from "../api.js";
+import { detailText, jobLabel, STATUS_LABELS } from "../schedulerLabels.js";
 import { fetchJobRuns, SchedulerUnauthorizedError, type JobRun } from "../schedulerApi.js";
-
-const JOB_LABELS: Readonly<Record<string, string>> = {
-  "catalog-import": "Import katalógu",
-  "prune-raw-exports": "Mazanie starých surových exportov",
-  "session-cleanup": "Mazanie expirovaných relácií",
-};
-
-const STATUS_LABELS: Record<JobRun["status"], string> = {
-  running: "Beží",
-  success: "Úspešná",
-  failure: "Zlyhala",
-};
 
 // Rovnaké dve role, ktoré server vyžaduje pre `GET /api/scheduler/runs`
 // (`requireRole("admin", "manazer")`, `scheduler-routes.ts`) — server ostáva
 // skutočnou bránou, toto len skrýva sekciu pre role, ktoré by aj tak dostali 403.
 const SCHEDULER_ROLES: ReadonlySet<Me["role"]> = new Set(["admin", "manazer"]);
-
-function detailText(run: JobRun): string {
-  if (run.status === "failure") return run.errorMessage ?? "—";
-  if (run.detail === null || run.detail === undefined) return "—";
-  return JSON.stringify(run.detail);
-}
 
 export function SchedulerSection({
   role,
@@ -83,7 +66,7 @@ export function SchedulerSection({
           <tbody>
             {runs.map((run) => (
               <tr key={run.jobName} data-testid={`job-${run.jobName}`}>
-                <td>{JOB_LABELS[run.jobName] ?? run.jobName}</td>
+                <td>{jobLabel(run.jobName)}</td>
                 <td>{new Date(run.startedAt).toLocaleString("sk-SK")}</td>
                 <td>{STATUS_LABELS[run.status]}</td>
                 <td>

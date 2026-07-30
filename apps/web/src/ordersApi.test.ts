@@ -5,6 +5,7 @@ import {
   fetchSupplierOrderMailPreview,
   sendSupplierOrderMail,
   setSupplierEmail,
+  triggerOrdersIngest,
   updateOrderLineState,
 } from "./ordersApi.js";
 
@@ -176,4 +177,64 @@ it("sendSupplierOrderMail pri 502 (zlyhané SMTP) vráti ok:false namiesto vyhod
 it("sendSupplierOrderMail pri 401 vyhodí OrdersUnauthorizedError", async () => {
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("", { status: 401 })));
   await expect(sendSupplierOrderMail("Dodávateľ Alfa")).rejects.toBeInstanceOf(OrdersUnauthorizedError);
+});
+
+// #57: tlačidlo "stiahnuť teraz" na obrazovke Sync zo Shoptetu.
+
+it("triggerOrdersIngest pošle POST na /api/orders/ingest a prečíta prijatý výsledok", async () => {
+  const fetchMock = vi.fn().mockResolvedValue(
+    new Response(
+      JSON.stringify({
+        status: "accepted",
+        orderCount: 2,
+        lineCount: 3,
+        skippedItemCount: 0,
+        pseudoItemCount: 1,
+        issueCount: 0,
+        rawPath: "/data/e2e-orders-raw/x.csv.gz",
+      }),
+      { status: 200 },
+    ),
+  );
+  vi.stubGlobal("fetch", fetchMock);
+
+  await expect(triggerOrdersIngest()).resolves.toEqual({
+    status: "accepted",
+    orderCount: 2,
+    lineCount: 3,
+    skippedItemCount: 0,
+    pseudoItemCount: 1,
+    issueCount: 0,
+  });
+  expect(fetchMock).toHaveBeenCalledWith("/api/orders/ingest", { method: "POST" });
+});
+
+it("triggerOrdersIngest prečíta zamietnutý výsledok", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue(new Response(JSON.stringify({ status: "rejected", reason: "prázdny export" }), { status: 200 })),
+  );
+  await expect(triggerOrdersIngest()).resolves.toEqual({ status: "rejected", reason: "prázdny export" });
+});
+
+it("triggerOrdersIngest prečíta 'busy', keď import už beží", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ status: "busy" }), { status: 200 })));
+  await expect(triggerOrdersIngest()).resolves.toEqual({ status: "busy" });
+});
+
+it("triggerOrdersIngest pri 401 vyhodí OrdersUnauthorizedError", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("", { status: 401 })));
+  await expect(triggerOrdersIngest()).rejects.toBeInstanceOf(OrdersUnauthorizedError);
+});
+
+it("triggerOrdersIngest zlyhá zrozumiteľne, keď export nie je nakonfigurovaný (503)", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: "Import objednávok nie je nakonfigurovaný (chýba SHOPTET_ORDERS_URL)" }), {
+        status: 503,
+      }),
+    ),
+  );
+  await expect(triggerOrdersIngest()).rejects.toThrow("Import objednávok nie je nakonfigurovaný");
 });
