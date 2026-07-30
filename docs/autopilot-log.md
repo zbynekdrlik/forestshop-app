@@ -852,3 +852,51 @@ nové heslo sa nikde v pushnutom obsahu nenachádza.
   Vybavený Dobropis, Vybavuje sa) — no typo-guessing needed. Console: 0
   errors/0 warnings throughout.
 - Per-ticket Discord card fired (`notify --run-card`, confirmed delivered).
+
+## 2026-07-30 — issue 60 (na objednanie: odškrtnutie objednaného + hromadné označenie skupiny)
+
+- Design comment posted before first commit: https://github.com/zbynekdrlik/forestshop-app/issues/60#issuecomment-5134292105
+  (root cause: `state` enum's `objednane` value is the row's DEFAULT/pending
+  state, not a confirmation of ordering — three different UI spots used the
+  word "Objednané" with three different meanings; chosen approach: a new
+  independent `order_line.ordered` boolean, orthogonal to `state`, mirroring
+  the legacy app's separate `ORDERED` flag; rejected: folding it into the
+  existing `state` enum).
+- Version bump `fdcc30e` (0.3.0-dev.35 → .36). Backend `d394504`: migration
+  0013 (`order_line.ordered boolean default false`), `setOrderLineOrdered`/
+  `setSupplierLinesOrdered` in `modules/orders/state.ts`,
+  `listOpenOrderLineIdsForSupplier` in `queries.ts`,
+  `POST /api/orders/lines/:lineId/ordered` + `PUT /api/suppliers/:supplier/
+  order-lines/ordered`, new integration test file
+  `orders-http-ordered.integration.test.ts` (8 tests). Frontend `add3164`:
+  checkbox column + per-supplier bulk toggle button (label flips between
+  "✔ Označiť skupinu ako objednané" / "↺ Zrušiť označenie skupiny", legacy
+  `markGroupOrdered` UX minus its `commitSeq` concurrency machinery — MVP,
+  single/few concurrent managers); renamed the two colliding "Objednané"
+  labels (`STATE_LABELS.objednane` → "Nevybavené", date column → "Dátum
+  objednávky"); extracted `OrderLineRow.tsx` to stay under eslint's
+  `max-lines: 400` (`OrdersSection.tsx` hit 454). No RED/GREEN — greenfield
+  feature (implement-then-test, per `tdd-workflow.md`), not a bug fix.
+- Fix commit `c801810`: the new `orders.spec.ts` e2e test used
+  `checkbox.check()`, which raced the async POST on GitHub Actions (passed
+  locally, failed on the PR-triggered CI run) — switched to `.click()` +
+  `expect(...).toBeChecked()`, same principle already documented for
+  `<select>` in `.claude/rules/testing.md`.
+- CI green (check/integration/e2e/docker-build/version-check) on `dev` push,
+  on the PR (`#75`), and on `main` after merge (`42153ac9`). Local before
+  push: typecheck + lint + unit (263 API + 175 web) + integration (201) +
+  full e2e (16/16, including 3 repeated fresh runs) all green.
+- Deployed + verified on https://forestshop-novy.newlevel.media
+  (v0.3.0-dev.36, commit `42153ac9` matches `/api/version`). Manually
+  exercised on a REAL production order line + a real 7-line supplier group
+  (BETALOV): checkbox check/uncheck persisted across reload and dimmed the
+  row; bulk button marked all 7 lines and flipped its own label, then
+  unmarked them again — both directions verified, prod data restored to its
+  original (unchecked) state afterward. 0 console errors/warnings.
+- Playbook updated: `.claude/rules/testing.md` (Playwright `.check()` vs
+  `.click()` race on a controlled checkbox with async `onChange`),
+  `.claude/rules/orders.md` (`ordered` boolean is independent of `state`,
+  never fold future "already handled" needs into the `state` enum),
+  `.claude/rules/frontend-design.md` (component-file max-lines split
+  pattern — extract the repeated row/item renderer first).
+- Per-ticket Discord card fired (`notify --run-card`, confirmed delivered).

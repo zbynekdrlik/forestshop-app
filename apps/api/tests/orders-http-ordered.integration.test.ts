@@ -182,7 +182,14 @@ it("manažér označí celú skupinu dodávateľa ako objednané naraz, JEDEN ag
   const bulkUdalosti = udalosti.filter((e) => e.action === "order_line.ordered.bulk_changed");
   expect(bulkUdalosti).toHaveLength(1);
   expect(bulkUdalosti[0]?.actorUserId).toBe(userId);
-  expect(bulkUdalosti[0]?.entityId).toBe("Dodávateľ Bulk");
+  // Review of PR 75, finding 1: hromadná akcia mutuje `order_line` riadky,
+  // nie e-mailový kontakt dodávateľa — entity musí byť rovnaké ako pri
+  // KAŽDEJ inej `order_line`-mutujúcej akcii (`state.ts:47,94`), inak by
+  // audit dopyt filtrovaný podľa `entity = "order_line"` túto hromadnú zmenu
+  // ticho vynechal. `entityId` ostáva `null` (žiadny JEDEN riadok) —
+  // dodávateľ je v `data` nižšie.
+  expect(bulkUdalosti[0]?.entity).toBe("order_line");
+  expect(bulkUdalosti[0]?.entityId).toBeNull();
   expect(bulkUdalosti[0]?.data).toMatchObject({
     supplier: "Dodávateľ Bulk",
     ordered: true,
@@ -246,4 +253,98 @@ it("rola citanie nesmie hromadne meniť príznak objednané", async () => {
     body: JSON.stringify({ ordered: true }),
   });
   expect(res.status).toBe(403);
+});
+
+// Review of PR 75, finding 4: `orders-http-state.integration.test.ts` testuje
+// rolu "sef" popri "citanie" pri zmene stavu (:101,:112) — rovnaká rola
+// chýbala tu pre hromadnú akciu.
+it("rola sef nesmie hromadne meniť príznak objednané", async () => {
+  const { app, cookie, db } = await boot("sef");
+  await db.insert(orderOpenStatuses).values({ statusName: "Vybavuje sa" }).onConflictDoNothing();
+  await vlozRiadok(db, "Dodávateľ X");
+
+  const res = await app.request(`/api/suppliers/${encodeURIComponent("Dodávateľ X")}/order-lines/ordered`, {
+    method: "PUT",
+    headers: { cookie, "content-type": "application/json" },
+    body: JSON.stringify({ ordered: true }),
+  });
+  expect(res.status).toBe(403);
+});
+
+// Review of PR 75, finding 5: per-riadkový endpoint má "neplatné telo → 400"
+// test (vyššie, `neplatná hodnota vráti 400`) — hromadný endpoint ho nemal.
+it("hromadná akcia s neplatným telom vráti 400", async () => {
+  const { app, cookie, db } = await boot("manazer");
+  await db.insert(orderOpenStatuses).values({ statusName: "Vybavuje sa" }).onConflictDoNothing();
+  await vlozRiadok(db, "Dodávateľ X");
+
+  const res = await app.request(`/api/suppliers/${encodeURIComponent("Dodávateľ X")}/order-lines/ordered`, {
+    method: "PUT",
+    headers: { cookie, "content-type": "application/json" },
+    body: JSON.stringify({ ordered: "ano" }),
+  });
+  expect(res.status).toBe(400);
+});
+
+// Review of PR 75, finding 2: `orders-http-state.integration.test.ts` má
+// cudzí-Origin (403) / rovnaký-pôvod (200) test pre zmenu stavu — ani jeden
+// z dvoch NOVÝCH endpointov (issue 60) ho nemal, hoci `requireSameOrigin()`
+// je na oboch zaregistrovaný.
+it("zmena príznaku objednané s cudzím Origin je odmietnutá (403), rovnaký pôvod prejde", async () => {
+  const { app, cookie, db } = await boot("manazer");
+  const { lineId } = await vlozRiadok(db);
+
+  const cudzi = await app.request(`/api/orders/lines/${lineId}/ordered`, {
+    method: "POST",
+    headers: {
+      cookie,
+      "content-type": "application/json",
+      origin: "https://utocnik.example",
+      host: "forestshop.example",
+    },
+    body: JSON.stringify({ ordered: true }),
+  });
+  expect(cudzi.status).toBe(403);
+
+  const rovnaky = await app.request(`/api/orders/lines/${lineId}/ordered`, {
+    method: "POST",
+    headers: {
+      cookie,
+      "content-type": "application/json",
+      origin: "https://forestshop.example",
+      host: "forestshop.example",
+    },
+    body: JSON.stringify({ ordered: true }),
+  });
+  expect(rovnaky.status).toBe(200);
+});
+
+it("hromadná zmena príznaku objednané s cudzím Origin je odmietnutá (403), rovnaký pôvod prejde", async () => {
+  const { app, cookie, db } = await boot("manazer");
+  await db.insert(orderOpenStatuses).values({ statusName: "Vybavuje sa" }).onConflictDoNothing();
+  await vlozRiadok(db, "Dodávateľ Origin");
+
+  const cudzi = await app.request(`/api/suppliers/${encodeURIComponent("Dodávateľ Origin")}/order-lines/ordered`, {
+    method: "PUT",
+    headers: {
+      cookie,
+      "content-type": "application/json",
+      origin: "https://utocnik.example",
+      host: "forestshop.example",
+    },
+    body: JSON.stringify({ ordered: true }),
+  });
+  expect(cudzi.status).toBe(403);
+
+  const rovnaky = await app.request(`/api/suppliers/${encodeURIComponent("Dodávateľ Origin")}/order-lines/ordered`, {
+    method: "PUT",
+    headers: {
+      cookie,
+      "content-type": "application/json",
+      origin: "https://forestshop.example",
+      host: "forestshop.example",
+    },
+    body: JSON.stringify({ ordered: true }),
+  });
+  expect(rovnaky.status).toBe(200);
 });

@@ -149,7 +149,27 @@ export async function listOpenOrderLinesBySupplier(db: Database): Promise<readon
 // SAMOSTATNÝ, užší dopyt (len ID, žiadne meno/veľkosť/odkaz na dodávateľa),
 // nie filtrovanie výstupu `listOpenOrderLinesBySupplier` v pamäti, aby
 // hromadná akcia nemusela ťahať VŠETKÝCH dodávateľov len kvôli jednému.
-export async function listOpenOrderLineIdsForSupplier(db: Database, supplier: string): Promise<readonly string[]> {
+//
+// Code review (review of PR 75, issue 60, finding 3): pôvodne bežal tento
+// dopyt MIMO transakcie, ktorá potom vykonáva hromadný UPDATE — medzi
+// prečítaním a zápisom mohol súbežný re-import objednávok alebo per-riadkové
+// prepnutie stavu zmeniť, ktoré riadky sú pre daného dodávateľa "otvorené"
+// (úzke TOCTOU okno, bez straty dát — zápis ide vždy na explicitné ID — ale
+// hromadná akcia mohla občas zasiahnuť riadok, ktorý medzitým opustil/vstúpil
+// do otvorenej skupiny). Volajúci (`state.ts`'s `setSupplierLinesOrdered`)
+// teraz volá TENTO dopyt AŽ VNÚTRI vlastnej transakcie a `.for("update")`
+// zamyká VŠETKY tabuľky JOINu bez ohľadu obmedzenia (žiadny `of` zoznam) —
+// vrátane `order`, takže súbežná zmena stavu objednávky (aj `setOrderLineState`'s
+// vlastný `.for("update")` na `order_line`) musí počkať na COMMIT tejto
+// transakcie, nie naopak. Parameter je preto zúžený na `Pick<Database,
+// "select">` (rovnaký vzor ako `audit/service.ts`'s `AuditExecutor`) — `tx`
+// (`PgTransaction`) nemá `Database`'s `$client`, takže by ho `tsc` odmietol
+// ako celý `Database` (`.claude/rules/database.md`). Regresný dôkaz:
+// `tests/orders-supplier-bulk-lock.integration.test.ts`.
+export async function listOpenOrderLineIdsForSupplier(
+  db: Pick<Database, "select">,
+  supplier: string,
+): Promise<readonly string[]> {
   const openStatuses = await listOpenStatusNames(db);
   if (openStatuses.length === 0) return [];
 
@@ -161,7 +181,8 @@ export async function listOpenOrderLineIdsForSupplier(db: Database, supplier: st
     .innerJoin(orders, eq(orders.id, orderLines.orderId))
     .innerJoin(variants, eq(variants.code, orderLines.variantCode))
     .innerJoin(products, eq(products.key, variants.productKey))
-    .where(and(inArray(orders.statusName, [...openStatuses]), supplierFilter));
+    .where(and(inArray(orders.statusName, [...openStatuses]), supplierFilter))
+    .for("update");
 
   return rows.map((row) => row.lineId);
 }

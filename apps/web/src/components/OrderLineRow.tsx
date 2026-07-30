@@ -21,6 +21,7 @@ export function OrderLineRow({
   canChangeState,
   busyLineId,
   busyOrderedLineId,
+  supplierBusy,
   onChangeState,
   onChangeOrdered,
 }: {
@@ -28,6 +29,14 @@ export function OrderLineRow({
   readonly canChangeState: boolean;
   readonly busyLineId: string | null;
   readonly busyOrderedLineId: string | null;
+  // Review of PR 75, finding 6: TRUE, keď práve prebieha hromadné "označiť/
+  // zrušiť skupinu ako objednané" PRE DODÁVATEĽA tohto riadku
+  // (`OrdersSection.tsx`'s `busyOrderedSupplier === group.supplier`) —
+  // nezávislé od `busyOrderedLineId` (vlastný per-riadkový zápis). Bez toho
+  // mohol manažér kliknúť na tento riadok ešte kým hromadný zápis pre celú
+  // skupinu bežal, čo krátkodobo rozhádzalo optimistický UI (posledný zápis
+  // vyhrá, žiadna strata dát, len zmätočné UX).
+  readonly supplierBusy: boolean;
   readonly onChangeState: (lineId: string, newState: OrderLine["state"]) => void;
   readonly onChangeOrdered: (lineId: string, ordered: boolean) => void;
 }): JSX.Element {
@@ -42,7 +51,7 @@ export function OrderLineRow({
           data-testid={`ordered-checkbox-${line.lineId}`}
           aria-label={`Označiť riadok objednávky ${line.externalOrderId} / ${line.variantCode} ako objednané u dodávateľa`}
           checked={line.ordered}
-          disabled={!canChangeState || busyOrderedLineId === line.lineId}
+          disabled={!canChangeState || busyOrderedLineId === line.lineId || supplierBusy}
           onChange={(e) => {
             onChangeOrdered(line.lineId, e.target.checked);
           }}

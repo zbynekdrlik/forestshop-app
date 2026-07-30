@@ -123,30 +123,42 @@ export interface SetSupplierLinesOrderedResult {
 // review na #59/#44). Zoznam dotknutých riadkov sa počíta z RIADKOV, ktoré
 // `GET /api/orders/open` PRÁVE TERAZ zobrazuje pre daného dodávateľa
 // (`listOpenOrderLineIdsForSupplier`) — teda presne to, čo manažér na
-// obrazovke vidí, nie všetky historické riadky toho dodávateľa. Samotný
+// obrazovke vidí, nie všetky historické riadky toho dodávateľa. Lookup +
 // zápis + JEDEN agregovaný audit záznam (namiesto jedného na riadok — inak
 // by kliknutie na 20-riadkovú skupinu vyrobilo 20 auditových riadkov za
-// jednu manažérovu akciu) bežia v JEDNEJ transakcii. Prázdna skupina (0
-// riadkov) je NEŠKODNÝ no-op, nie chyba — nič sa nezapíše, ani do auditu.
+// jednu manažérovu akciu) bežia VŠETKY v JEDNEJ transakcii (review of PR 75,
+// finding 3 — lookup pôvodne bežal MIMO nej, `.claude/rules/orders.md`
+// odkazuje na `queries.ts`'s komentár pre detail race/opravy). Prázdna
+// skupina (0 riadkov) je NEŠKODNÝ no-op, nie chyba — transakcia sa aj tak
+// otvorí a hneď commitne bez zápisu, nič sa nezapíše ani do auditu.
 export async function setSupplierLinesOrdered(
   db: Database,
   input: SetSupplierLinesOrderedInput,
 ): Promise<SetSupplierLinesOrderedResult> {
-  const lineIds = await listOpenOrderLineIdsForSupplier(db, input.supplier);
-  if (lineIds.length === 0) return { lineCount: 0 };
+  return db.transaction(async (tx) => {
+    const lineIds = await listOpenOrderLineIdsForSupplier(tx, input.supplier);
+    if (lineIds.length === 0) return { lineCount: 0 };
 
-  await db.transaction(async (tx) => {
     await tx.update(orderLines).set({ ordered: input.ordered }).where(inArray(orderLines.id, [...lineIds]));
 
+    // Review of PR 75, finding 1: pôvodne `entity: "supplier_contact"` —
+    // tento zápis mutuje `order_line` riadky, nie e-mailový kontakt
+    // dodávateľa, takže audit query filtrovaný podľa `entity = "order_line"`
+    // by ho ticho vynechal a filter podľa `"supplier_contact"` by ho miešal s
+    // nesúvisiacimi udalosťami e-mailového kontaktu. Rovnaký entity typ ako
+    // KAŽDÁ iná `order_line`-mutujúca akcia v tomto súbore (`state.ts:47,94`);
+    // `entityId` ostáva `null` (žiadny JEDEN riadok, na ktorý by mal
+    // ukazovať — rovnaký vzor ako `orders-routes.ts`'s bulk
+    // `orders.ingest.trigger` udalosť), dodávateľ + zasiahnuté ID zostávajú v
+    // `data`.
     await record(tx, {
       at: input.now,
       actorUserId: input.actorUserId,
       action: "order_line.ordered.bulk_changed",
-      entity: "supplier_contact",
-      entityId: input.supplier,
+      entity: "order_line",
       data: { supplier: input.supplier, ordered: input.ordered, lineIds, lineCount: lineIds.length },
     });
-  });
 
-  return { lineCount: lineIds.length };
+    return { lineCount: lineIds.length };
+  });
 }
