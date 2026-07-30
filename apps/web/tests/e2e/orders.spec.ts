@@ -2,6 +2,10 @@ import { expect, test, type ConsoleMessage } from "@playwright/test";
 
 const E2E_HESLO = "e2e-test-heslo"; // účet existuje len v testovacej databáze
 
+// #57: nové ľavé menu má "Na objednanie" ako záložku pod priečinkom Eshop,
+// nie ako predvolenú (tá je "Sync zo Shoptetu") — `?tab=orders` ju vyberie
+// priamo, bez potreby klikať cez sidebar v každom teste.
+
 // Rovnaká a JEDINÁ povolená výnimka ako v login.spec.ts/catalog.spec.ts.
 const jeOcakavane = (m: ConsoleMessage): boolean =>
   m.location().url.includes("/api/me") && m.text().includes("401");
@@ -15,7 +19,7 @@ test("manažér vidí otvorené objednávky zoskupené podľa dodávateľa, konz
     chyby.push(e.message);
   });
 
-  await page.goto("/");
+  await page.goto("/?tab=orders");
   await page.getByLabel("E-mail").fill("e2e@forestshop.sk");
   await page.getByLabel("Heslo").fill(E2E_HESLO);
   await page.getByRole("button", { name: "Prihlásiť sa" }).click();
@@ -68,7 +72,7 @@ test("manažér prepne stav riadku cez select, zmena pretrvá po obnovení strá
     chyby.push(e.message);
   });
 
-  await page.goto("/");
+  await page.goto("/?tab=orders");
   await page.getByLabel("E-mail").fill("e2e@forestshop.sk");
   await page.getByLabel("Heslo").fill(E2E_HESLO);
   await page.getByRole("button", { name: "Prihlásiť sa" }).click();
@@ -111,7 +115,7 @@ test("manažér nastaví e-mail dodávateľa a uvidí náhľad mailu so správne
     chyby.push(e.message);
   });
 
-  await page.goto("/");
+  await page.goto("/?tab=orders");
   await page.getByLabel("E-mail").fill("e2e@forestshop.sk");
   await page.getByLabel("Heslo").fill(E2E_HESLO);
   await page.getByRole("button", { name: "Prihlásiť sa" }).click();

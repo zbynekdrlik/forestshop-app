@@ -234,88 +234,95 @@ export function OrdersSection({
   const totalLines = suppliers.reduce((sum, group) => sum + group.lines.length, 0);
 
   return (
-    <section>
-      <h2>Na objednanie</h2>
+    <section className="orders-section">
       {!loaded && <p>Načítavam otvorené objednávky…</p>}
       {error !== "" && <p role="alert">{error}</p>}
       {stateError !== "" && <p role="alert">{stateError}</p>}
       {loaded && totalLines === 0 && (
-        <p data-testid="orders-empty">Zatiaľ nie sú žiadne otvorené objednávky.</p>
+        <p className="empty" data-testid="orders-empty">Zatiaľ nie sú žiadne otvorené objednávky.</p>
       )}
       {suppliers.map((group) => (
-        <div key={group.supplier} data-testid={`supplier-${group.supplier}`}>
-          <h3>{group.supplier}</h3>
-          <div data-testid={`supplier-contact-${group.supplier}`}>
-            {editingEmailSupplier === group.supplier ? (
-              <>
-                <input
-                  aria-label={`E-mail dodávateľa ${group.supplier}`}
-                  type="email"
-                  value={emailDraft}
-                  disabled={emailBusy}
-                  onChange={(e) => {
-                    setEmailDraft(e.target.value);
-                  }}
-                />
-                <button type="button" disabled={emailBusy} onClick={() => { saveEmail(group.supplier); }}>
-                  Uložiť
-                </button>
-                <button type="button" disabled={emailBusy} onClick={cancelEditEmail}>
-                  Zrušiť
-                </button>
-                {emailError !== "" && <p role="alert">{emailError}</p>}
-              </>
-            ) : (
-              <>
-                <span>E-mail dodávateľa: {group.email ?? "nenastavený"}</span>
-                {canChangeState && (
-                  <button type="button" onClick={() => { startEditEmail(group); }}>
-                    Upraviť e-mail
+        <div key={group.supplier} className="order-group" data-testid={`supplier-${group.supplier}`}>
+          <div className="toorder-supplier">
+            <span className="tosup-label">
+              {group.supplier} — {group.lines.length} {group.lines.length === 1 ? "riadok" : "riadky"}
+            </span>
+            <div className="tosup-contact" data-testid={`supplier-contact-${group.supplier}`}>
+              {editingEmailSupplier === group.supplier ? (
+                <>
+                  <input
+                    className="tosup-emailinput"
+                    aria-label={`E-mail dodávateľa ${group.supplier}`}
+                    type="email"
+                    value={emailDraft}
+                    disabled={emailBusy}
+                    onChange={(e) => {
+                      setEmailDraft(e.target.value);
+                    }}
+                  />
+                  <button type="button" className="btn sm good" disabled={emailBusy} onClick={() => { saveEmail(group.supplier); }}>
+                    Uložiť
                   </button>
-                )}
-              </>
+                  <button type="button" className="btn sm ghost" disabled={emailBusy} onClick={cancelEditEmail}>
+                    Zrušiť
+                  </button>
+                  {emailError !== "" && <p role="alert">{emailError}</p>}
+                </>
+              ) : (
+                <>
+                  <span className="tosup-email">E-mail dodávateľa: {group.email ?? "nenastavený"}</span>
+                  {canChangeState && (
+                    <button type="button" className="btn sm ghost" onClick={() => { startEditEmail(group); }}>
+                      Upraviť e-mail
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+            {canChangeState && (
+              <div className="tosup-actions">
+                <button type="button" className="btn sm ghost" onClick={() => { copyOrderToClipboard(group.supplier); }}>
+                  📋 Kopírovať objednávku
+                </button>
+                <button
+                  type="button"
+                  className="btn sm good"
+                  disabled={group.email === null || !group.lines.some((l) => l.state === OUTSTANDING_STATE)}
+                  title={
+                    group.email === null
+                      ? "Pre odoslanie mailom treba najprv nastaviť e-mail dodávateľa."
+                      : undefined
+                  }
+                  onClick={() => { openPreview(group.supplier); }}
+                >
+                  ✉️ Poslať objednávku e-mailom
+                </button>
+              </div>
             )}
           </div>
-          {canChangeState && (
-            <div>
-              <button type="button" onClick={() => { copyOrderToClipboard(group.supplier); }}>
-                📋 Kopírovať objednávku
-              </button>
-              <button
-                type="button"
-                disabled={group.email === null || !group.lines.some((l) => l.state === OUTSTANDING_STATE)}
-                title={
-                  group.email === null
-                    ? "Pre odoslanie mailom treba najprv nastaviť e-mail dodávateľa."
-                    : undefined
-                }
-                onClick={() => { openPreview(group.supplier); }}
-              >
-                ✉️ Poslať objednávku e-mailom
-              </button>
-              {group.email === null && <p>Pre odoslanie mailom treba najprv nastaviť e-mail dodávateľa.</p>}
-              {sendResult?.supplier === group.supplier && <p role="status">{sendResult.message}</p>}
-              {previewSupplier === group.supplier && (
-                <div data-testid={`mail-preview-${group.supplier}`}>
-                  {previewError !== "" && <p role="alert">{previewError}</p>}
-                  {preview !== null && (
-                    <>
-                      <p>Komu: {preview.to ?? "—"}</p>
-                      <p>Predmet: {preview.subject}</p>
-                      <pre>{preview.body}</pre>
-                      <button type="button" disabled={sendBusy} onClick={() => { confirmSend(group.supplier); }}>
-                        Odoslať
-                      </button>
-                      <button type="button" disabled={sendBusy} onClick={closePreview}>
-                        Zrušiť
-                      </button>
-                    </>
-                  )}
-                </div>
+          {canChangeState && group.email === null && (
+            <p className="reenote">Pre odoslanie mailom treba najprv nastaviť e-mail dodávateľa.</p>
+          )}
+          {sendResult?.supplier === group.supplier && <p role="status">{sendResult.message}</p>}
+          {previewSupplier === group.supplier && (
+            <div className="mail-preview" data-testid={`mail-preview-${group.supplier}`}>
+              {previewError !== "" && <p role="alert">{previewError}</p>}
+              {preview !== null && (
+                <>
+                  <p>Komu: {preview.to ?? "—"}</p>
+                  <p>Predmet: {preview.subject}</p>
+                  <pre>{preview.body}</pre>
+                  <button type="button" className="btn sm good" disabled={sendBusy} onClick={() => { confirmSend(group.supplier); }}>
+                    Odoslať
+                  </button>
+                  <button type="button" className="btn sm ghost" disabled={sendBusy} onClick={closePreview}>
+                    Zrušiť
+                  </button>
+                </>
               )}
             </div>
           )}
-          <table>
+          <table className="orders-table">
             <thead>
               <tr>
                 <th>Objednávka</th>
@@ -331,13 +338,17 @@ export function OrdersSection({
             </thead>
             <tbody>
               {group.lines.map((line) => (
-                <tr key={line.lineId} data-testid={`order-line-${line.lineId}`}>
+                <tr
+                  key={line.lineId}
+                  className={"order-row state-" + line.state}
+                  data-testid={`order-line-${line.lineId}`}
+                >
                   <td>{line.externalOrderId}</td>
                   <td>{line.customerName}</td>
                   <td>{line.variantCode}</td>
                   <td>{line.variantName}</td>
                   <td>{line.sizeLabel ?? "—"}</td>
-                  <td>{line.quantity}</td>
+                  <td className="ord-qty">{line.quantity} ks</td>
                   <td>
                     {canChangeState ? (
                       <select
@@ -351,6 +362,7 @@ export function OrdersSection({
                         // tu — tento select smie mať plnohodnotný popis.
                         aria-label={`Zmeniť stav riadku objednávky ${line.externalOrderId} / ${line.variantCode}`}
                         data-testid={`state-select-${line.lineId}`}
+                        className="ord-state-select"
                         value={line.state}
                         disabled={busyLineId === line.lineId}
                         onChange={(e) => {

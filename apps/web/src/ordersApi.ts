@@ -19,6 +19,32 @@ const orderLineSchema = z.object({
   state: z.enum(["objednane", "caka_sa", "skladom", "nedostupne"]),
 });
 
+// Zrkadlí `OrdersIngestResult` z `apps/api/src/modules/orders/ingest.ts` —
+// rovnaký vzor ako katalógov `ingestOutcomeSchema` (`catalogApi.ts`). Na
+// rozdiel od katalógu tu nie je "duplicate" verdikt (objednávky sa
+// neidentifikujú cez sha256 obsahu exportu) — len "accepted"/"rejected".
+const ordersIngestOutcomeSchema = z.discriminatedUnion("status", [
+  z.object({
+    status: z.literal("accepted"),
+    orderCount: z.number(),
+    lineCount: z.number(),
+    skippedItemCount: z.number(),
+    pseudoItemCount: z.number(),
+    issueCount: z.number(),
+  }),
+  z.object({
+    status: z.literal("rejected"),
+    reason: z.string(),
+  }),
+  // Súbežný import už beží (`ingestInFlight` guard v `orders-routes.ts`) —
+  // rovnaký tvar ako katalógov "busy", server ho vracia priamo, bez `rawPath`.
+  z.object({
+    status: z.literal("busy"),
+  }),
+]);
+
+export type OrdersIngestOutcome = z.infer<typeof ordersIngestOutcomeSchema>;
+
 const supplierGroupSchema = z.object({
   supplier: z.string(),
   lines: z.array(orderLineSchema),
@@ -57,6 +83,14 @@ async function readJson(response: Response, fallback: string): Promise<unknown> 
   if (response.status === 401) throw new OrdersUnauthorizedError();
   if (!response.ok) throw new Error(await serverErrorMessage(response, fallback));
   return await response.json();
+}
+
+// #57: ručné tlačidlo "stiahnuť teraz" na obrazovke Sync zo Shoptetu — volá
+// EXISTUJÚCI `POST /api/orders/ingest` (F3, #23), doteraz z webu vôbec
+// nedosiahnuteľný (žiadny frontendový wrapper naň neexistoval).
+export async function triggerOrdersIngest(): Promise<OrdersIngestOutcome> {
+  const response = await fetch("/api/orders/ingest", { method: "POST" });
+  return ordersIngestOutcomeSchema.parse(await readJson(response, "Import objednávok sa nepodarilo spustiť"));
 }
 
 export async function fetchOpenOrders(): Promise<readonly SupplierOpenOrders[]> {

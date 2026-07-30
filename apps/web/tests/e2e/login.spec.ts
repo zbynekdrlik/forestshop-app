@@ -26,7 +26,10 @@ test("manažér sa prihlási, vidí svoje meno a verziu, konzola je čistá", as
   });
   page.on("pageerror", (e) => chyby.push(e.message));
 
-  await page.goto("/");
+  // #57: "Plánovač" je od nového ľavého menu SKRYTÁ obrazovka (viditeľné sú
+  // len "Sync zo Shoptetu"/"Na objednanie") — dostupná ďalej cez priamy odkaz
+  // `?tab=scheduler` (`nav.ts`'s HIDDEN_TABS), presne kvôli tomuto testu.
+  await page.goto("/?tab=scheduler");
   await page.getByLabel("E-mail").fill("e2e@forestshop.sk");
   await page.getByLabel("Heslo").fill(E2E_HESLO);
   await page.getByRole("button", { name: "Prihlásiť sa" }).click();
@@ -40,7 +43,9 @@ test("manažér sa prihlási, vidí svoje meno a verziu, konzola je čistá", as
   await expect(page.getByRole("heading", { name: "Plánovač" })).toBeVisible();
   await expect(page.getByTestId("scheduler-empty")).toHaveText("Žiadny beh zatiaľ nie je zaznamenaný.");
 
-  await page.getByRole("button", { name: "Odhlásiť sa" }).click();
+  // #57: odhlásenie žije v menu používateľa v hlavičke (klik na meno ho rozbalí).
+  await page.getByTestId("greeting").click();
+  await page.getByRole("button", { name: "Odhlásiť" }).click();
   await expect(page.getByRole("heading", { name: "Prihlásenie" })).toBeVisible();
 
   expect(chyby).toEqual([]);
@@ -93,6 +98,12 @@ test("zmena hesla: zlé staré heslo/nezhoda odmietnuté, úspešná zmena zruš
   await page2.getByRole("button", { name: "Prihlásiť sa" }).click();
   await expect(page2.getByTestId("greeting")).toContainText("E2E Manažér");
 
+  // #57: zmena vlastného hesla už nie je rovno na stránke — je v menu
+  // používateľa v hlavičke (klik na meno ho rozbalí, žiadny priamy vzor v
+  // starej appke, pozri dizajnový komentár na issue 57).
+  await page.getByTestId("greeting").click();
+  await page.getByRole("button", { name: "Zmeniť heslo" }).click();
+
   // Zlé staré heslo — odmietnuté, nič sa nezmení.
   await page.getByLabel("Staré heslo").fill(ZLE_HESLO);
   await page.getByLabel("Nové heslo", { exact: true }).fill(NOVE_HESLO);
@@ -124,6 +135,10 @@ test("zmena hesla: zlé staré heslo/nezhoda odmietnuté, úspešná zmena zruš
   // Prvé zariadenie (to, čo zmenu vykonalo) ostáva prihlásené aj po obnovení.
   await page.reload();
   await expect(page.getByTestId("greeting")).toContainText("E2E Manažér");
+
+  // Obnovenie stránky zavrie menu aj panel zmeny hesla (React stav) — znova otvoriť.
+  await page.getByTestId("greeting").click();
+  await page.getByRole("button", { name: "Zmeniť heslo" }).click();
 
   // Vrátenie hesla na pôvodné — aby test ostal opakovateľný bez ohľadu na
   // poradie/opakovanie behu (žiaden reset DB medzi testami tohto súboru).

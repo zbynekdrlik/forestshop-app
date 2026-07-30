@@ -6,6 +6,11 @@ const E2E_HESLO = "e2e-test-heslo"; // účet existuje len v testovacej databáz
 const jeOcakavane = (m: ConsoleMessage): boolean =>
   m.location().url.includes("/api/me") && m.text().includes("401");
 
+// #57: "Kontrola párovania" je od nového ľavého menu SKRYTÁ obrazovka
+// (viditeľné sú len "Sync zo Shoptetu"/"Na objednanie") — kód aj testy
+// ostávajú, dostupná ďalej cez priamy odkaz `?tab=pairing` (`nav.ts`'s
+// HIDDEN_TABS).
+
 // #45: obrazovka "Kontrola párovania". `pairing` tabuľka nemá pri E2E setupe
 // ŽIADEN riadok (#46 automatické hľadanie kandidátov ešte neexistuje) — variant
 // "4859/46" (`scripts/e2e-setup.ts`, dodávateľ "DODAVATEL-TEST-1") sa preto pri
@@ -32,7 +37,7 @@ test("manažér ručne napáruje variant bez existujúceho kandidáta, zmena pre
     chyby.push(e.message);
   });
 
-  await page.goto("/");
+  await page.goto("/?tab=pairing");
   await page.getByLabel("E-mail").fill("e2e@forestshop.sk");
   await page.getByLabel("Heslo").fill(E2E_HESLO);
   await page.getByRole("button", { name: "Prihlásiť sa" }).click();
@@ -82,7 +87,7 @@ test("manažér potvrdí navrhnutú adresu jedným klikom, filter podľa stavu f
     chyby.push(e.message);
   });
 
-  await page.goto("/");
+  await page.goto("/?tab=pairing");
   await page.getByLabel("E-mail").fill("e2e@forestshop.sk");
   await page.getByLabel("Heslo").fill(E2E_HESLO);
   await page.getByRole("button", { name: "Prihlásiť sa" }).click();
@@ -144,7 +149,7 @@ test("manažér nastaví JEDNU adresu pre všetkých 9 veľkostí naraz, potom r
     chyby.push(e.message);
   });
 
-  await page.goto("/");
+  await page.goto("/?tab=pairing");
   await page.getByLabel("E-mail").fill(E2E_SKUPINY_EMAIL);
   await page.getByLabel("Heslo").fill(E2E_HESLO);
   await page.getByRole("button", { name: "Prihlásiť sa" }).click();

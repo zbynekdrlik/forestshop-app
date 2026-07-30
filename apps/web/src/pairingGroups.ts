@@ -57,10 +57,20 @@ export function isGroupFullyConfirmed(group: ProductGroup): boolean {
 }
 
 /**
- * Kto/kedy potvrdil skupinu — len keď je KAŽDÝ variant potvrdený TOU ISTOU
- * osobou v ten istý čas (bežný prípad po bulk potvrdení). Inak `null`, aby
- * zbalený riadok nikdy nepredstieral jednotnú atribúciu, ktorá v skutočnosti
- * je zmiešaná — podrobnosti sú vždy dostupné po rozdelení na veľkosti.
+ * Kto potvrdil skupinu — len keď je KAŽDÝ variant potvrdený TOU ISTOU
+ * osobou (bežný prípad po bulk potvrdení). Inak `null`, aby zbalený riadok
+ * nikdy nepredstieral jednotnú atribúciu, ktorá v skutočnosti je zmiešaná —
+ * podrobnosti sú vždy dostupné po rozdelení na veľkosti.
+ *
+ * ZÁMERNE sa NEPOROVNÁVA `confirmedAt` na presnú zhodu (live overenie na
+ * issue 47 — bulk potvrdenie je N samostatných `POST /api/pairing/confirm`
+ * volaní, každé so svojím vlastným `now = new Date()` na serveri, takže sa
+ * ich čas prirodzene líši o pár milisekúnd; presná zhoda by preto takmer
+ * VŽDY zlyhala a "Potvrdil" by po bulk potvrdení ukazovalo "—" namiesto
+ * mena). Vracia NAJSTARŠÍ `confirmedAt` zo skupiny ako reprezentatívny čas
+ * ("potvrdené od") — zobrazenie je aj tak len na úrovni DŇA
+ * (`toLocaleDateString`), takže milisekundový rozdiel by sa vizuálne
+ * neprejavil ani keby sa porovnával.
  */
 export function groupConfirmation(group: ProductGroup): {
   readonly confirmedByName: string | null;
@@ -68,10 +78,14 @@ export function groupConfirmation(group: ProductGroup): {
 } {
   const [first, ...rest] = group.variants;
   if (first === undefined || first.confirmedByName === null) return { confirmedByName: null, confirmedAt: null };
-  const same = rest.every(
-    (v) => v.confirmedByName === first.confirmedByName && v.confirmedAt === first.confirmedAt,
-  );
-  return same ? { confirmedByName: first.confirmedByName, confirmedAt: first.confirmedAt } : { confirmedByName: null, confirmedAt: null };
+  const same = rest.every((v) => v.confirmedByName === first.confirmedByName);
+  if (!same) return { confirmedByName: null, confirmedAt: null };
+  const earliest = group.variants.reduce<string | null>((min, v) => {
+    if (v.confirmedAt === null) return min;
+    if (min === null || v.confirmedAt < min) return v.confirmedAt;
+    return min;
+  }, null);
+  return { confirmedByName: first.confirmedByName, confirmedAt: earliest };
 }
 
 /**

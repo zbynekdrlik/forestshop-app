@@ -9,6 +9,10 @@ const E2E_HESLO = "e2e-test-heslo"; // účet existuje len v testovacej databáz
 const jeOcakavane = (m: ConsoleMessage): boolean =>
   m.location().url.includes("/api/me") && m.text().includes("401");
 
+// #57: "Katalóg" je od nového ľavého menu SKRYTÁ obrazovka (viditeľné sú len
+// "Sync zo Shoptetu"/"Na objednanie") — kód aj testy ostávajú, dostupná ďalej
+// cez priamy odkaz `?tab=catalog` (`nav.ts`'s HIDDEN_TABS).
+
 test("manažér vidí stav katalógu, vyhľadá variant a konzola je čistá", async ({ page }) => {
   const chyby: string[] = [];
   page.on("console", (m) => {
@@ -18,7 +22,7 @@ test("manažér vidí stav katalógu, vyhľadá variant a konzola je čistá", a
     chyby.push(e.message);
   });
 
-  await page.goto("/");
+  await page.goto("/?tab=catalog");
   await page.getByLabel("E-mail").fill("e2e@forestshop.sk");
   await page.getByLabel("Heslo").fill(E2E_HESLO);
   await page.getByRole("button", { name: "Prihlásiť sa" }).click();
@@ -40,7 +44,7 @@ test("manažér vidí stav katalógu, vyhľadá variant a konzola je čistá", a
 });
 
 test("filter podľa stavu zúži zoznam na predajné varianty", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/?tab=catalog");
   await page.getByLabel("E-mail").fill("e2e@forestshop.sk");
   await page.getByLabel("Heslo").fill(E2E_HESLO);
   await page.getByRole("button", { name: "Prihlásiť sa" }).click();
@@ -56,7 +60,7 @@ test("filter podľa stavu zúži zoznam na predajné varianty", async ({ page })
 // Review final-wave-a, položka 6: `scripts/e2e-setup.ts` označí variant
 // "40287" priamo v databáze ako chýbajúci (presne jeden zo 6 "sellable").
 test("filter 'Chýbajúce' nájde presne označený variant a riadok ukazuje, odkedy chýba", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/?tab=catalog");
   await page.getByLabel("E-mail").fill("e2e@forestshop.sk");
   await page.getByLabel("Heslo").fill(E2E_HESLO);
   await page.getByRole("button", { name: "Prihlásiť sa" }).click();
