@@ -792,3 +792,63 @@ nové heslo sa nikde v pushnutom obsahu nenachádza.
   dodávateľa — Poľovnícke kraťasy HART GOROSTA-SH (62621/52)"). Console:
   0 errors/0 warnings.
 - Per-ticket Discord card fired (`notify --run-card`, confirmed delivered).
+
+## 2026-07-30 — #59 (Na objednanie: filter podľa stavu objednávky zo Shoptetu)
+
+- Validated live first: DB schema on dev2 had NO status column at all
+  (`\d "order"`), and the live "Na objednanie" showed all 864 lines
+  unfiltered — issue confirmed still real.
+- Design comment posted BEFORE any code:
+  https://github.com/zbynekdrlik/forestshop-app/issues/59#issuecomment-5133725274
+  (2026-07-30T16:46:09Z, before first code commit `40c823f`).
+- Commits (5, `dev`): version bump 0.3.0-dev.35; `feat` — capture
+  `order.status_name` at ingest (migration `0012`, `parser.ts`/`ingest.ts`,
+  own tests) `40c823f`; RED — failing integration test proving the
+  unfiltered list `54252fd`; GREEN — `queries.ts` filter by
+  `order_open_status` `24fa075`; `feat` — admin settings panel +
+  `GET/PUT /api/orders/open-statuses` + e2e `0a8e467`. PR **#74** (`dev` →
+  `main`), merged `5adb8c3a`.
+- Deliberately did NOT copy the legacy app's 4-set model
+  (`to_order`/`terminal`/`known_open`/`cancelled` + impact-preview dialog)
+  — this app has neither "Nedostupné" nor reminder e-mails, so those three
+  sets would be dead complexity (MVP). Single `order_open_status` list,
+  seeded with the legacy default ("Vybavuje sa") so nothing silently
+  changes on deploy.
+- Two real bugs found + fixed during this ticket, both worth remembering:
+  1. **Route registration order matters in Hono** — `GET/PUT
+     /api/orders/open-statuses` registered AFTER the parameterized `GET
+     /api/orders/:id` meant Hono matched "open-statuses" as `:id` first and
+     404/400'd on invalid UUID before the intended handler ever ran. Fix:
+     register literal-path routes BEFORE parameterized siblings on the same
+     prefix. Caught by the local e2e run, not by any unit/integration test
+     (those call the module functions directly, never through the full
+     route table) — worth remembering for the next literal-vs-`:param`
+     route added under an existing `:id` prefix.
+  2. **`order_open_status` is a new ROOT table `TRUNCATE ... CASCADE` never
+     reaches** (same class as `supplier_contact`/`supplier`, no FK either
+     direction) — `tests/helpers/db.ts` and `scripts/e2e-setup.ts` both
+     needed it added to their TRUNCATE list AND a re-seed of the default
+     row after, or the table would either leak mutations across tests or
+     start every test from a silently-empty (nothing-ever-shows) state.
+     `DEFAULT_ORDER_OPEN_STATUS` exported from `open-statuses.ts` so both
+     helpers and the migration's seed value stay tied together.
+  3. `buildCsv` test helper in `orders-ingest.integration.test.ts` encodes
+     UTF-8 while `ingestOrders` always decodes as windows-1250 (matching
+     the real Shoptet export) — a non-ASCII literal in a hand-built test
+     CSV row mojibakes. Hand-built CSV tests in that file must stay
+     ASCII-only; real diacritics are covered by the committed cp1250
+     fixture instead.
+- CI green on the PR (check, integration, e2e, docker-build,
+  version-check) and on `main`. Local: typecheck + lint + unit (263 API +
+  167 web) + integration (193) + full e2e (15/15) all green before push.
+- Deployed + verified on https://forestshop-novy.newlevel.media
+  (v0.3.0-dev.35, commit `5adb8c3a` matches `/api/version` and the DOM
+  label). Triggered a real "Stiahnuť teraz" re-import on production to
+  populate real statuses on existing orders (they carried the migration's
+  DB-default status until the next re-import) — "Na objednanie" dropped
+  from 864 unfiltered lines to 39 correctly-filtered lines. Settings panel
+  read back the real distinct statuses Shoptet uses (Kompletná, Nevybavená,
+  Osob. odber, Stornovaná, Vratený tovar, Vybavená, Vybavená výmena,
+  Vybavený Dobropis, Vybavuje sa) — no typo-guessing needed. Console: 0
+  errors/0 warnings throughout.
+- Per-ticket Discord card fired (`notify --run-card`, confirmed delivered).
