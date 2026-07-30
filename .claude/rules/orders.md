@@ -1,6 +1,8 @@
 ---
 paths:
   - "apps/api/src/modules/orders/**"
+  - "apps/api/src/modules/mail/**"
+  - "apps/api/src/http/supplier-routes.ts"
   - "apps/api/src/cli/orders-ingest.ts"
   - "scripts/orders-ingest.ts"
 ---
@@ -102,3 +104,45 @@ paths:
   rovnakého produktu (sčítanie), pseudo-položku (`SHIPPING6`), neznámy
   variant (`99999/ZZ`), prázdny `itemCode` — pokrýva všetky preskočené
   triedy naraz.
+- **Odoslanie objednávky dodávateľovi mailom (#31)** — `modules/orders/
+  mail.ts` (agregácia + textový formát), `modules/mail/transport.ts`
+  (SMTP cez `nodemailer`, env premenné `MAIL_*` v `env.ts`) a
+  `http/supplier-routes.ts` (PUT e-mailu, GET náhľad, POST odoslanie).
+  Nová root tabuľka `supplier_contact` je kľúčovaná PRESNE tým reťazcom,
+  aký `queries.ts` zobrazuje ako `supplier` (vrátane zástupného
+  "(bez dodávateľa)"), NIE priamo na `product.supplier` — bez FK, pridaná
+  do OBOCH truncate zoznamov (rovnaký dôvod ako `order`/`order_line`
+  vyššie, `testing.md`). Textový formát verne kopíruje starú appku's
+  `orderCopyLines` (`kód | grube-id | veľkosť | N ks | url`,
+  `.filter(Boolean).join(' | ')`), ale nová schéma NEMÁ ani
+  per-dodávateľské "grube id", ani URL produktu — tie dve polia preto v
+  tom istom `filter(Boolean)` reťazci VŽDY vypadnú (nikdy sa nehádali,
+  štruktúrovo neexistujú). Ak niekedy pribudne URL produktu alebo podobný
+  identifikátor do `variant`/`product`, doplň ho do
+  `formatSupplierOrderMailLine` — mechanizmus je už pripravený, len chýba
+  zdroj dát. Agregácia beží LEN nad riadkami v stave `objednane` (ešte
+  neposlané ďalej) pre daného dodávateľa, súčet množstva podľa
+  `variant.code` (veľkosť je súčasťou kódu variantu). Odoslanie NIKDY
+  nemení `order_line.state` — manažér ho posúva ručne cez existujúci
+  select. E2E test odoslanie NIKDY neklika (žiadny `MAIL_HOST` v
+  `playwright.config.ts`'s webServer env → server by na "Odoslať" vrátil
+  503, čo by zalogovalo console error a porušilo jedinú povolenú výnimku,
+  `testing.md`) — E2E overuje len nastavenie e-mailu + náhľad, skutočné
+  odoslanie má integračný test s falošným transportom
+  (`supplier-mail.integration.test.ts`).
+- **UI "✉️ Poslať objednávku e-mailom" je DVOJKROKOVÉ.** Prvý klik len
+  otvorí náhľad (komu/predmet/telo) s tlačidlami "Odoslať"/"Zrušiť" priamo
+  pod pôvodným tlačidlom — skutočný `POST .../order-mail/send` ide až po
+  druhom kliku na "Odoslať". Pri manuálnom/Playwright overovaní na živom
+  systéme na to netreba zabudnúť (#38, 2026-07-30) — jeden klik ešte nič
+  neodošle.
+- **`MAIL_HOST/PORT/USER/PASS/FROM` na dev2 sú od #38 (2026-07-30) reálne
+  nastavené** — appka odosiela cez ROVNAKÚ SMTP schránku ako stará appka
+  (`parovanie_produktov`, majiteľovo rozhodnutie), hodnoty prevzaté z jej
+  gitignorovaného `data/.mail_env`. Overené end-to-end reálnym mailom cez
+  dočasný `supplier_contact` kontakt nastavený na majiteľovu vlastnú
+  adresu, po overení znova odstránený. `MAIL_BCC` (BCC-vždy konvencia
+  starej appky) táto appka zatiaľ NEPODPORUJE vôbec (nie je v `env.ts` ani
+  `transport.ts`) — vedomé rozhodnutie mimo rozsahu #38, nie prehliadnutá
+  medzera; ak niekedy pribudne, ide do `env.ts` vedľa `MAIL_FROM` a
+  `createSmtpMailTransport`'s recipient zoznamu.

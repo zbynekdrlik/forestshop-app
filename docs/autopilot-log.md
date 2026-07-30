@@ -154,9 +154,9 @@ RED→GREEN test names, key decisions, and the shared PR.
   (v0.3.0-dev.6 in DOM footer): wrong-old-password rejected with the
   expected message and zero console errors/warnings; successful change
   accepted using the LIVE owner account (`vychod@varos.sk`); logged out and
-  confirmed the OLD password (`sokol-bystrina-jaseb-898`) now fails login
+  confirmed the OLD password (`<heslo — mimo repozitára>`) now fails login
   while the temporary new one succeeds; changed the password back to
-  `sokol-bystrina-jaseb-898` and confirmed via a final logout+login that it
+  `<heslo — mimo repozitára>` and confirmed via a final logout+login that it
   is restored exactly. Console during the whole live check showed only the
   already-documented `/api/me`/`/api/login` 401 patterns (expected,
   deliberate test actions), no genuine errors.
@@ -396,3 +396,86 @@ pull_request run). Deployed + verified: https://forestshop-novy.newlevel.media
 DOM footer ukazuje `v0.3.0-dev.15`, prihlásenie vlastníkovým účtom funguje,
 dashboard "Na objednanie" sa vykresľuje so skutočnými produkčnými dátami,
 konzola čistá (len povolený `/api/me` 401).
+
+## #31 — Kopírovanie objednávky (F3) → poslanie objednávky dodávateľovi mailom
+
+Ticket bol predtým `needs-decision` (majiteľ zvažoval clipboard vs. mail),
+majiteľ rozhodol pre mail priamo z appky; ďalšie preskúmanie starej appky
+zistilo, že tá NIKDY mail dodávateľovi neposielala (len clipboard) a nikde
+neexistovala e-mailová adresa dodávateľa. Design comment posted na #31
+([komentár](https://github.com/zbynekdrlik/forestshop-app/issues/31#issuecomment-5127823676))
+pred prvým kódovým commitom: root cause (chýbajúci overený formát + chýbajúca
+adresa), zvolený prístup (SMTP cez `nodemailer`, presne rovnaký textový formát
+ako stará appka's `orderCopyLines`, nová tabuľka `supplier_contact`, náhľad +
+audit), zamietnutá alternatíva (clipboard-only, majiteľ ho už raz odmietol).
+Nová migrácia `0008_jittery_thaddeus_ross.sql` (`supplier_contact`, bez FK,
+pridaná do OBOCH truncate zoznamov). Implementácia: `modules/orders/mail.ts`
+(agregácia + formát), `modules/orders/supplier-contact.ts` (kontakt +
+audit), `modules/mail/transport.ts` (SMTP transport), `http/supplier-
+routes.ts` (PUT e-mailu, GET náhľad, POST odoslanie), UI v `OrdersSection.tsx`
+(úprava e-mailu, náhľad + potvrdenie, kopírovanie do schránky ako záloha).
+Testy: 10 unit (`mail.test.ts`, hranice skloňovania), 14 integračných
+(`supplier-mail.integration.test.ts`, falošný SMTP transport, audit, role,
+CSRF, 502/503 cesty), 6 nových component testov (`OrdersSection.test.tsx`),
+7 nových API-klient testov (`ordersApi.test.ts`), 1 nový E2E test
+(`orders.spec.ts`, nastavenie e-mailu + náhľad — SKUTOČNÉ odoslanie sa v E2E
+zámerne nekliká, žiadny `MAIL_HOST` v e2e prostredí). PR **#37** (`dev` →
+`main`), merged `ebb0138`. CI all green (push aj pull_request run + main
+post-merge run). Deployed + verified naživo na
+https://forestshop-novy.newlevel.media: `/api/version` = `{"version":
+"0.3.0-dev.17","commit":"ebb0138..."}`, DOM footer `v0.3.0-dev.17`,
+nastavenie e-mailu pre reálneho dodávateľa (BETALOV) v produkcii — perzistuje
+po reloade, náhľad správne agregoval 88 skutočných otvorených položiek
+(pluralizácia "88 položiek"), následne ZRUŠENÉ bez odoslania a e-mail vrátený
+na nenastavený; konzola čistá (len povolený `/api/me` 401).
+
+## #38 — Nastaviť odosielanie mailov na dev2 (MAIL_* v /srv/forestshop/.env)
+
+Čisto serverová konfigurácia, ŽIADNA zmena kódu (appka `env.ts` +
+`modules/mail/transport.ts` + `docker-compose.prod.yml` už plne
+podporovali `MAIL_HOST/PORT/USER/PASS/FROM` z #31/PR #37). Majiteľ
+rozhodol: rovnaká mailová schránka ako stará appka
+(`parovanie_produktov`), údaje z jej gitignorovaného `data/.mail_env`.
+`MAIL_HOST/PORT/USER/PASS/FROM` doplnené priamo na dev2 do
+`/srv/forestshop/.env` (mode 600) cez ssh stdin — hodnoty nikdy
+nevypísané do terminálu/logu. Kontajner reštartovaný (`docker compose up
+-d app`), zostal na `0.3.0-dev.17` (= main). Overené END-TO-END: dočasný
+`supplier_contact` pre BETALOV nastavený na majiteľovu vlastnú adresu
+(`vychod@varos.sk`), reálne odoslané cez UI ("Poslať objednávku
+e-mailom" → náhľad → "Odoslať"), server log potvrdil
+`"supplier":"BETALOV","status":"sent"` (skutočné SMTP, 1013 ms), dočasný
+kontakt následne odstránený (`"hasEmail":false`). Žiadna PR/CI — pure
+config. Playbook: `orders.md` doplnený o (a) dvojkrokový UI send flow
+(náhľad → potvrdenie) a (b) že `MAIL_*` sú od teraz reálne nastavené +
+`MAIL_BCC` zatiaľ appka nepodporuje (vedomé, mimo rozsahu #38).
+
+## #40 — Živé heslo majiteľa v čistom texte v docs/autopilot-log.md
+
+Nález pred zverejnením repa: pri overovaní #18 (zmena hesla) sa do tohto
+logu zapísala skutočná hodnota živého hesla k účtu majiteľa
+(`vychod@varos.sk`) — v ~40 historických commitoch na `dev` aj `main`.
+Dizajnový komentár (príčina + zvolený prístup + zamietnutá alternatíva
+prepisu histórie) zapísaný na tiket PRED touto zmenou:
+https://github.com/zbynekdrlik/forestshop-app/issues/40#issuecomment-5128673051.
+
+Riešenie bez prepisovania histórie (`commit-conventions.md` to zakazuje):
+1. Heslo majiteľa ROTOVANÉ cez živé `POST /api/me/password` na
+   https://forestshop-novy.newlevel.media — overené: prihlásenie s NOVÝM
+   heslom 200, prihlásenie so STARÝM heslom teraz 401. Hodnota nikde
+   necommitovaná — `<heslo — mimo repozitára>`.
+2. `docs/autopilot-log.md` (riadky ~156-159): obe plaintextové výskyty
+   nahradené `<heslo — mimo repozitára>`.
+3. Nové pravidlo `.claude/rules/sensitive-values.md` (`paths:` na `docs/**`,
+   `.claude/**`; súbor sa NEvolá `secrets.md` — taký názov si vlastný
+   `block-sensitive-staging.sh` hook zamieňa za skutočný súbor s tajomstvami
+   a odmieta ho stagovať): skutočné heslá/tokeny/Shoptet `hash=` sa nikdy
+   nezapisujú do repozitára.
+4. `CLAUDE.md` už správne uvádzalo repo ako `(public)` (z predošlého
+   pokusu o zverejnenie, ktorý práve tento audit zastavil) — žiadna
+   zmena netreba, main session prepne viditeľnosť na verejnú hneď po
+   zlúčení tejto vetvy.
+
+Žiadna PR do `main` — zámerne zostáva na `dev`; main session koordinuje
+zverejnenie repa + obnovenie CI (GitHub Actions bolo blokované limitom
+účtu, #39) + merge. Grep diffu pred pushom potvrdil, že ani staré, ani
+nové heslo sa nikde v pushnutom obsahu nenachádza.
