@@ -41,8 +41,11 @@ const { db, pool } = createDb();
 // smerom) — bez ručného pridania by riadky `order` z predchádzajúceho E2E
 // behu ticho prežívali. `"order"` je rezervované SQL kľúčové slovo, musí byť
 // uvodzované ručne v priamom SQL stringu.
+// "supplier_contact" (#31) pridané rovnakým dôvodom ako "order_line, \"order\""
+// vyššie — nemá žiadny FK (kľúčovaný reťazcom dodávateľa, nie id), CASCADE ho
+// preto nikdy nestrhne.
 await db.execute(
-  'TRUNCATE TABLE ingest_issue, variant, product, catalog_snapshot, job_run, audit_events, sessions, users, order_line, "order" RESTART IDENTITY CASCADE',
+  'TRUNCATE TABLE ingest_issue, variant, product, catalog_snapshot, job_run, audit_events, sessions, users, order_line, "order", supplier_contact RESTART IDENTITY CASCADE',
 );
 await db.insert(users).values({
   email: "e2e@forestshop.sk",

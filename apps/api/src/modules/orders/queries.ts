@@ -1,6 +1,6 @@
 import { asc, desc, eq } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
-import { orderLines, orders, products, variants, type OrderLineState } from "../../db/schema.js";
+import { orderLines, orders, products, supplierContacts, variants, type OrderLineState } from "../../db/schema.js";
 
 export interface OpenOrderLine {
   readonly lineId: string;
@@ -19,13 +19,25 @@ export interface OpenOrderLine {
 export interface SupplierOpenOrders {
   readonly supplier: string;
   readonly lines: readonly OpenOrderLine[];
+  // E-mailový kontakt dodávateľa (#31), `null` keď zatiaľ nenastavený —
+  // `supplier_contact` je samostatná tabuľka (manažér ju edituje nezávisle
+  // od importu objednávok), preto sa dopytuje osobitne od hlavného
+  // zoskupovacieho dopytu nižšie, nie cez JOIN naň (zástupný kľúč
+  // "(bez dodávateľa)" nemá zodpovedajúci `product.supplier`, na ktorý by sa
+  // dalo joinovať — kontakt sa priraďuje AŽ PO zoskupení, podľa rovnakého
+  // zobrazovaného kľúča).
+  readonly email: string | null;
 }
 
 // `product.supplier` je v schéme nepovinné (`text("supplier")`, bez
 // `.notNull()`) — Shoptet export niekedy nesie prázdnu hodnotu (`map-row.ts`'s
 // `textOrNull`). Zoskupenie takých riadkov dostáva čitateľný zástupný kľúč
 // namiesto toho, aby zmizli/spadli na `null` kľúč v Mape.
-const NEZNAMY_DODAVATEL = "(bez dodávateľa)";
+// Exportované (nie len modulová konštanta) — `modules/orders/mail.ts` (#31)
+// potrebuje TEN ISTÝ reťazec pri hľadaní kontaktu/agregovaní outstanding
+// riadkov pre zástupnú skupinu, nikdy vlastnú duplicitnú definíciu, ktorá by
+// sa mohla rozísť.
+export const NEZNAMY_DODAVATEL = "(bez dodávateľa)";
 
 // Zoskupenie je na ÚROVNI RIADKA objednávky, nie na úrovni objednávky —
 // jedna objednávka môže obsahovať položky od VIACERÝCH dodávateľov
@@ -84,10 +96,19 @@ export async function listOpenOrderLinesBySupplier(db: Database): Promise<readon
     lines.push(line);
   }
 
+  const contactRows = await db
+    .select({ supplier: supplierContacts.supplier, email: supplierContacts.email })
+    .from(supplierContacts);
+  const emailBySupplier = new Map(contactRows.map((row) => [row.supplier, row.email]));
+
   // `Map` uchováva poradie prvého vloženia kľúča — keďže hlavný dopyt už
   // triedi `asc(products.supplier)`, výsledné poradie skupín je abecedné bez
   // ďalšieho triedenia tu.
-  return [...bySupplier.entries()].map(([supplier, lines]) => ({ supplier, lines }));
+  return [...bySupplier.entries()].map(([supplier, lines]) => ({
+    supplier,
+    lines,
+    email: emailBySupplier.get(supplier) ?? null,
+  }));
 }
 
 export interface OrderDetailLine {

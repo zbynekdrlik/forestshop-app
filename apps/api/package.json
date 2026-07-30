@@ -17,12 +17,14 @@
     "@node-rs/argon2": "^2.0.0",
     "drizzle-orm": "^0.38.0",
     "hono": "^4.6.0",
+    "nodemailer": "^9.0.3",
     "pg": "^8.13.0",
     "pino": "^9.5.0",
     "zod": "^3.24.0"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
+    "@types/nodemailer": "^8.0.1",
     "@types/pg": "^8.11.0",
     "drizzle-kit": "^0.31.0",
     "vitest": "^3.0.0"

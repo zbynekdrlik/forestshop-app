@@ -9,6 +9,7 @@ import { createApp } from "./http/app.js";
 import { log } from "./logger.js";
 import { createHttpExportFetcher } from "./modules/catalog/fetcher.js";
 import { ingestCatalog } from "./modules/catalog/ingest.js";
+import { createSmtpMailTransport } from "./modules/mail/transport.js";
 import { computeImportWindow, createHttpOrdersExportFetcher } from "./modules/orders/fetcher.js";
 import { DEFAULT_ORDERS_IMPORT_WINDOW_DAYS, ingestOrders, type RunOrdersIngest } from "./modules/orders/ingest.js";
 import {
@@ -67,10 +68,27 @@ const runOrdersIngest: RunOrdersIngest | undefined =
         });
       };
 
+// Odosielanie objednávky dodávateľovi mailom (#31) — rovnaká úvaha ako
+// `runIngest`/`runOrdersIngest` vyššie: `MAIL_HOST` je nepovinná (`env.ts`),
+// bez nej appka beží ďalej, len odoslanie mailom vráti 503
+// (`http/supplier-routes.ts`).
+const mailHost = env.MAIL_HOST;
+const sendSupplierMail =
+  mailHost === undefined
+    ? undefined
+    : createSmtpMailTransport({
+        host: mailHost,
+        port: env.MAIL_PORT,
+        user: env.MAIL_USER,
+        pass: env.MAIL_PASS,
+        from: env.MAIL_FROM,
+      });
+
 const app = createApp(db, {
   cookieSecure: env.SESSION_COOKIE_SECURE,
   ...(runIngest === undefined ? {} : { runIngest }),
   ...(runOrdersIngest === undefined ? {} : { runOrdersIngest }),
+  ...(sendSupplierMail === undefined ? {} : { sendSupplierMail }),
 });
 
 // F2 (#12/#3) + F3 (#22/#28): nočný import katalógu/objednávok, mazanie

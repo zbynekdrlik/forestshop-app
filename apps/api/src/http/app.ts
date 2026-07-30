@@ -7,6 +7,7 @@ import { log } from "../logger.js";
 import { changePassword } from "../modules/auth/change-password.js";
 import { MIN_NEW_PASSWORD_LENGTH } from "../modules/auth/passwords.js";
 import { login, logout } from "../modules/auth/service.js";
+import type { MailTransport } from "../modules/mail/transport.js";
 import { appVersion } from "../version.js";
 import { registerCatalogRoutes, type RunIngest } from "./catalog-routes.js";
 import { checkLoginRateLimit, clientIp } from "./login-rate-limit.js";
@@ -14,6 +15,7 @@ import { SESSION_COOKIE, requireUser, type AppBindings } from "./middleware.js";
 import { registerOrdersRoutes, type RunOrdersIngest } from "./orders-routes.js";
 import { requireSameOrigin } from "./origin-check.js";
 import { registerSchedulerRoutes } from "./scheduler-routes.js";
+import { registerSupplierRoutes } from "./supplier-routes.js";
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -31,6 +33,7 @@ export function createApp(
     readonly cookieSecure: boolean;
     readonly runIngest?: RunIngest;
     readonly runOrdersIngest?: RunOrdersIngest;
+    readonly sendSupplierMail?: MailTransport;
   },
 ): Hono<AppBindings> {
   const app = new Hono<AppBindings>();
@@ -122,6 +125,7 @@ export function createApp(
   registerCatalogRoutes(app, db, options.runIngest);
   registerOrdersRoutes(app, db, options.runOrdersIngest);
   registerSchedulerRoutes(app, db);
+  registerSupplierRoutes(app, db, options.sendSupplierMail);
 
   // Musí byť registrovaný AŽ PO všetkých skutočných /api/* trasách vyššie — Hono
   // vyberá presnejšiu zhodu, takže tie majú prednosť a sem sa dostane len to, čo

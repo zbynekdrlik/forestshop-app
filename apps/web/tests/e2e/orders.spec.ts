@@ -91,3 +91,73 @@ test("manažér prepne stav riadku cez select, zmena pretrvá po obnovení strá
 
   expect(chyby).toEqual([]);
 });
+
+// #31: e-mailový kontakt dodávateľa + náhľad objednávky mailom, cez skutočný
+// prehliadač nad reálne naimportovanými fixtúrovými dátami (`scripts/
+// e2e-setup.ts`). Skutočné ODOSLANIE (SMTP) sa tu zámerne NEKLIKÁ — MAIL_HOST
+// nie je v e2e prostredí nakonfigurovaný (`playwright.config.ts`), takže
+// server by na "Odoslať" vrátil 503, čo by (rovnako ako akýkoľvek iný
+// 4xx/5xx fetch) zalogovalo console error a porušilo jedinú povolenú
+// výnimku (`.claude/rules/testing.md`) — samotné odoslanie je overené
+// integračne (`apps/api/tests/supplier-mail.integration.test.ts`) s falošným
+// transportom. E2E overuje SKUTOČNÝ prehliadačový workflow: nastavenie
+// e-mailu (perzistuje po reloade) a náhľad so správne agregovaným obsahom.
+test("manažér nastaví e-mail dodávateľa a uvidí náhľad mailu so správne agregovaným obsahom, konzola je čistá", async ({ page }) => {
+  const chyby: string[] = [];
+  page.on("console", (m) => {
+    if ((m.type() === "error" || m.type() === "warning") && !jeOcakavane(m)) chyby.push(m.text());
+  });
+  page.on("pageerror", (e) => {
+    chyby.push(e.message);
+  });
+
+  await page.goto("/");
+  await page.getByLabel("E-mail").fill("e2e@forestshop.sk");
+  await page.getByLabel("Heslo").fill(E2E_HESLO);
+  await page.getByRole("button", { name: "Prihlásiť sa" }).click();
+  await expect(page.getByRole("heading", { name: "Na objednanie" })).toBeVisible();
+
+  // Objednávka 9001 (dodávateľ "DODAVATEL-TEST-1") má JEDINÝ riadok vo stave
+  // "caka_sa" (`scripts/e2e-setup.ts`) — teda ŽIADNU otvorenú položku na
+  // objednanie. Tlačidlo odoslania preto musí byť disabled, aj keď sa
+  // e-mail dodávateľa nastaví — overuje, že disabled stav sleduje SKUTOČNÝ
+  // stav riadkov, nie len prítomnosť e-mailu.
+  const skupinaTest1 = page.getByTestId("supplier-DODAVATEL-TEST-1");
+  await skupinaTest1.getByRole("button", { name: "Upraviť e-mail" }).click();
+  await skupinaTest1.getByLabel("E-mail dodávateľa DODAVATEL-TEST-1").fill("test1@dodavatel.example");
+  await skupinaTest1.getByRole("button", { name: "Uložiť" }).click();
+  await expect(skupinaTest1.getByText("E-mail dodávateľa: test1@dodavatel.example")).toBeVisible();
+  await expect(skupinaTest1.getByRole("button", { name: "✉️ Poslať objednávku e-mailom" })).toBeDisabled();
+
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Na objednanie" })).toBeVisible();
+  await expect(
+    page.getByTestId("supplier-DODAVATEL-TEST-1").getByText("E-mail dodávateľa: test1@dodavatel.example"),
+  ).toBeVisible();
+
+  // Objednávka 9002 (zástupný dodávateľ "(bez dodávateľa)") má riadok vo
+  // východiskovom stave "objednane" — TÁ skupina má odoslanie povolené,
+  // hneď ako dostane e-mail.
+  const skupinaBezDodavatela = page.getByTestId("supplier-(bez dodávateľa)");
+  await skupinaBezDodavatela.getByRole("button", { name: "Upraviť e-mail" }).click();
+  await skupinaBezDodavatela.getByLabel("E-mail dodávateľa (bez dodávateľa)").fill("nezaradene@example.com");
+  await skupinaBezDodavatela.getByRole("button", { name: "Uložiť" }).click();
+  const poslatTlacidlo = skupinaBezDodavatela.getByRole("button", { name: "✉️ Poslať objednávku e-mailom" });
+  await expect(poslatTlacidlo).toBeEnabled();
+  await poslatTlacidlo.click();
+
+  const nahlad = skupinaBezDodavatela.getByTestId("mail-preview-(bez dodávateľa)");
+  await expect(nahlad).toBeVisible();
+  await expect(nahlad).toContainText("nezaradene@example.com");
+  // "40287" je jednovariantný produkt (žiadna veľkosť) s množstvom 1
+  // (`scripts/e2e-setup.ts`) — presný, server-vypočítaný tvar riadku.
+  await expect(nahlad).toContainText("Objednávka — (bez dodávateľa) (1 položka)");
+  await expect(nahlad.locator("pre")).toHaveText("Objednávka — (bez dodávateľa) (1 položka)\n40287 | 1 ks");
+
+  // Zrušenie náhľadu — v tomto teste sa zámerne NEODOSIELA (viď komentár
+  // vyššie).
+  await nahlad.getByRole("button", { name: "Zrušiť" }).click();
+  await expect(nahlad).not.toBeVisible();
+
+  expect(chyby).toEqual([]);
+});
