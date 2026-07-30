@@ -122,7 +122,10 @@ export async function listSnapshots(db: Database, limit: number): Promise<readon
 // task-6-fix-1). Postgres berie spätnú lomku ako escape znak pre LIKE/ILIKE bez
 // ďalšej konfigurácie — preto sa escapuje aj ona sama, a to PRVÁ, inak by
 // escapovanie znaku escapovalo escape.
-function escapeLikePattern(value: string): string {
+// Exportované — `modules/pairing/queries.ts` (issue 45) potrebuje PRESNE tú
+// istú escapovaciu logiku pre svoje vlastné ILIKE hľadanie nad `variant.code`/
+// `variant.name`, nikdy vlastnú duplicitnú kópiu, ktorá by sa mohla rozísť.
+export function escapeLikePattern(value: string): string {
   return value.replace(/[\\%_]/g, (ch) => `\\${ch}`);
 }
 
