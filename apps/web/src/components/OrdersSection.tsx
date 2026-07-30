@@ -331,6 +331,7 @@ export function OrdersSection({
                 <th>Produkt</th>
                 <th>Veľkosť</th>
                 <th>Množstvo</th>
+                <th>Dodávateľ</th>
                 <th>Stav</th>
                 <th>Objednané</th>
                 <th>Komentár</th>
@@ -349,6 +350,18 @@ export function OrdersSection({
                   <td>{line.variantName}</td>
                   <td>{line.sizeLabel ?? "—"}</td>
                   <td className="ord-qty">{line.quantity} ks</td>
+                  <td className="ord-supplier-cell" data-testid={`supplier-link-${line.lineId}`}>
+                    {line.supplierUrl !== null ? (
+                      <a href={line.supplierUrl} target="_blank" rel="noreferrer" className="ord-supplier-link">
+                        Odkaz na dodávateľa
+                      </a>
+                    ) : line.supplierNote !== null ? (
+                      <span className="ord-supplier-note">{line.supplierNote}</span>
+                    ) : (
+                      "—"
+                    )}
+                    {line.externalCode !== null && <div className="ord-supplier-code">kód {line.externalCode}</div>}
+                  </td>
                   <td>
                     {canChangeState ? (
                       <select

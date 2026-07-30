@@ -623,3 +623,33 @@ nové heslo sa nikde v pushnutom obsahu nenachádza.
   "Navrhnuté" bez adresy.
 - Per-ticket Discord card fired (`notify --run-card`, confirmed delivered).
 - Per-ticket Discord card fired (`notify --run-card`, confirmed delivered).
+
+## Issue 57 — Ľavé menu (Systém/Sync zo Shoptetu, Eshop/Na objednanie) + vlastný vzhľad
+
+- Resumed from a stopped worker's uncommitted tree (nav.ts registry,
+  Sidebar/Topbar/SyncSection, className refactors) — kept the structure,
+  replaced `app.css` entirely (it had literally copied the legacy app's CSS
+  values, which the owner explicitly rejected), moved change-password from
+  the sidebar footer to a user-menu dropdown in the Topbar header (owner's
+  explicit instruction), fixed a missing `within` import in
+  `SyncSection.test.tsx`.
+- Design comment posted BEFORE first commit:
+  https://github.com/zbynekdrlik/forestshop-app/issues/57#issuecomment-5131902935
+- Fixed while finishing: `nav.spec.ts` wrongly asserted the orders screen is
+  empty (e2e-setup.ts always seeds 2 real orders) + a login-rate-limit
+  overflow on the shared e2e account (new isolated `e2e-nav@forestshop.sk`,
+  same pattern as issue 47's `E2E_SKUPINY_EMAIL`).
+- Commit `54b497b` (feature) on `dev`; PR **#68** (`dev` → `main`), merged
+  `2683840`. CI all green (check, integration 184/184, e2e 14/14 ×2 stable
+  runs, docker-build, version-check).
+- Deployed + verified on https://forestshop-novy.newlevel.media
+  (v0.3.0-dev.28, matches DOM). Sidebar shows exactly the two folders/tabs,
+  Sync screen shows real catalog+orders sync status, "Na objednanie" shows
+  real order data with the new design, user-menu reveals "Zmeniť
+  heslo"/"Odhlásiť". Console: 0 errors/0 warnings.
+- Playbook: new `.claude/rules/frontend-design.md` (design tokens, nav
+  registry pattern, user-menu-in-header decision, e2e login-rate-limit
+  gotcha) + CLAUDE.md router entry — commits `e0804cb`/`c0caca2` on `dev`
+  (docs-only, rides the next feature PR; required its own version bump to
+  `0.3.0-dev.29` after CI's version-check correctly caught the omission).
+- Per-ticket Discord card fired (`notify --run-card`, confirmed delivered).

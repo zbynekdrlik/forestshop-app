@@ -2,6 +2,7 @@ import { and, asc, eq, isNull } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
 import { orderLines, orders, products, supplierContacts, variants } from "../../db/schema.js";
 import { log } from "../../logger.js";
+import { extractSupplierLink } from "../catalog/supplier-link.js";
 import type { MailTransport } from "../mail/transport.js";
 import { NEZNAMY_DODAVATEL } from "./queries.js";
 import { itemsWord } from "./pluralize.js";
@@ -10,10 +11,15 @@ import { itemsWord } from "./pluralize.js";
 // množstva podľa `variant.code` naprieč VŠETKÝMI otvorenými objednávkami
 // toho dodávateľa (veľkosť je súčasťou kódu variantu, netreba samostatný
 // agregačný kľúč ako stará appka's `code + size`, viď komentár na tickete).
+// `externalCode`/`supplierUrl` (issue 67) sú vlastnosti VARIANTU (kód) resp.
+// ODVODENÉ z produktu (odkaz) — stabilné pre daný `variantCode` naprieč
+// všetkými agregovanými objednávkami, preto sa neagregujú, len prenesú.
 export interface SupplierOrderMailLine {
   readonly variantCode: string;
   readonly sizeLabel: string | null;
   readonly quantity: number;
+  readonly externalCode: string | null;
+  readonly supplierUrl: string | null;
 }
 
 export interface SupplierOrderMailContent {
@@ -24,16 +30,22 @@ export interface SupplierOrderMailContent {
   readonly itemCount: number;
 }
 
-// Jeden riadok textu = `[kód, veľkosť, "N ks"].filter(Boolean).join(' | ')` —
-// rovnaká `.filter(Boolean).join(' | ')` kostra ako stará appka's
-// `orderCopyLines` (`app.js:2076-2142`), len BEZ jej dvoch ďalších polí
-// (per-dodávateľské "grube id", URL produktu) — nová dátová schéma tohoto
-// projektu tieto dva zdroje štruktúrovo nemá (žiadny per-dodávateľský kód
-// položky, žiadna URL v `variant`/`product`), takže v tom istom
-// `filter(Boolean)` mechanizme vždy vypadnú, presne ako by vypadlo prázdne
-// pole u ktoréhokoľvek iného dodávateľa v starej appke.
+// Jeden riadok textu = `.filter(Boolean).join(' | ')` — rovnaká kostra ako
+// stará appka's `orderCopyLines` (`app.js:2076-2142`, `[kód, grube-id,
+// veľkosť, N ks, url]`). issue 67 doplnil presne tie dve chýbajúce polia —
+// `externalCode` (kód dodávateľa, staré app's "grube id" bolo len
+// dodávateľ-špecifické pomenovanie toho istého konceptu) a `supplierUrl`
+// (odkaz, extrahovaný z `product.internalNote`) — do rovnakého poradia ako
+// stará appka. Keď je `null` (dodávateľ v exporte kód/odkaz neuviedol),
+// segment sa v `filter(Boolean)` jednoducho vynechá, presne ako doteraz.
 function formatSupplierOrderMailLine(line: SupplierOrderMailLine): string {
-  return [line.variantCode, line.sizeLabel ?? "", `${String(line.quantity)} ks`]
+  return [
+    line.variantCode,
+    line.externalCode !== null ? `kód ${line.externalCode}` : "",
+    line.sizeLabel ?? "",
+    `${String(line.quantity)} ks`,
+    line.supplierUrl ?? "",
+  ]
     .filter((part) => part !== "")
     .join(" | ");
 }
@@ -63,6 +75,8 @@ async function loadOutstandingLines(db: Database, supplier: string): Promise<Sup
       variantCode: orderLines.variantCode,
       sizeLabel: variants.sizeLabel,
       quantity: orderLines.quantity,
+      externalCode: variants.externalCode,
+      internalNote: products.internalNote,
     })
     .from(orderLines)
     .innerJoin(orders, eq(orders.id, orderLines.orderId))
@@ -75,7 +89,13 @@ async function loadOutstandingLines(db: Database, supplier: string): Promise<Sup
   for (const row of rows) {
     const existing = byCode.get(row.variantCode);
     if (existing === undefined) {
-      byCode.set(row.variantCode, { variantCode: row.variantCode, sizeLabel: row.sizeLabel, quantity: row.quantity });
+      byCode.set(row.variantCode, {
+        variantCode: row.variantCode,
+        sizeLabel: row.sizeLabel,
+        quantity: row.quantity,
+        externalCode: row.externalCode,
+        supplierUrl: extractSupplierLink(row.internalNote).url,
+      });
     } else {
       byCode.set(row.variantCode, { ...existing, quantity: existing.quantity + row.quantity });
     }

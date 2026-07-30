@@ -40,6 +40,13 @@ test("manažér vidí otvorené objednávky zoskupené podľa dodávateľa, konz
   await expect(riadokAlfa).toContainText("Čaká sa");
   await expect(riadokAlfa).toContainText("Zavolať pred doručením");
 
+  // issue 67: fixtúra ("4859/46") má reálny holý odkaz na dodávateľa
+  // (`internalNote`) aj kód dodávateľa (`externalCode`, "OB832") —
+  // over cez map-row.test.ts, ak sa fixtúra niekedy zmení.
+  const odkazAlfa = riadokAlfa.getByRole("link", { name: "Odkaz na dodávateľa" });
+  await expect(odkazAlfa).toHaveAttribute("href", "https://www.huntingshop.eu/wild-t-green-nohavice");
+  await expect(riadokAlfa).toContainText("OB832");
+
   // Objednávka 9002 je nad variantom "40287", ktorý nemá dodávateľa
   // (`product.supplier` je `null`) — zoskupí sa pod zástupný kľúč, nie pod
   // "null" a nezmizne.

@@ -101,6 +101,59 @@ it("vráti otvorené objednávky zoskupené podľa dodávateľa, riadky zostupne
   expect(beta?.lines[0]).toMatchObject({ externalOrderId: "1002", variantCode: "B-1", quantity: 5 });
 });
 
+// issue 67: odkaz na tovar u dodávateľa (extrahovaný z `internalNote`) a kód
+// dodávateľa (`externalCode`) sa objavia v `/api/orders/open`, v troch
+// tvaroch, aké export skutočne obsahuje (holý odkaz, odkaz s popisom, žiadny
+// odkaz — len poznámka).
+it("vráti odkaz na dodávateľa a kód dodávateľa pri riadku, vo všetkých troch tvaroch internalNote", async () => {
+  const { app, cookie, db } = await boot("citanie");
+  await insertTestVariant(db, "HOLY-URL", "Dodávateľ Holý", {
+    internalNote: "https://www.huntingshop.eu/fairfax-fz-mikina",
+    externalCode: "OB832",
+  });
+  await insertTestVariant(db, "S-POPISOM", "Dodávateľ Popis", {
+    internalNote: "Dodávateľ: Trigona - https://trigona.sk/smith-s/polovnicke/c199",
+    externalCode: "TRG-1",
+  });
+  await insertTestVariant(db, "BEZ-URL", "Dodávateľ Bez odkazu", { internalNote: "Soxland" });
+
+  const [objednavka] = await db
+    .insert(orders)
+    .values({ externalOrderId: "4001", customerName: "Zákazník", placedAt: new Date("2026-07-20T00:00:00Z") })
+    .returning();
+  if (objednavka === undefined) throw new Error("insert zlyhal");
+  await db.insert(orderLines).values([
+    { orderId: objednavka.id, variantCode: "HOLY-URL", quantity: 1 },
+    { orderId: objednavka.id, variantCode: "S-POPISOM", quantity: 1 },
+    { orderId: objednavka.id, variantCode: "BEZ-URL", quantity: 1 },
+  ]);
+
+  const res = await app.request("/api/orders/open", { headers: { cookie } });
+  const telo = (await res.json()) as {
+    suppliers: {
+      supplier: string;
+      lines: { variantCode: string; supplierUrl: string | null; supplierNote: string | null; externalCode: string | null }[];
+    }[];
+  };
+
+  const linePre = (supplier: string) => telo.suppliers.find((s) => s.supplier === supplier)?.lines[0];
+
+  expect(linePre("Dodávateľ Holý")).toMatchObject({
+    supplierUrl: "https://www.huntingshop.eu/fairfax-fz-mikina",
+    externalCode: "OB832",
+  });
+  expect(linePre("Dodávateľ Popis")).toMatchObject({
+    supplierUrl: "https://trigona.sk/smith-s/polovnicke/c199",
+    supplierNote: "Dodávateľ: Trigona - https://trigona.sk/smith-s/polovnicke/c199",
+    externalCode: "TRG-1",
+  });
+  expect(linePre("Dodávateľ Bez odkazu")).toMatchObject({
+    supplierUrl: null,
+    supplierNote: "Soxland",
+    externalCode: null,
+  });
+});
+
 // Review finding: `product.supplier` je nepovinný stĺpec (Shoptet export
 // niekedy nesie prázdnu hodnotu, `map-row.ts`'s `textOrNull`) — bez tohto
 // testu by regresia zlomeného `?? NEZNAMY_DODAVATEL` fallbacku (napr.

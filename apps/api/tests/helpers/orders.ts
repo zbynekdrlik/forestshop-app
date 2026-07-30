@@ -12,18 +12,22 @@ import { insertTestSnapshot } from "./catalog.js";
  * rovnaká ako doteraz, takže existujúce volania sa nemenia. `null` je
  * explicitne povolené (nie len string) — `product.supplier` je v schéme
  * nepovinný stĺpec (`.claude/rules/orders.md`) a `queries.ts`'s zoskupenie
- * musí zvládnuť aj tento prípad.
+ * musí zvládnuť aj tento prípad. Nepovinný `options` (issue 67) — odkaz na
+ * dodávateľa (`internalNote`) a kód u dodávateľa (`externalCode`), oba
+ * predvolene `null` (existujúce volania sa nemenia).
  */
 export async function insertTestVariant(
   db: Database,
   code: string,
   supplier: string | null = "Test dodávateľ",
+  options: { readonly internalNote?: string | null; readonly externalCode?: string | null } = {},
 ): Promise<void> {
   const snapshotId = await insertTestSnapshot(db);
   await db.insert(products).values({
     key: code,
     name: `Test produkt ${code}`,
     supplier,
+    internalNote: options.internalNote ?? null,
     firstSeenAt: new Date("2026-01-01T00:00:00Z"),
     lastSeenAt: new Date("2026-01-01T00:00:00Z"),
     lastSeenSnapshotId: snapshotId,
@@ -34,6 +38,7 @@ export async function insertTestVariant(
     guid: code,
     sizeLabel: null,
     pairCode: null,
+    externalCode: options.externalCode ?? null,
     name: `Test produkt ${code}`,
     currency: "EUR",
     price: "10.00",

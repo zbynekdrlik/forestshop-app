@@ -20,8 +20,10 @@ function bareRow(overrides: Record<string, string> = {}): Record<string, string>
     code: "TEST/1",
     guid: "guid-test-0001",
     pairCode: "",
+    externalCode: "",
     name: "Testovací produkt",
     supplier: "",
+    internalNote: "",
     price: "",
     standardPrice: "",
     purchasePrice: "",
@@ -144,6 +146,22 @@ describe("mapRow nad reálnymi riadkami fixtúry", () => {
 
   it("zapíše dodávateľa, keď ho export uvádza", () => {
     expect(mapRow(fixtureRow("4859/46")).record?.supplier).toBe("DODAVATEL-TEST-1");
+  });
+
+  // issue 67: `internalNote` (odkaz na tovar u dodávateľa) a `externalCode`
+  // (kód tovaru u dodávateľa) — obe polia fixtúra reálne obsahuje pre tento
+  // variant (holý odkaz, bez popisu).
+  it("zapíše odkaz na dodávateľa (internalNote) aj kód dodávateľa (externalCode), keď ich export uvádza", () => {
+    const { record } = mapRow(fixtureRow("4859/46"));
+    expect(record?.internalNote).toBe("https://www.huntingshop.eu/wild-t-green-nohavice");
+    expect(record?.externalCode).toBe("OB832");
+  });
+
+  it("prázdny internalNote/externalCode v exporte sa mapuje na null, nie na chybu", () => {
+    const { record, issues } = mapRow(fixtureRow("40287"));
+    expect(record?.internalNote).toBeNull();
+    expect(record?.externalCode).toBeNull();
+    expect(issues).toEqual([]);
   });
 });
 
