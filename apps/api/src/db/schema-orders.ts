@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  boolean,
   check,
   index,
   integer,
@@ -107,6 +108,17 @@ export const orderLines = pgTable(
       .references(() => variants.code),
     quantity: integer("quantity").notNull(),
     state: orderLineState("state").notNull().default("objednane"),
+    // issue 60: NEZÁVISLÝ príznak od `state` vyššie — "manažér reálne objednal
+    // tento riadok u dodávateľa" (stará appka's samostatný `ORDERED` boolean,
+    // oddelený od WAITING/INSTOCK/UNAVAIL, `webreview/static/app.js`'s
+    // `saveOrdered`/`markGroupOrdered`). `state`'s `objednane` hodnota je
+    // VÝCHODISKOVÝ stav riadku (pozri komentár vyššie + `OrdersSection.tsx`'s
+    // `OUTSTANDING_STATE`), NIE potvrdenie objednania — preto appka doteraz
+    // nemala žiadne pole na "toto som už objednal", len postupový automat
+    // (čaká sa/skladom/nedostupné), ktorý s tým nesúvisí. Manažér môže riadok
+    // odškrtnúť ako objednané v ĽUBOVOĽNOM `state`, rovnako ako v starej appke
+    // mohli byť ORDERED aj WAITING/INSTOCK/UNAVAIL nezávisle nastavené.
+    ordered: boolean("ordered").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
