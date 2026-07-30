@@ -103,3 +103,29 @@ paths:
   Test na KAŽDÚ ďalšiu takúto FK+CHECK kombináciu: over, či `onDelete` reálne
   vie nastať v STAVE, kde CHECK vyžaduje ten stĺpec vyplnený — ak nie,
   `restrict` je pravdivejší popis než `set null`/`cascade`.
+- **`SELECT ... FOR UPDATE` (drizzle's `.for("update")`) BEZ `of` zoznamu
+  zamyká riadky VO VŠETKÝCH tabuľkách JOINu, nielen v primárne vybranej** —
+  Postgres dokumentácia: locking klauzuly bez `OF` zoznamu ovplyvňujú
+  všetky tabuľky použité v príkaze. Review of PR 75, finding 3
+  (`orders/queries.ts`'s `listOpenOrderLineIdsForSupplier`, ktorý JOINuje
+  `order_line`/`order`/`variant`/`product`): presun tohto dopytu VNÚTRI
+  transakcie `setSupplierLinesOrdered` (`state.ts`) spolu s `.for("update")`
+  zatvoril TOCTOU okno (súbežný re-import/per-riadkový toggle už nemôže
+  zmeniť "otvorenú" množinu medzi čítaním a zápisom) presne PRETO, že zámok
+  pokrýva aj `order` riadok, nielen `order_line`. Deterministický regresný
+  test (`tests/orders-supplier-bulk-lock.integration.test.ts`, rovnaká
+  technika ako `orders-state-lock.integration.test.ts`) to dokazuje tak, že
+  drží `SELECT ... FOR UPDATE` z druhého pripojenia na `order` riadku (NIE
+  `order_line`) — obyčajný nezamknutý SELECT (stav pred opravou) by naň
+  vôbec nečakal, takže test spoľahlivo zlyhá na starom kóde a prejde na
+  novom. Rovnaký trik na ĎALŠIU takúto opravu: zamkni z druhého pripojenia
+  tabuľku, ktorá je LEN súčasťou JOINu (nie tá, na ktorú priamo mieri
+  finálny UPDATE) — ak sa volajúci kód naň zasekne, dôkaz, že `.for("update")`
+  skutočne beží cez celý JOIN vo vnútri tej istej transakcie.
+- **Funkcia, ktorá má bežať aj s `tx`, potrebuje zúžený parameter aj pre
+  `.select()`, nielen pre `.insert()`** (rozšírenie vzoru vyššie z `audit/
+  service.ts`'s `AuditExecutor`) — `orders/open-statuses.ts`'s
+  `listOpenStatusNames` a `orders/queries.ts`'s
+  `listOpenOrderLineIdsForSupplier` majú teraz `Pick<Database, "select">`
+  namiesto celého `Database`, aby ich šlo volať aj s `tx` (`PgTransaction`
+  nemá `Database`'s `$client`).
