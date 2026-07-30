@@ -1,9 +1,9 @@
 import { eq } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
-import { orderLines, productSupplierOverrides, variants } from "../../db/schema.js";
+import { orderLines, productSupplierOverrides, products, variants } from "../../db/schema.js";
 import { record } from "../audit/service.js";
 
-export type AssignOrderLineSupplierResult = "ok" | "not_found";
+export type AssignOrderLineSupplierResult = "ok" | "not_found" | "already_has_supplier";
 
 export interface AssignOrderLineSupplierInput {
   readonly lineId: string;
@@ -29,18 +29,35 @@ export interface AssignOrderLineSupplierInput {
 // prísnejšie zamykanie proti súbežnému prepisu tej istej hodnoty by pridalo
 // zložitosť bez reálneho prínosu — Postgres `onConflictDoUpdate` je aj tak
 // atomický, posledný zápis vyhráva presne tak, ako pri kontakte.
+// issue 86 (nezávislý audit): server si dovtedy NIKDY neoverila, že produkt
+// naozaj nemá dodávateľa v katalógu — pravidlo "priradiť sa smie len riadok
+// bez `product.supplier`" (`queries.ts`'s `supplierAssignable`) bolo
+// vynucované LEN vo frontende (`OrderLineRow.tsx`). Zabudnutá otvorená
+// stránka, priame API volanie, alebo súbeh s nočným importom katalógu medzi
+// načítaním a odoslaním mohli zapísať override aj pre produkt, ktorý UŽ
+// dodávateľa má — override by potom ležal nečinne (`effectiveSupplierSql`
+// uprednostní katalóg), kým neskorší import katalógu legitímne nevráti
+// `product.supplier` späť na `null`, čím by sa starý pravopis potichu znova
+// aktivoval bez zásahu manažéra. Fix: SELECT teraz číta aj `products.supplier`
+// (JOIN na `products`, dovtedy chýbajúci — pôvodný SELECT sa cez `variants`
+// k nemu vôbec nedostal) a podmienka sa vyhodnotí VNÚTRI TEJ ISTEJ transakcie
+// ako upsert nižšie. Žiadne `.for("update")` naviac — rovnaké zdôvodnenie ako
+// komentár nižšie (fallback pole pre nízkofrekventovanú ručnú akciu, nie dáta
+// citlivé na mikrosekundové okno súbehu).
 export async function assignOrderLineSupplier(
   db: Database,
   input: AssignOrderLineSupplierInput,
 ): Promise<AssignOrderLineSupplierResult> {
   return db.transaction(async (tx) => {
     const [line] = await tx
-      .select({ productKey: variants.productKey })
+      .select({ productKey: variants.productKey, catalogSupplier: products.supplier })
       .from(orderLines)
       .innerJoin(variants, eq(variants.code, orderLines.variantCode))
+      .innerJoin(products, eq(products.key, variants.productKey))
       .where(eq(orderLines.id, input.lineId))
       .limit(1);
     if (line === undefined) return "not_found";
+    if (line.catalogSupplier !== null) return "already_has_supplier";
 
     await tx
       .insert(productSupplierOverrides)
