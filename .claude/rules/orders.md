@@ -146,3 +146,26 @@ paths:
   `transport.ts`) — vedomé rozhodnutie mimo rozsahu #38, nie prehliadnutá
   medzera; ak niekedy pribudne, ide do `env.ts` vedľa `MAIL_FROM` a
   `createSmtpMailTransport`'s recipient zoznamu.
+- **Objednávka nesie Shoptet-ov `status_name` (issue 59)** — order-level
+  pole ako `customerName`/`placedAt` (opakuje sa na KAŽDOM riadku tej istej
+  objednávky, importer berie prvý výskyt), normalizované `normalizeStatusName`
+  (NFC + orez, `parser.ts`) rovnakým vzorom ako stará appka's `norm_status` —
+  MUSÍ byť rovnaká normalizácia na oboch stranách porovnania (export vs.
+  `order_open_status`), inak sa zhoda nikdy nenájde. Na rozdiel od
+  `comment`/`order_line.state` (appkou/manažérom vlastnené, re-import ich
+  NEPREPÍŠE) je `status_name` VŽDY Shoptetovo pole — re-import ho vždy
+  OSVIEŽI. `order_open_status` (nastaviteľný zoznam "ešte sa vybavuje",
+  `modules/orders/open-statuses.ts`) rozhoduje, čo ukáže "Na objednanie"
+  (`queries.ts`'s `listOpenOrderLinesBySupplier`) — zámerne LEN tento jeden
+  zoznam, nie stará appka's `to_order`/`terminal`/`known_open`/`cancelled`
+  štvorica (tie tri navyše existujú len kvôli "Nedostupné" tabu a
+  pripomienkovým e-mailom, ktoré táto appka nemá).
+- **`orders-ingest.integration.test.ts`'s `buildCsv` vracia UTF-8 Buffer, ale
+  `ingestOrders` VŽDY dekóduje ako windows-1250** (`decodeCp1250`, rovnaký
+  zámer ako skutočný Shoptet export) — akýkoľvek non-ASCII znak (diakritika)
+  priamo v `buildCsv`-vytváraných riadkoch preto vyjde na druhej strane
+  pokazený (mojibake, napr. "Vybavená" → "VybavenĂˇ"), lebo dva bajty UTF-8
+  znaku sa dekódujú ako DVA samostatné cp1250 znaky. Testy nad `buildCsv`
+  preto zostávajú ASCII-only — skutočná diakritika sa testuje cez
+  commitnutú fixtúru (`fixtures/orders-sample.csv`), ktorá JE natívne cp1250
+  na disku.

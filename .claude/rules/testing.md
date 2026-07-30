@@ -109,6 +109,20 @@ paths:
   SQL kľúčové slovo, v raw SQL literáli (`sql\`TRUNCATE TABLE ...\``) MUSÍ byť
   ručne uvodzovkované (`"order"`) — drizzle-ove query buildre to robia
   automaticky, priamy SQL string nie.
+- **Nová "koreňová" tabuľka, ktorá NESIE reálny produkčný obsah (napr.
+  seedovaný migráciou, nie len prázdna štruktúra) potrebuje po TRUNCATE aj
+  RESEED, nielen pridanie do zoznamu.** `order_open_status` (issue 59) je
+  ten istý prípad ako `supplier_contact`/`supplier` vyššie (žiadny FK v
+  žiadnom smere), ALE navyše migrácia doň seeduje default riadok
+  ("Vybavuje sa") — bez re-insertu HNEĎ po TRUNCATE by KAŽDÝ test začínal s
+  PRÁZDNYM zoznamom, čo ticho vyprázdni "Na objednanie" pre úplne každý
+  test, čo naň spolieha (skoro všetky). Vzor: exportovaná konštanta
+  (`DEFAULT_ORDER_OPEN_STATUS` v `modules/orders/open-statuses.ts`) namiesto
+  reťazcového literálu na dvoch miestach (`tests/helpers/db.ts` +
+  `scripts/e2e-setup.ts`), aby default nikdy nerozišiel medzi migráciou a
+  testovými pomôckami. Test na KAŽDÚ ďalšiu takúto tabuľku: nesie
+  seedovaný/predvolený obsah, na ktorý sa iné testy SPOLIEHAJÚ? Ak áno,
+  po TRUNCATE treba reseed, nielen pridanie do zoznamu.
 - **Standalone skript v `scripts/*.ts` (mimo TS projektu `apps/api`) hlási
   falošné `@typescript-eslint/no-unsafe-*` na AKÝKOĽVEK priamy import z
   `"drizzle-orm"`** — nielen na tagovanú šablónu `sql` (ako pôvodne
