@@ -104,24 +104,62 @@ paths:
   vie nastať v STAVE, kde CHECK vyžaduje ten stĺpec vyplnený — ak nie,
   `restrict` je pravdivejší popis než `set null`/`cascade`.
 - **`SELECT ... FOR UPDATE` (drizzle's `.for("update")`) BEZ `of` zoznamu
-  zamyká riadky VO VŠETKÝCH tabuľkách JOINu, nielen v primárne vybranej** —
-  Postgres dokumentácia: locking klauzuly bez `OF` zoznamu ovplyvňujú
-  všetky tabuľky použité v príkaze. Review of PR 75, finding 3
-  (`orders/queries.ts`'s `listOpenOrderLineIdsForSupplier`, ktorý JOINuje
-  `order_line`/`order`/`variant`/`product`): presun tohto dopytu VNÚTRI
-  transakcie `setSupplierLinesOrdered` (`state.ts`) spolu s `.for("update")`
-  zatvoril TOCTOU okno (súbežný re-import/per-riadkový toggle už nemôže
-  zmeniť "otvorenú" množinu medzi čítaním a zápisom) presne PRETO, že zámok
-  pokrýva aj `order` riadok, nielen `order_line`. Deterministický regresný
-  test (`tests/orders-supplier-bulk-lock.integration.test.ts`, rovnaká
-  technika ako `orders-state-lock.integration.test.ts`) to dokazuje tak, že
-  drží `SELECT ... FOR UPDATE` z druhého pripojenia na `order` riadku (NIE
-  `order_line`) — obyčajný nezamknutý SELECT (stav pred opravou) by naň
-  vôbec nečakal, takže test spoľahlivo zlyhá na starom kóde a prejde na
-  novom. Rovnaký trik na ĎALŠIU takúto opravu: zamkni z druhého pripojenia
-  tabuľku, ktorá je LEN súčasťou JOINu (nie tá, na ktorú priamo mieri
-  finálny UPDATE) — ak sa volajúci kód naň zasekne, dôkaz, že `.for("update")`
-  skutočne beží cez celý JOIN vo vnútri tej istej transakcie.
+  zamyká riadky VO VŠETKÝCH tabuľkách JOINu, nielen v primárne vybranej —
+  a KEĎ to spraví zbytočne pre tabuľky, ktoré zápis vôbec nemení, riskuje
+  DEADLOCK s inou transakciou, čo tie isté tabuľky zamyká v OPAČNOM poradí,
+  nielen zbytočné čakanie.** Postgres dokumentácia: locking klauzuly bez
+  `OF` zoznamu ovplyvňujú všetky tabuľky použité v príkaze. Review of PR 75,
+  finding 3 (`orders/queries.ts`'s `listOpenOrderLineIdsForSupplier`, ktorý
+  JOINuje `order_line`/`order`/`variant`/`product`): presun tohto dopytu
+  VNÚTRI transakcie `setSupplierLinesOrdered` (`state.ts`) spolu s
+  `.for("update")` (VTEDY ešte bez `of` zoznamu) zatvoril TOCTOU okno
+  (súbežný re-import/per-riadkový toggle už nemôže zmeniť "otvorenú"
+  množinu medzi čítaním a zápisom) — ale review of PR 76, finding 1 hneď
+  potom odhalil, že ten istý bezzoznamový zámok POKRÝVAL AJ `variant`/
+  `product`, hoci tento zápis mutuje LEN `order_line`. `catalog/ingest.ts`
+  berie svoj dlhý import v poradí produkt → variant (upsert produktov, potom
+  variantov, plus záverečný hromadný `UPDATE variant`), zatiaľ čo LockRows
+  uzol tohto dopytu by zamykal v opačnom poradí rozsahovej tabuľky
+  (order_line → order → variant → product) — opačné poradie zámkov medzi
+  dvomi transakciami je klasický predpoklad na deadlock, nielen na čakanie.
+  Konečná oprava: `.for("update", { of: [orderLines, orders] })` — TOCTOU
+  uzáver zostáva (zámok stále pokrýva `order`), katalógové tabuľky sa už
+  nezamykajú vôbec. **Pravidlo pre KAŽDÉ ďalšie `.for("update")` cez JOIN:
+  `of` zoznam sa vyberá podľa toho, ČO zápis SKUTOČNE mutuje, nikdy podľa
+  toho, čo JOIN len na filtrovanie/čítanie potrebuje** — aj keď na
+  uzavretie TOCTOU okna stačí zamknúť viac než primárnu tabuľku (tu aj
+  `order`, nielen `order_line`), nikdy nezamykaj tabuľku, ktorú tento zápis
+  vôbec nemení.
+  Dva doplňujúce regresné testy (`tests/orders-supplier-bulk-lock
+  .integration.test.ts`, rovnaká technika ako `orders-state-lock
+  .integration.test.ts`) dokazujú OBE vlastnosti nezávisle:
+  1. **TOCTOU uzáver stále platí** — drží `SELECT ... FOR UPDATE` z druhého
+     pripojenia na `order` riadku (NIE `order_line`); obyčajný nezamknutý
+     SELECT (stav pred pôvodnou PR 75 opravou) by naň vôbec nečakal.
+  2. **Katalógové tabuľky už nie sú zamknuté** — drží zámok na `product`
+     riadku (súčasť JOINu, ale mimo `of` zoznamu) a NEUVOĽNÍ ho, kým sám
+     testovaný `await` nedokončí; na bezzoznamovom `.for("update")` (stav
+     pred touto opravou) by preto `await` nikdy nedokončil a test by
+     spoľahlivo padol na `testTimeout` (30s) namiesto rýchleho prejdenia.
+  Rovnaký dvojitý test na ĎALŠIU takúto opravu: over ZVLÁŠŤ, že žiadaný
+  zámok (tabuľka, na ktorej TOCTOU skutočne závisí) stále blokuje, AJ že
+  nežiaduci zámok (tabuľka mimo `of` zoznamu, ale v tom istom JOINe) už
+  neblokuje — jeden test dokazujúci len jednu z dvoch vlastností by druhú
+  regresiu (návrat k celoplošnému zámku, alebo príliš úzky zámok, čo znovu
+  otvorí TOCTOU) nechal nepovšimnutú.
+  **Deterministický "NEBLOKUJE" dôkaz bez čakania na promise-timing:**
+  namiesto sledovania JS-strany flagu (`.then()` nastaveného flagu) sa
+  "je/nie je ešte zaseknuté na zámku" dá zistiť PRIAMO z Postgresu —
+  `SELECT count(*) FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND
+  pid <> pg_backend_pid()` z druhého pripojenia, opakovane pollované do
+  krátkeho deadline. Review of PR 76, finding 2 + 4 nahradil pôvodný pevný
+  200ms `setTimeout` + neošetrený `.then()` (na preťaženom CI runneri mohla
+  aj pred-opravová odomknutá cesta trvať dlhšie než 200ms → falošne zelený
+  test; nerejectovaný `.then()` mohol unhandled rejection pripísať
+  neskoršiemu testu v tom istom jednoprocesovom behu) presne týmto —
+  `withCleanDb()`'s advisory izolačný zámok + `fileParallelism: false`
+  (`.claude/rules/testing.md`) garantujú, že žiadny INÝ backend v tú chvíľu
+  nebeží, takže "niekto je zaseknutý na zámku" môže byť len testovaný kód.
 - **Funkcia, ktorá má bežať aj s `tx`, potrebuje zúžený parameter aj pre
   `.select()`, nielen pre `.insert()`** (rozšírenie vzoru vyššie z `audit/
   service.ts`'s `AuditExecutor`) — `orders/open-statuses.ts`'s
