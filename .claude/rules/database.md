@@ -62,3 +62,32 @@ paths:
   typ), aby ho bolo možné volať `record(tx, ...)` vnútri transakcie
   (#10, `changePassword`). Rovnaký test pri KAŽDEJ ďalšej zdieľanej funkcii:
   potrebuje volajúci naozaj CELÝ `Database`, alebo len pár metód?
+- **Nový `schema-<oblasť>.ts` súbor, ktorý potrebuje `users`/`sessions`/
+  `audit_events`, si NESMIE po ne siahnuť cez `./schema.js` (barrel)** — `schema.ts`
+  re-exportuje KAŽDÝ `schema-*.ts` súbor cez `export *`, takže import z barrelu
+  vytvorí kruh (`schema.ts` → nový súbor → `schema.ts`). Preto sú `users`/
+  `sessions`/`audit_events` od #44 vo vlastnom sibling súbore
+  `schema-users.ts` (schema.ts je odvtedy ČISTÝ barrel, žiadne vlastné
+  definície) — nový `schema-*.ts` importuje `users` odtiaľ priamo, presne ako
+  `schema-orders.ts` importuje `variants` z `schema-catalog.ts`. Rovnaký test
+  pri každom ďalšom novom `schema-*.ts`: potrebuje niečo z `users.ts`/inej
+  sibling tabuľky? Import PRIAMO z toho súboru, nikdy cez `schema.js`.
+- **CHECK, ktorý viaže STAV na DVA nullable stĺpce naraz, sa NEDÁ vyjadriť
+  bare rovnosťou booleovských výrazov** (vzor `catalog_snapshot_reason_ck`,
+  jeden stĺpec, funguje bezpečne) — `(state = 'X') = (a IS NOT NULL AND b IS
+  NOT NULL)` prepustí POLOVIČNE vyplnený riadok (`state != 'X'`, jeden z
+  `a`/`b` vyplnený, druhý null), lebo pravá strana potrebuje byť len `false`,
+  čo platí už pri JEDNOM null stĺpci, nie len pri OBOCH. Nájdené code review
+  na PR #50 (`pairing_confirmation_ck`, #44), overené naživo proti Postgresu
+  pred opravou. Správny tvar je explicitný dvojsmerný OR, ktorý vyžaduje OBA
+  stĺpce zhodne v každej vetve:
+  ```sql
+  CHECK (
+    (state = 'X' AND a IS NOT NULL AND b IS NOT NULL)
+    OR (state != 'X' AND a IS NULL AND b IS NULL)
+  )
+  ```
+  Test na KAŽDÝ ďalší viac-stĺpcový CHECK tohto tvaru: napíš test pre
+  POLOVIČNÚ kombináciu (jeden stĺpec vyplnený, druhý null), nielen pre "oba
+  vyplnené v zlom stave" a "oba prázdne v zlom stave" — presne tá tretia
+  kombinácia je to, čo bare rovnosť tichο prepúšťa.

@@ -479,3 +479,41 @@ Riešenie bez prepisovania histórie (`commit-conventions.md` to zakazuje):
 zverejnenie repa + obnovenie CI (GitHub Actions bolo blokované limitom
 účtu, #39) + merge. Grep diffu pred pushom potvrdil, že ani staré, ani
 nové heslo sa nikde v pushnutom obsahu nenachádza.
+
+## 2026-07-30 — #44 (F4: databázový základ pre párovanie tovaru)
+
+- Verzia: `0.3.0-dev.19` → `0.3.0-dev.20`, commit `4787db3` (prvý na `dev`,
+  pred design komentárom overená verzia bump-founa).
+- Design komentár (root cause + zvolený prístup + zamietnutá alternatíva
+  `supplierId` FK) zapísaný PRED prvým kódovým commitom:
+  https://github.com/zbynekdrlik/forestshop-app/issues/44#issuecomment-5129250113.
+- Nové `apps/api/src/db/schema-pairing.ts`: `supplier` (PK `name`, mirror
+  `supplier_contact`'s text-keyed konvencie) + `pairing` (`variant_code`
+  UNIQUE FK na `variant.code` — štrukturálna oprava starej appky, kde sa
+  dve veľkosti jedného produktu nikdy nepotvrdili naraz). `users`/
+  `sessions`/`audit_events` presunuté z `schema.ts` do nového
+  `schema-users.ts` (schema.ts je teraz čistý barrel), aby sa predišlo
+  kruhovému importu. Commit `98e54d5` (13 integračných testov v
+  `pairing-schema.integration.test.ts`, TRUNCATE zoznamy aktualizované).
+- **Nájdené code review pred mergom** (`superpowers:requesting-code-review`):
+  `pairing_confirmation_ck`'s pôvodná jednoduchá rovnosť (rozšírenie
+  jednostĺpcového vzoru `catalog_snapshot_reason_ck` na dva stĺpce)
+  nesprávne prepúšťala POLOVIČNE vyplnený riadok (`state='navrhnute'` +
+  vyplnený len jeden z `confirmed_by`/`confirmed_at`) — overené naživo
+  proti Postgresu. Migrácia bola len v lokálnom sandboxe (nikdy
+  nemergnutá), preto opravená priamo v tej istej `0009` migrácii
+  (`0009_melodic_rick_jones.sql` → `0009_sleepy_marauders.sql`,
+  explicitný dvojsmerný OR), nie ako ďalší incremental krok. Fix commit
+  `421a17b` (+2 regresné testy pre obe polovičné kombinácie).
+- E2E job na push-triggerovanom CI behu raz zlyhal na
+  `orders.spec.ts:62` (nesúvisiaci multi-worker flake, `.claude/rules/
+  testing.md`'s zdokumentovaná trieda #32) — pull_request beh na tom
+  istom commite prešiel zeleno; jeden rerun potvrdil transientnosť.
+- Shared PR: **#50** (`dev` → `main`), `Closes #44`, merged `71e66a7`.
+  Deployed + verified na https://forestshop-novy.newlevel.media
+  (v0.3.0-dev.20, DOM verzia + `/api/version` sedia s merge commitom;
+  živá Postgres na dev2 potvrdzuje opravený CHECK aj všetky FK/indexy
+  presne podľa schémy).
+- Drobné postrehy z review (chýbajúci index na `pairing.confirmed_by`,
+  case/whitespace normalizácia `supplier.name` joinu) zaznamenané na
+  #46 a #48 pre budúce úlohy — žiadna zmena v tomto PR.
