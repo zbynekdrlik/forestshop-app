@@ -47,13 +47,17 @@ afterEach(async () => {
 // completely decoupled from how fast the JS event loop schedules
 // microtasks. `withCleanDb()`'s advisory isolation lock + this project's
 // `fileParallelism: false` (`.claude/rules/testing.md`) guarantee no other
-// backend is active during this test, so any blocked backend found here can
-// only be the bulk call under test.
+// CLIENT backend is active during this test, so any lock-blocked client
+// backend found here can only be the bulk call under test — `backend_type =
+// 'client backend'` (deep-review suggestion, review of PR 76) narrows this
+// further, excluding autovacuum/background-writer/checkpointer backends
+// that could theoretically also show `wait_event_type = 'Lock'` briefly.
 async function waitUntilSomeBackendIsLockBlocked(rawClient: pg.Client, deadlineMs = 10_000): Promise<void> {
   const start = Date.now();
   for (;;) {
     const { rows } = await rawClient.query<{ n: number }>(
-      "SELECT count(*)::int AS n FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND pid <> pg_backend_pid()",
+      "SELECT count(*)::int AS n FROM pg_stat_activity" +
+        " WHERE wait_event_type = 'Lock' AND backend_type = 'client backend' AND pid <> pg_backend_pid()",
     );
     if ((rows[0]?.n ?? 0) > 0) return;
     if (Date.now() - start > deadlineMs) {

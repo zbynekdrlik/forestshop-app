@@ -158,14 +158,16 @@ export async function listOpenOrderLinesBySupplier(db: Database): Promise<readon
 // hromadná akcia mohla občas zasiahnuť riadok, ktorý medzitým opustil/vstúpil
 // do otvorenej skupiny). Volajúci (`state.ts`'s `setSupplierLinesOrdered`)
 // teraz volá TENTO dopyt AŽ VNÚTRI vlastnej transakcie a `.for("update")`
-// zamyká VŠETKY tabuľky JOINu bez ohľadu obmedzenia (žiadny `of` zoznam) —
-// vrátane `order`, takže súbežná zmena stavu objednávky (aj `setOrderLineState`'s
-// vlastný `.for("update")` na `order_line`) musí počkať na COMMIT tejto
-// transakcie, nie naopak. Parameter je preto zúžený na `Pick<Database,
-// "select">` (rovnaký vzor ako `audit/service.ts`'s `AuditExecutor`) — `tx`
-// (`PgTransaction`) nemá `Database`'s `$client`, takže by ho `tsc` odmietol
-// ako celý `Database` (`.claude/rules/database.md`). Regresný dôkaz:
-// `tests/orders-supplier-bulk-lock.integration.test.ts`.
+// pokrýva aj `order` (viď `of` zoznam pri samotnom dopyte nižšie — od review
+// of PR 76, finding 1 už NIE je bezzoznamový, pozri ten komentár pre presné
+// dôvody a rozsah), takže súbežná zmena stavu objednávky (aj
+// `setOrderLineState`'s vlastný `.for("update")` na `order_line`) musí
+// počkať na COMMIT tejto transakcie, nie naopak. Parameter je preto zúžený
+// na `Pick<Database, "select">` (rovnaký vzor ako `audit/service.ts`'s
+// `AuditExecutor`) — `tx` (`PgTransaction`) nemá `Database`'s `$client`,
+// takže by ho `tsc` odmietol ako celý `Database` (`.claude/rules/
+// database.md`). Regresný dôkaz: `tests/orders-supplier-bulk-lock
+// .integration.test.ts`.
 export async function listOpenOrderLineIdsForSupplier(
   db: Pick<Database, "select">,
   supplier: string,
