@@ -345,3 +345,26 @@ RED→GREEN test names, key decisions, and the shared PR.
   "Objednané" (real production data, real customer order). Zero console
   errors beyond the sanctioned unauthenticated `/api/me` 401.
 - Per-ticket Discord card fired (`notify --run-card`, confirmed delivered).
+- **Follow-up fix cycle (same ticket, after merge):** dispatched an
+  independent code-review subagent against the merged diff (`917242c
+  ..7183ade`) as extra due diligence since #25 adds a new authenticated
+  write endpoint. Found 🟡 `setOrderLineState`'s SELECT wasn't row-locked
+  (audit `from` could go stale under two concurrent state changes on the
+  same line — the `state` column itself still ended up correct,
+  last-write-wins) and 🔵 the state select's `aria-label` had been
+  stripped of the word "stav" to dodge a Playwright substring collision,
+  silently sacrificing accessibility. Design rationale posted on #25
+  ([comment](https://github.com/zbynekdrlik/forestshop-app/issues/25#issuecomment-5125171329))
+  before the fix commit `eb0703d`: added `.for("update")` + a new
+  deterministic regression test `orders-state-lock.integration.test.ts`
+  (verified RED without the lock, GREEN with it — same pattern as
+  `catalog-ingest-lock.integration.test.ts`); restored a full `aria-label`
+  and instead made the COLLIDING existing test
+  (`catalog.spec.ts`) use `getByLabel("Stav", { exact: true })`. PR **#34**
+  (`dev` → `main`), merged `e736aab`. CI all green on both push and PR
+  runs. Deployed + verified: https://forestshop-novy.newlevel.media shows
+  `v0.3.0-dev.14` in the DOM footer, `/api/version` commit matches
+  `e736aaba`, the new accessible `aria-label` ("Zmeniť stav riadku
+  objednávky …") is live in the DOM, order 20261259's line still correctly
+  shows "Objednané" (the earlier manual test restore held), zero console
+  errors.
