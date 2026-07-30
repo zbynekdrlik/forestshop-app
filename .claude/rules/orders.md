@@ -181,3 +181,20 @@ paths:
   aj ďalej filtruje LEN podľa `state === "objednane"`, `ordered` na ňu vôbec
   nevplýva. Ďalšia funkcia, ktorá by potrebovala "bolo toto už vybavené",
   siahni po `ordered`, nie po pridávaní ďalšej hodnoty do `state` enumu.
+- **Audit `entity` musí byť to, čo sa REÁLNE MUTUJE, nikdy zoskupovací kľúč
+  vstupu.** Code review na PR 75 (finding 1): `setSupplierLinesOrdered`
+  (hromadné "objednané" na CELÚ skupinu dodávateľa, `state.ts`) pôvodne
+  zapisovala `entity: "supplier_contact"` len preto, že VSTUP je dodávateľ —
+  ale mutuje `order_line` riadky, takže audit dopyt filtrovaný podľa
+  `entity = "order_line"` ju ticho vynechával a filter podľa
+  `"supplier_contact"` ju miešal s nesúvisiacimi udalosťami e-mailového
+  kontaktu (`supplier-routes.ts`'s `email`/`order-mail/send`). Oprava:
+  `entity` rovnaké ako pri KAŽDEJ inej `order_line`-mutujúcej akcii v tomto
+  súbore (`"order_line"`), `entityId: null` (žiadny JEDEN riadok pri
+  hromadnej akcii), dodávateľ + zasiahnuté ID zostávajú v `data`. Test pre
+  ĎALŠIU hromadnú/agregovanú akciu: `entity` sa vždy odvodzuje od TOHO, ČO sa
+  v DB mení, nie od parametra, podľa ktorého sa vyberajú riadky.
+  Podrobný TOCTOU fix (finding 3, presun `listOpenOrderLineIdsForSupplier`
+  do tej istej transakcie s `.for("update")`) je zdokumentovaný v
+  `.claude/rules/database.md` (Postgres `FOR UPDATE` bez `OF` zoznamu
+  zamyká celý JOIN, nielen primárnu tabuľku).

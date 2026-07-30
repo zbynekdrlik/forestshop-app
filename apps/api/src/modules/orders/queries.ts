@@ -158,14 +158,16 @@ export async function listOpenOrderLinesBySupplier(db: Database): Promise<readon
 // hromadná akcia mohla občas zasiahnuť riadok, ktorý medzitým opustil/vstúpil
 // do otvorenej skupiny). Volajúci (`state.ts`'s `setSupplierLinesOrdered`)
 // teraz volá TENTO dopyt AŽ VNÚTRI vlastnej transakcie a `.for("update")`
-// zamyká VŠETKY tabuľky JOINu bez ohľadu obmedzenia (žiadny `of` zoznam) —
-// vrátane `order`, takže súbežná zmena stavu objednávky (aj `setOrderLineState`'s
-// vlastný `.for("update")` na `order_line`) musí počkať na COMMIT tejto
-// transakcie, nie naopak. Parameter je preto zúžený na `Pick<Database,
-// "select">` (rovnaký vzor ako `audit/service.ts`'s `AuditExecutor`) — `tx`
-// (`PgTransaction`) nemá `Database`'s `$client`, takže by ho `tsc` odmietol
-// ako celý `Database` (`.claude/rules/database.md`). Regresný dôkaz:
-// `tests/orders-supplier-bulk-lock.integration.test.ts`.
+// pokrýva aj `order` (viď `of` zoznam pri samotnom dopyte nižšie — od review
+// of PR 76, finding 1 už NIE je bezzoznamový, pozri ten komentár pre presné
+// dôvody a rozsah), takže súbežná zmena stavu objednávky (aj
+// `setOrderLineState`'s vlastný `.for("update")` na `order_line`) musí
+// počkať na COMMIT tejto transakcie, nie naopak. Parameter je preto zúžený
+// na `Pick<Database, "select">` (rovnaký vzor ako `audit/service.ts`'s
+// `AuditExecutor`) — `tx` (`PgTransaction`) nemá `Database`'s `$client`,
+// takže by ho `tsc` odmietol ako celý `Database` (`.claude/rules/
+// database.md`). Regresný dôkaz: `tests/orders-supplier-bulk-lock
+// .integration.test.ts`.
 export async function listOpenOrderLineIdsForSupplier(
   db: Pick<Database, "select">,
   supplier: string,
@@ -182,7 +184,18 @@ export async function listOpenOrderLineIdsForSupplier(
     .innerJoin(variants, eq(variants.code, orderLines.variantCode))
     .innerJoin(products, eq(products.key, variants.productKey))
     .where(and(inArray(orders.statusName, [...openStatuses]), supplierFilter))
-    .for("update");
+    // Code review (review of PR 76, finding 1): `.for("update")` bez `of`
+    // zoznamu zamyká VŠETKY štyri JOINnuté tabuľky (aj `variant`/`product`,
+    // ktoré tento zápis vôbec nemutuje) — `catalog/ingest.ts` berie svoj
+    // dlhý import v poradí product → variant (upsert produktov, potom
+    // variantov, plus záverečný hromadný `UPDATE variant`), zatiaľ čo
+    // LockRows uzol tohto dopytu by zamykal v poradí rozsahovej tabuľky
+    // (order_line → order → variant → product) — opačné poradie zámkov medzi
+    // dvomi transakciami je klasický predpoklad na deadlock. Zúženie na `of:
+    // [orderLines, orders]` zachováva presne ten istý TOCTOU uzáver (viď
+    // komentár vyššie + `.claude/rules/database.md`), bez zamykania
+    // katalógových tabuliek, ktoré tento zápis nikdy nemení.
+    .for("update", { of: [orderLines, orders] });
 
   return rows.map((row) => row.lineId);
 }

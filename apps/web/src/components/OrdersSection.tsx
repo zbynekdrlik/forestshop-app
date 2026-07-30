@@ -348,11 +348,22 @@ export function OrdersSection({
                 {/* issue 60: hromadné označenie/zrušenie CELEJ skupiny naraz —
                     jedno tlačidlo, ktoré prepína smer podľa toho, či je skupina
                     UŽ celá odškrtnutá (rovnaký zámer ako stará appka's
-                    `markGroupOrdered`/`allOrdered`). */}
+                    `markGroupOrdered`/`allOrdered`). Review of PR 76, finding 5:
+                    mirror smeru fixu 6 (review of PR 75, finding 6) — tlačidlo
+                    musí byť needitovateľné AJ kým beží per-riadkový zápis pre
+                    NIEKTORÝ riadok TEJTO skupiny (`busyOrderedLineId`), nielen
+                    počas vlastného hromadného zápisu (`busyOrderedSupplier`).
+                    Bez toho by klik na tlačidlo tesne po odškrtnutí jedného
+                    riadku poslal hromadný zápis počítaný z ešte-neaktuálneho
+                    `ordered` (optimistický update toho riadku sa prejaví až po
+                    vyriešení jeho vlastného promisu). */}
                 <button
                   type="button"
                   className="btn sm ghost"
-                  disabled={busyOrderedSupplier === group.supplier}
+                  disabled={
+                    busyOrderedSupplier === group.supplier ||
+                    (busyOrderedLineId !== null && group.lines.some((l) => l.lineId === busyOrderedLineId))
+                  }
                   onClick={() => {
                     toggleGroupOrdered(group.supplier, !group.lines.every((l) => l.ordered));
                   }}

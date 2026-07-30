@@ -66,3 +66,18 @@ paths:
   `orders-http-state.integration.test.ts`) — when a component crosses the
   cap, pull out the REPEATED per-item rendering unit first; it is almost
   always the largest, most self-contained slice.
+- **A per-item busy-guard vs. a group busy-guard needs to be disabled in
+  BOTH directions, or it will be found missing one at a time.** Issue 60's
+  "objednané" checkbox (per-row) + group toggle button pair got this fix
+  TWICE: review of PR 75 finding 6 disabled the per-row checkbox while the
+  group's own bulk write (`busyOrderedSupplier`) was in flight, and review
+  of PR 76 finding 5 then had to add the MIRROR — disabling the group
+  button while a per-row write (`busyOrderedLineId`) for a line IN that
+  group was in flight (`group.lines.some((l) => l.lineId ===
+  busyOrderedLineId)`, `OrdersSection.tsx`). Both directions matter because
+  either write can complete after the other and repaint the same rows with
+  a stale computed value — no data loss (last write to the DB still wins),
+  but confusing UI. When adding ANY new busy-flag pair like this (an
+  individual-item action + a group/bulk action touching the same items),
+  add BOTH disables in the SAME change, don't wait for a second review pass
+  to catch the missing direction.
