@@ -5,6 +5,7 @@ import { ChangePasswordForm } from "./components/ChangePasswordForm.js";
 import { Footer } from "./components/Footer.js";
 import { LoginForm } from "./components/LoginForm.js";
 import { OrdersSection } from "./components/OrdersSection.js";
+import { PairingSection } from "./components/PairingSection.js";
 import { SchedulerSection } from "./components/SchedulerSection.js";
 
 export function App(): JSX.Element {
@@ -77,6 +78,7 @@ export function App(): JSX.Element {
       {logoutError !== "" && <p role="alert">{logoutError}</p>}
       <CatalogPage role={me.role} onSessionExpired={reload} />
       <OrdersSection role={me.role} onSessionExpired={reload} />
+      <PairingSection role={me.role} onSessionExpired={reload} />
       <SchedulerSection role={me.role} onSessionExpired={reload} />
       <ChangePasswordForm onSessionExpired={reload} />
       <Footer />

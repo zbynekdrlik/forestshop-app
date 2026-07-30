@@ -9,7 +9,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { createDb } from "../apps/api/src/db/client.js";
-import { orderLines, orders, users } from "../apps/api/src/db/schema.js";
+import { orderLines, orders, pairings, users } from "../apps/api/src/db/schema.js";
 import { hashPassword } from "../apps/api/src/modules/auth/passwords.js";
 import { ingestCatalog } from "../apps/api/src/modules/catalog/ingest.js";
 import { DEFAULT_SNAPSHOT_LIMITS } from "../apps/api/src/modules/catalog/validation.js";
@@ -132,6 +132,19 @@ await db.insert(orderLines).values({
   orderId: objednavkaBezDodavatela.id,
   variantCode: "40287",
   quantity: 1,
+});
+
+// F4 (#45): jeden UŽ NAVRHNUTÝ (nepotvrdený) pairing kandidát — simuluje to,
+// čo by inak vložilo #46 (automatické hľadanie kandidátov, ešte
+// neimplementované). Bez tohto by "pairing.spec.ts" nemalo ako otestovať
+// "✓ Potvrdiť jedným klikom" cez skutočný prehliadač (žiadna appkina vlastná
+// akcia dnes nevytvorí riadok v stave 'navrhnute' S vyplnenou adresou —
+// ručné zadanie adresy cez UI rovno aj potvrdzuje, viď návrhový komentár na
+// issue 45) — variant "4859/46" zostáva zámerne BEZ pairing riadku vôbec
+// (LEFT JOIN prípad, otestovaný v prvom teste súboru).
+await db.insert(pairings).values({
+  variantCode: "40287",
+  supplierUrl: "https://www.grube.sk/p/ciapka-polar-forest/1",
 });
 
 await pool.end();
