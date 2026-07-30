@@ -65,3 +65,30 @@ paths:
   adresou — nevytvorí; ručné zadanie adresy cez UI rovno aj potvrdzuje).
   Variant `"4859/46"` zostáva zámerne BEZ pairing riadku vôbec (testuje
   LEFT JOIN prípad namiesto toho).
+- **Re-potvrdenie UŽ potvrdeného riadku s NEZMENENOU adresou je no-op —
+  NIKDY neprepisuje `confirmedBy`/`confirmedAt`** (review nález na PR 54,
+  issue 45, oprava v `state.ts`'s `confirmPairing()`): pred upsertom sa
+  overí `existing?.state === "potvrdene" && existing.supplierUrl ===
+  finalUrl`; ak platí, funkcia vráti `"ok"` bez zápisu (žiadny upsert,
+  žiadny audit event). Bez tejto kontroly ktorýkoľvek ďalší klik na "✓
+  Potvrdiť" (druhým manažérom, alebo aj tým istým znova) ticho ukradol
+  attribution, hoci nebolo urobené žiadne nové rozhodnutie. Skutočná ZMENA
+  adresy (ručná oprava cez "✗ Zadať inú adresu" na INÚ adresu) JE nové
+  rozhodnutie — normálna cesta (upsert + audit) sa nemení. Web strana
+  pridáva `item.state === "potvrdene"` do `disabled` na "✓ Potvrdiť"
+  tlačidle — je to len UX vrstva (predchádza zbytočnému kliku), server
+  ostáva skutočnou bránou (priamy API call/stale UI by inak obišiel
+  disabled tlačidlo). Test na KAŽDÝ ďalší podobný "potvrď/ulož" endpoint,
+  ktorý má koncept "kto a kedy": over, či opätovné volanie s NEZMENENÝMI
+  dátami skutočne zachová pôvodnú attribution, nielen že vráti rovnaký
+  HTTP status.
+- **Integračný test-súbor pre párovanie je rozdelený DVOMA súbormi kvôli
+  ESLint `max-lines` (400), NIE kvôli inej téme:** `pairing-http.
+  integration.test.ts` (CRUD/HTTP správanie) a `pairing-reconfirm.
+  integration.test.ts` (no-op re-potvrdenie, potrebuje DVOCH súčasne
+  prihlásených manažérov — vlastný `withCleanDb()` helper, nie zdieľaný
+  `boot()`). Ďalší test pre párovanie, ktorý by `pairing-http.
+  integration.test.ts` posunul cez 400 riadkov, patrí do `pairing-
+  reconfirm.integration.test.ts` (ak súvisí s re-potvrdením) alebo ďalšieho
+  nového `pairing-*.integration.test.ts` súboru (inak) — nie do
+  jedného rastúceho monolitu.
