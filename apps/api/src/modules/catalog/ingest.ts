@@ -233,7 +233,11 @@ export async function ingestCatalog(
   for (const record of records) {
     const known = productValues.get(record.productKey);
     if (known === undefined) {
-      productValues.set(record.productKey, { name: record.name, supplier: record.supplier, internalNote: record.internalNote });
+      productValues.set(record.productKey, {
+        name: record.name,
+        supplier: record.supplier,
+        internalNote: record.internalNote,
+      });
       continue;
     }
     if (known.name !== record.name) {
