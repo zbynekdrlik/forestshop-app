@@ -173,15 +173,42 @@ paths:
   --failed` — čerstvý pull znova stiahne vrstvu od nuly. Ak sa to isté zopakuje
   DRUHÝKRÁT za sebou, už to nie je transientný jav — over `docker system df`
   (miesto na disku) a zváž reštart `containerd`/`docker` služby na dev2.
-- **DRUHÝ pozorovaný transientný symptom TEJ ISTEJ triedy (#25, 2026-07-30):
-  `docker compose up -d` zlyhá na `Error response from daemon: No such
-  container: <hash>_forestshop-app-1` počas kroku "Recreate"** — opäť žiadna
-  zmena závislostí v danom PR, teda opäť lokálny containerd/docker stav na
-  dev2, nie obsah image. Rovnaká liečba ako vyššie: `gh run rerun <run-id>
-  --failed` (jeden rerun stačil, prešiel hneď). Ak sa PRI DEPLOJI objaví
-  INÁ hláška než "failed to extract layer", nepredpokladaj automaticky inú
-  príčinu — over najprv jednoduchým rerunom, až pri DRUHOM zlyhaní za sebou
-  rieš ako skutočný problém.
+- **OPRAVA k nižšie zdokumentovanému nálezu z #25 — NEBOL to transientný
+  containerd jav, bol to skutočný, DETERMINISTICKÝ bug appky (issue 78,
+  vyriešené).** Pôvodný záznam (nižšie, ponechaný pre históriu) priradil
+  `Error response from daemon: No such container: <hash>_forestshop-app-1`
+  počas "Recreate" k rovnakej triede ako `failed to extract layer`
+  (containerd/overlayfs korupcia) — mylne, len preto, že jeden rerun vtedy
+  "pomohol". Skutočná príčina: appka (`apps/api/src/index.ts`) nemala ŽIADEN
+  `SIGTERM`/`SIGINT` handler a `Dockerfile`'s `CMD` beží bez init procesu
+  (PID 1) — jadro preto default dispozíciu signálu vôbec neaplikovalo, appka
+  SIGTERM úplne ignorovala a bežala ďalej celý `stop_grace_period` (10s), kým
+  ju Docker nezabil SIGKILLom; `docker compose up`'s "Recreate" krok si
+  medzitým interne pripravil "nahradiť starý kontajner" podľa jeho dočasného
+  ID, ale kontajner bol už `destroy`nutý skôr, než sa k tomu kroku dostal —
+  odtiaľ "No such container". Rerun vtedy "pomohol" len preto, že táto
+  časovacia hra nie je pri KAŽDOM behu istá (compose's interné časovanie
+  recreate kroku niekedy stihne, niekedy nie) — bug bol prítomný pri KAŽDOM
+  deployi, len sa nie vždy prejavil viditeľným zlyhaním. Fix: `apps/api/src/
+  shutdown.ts`'s `createShutdownHandler` (explicitný, idempotentný handler,
+  zavrie HTTP server aj DB pool, `process.exit(0)`, ohraničený force-exit
+  fallback) + `docker-compose.prod.yml`'s `app` service dostala explicitný
+  `stop_grace_period: 15s` ako doplnkovú rezervu. **Ponaučenie pre budúci
+  podobný nález:** "jeden rerun pomohol" dokazuje len že chyba je
+  NEDETERMINISTICKÁ v ČASOVANÍ prejavu, nie že príčina je transientná
+  infraštruktúra — over `docker events` (kill signal, timing medzi SIGTERM
+  a SIGKILL) PRED zápisom "transientný jav" do playbooku.
+
+- **PÔVODNÝ (čiastočne mylný) záznam, ponechaný pre históriu — pozri opravu
+  vyššie:** DRUHÝ pozorovaný transientný symptom TEJ ISTEJ triedy (#25,
+  2026-07-30): `docker compose up -d` zlyhá na `Error response from daemon:
+  No such container: <hash>_forestshop-app-1` počas kroku "Recreate" — opäť
+  žiadna zmena závislostí v danom PR, teda opäť lokálny containerd/docker
+  stav na dev2, nie obsah image. Rovnaká liečba ako vyššie: `gh run rerun
+  <run-id> --failed` (jeden rerun stačil, prešiel hneď). Ak sa PRI DEPLOJI
+  objaví INÁ hláška než "failed to extract layer", nepredpokladaj
+  automaticky inú príčinu — over najprv jednoduchým rerunom, až pri DRUHOM
+  zlyhaní za sebou rieš ako skutočný problém.
 
 - **`build` job (GitHub-hosted, nahráva do ghcr.io) potrebuje explicitný
   `docker/setup-buildx-action@v3` PRED `docker/build-push-action@v6`** —

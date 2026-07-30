@@ -900,3 +900,107 @@ nové heslo sa nikde v pushnutom obsahu nenachádza.
   `.claude/rules/frontend-design.md` (component-file max-lines split
   pattern — extract the repeated row/item renderer first).
 - Per-ticket Discord card fired (`notify --run-card`, confirmed delivered).
+
+## 2026-07-30 — review of PR 76 (five findings, no GitHub issue — direct review-fix cycle)
+
+- Not a GitHub-issue-tracked ticket: user handed five code-review findings
+  from an independent review of PR 76's own diff directly, to fix in one PR
+  (`explicitly: do NOT file a GitHub issue for them`). Version bump `225b113`
+  (`0.3.0-dev.38`).
+- **Finding 1** (deadlock risk): `queries.ts`'s
+  `listOpenOrderLineIdsForSupplier`'s `.for("update")` had no `of` list,
+  locking `variant`/`product` too — opposite lock order vs.
+  `catalog/ingest.ts`'s product→variant. RED `b18dbfa` (new test
+  `"hromadné označenie NEČAKÁ na zámok katalógovej tabuľky (product)…"`,
+  confirmed hangs to the 30s `testTimeout` against the unfixed query — see
+  report) → GREEN `bbc92bf` (`.for("update", { of: [orderLines, orders] })`).
+- **Findings 2/3/4** (test-quality only, same file, RED-only commit
+  `b18dbfa` since no production code changed): replaced the existing lock
+  test's fixed 200ms sleep with `pg_stat_activity` polling (deterministic
+  "still blocked" proof), removed a tautological `expect(settled).toBe(true)`
+  right after `await bulk` (a `.then()` registered earlier always resolves
+  first), added a rejection handler to that same `.then()`.
+- **Finding 5** (UI busy-guard mirror): `OrdersSection.tsx`'s group toggle
+  button was disabled only for its own bulk write (`busyOrderedSupplier`),
+  not for a per-row write in flight for a line in that group
+  (`busyOrderedLineId`) — the reverse of PR 75's finding 6. RED `a8718f6`
+  (new test `"skupinové tlačidlo je disabled počas per-riadkovej zmeny…"`,
+  confirmed fails against unfixed component) → GREEN `ca550d6` (added the
+  mirror condition to `disabled`).
+- Deep-review subagent (`superpowers:requesting-code-review`) came back
+  0 🔴 0 🟡, 2 🔵 (both same-file touch-ups, not new scope) → fixed in
+  `93acfb5`: corrected a stale docblock comment in `queries.ts` that still
+  described the pre-finding-1 unscoped lock, and added `backend_type =
+  'client backend'` to the `pg_stat_activity` poll to rule out a
+  theoretical autovacuum false positive.
+- Docs commits `6f2f7f8` (`.claude/rules/database.md` — rewrote the
+  `FOR UPDATE` note to cover findings 1-4 together, replacing the
+  now-incomplete PR-75-only version) and `c08a1db`
+  (`.claude/rules/frontend-design.md` — bidirectional busy-guard gotcha,
+  same pattern needed a fix in both directions across PR 75 + PR 76).
+- CI green (check/integration/e2e/docker-build/version-check) on `dev`
+  push, on the PR (`#77`), and on `main` after merge (`d19f8eae`). Local
+  before push: lint + typecheck clean, unit 263 API + 177 web, integration
+  207 (Postgres 5433).
+- **Deploy hit an unrelated infra race**: `docker compose up -d` on dev2
+  failed (`No such container: 4403a25ef63f_forestshop-app-1`) because the
+  OLD `0.3.0-dev.37` container did not exit on `SIGTERM` within the 10s
+  stop grace period and got `SIGKILL`ed mid-recreate, leaving prod down
+  (502) with `forestshop-app-1` fully removed. Recovered manually
+  (`docker compose -f docker-compose.prod.yml up -d` on dev2) — confirmed
+  `/api/version` back to `0.3.0-dev.38`/`d19f8eae`, clean logs. Filed as a
+  separate issue (`#78`, scope-gate `cross-cutting`) rather than fixed here
+  — `apps/api/src/index.ts` has no `SIGTERM`/`SIGINT` handler at all, root
+  cause needs its own investigation + design (touches both the app's
+  shutdown path and `docker-compose.prod.yml`), out of scope for these five
+  findings.
+- Deployed + verified on https://forestshop-novy.newlevel.media
+  (v0.3.0-dev.38, commit `d19f8eae` matches `/api/version`). Playwright on
+  the live "Na objednanie" screen: single checkbox (order 20261263,
+  variant 62605/6) ticked, reload confirmed it stayed ticked + row dimmed;
+  supplier group "Citrade" (2 lines) group-toggled to ordered (label
+  flipped to "↺ Zrušiť označenie skupiny"), then toggled back to unordered
+  (label back to "✔ Označiť skupinu ako objednané") — both directions
+  confirmed via DOM read. Reload afterward: all 39 checkboxes on the page
+  unchecked (data restored). 0 console errors/warnings across the whole
+  session.
+- No PR number appears in any commit message (`#N` bans the design-comment
+  hook on this repo) — "PR 76"/"PR 77" written in prose throughout.
+- Shared PR: `#77`.
+
+## 2026-07-30 — issue 78 (deploy SIGTERM/recreate race)
+
+- Root cause: `apps/api/src/index.ts` had NO signal handler at all. The
+  container runs as PID 1 (`Dockerfile`'s `CMD`, no `tini`/`init: true`), and
+  the kernel does not apply a signal's default disposition to PID 1 unless
+  the process installs an explicit handler — so SIGTERM was silently
+  ignored for the full `stop_grace_period` (10s) until Docker SIGKILLed the
+  process, racing `docker compose up`'s Recreate step ("No such container").
+  Same symptom had already hit deploy for PR 25 and was misdiagnosed there
+  as transient containerd flakiness (fixed by a rerun) — corrected that
+  playbook entry in place (`.claude/rules/deploy.md`) rather than leaving
+  the wrong lesson for the next occurrence.
+- New `apps/api/src/shutdown.ts`: `createShutdownHandler()` — idempotent,
+  stops the scheduler (`.stop()`, so no new tick starts mid-shutdown),
+  proactively closes idle HTTP connections, closes the HTTP server then the
+  DB pool, `process.exit(0)`; bounded 8s force-exit(1) fallback, guarded
+  against a double `exit()` call. `docker-compose.prod.yml`'s `app` service
+  got an explicit `stop_grace_period: 15s` as a complementary margin.
+- RED/GREEN: `bf7f593` (test, `[red]`, confirmed failing — module didn't
+  exist yet) → `a022b27` (fix, `[green]`). Three follow-up commits from
+  self-review + an independent code-review subagent: `8059324` (double-exit
+  guard), `ceaf2b4` (stop_grace_period + playbook correction — landed
+  between red/green and the follow-ups), `c18f23b` (scheduler stop +
+  closeIdleConnections + a fourth test proving an in-flight request
+  completes normally when the signal arrives mid-request — this test
+  surfaced a real subtlety: `server.close()` waits on Node's
+  `keepAliveTimeout` unless the response sets `Connection: close`).
+- Verified end-to-end THREE times against the actual built production
+  Docker image running as real PID 1 (not just the integration test): a
+  bare `docker stop -t 15` on the unfixed image would have hung the full
+  grace period; on the fixed image it exited in 431ms, then 211ms after the
+  scheduler-stop wiring, both with exit code 0.
+- CI green (check/integration ×211/e2e/docker-build/version-check) on `dev`
+  push and on the PR (`#79`) across all three pushes; local before each
+  push: lint + typecheck clean.
+- Shared PR: `#79`.

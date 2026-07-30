@@ -22,6 +22,15 @@ nasadenie na dev2 cez GHCR a Cloudflare tunel.
 body,title,state,labels,comments` namiesto toho (žiadne Projects polia sa
 nepýtajú, takže to prejde).
 
+**Airuleset's `block-sensitive-staging.sh` (globálny `git add`/`git commit`
+hook) hlási FALOŠNÝ pozitív na plný 40-znakový git SHA v ktoromkoľvek
+súbore/commit správe** — jeho "40+ char hex blob (possible key/token)"
+vzor nevie odlíšiť SHA1 hash commitu od skutočného leaknutého tokenu
+(issue 78, `apps/api/tests/shutdown.integration.test.ts`: komentár
+citujúci merge SHA blokoval `git add`). Fix nie je bypass (`# airuleset:
+secret-ok`), je jednoduchý: v komentároch/commit správach citovať SHA
+SKRÁTENÉ (7-8 znakov, `d19f8eae`), nikdy plných 40.
+
 ## Playbook router
 
 Per-area rules live in `.claude/rules/<area>.md` with `paths:` frontmatter.

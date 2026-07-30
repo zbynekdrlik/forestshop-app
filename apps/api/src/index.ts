@@ -20,10 +20,11 @@ import {
   sessionCleanupJob,
 } from "./modules/scheduler/jobs.js";
 import { startScheduler } from "./modules/scheduler/scheduler.js";
+import { createShutdownHandler } from "./shutdown.js";
 import { appVersion } from "./version.js";
 
 const env = loadEnv();
-const { db } = createDb(env.DATABASE_URL);
+const { db, pool } = createDb(env.DATABASE_URL);
 
 // Migrácie beží aplikácia sama pri štarte — nasadenie tak nemá druhý, samostatne
 // zlyhateľný krok. Drizzle spúšťa každú migráciu vo VLASTNEJ transakcii, takže
@@ -98,7 +99,7 @@ const app = createApp(db, {
 // dostávajú svoj `run*Ingest` (môže byť `undefined`, keď zodpovedajúca URL
 // nie je nastavená — job to zaznamená ako "failure" s vysvetlením, nikdy sa
 // nepreskočí ticho).
-startScheduler(db, [
+const scheduler = startScheduler(db, [
   catalogImportJob(runIngest),
   pruneRawExportsJob(),
   sessionCleanupJob(),
@@ -131,5 +132,14 @@ if (existsSync(publicDir)) {
   );
 }
 
-serve({ fetch: app.fetch, port: env.PORT });
+const server = serve({ fetch: app.fetch, port: env.PORT });
 console.log(JSON.stringify({ msg: "api beží", port: env.PORT, version: appVersion() }));
+
+// issue 78 — plné vysvetlenie prečo toto existuje je v shutdown.ts.
+const shutdown = createShutdownHandler({ server, pool, scheduler });
+process.on("SIGTERM", () => {
+  shutdown("SIGTERM");
+});
+process.on("SIGINT", () => {
+  shutdown("SIGINT");
+});
