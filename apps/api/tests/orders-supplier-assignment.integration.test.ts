@@ -1,5 +1,6 @@
+import { eq } from "drizzle-orm";
 import { afterEach, expect, it } from "vitest";
-import { orderLines, orders, users } from "../src/db/schema.js";
+import { orderLines, orders, productSupplierOverrides, users } from "../src/db/schema.js";
 import { createApp } from "../src/http/app.js";
 import { resetLoginRateLimit } from "../src/http/login-rate-limit.js";
 import { hashPassword } from "../src/modules/auth/passwords.js";
@@ -212,4 +213,52 @@ it("rola citanie nesmie priradiť dodávateľa (403)", async () => {
     body: JSON.stringify({ supplier: "Niekto" }),
   });
   expect(res.status).toBe(403);
+});
+
+// issue 86 (nezávislý audit): server dovtedy vôbec neoveroval, že produkt
+// nemá dodávateľa v katalógu — pravidlo bolo vynucované LEN vo frontende.
+// Riadok, ktorého produkt UŽ má `product.supplier` vyplnené, nesmie ísť
+// priradiť ručne, a NESMIE sa pri tom zapísať žiadny `product_supplier_
+// override` riadok (dormantný override, čo by sa neskôr potichu aktivoval).
+it("priradenie riadku, ktorého produkt UŽ má dodávateľa v katalógu, vráti 409 a nezapíše override", async () => {
+  const { app, cookie, db } = await boot("manazer");
+  await insertTestVariant(db, "N-D", "Existujúci Katalógový Dodávateľ");
+  const [objednavka] = await db
+    .insert(orders)
+    .values({ externalOrderId: "6006", customerName: "Zákazník", placedAt: new Date("2026-07-07T00:00:00Z") })
+    .returning();
+  if (objednavka === undefined) throw new Error("insert zlyhal");
+  const [line] = await db.insert(orderLines).values({ orderId: objednavka.id, variantCode: "N-D", quantity: 1 }).returning();
+  if (line === undefined) throw new Error("insert zlyhal");
+
+  const res = await app.request(`/api/orders/lines/${line.id}/supplier`, {
+    method: "POST",
+    headers: { cookie, "content-type": "application/json" },
+    body: JSON.stringify({ supplier: "Ručne Napísaný Dodávateľ" }),
+  });
+  expect(res.status).toBe(409);
+
+  const override = await db.select().from(productSupplierOverrides).where(eq(productSupplierOverrides.productKey, "N-D"));
+  expect(override).toHaveLength(0);
+});
+
+// issue 86 (nezávislý audit): `.max(200)` na `orderLineSupplierBody`,
+// rovnaká horná hranica ako ostatné voľné textové vstupy v projekte.
+it("priradenie dodávateľa s reťazcom nad 200 znakov vráti 400 (validácia)", async () => {
+  const { app, cookie, db } = await boot("manazer");
+  await insertTestVariant(db, "N-E", null);
+  const [objednavka] = await db
+    .insert(orders)
+    .values({ externalOrderId: "6007", customerName: "Zákazník", placedAt: new Date("2026-07-08T00:00:00Z") })
+    .returning();
+  if (objednavka === undefined) throw new Error("insert zlyhal");
+  const [line] = await db.insert(orderLines).values({ orderId: objednavka.id, variantCode: "N-E", quantity: 1 }).returning();
+  if (line === undefined) throw new Error("insert zlyhal");
+
+  const res = await app.request(`/api/orders/lines/${line.id}/supplier`, {
+    method: "POST",
+    headers: { cookie, "content-type": "application/json" },
+    body: JSON.stringify({ supplier: "x".repeat(201) }),
+  });
+  expect(res.status).toBe(400);
 });
