@@ -54,3 +54,15 @@ paths:
   "Nesprávny e-mail alebo heslo" on a RANDOM later test in the same run, not
   a rate-limit-specific error (the client's `postLogin()` collapses every
   non-2xx response, including 429, to the same generic failure).
+- **A component file that grows past eslint's `max-lines: 400` after adding a
+  feature gets its TABLE ROW / list-item rendering extracted into its own
+  component file, not trimmed by removing comments/whitespace.** Issue 60
+  added a checkbox column + a renamed header to `OrdersSection.tsx`, pushing
+  it to 454 lines — extracted the `<tr>` body (plus the `STATE_LABELS` map it
+  alone uses) into `OrderLineRow.tsx`, taking `line`/`canChangeState`/busy-flag
+  props and two callbacks (`onChangeState`/`onChangeOrdered`) from the parent,
+  which stayed the state/data-fetching owner. Same principle as the
+  established test-file split pattern (`orders-http.integration.test.ts` /
+  `orders-http-state.integration.test.ts`) — when a component crosses the
+  cap, pull out the REPEATED per-item rendering unit first; it is almost
+  always the largest, most self-contained slice.

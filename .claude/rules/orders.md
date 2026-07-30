@@ -169,3 +169,15 @@ paths:
   preto zostávajú ASCII-only — skutočná diakritika sa testuje cez
   commitnutú fixtúru (`fixtures/orders-sample.csv`), ktorá JE natívne cp1250
   na disku.
+- **`order_line.ordered` (issue 60) je NEZÁVISLÝ boolean od `order_line.state`
+  enumu — nezamieňať.** `state` (objednane/caka_sa/skladom/nedostupne) sleduje
+  POSTUP u dodávateľa (a jeho `objednane` hodnota je VÝCHODISKOVÝ/predvolený
+  stav riadku — vo frontende zobrazený ako "Nevybavené", NIE "Objednané", od
+  issue 60). `ordered` je samostatný príznak "manažér toto reálne objednal u
+  dodávateľa" (checkbox + hromadné tlačidlo na "Na objednanie", `state.ts`'s
+  `setOrderLineOrdered`/`setSupplierLinesOrdered`) — rovnaký zámer ako stará
+  appka's samostatný `ORDERED` flag, oddelený od WAITING/INSTOCK/UNAVAIL.
+  Manažér ho môže odškrtnúť v ĽUBOVOĽNOM `state`; mailová agregácia (`mail.ts`)
+  aj ďalej filtruje LEN podľa `state === "objednane"`, `ordered` na ňu vôbec
+  nevplýva. Ďalšia funkcia, ktorá by potrebovala "bolo toto už vybavené",
+  siahni po `ordered`, nie po pridávaní ďalšej hodnoty do `state` enumu.

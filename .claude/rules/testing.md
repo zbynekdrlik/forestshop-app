@@ -235,3 +235,17 @@ paths:
   Pri pridávaní/úprave e2e testu okolo AKÉHOKOĽVEK `<select>`u v tejto appke
   vždy skontroluj, či asercia naozaj testuje VYBRANÚ hodnotu, nie len
   prítomnosť textu niekde v okolí.
+- **Rovnaký problém, iný tvar: Playwright's `locator.check()` na kontrolovanom
+  (`checked={...}`) checkboxe, ktorého `onChange` spúšťa ASYNC zápis (fetch na
+  server), zlyhá s "Clicking the checkbox did not change its state"** —
+  `.check()` si SÁM ihneď po kliku overí, že checkbox je zaškrtnutý, ale
+  optimistický lokálny update sa prejaví AŽ po vyriešení promisu, takže na
+  pomalšom CI behu (nie lokálne) prehrá závod. Zistené issue 60
+  (`orders.spec.ts`'s test odškrtávacieho políčka "objednané u dodávateľa" —
+  lokálne 100% prešiel, na GitHub Actions runneri spadol na prvom pokuse).
+  Fix je rovnaký princíp ako `<select>` vyššie: `.click()` namiesto
+  `.check()`/`.uncheck()`, a POTOM `await expect(checkbox).toBeChecked()`
+  (alebo `.not.toBeChecked()`) — to SKUTOČNE čaká/opakuje, kým sa zápis
+  potvrdí. Pri pridávaní e2e testu okolo AKÉHOKOĽVEK kontrolovaného
+  checkboxu v tejto appke použi `.click()` + `expect().toBeChecked()`, nikdy
+  `.check()`/`.uncheck()` priamo.
