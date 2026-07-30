@@ -1,11 +1,12 @@
 import { and, asc, eq, isNull } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
-import { orderLines, orders, products, supplierContacts, variants } from "../../db/schema.js";
+import { orderLines, orders, productSupplierOverrides, products, supplierContacts, variants } from "../../db/schema.js";
 import { log } from "../../logger.js";
 import { extractSupplierLink } from "../catalog/supplier-link.js";
 import type { MailTransport } from "../mail/transport.js";
 import { NEZNAMY_DODAVATEL } from "./queries.js";
 import { itemsWord } from "./pluralize.js";
+import { effectiveSupplierSql, normalizedSupplierKeySql, normalizeSupplierKeyJs } from "./supplier-key.js";
 
 // Jeden agregovaný riadok objednávky pre daného dodávateľa — súčet
 // množstva podľa `variant.code` naprieč VŠETKÝMI otvorenými objednávkami
@@ -69,7 +70,14 @@ export function formatSupplierOrderMailText(
 // zobrazenia v tabe, čo tu nemá priamy ekvivalent; abecedné poradie je
 // stabilné a ľahko overiteľné, nie hádanie chýbajúceho zdroja dát.
 async function loadOutstandingLines(db: Database, supplier: string): Promise<SupplierOrderMailLine[]> {
-  const supplierCondition = supplier === NEZNAMY_DODAVATEL ? isNull(products.supplier) : eq(products.supplier, supplier);
+  // issue 63: rovnaké override-aware, normalizované porovnanie ako
+  // `queries.ts`'s `listOpenOrderLineIdsForSupplier` — inak by mail
+  // dodávateľovi vynechal riadky, ktoré ručné priradenie/case-insensitive
+  // zoskupenie práve zaradilo do tejto skupiny s iným pravopisom.
+  const supplierCondition =
+    supplier === NEZNAMY_DODAVATEL
+      ? and(isNull(products.supplier), isNull(productSupplierOverrides.supplier))
+      : eq(normalizedSupplierKeySql(effectiveSupplierSql), normalizeSupplierKeyJs(supplier));
   const rows = await db
     .select({
       variantCode: orderLines.variantCode,
@@ -82,6 +90,7 @@ async function loadOutstandingLines(db: Database, supplier: string): Promise<Sup
     .innerJoin(orders, eq(orders.id, orderLines.orderId))
     .innerJoin(variants, eq(variants.code, orderLines.variantCode))
     .innerJoin(products, eq(products.key, variants.productKey))
+    .leftJoin(productSupplierOverrides, eq(productSupplierOverrides.productKey, products.key))
     .where(and(supplierCondition, eq(orderLines.state, "objednane")))
     .orderBy(asc(orderLines.variantCode));
 

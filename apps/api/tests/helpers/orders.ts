@@ -85,7 +85,12 @@ export async function insertTestVariantForProduct(
     .values({
       key: productKey,
       name: options.productName ?? `Test produkt ${productKey}`,
-      supplier: options.supplier ?? "Test dodávateľ",
+      // issue 63: `??` by "opravilo" aj VÝSLOVNE zadané `supplier: null` späť
+      // na default — `??` fallbackuje na `undefined` AJ `null` rovnako.
+      // Explicitný `"supplier" in options` rozlíši "kľúč vôbec nezadaný"
+      // (default "Test dodávateľ") od "zadané ako null" (skutočne bez
+      // dodávateľa — potrebné pre testy ručného priradenia dodávateľa).
+      supplier: "supplier" in options ? options.supplier : "Test dodávateľ",
       firstSeenAt: new Date("2026-01-01T00:00:00Z"),
       lastSeenAt: new Date("2026-01-01T00:00:00Z"),
       lastSeenSnapshotId: snapshotId,
