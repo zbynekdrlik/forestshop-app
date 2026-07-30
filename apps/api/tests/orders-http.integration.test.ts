@@ -211,6 +211,33 @@ it("vráti detail objednávky so všetkými riadkami, 404 pre neznáme id, 400 p
   expect(neplatneRes.status).toBe(400);
 });
 
+// issue 70 (code review nález po PR 69): `getOrderDetail`/`OrderDetailLine`
+// neboli rozšírené o `supplierUrl`/`supplierNote`/`externalCode`, na rozdiel
+// od `listOpenOrderLinesBySupplier` (test vyššie) a `mail.ts`'s
+// `loadOutstandingLines` — tretia čítacia cesta zostala nekonzistentná.
+it("detail objednávky nesie odkaz na dodávateľa aj kód dodávateľa pri riadku, rovnako ako /api/orders/open", async () => {
+  const { app, cookie, db } = await boot("manazer");
+  await insertTestVariant(db, "DET-1", "Dodávateľ Detail", {
+    internalNote: "https://www.huntingshop.eu/fairfax-fz-mikina",
+    externalCode: "OB832",
+  });
+  const [objednavka] = await db
+    .insert(orders)
+    .values({ externalOrderId: "5001", customerName: "Zákazník", placedAt: new Date("2026-07-22T00:00:00Z") })
+    .returning();
+  if (objednavka === undefined) throw new Error("insert zlyhal");
+  await db.insert(orderLines).values({ orderId: objednavka.id, variantCode: "DET-1", quantity: 1 });
+
+  const detailRes = await app.request(`/api/orders/${objednavka.id}`, { headers: { cookie } });
+  const detailTelo = (await detailRes.json()) as {
+    lines: { supplierUrl: string | null; supplierNote: string | null; externalCode: string | null }[];
+  };
+  expect(detailTelo.lines[0]).toMatchObject({
+    supplierUrl: "https://www.huntingshop.eu/fairfax-fz-mikina",
+    externalCode: "OB832",
+  });
+});
+
 // `insertTestVariant`/o dôvod, prečo je každá rola SAMOSTATNÝM `it()` a nie
 // tromi po sebe idúcimi `boot()` volaniami v jednom teste: `withCleanDb()`
 // berie exkluzívny session-scoped zámok a druhé volanie TRUNCATE-uje tie isté
