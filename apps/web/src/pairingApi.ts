@@ -11,6 +11,8 @@ const pairingItemSchema = z.object({
   variantCode: z.string(),
   variantName: z.string(),
   sizeLabel: z.string().nullable(),
+  productKey: z.string(),
+  productName: z.string(),
   productSupplier: z.string().nullable(),
   supplierUrl: z.string().nullable(),
   state: z.enum(["navrhnute", "potvrdene"]),

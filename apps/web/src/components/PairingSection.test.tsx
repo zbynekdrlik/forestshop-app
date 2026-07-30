@@ -17,10 +17,17 @@ vi.mock("../pairingApi.js", async (importOriginal) => {
 
 const { PairingUnauthorizedError } = await import("../pairingApi.js");
 
+// `40238/M`/`40237/3XL` majú ROZDIELNY `productKey` (rôzne produkty, náhoda
+// v podobných kódoch) — issue 47's zoskupovacie testy nižšie majú VLASTNÉ
+// fixtúry (`VELKOST_M`/`VELKOST_L`) s rovnakým `productKey`, tieto tri
+// zostávajú jednovariantné (`productKey` === vlastný `variantCode`), presne
+// ako pred touto zmenou (byte-identická renderovacia cesta).
 const NAVRHNUTY = {
   variantCode: "40237/3XL",
   variantName: "Nohavice FOREST 1003",
   sizeLabel: "3XL",
+  productKey: "40237/3XL",
+  productName: "Nohavice FOREST 1003",
   productSupplier: "GRUBE",
   supplierUrl: "https://www.grube.sk/p/1",
   state: "navrhnute" as const,
@@ -32,6 +39,8 @@ const POTVRDENY = {
   variantCode: "40238/M",
   variantName: "Nohavice FOREST 1003",
   sizeLabel: "M",
+  productKey: "40238/M",
+  productName: "Nohavice FOREST 1003",
   productSupplier: "GRUBE",
   supplierUrl: "https://www.grube.sk/p/2",
   state: "potvrdene" as const,
@@ -43,11 +52,34 @@ const BEZ_ADRESY = {
   variantCode: "40239/S",
   variantName: "Čiapka Polar FOREST",
   sizeLabel: null,
+  productKey: "40239/S",
+  productName: "Čiapka Polar FOREST",
   productSupplier: null,
   supplierUrl: null,
   state: "navrhnute" as const,
   confirmedByName: null,
   confirmedAt: null,
+};
+
+// Issue 47 (F4 rozdelenie podľa veľkostí) — jeden produkt ("40260"), DVE
+// veľkosti, ROVNAKÁ adresa u dodávateľa (homogénne, zbalené zobrazenie).
+const VELKOST_M = {
+  variantCode: "40260/M",
+  variantName: "Bunda FOREST",
+  sizeLabel: "M",
+  productKey: "40260",
+  productName: "Bunda FOREST",
+  productSupplier: "GRUBE",
+  supplierUrl: "https://www.grube.sk/p/bunda",
+  state: "navrhnute" as const,
+  confirmedByName: null,
+  confirmedAt: null,
+};
+
+const VELKOST_L = {
+  ...VELKOST_M,
+  variantCode: "40260/L",
+  sizeLabel: "L",
 };
 
 afterEach(() => {
@@ -207,4 +239,110 @@ it("potvrdenie pri 401 zavolá onSessionExpired namiesto zobrazenia chyby", asyn
   await waitFor(() => {
     expect(onSessionExpired).toHaveBeenCalledTimes(1);
   });
+});
+
+// Issue 47 — F4 rozdelenie podľa veľkostí. Skupinové (zbalené) zobrazenie sa
+// aktivuje LEN pre produkt s viac ako 1 variantom; zoskupenie je odvodené
+// (`pairingGroups.ts`), nikdy sa nepersistuje.
+it("viacvariantný produkt s ROVNAKOU adresou na oboch veľkostiach sa zobrazí ako JEDEN zbalený riadok", async () => {
+  searchPairings.mockResolvedValue({ total: 2, items: [VELKOST_M, VELKOST_L] });
+
+  render(<PairingSection role="manazer" onSessionExpired={() => {}} />);
+
+  const skupina = await screen.findByTestId("pairing-group-40260");
+  expect(skupina.textContent).toContain("Bunda FOREST");
+  expect(skupina.textContent).toContain("M, L");
+  expect(screen.queryByTestId("pairing-40260/M")).toBeNull();
+  expect(screen.queryByTestId("pairing-40260/L")).toBeNull();
+});
+
+it("viacvariantný produkt s ROZDIELNOU adresou na veľkostiach sa zobrazí AUTOMATICKY rozdelený (bez klikania)", async () => {
+  const inaAdresa = { ...VELKOST_L, supplierUrl: "https://www.grube.sk/p/bunda-inak" };
+  searchPairings.mockResolvedValue({ total: 2, items: [VELKOST_M, inaAdresa] });
+
+  render(<PairingSection role="manazer" onSessionExpired={() => {}} />);
+
+  await screen.findByTestId("pairing-40260/M");
+  expect(screen.getByTestId("pairing-40260/L")).toBeTruthy();
+  expect(screen.queryByTestId("pairing-group-40260")).toBeNull();
+});
+
+it("✂ Rozdeliť na veľkosti rozbalí homogénnu skupinu na jednotlivé veľkosti; ↩ Zlúčiť veľkosti ju zabalí späť", async () => {
+  searchPairings.mockResolvedValue({ total: 2, items: [VELKOST_M, VELKOST_L] });
+
+  render(<PairingSection role="manazer" onSessionExpired={() => {}} />);
+
+  fireEvent.click(await screen.findByTestId("split-40260"));
+
+  await screen.findByTestId("pairing-40260/M");
+  expect(screen.getByTestId("pairing-40260/L")).toBeTruthy();
+  expect(screen.queryByTestId("pairing-group-40260")).toBeNull();
+
+  fireEvent.click(screen.getByTestId("merge-40260"));
+
+  await screen.findByTestId("pairing-group-40260");
+  expect(screen.queryByTestId("pairing-40260/M")).toBeNull();
+});
+
+it("✓ Potvrdiť na zbalenej skupine potvrdí VŠETKY jej veľkosti (bulk, jeden POST na variant)", async () => {
+  searchPairings.mockResolvedValueOnce({ total: 2, items: [VELKOST_M, VELKOST_L] });
+  searchPairings.mockResolvedValueOnce({
+    total: 2,
+    items: [
+      { ...VELKOST_M, state: "potvrdene", confirmedByName: "Manažér", confirmedAt: "2026-07-30T12:00:00.000Z" },
+      { ...VELKOST_L, state: "potvrdene", confirmedByName: "Manažér", confirmedAt: "2026-07-30T12:00:00.000Z" },
+    ],
+  });
+  confirmPairing.mockResolvedValue(undefined);
+
+  render(<PairingSection role="manazer" onSessionExpired={() => {}} />);
+
+  fireEvent.click(await screen.findByTestId("confirm-group-40260"));
+
+  await waitFor(() => {
+    expect(confirmPairing).toHaveBeenCalledWith("40260/M");
+    expect(confirmPairing).toHaveBeenCalledWith("40260/L");
+  });
+  await waitFor(() => {
+    expect(screen.getByTestId("pairing-group-40260").textContent).toContain("Potvrdené");
+  });
+});
+
+it("✗ Zadať inú adresu na zbalenej skupine pošle ROVNAKÚ novú adresu na VŠETKY jej veľkosti", async () => {
+  searchPairings.mockResolvedValueOnce({ total: 2, items: [VELKOST_M, VELKOST_L] });
+  const novaAdresa = "https://www.grube.sk/p/bunda-nova";
+  searchPairings.mockResolvedValueOnce({
+    total: 2,
+    items: [
+      { ...VELKOST_M, supplierUrl: novaAdresa, state: "potvrdene", confirmedByName: "Manažér", confirmedAt: "2026-07-30T12:00:00.000Z" },
+      { ...VELKOST_L, supplierUrl: novaAdresa, state: "potvrdene", confirmedByName: "Manažér", confirmedAt: "2026-07-30T12:00:00.000Z" },
+    ],
+  });
+  confirmPairing.mockResolvedValue(undefined);
+
+  render(<PairingSection role="manazer" onSessionExpired={() => {}} />);
+
+  fireEvent.click(await screen.findByTestId("reject-group-40260"));
+  fireEvent.change(screen.getByLabelText("Adresa u dodávateľa pre Bunda FOREST (všetky veľkosti)"), {
+    target: { value: novaAdresa },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Potvrdiť" }));
+
+  await waitFor(() => {
+    expect(confirmPairing).toHaveBeenCalledWith("40260/M", novaAdresa);
+    expect(confirmPairing).toHaveBeenCalledWith("40260/L", novaAdresa);
+  });
+  await waitFor(() => {
+    expect(screen.getByTestId("pairing-group-40260").textContent).toContain("Potvrdené");
+  });
+});
+
+it("rola citanie nevidí Akcie ani na zbalenej skupine (žiadne tlačidlo Rozdeliť)", async () => {
+  searchPairings.mockResolvedValue({ total: 2, items: [VELKOST_M, VELKOST_L] });
+
+  render(<PairingSection role="citanie" onSessionExpired={() => {}} />);
+
+  await screen.findByTestId("pairing-group-40260");
+  expect(screen.queryByTestId("split-40260")).toBeNull();
+  expect(screen.queryByTestId("confirm-group-40260")).toBeNull();
 });

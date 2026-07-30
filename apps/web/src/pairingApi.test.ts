@@ -20,6 +20,8 @@ it("prečíta zoznam párovania", async () => {
         variantCode: "40237/3XL",
         variantName: "Nohavice FOREST 1003",
         sizeLabel: "3XL",
+        productKey: "40237",
+        productName: "Nohavice FOREST 1003",
         productSupplier: "GRUBE",
         supplierUrl: null,
         state: "navrhnute" as const,

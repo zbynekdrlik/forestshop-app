@@ -56,3 +56,61 @@ export async function insertTestVariant(
     missingSince: null,
   });
 }
+
+/**
+ * Vloží JEDEN variant (veľkosť) patriaci k VIACVARIANTNÉMU produktu — na
+ * rozdiel od `insertTestVariant` (ktorá vždy vytvorí NOVÝ produkt, kľúčovaný
+ * samotným `code`) tu volajúci sám zadá zdieľaný `productKey`, takže
+ * viacero volaní so ROVNAKÝM `productKey` a RÔZNYMI `code` vytvorí presne
+ * to, čo issue 47 (F4 rozdelenie podľa veľkostí) potrebuje testovať:
+ * zoskupenie `apps/api/src/modules/pairing/queries.ts`'s `listPairings()`
+ * podľa produktu. `.onConflictDoNothing()` na produkte — DRUHÉ a ďalšie
+ * volanie pre ten istý `productKey` zámerne NEPREPÍŠE už vložený riadok
+ * produktu (rovnaký produkt, len iný variant).
+ */
+export async function insertTestVariantForProduct(
+  db: Database,
+  productKey: string,
+  code: string,
+  options: { readonly sizeLabel?: string | null; readonly supplier?: string | null; readonly productName?: string } = {},
+): Promise<void> {
+  const snapshotId = await insertTestSnapshot(db);
+  await db
+    .insert(products)
+    .values({
+      key: productKey,
+      name: options.productName ?? `Test produkt ${productKey}`,
+      supplier: options.supplier ?? "Test dodávateľ",
+      firstSeenAt: new Date("2026-01-01T00:00:00Z"),
+      lastSeenAt: new Date("2026-01-01T00:00:00Z"),
+      lastSeenSnapshotId: snapshotId,
+    })
+    .onConflictDoNothing();
+  await db.insert(variants).values({
+    code,
+    productKey,
+    guid: productKey,
+    sizeLabel: options.sizeLabel ?? null,
+    pairCode: null,
+    name: options.productName ?? `Test produkt ${productKey}`,
+    currency: "EUR",
+    price: "10.00",
+    standardPrice: null,
+    purchasePrice: null,
+    actionPrice: null,
+    actionFrom: null,
+    actionUntil: null,
+    percentVat: null,
+    includingVat: null,
+    stock: 5,
+    availabilityInStockText: "Skladom",
+    availabilityOutOfStockText: "Není skladem",
+    availabilityText: "Skladom",
+    productVisibility: "visible",
+    state: "sellable",
+    firstSeenAt: new Date("2026-01-01T00:00:00Z"),
+    lastSeenAt: new Date("2026-01-01T00:00:00Z"),
+    lastSeenSnapshotId: snapshotId,
+    missingSince: null,
+  });
+}
