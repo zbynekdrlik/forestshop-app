@@ -186,3 +186,52 @@ it("riadok checkbox je disabled počas hromadnej akcie pre jeho dodávateľa, po
   });
   expect(screen.getByTestId<HTMLInputElement>(`ordered-checkbox-${LINE_NOVA.lineId}`).disabled).toBe(false);
 });
+
+// Review of PR 76, finding 5: fix 6 above (PR 75, finding 6) was applied in
+// only one direction — the per-row checkbox is blocked during a bulk write,
+// but the group toggle button was NOT blocked while a per-row change is in
+// flight for its own supplier. Scenario: A=checked, B=unchecked; manager
+// unchecks A (POST A=false in flight, optimistic update lands only on
+// resolve) and immediately clicks the group button — `every(l => l.ordered)`
+// still reads `false` for a moment, so the bulk sends `ordered: true`; the
+// bulk's `.then` paints both rows checked, then A's own per-row `.then`
+// repaints A unchecked while the DB actually holds `true`. No data loss, but
+// exactly the confusing-UI class the original finding targeted, mirrored.
+it("skupinové tlačidlo je disabled počas per-riadkovej zmeny v tej istej skupine, po jej dokončení sa znova sprístupní", async () => {
+  fetchOpenOrders.mockResolvedValue([
+    { supplier: "Dodávateľ Alfa", lines: [LINE_STARA, LINE_NOVA], email: null },
+  ]);
+  let resolveRiadok: (() => void) | undefined;
+  updateOrderLineOrdered.mockImplementation(
+    () =>
+      new Promise<void>((resolve) => {
+        resolveRiadok = resolve;
+      }),
+  );
+
+  render(<OrdersSection role="manazer" onSessionExpired={() => {}} />);
+
+  const oznacit = await screen.findByRole("button", { name: "✔ Označiť skupinu ako objednané" });
+  expect(oznacit.hasAttribute("disabled")).toBe(false);
+
+  const checkboxStara = await screen.findByTestId<HTMLInputElement>(`ordered-checkbox-${LINE_STARA.lineId}`);
+  fireEvent.click(checkboxStara);
+
+  // Kým per-riadkový zápis pre TENTO dodávateľ ešte beží, skupinové
+  // tlačidlo musí byť needitovateľné — inak by mohlo poslať hromadný zápis
+  // na základe ešte-neaktualizovaného `ordered` a jeho výsledok by neskôr
+  // prepísala odpoveď per-riadkového zápisu (opačné poradie ako fix 6).
+  await waitFor(() => {
+    expect(
+      screen.getByRole("button", { name: "✔ Označiť skupinu ako objednané" }).hasAttribute("disabled"),
+    ).toBe(true);
+  });
+
+  resolveRiadok?.();
+
+  await waitFor(() => {
+    expect(
+      screen.getByRole("button", { name: "✔ Označiť skupinu ako objednané" }).hasAttribute("disabled"),
+    ).toBe(false);
+  });
+});
