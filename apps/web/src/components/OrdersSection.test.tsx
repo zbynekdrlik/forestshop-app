@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { OrdersSection } from "./OrdersSection.js";
 
@@ -40,6 +40,9 @@ const LINE_STARA = {
   sizeLabel: "3XL",
   quantity: 2,
   state: "objednane" as const,
+  supplierUrl: null,
+  supplierNote: null,
+  externalCode: null,
 };
 
 const LINE_NOVA = {
@@ -54,6 +57,9 @@ const LINE_NOVA = {
   sizeLabel: null,
   quantity: 1,
   state: "skladom" as const,
+  supplierUrl: null,
+  supplierNote: null,
+  externalCode: null,
 };
 
 afterEach(() => {
@@ -101,6 +107,45 @@ it("chýbajúcu veľkosť a komentár zobrazí ako pomlčku", async () => {
   const riadok = await screen.findByTestId(`order-line-${LINE_NOVA.lineId}`);
   // LINE_NOVA má sizeLabel: null — zobrazí sa pomlčka namiesto prázdneho políčka.
   expect(riadok.textContent).toContain("—");
+});
+
+// issue 67: odkaz na tovar u dodávateľa a kód dodávateľa — tri tvary, aké
+// export skutočne obsahuje.
+it("riadok s odkazom na dodávateľa zobrazí klikateľný odkaz aj kód dodávateľa", async () => {
+  const riadokSOdkazom = {
+    ...LINE_STARA,
+    supplierUrl: "https://www.huntingshop.eu/wild-t-green-nohavice",
+    supplierNote: "https://www.huntingshop.eu/wild-t-green-nohavice",
+    externalCode: "OB832",
+  };
+  fetchOpenOrders.mockResolvedValue([{ supplier: "Dodávateľ Alfa", lines: [riadokSOdkazom], email: null }]);
+
+  render(<OrdersSection role="citanie" onSessionExpired={() => {}} />);
+
+  const bunka = await screen.findByTestId(`supplier-link-${LINE_STARA.lineId}`);
+  const odkaz = within(bunka).getByRole<HTMLAnchorElement>("link", { name: "Odkaz na dodávateľa" });
+  expect(odkaz.getAttribute("href")).toBe("https://www.huntingshop.eu/wild-t-green-nohavice");
+  expect(bunka.textContent).toContain("OB832");
+});
+
+it("riadok bez odkazu, len s poznámkou (internalNote bez URL), zobrazí obyčajný text namiesto odkazu", async () => {
+  const riadokBezOdkazu = { ...LINE_STARA, supplierUrl: null, supplierNote: "Soxland", externalCode: null };
+  fetchOpenOrders.mockResolvedValue([{ supplier: "Dodávateľ Alfa", lines: [riadokBezOdkazu], email: null }]);
+
+  render(<OrdersSection role="citanie" onSessionExpired={() => {}} />);
+
+  const bunka = await screen.findByTestId(`supplier-link-${LINE_STARA.lineId}`);
+  expect(within(bunka).queryByRole("link", { name: "Odkaz na dodávateľa" })).toBeNull();
+  expect(bunka.textContent).toContain("Soxland");
+});
+
+it("riadok bez akéhokoľvek údaja o dodávateľovi zobrazí pomlčku", async () => {
+  fetchOpenOrders.mockResolvedValue([{ supplier: "Dodávateľ Alfa", lines: [LINE_STARA], email: null }]);
+
+  render(<OrdersSection role="citanie" onSessionExpired={() => {}} />);
+
+  const bunka = await screen.findByTestId(`supplier-link-${LINE_STARA.lineId}`);
+  expect(bunka.textContent).toBe("—");
 });
 
 it("pri 401 zavolá onSessionExpired namiesto zobrazenia všeobecnej chyby", async () => {

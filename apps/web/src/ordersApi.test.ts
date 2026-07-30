@@ -21,6 +21,9 @@ const LINE = {
   sizeLabel: null,
   quantity: 1,
   state: "objednane" as const,
+  supplierUrl: null,
+  supplierNote: null,
+  externalCode: null,
 };
 
 it("prečíta otvorené objednávky zoskupené podľa dodávateľa, vrátane e-mailu dodávateľa", async () => {

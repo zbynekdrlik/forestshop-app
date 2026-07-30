@@ -1,6 +1,7 @@
 import { asc, desc, eq } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
 import { orderLines, orders, products, supplierContacts, variants, type OrderLineState } from "../../db/schema.js";
+import { extractSupplierLink } from "../catalog/supplier-link.js";
 
 export interface OpenOrderLine {
   readonly lineId: string;
@@ -14,6 +15,14 @@ export interface OpenOrderLine {
   readonly sizeLabel: string | null;
   readonly quantity: number;
   readonly state: OrderLineState;
+  // issue 67: odkaz na tovar u dodávateľa (extrahovaný z `product.internalNote`
+  // cez `extractSupplierLink`) a kód tovaru u dodávateľa (`variant.externalCode`,
+  // priamo). `supplierUrl` je `null`, keď v `internalNote` nie je odkaz —
+  // vtedy `supplierNote` (surový pôvodný text, ak nejaký je) slúži ako
+  // plain-text fallback na obrazovke.
+  readonly supplierUrl: string | null;
+  readonly supplierNote: string | null;
+  readonly externalCode: string | null;
 }
 
 export interface SupplierOpenOrders {
@@ -61,6 +70,8 @@ export async function listOpenOrderLinesBySupplier(db: Database): Promise<readon
       quantity: orderLines.quantity,
       state: orderLines.state,
       supplier: products.supplier,
+      internalNote: products.internalNote,
+      externalCode: variants.externalCode,
     })
     .from(orderLines)
     .innerJoin(orders, eq(orders.id, orderLines.orderId))
@@ -74,6 +85,7 @@ export async function listOpenOrderLinesBySupplier(db: Database): Promise<readon
 
   const bySupplier = new Map<string, OpenOrderLine[]>();
   for (const row of rows) {
+    const supplierLink = extractSupplierLink(row.internalNote);
     const line: OpenOrderLine = {
       lineId: row.lineId,
       orderId: row.orderId,
@@ -86,6 +98,9 @@ export async function listOpenOrderLinesBySupplier(db: Database): Promise<readon
       sizeLabel: row.sizeLabel,
       quantity: row.quantity,
       state: row.state,
+      supplierUrl: supplierLink.url,
+      supplierNote: supplierLink.note,
+      externalCode: row.externalCode,
     };
     const supplierKey = row.supplier ?? NEZNAMY_DODAVATEL;
     let lines = bySupplier.get(supplierKey);

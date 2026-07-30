@@ -229,11 +229,11 @@ export async function ingestCatalog(
 
   // Beží bez ohľadu na úspech parsovania — pri zlyhaní je `records` prázdne pole,
   // takže je to no-op (nič sa neprepočítava druhýkrát).
-  const productValues = new Map<string, { name: string; supplier: string | null }>();
+  const productValues = new Map<string, { name: string; supplier: string | null; internalNote: string | null }>();
   for (const record of records) {
     const known = productValues.get(record.productKey);
     if (known === undefined) {
-      productValues.set(record.productKey, { name: record.name, supplier: record.supplier });
+      productValues.set(record.productKey, { name: record.name, supplier: record.supplier, internalNote: record.internalNote });
       continue;
     }
     if (known.name !== record.name) {
@@ -368,6 +368,7 @@ export async function ingestCatalog(
               key,
               name: value.name,
               supplier: value.supplier,
+              internalNote: value.internalNote,
               firstSeenAt: options.now,
               lastSeenAt: options.now,
               lastSeenSnapshotId: snapshotId,
@@ -378,6 +379,7 @@ export async function ingestCatalog(
             set: {
               name: sql`excluded.name`,
               supplier: sql`excluded.supplier`,
+              internalNote: sql`excluded.internal_note`,
               lastSeenAt: options.now,
               lastSeenSnapshotId: snapshotId,
             },
@@ -390,14 +392,15 @@ export async function ingestCatalog(
           .values(
             batch.map((record) => ({
               // Polia sa vypisujú EXPLICITNE, nie `...record` (minor, review
-              // task-5-fix-1) — `record.supplier` patrí stĺpcu `product`, nie
-              // `variant`; predtým to fungovalo len preto, že ORM neznáme
-              // kľúče ticho zahodí.
+              // task-5-fix-1) — `record.supplier`/`record.internalNote`
+              // patria stĺpcu `product`, nie `variant`; predtým to fungovalo
+              // len preto, že ORM neznáme kľúče ticho zahodí.
               code: record.code,
               productKey: record.productKey,
               guid: record.guid,
               sizeLabel: record.sizeLabel,
               pairCode: record.pairCode,
+              externalCode: record.externalCode,
               name: record.name,
               currency: record.currency,
               price: record.price,
@@ -427,6 +430,7 @@ export async function ingestCatalog(
               guid: sql`excluded.guid`,
               sizeLabel: sql`excluded.size_label`,
               pairCode: sql`excluded.pair_code`,
+              externalCode: sql`excluded.external_code`,
               name: sql`excluded.name`,
               currency: sql`excluded.currency`,
               price: sql`excluded.price`,

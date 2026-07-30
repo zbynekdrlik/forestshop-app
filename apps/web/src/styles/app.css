@@ -646,3 +646,17 @@ tr:last-child td {
   font: inherit;
   font-size: var(--fs-text-sm);
 }
+/* issue 67: odkaz/kód dodávateľa pri riadku objednávky. */
+.ord-supplier-cell {
+  white-space: nowrap;
+}
+.ord-supplier-link {
+  font-weight: var(--fs-weight-medium);
+}
+.ord-supplier-note {
+  color: var(--fs-ink-muted);
+}
+.ord-supplier-code {
+  font-size: var(--fs-text-xs);
+  color: var(--fs-ink-faint);
+}

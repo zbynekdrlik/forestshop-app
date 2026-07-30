@@ -191,6 +191,33 @@ it("náhľad agreguje množstvo podľa kódu variantu naprieč objednávkami, vy
   expect(telo.body).toBe("Objednávka — Dodávateľ Alfa (1 položka)\n4859/46 | 5 ks");
 });
 
+// issue 67: kód dodávateľa (`externalCode`) a odkaz na tovar u dodávateľa
+// (extrahovaný z `internalNote`) sa objavia v textovom náhľade, presne v
+// tvare, aký `formatSupplierOrderMailLine` skladá.
+it("náhľad zahrnie kód dodávateľa aj odkaz, keď ich export uviedol", async () => {
+  const { app, cookie, db } = await boot("manazer");
+  await insertTestVariant(db, "4859/46", "Dodávateľ Alfa", {
+    internalNote: "https://www.huntingshop.eu/wild-t-green-nohavice",
+    externalCode: "OB832",
+  });
+  const [obj] = await db
+    .insert(orders)
+    .values({ externalOrderId: "6010", customerName: "Zákazník", placedAt: new Date("2026-07-01T00:00:00Z") })
+    .returning();
+  if (obj === undefined) throw new Error("insert zlyhal");
+  await db.insert(orderLines).values({ orderId: obj.id, variantCode: "4859/46", quantity: 2 });
+  await db.insert(supplierContacts).values({ supplier: "Dodávateľ Alfa", email: "alfa@dodavatel.example" });
+
+  const res = await app.request(`/api/suppliers/${encodeURIComponent("Dodávateľ Alfa")}/order-mail`, {
+    headers: { cookie },
+  });
+  expect(res.status).toBe(200);
+  const telo = (await res.json()) as { body: string };
+  expect(telo.body).toBe(
+    "Objednávka — Dodávateľ Alfa (1 položka)\n4859/46 | kód OB832 | 2 ks | https://www.huntingshop.eu/wild-t-green-nohavice",
+  );
+});
+
 it("náhľad pre dodávateľa bez e-mailu vráti to: null", async () => {
   const { app, cookie, db } = await boot("manazer");
   await insertTestVariant(db, "Z-1", "Dodávateľ Zeta");

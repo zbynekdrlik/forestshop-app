@@ -16,9 +16,10 @@ export interface RowIssue {
   readonly detail: Record<string, string>;
 }
 
-/** Polia zodpovedajú 1:1 stĺpcom tabuľky `variant`, okrem: `supplier` (ten je
- *  stĺpec tabuľky `product`, Task 5 ho tam zapíše) a `firstSeenAt`/`lastSeenAt`/
- *  `lastSeenSnapshotId`/`missingSince` (tie dopĺňa ingest, Task 5). */
+/** Polia zodpovedajú 1:1 stĺpcom tabuľky `variant`, okrem: `supplier` a
+ *  `internalNote` (tie sú stĺpce tabuľky `product`, Task 5/issue 67 ich tam
+ *  zapíšu) a `firstSeenAt`/`lastSeenAt`/`lastSeenSnapshotId`/`missingSince`
+ *  (tie dopĺňa ingest, Task 5). */
 export interface VariantRecord {
   readonly code: string;
   // Identita produktu — export's `guid`, nikdy prefix `code` pred lomkou
@@ -29,8 +30,17 @@ export interface VariantRecord {
   readonly guid: string;
   readonly sizeLabel: string | null;
   readonly pairCode: string | null;
+  // Kód tovaru u dodávateľa (issue 67), export's `externalCode` — na rozdiel
+  // od `internalNote` nižšie ide PRIAMO do stĺpca `variant.external_code`
+  // (medzi veľkosťami toho istého produktu sa bežne líši, `schema-catalog.ts`).
+  readonly externalCode: string | null;
   readonly name: string;
   readonly supplier: string | null;
+  // Odkaz na tovar u dodávateľa (issue 67), export's `internalNote` — patrí
+  // stĺpcu `product.internal_note` (ingest.ts ho tam zapíše, rovnaká cesta
+  // ako `supplier` nižšie), NIE `variant` — na reálnom exporte je v rámci
+  // jedného produktu vždy rovnaké naprieč všetkými veľkosťami.
+  readonly internalNote: string | null;
   readonly currency: string | null;
   readonly price: string | null;
   readonly standardPrice: string | null;
@@ -181,8 +191,10 @@ export function mapRow(row: Readonly<Record<string, string>>): {
       guid,
       sizeLabel,
       pairCode: textOrNull((row["pairCode"] ?? "").trim()),
+      externalCode: textOrNull((row["externalCode"] ?? "").trim()),
       name,
       supplier: textOrNull((row["supplier"] ?? "").trim()),
+      internalNote: textOrNull((row["internalNote"] ?? "").trim()),
       currency,
       price,
       standardPrice,

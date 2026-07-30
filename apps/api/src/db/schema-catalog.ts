@@ -86,6 +86,17 @@ export const products = pgTable(
     key: text("key").primaryKey(),
     name: text("name").notNull(),
     supplier: text("supplier"),
+    // Odkaz na tovar u dodávateľa, PRESNE ako export's `internalNote` (surový
+    // text, žiadna extrakcia URL pri zápise — issue 67). Je to vlastnosť
+    // PRODUKTU, nie variantu: na reálnom exporte (14 014 riadkov, 4 519
+    // produktov) mal KAŽDÝ produkt naprieč všetkými svojimi veľkosťami vždy
+    // presne jednu hodnotu tohto poľa — na rozdiel od `externalCode` nižšie
+    // (`schema-catalog.ts`'s `variants`), ktorý sa medzi veľkosťami toho
+    // istého produktu bežne LÍŠI. Extrakcia URL z prípadného labelovaného
+    // textu (`Dodávateľ: X - https://...`) beží AŽ pri čítaní
+    // (`modules/catalog/supplier-link.ts`), nikdy pri importe — žiadny ďalší
+    // odvodený stĺpec, žiadne riziko rozídenia sa algoritmu a uložených dát.
+    internalNote: text("internal_note"),
     firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).notNull(),
     lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull(),
     lastSeenSnapshotId: uuid("last_seen_snapshot_id")
@@ -115,6 +126,11 @@ export const variants = pgTable(
     guid: text("guid").notNull(),
     sizeLabel: text("size_label"),
     pairCode: text("pair_code"),
+    // Kód tovaru u dodávateľa, export's `externalCode` (issue 67) — na rozdiel
+    // od `internalNote` na `products` vyššie je toto vlastnosť VARIANTU: na
+    // reálnom exporte sa medzi veľkosťami toho istého produktu bežne líši
+    // (napr. jeden produkt mal `AJ26-L`, `AJ26-M`, `AJ26-S`, `AJ26-XL`).
+    externalCode: text("external_code"),
     name: text("name").notNull(),
     currency: text("currency"),
     price: numeric("price", { precision: 12, scale: 2 }),

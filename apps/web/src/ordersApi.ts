@@ -17,6 +17,12 @@ const orderLineSchema = z.object({
   sizeLabel: z.string().nullable(),
   quantity: z.number(),
   state: z.enum(["objednane", "caka_sa", "skladom", "nedostupne"]),
+  // issue 67: odkaz na tovar u dodávateľa (`supplierUrl`, `null` keď v
+  // exporte nie je odkaz) + surový text pre plain-text fallback
+  // (`supplierNote`) + kód tovaru u dodávateľa (`externalCode`).
+  supplierUrl: z.string().nullable(),
+  supplierNote: z.string().nullable(),
+  externalCode: z.string().nullable(),
 });
 
 // Zrkadlí `OrdersIngestResult` z `apps/api/src/modules/orders/ingest.ts` —
