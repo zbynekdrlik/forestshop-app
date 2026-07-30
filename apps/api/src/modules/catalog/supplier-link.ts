@@ -41,6 +41,13 @@ const NON_BRACKET_TRAILING_RE = /[.,;:!?'">]+$/;
 // ("(pozri https://...)"). Preto sa zatváracia zátvorka orezáva LEN keď je
 // vo vnútri kandidátnej URL NEVYVÁŽENÁ (viac zatváracích než otváracích —
 // bola prevzatá z obalujúceho textu, nepatrí URL), nikdy keď je vyvážená.
+//
+// Zámerné zjednodušenie (code review, PR 73): počet výskytov, nie
+// poradie/zásobník — `"https://x.com/)a(b)"` (osamotená `)` PRED skutočným
+// párom) by sa vyhodnotil ako vyvážený (1×`(`, 1×`)`) a osamotenú `)` na
+// začiatku by nechal bez zmeny. V reálnych `internalNote` tvaroch (bodka/
+// zátvorka AŽ za odkazom, issue 70/72) sa to nevyskytuje — poradovo presný
+// zásobníkový parser by bol zbytočná komplexita pre tento vstup.
 const BRACKET_PAIRS: readonly (readonly [open: string, close: string])[] = [
   ["(", ")"],
   ["[", "]"],

@@ -106,4 +106,18 @@ describe("extractSupplierLink", () => {
       note: "[pozri https://shop.example.com/y]",
     });
   });
+
+  it("zložená zátvorka vyvážená vnútri url sa neorezáva (tretí typ zátvorky)", () => {
+    expect(extractSupplierLink("https://shop.example.com/a_{b}")).toEqual({
+      url: "https://shop.example.com/a_{b}",
+      note: "https://shop.example.com/a_{b}",
+    });
+  });
+
+  it("otváracia zátvorka BEZ zatváracej sa neorezáva (url nekončí zátvorkou)", () => {
+    expect(extractSupplierLink("https://shop.example.com/a(b")).toEqual({
+      url: "https://shop.example.com/a(b",
+      note: "https://shop.example.com/a(b",
+    });
+  });
 });
