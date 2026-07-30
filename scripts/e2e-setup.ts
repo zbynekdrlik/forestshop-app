@@ -85,6 +85,12 @@ const E2E_FILTRE_EMAIL = "e2e-filtre@forestshop.sk"; // musí sa zhodovať s hod
 // `e2e@forestshop.sk`.
 const E2E_SUCET_EMAIL = "e2e-sucet@forestshop.sk"; // musí sa zhodovať s hodnotou v orders.spec.ts
 
+// issue 63: rovnaký mechanizmus a dôvod ako `E2E_SUCET_EMAIL` vyššie — VLASTNÝ
+// izolovaný účet pre `orders-supplier-assign.spec.ts` (nový SAMOSTATNÝ súbor,
+// nie ďalší test v `orders.spec.ts`, ktorý je už na hranici eslint
+// `max-lines`, `.claude/rules/testing.md`).
+const E2E_PRIRADENIE_EMAIL = "e2e-priradenie@forestshop.sk"; // musí sa zhodovať s hodnotou v orders-supplier-assign.spec.ts
+
 const { db, pool } = createDb();
 // Konštantný literál bez interpolácie — obyčajný reťazec je tu rovnako bezpečný
 // ako `sql` tagovaná šablóna (tú používa ekvivalentný apps/api/tests/helpers/db.ts),
@@ -160,6 +166,12 @@ await db.insert(users).values({
 });
 await db.insert(users).values({
   email: E2E_SUCET_EMAIL,
+  passwordHash: await hashPassword(E2E_HESLO),
+  displayName: "E2E Manažér",
+  role: "manazer",
+});
+await db.insert(users).values({
+  email: E2E_PRIRADENIE_EMAIL,
   passwordHash: await hashPassword(E2E_HESLO),
   displayName: "E2E Manažér",
   role: "manazer",
@@ -315,6 +327,32 @@ await db.insert(orderLines).values({
   variantCode: "60055/10",
   quantity: 2,
 });
+
+// issue 63: DVE riadky BEZ dodávateľa nad DVOMA veľkosťami TOHO ISTÉHO
+// produktu ("60035/L", "60035/M" — CSV fixtúra ich nesie s prázdnym
+// `supplier`, dovtedy nepoužité v žiadnom teste, `.claude/rules/catalog.md`'s
+// CSV-editačný vzor) — NIE "40287" (ten `orders.spec.ts` viacnásobne overuje
+// presným počtom/obsahom "(bez dodávateľa)" skupiny; tento test by ho
+// manuálnym priradením natrvalo presunul preč a rozbil tie testy). DVE
+// veľkosti toho istého produktu overujú "platí aj pre ĎALŠIU veľkosť"
+// (ticket bod 2) — obe štartujú BEZ dodávateľa, priradenie cez JEDNU musí
+// platiť aj pre druhú. Pridáva GLOBÁLNE 2 riadky do "(bez dodávateľa)" —
+// `orders.spec.ts`'s prvý test (E2E_FILTRE_EMAIL) preto počíta so "Všetci
+// (6)"/"(bez dodávateľa) (3)" namiesto pôvodných (4)/(1).
+const [objednavkaPriradenie] = await db
+  .insert(orders)
+  .values({
+    externalOrderId: "9006",
+    customerName: "E2E Zákazník Priradenie",
+    statusName: DEFAULT_ORDER_OPEN_STATUS,
+    placedAt: new Date("2026-07-25T09:00:00Z"),
+  })
+  .returning();
+if (objednavkaPriradenie === undefined) throw new Error("E2E objednávka (priradenie) sa nepodarila vložiť");
+await db.insert(orderLines).values([
+  { orderId: objednavkaPriradenie.id, variantCode: "60035/L", quantity: 1 },
+  { orderId: objednavkaPriradenie.id, variantCode: "60035/M", quantity: 1 },
+]);
 
 // F4 (#45): jeden UŽ NAVRHNUTÝ (nepotvrdený) pairing kandidát — simuluje to,
 // čo by inak vložilo #46 (automatické hľadanie kandidátov, ešte

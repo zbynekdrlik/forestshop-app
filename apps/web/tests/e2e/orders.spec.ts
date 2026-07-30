@@ -38,13 +38,16 @@ test("manažér filtruje podľa dodávateľa, vidí súhrn ostáva vybaviť a sk
 
   // issue 62: fixtúra pridala DODAVATEL-TEST-2 (2 riadky, `scripts/
   // e2e-setup.ts`'s "60055/10" súčtový pár) — celkový počet aj globálny
-  // súhrn nižšie preto počítajú so 4 riadkami, nie s pôvodnými 2.
-  await expect(page.getByTestId("supplier-chip-all")).toHaveText("Všetci (4)");
+  // súhrn nižšie preto počítajú so 4 riadkami, nie s pôvodnými 2. issue 63:
+  // fixtúra pridala ĎALŠIE 2 riadky BEZ dodávateľa ("60035/L"/"60035/M",
+  // `orders-supplier-assign.spec.ts`'s fixtúra) — "(bez dodávateľa)" má preto
+  // 3, nie 1, "Všetci" 6, nie 4.
+  await expect(page.getByTestId("supplier-chip-all")).toHaveText("Všetci (6)");
   await expect(page.getByTestId("supplier-chip-DODAVATEL-TEST-1")).toHaveText("DODAVATEL-TEST-1 (1)");
-  await expect(page.getByTestId("supplier-chip-(bez dodávateľa)")).toHaveText("(bez dodávateľa) (1)");
+  await expect(page.getByTestId("supplier-chip-(bez dodávateľa)")).toHaveText("(bez dodávateľa) (3)");
 
   const summary = page.getByTestId("orders-summary");
-  await expect(summary).toHaveText("Ostáva vybaviť 3 z 4 · Čaká sa 1");
+  await expect(summary).toHaveText("Ostáva vybaviť 5 z 6 · Čaká sa 1");
 
   // Klik na chip DODAVATEL-TEST-1 zúži zoznam len na jeho skupinu.
   await page.getByTestId("supplier-chip-DODAVATEL-TEST-1").click();
@@ -56,7 +59,7 @@ test("manažér filtruje podľa dodávateľa, vidí súhrn ostáva vybaviť a sk
   await page.getByTestId("supplier-chip-(bez dodávateľa)").click();
   await expect(page.getByTestId("supplier-(bez dodávateľa)")).toBeVisible();
   await expect(page.getByTestId("supplier-DODAVATEL-TEST-1")).not.toBeVisible();
-  await expect(summary).toHaveText("(bez dodávateľa): ostáva vybaviť 1 z 1");
+  await expect(summary).toHaveText("(bez dodávateľa): ostáva vybaviť 3 z 3");
 
   // Späť na "Všetci" — obe skupiny opäť viditeľné.
   await page.getByTestId("supplier-chip-all").click();
@@ -186,7 +189,11 @@ test("manažér vidí otvorené objednávky zoskupené podľa dodávateľa, konz
   // "null" a nezmizne.
   const skupinaBezDodavatela = page.getByTestId("supplier-(bez dodávateľa)");
   await expect(skupinaBezDodavatela).toBeVisible();
-  const riadokBez = skupinaBezDodavatela.locator("[data-testid^='order-line-']");
+  // issue 63: fixtúra pridala ĎALŠIE 2 riadky BEZ dodávateľa (objednávka
+  // 9006) — skupina má teraz 3 riadky, `.filter({ hasText })` zúži presne na
+  // riadok objednávky 9002 (inak by `[data-testid^='order-line-']` zhodou
+  // troch prvkov spadlo na strict-mode violation).
+  const riadokBez = skupinaBezDodavatela.locator("[data-testid^='order-line-']").filter({ hasText: "9002" });
   await expect(riadokBez).toContainText("9002");
   await expect(riadokBez).toContainText("E2E Zákazník Bez dodávateľa");
   await expect(riadokBez).toContainText("40287");
@@ -297,7 +304,13 @@ test("manažér nastaví e-mail dodávateľa a uvidí náhľad mailu so správne
   const skupinaBezDodavatela = page.getByTestId("supplier-(bez dodávateľa)");
   await skupinaBezDodavatela.getByRole("button", { name: "Upraviť e-mail" }).click();
   await skupinaBezDodavatela.getByLabel("E-mail dodávateľa (bez dodávateľa)").fill("nezaradene@example.com");
-  await skupinaBezDodavatela.getByRole("button", { name: "Uložiť" }).click();
+  // issue 63: `{ exact: true }` — skupina teraz obsahuje AJ priraďovacie
+  // tlačidlá "💾" (aria-label "Uložiť priradenie dodávateľa…"), ktorých
+  // accessible name OBSAHUJE "Uložiť" ako substring (Playwright's substring
+  // zhoda bez `exact`, `.claude/rules/pairing.md`'s zistený vzor). Oprava je
+  // na strane TOHTO (existujúceho, užšieho) locatora, nie oberaním nového
+  // tlačidla o jeho plnohodnotný popis.
+  await skupinaBezDodavatela.getByRole("button", { name: "Uložiť", exact: true }).click();
   const poslatTlacidlo = skupinaBezDodavatela.getByRole("button", { name: "✉️ Poslať objednávku e-mailom" });
   await expect(poslatTlacidlo).toBeEnabled();
   await poslatTlacidlo.click();
@@ -306,9 +319,15 @@ test("manažér nastaví e-mail dodávateľa a uvidí náhľad mailu so správne
   await expect(nahlad).toBeVisible();
   await expect(nahlad).toContainText("nezaradene@example.com");
   // "40287" je jednovariantný produkt (žiadna veľkosť) s množstvom 1
-  // (`scripts/e2e-setup.ts`) — presný, server-vypočítaný tvar riadku.
-  await expect(nahlad).toContainText("Objednávka — (bez dodávateľa) (1 položka)");
-  await expect(nahlad.locator("pre")).toHaveText("Objednávka — (bez dodávateľa) (1 položka)\n40287 | 1 ks");
+  // (`scripts/e2e-setup.ts`). issue 63: fixtúra pridala ĎALŠIE 2 riadky BEZ
+  // dodávateľa v predvolenom stave "objednane" ("60035/L"/"60035/M", obe
+  // veľkosti odvodené priamo z kódu, `map-row.ts`'s `splitCode`) — mailová
+  // agregácia preto teraz vidí 3 položky, nie 1, zoradené vzostupne podľa
+  // kódu variantu.
+  await expect(nahlad).toContainText("Objednávka — (bez dodávateľa) (3 položky)");
+  await expect(nahlad.locator("pre")).toHaveText(
+    "Objednávka — (bez dodávateľa) (3 položky)\n40287 | 1 ks\n60035/L | L | 1 ks\n60035/M | M | 1 ks",
+  );
 
   // Zrušenie náhľadu — v tomto teste sa zámerne NEODOSIELA (viď komentár
   // vyššie).
@@ -431,6 +450,75 @@ test("manažér odškrtne riadok ako objednaný a hromadne označí/zruší cel�
   const oznacitTlacidlo = skupina.getByRole("button", { name: "✔ Označiť skupinu ako objednané" });
   await oznacitTlacidlo.click();
   await expect(riadokPoReloade.locator("input[type='checkbox']")).toBeChecked();
+
+  expect(chyby).toEqual([]);
+});
+
+// issue 63: VLASTNÝ izolovaný účet — balík je už na hranici `MAX_ATTEMPTS`
+// (komentár vyššie pri `E2E_NAV_EMAIL`). Test je ZÁMERNE POSLEDNÝ v súbore —
+// priradenie MENÍ SKUPINU (presúva riadok preč z "(bez dodávateľa)"), takže
+// žiadny INÝ test v tomto súbore nesmie bežať PO ňom, ak sa spolieha na
+// pôvodný (nezmenený) obsah "(bez dodávateľa)" (rovnaký dôvod ako testy
+// vyššie, ktoré sú tiež zámerne umiestnené podľa toho, čo mutujú).
+const E2E_PRIRADENIE_EMAIL = "e2e-priradenie@forestshop.sk";
+
+test("manažér ručne priradí dodávateľa riadku bez dodávateľa s našepkávaním, priradenie platí aj pre ĎALŠIU veľkosť toho istého produktu, konzola je čistá", async ({
+  page,
+}) => {
+  const chyby: string[] = [];
+  page.on("console", (m) => {
+    if ((m.type() === "error" || m.type() === "warning") && !jeOcakavane(m)) chyby.push(m.text());
+  });
+  page.on("pageerror", (e) => {
+    chyby.push(e.message);
+  });
+
+  await page.goto("/?tab=orders");
+  await page.getByLabel("E-mail").fill(E2E_PRIRADENIE_EMAIL);
+  await page.getByLabel("Heslo").fill(E2E_HESLO);
+  await page.getByRole("button", { name: "Prihlásiť sa" }).click();
+  await expect(page.getByRole("heading", { name: "Na objednanie" })).toBeVisible();
+
+  // Riadok BEZ dodávateľa (objednávka 9006, `scripts/e2e-setup.ts`) — pole na
+  // priradenie je viditeľné a prázdne (kým riadok DODAVATEL-TEST-1 s
+  // katalógovým dodávateľom žiadne pole nemá, len "—").
+  const vstupL = page.getByLabel("Priradiť dodávateľa riadku objednávky 9006 / 60035/L");
+  await expect(vstupL).toBeVisible();
+  await expect(vstupL).toHaveValue("");
+  const bunkaTest1 = page
+    .getByTestId("supplier-DODAVATEL-TEST-1")
+    .locator("[data-testid^='supplier-assign-cell-']");
+  await expect(bunkaTest1).toHaveText("—");
+
+  // Našepkávanie: known-suppliers datalist musí ponúkať UŽ existujúceho
+  // dodávateľa (dôkaz, že sa berie zo skutočne načítaných skupín, nie z
+  // pevného zoznamu) — nie holý ASCII-art, priamy DOM dôkaz.
+  await expect(page.locator("#known-suppliers option[value='DODAVATEL-TEST-1']")).toHaveCount(1);
+
+  await vstupL.fill("E2E Dodávateľ Priradenie");
+  await page.getByLabel("Uložiť priradenie dodávateľa riadku objednávky 9006 / 60035/L").click();
+
+  // Refetch po uložení (`OrdersSection.tsx`'s `assignSupplier`) — nová
+  // skupina sa objaví, riadok "60035/L" je v nej.
+  const novaSkupina = page.getByTestId("supplier-E2E Dodávateľ Priradenie");
+  await expect(novaSkupina).toBeVisible();
+  await expect(novaSkupina).toContainText("60035/L");
+
+  // issue 63 bod 2: priradenie cez JEDNU veľkosť platí aj pre "60035/M" —
+  // TEN ISTÝ produkt, iný riadok, nikdy ručne priradený, a napriek tomu je v
+  // TEJ ISTEJ novej skupine (produktová perzistencia, `product_supplier_
+  // override`).
+  await expect(novaSkupina).toContainText("60035/M");
+  const vstupM = page.getByLabel("Priradiť dodávateľa riadku objednávky 9006 / 60035/M");
+  await expect(vstupM).toHaveValue("E2E Dodávateľ Priradenie");
+
+  // Pretrvanie po obnovení stránky — priradenie je v DB (`product_supplier_
+  // override`), nielen v optimistickom klientskom stave.
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Na objednanie" })).toBeVisible();
+  const novaSkupinaPoReloade = page.getByTestId("supplier-E2E Dodávateľ Priradenie");
+  await expect(novaSkupinaPoReloade).toContainText("60035/L");
+  await expect(novaSkupinaPoReloade).toContainText("60035/M");
 
   expect(chyby).toEqual([]);
 });
