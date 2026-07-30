@@ -43,9 +43,12 @@ const { db, pool } = createDb();
 // uvodzované ručne v priamom SQL stringu.
 // "supplier_contact" (#31) pridané rovnakým dôvodom ako "order_line, \"order\""
 // vyššie — nemá žiadny FK (kľúčovaný reťazcom dodávateľa, nie id), CASCADE ho
-// preto nikdy nestrhne.
+// preto nikdy nestrhne. "supplier" (#44) je rovnaký prípad — tiež kľúčovaný
+// reťazcom mena dodávateľa, žiadny FK. "pairing" (#44) FK do "variant" má, takže
+// by ho CASCADE strhol aj bez uvedenia — pridané ručne kvôli tej istej
+// sebadokumentujúcej dôslednosti ako "order_line".
 await db.execute(
-  'TRUNCATE TABLE ingest_issue, variant, product, catalog_snapshot, job_run, audit_events, sessions, users, order_line, "order", supplier_contact RESTART IDENTITY CASCADE',
+  'TRUNCATE TABLE ingest_issue, variant, product, catalog_snapshot, job_run, audit_events, sessions, users, order_line, "order", supplier_contact, pairing, supplier RESTART IDENTITY CASCADE',
 );
 await db.insert(users).values({
   email: "e2e@forestshop.sk",

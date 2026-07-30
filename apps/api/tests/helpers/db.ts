@@ -37,9 +37,12 @@ export async function withCleanDb(): Promise<{ db: Database; close: () => Promis
     // "supplier_contact" (#31) has NO foreign key at all (keyed on the
     // supplier NAME string, not an id) — CASCADE never reaches it from any
     // direction, so it must be listed explicitly too, same reasoning as
-    // "order" above.
+    // "order" above. "supplier" (#44) is the SAME situation — also keyed on
+    // the supplier NAME string, no FK at all. "pairing" (#44) DOES have an FK
+    // into "variant" so `TRUNCATE variant CASCADE` already reaches it — listed
+    // explicitly anyway for the same self-documenting reason "order_line" is.
     await db.execute(
-      sql`TRUNCATE TABLE ingest_issue, variant, product, catalog_snapshot, job_run, audit_events, sessions, users, order_line, "order", supplier_contact RESTART IDENTITY CASCADE`,
+      sql`TRUNCATE TABLE ingest_issue, variant, product, catalog_snapshot, job_run, audit_events, sessions, users, order_line, "order", supplier_contact, pairing, supplier RESTART IDENTITY CASCADE`,
     );
   } catch (err) {
     try {
