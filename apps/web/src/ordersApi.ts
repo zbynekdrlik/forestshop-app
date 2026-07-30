@@ -36,9 +36,24 @@ export class OrdersUnauthorizedError extends Error {
   }
 }
 
+const errorBodySchema = z.object({ error: z.string() });
+
+// Rovnaký vzor ako `catalogApi.ts`'s `serverErrorMessage` — server posiela
+// `{error: "..."}` telo so slovenskou hláškou (napr. neznámy riadok, neplatný
+// stav), ktorú treba zobraziť namiesto všeobecného fallbacku.
+async function serverErrorMessage(response: Response, fallback: string): Promise<string> {
+  try {
+    const parsed = errorBodySchema.safeParse(await response.json());
+    if (parsed.success) return parsed.data.error;
+  } catch {
+    // Telo nie je platný JSON (alebo chýba) — použi všeobecnú hlášku.
+  }
+  return fallback;
+}
+
 async function readJson(response: Response, fallback: string): Promise<unknown> {
   if (response.status === 401) throw new OrdersUnauthorizedError();
-  if (!response.ok) throw new Error(fallback);
+  if (!response.ok) throw new Error(await serverErrorMessage(response, fallback));
   return await response.json();
 }
 
@@ -48,4 +63,18 @@ export async function fetchOpenOrders(): Promise<readonly SupplierOpenOrders[]> 
     await readJson(response, "Otvorené objednávky sa nepodarilo načítať"),
   );
   return parsed.suppliers;
+}
+
+// #25: zmena stavu riadku objednávky — `lineId` je globálne unikátne (UUID
+// primárny kľúč `order_line.id`), netreba aj `orderId`.
+export async function updateOrderLineState(
+  lineId: string,
+  state: OrderLine["state"],
+): Promise<void> {
+  const response = await fetch(`/api/orders/lines/${lineId}/state`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ state }),
+  });
+  await readJson(response, "Zmena stavu sa nepodarila");
 }

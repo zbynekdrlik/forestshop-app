@@ -76,7 +76,7 @@ export function App(): JSX.Element {
       </button>
       {logoutError !== "" && <p role="alert">{logoutError}</p>}
       <CatalogPage role={me.role} onSessionExpired={reload} />
-      <OrdersSection onSessionExpired={reload} />
+      <OrdersSection role={me.role} onSessionExpired={reload} />
       <SchedulerSection role={me.role} onSessionExpired={reload} />
       <ChangePasswordForm onSessionExpired={reload} />
       <Footer />

@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState, type JSX } from "react";
+import type { Me } from "../api.js";
 import {
   fetchOpenOrders,
   OrdersUnauthorizedError,
+  updateOrderLineState,
   type OrderLine,
   type SupplierOpenOrders,
 } from "../ordersApi.js";
@@ -13,16 +15,29 @@ const STATE_LABELS: Record<OrderLine["state"], string> = {
   nedostupne: "Nedostupné",
 };
 
-// V1 je čisto na pozeranie (#24) — meniť stav riadku a kopírovať objednávku
-// príde až s #25. Preto tu nie je žiadny formulár ani tlačidlo, len čítanie.
+// Rovnaké dve role, ktoré server vyžaduje pre
+// `POST /api/orders/lines/:lineId/state` (`requireRole("admin", "manazer")`,
+// `orders-routes.ts`) — server ostáva skutočnou bránou, toto len skrýva
+// ovládací prvok pre role, ktoré by aj tak dostali 403 (rovnaký vzor ako
+// `CatalogPage`'s `IMPORT_ROLES`/`SchedulerSection`'s `SCHEDULER_ROLES`).
+const CAN_CHANGE_STATE_ROLES: ReadonlySet<Me["role"]> = new Set(["admin", "manazer"]);
+
+// #25: kopírovanie objednávky presunuté do #31 (otvorená otázka pre
+// majiteľa — presný výstup nie je definovaný), preto tu stále nie je žiadne
+// tlačidlo "kopírovať".
 export function OrdersSection({
+  role,
   onSessionExpired,
 }: {
+  readonly role: Me["role"];
   readonly onSessionExpired: () => void;
 }): JSX.Element {
   const [suppliers, setSuppliers] = useState<readonly SupplierOpenOrders[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState("");
+  const [stateError, setStateError] = useState("");
+  const [busyLineId, setBusyLineId] = useState<string | null>(null);
+  const canChangeState = CAN_CHANGE_STATE_ROLES.has(role);
 
   const load = useCallback(() => {
     fetchOpenOrders()
@@ -42,6 +57,35 @@ export function OrdersSection({
 
   useEffect(load, [load]);
 
+  const changeState = useCallback(
+    (lineId: string, newState: OrderLine["state"]) => {
+      setStateError("");
+      setBusyLineId(lineId);
+      updateOrderLineState(lineId, newState)
+        .then(() => {
+          // Lokálna aktualizácia namiesto plného refetchu — server už
+          // potvrdil zápis (aj audit), netreba znova ťahať celý zoznam.
+          setSuppliers((current) =>
+            current.map((group) => ({
+              ...group,
+              lines: group.lines.map((line) => (line.lineId === lineId ? { ...line, state: newState } : line)),
+            })),
+          );
+        })
+        .catch((err: unknown) => {
+          if (err instanceof OrdersUnauthorizedError) {
+            onSessionExpired();
+            return;
+          }
+          setStateError(err instanceof Error ? err.message : "Zmena stavu sa nepodarila.");
+        })
+        .finally(() => {
+          setBusyLineId(null);
+        });
+    },
+    [onSessionExpired],
+  );
+
   // `/api/orders/open` už zoraďuje riadky presne tak, ako majú byť zobrazené
   // (dodávateľ vzostupne, potom najnovšia objednávka prvá) — žiadne ďalšie
   // preskupovanie na klientovi.
@@ -52,6 +96,7 @@ export function OrdersSection({
       <h2>Na objednanie</h2>
       {!loaded && <p>Načítavam otvorené objednávky…</p>}
       {error !== "" && <p role="alert">{error}</p>}
+      {stateError !== "" && <p role="alert">{stateError}</p>}
       {loaded && totalLines === 0 && (
         <p data-testid="orders-empty">Zatiaľ nie sú žiadne otvorené objednávky.</p>
       )}
@@ -81,7 +126,33 @@ export function OrdersSection({
                   <td>{line.variantName}</td>
                   <td>{line.sizeLabel ?? "—"}</td>
                   <td>{line.quantity}</td>
-                  <td>{STATE_LABELS[line.state]}</td>
+                  <td>
+                    {canChangeState ? (
+                      <select
+                        // Zámerne BEZ slova "stav" — Playwright's `getByLabel`
+                        // robí substring zhodu bez ohľadu na veľkosť písmen, takže
+                        // by kolidovalo s katalógovým `<label>Stav</label>`
+                        // (`CatalogPage.tsx`, `getByLabel("Stav")` v
+                        // `catalog.spec.ts`) a e2e test by dostal "strict mode
+                        // violation" (viacero zhôd).
+                        aria-label={`Riadok objednávky ${line.externalOrderId} / ${line.variantCode}`}
+                        data-testid={`state-select-${line.lineId}`}
+                        value={line.state}
+                        disabled={busyLineId === line.lineId}
+                        onChange={(e) => {
+                          changeState(line.lineId, e.target.value as OrderLine["state"]);
+                        }}
+                      >
+                        {(Object.keys(STATE_LABELS) as OrderLine["state"][]).map((s) => (
+                          <option key={s} value={s}>
+                            {STATE_LABELS[s]}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      STATE_LABELS[line.state]
+                    )}
+                  </td>
                   <td>{new Date(line.placedAt).toLocaleDateString("sk-SK")}</td>
                   <td>{line.comment ?? "—"}</td>
                 </tr>
