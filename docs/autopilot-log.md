@@ -1043,3 +1043,42 @@ nové heslo sa nikde v pushnutom obsahu nenachádza.
   push and PR `#80`; main CI + Deploy green on merge `ed2b153`; live
   `/api/version` matched (`0.3.0-dev.40` @ `ed2b153`).
 - Shared PR: `#80`.
+
+## Issue 62 — súčet kusov toho istého produktu naprieč objednávkami dodávateľa
+
+- Root cause / design comment posted to issue 62 BEFORE the first feature
+  commit: legacy `app.js:1918-1962`'s `groupQtyTotals`/`totalChipSpec`
+  (per-supplier chip, ≥2 lines of the same `itemCode`, "remaining" text +
+  "total" tooltip) ported as a DERIVED value computed on every render
+  (`ordersSummary.ts`'s `computeVariantTotals`/`formatVariantTotalChip`) —
+  rejected the legacy's imperative DOM-patch approach (`refreshOrderTotals`)
+  since this app has no non-React editor state that a repaint would disturb.
+- New chip class `.qty-total-chip` in `OrderLineRow.tsx`'s qty cell,
+  intentionally non-clickable/visually distinct from the filter `.chip`
+  (issue 61). Computed over the group's FULL (unfiltered) `group.lines`, so
+  it never depends on the "skryť vybavené" toggle.
+- E2E fixture needed a genuinely-repeating product WITHOUT touching
+  `DODAVATEL-TEST-1`/`(bez dodávateľa)` (other tests assert their EXACT
+  line counts, e.g. "Všetci (2)") — added a brand-new supplier
+  `DODAVATEL-TEST-2` by changing ONE previously-unused-in-tests CSV fixture
+  row's `supplier` field (`60055/10`, was empty) and two new orders in
+  `scripts/e2e-setup.ts` referencing it twice (3 ks + 2 ks). CSV edit done
+  byte-for-byte via a Python round-trip script (file is cp1250, quoted data
+  rows but an UNQUOTED header row — `csv.QUOTE_ALL` on the whole file would
+  have silently re-quoted the header too). New isolated e2e account
+  `e2e-sucet@forestshop.sk` (shared account already at `MAX_ATTEMPTS=10`).
+  Updated the ONE existing global-count assertion in `orders.spec.ts`
+  ("Všetci (2)"/"Ostáva vybaviť 1 z 2 · Čaká sa 1" → "(4)"/"3 z 4 · Čaká sa 1").
+- Commits: `c8805d0` (version bump 0.3.0-dev.42) → `a3cf6d6` (feature + tests).
+- Verified live on production (39 real order lines, 0 naturally-repeating
+  `variantCode` right now) — confirmed the ABSENCE of any chip is correct
+  (no false positive), then toggled one real row's "ordered" checkbox and
+  back via Playwright: write persisted instantly (no reload), console
+  stayed at 0 errors/0 warnings, all 39 rows confirmed back to unchecked
+  afterwards. The actual sum/live-recompute-on-repeat behavior is proven by
+  the new CI-green `orders.spec.ts` test (controlled `DODAVATEL-TEST-2`
+  fixture), since live data has no natural repeat at verification time.
+- CI green (version-check/check/integration/e2e/docker-build) on `dev` push
+  and PR `#82`; main CI + Deploy green on merge `04435a5`; live
+  `/api/version` matched (`0.3.0-dev.42` @ `04435a5`).
+- Shared PR: `#82`.
