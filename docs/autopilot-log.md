@@ -740,3 +740,55 @@ nové heslo sa nikde v pushnutom obsahu nenachádza.
   notes truncate with `title` + ellipsis CSS applied. Console: 0
   errors/0 warnings.
 - Per-ticket Discord card fired (`notify --run-card`, confirmed delivered).
+
+## Issue 72 — residual defects after issue 70/PR 71 (2026-07-30)
+
+- Two residual defects, both proven live by executing the shipped code before
+  fixing: 1) `extractSupplierLink`'s trailing-punctuation trimmer stripped
+  ANY trailing closing bracket, even one that is part of the URL itself
+  (`https://shop.example.com/a_(b)` → truncated to `.../a_(b`, dead link).
+  2) `OrdersSection.tsx`'s supplier-link `aria-label` only carried
+  `variantName`, so two order lines of the same product in different sizes
+  had an identical accessible name. Filed as **#72** (`Scope-gate:
+  planned-work`), design comment posted before first code commit.
+- Fix 1: `trimTrailingPunctuation()` replaces the blind regex — non-bracket
+  trailing punctuation still stripped unconditionally, a trailing closing
+  bracket stripped ONLY when unbalanced within the candidate URL (more
+  closers than openers of that type), iterated for mixed suffixes (`(b).`).
+  RED/GREEN: `supplier-link.test.ts` (commit `b6cc565` RED → `290e0d3`
+  GREEN), later extended (code-review 🔵 findings) with a third bracket
+  type (`{}`) and an unclosed-opening-bracket case (commit `fdf7fe2`).
+- Fix 2: `aria-label` now interpolates `variantCode` alongside `variantName`.
+  RED/GREEN: `OrdersSection.test.tsx` (same commits) — existing test's
+  exact-match name updated + a new dedicated two-different-sizes test.
+- Side-effect discovered while driving PR 73's CI green (not part of the
+  original scope, fixed in the same PR since it blocked merge): `orders
+  .spec.ts`'s state-change e2e test asserted `toContainText("Skladom")`,
+  which is tautological — ALL FOUR `STATE_LABELS` are always rendered as
+  `<option>` children of the `<select>` regardless of selection, so the
+  assertion never waited for the state-change PATCH to actually resolve.
+  Under CI's slower runner `page.reload()` occasionally raced ahead of the
+  still-in-flight write (observed once, PR 73's first CI run). Fixed by
+  asserting `toHaveValue("skladom")` directly on the select — this
+  genuinely waits for the local optimistic update, which only fires after
+  the PATCH promise resolves. Commit `8fe21cd`.
+- Commits (5, `dev`): version bump 0.3.0-dev.34, RED test commit, GREEN fix
+  commit, e2e-flake fix commit, code-review-followup test commit. PR **#73**
+  (`dev` → `main`), merged `edb2b8e`. CI all green on the PR (check,
+  integration, e2e 14/14, docker-build, version-check) and on `main`
+  (check, integration, e2e, docker-build). Local: typecheck + lint +
+  unit (257 API + 155 web) + full e2e suite (14/14, 0 console errors)
+  all green before push.
+- Deep code review (`requesting-code-review`) found 0 🔴 0 🟡, 4 🔵 — 3
+  addressed (missing `{}` bracket test, missing unclosed-opening test, a
+  documentation comment on the count-based-not-stack-based balance check
+  limitation), 1 explicitly pre-existing/out-of-scope (an all-punctuation
+  candidate trims to bare `https://` — same failure mode existed before
+  this PR, unrelated to issue 72).
+- Deployed + verified on https://forestshop-novy.newlevel.media
+  (v0.3.0-dev.34, `/api/version` commit + DOM version label both match
+  `edb2b8e` = `origin/main` HEAD). Live-checked "Na objednanie": supplier
+  links render with `aria-label` now carrying `variantCode` (e.g. "Odkaz na
+  dodávateľa — Poľovnícke kraťasy HART GOROSTA-SH (62621/52)"). Console:
+  0 errors/0 warnings.
+- Per-ticket Discord card fired (`notify --run-card`, confirmed delivered).
