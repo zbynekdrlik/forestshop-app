@@ -3,6 +3,45 @@
 Terse per-ticket log of autopilot-worker cycles: issue(s), commit SHAs,
 RED→GREEN test names, key decisions, and the shared PR.
 
+## 2026-07-31 — #86 (supplier-assignment write-side gaps, found by independent audit of #63)
+
+- **Finding 1**: `assignOrderLineSupplier` (`supplier-assignment.ts`) never
+  re-checked `products.supplier IS NULL` — the rule was enforced only in
+  the frontend (`OrderLineRow.tsx`'s `supplierAssignable`). Fix: SELECT now
+  joins `products`, condition evaluated inside the same transaction as the
+  upsert; new `"already_has_supplier"` result mapped to HTTP 409 in
+  `orders-routes.ts`. No frontend change needed — `ordersApi.ts`'s
+  `readJson`/`serverErrorMessage` already surfaces any `{error}` body on
+  any non-200 status via the existing `stateError` banner.
+- **Finding 2**: `orderLineSupplierBody` had no `.max()` — added `.max(200)`
+  to match `catalog-routes.ts`/`pairing-routes.ts`.
+- Design comment (root cause + rejected alternative — no extra
+  `.for("update")` lock, same reasoning as the file's existing comment)
+  posted BEFORE the first code commit: issue #86 comment
+  `#issuecomment-5137353081`.
+- Tests: RED `d0eaae8` (`orders-supplier-assignment.integration.test.ts` —
+  409 + no override row written; 400 on a 201-char supplier) → GREEN
+  `0d94d75` (both checks implemented).
+- Verified live on production (`https://forestshop-novy.newlevel.media`):
+  direct `fetch()` on a TRIGONA-group line returned 409 with the Slovak
+  message, `product_supplier_override` stayed empty; a 201-char supplier
+  returned 400 (Zod `too_big`). Then a real "(bez dodávateľa)" line was
+  assigned via the UI (moved into a new 1-line group, exactly one override
+  row appeared), the row was deleted directly in Postgres afterward, and a
+  reload confirmed production data back to its original state exactly:
+  "(bez dodávateľa) (3)", "Ostáva vybaviť 39 z 39", 0 lines `ordered`,
+  `product_supplier_override` back to 0 rows.
+- Commits: `0ac370a` (version bump 0.3.0-dev.46) → `d0eaae8` (red) →
+  `0d94d75` (green).
+- CI green (version-check/check/integration/e2e/docker-build) on `dev`
+  push and PR `#87`; main CI + Deploy green on merge `64662ba`; live
+  `/api/version` matched (`0.3.0-dev.46` @ `64662ba`).
+- Shared PR: `#87`. Playbook: `orders.md` gained two entries — "a
+  read-side computed rule (`supplierAssignable`) must be independently
+  enforced by the write path, not just hidden by the frontend" and
+  "`readJson`/`serverErrorMessage` already handles any new HTTP error
+  status on an existing write route, no frontend change needed."
+
 ## 2026-07-29 — #4 (apps/api/tests/ under tsc -b) + #7 (local integration-test DB isolation)
 
 - **#4** (rescoped remainder — `scripts/` half already done in `87ab34a`):
