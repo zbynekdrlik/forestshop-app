@@ -1,6 +1,8 @@
 ---
 paths:
   - "apps/api/src/modules/orders/**"
+  - "apps/api/src/modules/mail/**"
+  - "apps/api/src/http/supplier-routes.ts"
   - "apps/api/src/cli/orders-ingest.ts"
   - "scripts/orders-ingest.ts"
 ---
@@ -102,3 +104,29 @@ paths:
   rovnakého produktu (sčítanie), pseudo-položku (`SHIPPING6`), neznámy
   variant (`99999/ZZ`), prázdny `itemCode` — pokrýva všetky preskočené
   triedy naraz.
+- **Odoslanie objednávky dodávateľovi mailom (#31)** — `modules/orders/
+  mail.ts` (agregácia + textový formát), `modules/mail/transport.ts`
+  (SMTP cez `nodemailer`, env premenné `MAIL_*` v `env.ts`) a
+  `http/supplier-routes.ts` (PUT e-mailu, GET náhľad, POST odoslanie).
+  Nová root tabuľka `supplier_contact` je kľúčovaná PRESNE tým reťazcom,
+  aký `queries.ts` zobrazuje ako `supplier` (vrátane zástupného
+  "(bez dodávateľa)"), NIE priamo na `product.supplier` — bez FK, pridaná
+  do OBOCH truncate zoznamov (rovnaký dôvod ako `order`/`order_line`
+  vyššie, `testing.md`). Textový formát verne kopíruje starú appku's
+  `orderCopyLines` (`kód | grube-id | veľkosť | N ks | url`,
+  `.filter(Boolean).join(' | ')`), ale nová schéma NEMÁ ani
+  per-dodávateľské "grube id", ani URL produktu — tie dve polia preto v
+  tom istom `filter(Boolean)` reťazci VŽDY vypadnú (nikdy sa nehádali,
+  štruktúrovo neexistujú). Ak niekedy pribudne URL produktu alebo podobný
+  identifikátor do `variant`/`product`, doplň ho do
+  `formatSupplierOrderMailLine` — mechanizmus je už pripravený, len chýba
+  zdroj dát. Agregácia beží LEN nad riadkami v stave `objednane` (ešte
+  neposlané ďalej) pre daného dodávateľa, súčet množstva podľa
+  `variant.code` (veľkosť je súčasťou kódu variantu). Odoslanie NIKDY
+  nemení `order_line.state` — manažér ho posúva ručne cez existujúci
+  select. E2E test odoslanie NIKDY neklika (žiadny `MAIL_HOST` v
+  `playwright.config.ts`'s webServer env → server by na "Odoslať" vrátil
+  503, čo by zalogovalo console error a porušilo jedinú povolenú výnimku,
+  `testing.md`) — E2E overuje len nastavenie e-mailu + náhľad, skutočné
+  odoslanie má integračný test s falošným transportom
+  (`supplier-mail.integration.test.ts`).

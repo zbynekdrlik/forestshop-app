@@ -396,3 +396,35 @@ pull_request run). Deployed + verified: https://forestshop-novy.newlevel.media
 DOM footer ukazuje `v0.3.0-dev.15`, prihlásenie vlastníkovým účtom funguje,
 dashboard "Na objednanie" sa vykresľuje so skutočnými produkčnými dátami,
 konzola čistá (len povolený `/api/me` 401).
+
+## #31 — Kopírovanie objednávky (F3) → poslanie objednávky dodávateľovi mailom
+
+Ticket bol predtým `needs-decision` (majiteľ zvažoval clipboard vs. mail),
+majiteľ rozhodol pre mail priamo z appky; ďalšie preskúmanie starej appky
+zistilo, že tá NIKDY mail dodávateľovi neposielala (len clipboard) a nikde
+neexistovala e-mailová adresa dodávateľa. Design comment posted na #31
+([komentár](https://github.com/zbynekdrlik/forestshop-app/issues/31#issuecomment-5127823676))
+pred prvým kódovým commitom: root cause (chýbajúci overený formát + chýbajúca
+adresa), zvolený prístup (SMTP cez `nodemailer`, presne rovnaký textový formát
+ako stará appka's `orderCopyLines`, nová tabuľka `supplier_contact`, náhľad +
+audit), zamietnutá alternatíva (clipboard-only, majiteľ ho už raz odmietol).
+Nová migrácia `0008_jittery_thaddeus_ross.sql` (`supplier_contact`, bez FK,
+pridaná do OBOCH truncate zoznamov). Implementácia: `modules/orders/mail.ts`
+(agregácia + formát), `modules/orders/supplier-contact.ts` (kontakt +
+audit), `modules/mail/transport.ts` (SMTP transport), `http/supplier-
+routes.ts` (PUT e-mailu, GET náhľad, POST odoslanie), UI v `OrdersSection.tsx`
+(úprava e-mailu, náhľad + potvrdenie, kopírovanie do schránky ako záloha).
+Testy: 10 unit (`mail.test.ts`, hranice skloňovania), 14 integračných
+(`supplier-mail.integration.test.ts`, falošný SMTP transport, audit, role,
+CSRF, 502/503 cesty), 6 nových component testov (`OrdersSection.test.tsx`),
+7 nových API-klient testov (`ordersApi.test.ts`), 1 nový E2E test
+(`orders.spec.ts`, nastavenie e-mailu + náhľad — SKUTOČNÉ odoslanie sa v E2E
+zámerne nekliká, žiadny `MAIL_HOST` v e2e prostredí). PR **#37** (`dev` →
+`main`), merged `ebb0138`. CI all green (push aj pull_request run + main
+post-merge run). Deployed + verified naživo na
+https://forestshop-novy.newlevel.media: `/api/version` = `{"version":
+"0.3.0-dev.17","commit":"ebb0138..."}`, DOM footer `v0.3.0-dev.17`,
+nastavenie e-mailu pre reálneho dodávateľa (BETALOV) v produkcii — perzistuje
+po reloade, náhľad správne agregoval 88 skutočných otvorených položiek
+(pluralizácia "88 položiek"), následne ZRUŠENÉ bez odoslania a e-mail vrátený
+na nenastavený; konzola čistá (len povolený `/api/me` 401).
