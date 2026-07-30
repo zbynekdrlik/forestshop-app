@@ -134,6 +134,11 @@ export interface OrderDetailLine {
   readonly supplier: string;
   readonly quantity: number;
   readonly state: OrderLineState;
+  // issue 70: tretia čítacia cesta zjednotená s `listOpenOrderLinesBySupplier`
+  // a `mail.ts`'s `loadOutstandingLines` — rovnaký zámer, rovnaké polia.
+  readonly supplierUrl: string | null;
+  readonly supplierNote: string | null;
+  readonly externalCode: string | null;
 }
 
 export interface OrderDetail {
@@ -158,6 +163,8 @@ export async function getOrderDetail(db: Database, id: string): Promise<OrderDet
       supplier: products.supplier,
       quantity: orderLines.quantity,
       state: orderLines.state,
+      internalNote: products.internalNote,
+      externalCode: variants.externalCode,
     })
     .from(orderLines)
     .innerJoin(variants, eq(variants.code, orderLines.variantCode))
@@ -171,6 +178,20 @@ export async function getOrderDetail(db: Database, id: string): Promise<OrderDet
     customerName: order.customerName,
     comment: order.comment,
     placedAt: order.placedAt.toISOString(),
-    lines: lineRows.map((row) => ({ ...row, supplier: row.supplier ?? NEZNAMY_DODAVATEL })),
+    lines: lineRows.map((row) => {
+      const supplierLink = extractSupplierLink(row.internalNote);
+      return {
+        lineId: row.lineId,
+        variantCode: row.variantCode,
+        variantName: row.variantName,
+        sizeLabel: row.sizeLabel,
+        supplier: row.supplier ?? NEZNAMY_DODAVATEL,
+        quantity: row.quantity,
+        state: row.state,
+        supplierUrl: supplierLink.url,
+        supplierNote: supplierLink.note,
+        externalCode: row.externalCode,
+      };
+    }),
   };
 }
