@@ -71,6 +71,13 @@
       "when": 1785405877813,
       "tag": "0009_sleepy_marauders",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1785407621230,
+      "tag": "0010_dusty_skullbuster",
+      "breakpoints": true
     }
   ]
 }

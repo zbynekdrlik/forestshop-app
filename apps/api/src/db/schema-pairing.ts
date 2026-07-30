@@ -57,15 +57,25 @@ export const pairings = pgTable(
     supplierUrl: text("supplier_url"),
     state: pairingState("state").notNull().default("navrhnute"),
     // Kto a kedy potvrdil zhodu (#45) — vyplnené PRÁVE VTEDY, keď je
-    // state='potvrdene' (viď CHECK nižšie). `onDelete: "set null"` mirror
-    // `audit_events.actor_user_id` — zmazanie používateľa nesmie zmazať
-    // históriu potvrdenia, len stratiť odkaz na to, KTO presne to bol.
-    confirmedBy: uuid("confirmed_by").references(() => users.id, { onDelete: "set null" }),
+    // state='potvrdene' (viď CHECK nižšie). `onDelete: "restrict"` (NIE
+    // "set null", pôvodná voľba pri #44 — mirror `audit_events.actor_user_id` —
+    // ktorá tu nikdy nemohla reálne nastať): `pairing_confirmation_ck`
+    // vyžaduje `confirmed_by` vyplnené vždy, keď state='potvrdene', takže
+    // set-null by vždy porušil CHECK skôr, než by k nemu vôbec došlo, a
+    // Postgres by delete zamietol so zavádzajúcou CHECK-violation namiesto
+    // jasnej FK-violation. "restrict" mení len TOTO — deklarovaný zámer teraz
+    // zodpovedá skutočnému, nezmenenému správaniu: používateľa, ktorý potvrdil
+    // pairing, nemožno zmazať, história potvrdenia (KTO a KEDY) ostáva
+    // nedotknutá (review nález na PR #50, issue 44).
+    confirmedBy: uuid("confirmed_by").references(() => users.id, { onDelete: "restrict" }),
     confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     index("pairing_state_idx").on(t.state),
+    // FK stĺpec bez indexu → seq-scan cez `pairing` pri KAŽDOM zmazaní/update
+    // `users.id` (review nález na PR #50, issue 44).
+    index("pairing_confirmed_by_idx").on(t.confirmedBy),
     // Automat vynútený databázou, nie len kódom (rovnaký vzor ako
     // `catalog_snapshot_reason_ck`, ale rozšírený na DVA stĺpce naraz):
     // `confirmed_by`/`confirmed_at` sú buď OBA null (state navrhnute), alebo
