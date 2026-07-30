@@ -8,7 +8,7 @@ import { record } from "../modules/audit/service.js";
 import { ORDERS_EXPORT_URL_NOT_CONFIGURED, type OrdersIngestResult, type RunOrdersIngest } from "../modules/orders/ingest.js";
 import { listKnownStatusNames, listOpenStatusNames, replaceOpenStatusNames } from "../modules/orders/open-statuses.js";
 import { getOrderDetail, listOpenOrderLinesBySupplier } from "../modules/orders/queries.js";
-import { setOrderLineState } from "../modules/orders/state.js";
+import { setOrderLineOrdered, setOrderLineState } from "../modules/orders/state.js";
 import { requireRole, requireUser, type AppBindings } from "./middleware.js";
 import { requireSameOrigin } from "./origin-check.js";
 
@@ -18,6 +18,8 @@ const orderLineParam = z.object({ lineId: z.string().uuid() });
 // schémou, `schema-orders.ts`) — nikdy ručne prepísaná únia, ktorá by sa mohla
 // rozísť pri pridaní ďalšieho stavu.
 const orderLineStateBody = z.object({ state: z.enum(orderLineState.enumValues) });
+// issue 60: odškrtávacie políčko "objednané u dodávateľa".
+const orderLineOrderedBody = z.object({ ordered: z.boolean() });
 // issue 59: `min(1)` len zachytí zjavne prázdny request skôr, než sa vôbec
 // dostane k `replaceOpenStatusNames` — SKUTOČNÉ čistenie (normalizácia,
 // orezanie prázdnych/duplicít po trime) beží až v module, lebo "['   ']"
@@ -110,6 +112,36 @@ export function registerOrdersRoutes(
       }
       log.info({ actorUserId: user.userId, lineId, state }, "zmena stavu riadku objednávky");
       return c.json({ ok: true as const, state });
+    },
+  );
+
+  // issue 60: odškrtávacie políčko "objednané u dodávateľa" — NEZÁVISLÉ od
+  // stavu vyššie (viď `modules/orders/state.ts`'s `setOrderLineOrdered`
+  // komentár). Rovnaké oprávnenie ako zmena stavu.
+  app.post(
+    "/api/orders/lines/:lineId/ordered",
+    requireSameOrigin(),
+    requireUser(db),
+    requireRole("admin", "manazer"),
+    zValidator("param", orderLineParam),
+    zValidator("json", orderLineOrderedBody),
+    async (c) => {
+      const { lineId } = c.req.valid("param");
+      const { ordered } = c.req.valid("json");
+      const user = c.get("user");
+      const now = new Date();
+
+      const result = await setOrderLineOrdered(db, {
+        lineId,
+        ordered,
+        actorUserId: user.userId,
+        now,
+      });
+      if (result === "not_found") {
+        return c.json({ error: "Riadok objednávky sa nenašiel" }, 404);
+      }
+      log.info({ actorUserId: user.userId, lineId, ordered }, "zmena príznaku objednané riadku objednávky");
+      return c.json({ ok: true as const, ordered });
     },
   );
 

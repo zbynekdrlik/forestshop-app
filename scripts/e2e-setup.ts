@@ -60,6 +60,13 @@ const E2E_NAV_EMAIL = "e2e-nav@forestshop.sk"; // musí sa zhodovať s hodnotou 
 // namiesto ďalšieho prihlásenia pod zdieľaným `e2e@forestshop.sk`.
 const E2E_OTVORENE_STAVY_EMAIL = "e2e-otvorene-stavy@forestshop.sk"; // musí sa zhodovať s hodnotou v orders.spec.ts
 
+// issue 60: rovnaký mechanizmus a dôvod ako `E2E_OTVORENE_STAVY_EMAIL`
+// vyššie — balík je UŽ na hranici `MAX_ATTEMPTS` (komentár vyššie), takže
+// nový test (odškrtávacie políčko + hromadné označenie skupiny) dostáva
+// VLASTNÝ izolovaný účet namiesto ďalšieho prihlásenia pod zdieľaným
+// `e2e@forestshop.sk`.
+const E2E_OBJEDNANE_EMAIL = "e2e-objednane@forestshop.sk"; // musí sa zhodovať s hodnotou v orders.spec.ts
+
 const { db, pool } = createDb();
 // Konštantný literál bez interpolácie — obyčajný reťazec je tu rovnako bezpečný
 // ako `sql` tagovaná šablóna (tú používa ekvivalentný apps/api/tests/helpers/db.ts),
@@ -117,6 +124,12 @@ await db.insert(users).values({
 });
 await db.insert(users).values({
   email: E2E_OTVORENE_STAVY_EMAIL,
+  passwordHash: await hashPassword(E2E_HESLO),
+  displayName: "E2E Manažér",
+  role: "manazer",
+});
+await db.insert(users).values({
+  email: E2E_OBJEDNANE_EMAIL,
   passwordHash: await hashPassword(E2E_HESLO),
   displayName: "E2E Manažér",
   role: "manazer",

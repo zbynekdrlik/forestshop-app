@@ -1,4 +1,4 @@
-import { asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
 import { orderLines, orders, products, supplierContacts, variants, type OrderLineState } from "../../db/schema.js";
 import { extractSupplierLink } from "../catalog/supplier-link.js";
@@ -16,6 +16,9 @@ export interface OpenOrderLine {
   readonly sizeLabel: string | null;
   readonly quantity: number;
   readonly state: OrderLineState;
+  // issue 60: nezávislý príznak "objednané u dodávateľa" (viď komentár k
+  // `orderLines.ordered` v `schema-orders.ts`) — oddelené od `state` vyššie.
+  readonly ordered: boolean;
   // issue 67: odkaz na tovar u dodávateľa (extrahovaný z `product.internalNote`
   // cez `extractSupplierLink`) a kód tovaru u dodávateľa (`variant.externalCode`,
   // priamo). `supplierUrl` je `null`, keď v `internalNote` nie je odkaz —
@@ -77,6 +80,7 @@ export async function listOpenOrderLinesBySupplier(db: Database): Promise<readon
       sizeLabel: variants.sizeLabel,
       quantity: orderLines.quantity,
       state: orderLines.state,
+      ordered: orderLines.ordered,
       supplier: products.supplier,
       internalNote: products.internalNote,
       externalCode: variants.externalCode,
@@ -107,6 +111,7 @@ export async function listOpenOrderLinesBySupplier(db: Database): Promise<readon
       sizeLabel: row.sizeLabel,
       quantity: row.quantity,
       state: row.state,
+      ordered: row.ordered,
       supplierUrl: supplierLink.url,
       supplierNote: supplierLink.note,
       externalCode: row.externalCode,
@@ -135,6 +140,32 @@ export async function listOpenOrderLinesBySupplier(db: Database): Promise<readon
   }));
 }
 
+// issue 60: ID riadkov, ktoré `listOpenOrderLinesBySupplier` PRÁVE TERAZ
+// zobrazuje pre JEDNÉHO dodávateľa — používa `modules/orders/state.ts`'s
+// `setSupplierLinesOrdered` (hromadné označenie skupiny), aby hromadná akcia
+// vždy dopadla presne na to, čo manažér na obrazovke "Na objednanie" vidí.
+// Rovnaký filter (otvorené Shoptet stavy) a rovnaký zástupný kľúč
+// (`NEZNAMY_DODAVATEL`) ako hlavný zoskupovací dopyt vyššie — zámerne
+// SAMOSTATNÝ, užší dopyt (len ID, žiadne meno/veľkosť/odkaz na dodávateľa),
+// nie filtrovanie výstupu `listOpenOrderLinesBySupplier` v pamäti, aby
+// hromadná akcia nemusela ťahať VŠETKÝCH dodávateľov len kvôli jednému.
+export async function listOpenOrderLineIdsForSupplier(db: Database, supplier: string): Promise<readonly string[]> {
+  const openStatuses = await listOpenStatusNames(db);
+  if (openStatuses.length === 0) return [];
+
+  const supplierFilter = supplier === NEZNAMY_DODAVATEL ? isNull(products.supplier) : eq(products.supplier, supplier);
+
+  const rows = await db
+    .select({ lineId: orderLines.id })
+    .from(orderLines)
+    .innerJoin(orders, eq(orders.id, orderLines.orderId))
+    .innerJoin(variants, eq(variants.code, orderLines.variantCode))
+    .innerJoin(products, eq(products.key, variants.productKey))
+    .where(and(inArray(orders.statusName, [...openStatuses]), supplierFilter));
+
+  return rows.map((row) => row.lineId);
+}
+
 export interface OrderDetailLine {
   readonly lineId: string;
   readonly variantCode: string;
@@ -143,6 +174,8 @@ export interface OrderDetailLine {
   readonly supplier: string;
   readonly quantity: number;
   readonly state: OrderLineState;
+  // issue 60: rovnaký nezávislý príznak ako `OpenOrderLine.ordered`.
+  readonly ordered: boolean;
   // issue 70: tretia čítacia cesta zjednotená s `listOpenOrderLinesBySupplier`
   // a `mail.ts`'s `loadOutstandingLines` — rovnaký zámer, rovnaké polia.
   readonly supplierUrl: string | null;
@@ -172,6 +205,7 @@ export async function getOrderDetail(db: Database, id: string): Promise<OrderDet
       supplier: products.supplier,
       quantity: orderLines.quantity,
       state: orderLines.state,
+      ordered: orderLines.ordered,
       internalNote: products.internalNote,
       externalCode: variants.externalCode,
     })
@@ -197,6 +231,7 @@ export async function getOrderDetail(db: Database, id: string): Promise<OrderDet
         supplier: row.supplier ?? NEZNAMY_DODAVATEL,
         quantity: row.quantity,
         state: row.state,
+        ordered: row.ordered,
         supplierUrl: supplierLink.url,
         supplierNote: supplierLink.note,
         externalCode: row.externalCode,

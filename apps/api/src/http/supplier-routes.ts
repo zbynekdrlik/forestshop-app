@@ -6,6 +6,7 @@ import { log } from "../logger.js";
 import { record } from "../modules/audit/service.js";
 import type { MailTransport } from "../modules/mail/transport.js";
 import { buildSupplierOrderMailContent, sendSupplierOrderMail } from "../modules/orders/mail.js";
+import { setSupplierLinesOrdered } from "../modules/orders/state.js";
 import { setSupplierContactEmail } from "../modules/orders/supplier-contact.js";
 import { requireRole, requireUser, type AppBindings } from "./middleware.js";
 import { requireSameOrigin } from "./origin-check.js";
@@ -17,6 +18,9 @@ const supplierParam = z.object({ supplier: z.string().min(1) });
 const setSupplierEmailBody = z.object({
   email: z.preprocess((value) => (value === "" ? null : value), z.string().email().nullable()),
 });
+
+// issue 60: hromadné označenie/zrušenie celej skupiny dodávateľa ako objednané.
+const setSupplierOrderedBody = z.object({ ordered: z.boolean() });
 
 export function registerSupplierRoutes(app: Hono<AppBindings>, db: Database, sendMail: MailTransport | undefined): void {
   // E-mailový kontakt dodávateľa (#31) — rovnaké oprávnenie ako zmena stavu
@@ -38,6 +42,32 @@ export function registerSupplierRoutes(app: Hono<AppBindings>, db: Database, sen
       await setSupplierContactEmail(db, { supplier, email, actorUserId: user.userId, now });
       log.info({ actorUserId: user.userId, supplier, hasEmail: email !== null }, "zmena e-mailu dodávateľa");
       return c.json({ ok: true as const, email });
+    },
+  );
+
+  // issue 60: hromadné "označiť celú skupinu dodávateľa ako objednané"
+  // (opačným smerom = zrušenie). Rovnaké oprávnenie + CSRF disciplína ako
+  // zmena stavu jedného riadku — `setSupplierLinesOrdered` sama nájde presne
+  // tie riadky, ktoré `/api/orders/open` pre tohto dodávateľa PRÁVE TERAZ
+  // zobrazuje (viď komentár v `modules/orders/state.ts`).
+  app.put(
+    "/api/suppliers/:supplier/order-lines/ordered",
+    requireSameOrigin(),
+    requireUser(db),
+    requireRole("admin", "manazer"),
+    zValidator("param", supplierParam),
+    zValidator("json", setSupplierOrderedBody),
+    async (c) => {
+      const { supplier } = c.req.valid("param");
+      const { ordered } = c.req.valid("json");
+      const user = c.get("user");
+      const now = new Date();
+      const result = await setSupplierLinesOrdered(db, { supplier, ordered, actorUserId: user.userId, now });
+      log.info(
+        { actorUserId: user.userId, supplier, ordered, lineCount: result.lineCount },
+        "hromadná zmena príznaku objednané pre dodávateľa",
+      );
+      return c.json({ ok: true as const, ordered, lineCount: result.lineCount });
     },
   );
 

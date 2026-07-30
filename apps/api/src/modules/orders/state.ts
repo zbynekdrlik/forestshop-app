@@ -1,7 +1,8 @@
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
 import { orderLines, type OrderLineState } from "../../db/schema.js";
 import { record } from "../audit/service.js";
+import { listOpenOrderLineIdsForSupplier } from "./queries.js";
 
 export type SetOrderLineStateResult = "ok" | "not_found";
 
@@ -55,4 +56,97 @@ export async function setOrderLineState(
 
     return "ok";
   });
+}
+
+export type SetOrderLineOrderedResult = "ok" | "not_found";
+
+export interface SetOrderLineOrderedInput {
+  readonly lineId: string;
+  readonly ordered: boolean;
+  readonly actorUserId: string;
+  readonly now: Date;
+}
+
+// issue 60: odškrtávacie políčko "objednané u dodávateľa" — NEZÁVISLÝ
+// príznak od `state` vyššie (viď komentár k `orderLines.ordered` v
+// `schema-orders.ts`). Rovnaký vzor ako `setOrderLineState`: jedna
+// transakcia, `.for("update")` proti tej istej race medzi dvoma súbežnými
+// zmenami TOHO ISTÉHO riadku, audit v tej istej transakcii.
+export async function setOrderLineOrdered(
+  db: Database,
+  input: SetOrderLineOrderedInput,
+): Promise<SetOrderLineOrderedResult> {
+  return db.transaction(async (tx) => {
+    const [line] = await tx
+      .select({ orderId: orderLines.orderId, variantCode: orderLines.variantCode, ordered: orderLines.ordered })
+      .from(orderLines)
+      .where(eq(orderLines.id, input.lineId))
+      .for("update")
+      .limit(1);
+    if (line === undefined) return "not_found";
+
+    await tx.update(orderLines).set({ ordered: input.ordered }).where(eq(orderLines.id, input.lineId));
+
+    await record(tx, {
+      at: input.now,
+      actorUserId: input.actorUserId,
+      action: "order_line.ordered.changed",
+      entity: "order_line",
+      entityId: input.lineId,
+      data: {
+        orderId: line.orderId,
+        variantCode: line.variantCode,
+        from: line.ordered,
+        to: input.ordered,
+      },
+    });
+
+    return "ok";
+  });
+}
+
+export interface SetSupplierLinesOrderedInput {
+  readonly supplier: string;
+  readonly ordered: boolean;
+  readonly actorUserId: string;
+  readonly now: Date;
+}
+
+export interface SetSupplierLinesOrderedResult {
+  readonly lineCount: number;
+}
+
+// issue 60: hromadné "označiť celú skupinu dodávateľa ako objednané"/zrušenie
+// (stará appka's `markGroupOrdered`, bez jej `commitSeq`/optimistic-retry
+// zložitosti — appka má jedného-pár súčasne prihlásených manažérov, nie
+// desiatky súbežných editorov, rovnaký zámer ako zjednodušenie spomenuté v
+// review na #59/#44). Zoznam dotknutých riadkov sa počíta z RIADKOV, ktoré
+// `GET /api/orders/open` PRÁVE TERAZ zobrazuje pre daného dodávateľa
+// (`listOpenOrderLineIdsForSupplier`) — teda presne to, čo manažér na
+// obrazovke vidí, nie všetky historické riadky toho dodávateľa. Samotný
+// zápis + JEDEN agregovaný audit záznam (namiesto jedného na riadok — inak
+// by kliknutie na 20-riadkovú skupinu vyrobilo 20 auditových riadkov za
+// jednu manažérovu akciu) bežia v JEDNEJ transakcii. Prázdna skupina (0
+// riadkov) je NEŠKODNÝ no-op, nie chyba — nič sa nezapíše, ani do auditu.
+export async function setSupplierLinesOrdered(
+  db: Database,
+  input: SetSupplierLinesOrderedInput,
+): Promise<SetSupplierLinesOrderedResult> {
+  const lineIds = await listOpenOrderLineIdsForSupplier(db, input.supplier);
+  if (lineIds.length === 0) return { lineCount: 0 };
+
+  await db.transaction(async (tx) => {
+    await tx.update(orderLines).set({ ordered: input.ordered }).where(inArray(orderLines.id, [...lineIds]));
+
+    await record(tx, {
+      at: input.now,
+      actorUserId: input.actorUserId,
+      action: "order_line.ordered.bulk_changed",
+      entity: "supplier_contact",
+      entityId: input.supplier,
+      data: { supplier: input.supplier, ordered: input.ordered, lineIds, lineCount: lineIds.length },
+    });
+  });
+
+  return { lineCount: lineIds.length };
 }

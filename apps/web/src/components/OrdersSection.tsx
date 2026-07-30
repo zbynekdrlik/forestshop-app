@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type JSX } from "react";
 import type { Me } from "../api.js";
+import { OrderLineRow } from "./OrderLineRow.js";
 import { OrderOpenStatusesPanel } from "./OrderOpenStatusesPanel.js";
 import {
   fetchOpenOrders,
@@ -7,18 +8,13 @@ import {
   OrdersUnauthorizedError,
   sendSupplierOrderMail,
   setSupplierEmail,
+  setSupplierLinesOrdered,
+  updateOrderLineOrdered,
   updateOrderLineState,
   type OrderLine,
   type OrderMailPreview,
   type SupplierOpenOrders,
 } from "../ordersApi.js";
-
-const STATE_LABELS: Record<OrderLine["state"], string> = {
-  objednane: "Objednané",
-  caka_sa: "Čaká sa",
-  skladom: "Skladom",
-  nedostupne: "Nedostupné",
-};
 
 // Rovnaké dve role, ktoré server vyžaduje pre
 // `POST /api/orders/lines/:lineId/state` (`requireRole("admin", "manazer")`,
@@ -29,7 +25,10 @@ const CAN_CHANGE_STATE_ROLES: ReadonlySet<Me["role"]> = new Set(["admin", "manaz
 
 // Riadky, ktoré ešte treba objednať u dodávateľa (rovnaký zámer ako stará
 // appka's `outstandingOf`/`!isHandled`, #31) — východiskový stav pred tým,
-// než manažér čokoľvek ručne posunie ďalej.
+// než manažér čokoľvek ručne posunie ďalej. Toto gejtuje LEN tlačidlo
+// "odoslať objednávku mailom" (server-strana `mail.ts` filtruje rovnako) —
+// je to NEZÁVISLÉ od nového `ordered` príznaku (issue 60) nižšie, mail sa dá
+// odoslať/skopírovať bez ohľadu na to, či je riadok už odškrtnutý.
 const OUTSTANDING_STATE: OrderLine["state"] = "objednane";
 
 export function OrdersSection({
@@ -101,6 +100,69 @@ export function OrdersSection({
         })
         .finally(() => {
           setBusyLineId(null);
+        });
+    },
+    [onSessionExpired],
+  );
+
+  // issue 60: odškrtávacie políčko "objednané u dodávateľa" — per riadok aj
+  // hromadne pre celú skupinu dodávateľa. NEZÁVISLÉ od `changeState` vyššie.
+  const [busyOrderedLineId, setBusyOrderedLineId] = useState<string | null>(null);
+  const [busyOrderedSupplier, setBusyOrderedSupplier] = useState<string | null>(null);
+
+  const changeOrdered = useCallback(
+    (lineId: string, ordered: boolean) => {
+      setStateError("");
+      setBusyOrderedLineId(lineId);
+      updateOrderLineOrdered(lineId, ordered)
+        .then(() => {
+          setSuppliers((current) =>
+            current.map((group) => ({
+              ...group,
+              lines: group.lines.map((line) => (line.lineId === lineId ? { ...line, ordered } : line)),
+            })),
+          );
+        })
+        .catch((err: unknown) => {
+          if (err instanceof OrdersUnauthorizedError) {
+            onSessionExpired();
+            return;
+          }
+          setStateError(err instanceof Error ? err.message : "Zmena príznaku objednané sa nepodarila.");
+        })
+        .finally(() => {
+          setBusyOrderedLineId(null);
+        });
+    },
+    [onSessionExpired],
+  );
+
+  // Hromadné označenie/zrušenie CELEJ skupiny dodávateľa naraz (stará appka's
+  // `markGroupOrdered` — jedno tlačidlo, ktoré prepína smer podľa toho, či je
+  // skupina UŽ celá objednaná, `webreview/static/app.js`'s `allOrdered`).
+  const toggleGroupOrdered = useCallback(
+    (supplier: string, ordered: boolean) => {
+      setStateError("");
+      setBusyOrderedSupplier(supplier);
+      setSupplierLinesOrdered(supplier, ordered)
+        .then(() => {
+          setSuppliers((current) =>
+            current.map((group) =>
+              group.supplier === supplier
+                ? { ...group, lines: group.lines.map((line) => ({ ...line, ordered })) }
+                : group,
+            ),
+          );
+        })
+        .catch((err: unknown) => {
+          if (err instanceof OrdersUnauthorizedError) {
+            onSessionExpired();
+            return;
+          }
+          setStateError(err instanceof Error ? err.message : "Hromadné označenie skupiny sa nepodarilo.");
+        })
+        .finally(() => {
+          setBusyOrderedSupplier(null);
         });
     },
     [onSessionExpired],
@@ -283,6 +345,20 @@ export function OrdersSection({
             </div>
             {canChangeState && (
               <div className="tosup-actions">
+                {/* issue 60: hromadné označenie/zrušenie CELEJ skupiny naraz —
+                    jedno tlačidlo, ktoré prepína smer podľa toho, či je skupina
+                    UŽ celá odškrtnutá (rovnaký zámer ako stará appka's
+                    `markGroupOrdered`/`allOrdered`). */}
+                <button
+                  type="button"
+                  className="btn sm ghost"
+                  disabled={busyOrderedSupplier === group.supplier}
+                  onClick={() => {
+                    toggleGroupOrdered(group.supplier, !group.lines.every((l) => l.ordered));
+                  }}
+                >
+                  {group.lines.every((l) => l.ordered) ? "↺ Zrušiť označenie skupiny" : "✔ Označiť skupinu ako objednané"}
+                </button>
                 <button type="button" className="btn sm ghost" onClick={() => { copyOrderToClipboard(group.supplier); }}>
                   📋 Kopírovať objednávku
                 </button>
@@ -327,6 +403,10 @@ export function OrdersSection({
           <table className="orders-table">
             <thead>
               <tr>
+                {/* issue 60: odškrtávacie políčko — JEDINÉ miesto na obrazovke,
+                    ktoré sa smie volať "Objednané" (viď `STATE_LABELS`
+                    a stĺpec dátumu nižšie, obe premenované, aby nekolidovali). */}
+                <th>Objednané</th>
                 <th>Objednávka</th>
                 <th>Zákazník</th>
                 <th>Kód</th>
@@ -335,79 +415,21 @@ export function OrdersSection({
                 <th>Množstvo</th>
                 <th>Dodávateľ</th>
                 <th>Stav</th>
-                <th>Objednané</th>
+                <th>Dátum objednávky</th>
                 <th>Komentár</th>
               </tr>
             </thead>
             <tbody>
               {group.lines.map((line) => (
-                <tr
+                <OrderLineRow
                   key={line.lineId}
-                  className={"order-row state-" + line.state}
-                  data-testid={`order-line-${line.lineId}`}
-                >
-                  <td>{line.externalOrderId}</td>
-                  <td>{line.customerName}</td>
-                  <td>{line.variantCode}</td>
-                  <td>{line.variantName}</td>
-                  <td>{line.sizeLabel ?? "—"}</td>
-                  <td className="ord-qty">{line.quantity} ks</td>
-                  <td className="ord-supplier-cell" data-testid={`supplier-link-${line.lineId}`}>
-                    {line.supplierUrl !== null ? (
-                      <a
-                        href={line.supplierUrl}
-                        target="_blank"
-                        rel="noreferrer noopener"
-                        className="ord-supplier-link"
-                        // issue 72: variantName sám nestačí — dva riadky
-                        // toho istého produktu v rôznych veľkostiach majú
-                        // zhodný variantName, líšia sa len variantCode.
-                        aria-label={`Odkaz na dodávateľa — ${line.variantName} (${line.variantCode})`}
-                      >
-                        Odkaz na dodávateľa
-                      </a>
-                    ) : line.supplierNote !== null ? (
-                      <span className="ord-supplier-note" title={line.supplierNote}>
-                        {line.supplierNote}
-                      </span>
-                    ) : line.externalCode === null ? (
-                      "—"
-                    ) : null}
-                    {line.externalCode !== null && <div className="ord-supplier-code">kód {line.externalCode}</div>}
-                  </td>
-                  <td>
-                    {canChangeState ? (
-                      <select
-                        // Code review finding (#25): pôvodne bez slova "stav"
-                        // v aria-labeli (obchádzka Playwright's substring
-                        // `getByLabel("Stav")` kolízie s katalógovým filtrom),
-                        // čo by čítačke obrazovky neoznámilo, čo tento prvok
-                        // robí. Skutočná oprava patrí na stranu KOLÍDUJÚCEHO
-                        // testu (`catalog.spec.ts` teraz používa
-                        // `{ exact: true }`), nie na obetovanie prístupnosti
-                        // tu — tento select smie mať plnohodnotný popis.
-                        aria-label={`Zmeniť stav riadku objednávky ${line.externalOrderId} / ${line.variantCode}`}
-                        data-testid={`state-select-${line.lineId}`}
-                        className="ord-state-select"
-                        value={line.state}
-                        disabled={busyLineId === line.lineId}
-                        onChange={(e) => {
-                          changeState(line.lineId, e.target.value as OrderLine["state"]);
-                        }}
-                      >
-                        {(Object.keys(STATE_LABELS) as OrderLine["state"][]).map((s) => (
-                          <option key={s} value={s}>
-                            {STATE_LABELS[s]}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      STATE_LABELS[line.state]
-                    )}
-                  </td>
-                  <td>{new Date(line.placedAt).toLocaleDateString("sk-SK")}</td>
-                  <td>{line.comment ?? "—"}</td>
-                </tr>
+                  line={line}
+                  canChangeState={canChangeState}
+                  busyLineId={busyLineId}
+                  busyOrderedLineId={busyOrderedLineId}
+                  onChangeState={changeState}
+                  onChangeOrdered={changeOrdered}
+                />
               ))}
             </tbody>
           </table>
