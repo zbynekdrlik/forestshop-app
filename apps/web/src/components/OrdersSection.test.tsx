@@ -124,13 +124,51 @@ it("riadok s odkazom na dodávateľa zobrazí klikateľný odkaz aj kód dodáva
 
   const bunka = await screen.findByTestId(`supplier-link-${LINE_STARA.lineId}`);
   // issue 70: aria-label nesie názov produktu, aby riadky nemali rovnaké
-  // prístupné meno — viditeľný text ostáva "Odkaz na dodávateľa".
+  // prístupné meno — viditeľný text ostáva "Odkaz na dodávateľa". issue 72:
+  // samotný variantName ešte nestačí — dva riadky toho istého produktu v
+  // rôznych veľkostiach majú rovnaký variantName, líšia sa len variantCode —
+  // preto ho aria-label musí niesť tiež.
   const odkaz = within(bunka).getByRole<HTMLAnchorElement>("link", {
-    name: `Odkaz na dodávateľa — ${LINE_STARA.variantName}`,
+    name: `Odkaz na dodávateľa — ${LINE_STARA.variantName} (${LINE_STARA.variantCode})`,
   });
   expect(odkaz.getAttribute("href")).toBe("https://www.huntingshop.eu/wild-t-green-nohavice");
   expect(odkaz.getAttribute("rel")).toBe("noreferrer noopener");
   expect(bunka.textContent).toContain("OB832");
+});
+
+// issue 72: dva riadky TOHO ISTÉHO produktu v DVOCH rôznych veľkostiach majú
+// zhodný variantName — bez variantCode v aria-labeli by mali identické
+// prístupné meno a čítačka obrazovky by ich nevedela rozlíšiť.
+it("dva riadky rovnakého produktu v rôznych veľkostiach majú odlišné prístupné mená odkazu", async () => {
+  const velkostS = {
+    ...LINE_STARA,
+    lineId: "33333333-3333-3333-3333-333333333333",
+    variantCode: "A-1/S",
+    sizeLabel: "S",
+    supplierUrl: "https://www.huntingshop.eu/nohavice-s",
+    supplierNote: "https://www.huntingshop.eu/nohavice-s",
+  };
+  const velkostM = {
+    ...LINE_STARA,
+    lineId: "44444444-4444-4444-4444-444444444444",
+    variantCode: "A-1/M",
+    sizeLabel: "M",
+    supplierUrl: "https://www.huntingshop.eu/nohavice-m",
+    supplierNote: "https://www.huntingshop.eu/nohavice-m",
+  };
+  fetchOpenOrders.mockResolvedValue([{ supplier: "Dodávateľ Alfa", lines: [velkostS, velkostM], email: null }]);
+
+  render(<OrdersSection role="citanie" onSessionExpired={() => {}} />);
+
+  const bunkaS = await screen.findByTestId(`supplier-link-${velkostS.lineId}`);
+  const bunkaM = await screen.findByTestId(`supplier-link-${velkostM.lineId}`);
+  const odkazS = within(bunkaS).getByRole<HTMLAnchorElement>("link", {
+    name: `Odkaz na dodávateľa — ${velkostS.variantName} (${velkostS.variantCode})`,
+  });
+  const odkazM = within(bunkaM).getByRole<HTMLAnchorElement>("link", {
+    name: `Odkaz na dodávateľa — ${velkostM.variantName} (${velkostM.variantCode})`,
+  });
+  expect(odkazS.getAttribute("aria-label")).not.toBe(odkazM.getAttribute("aria-label"));
 });
 
 it("riadok bez odkazu, len s poznámkou (internalNote bez URL), zobrazí obyčajný text namiesto odkazu", async () => {

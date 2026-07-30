@@ -75,4 +75,35 @@ describe("extractSupplierLink", () => {
       note: "Primárny https://a.example.com/prvy, záložný https://b.example.com/druhy",
     });
   });
+
+  // issue 72: naivné orezanie triedy znakov `)]}...` bralo AJ zátvorku, ktorá
+  // je súčasťou samotnej URL (nie obalujúceho textu) — treba počítať
+  // vyváženosť zátvoriek v kandidátnej URL, nie orezávať naslepo.
+  it("zátvorka VYVÁŽENÁ vnútri samotnej url sa neorezáva (je súčasťou adresy)", () => {
+    expect(extractSupplierLink("https://shop.example.com/a_(b)")).toEqual({
+      url: "https://shop.example.com/a_(b)",
+      note: "https://shop.example.com/a_(b)",
+    });
+  });
+
+  it("zmiešaný koniec — vyvážená zátvorka v url + koncová bodka mimo nej", () => {
+    expect(extractSupplierLink("Pozri https://shop.example.com/a_(b).")).toEqual({
+      url: "https://shop.example.com/a_(b)",
+      note: "Pozri https://shop.example.com/a_(b).",
+    });
+  });
+
+  it("hranatá zátvorka vyvážená vnútri url sa neorezáva", () => {
+    expect(extractSupplierLink("https://shop.example.com/a_[b]")).toEqual({
+      url: "https://shop.example.com/a_[b]",
+      note: "https://shop.example.com/a_[b]",
+    });
+  });
+
+  it("hranatá zátvorka NEVYVÁŽENÁ (obaľuje celý odkaz) sa aj naďalej orezáva", () => {
+    expect(extractSupplierLink("[pozri https://shop.example.com/y]")).toEqual({
+      url: "https://shop.example.com/y",
+      note: "[pozri https://shop.example.com/y]",
+    });
+  });
 });
