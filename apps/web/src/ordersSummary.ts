@@ -95,9 +95,12 @@ export function computeVariantTotals(
 // Chip sa zobrazí LEN keď produkt genuinely opakuje naprieč VIACERÝMI
 // riadkami dodávateľa (`lineCount >= 2`, rovnaká podmienka ako stará appka's
 // `all.lines < 2` → žiadny chip) — jediný riadok produktu by chip len
-// zopakoval množstvo, ktoré je už vidno v stĺpci vedľa.
+// zopakoval množstvo, ktoré je už vidno v stĺpci vedľa. issue 63 (nález pri
+// kontrole issue 62): rovnako sa chip schová, keď `remaining === 0` — celý
+// opakovaný produkt je UŽ vybavený naprieč všetkými riadkami, chip by inak
+// navždy visel s textom "Σ spolu 0 ks" aj keď netreba nič objednať.
 export function formatVariantTotalChip(vt: VariantTotal): { readonly text: string; readonly title: string } | null {
-  if (vt.lineCount < 2) return null;
+  if (vt.lineCount < 2 || vt.remaining === 0) return null;
   return {
     text: `Σ spolu ${String(vt.remaining)} ks`,
     title: `Spolu vo všetkých objednávkach: ${String(vt.total)} ks · nevybavené: ${String(vt.remaining)} ks`,
