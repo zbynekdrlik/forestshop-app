@@ -64,3 +64,42 @@ export function formatOrderSummaryText(summary: OrderLinesSummary, supplierLabel
     (bits.length > 0 ? ` · ${bits.join(" · ")}` : "")
   );
 }
+
+// issue 62 — priamy náprotivok starej appky's `groupQtyTotals`/`totalChipSpec`
+// (`app.js:1918-1962`). Kľúčované podľa `variantCode` (ten už v sebe nesie aj
+// veľkosť, `.claude/rules/orders.md`), počítané nad CELOU (nefiltrovanou)
+// množinou riadkov jedného dodávateľa — volajúci VŽDY posiela
+// `group.lines`, nikdy pohľad zúžený prepínačom "skryť vybavené", aby chip
+// nezávisel od toho prepínača (rovnaký zámer ako stará appka's komentár
+// "same outstandingOf scope").
+export interface VariantTotal {
+  readonly total: number;
+  readonly remaining: number;
+  readonly lineCount: number;
+}
+
+export function computeVariantTotals(
+  lines: readonly Pick<OrderLine, "variantCode" | "quantity" | "ordered" | "state">[],
+): ReadonlyMap<string, VariantTotal> {
+  const totals = new Map<string, { total: number; remaining: number; lineCount: number }>();
+  for (const line of lines) {
+    const entry = totals.get(line.variantCode) ?? { total: 0, remaining: 0, lineCount: 0 };
+    entry.total += line.quantity;
+    if (!isLineResolved(line)) entry.remaining += line.quantity;
+    entry.lineCount += 1;
+    totals.set(line.variantCode, entry);
+  }
+  return totals;
+}
+
+// Chip sa zobrazí LEN keď produkt genuinely opakuje naprieč VIACERÝMI
+// riadkami dodávateľa (`lineCount >= 2`, rovnaká podmienka ako stará appka's
+// `all.lines < 2` → žiadny chip) — jediný riadok produktu by chip len
+// zopakoval množstvo, ktoré je už vidno v stĺpci vedľa.
+export function formatVariantTotalChip(vt: VariantTotal): { readonly text: string; readonly title: string } | null {
+  if (vt.lineCount < 2) return null;
+  return {
+    text: `Σ spolu ${String(vt.remaining)} ks`,
+    title: `Spolu vo všetkých objednávkach: ${String(vt.total)} ks · nevybavené: ${String(vt.remaining)} ks`,
+  };
+}

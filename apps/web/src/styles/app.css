@@ -701,6 +701,23 @@ tr:last-child td {
   font-weight: var(--fs-weight-semibold);
   color: var(--fs-ink);
 }
+/* issue 62: súčet kusov toho istého produktu naprieč objednávkami dodávateľa
+   — neklikateľná pilulka, zámerne odlišná od interaktívneho `.chip`
+   (dodávateľský filter), aby sa nedali zameniť za ovládací prvok. */
+.qty-total-chip {
+  display: inline-flex;
+  align-items: center;
+  margin-left: var(--fs-space-2);
+  padding: 0 var(--fs-space-2);
+  font-size: var(--fs-text-xs);
+  font-weight: var(--fs-weight-medium);
+  color: var(--fs-brand);
+  background: var(--fs-surface-alt);
+  border: 1px solid var(--fs-border);
+  border-radius: 999px;
+  white-space: nowrap;
+  cursor: help;
+}
 .ord-state-select {
   padding: var(--fs-space-1) var(--fs-space-2);
   border: 1px solid var(--fs-border);

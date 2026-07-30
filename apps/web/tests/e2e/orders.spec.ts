@@ -36,12 +36,15 @@ test("manažér filtruje podľa dodávateľa, vidí súhrn ostáva vybaviť a sk
   await page.getByRole("button", { name: "Prihlásiť sa" }).click();
   await expect(page.getByRole("heading", { name: "Na objednanie" })).toBeVisible();
 
-  await expect(page.getByTestId("supplier-chip-all")).toHaveText("Všetci (2)");
+  // issue 62: fixtúra pridala DODAVATEL-TEST-2 (2 riadky, `scripts/
+  // e2e-setup.ts`'s "60055/10" súčtový pár) — celkový počet aj globálny
+  // súhrn nižšie preto počítajú so 4 riadkami, nie s pôvodnými 2.
+  await expect(page.getByTestId("supplier-chip-all")).toHaveText("Všetci (4)");
   await expect(page.getByTestId("supplier-chip-DODAVATEL-TEST-1")).toHaveText("DODAVATEL-TEST-1 (1)");
   await expect(page.getByTestId("supplier-chip-(bez dodávateľa)")).toHaveText("(bez dodávateľa) (1)");
 
   const summary = page.getByTestId("orders-summary");
-  await expect(summary).toHaveText("Ostáva vybaviť 1 z 2 · Čaká sa 1");
+  await expect(summary).toHaveText("Ostáva vybaviť 3 z 4 · Čaká sa 1");
 
   // Klik na chip DODAVATEL-TEST-1 zúži zoznam len na jeho skupinu.
   await page.getByTestId("supplier-chip-DODAVATEL-TEST-1").click();
@@ -77,6 +80,66 @@ test("manažér filtruje podľa dodávateľa, vidí súhrn ostáva vybaviť a sk
   // Vypnutie prepínača vráti skrytú skupinu späť.
   await page.getByTestId("orders-hide-resolved-toggle").click();
   await expect(page.getByTestId("supplier-DODAVATEL-TEST-1")).toBeVisible();
+
+  expect(chyby).toEqual([]);
+});
+
+// issue 62: VLASTNÝ izolovaný účet (balík je už na hranici MAX_ATTEMPTS=10,
+// `scripts/e2e-setup.ts`'s komentár k `E2E_SUCET_EMAIL`).
+const E2E_SUCET_EMAIL = "e2e-sucet@forestshop.sk";
+
+// issue 62: `scripts/e2e-setup.ts` zakladá DVE objednávky (9004 + 9005) od
+// dvoch rôznych zákazníkov nad TÝM ISTÝM variantom "60055/10" (3 ks + 2 ks,
+// obe vo východiskovom nevybavenom stave) pod novým dodávateľom
+// "DODAVATEL-TEST-2" — presne scenár, ktorý tento ticket rieši: chip
+// "Σ spolu" na OBOCH riadkoch ukazuje 5 ks (celé dopytované množstvo je
+// zároveň celé nevybavené) a po odškrtnutí JEDNÉHO riadku ako objednaného sa
+// ihneď (bez reloadu) prepočíta na 2 ks na OBOCH riadkoch naraz.
+test("súčet kusov toho istého produktu naprieč objednávkami dodávateľa sa prepočíta hneď po zmene stavu riadku, konzola je čistá", async ({
+  page,
+}) => {
+  const chyby: string[] = [];
+  page.on("console", (m) => {
+    if ((m.type() === "error" || m.type() === "warning") && !jeOcakavane(m)) chyby.push(m.text());
+  });
+  page.on("pageerror", (e) => {
+    chyby.push(e.message);
+  });
+
+  await page.goto("/?tab=orders");
+  await page.getByLabel("E-mail").fill(E2E_SUCET_EMAIL);
+  await page.getByLabel("Heslo").fill(E2E_HESLO);
+  await page.getByRole("button", { name: "Prihlásiť sa" }).click();
+  await expect(page.getByRole("heading", { name: "Na objednanie" })).toBeVisible();
+
+  const skupina = page.getByTestId("supplier-DODAVATEL-TEST-2");
+  await expect(skupina).toBeVisible();
+
+  const riadokPrva = skupina.locator("[data-testid^='order-line-']").filter({ hasText: "E2E Zákazník Súčet Prvá" });
+  const riadokDruha = skupina.locator("[data-testid^='order-line-']").filter({ hasText: "E2E Zákazník Súčet Druhá" });
+  const chipPrva = riadokPrva.locator("[data-testid^='qty-total-']");
+  const chipDruha = riadokDruha.locator("[data-testid^='qty-total-']");
+
+  // Pred akoukoľvek zmenou: obe objednávky nevybavené → chip na OBOCH
+  // riadkoch ukazuje celé dopytované množstvo (3 + 2 = 5) ako zostávajúce.
+  await expect(chipPrva).toHaveText("Σ spolu 5 ks");
+  await expect(chipPrva).toHaveAttribute("title", "Spolu vo všetkých objednávkach: 5 ks · nevybavené: 5 ks");
+  await expect(chipDruha).toHaveText("Σ spolu 5 ks");
+
+  // Odškrtnutie PRVÉHO riadku (3 ks) ako objednané — `.click()`, nie
+  // `.check()` (`.claude/rules/testing.md`: zápis je async, `.check()` by na
+  // pomalšom CI behu prehral závod so serverovou odpoveďou).
+  const checkboxPrva = riadokPrva.locator("input[type='checkbox']");
+  await checkboxPrva.click();
+  await expect(checkboxPrva).toBeChecked();
+
+  // Prepočet je OKAMŽITÝ (bez `page.reload()`) a týka sa OBOCH riadkov
+  // naraz — presne požiadavka ticketu ("súčet sa musí prepočítať hneď po
+  // zmene stavu riadku, bez obnovenia stránky").
+  await expect(chipPrva).toHaveText("Σ spolu 2 ks");
+  await expect(chipDruha).toHaveText("Σ spolu 2 ks");
+  await expect(chipDruha).toHaveAttribute("title", "Spolu vo všetkých objednávkach: 5 ks · nevybavené: 2 ks");
+  await expect(page.getByRole("alert")).toHaveCount(0);
 
   expect(chyby).toEqual([]);
 });
