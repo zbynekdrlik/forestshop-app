@@ -2,14 +2,23 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, expect, it, vi } from "vitest";
 import { OrdersSection } from "./OrdersSection.js";
 
-const { fetchOpenOrders, updateOrderLineState, setSupplierEmail, fetchSupplierOrderMailPreview, sendSupplierOrderMail } =
-  vi.hoisted(() => ({
-    fetchOpenOrders: vi.fn(),
-    updateOrderLineState: vi.fn(),
-    setSupplierEmail: vi.fn(),
-    fetchSupplierOrderMailPreview: vi.fn(),
-    sendSupplierOrderMail: vi.fn(),
-  }));
+const {
+  fetchOpenOrders,
+  updateOrderLineState,
+  updateOrderLineOrdered,
+  setSupplierLinesOrdered,
+  setSupplierEmail,
+  fetchSupplierOrderMailPreview,
+  sendSupplierOrderMail,
+} = vi.hoisted(() => ({
+  fetchOpenOrders: vi.fn(),
+  updateOrderLineState: vi.fn(),
+  updateOrderLineOrdered: vi.fn(),
+  setSupplierLinesOrdered: vi.fn(),
+  setSupplierEmail: vi.fn(),
+  fetchSupplierOrderMailPreview: vi.fn(),
+  sendSupplierOrderMail: vi.fn(),
+}));
 
 // `OrdersUnauthorizedError` ostáva SKUTOČNÁ trieda z reálneho modulu — rovnaký
 // dôvod ako `SchedulerSection.test.tsx`'s `SchedulerUnauthorizedError`:
@@ -20,6 +29,8 @@ vi.mock("../ordersApi.js", async (importOriginal) => {
     ...actual,
     fetchOpenOrders,
     updateOrderLineState,
+    updateOrderLineOrdered,
+    setSupplierLinesOrdered,
     setSupplierEmail,
     fetchSupplierOrderMailPreview,
     sendSupplierOrderMail,
@@ -40,6 +51,7 @@ const LINE_STARA = {
   sizeLabel: "3XL",
   quantity: 2,
   state: "objednane" as const,
+  ordered: false,
   supplierUrl: null,
   supplierNote: null,
   externalCode: null,
@@ -57,6 +69,7 @@ const LINE_NOVA = {
   sizeLabel: null,
   quantity: 1,
   state: "skladom" as const,
+  ordered: false,
   supplierUrl: null,
   supplierNote: null,
   externalCode: null,
@@ -96,7 +109,9 @@ it("zoskupí riadky podľa dodávateľa a zobrazí produkt, veľkosť, množstvo
 
   const stary = screen.getByTestId(`order-line-${LINE_STARA.lineId}`);
   expect(stary.textContent).toContain("3XL");
-  expect(stary.textContent).toContain("Objednané");
+  // issue 60: východiskový stav "objednane" sa teraz volá "Nevybavené" — slovo
+  // "Objednané" je odteraz VÝLUČNE nové odškrtávacie políčko, nie tento stav.
+  expect(stary.textContent).toContain("Nevybavené");
 });
 
 it("chýbajúcu veľkosť a komentár zobrazí ako pomlčku", async () => {
@@ -294,6 +309,88 @@ it("zmena stavu pri 401 zavolá onSessionExpired namiesto zobrazenia chyby", asy
     expect(onSessionExpired).toHaveBeenCalledTimes(1);
   });
   expect(screen.queryByRole("alert")).toBeNull();
+});
+
+// issue 60: odškrtávacie políčko "objednané u dodávateľa" — per riadok aj
+// hromadne pre celú skupinu.
+
+it("rola citanie vidí políčko objednané ako needitovateľné", async () => {
+  fetchOpenOrders.mockResolvedValue([{ supplier: "Dodávateľ Alfa", lines: [LINE_STARA], email: null }]);
+
+  render(<OrdersSection role="citanie" onSessionExpired={() => {}} />);
+
+  const checkbox = await screen.findByTestId<HTMLInputElement>(`ordered-checkbox-${LINE_STARA.lineId}`);
+  expect(checkbox.checked).toBe(false);
+  expect(checkbox.disabled).toBe(true);
+});
+
+it("manažér odškrtne riadok ako objednaný, riadok sa vizuálne stlmí bez nového načítania", async () => {
+  fetchOpenOrders.mockResolvedValue([{ supplier: "Dodávateľ Alfa", lines: [LINE_STARA], email: null }]);
+  updateOrderLineOrdered.mockResolvedValue(undefined);
+
+  render(<OrdersSection role="manazer" onSessionExpired={() => {}} />);
+
+  const checkbox = await screen.findByTestId<HTMLInputElement>(`ordered-checkbox-${LINE_STARA.lineId}`);
+  expect(checkbox.checked).toBe(false);
+  expect(checkbox.disabled).toBe(false);
+
+  fireEvent.click(checkbox);
+
+  await waitFor(() => {
+    expect(updateOrderLineOrdered).toHaveBeenCalledWith(LINE_STARA.lineId, true);
+  });
+  await waitFor(() => {
+    expect(screen.getByTestId<HTMLInputElement>(`ordered-checkbox-${LINE_STARA.lineId}`).checked).toBe(true);
+  });
+  expect(screen.getByTestId(`order-line-${LINE_STARA.lineId}`).className).toContain("ordered");
+  // Presne JEDNO volanie fetchOpenOrders (počiatočné načítanie) — lokálna
+  // aktualizácia, žiadny refetch.
+  expect(fetchOpenOrders).toHaveBeenCalledTimes(1);
+  expect(screen.queryByRole("alert")).toBeNull();
+});
+
+it("zlyhaná zmena príznaku objednané zobrazí slovenskú hlášku a checkbox sa nezmení", async () => {
+  fetchOpenOrders.mockResolvedValue([{ supplier: "Dodávateľ Alfa", lines: [LINE_STARA], email: null }]);
+  updateOrderLineOrdered.mockRejectedValue(new Error("Zmena príznaku objednané sa nepodarila"));
+
+  render(<OrdersSection role="manazer" onSessionExpired={() => {}} />);
+
+  const checkbox = await screen.findByTestId<HTMLInputElement>(`ordered-checkbox-${LINE_STARA.lineId}`);
+  fireEvent.click(checkbox);
+
+  await waitFor(() => {
+    expect(screen.getByRole("alert").textContent).toBe("Zmena príznaku objednané sa nepodarila");
+  });
+  expect(screen.getByTestId<HTMLInputElement>(`ordered-checkbox-${LINE_STARA.lineId}`).checked).toBe(false);
+});
+
+it("manažér označí celú skupinu dodávateľa naraz, tlačidlo sa prepne na zrušenie", async () => {
+  fetchOpenOrders.mockResolvedValue([
+    { supplier: "Dodávateľ Alfa", lines: [LINE_STARA, LINE_NOVA], email: null },
+  ]);
+  setSupplierLinesOrdered.mockResolvedValue({ lineCount: 2 });
+
+  render(<OrdersSection role="manazer" onSessionExpired={() => {}} />);
+
+  const oznacit = await screen.findByRole("button", { name: "✔ Označiť skupinu ako objednané" });
+  fireEvent.click(oznacit);
+
+  await waitFor(() => {
+    expect(setSupplierLinesOrdered).toHaveBeenCalledWith("Dodávateľ Alfa", true);
+  });
+  await waitFor(() => {
+    expect(screen.getByTestId<HTMLInputElement>(`ordered-checkbox-${LINE_STARA.lineId}`).checked).toBe(true);
+  });
+  expect(screen.getByTestId<HTMLInputElement>(`ordered-checkbox-${LINE_NOVA.lineId}`).checked).toBe(true);
+
+  // Skupina je teraz celá objednaná — tlačidlo prepína OPAČNÝM smerom.
+  const zrusit = await screen.findByRole("button", { name: "↺ Zrušiť označenie skupiny" });
+  setSupplierLinesOrdered.mockResolvedValue({ lineCount: 2 });
+  fireEvent.click(zrusit);
+
+  await waitFor(() => {
+    expect(setSupplierLinesOrdered).toHaveBeenCalledWith("Dodávateľ Alfa", false);
+  });
 });
 
 // #31: e-mailový kontakt dodávateľa + odoslanie objednávky mailom.

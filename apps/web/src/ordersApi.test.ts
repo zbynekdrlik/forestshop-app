@@ -7,7 +7,9 @@ import {
   saveOpenStatuses,
   sendSupplierOrderMail,
   setSupplierEmail,
+  setSupplierLinesOrdered,
   triggerOrdersIngest,
+  updateOrderLineOrdered,
   updateOrderLineState,
 } from "./ordersApi.js";
 
@@ -23,6 +25,7 @@ const LINE = {
   sizeLabel: null,
   quantity: 1,
   state: "objednane" as const,
+  ordered: false,
   supplierUrl: null,
   supplierNote: null,
   externalCode: null,
@@ -126,6 +129,51 @@ it("updateOrderLineState bez tela odpovede použije všeobecnú hlášku", async
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("", { status: 500 })));
   await expect(updateOrderLineState("11111111-1111-1111-1111-111111111111", "skladom")).rejects.toThrow(
     "Zmena stavu sa nepodarila",
+  );
+});
+
+// issue 60: odškrtávacie políčko "objednané u dodávateľa".
+it("updateOrderLineOrdered pošle POST na správnu trasu s telom { ordered }", async () => {
+  const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ ok: true, ordered: true }), { status: 200 }));
+  vi.stubGlobal("fetch", fetchMock);
+
+  await updateOrderLineOrdered("11111111-1111-1111-1111-111111111111", true);
+
+  expect(fetchMock).toHaveBeenCalledWith(
+    "/api/orders/lines/11111111-1111-1111-1111-111111111111/ordered",
+    expect.objectContaining({
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ordered: true }),
+    }),
+  );
+});
+
+it("updateOrderLineOrdered pri 401 vyhodí OrdersUnauthorizedError", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("", { status: 401 })));
+  await expect(updateOrderLineOrdered("11111111-1111-1111-1111-111111111111", true)).rejects.toBeInstanceOf(
+    OrdersUnauthorizedError,
+  );
+});
+
+it("setSupplierLinesOrdered pošle PUT s URL-enkódovaným menom dodávateľa a vráti počet zmenených riadkov", async () => {
+  const fetchMock = vi
+    .fn()
+    .mockResolvedValue(new Response(JSON.stringify({ ok: true, ordered: true, lineCount: 3 }), { status: 200 }));
+  vi.stubGlobal("fetch", fetchMock);
+
+  await expect(setSupplierLinesOrdered("Dodávateľ Alfa", true)).resolves.toEqual({ lineCount: 3 });
+
+  expect(fetchMock).toHaveBeenCalledWith(
+    "/api/suppliers/Dod%C3%A1vate%C4%BE%20Alfa/order-lines/ordered",
+    expect.objectContaining({ method: "PUT", body: JSON.stringify({ ordered: true }) }),
+  );
+});
+
+it("setSupplierLinesOrdered zlyhá zrozumiteľne pri chybe servera", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("", { status: 500 })));
+  await expect(setSupplierLinesOrdered("Dodávateľ Alfa", true)).rejects.toThrow(
+    "Hromadné označenie skupiny sa nepodarilo",
   );
 });
 

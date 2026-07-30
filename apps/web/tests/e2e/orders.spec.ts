@@ -57,8 +57,10 @@ test("manažér vidí otvorené objednávky zoskupené podľa dodávateľa, konz
   await expect(riadokBez).toContainText("E2E Zákazník Bez dodávateľa");
   await expect(riadokBez).toContainText("40287");
   await expect(riadokBez).toContainText("Čiapka Polar FOREST");
-  // Predvolený stav riadku (schema default "objednane") a chýbajúca veľkosť.
-  await expect(riadokBez).toContainText("Objednané");
+  // Predvolený stav riadku (schema default "objednane") a chýbajúca veľkosť —
+  // issue 60: premenované na "Nevybavené" (slovo "Objednané" teraz patrí
+  // výlučne novému odškrtávaciemu políčku).
+  await expect(riadokBez).toContainText("Nevybavené");
 
   expect(chyby).toEqual([]);
 });
@@ -230,6 +232,65 @@ test("uzavretá objednávka sa v 'Na objednanie' neukáže, kým sa jej stav nep
   await expect(skupinaBezDodavatela).toContainText("E2E Zákazník Bez dodávateľa");
   const skupinaTest1 = page.getByTestId("supplier-DODAVATEL-TEST-1");
   await expect(skupinaTest1).toContainText("9001");
+
+  expect(chyby).toEqual([]);
+});
+
+// issue 60: VLASTNÝ izolovaný účet — balík je už na hranici MAX_ATTEMPTS=10
+// (viď `scripts/e2e-setup.ts`'s komentár k `E2E_OBJEDNANE_EMAIL`).
+const E2E_OBJEDNANE_EMAIL = "e2e-objednane@forestshop.sk";
+
+// issue 60: odškrtávacie políčko "objednané u dodávateľa" (per riadok) a
+// hromadné označenie/zrušenie CELEJ skupiny naraz. Používa skupinu
+// "DODAVATEL-TEST-1" (objednávka 9001, JEDINÝ riadok) — nie
+// "(bez dodávateľa)", ktorú iný test v tomto súbore (uzavretá objednávka
+// vyššie) môže medzičasom rozšíriť o druhý riadok; DODAVATEL-TEST-1 má vždy
+// presne jeden riadok bez ohľadu na poradie behu ostatných testov v súbore.
+test("manažér odškrtne riadok ako objednaný a hromadne označí/zruší celú skupinu, konzola je čistá", async ({ page }) => {
+  const chyby: string[] = [];
+  page.on("console", (m) => {
+    if ((m.type() === "error" || m.type() === "warning") && !jeOcakavane(m)) chyby.push(m.text());
+  });
+  page.on("pageerror", (e) => {
+    chyby.push(e.message);
+  });
+
+  await page.goto("/?tab=orders");
+  await page.getByLabel("E-mail").fill(E2E_OBJEDNANE_EMAIL);
+  await page.getByLabel("Heslo").fill(E2E_HESLO);
+  await page.getByRole("button", { name: "Prihlásiť sa" }).click();
+  await expect(page.getByRole("heading", { name: "Na objednanie" })).toBeVisible();
+
+  const skupina = page.getByTestId("supplier-DODAVATEL-TEST-1");
+  const riadok = skupina.locator("[data-testid^='order-line-']");
+  const checkbox = riadok.locator("input[type='checkbox']");
+  await expect(checkbox).not.toBeChecked();
+  await expect(riadok).not.toHaveClass(/ordered/);
+
+  // Per riadok — odškrtnutie stlmí CELÝ riadok a pretrvá po obnovení stránky.
+  await checkbox.check();
+  await expect(checkbox).toBeChecked();
+  await expect(riadok).toHaveClass(/ordered/);
+  await expect(page.getByRole("alert")).toHaveCount(0);
+
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Na objednanie" })).toBeVisible();
+  const riadokPoReloade = page.getByTestId("supplier-DODAVATEL-TEST-1").locator("[data-testid^='order-line-']");
+  await expect(riadokPoReloade.locator("input[type='checkbox']")).toBeChecked();
+
+  // Hromadné tlačidlo — skupina je UŽ celá objednaná, tlačidlo preto ponúka
+  // ZRUŠENIE (opačný smer), nie opätovné označenie.
+  const zrusitTlacidlo = skupina.getByRole("button", { name: "↺ Zrušiť označenie skupiny" });
+  await expect(zrusitTlacidlo).toBeVisible();
+  await zrusitTlacidlo.click();
+  await expect(riadokPoReloade.locator("input[type='checkbox']")).not.toBeChecked();
+  await expect(riadokPoReloade).not.toHaveClass(/ordered/);
+
+  // Tlačidlo sa prepne späť na "označiť" a hromadné označenie funguje aj
+  // opačným smerom.
+  const oznacitTlacidlo = skupina.getByRole("button", { name: "✔ Označiť skupinu ako objednané" });
+  await oznacitTlacidlo.click();
+  await expect(riadokPoReloade.locator("input[type='checkbox']")).toBeChecked();
 
   expect(chyby).toEqual([]);
 });

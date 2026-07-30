@@ -17,6 +17,9 @@ const orderLineSchema = z.object({
   sizeLabel: z.string().nullable(),
   quantity: z.number(),
   state: z.enum(["objednane", "caka_sa", "skladom", "nedostupne"]),
+  // issue 60: nezávislý príznak "objednané u dodávateľa" (viď `state.ts`'s
+  // komentár) — oddelené od `state` vyššie.
+  ordered: z.boolean(),
   // issue 67: odkaz na tovar u dodávateľa (`supplierUrl`, `null` keď v
   // exporte nie je odkaz) + surový text pre plain-text fallback
   // (`supplierNote`) + kód tovaru u dodávateľa (`externalCode`).
@@ -152,6 +155,37 @@ export async function updateOrderLineState(
     body: JSON.stringify({ state }),
   });
   await readJson(response, "Zmena stavu sa nepodarila");
+}
+
+// issue 60: odškrtávacie políčko "objednané u dodávateľa" — NEZÁVISLÉ od
+// `updateOrderLineState` vyššie.
+export async function updateOrderLineOrdered(lineId: string, ordered: boolean): Promise<void> {
+  const response = await fetch(`/api/orders/lines/${lineId}/ordered`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ ordered }),
+  });
+  await readJson(response, "Zmena príznaku objednané sa nepodarila");
+}
+
+const setSupplierLinesOrderedResultSchema = z.object({ ok: z.literal(true), ordered: z.boolean(), lineCount: z.number() });
+
+// issue 60: hromadné označenie/zrušenie CELEJ skupiny dodávateľa naraz — server
+// sám nájde presne tie riadky, ktoré `fetchOpenOrders` pre daného dodávateľa
+// PRÁVE TERAZ zobrazuje (`modules/orders/state.ts`'s `setSupplierLinesOrdered`).
+export async function setSupplierLinesOrdered(
+  supplier: string,
+  ordered: boolean,
+): Promise<{ readonly lineCount: number }> {
+  const response = await fetch(`/api/suppliers/${encodeURIComponent(supplier)}/order-lines/ordered`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ ordered }),
+  });
+  const telo = setSupplierLinesOrderedResultSchema.parse(
+    await readJson(response, "Hromadné označenie skupiny sa nepodarilo"),
+  );
+  return { lineCount: telo.lineCount };
 }
 
 // #31: e-mailový kontakt dodávateľa + odoslanie objednávky mailom.

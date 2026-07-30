@@ -635,6 +635,12 @@ tr:last-child td {
 .orders-table tr.state-nedostupne td:first-child {
   box-shadow: inset 3px 0 0 var(--fs-danger);
 }
+/* issue 60: odškrtnuté "objednané u dodávateľa" — stlmí CELÝ riadok bez
+   ohľadu na `state-*` farbu vyššie (rovnaká hodnota, akú appka už používa
+   pre `.btn:disabled`, nie prevzaté zo starej appky). */
+.orders-table tr.ordered {
+  opacity: 0.55;
+}
 .ord-qty {
   font-weight: var(--fs-weight-semibold);
   color: var(--fs-ink);
