@@ -92,7 +92,16 @@ test("manažér prepne stav riadku cez select, zmena pretrvá po obnovení strá
   await expect(select).toHaveValue("caka_sa");
 
   await select.selectOption("skladom");
-  await expect(riadok).toContainText("Skladom");
+  // Nie `toContainText("Skladom")` — VŠETKY štyri `STATE_LABELS` sú vždy
+  // vykreslené ako `<option>` deti selectu bez ohľadu na to, ktorý je
+  // vybraný, takže taká kontrola textu je tautológia (vždy prejde, aj keď sa
+  // zápis nikdy nedokončí). `toHaveValue` na SAMOTNOM selecte skutočne čaká,
+  // kým lokálny optimistický update prebehne (deje sa AŽ po úspešnom
+  // vyriešení PATCH promisu, `OrdersSection.tsx`'s `changeState`), čím
+  // zaručuje, že zápis je na serveri potvrdený PRED nasledujúcim reloadom —
+  // bez tejto zmeny mohol pod pomalším CI behom `page.reload()` predbehnúť
+  // ešte neuzavretý zápis a nasledujúca kontrola po reloade náhodne zlyhala.
+  await expect(select).toHaveValue("skladom");
   await expect(page.getByRole("alert")).toHaveCount(0);
 
   await page.reload();
