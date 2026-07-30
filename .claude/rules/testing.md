@@ -144,6 +144,13 @@ paths:
   resolved to 3 elements". Odhalilo sa AŽ pri behu CELÉHO e2e balíka
   (`pnpm --filter @forestshop/web e2e`), nie len nového spec súboru — pri
   pridávaní `aria-label`/`getByLabel` VŽDY spusti celý balík, nikdy len
+  nový spec súbor. **Oprav to na strane KOLÍDUJÚCEHO (existujúceho, užšieho)
+  labelu, nie obetovaním prístupnosti nového prvku** — code review na #25
+  upozornil, že prvá oprava (odstránenie slova "stav" z nového
+  `aria-label`u) by čítačke obrazovky vôbec neoznámila, čo nový select robí.
+  Skutočná oprava: existujúci `catalog.spec.ts` dostal
+  `getByLabel("Stav", { exact: true })`, nový select v `OrdersSection.tsx`
+  si ponechal plnohodnotný popis (`"Zmeniť stav riadku objednávky ..."`).
   novo pridaný test.
 - **Playwright s viacerými workermi (predvolený počet, ako aj CI runner)
   môže byť nestály — všetky e2e spec súbory zdieľajú JEDEN bežiaci API
