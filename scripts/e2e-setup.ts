@@ -1,7 +1,7 @@
-// Pripraví databázu pre E2E beh: vymaže všetky riadky a založí presne jedného
-// testovacieho používateľa. Beží pred štartom API servera (viď
+// Pripraví databázu pre E2E beh: vymaže všetky riadky a založí testovacích
+// používateľov. Beží pred štartom API servera (viď
 // apps/web/playwright.config.ts) a je idempotentný — opakované spustenie
-// necháva presne jedného používateľa vďaka TRUNCATE pred insertom.
+// necháva rovnaký počet používateľov vďaka TRUNCATE pred insertom.
 //
 // POZOR: mieri na tú istú lokálnu databázu ako integračné testy (DATABASE_URL
 // z prostredia). To je v poriadku LEN preto, že tabuľky vždy najprv vyprázdni
@@ -14,7 +14,20 @@ import { hashPassword } from "../apps/api/src/modules/auth/passwords.js";
 import { ingestCatalog } from "../apps/api/src/modules/catalog/ingest.js";
 import { DEFAULT_SNAPSHOT_LIMITS } from "../apps/api/src/modules/catalog/validation.js";
 
-const E2E_HESLO = "e2e-test-heslo"; // musí sa zhodovať s hodnotou v login.spec.ts
+const E2E_HESLO = "e2e-test-heslo"; // musí sa zhodovať s hodnotou v login.spec.ts/catalog.spec.ts/orders.spec.ts
+
+// #32: vlastný, IZOLOVANÝ účet len pre `login.spec.ts`'s test zmeny hesla.
+// Ten test DOČASNE mení SKUTOČNÉ heslo prihláseného účtu v DB (staré → nové →
+// späť) — keby sa prihlasoval pod ZDIEĽANÝM `e2e@forestshop.sk` (ako
+// `catalog.spec.ts`/`orders.spec.ts`/zvyšné testy v `login.spec.ts`), Playwright
+// pri `--workers=2` (CI default) plánuje spec SÚBORY na súbežné workery proti
+// JEDNÉMU zdieľanému API serveru + JEDNEJ DB — súbežný `POST /api/login` z INÉHO
+// súboru, spadnutý presne do okna medzi zmenou a vrátením hesla, by dostal
+// skutočný 401 (heslo v DB v tej chvíli nesedí s naprogramovaným literálom).
+// Reprodukované a potvrdené #32 (5× `--workers=2`, 4× zlyhalo presne takto —
+// pozri komentár na tickete pred touto zmenou). Účet tu nižšie zostáva jediný,
+// ktorého heslo sa kedy mení — nikto iný sa pod ním neprihlasuje.
+const E2E_HESLO_ZMENA_EMAIL = "e2e-heslo@forestshop.sk"; // musí sa zhodovať s hodnotou v login.spec.ts
 
 const { db, pool } = createDb();
 // Konštantný literál bez interpolácie — obyčajný reťazec je tu rovnako bezpečný
@@ -33,6 +46,15 @@ await db.execute(
 );
 await db.insert(users).values({
   email: "e2e@forestshop.sk",
+  passwordHash: await hashPassword(E2E_HESLO),
+  displayName: "E2E Manažér",
+  role: "manazer",
+});
+// Rovnaké počiatočné heslo a zobrazované meno ako vyššie (žiadny test naň
+// nespolieha ako na odlišujúci znak) — jediný rozdiel je e-mail, ktorý ho robí
+// SAMOSTATNÝM riadkom v `users`, izolovaným od zdieľaného účtu vyššie.
+await db.insert(users).values({
+  email: E2E_HESLO_ZMENA_EMAIL,
   passwordHash: await hashPassword(E2E_HESLO),
   displayName: "E2E Manažér",
   role: "manazer",

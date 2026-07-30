@@ -2,6 +2,15 @@ import { expect, test, type ConsoleMessage } from "@playwright/test";
 
 const E2E_HESLO = "e2e-test-heslo"; // účet existuje len v testovacej databáze
 const ZLE_HESLO = "nespravne";
+// #32: samostatný, IZOLOVANÝ účet len pre test zmeny hesla nižšie — musí sa
+// zhodovať s `E2E_HESLO_ZMENA_EMAIL` v `scripts/e2e-setup.ts`. Ten test
+// DOČASNE mení skutočné heslo prihláseného účtu v DB; keby sa prihlasoval pod
+// zdieľaným `e2e@forestshop.sk` (ako zvyšné testy tu aj `catalog.spec.ts`/
+// `orders.spec.ts`), súbežný `POST /api/login` z INÉHO spec súboru (Playwright
+// pri `--workers=2` beží spec súbory súbežne proti JEDNÉMU API serveru + DB)
+// by mohol spadnúť do okna medzi zmenou a vrátením hesla a dostať skutočný
+// 401 — presne mechanizmus, ktorý spôsoboval #32.
+const E2E_HESLO_ZMENA_EMAIL = "e2e-heslo@forestshop.sk";
 
 test("manažér sa prihlási, vidí svoje meno a verziu, konzola je čistá", async ({ page }) => {
   const chyby: string[] = [];
@@ -68,7 +77,7 @@ test("zmena hesla: zlé staré heslo/nezhoda odmietnuté, úspešná zmena zruš
   sledujKonzolu(page);
 
   await page.goto("/");
-  await page.getByLabel("E-mail").fill("e2e@forestshop.sk");
+  await page.getByLabel("E-mail").fill(E2E_HESLO_ZMENA_EMAIL);
   await page.getByLabel("Heslo").fill(E2E_HESLO);
   await page.getByRole("button", { name: "Prihlásiť sa" }).click();
   await expect(page.getByTestId("greeting")).toContainText("E2E Manažér");
@@ -79,7 +88,7 @@ test("zmena hesla: zlé staré heslo/nezhoda odmietnuté, úspešná zmena zruš
   const page2 = await context2.newPage();
   sledujKonzolu(page2);
   await page2.goto("/");
-  await page2.getByLabel("E-mail").fill("e2e@forestshop.sk");
+  await page2.getByLabel("E-mail").fill(E2E_HESLO_ZMENA_EMAIL);
   await page2.getByLabel("Heslo").fill(E2E_HESLO);
   await page2.getByRole("button", { name: "Prihlásiť sa" }).click();
   await expect(page2.getByTestId("greeting")).toContainText("E2E Manažér");
