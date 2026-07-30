@@ -271,7 +271,7 @@ it("odmietne 'navrhnute' s vyplneným LEN confirmed_at (CHECK, opačná polovica
   ).rejects.toThrow(/pairing_confirmation_ck/);
 });
 
-it("NEzmaže pairing, keď sa zmaže potvrdzujúci používateľ — len stratí odkaz (onDelete: set null)", async () => {
+it("NEdovolí zmazať používateľa, ktorý potvrdil pairing — história potvrdenia sa zachováva (onDelete: restrict)", async () => {
   const ctx = await withCleanDb();
   close = ctx.close;
   await insertTestVariant(ctx.db, "40244/4XL");
@@ -283,15 +283,16 @@ it("NEzmaže pairing, keď sa zmaže potvrdzujúci používateľ — len stratí
     confirmedAt: NOW,
   });
 
-  // Zmazanie používateľa priamo cez SQL — smie porušiť CHECK (potvrdene bez
-  // confirmed_by) len vtedy, ak by set null nefungoval; over, že sa namiesto
-  // toho zmaže samotný riadok pairing (set null by inak vytvoril nekonzistentný
-  // stav, ktorý CHECK odmieta — takže onDelete tu MUSÍ byť "cascade" na úrovni
-  // riadku pairing, nie len set null na stĺpci). Skutočné správanie: Postgres
-  // ON DELETE SET NULL na `confirmed_by` by porušilo `pairing_confirmation_ck`
-  // (potvrdene vyžaduje confirmed_by vyplnené) — DB preto zmazanie POUŽÍVATEĽA
-  // odmietne, kým je naň napojený potvrdený pairing.
+  // Zmazanie používateľa priamo cez SQL. Predtým bol FK deklarovaný
+  // "set null", no to nikdy reálne nenastalo — `pairing_confirmation_ck`
+  // vyžaduje confirmed_by vyplnené, kým state='potvrdene', takže set-null by
+  // vždy porušil CHECK a Postgres delete odmietol s CHECK-violation (mätúce
+  // pre čitateľa, keď FK sám tvrdil "set null"). FK je teraz deklarovaný
+  // "restrict" — zodpovedá skutočnému, nezmenenému správaniu (delete zlyhá),
+  // len s jasnou FK-violation namiesto zavádzajúcej CHECK-violation. Používateľ,
+  // ktorý raz potvrdil pairing, sa preto nedá zmazať vôbec — pairing
+  // (história potvrdenia) tým ostáva nedotknutá.
   await expect(
     ctx.db.execute(sql`DELETE FROM users WHERE id = ${userId}`),
-  ).rejects.toThrow(/pairing_confirmation_ck/);
+  ).rejects.toThrow(/pairing_confirmed_by_users_id_fk/);
 });
