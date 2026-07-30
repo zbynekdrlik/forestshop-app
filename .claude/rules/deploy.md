@@ -182,3 +182,17 @@ paths:
   INÁ hláška než "failed to extract layer", nepredpokladaj automaticky inú
   príčinu — over najprv jednoduchým rerunom, až pri DRUHOM zlyhaní za sebou
   rieš ako skutočný problém.
+
+- **`build` job (GitHub-hosted, nahráva do ghcr.io) potrebuje explicitný
+  `docker/setup-buildx-action@v3` PRED `docker/build-push-action@v6`** —
+  bez neho buildx použije predvolený builder s driverom `docker` (naviazaný
+  na lokálny daemon runnera), ktorý nevie `push: true` počas zostavovania
+  cez natívny BuildKit exportér; namiesto toho obraz najprv uloží do
+  daemona a až potom spustí samostatný `docker push`. Tento dvojkrokový
+  spôsob bol príčinou `ERROR: failed to build: unknown blob` pri nahrávaní
+  viacerých tagov naraz (`:0.3.0-dev.18` + `:latest`) na ghcr.io (run
+  30529745338, issue #42) — desiatky predchádzajúcich behov s tým istým
+  chýbajúcim krokom prešli, takže ide o latentnú krehkosť builderu bez
+  `docker-container` drivera, nie o vždy-zlyhá chybu. Fix je jeden riadok
+  (`uses: docker/setup-buildx-action@v3`), nie retry/`continue-on-error`
+  okolo push kroku.
