@@ -59,8 +59,12 @@ function cleanStatusList(statuses: readonly string[]): string[] {
 }
 
 /** Nastavené stavy, ktoré sa počítajú ako "objednávka sa ešte vybavuje" —
- * abecedne, pre stabilné, ľahko overiteľné poradie na obrazovke. */
-export async function listOpenStatusNames(db: Database): Promise<readonly string[]> {
+ * abecedne, pre stabilné, ľahko overiteľné poradie na obrazovke.
+ * `Pick<Database, "select">` (nie celý `Database`) — review of PR 75, finding
+ * 3: `queries.ts`'s `listOpenOrderLineIdsForSupplier` teraz volá toto aj
+ * s `tx` (`PgTransaction`), ktorý nemá `Database`'s `$client`
+ * (`.claude/rules/database.md`). */
+export async function listOpenStatusNames(db: Pick<Database, "select">): Promise<readonly string[]> {
   const rows = await db
     .select({ statusName: orderOpenStatuses.statusName })
     .from(orderOpenStatuses)
