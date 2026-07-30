@@ -28,6 +28,12 @@ services:
   app:
     image: ghcr.io/zbynekdrlik/forestshop-app:${IMAGE_TAG:-latest}
     restart: unless-stopped
+    # Doplnok k appka's vlastnému SIGTERM handleru (apps/api/src/shutdown.ts,
+    # issue 78) — appka sa dnes ukončí za pár ms, ale 15s dáva rezervu pre
+    # prípad pomalšieho zatvárania DB spojení pod záťažou. Toto NIE JE
+    # náhrada za handler: appka bez neho SIGTERM ignorovala úplne (PID 1 bez
+    # init procesu) a čakala by celých 15s pri KAŽDOM deployi namiesto pár ms.
+    stop_grace_period: 15s
     depends_on:
       postgres: { condition: service_healthy }
     environment:
