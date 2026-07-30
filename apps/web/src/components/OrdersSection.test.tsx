@@ -393,6 +393,48 @@ it("manažér označí celú skupinu dodávateľa naraz, tlačidlo sa prepne na 
   });
 });
 
+// Review of PR 75, finding 6: per-riadkový checkbox bol doteraz disabled LEN
+// cez `busyOrderedLineId` (vlastný per-riadkový zápis) — nie aj počas
+// hromadnej "označiť skupinu" akcie PRE TEN ISTÝ dodávateľ
+// (`busyOrderedSupplier` v `OrdersSection.tsx`). Súbežný per-riadkový klik
+// počas ešte prebiehajúceho hromadného zápisu nechal optimistický UI na
+// krátko nekonzistentný (posledný zápis vyhrá, žiadna strata dát, ale
+// zmätočné UX).
+it("riadok checkbox je disabled počas hromadnej akcie pre jeho dodávateľa, po jej dokončení sa znova sprístupní", async () => {
+  fetchOpenOrders.mockResolvedValue([
+    { supplier: "Dodávateľ Alfa", lines: [LINE_STARA, LINE_NOVA], email: null },
+  ]);
+  let resolveBulk: ((value: { lineCount: number }) => void) | undefined;
+  setSupplierLinesOrdered.mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        resolveBulk = resolve;
+      }),
+  );
+
+  render(<OrdersSection role="manazer" onSessionExpired={() => {}} />);
+
+  const oznacit = await screen.findByRole("button", { name: "✔ Označiť skupinu ako objednané" });
+  const checkboxStara = await screen.findByTestId<HTMLInputElement>(`ordered-checkbox-${LINE_STARA.lineId}`);
+  expect(checkboxStara.disabled).toBe(false);
+
+  fireEvent.click(oznacit);
+
+  // Kým hromadný zápis ešte beží, OBIDVA riadky tohto dodávateľa musia byť
+  // needitovateľné — nielen ten, na ktorý by manažér prípadne klikol zvlášť.
+  await waitFor(() => {
+    expect(screen.getByTestId<HTMLInputElement>(`ordered-checkbox-${LINE_STARA.lineId}`).disabled).toBe(true);
+  });
+  expect(screen.getByTestId<HTMLInputElement>(`ordered-checkbox-${LINE_NOVA.lineId}`).disabled).toBe(true);
+
+  resolveBulk?.({ lineCount: 2 });
+
+  await waitFor(() => {
+    expect(screen.getByTestId<HTMLInputElement>(`ordered-checkbox-${LINE_STARA.lineId}`).disabled).toBe(false);
+  });
+  expect(screen.getByTestId<HTMLInputElement>(`ordered-checkbox-${LINE_NOVA.lineId}`).disabled).toBe(false);
+});
+
 // #31: e-mailový kontakt dodávateľa + odoslanie objednávky mailom.
 
 it("rola citanie nevidí tlačidlá na úpravu e-mailu ani odoslanie mailom, len text", async () => {
