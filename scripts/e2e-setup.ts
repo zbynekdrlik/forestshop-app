@@ -67,6 +67,16 @@ const E2E_OTVORENE_STAVY_EMAIL = "e2e-otvorene-stavy@forestshop.sk"; // musí sa
 // `e2e@forestshop.sk`.
 const E2E_OBJEDNANE_EMAIL = "e2e-objednane@forestshop.sk"; // musí sa zhodovať s hodnotou v orders.spec.ts
 
+// issue 61: VLASTNÝ izolovaný účet — rovnaký mechanizmus a dôvod ako vyššie
+// (balík je už na hranici `MAX_ATTEMPTS`). Test pod týmto účtom je zámerne
+// PRVÝ v `orders.spec.ts` (nie posledný ako ostatné nové testy vyššie) —
+// overuje PÔVODNÉ, ešte-nezmenené seedované dáta (DODAVATEL-TEST-1 v
+// "caka_sa", "(bez dodávateľa)" v predvolenom "objednane"), kým ich testy
+// NIŽŠIE v súbore (zmena stavu/objednané, pridanie stavu do nastavenia)
+// ešte nestihli zmutovať — poradie testov v súbore je tu preto zámerne
+// dôležité, nie náhodné.
+const E2E_FILTRE_EMAIL = "e2e-filtre@forestshop.sk"; // musí sa zhodovať s hodnotou v orders.spec.ts
+
 const { db, pool } = createDb();
 // Konštantný literál bez interpolácie — obyčajný reťazec je tu rovnako bezpečný
 // ako `sql` tagovaná šablóna (tú používa ekvivalentný apps/api/tests/helpers/db.ts),
@@ -130,6 +140,12 @@ await db.insert(users).values({
 });
 await db.insert(users).values({
   email: E2E_OBJEDNANE_EMAIL,
+  passwordHash: await hashPassword(E2E_HESLO),
+  displayName: "E2E Manažér",
+  role: "manazer",
+});
+await db.insert(users).values({
+  email: E2E_FILTRE_EMAIL,
   passwordHash: await hashPassword(E2E_HESLO),
   displayName: "E2E Manažér",
   role: "manazer",

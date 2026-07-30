@@ -560,6 +560,62 @@ tr:last-child td {
 .order-group {
   margin-bottom: var(--fs-space-6);
 }
+
+/* issue 61: filtrovacie štítky dodávateľov + súhrn "ostáva vybaviť" +
+   prepínač "skryť vybavené" — vlastný jazyk tejto appky (issue výslovne
+   žiada dizajn podľa NOVEJ appky, nie prevzaté farby starej). */
+.orders-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--fs-space-2);
+  margin-bottom: var(--fs-space-5);
+  padding-bottom: var(--fs-space-3);
+  border-bottom: 1px solid var(--fs-border-soft);
+}
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--fs-space-2);
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  font-size: var(--fs-text-xs);
+  font-weight: var(--fs-weight-medium);
+  padding: var(--fs-space-1) var(--fs-space-3);
+  border-radius: 999px;
+  background: var(--fs-surface-alt);
+  color: var(--fs-ink);
+  border: 1px solid var(--fs-border);
+  cursor: pointer;
+}
+.chip.done {
+  background: var(--fs-success-bg);
+  color: var(--fs-success);
+  border-color: transparent;
+}
+.chip.active {
+  background: var(--fs-brand);
+  color: #fff;
+  border-color: var(--fs-brand);
+  font-weight: var(--fs-weight-bold);
+}
+.orders-toolbar-summary-row {
+  display: flex;
+  align-items: center;
+  gap: var(--fs-space-3);
+  flex-wrap: wrap;
+}
+.orders-summary {
+  font-size: var(--fs-text-sm);
+  color: var(--fs-ink-muted);
+  margin: 0;
+}
+.btn.ghost.on {
+  background: var(--fs-brand-soft);
+  color: var(--fs-brand-strong);
+  border-color: var(--fs-brand);
+}
 .toorder-supplier {
   display: flex;
   align-items: center;
