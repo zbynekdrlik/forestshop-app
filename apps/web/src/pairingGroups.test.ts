@@ -110,6 +110,34 @@ it("groupConfirmation vráti spoločnú atribúciu, keď je zhodná na všetkýc
   expect(groupConfirmation(group)).toEqual({ confirmedByName: "Manažér", confirmedAt: "2026-07-30T10:00:00.000Z" });
 });
 
+// Live overenie na issue 47: bulk potvrdenie je N samostatných POST volaní,
+// každé s vlastným `now = new Date()` na serveri — `confirmedAt` sa preto
+// medzi variantmi takmer VŽDY líši o pár milisekúnd, aj keď ide o TEN ISTÝ
+// bulk úkon TEJ ISTEJ osoby. `groupConfirmation` preto porovnáva LEN meno,
+// nikdy presný čas — inak by "Potvrdil" po KAŽDOM bulk potvrdení ukazovalo
+// "—" namiesto mena (reálne pozorované pri post-deploy overení na prod).
+it("groupConfirmation vráti meno aj pri MIERNE odlišnom confirmedAt (bulk potvrdenie, tá istá osoba) — NAJSTARŠÍ čas", () => {
+  const groups = groupPairingItems([
+    item({
+      variantCode: "40237/M",
+      productKey: "40237",
+      state: "potvrdene",
+      confirmedByName: "Manažér",
+      confirmedAt: "2026-07-30T10:00:00.050Z",
+    }),
+    item({
+      variantCode: "40237/L",
+      productKey: "40237",
+      state: "potvrdene",
+      confirmedByName: "Manažér",
+      confirmedAt: "2026-07-30T10:00:00.010Z",
+    }),
+  ]);
+  const group = groups[0];
+  if (group === undefined) throw new Error("group missing");
+  expect(groupConfirmation(group)).toEqual({ confirmedByName: "Manažér", confirmedAt: "2026-07-30T10:00:00.010Z" });
+});
+
 it("groupConfirmation vráti null, keď sa atribúcia medzi variantmi LÍŠI (zmiešaná skupina)", () => {
   const groups = groupPairingItems([
     item({
