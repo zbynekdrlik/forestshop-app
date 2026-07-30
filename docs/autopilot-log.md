@@ -687,3 +687,56 @@ nové heslo sa nikde v pushnutom obsahu nenachádza.
   supplier codes (e.g. "OB041 / XHGOSH") render on real "Na objednanie"
   rows, clickable, correct `href`. Console: 0 errors/0 warnings.
 - Per-ticket Discord card fired (`notify --run-card`, confirmed delivered).
+
+## Issue 70 — code-review follow-up on PR 69 (2026-07-30)
+
+- Two independent post-merge reviews of PR 69 (issue 67, merge `a602cd7`)
+  found 9 real defects in that diff. Filed as issue **#70** (`Scope-gate:
+  planned-work`), design comment posted before first code commit.
+- 1) `extractSupplierLink`'s `URL_RE`'s greedy `\S+` swallowed trailing
+  punctuation (`.`, `)`) right after the URL — trimmed with a
+  `TRAILING_PUNCTUATION_RE` post-match replace. RED/GREEN:
+  `supplier-link.test.ts` (3 new cases) → `supplier-link.ts`.
+- 2) `OrdersSection.tsx`'s `—` placeholder ignored `externalCode` — now
+  shown only when `supplierUrl`, `supplierNote` AND `externalCode` are all
+  null. RED/GREEN: `OrdersSection.test.tsx` → `OrdersSection.tsx` (also
+  bundled 4/8 below, same lines).
+- 3) `.ord-supplier-cell`'s unbounded `nowrap` bounded with
+  `overflow/text-overflow/ellipsis`, matching `.folder-head .ftitle`'s
+  existing pattern; `title` attr added for the full text (CSS-only, no
+  unit-testable behavior — manually verified live).
+- 4) `rel="noopener"` added alongside `noreferrer`.
+- 5) `ordersApi.ts`'s `supplierUrl` zod schema now regex-checks
+  `^https?:\/\//` as an independent second layer. RED/GREEN:
+  `ordersApi.test.ts` → `ordersApi.ts`.
+- 6) `getOrderDetail`/`OrderDetailLine` (`queries.ts`) extended with the
+  three fields — third read path unified with `listOpenOrderLinesBySupplier`
+  / `mail.ts`. RED/GREEN: `orders-http.integration.test.ts` →
+  `queries.ts`.
+- 7) Multi-URL-in-one-note case added to `supplier-link.test.ts` (first-match
+  is intentional, now documented + tested).
+- 8) `aria-label` on the supplier link now carries the product name
+  (distinct accessible name per row) — bundled with fix 2/4.
+- 9) 128-char line in `ingest.ts` wrapped.
+- Side-effect: the new order-detail test pushed
+  `orders-http.integration.test.ts` over eslint's 400-line cap — split
+  state-change (#25) tests into a new `orders-http-state.integration
+  .test.ts`, same pattern as the existing `catalog-http`/
+  `catalog-http-ingest` split. See `.claude/rules/testing.md`.
+- Deliberately NOT fixed (documented in PR body): the " | " ambiguity in
+  copied order text — human-read only, never re-parsed.
+- Commits (12, `dev`): version bump 0.3.0-dev.32, 4 RED/GREEN pairs (1, 2,
+  5, 6), 2 pure fixes (3+4+8 bundled into fix 2's commit, 9 standalone),
+  the eslint-line-cap split. PR **#71** (`dev` → `main`), merged `6f97afd`.
+  CI all green both on the PR and on `main` (version-check, check,
+  integration 187/187, docker-build, e2e 14/14; Deploy workflow green).
+  Local: typecheck + lint + unit (405) + integration (187) + e2e (14) all
+  green before push.
+- Deployed + verified on https://forestshop-novy.newlevel.media
+  (v0.3.0-dev.32, commit matches `git log origin/main -1`). Live-checked
+  against real production order data (864 supplier cells): 0 cells show
+  the `—` placeholder alongside a supplier code, `rel="noreferrer
+  noopener"` + product-name `aria-label` present on every link, supplier
+  notes truncate with `title` + ellipsis CSS applied. Console: 0
+  errors/0 warnings.
+- Per-ticket Discord card fired (`notify --run-card`, confirmed delivered).

@@ -357,7 +357,10 @@ export function OrdersSection({
                         target="_blank"
                         rel="noreferrer noopener"
                         className="ord-supplier-link"
-                        aria-label={`Odkaz na dodávateľa — ${line.variantName}`}
+                        // issue 72: variantName sám nestačí — dva riadky
+                        // toho istého produktu v rôznych veľkostiach majú
+                        // zhodný variantName, líšia sa len variantCode.
+                        aria-label={`Odkaz na dodávateľa — ${line.variantName} (${line.variantCode})`}
                       >
                         Odkaz na dodávateľa
                       </a>

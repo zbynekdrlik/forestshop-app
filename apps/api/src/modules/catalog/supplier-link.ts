@@ -30,13 +30,72 @@ const URL_RE = /https?:\/\/\S+/i;
 // znakov po matchi orežú. Poznámka s VIACERÝMI odkazmi (issue 70's test)
 // zámerne berie len PRVÝ výskyt — žiadny zoznam odkazov sa v UI zatiaľ
 // nezobrazuje.
-const TRAILING_PUNCTUATION_RE = /[)\]}>.,;:!?'"]+$/;
+//
+// Neborovkovaná (non-bracket) interpunkcia sa orezáva VŽDY bez podmienky —
+// nikdy nie je legitímnou súčasťou URL cesty v tomto exporte.
+const NON_BRACKET_TRAILING_RE = /[.,;:!?'">]+$/;
+
+// issue 72: naivné orezanie CELEJ triedy `)]}...` bralo aj zátvorku, ktorá je
+// SÚČASŤOU samotnej URL (napr. `https://shop.example.com/a_(b)` — reálne
+// existujúce URL tvary s zátvorkou v ceste), nie len obalujúceho textu
+// ("(pozri https://...)"). Preto sa zatváracia zátvorka orezáva LEN keď je
+// vo vnútri kandidátnej URL NEVYVÁŽENÁ (viac zatváracích než otváracích —
+// bola prevzatá z obalujúceho textu, nepatrí URL), nikdy keď je vyvážená.
+//
+// Zámerné zjednodušenie (code review, PR 73): počet výskytov, nie
+// poradie/zásobník — `"https://x.com/)a(b)"` (osamotená `)` PRED skutočným
+// párom) by sa vyhodnotil ako vyvážený (1×`(`, 1×`)`) a osamotenú `)` na
+// začiatku by nechal bez zmeny. V reálnych `internalNote` tvaroch (bodka/
+// zátvorka AŽ za odkazom, issue 70/72) sa to nevyskytuje — poradovo presný
+// zásobníkový parser by bol zbytočná komplexita pre tento vstup.
+const BRACKET_PAIRS: readonly (readonly [open: string, close: string])[] = [
+  ["(", ")"],
+  ["[", "]"],
+  ["{", "}"],
+];
+
+function countOccurrences(haystack: string, needle: string): number {
+  let count = 0;
+  for (const char of haystack) {
+    if (char === needle) count += 1;
+  }
+  return count;
+}
+
+// Iteruje, kým sa niečo mení — pokrýva zmiešané/opakované konce ako `(b).`
+// alebo `x).`: najprv orež nezátvorkovú interpunkciu, potom over/orež
+// nevyváženú zátvorku, opakuj.
+function trimTrailingPunctuation(candidate: string): string {
+  let url = candidate;
+  let changed = true;
+  while (changed) {
+    changed = false;
+
+    const withoutTrailingPunctuation = url.replace(NON_BRACKET_TRAILING_RE, "");
+    if (withoutTrailingPunctuation !== url) {
+      url = withoutTrailingPunctuation;
+      changed = true;
+      continue;
+    }
+
+    for (const [open, close] of BRACKET_PAIRS) {
+      if (!url.endsWith(close)) continue;
+      const isUnbalanced = countOccurrences(url, close) > countOccurrences(url, open);
+      if (isUnbalanced) {
+        url = url.slice(0, -1);
+        changed = true;
+        break;
+      }
+    }
+  }
+  return url;
+}
 
 export function extractSupplierLink(internalNote: string | null): SupplierLink {
   const raw = (internalNote ?? "").trim();
   if (raw === "") return { url: null, note: null };
   const match = URL_RE.exec(raw);
   if (match === null) return { url: null, note: raw };
-  const url = match[0].replace(TRAILING_PUNCTUATION_RE, "");
+  const url = trimTrailingPunctuation(match[0]);
   return { url, note: raw };
 }

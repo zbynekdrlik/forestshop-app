@@ -132,6 +132,28 @@ paths:
   `change-password.integration.test.ts`/`login.spec.ts`'s dvoj-kontextový
   e2e test — presne takto sa to odhalilo (e2e test napísaný najprv na 4xx
   zlyhal na tomto pravidle).
+- **`@testing-library/react`'s `getByRole(..., { name })` robí PRESNÚ zhodu
+  (celý accessible name musí sedieť), na rozdiel od Playwright's
+  substring/case-insensitive zhody popísanej nižšie.** Pridanie `aria-label`
+  na prvok (issue 70: `aria-label` s názvom produktu na odkaze "Odkaz na
+  dodávateľa", aby riadky nemali identické prístupné meno) PREPÍŠE celý
+  accessible name — existujúci vitest test s `getByRole("link", { name:
+  "Odkaz na dodávateľa" })` prestane nachádzať prvok a treba ho upraviť na
+  presný nový name (`` `Odkaz na dodávateľa — ${variantName}` ``). Playwright
+  e2e testy s tým istým textom OSTANÚ fungovať bez zmeny — ich substring
+  zhoda `"Odkaz na dodávateľa"` je stále obsiahnutá v novom dlhšom name.
+- **`.claude/rules/testing.md`'s eslint `max-lines: 400` (skipBlankLines,
+  skipComments) platí AJ na integračné testy, nielen unit testy** — pridanie
+  jedného ďalšieho testu do `orders-http.integration.test.ts` (issue 70) ho
+  poslalo cez limit. Zavedený vzor: vyčleniť tematicky súvislý blok (vlastný
+  `boot()`, vlastné pomocné funkcie, vlastné testy) do NOVÉHO súboru s
+  komentárom "Vydelené z X, aby ani jeden nenarástol cez limit" — presne
+  ako existujúci `catalog-http.integration.test.ts` /
+  `catalog-http-ingest.integration.test.ts` split. Nový vzor: `orders-http
+  .integration.test.ts` (čítanie + import) / `orders-http-state.integration
+  .test.ts` (#25 zmena stavu riadku). Pri pridávaní testu do už veľkého
+  integračného súboru `pnpm lint` VŽDY over PRED pushom, nie až keď to
+  spadne v CI.
 - **Playwright's `getByLabel`/`getByText` robia SUBSTRING zhodu (case-
   insensitive), nie presnú, pokiaľ nedáš `{ exact: true }`** — nové
   `aria-label` pridané do jednej sekcie môže tichým spôsobom kolidovať s
