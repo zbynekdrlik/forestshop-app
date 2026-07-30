@@ -967,3 +967,40 @@ nové heslo sa nikde v pushnutom obsahu nenachádza.
 - No PR number appears in any commit message (`#N` bans the design-comment
   hook on this repo) — "PR 76"/"PR 77" written in prose throughout.
 - Shared PR: `#77`.
+
+## 2026-07-30 — issue 78 (deploy SIGTERM/recreate race)
+
+- Root cause: `apps/api/src/index.ts` had NO signal handler at all. The
+  container runs as PID 1 (`Dockerfile`'s `CMD`, no `tini`/`init: true`), and
+  the kernel does not apply a signal's default disposition to PID 1 unless
+  the process installs an explicit handler — so SIGTERM was silently
+  ignored for the full `stop_grace_period` (10s) until Docker SIGKILLed the
+  process, racing `docker compose up`'s Recreate step ("No such container").
+  Same symptom had already hit deploy for PR 25 and was misdiagnosed there
+  as transient containerd flakiness (fixed by a rerun) — corrected that
+  playbook entry in place (`.claude/rules/deploy.md`) rather than leaving
+  the wrong lesson for the next occurrence.
+- New `apps/api/src/shutdown.ts`: `createShutdownHandler()` — idempotent,
+  stops the scheduler (`.stop()`, so no new tick starts mid-shutdown),
+  proactively closes idle HTTP connections, closes the HTTP server then the
+  DB pool, `process.exit(0)`; bounded 8s force-exit(1) fallback, guarded
+  against a double `exit()` call. `docker-compose.prod.yml`'s `app` service
+  got an explicit `stop_grace_period: 15s` as a complementary margin.
+- RED/GREEN: `bf7f593` (test, `[red]`, confirmed failing — module didn't
+  exist yet) → `a022b27` (fix, `[green]`). Three follow-up commits from
+  self-review + an independent code-review subagent: `8059324` (double-exit
+  guard), `ceaf2b4` (stop_grace_period + playbook correction — landed
+  between red/green and the follow-ups), `c18f23b` (scheduler stop +
+  closeIdleConnections + a fourth test proving an in-flight request
+  completes normally when the signal arrives mid-request — this test
+  surfaced a real subtlety: `server.close()` waits on Node's
+  `keepAliveTimeout` unless the response sets `Connection: close`).
+- Verified end-to-end THREE times against the actual built production
+  Docker image running as real PID 1 (not just the integration test): a
+  bare `docker stop -t 15` on the unfixed image would have hung the full
+  grace period; on the fixed image it exited in 431ms, then 211ms after the
+  scheduler-stop wiring, both with exit code 0.
+- CI green (check/integration ×211/e2e/docker-build/version-check) on `dev`
+  push and on the PR (`#79`) across all three pushes; local before each
+  push: lint + typecheck clean.
+- Shared PR: `#79`.
