@@ -2,14 +2,21 @@ import { zValidator } from "@hono/zod-validator";
 import type { Hono } from "hono";
 import { z } from "zod";
 import type { Database } from "../db/client.js";
+import { orderLineState } from "../db/schema.js";
 import { log } from "../logger.js";
 import { record } from "../modules/audit/service.js";
 import { ORDERS_EXPORT_URL_NOT_CONFIGURED, type OrdersIngestResult, type RunOrdersIngest } from "../modules/orders/ingest.js";
 import { getOrderDetail, listOpenOrderLinesBySupplier } from "../modules/orders/queries.js";
+import { setOrderLineState } from "../modules/orders/state.js";
 import { requireRole, requireUser, type AppBindings } from "./middleware.js";
 import { requireSameOrigin } from "./origin-check.js";
 
 const orderParam = z.object({ id: z.string().uuid() });
+const orderLineParam = z.object({ lineId: z.string().uuid() });
+// Čerpané priamo z `orderLineState.enumValues` (zdieľaný zdroj pravdy so
+// schémou, `schema-orders.ts`) — nikdy ručne prepísaná únia, ktorá by sa mohla
+// rozísť pri pridaní ďalšieho stavu.
+const orderLineStateBody = z.object({ state: z.enum(orderLineState.enumValues) });
 
 // Re-exportované, aby `http/app.ts` nemusel meniť svoj import — kanonická
 // definícia žije v `modules/orders/ingest.ts` (rovnaký vzor ako katalógov
@@ -33,6 +40,36 @@ export function registerOrdersRoutes(
     if (detail === null) return c.json({ error: "Objednávka sa nenašla" }, 404);
     return c.json(detail);
   });
+
+  // Zmena stavu riadku objednávky (#25) — rovnaké oprávnenie ako spustenie
+  // importu (`requireRole("admin", "manazer")`): manažér stavy mení, `citanie`/
+  // `sef` len čítajú.
+  app.post(
+    "/api/orders/lines/:lineId/state",
+    requireSameOrigin(),
+    requireUser(db),
+    requireRole("admin", "manazer"),
+    zValidator("param", orderLineParam),
+    zValidator("json", orderLineStateBody),
+    async (c) => {
+      const { lineId } = c.req.valid("param");
+      const { state } = c.req.valid("json");
+      const user = c.get("user");
+      const now = new Date();
+
+      const result = await setOrderLineState(db, {
+        lineId,
+        newState: state,
+        actorUserId: user.userId,
+        now,
+      });
+      if (result === "not_found") {
+        return c.json({ error: "Riadok objednávky sa nenašiel" }, 404);
+      }
+      log.info({ actorUserId: user.userId, lineId, state }, "zmena stavu riadku objednávky");
+      return c.json({ ok: true as const, state });
+    },
+  );
 
   // JEDEN import naraz — rovnaký in-flight guard ako `/api/catalog/ingest`
   // (uzáver na inštanciu aplikácie, `createApp`/`registerOrdersRoutes` sa

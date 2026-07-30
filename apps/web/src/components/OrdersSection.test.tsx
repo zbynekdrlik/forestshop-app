@@ -2,14 +2,17 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { OrdersSection } from "./OrdersSection.js";
 
-const { fetchOpenOrders } = vi.hoisted(() => ({ fetchOpenOrders: vi.fn() }));
+const { fetchOpenOrders, updateOrderLineState } = vi.hoisted(() => ({
+  fetchOpenOrders: vi.fn(),
+  updateOrderLineState: vi.fn(),
+}));
 
 // `OrdersUnauthorizedError` ostáva SKUTOČNÁ trieda z reálneho modulu — rovnaký
 // dôvod ako `SchedulerSection.test.tsx`'s `SchedulerUnauthorizedError`:
 // `instanceof` v komponente musí fungovať aj v teste.
 vi.mock("../ordersApi.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../ordersApi.js")>();
-  return { ...actual, fetchOpenOrders };
+  return { ...actual, fetchOpenOrders, updateOrderLineState };
 });
 
 const { OrdersUnauthorizedError } = await import("../ordersApi.js");
@@ -50,7 +53,7 @@ afterEach(() => {
 it("keď zatiaľ nie sú žiadne otvorené objednávky, zobrazí informačnú vetu namiesto holej tabuľky", async () => {
   fetchOpenOrders.mockResolvedValue([]);
 
-  render(<OrdersSection onSessionExpired={() => {}} />);
+  render(<OrdersSection role="citanie" onSessionExpired={() => {}} />);
 
   await screen.findByTestId("orders-empty");
   expect(screen.queryByRole("table")).toBeNull();
@@ -61,7 +64,7 @@ it("zoskupí riadky podľa dodávateľa a zobrazí produkt, veľkosť, množstvo
     { supplier: "Dodávateľ Alfa", lines: [LINE_NOVA, LINE_STARA] },
   ]);
 
-  render(<OrdersSection onSessionExpired={() => {}} />);
+  render(<OrdersSection role="citanie" onSessionExpired={() => {}} />);
 
   const skupina = await screen.findByTestId("supplier-Dodávateľ Alfa");
   expect(skupina.textContent).toContain("Dodávateľ Alfa");
@@ -82,7 +85,7 @@ it("zoskupí riadky podľa dodávateľa a zobrazí produkt, veľkosť, množstvo
 it("chýbajúcu veľkosť a komentár zobrazí ako pomlčku", async () => {
   fetchOpenOrders.mockResolvedValue([{ supplier: "Dodávateľ Alfa", lines: [LINE_NOVA] }]);
 
-  render(<OrdersSection onSessionExpired={() => {}} />);
+  render(<OrdersSection role="citanie" onSessionExpired={() => {}} />);
 
   const riadok = await screen.findByTestId(`order-line-${LINE_NOVA.lineId}`);
   // LINE_NOVA má sizeLabel: null — zobrazí sa pomlčka namiesto prázdneho políčka.
@@ -93,7 +96,7 @@ it("pri 401 zavolá onSessionExpired namiesto zobrazenia všeobecnej chyby", asy
   fetchOpenOrders.mockRejectedValue(new OrdersUnauthorizedError());
   const onSessionExpired = vi.fn();
 
-  render(<OrdersSection onSessionExpired={onSessionExpired} />);
+  render(<OrdersSection role="citanie" onSessionExpired={onSessionExpired} />);
 
   await waitFor(() => {
     expect(onSessionExpired).toHaveBeenCalledTimes(1);
@@ -104,9 +107,77 @@ it("pri 401 zavolá onSessionExpired namiesto zobrazenia všeobecnej chyby", asy
 it("keď načítanie zlyhá inou chybou, zobrazí vlastnú slovenskú hlášku", async () => {
   fetchOpenOrders.mockRejectedValue(new Error("network"));
 
-  render(<OrdersSection onSessionExpired={() => {}} />);
+  render(<OrdersSection role="citanie" onSessionExpired={() => {}} />);
 
   await waitFor(() => {
     expect(screen.getByRole("alert").textContent).toBe("Otvorené objednávky sa nepodarilo načítať.");
   });
+});
+
+// #25: zmena stavu riadku — rola "sef" ostáva na čistom texte, presne ako
+// "citanie" vyššie (rovnaká brána ako server, žiadny select pre neprivilegovanú rolu).
+it("rola sef nevidí select na zmenu stavu, len text", async () => {
+  fetchOpenOrders.mockResolvedValue([{ supplier: "Dodávateľ Alfa", lines: [LINE_STARA] }]);
+
+  render(<OrdersSection role="sef" onSessionExpired={() => {}} />);
+
+  await screen.findByTestId(`order-line-${LINE_STARA.lineId}`);
+  expect(screen.queryByTestId(`state-select-${LINE_STARA.lineId}`)).toBeNull();
+});
+
+it("rola manazer vidí select a zmena stavu sa prejaví lokálne bez nového načítania", async () => {
+  fetchOpenOrders.mockResolvedValue([{ supplier: "Dodávateľ Alfa", lines: [LINE_STARA] }]);
+  updateOrderLineState.mockResolvedValue(undefined);
+
+  render(<OrdersSection role="manazer" onSessionExpired={() => {}} />);
+
+  const select = await screen.findByTestId<HTMLSelectElement>(`state-select-${LINE_STARA.lineId}`);
+  expect(select.value).toBe("objednane");
+
+  select.value = "skladom";
+  select.dispatchEvent(new Event("change", { bubbles: true }));
+
+  await waitFor(() => {
+    expect(updateOrderLineState).toHaveBeenCalledWith(LINE_STARA.lineId, "skladom");
+  });
+  await waitFor(() => {
+    expect(screen.getByTestId<HTMLSelectElement>(`state-select-${LINE_STARA.lineId}`).value).toBe("skladom");
+  });
+  // Presne JEDNO volanie fetchOpenOrders (počiatočné načítanie) — úspešná
+  // zmena aktualizuje lokálny stav, netreba refetch.
+  expect(fetchOpenOrders).toHaveBeenCalledTimes(1);
+  expect(screen.queryByRole("alert")).toBeNull();
+});
+
+it("zlyhaná zmena stavu zobrazí slovenskú hlášku zo servera a stav sa nezmení", async () => {
+  fetchOpenOrders.mockResolvedValue([{ supplier: "Dodávateľ Alfa", lines: [LINE_STARA] }]);
+  updateOrderLineState.mockRejectedValue(new Error("Riadok objednávky sa nenašiel"));
+
+  render(<OrdersSection role="manazer" onSessionExpired={() => {}} />);
+
+  const select = await screen.findByTestId<HTMLSelectElement>(`state-select-${LINE_STARA.lineId}`);
+  select.value = "skladom";
+  select.dispatchEvent(new Event("change", { bubbles: true }));
+
+  await waitFor(() => {
+    expect(screen.getByRole("alert").textContent).toBe("Riadok objednávky sa nenašiel");
+  });
+  expect(screen.getByTestId<HTMLSelectElement>(`state-select-${LINE_STARA.lineId}`).value).toBe("objednane");
+});
+
+it("zmena stavu pri 401 zavolá onSessionExpired namiesto zobrazenia chyby", async () => {
+  fetchOpenOrders.mockResolvedValue([{ supplier: "Dodávateľ Alfa", lines: [LINE_STARA] }]);
+  updateOrderLineState.mockRejectedValue(new OrdersUnauthorizedError());
+  const onSessionExpired = vi.fn();
+
+  render(<OrdersSection role="manazer" onSessionExpired={onSessionExpired} />);
+
+  const select = await screen.findByTestId<HTMLSelectElement>(`state-select-${LINE_STARA.lineId}`);
+  select.value = "skladom";
+  select.dispatchEvent(new Event("change", { bubbles: true }));
+
+  await waitFor(() => {
+    expect(onSessionExpired).toHaveBeenCalledTimes(1);
+  });
+  expect(screen.queryByRole("alert")).toBeNull();
 });

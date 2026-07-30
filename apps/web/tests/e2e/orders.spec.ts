@@ -51,3 +51,43 @@ test("manažér vidí otvorené objednávky zoskupené podľa dodávateľa, konz
 
   expect(chyby).toEqual([]);
 });
+
+// #25: manažér prepne stav riadku cez select v UI a zmena PRETRVÁ po obnovení
+// stránky. Zápis stavu a audit bežia v JEDNEJ transakcii (`modules/orders/
+// state.ts`) — pretrvanie po reloade je teda dôkazom, že transakcia skutočne
+// commitla (audit zápis neyhodil výnimku, ktorá by ju bola vrátila späť).
+// Samotný obsah auditového riadku (kto, kedy, z akého stavu do akého) overuje
+// integračný test (`apps/api/tests/orders-http.integration.test.ts`) priamo
+// nad databázou — tam patrí kontrola stĺpcov DB riadku, nie do e2e.
+test("manažér prepne stav riadku cez select, zmena pretrvá po obnovení stránky, konzola je čistá", async ({ page }) => {
+  const chyby: string[] = [];
+  page.on("console", (m) => {
+    if ((m.type() === "error" || m.type() === "warning") && !jeOcakavane(m)) chyby.push(m.text());
+  });
+  page.on("pageerror", (e) => {
+    chyby.push(e.message);
+  });
+
+  await page.goto("/");
+  await page.getByLabel("E-mail").fill("e2e@forestshop.sk");
+  await page.getByLabel("Heslo").fill(E2E_HESLO);
+  await page.getByRole("button", { name: "Prihlásiť sa" }).click();
+  await expect(page.getByRole("heading", { name: "Na objednanie" })).toBeVisible();
+
+  // Objednávka 9001 (dodávateľ "DODAVATEL-TEST-1") má riadok so stavom
+  // "caka_sa" (`scripts/e2e-setup.ts`).
+  const riadok = page.getByTestId("supplier-DODAVATEL-TEST-1").locator("[data-testid^='order-line-']");
+  const select = riadok.locator("select");
+  await expect(select).toHaveValue("caka_sa");
+
+  await select.selectOption("skladom");
+  await expect(riadok).toContainText("Skladom");
+  await expect(page.getByRole("alert")).toHaveCount(0);
+
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Na objednanie" })).toBeVisible();
+  const riadokPoReloade = page.getByTestId("supplier-DODAVATEL-TEST-1").locator("[data-testid^='order-line-']");
+  await expect(riadokPoReloade.locator("select")).toHaveValue("skladom");
+
+  expect(chyby).toEqual([]);
+});
