@@ -670,3 +670,38 @@ tr:last-child td {
   font-size: var(--fs-text-xs);
   color: var(--fs-ink-faint);
 }
+
+/* issue 59: nastavenie otvorených stavov objednávok — rovnaký vizuálny
+   jazyk ako `.autostatus`/`.mail-preview` vyššie (karta na svetlom podklade),
+   vlastný namespace, aby sa nekolidovalo s tabuľkovými triedami. */
+.order-open-statuses {
+  margin-bottom: var(--fs-space-4);
+}
+.oos-body {
+  background: var(--fs-surface);
+  border: 1px solid var(--fs-border);
+  border-radius: var(--fs-radius-md);
+  box-shadow: var(--fs-shadow-sm);
+  padding: var(--fs-space-4);
+  margin-top: var(--fs-space-2);
+  max-width: 32rem;
+}
+.oos-help {
+  font-size: var(--fs-text-sm);
+  color: var(--fs-ink-muted);
+  margin: 0 0 var(--fs-space-2);
+}
+.oos-textarea {
+  width: 100%;
+  font: inherit;
+  font-size: var(--fs-text-sm);
+  padding: var(--fs-space-2);
+  border: 1px solid var(--fs-border);
+  border-radius: var(--fs-radius-sm);
+  resize: vertical;
+}
+.oos-known {
+  font-size: var(--fs-text-xs);
+  color: var(--fs-ink-faint);
+  margin: var(--fs-space-2) 0;
+}

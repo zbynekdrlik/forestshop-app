@@ -41,15 +41,14 @@ export function registerOrdersRoutes(
     c.json({ suppliers: await listOpenOrderLinesBySupplier(db) }),
   );
 
-  app.get("/api/orders/:id", requireUser(db), zValidator("param", orderParam), async (c) => {
-    const detail = await getOrderDetail(db, c.req.valid("param").id);
-    if (detail === null) return c.json({ error: "Objednávka sa nenašla" }, 404);
-    return c.json(detail);
-  });
-
   // issue 59: nastavenie, ktoré Shoptet stavy sa počítajú ako "objednávka sa
-  // ešte vybavuje" (rozhoduje o obsahu `/api/orders/open` vyššie). Čítanie
-  // má rovnaké oprávnenie ako zvyšok obrazovky (`requireUser`, žiadne
+  // ešte vybavuje" (rozhoduje o obsahu `/api/orders/open` vyššie). MUSÍ byť
+  // zaregistrované PRED `/api/orders/:id` nižšie — Hono zhoduje trasy v
+  // poradí registrácie, takže parametrizovaná `:id` by inak "open-statuses"
+  // zožrala ako svoj parameter (zlyhala by na neplatnom UUID) skôr, než by
+  // sa vôbec dostalo k tejto konkrétnej ceste (zistené naživo, e2e beh).
+  //
+  // Čítanie má rovnaké oprávnenie ako zvyšok obrazovky (`requireUser`, žiadne
   // obmedzenie roly) — vidieť nastavenie nie je citlivejšie než vidieť
   // samotné otvorené objednávky.
   app.get("/api/orders/open-statuses", requireUser(db), async (c) => {
@@ -77,6 +76,12 @@ export function registerOrdersRoutes(
       return c.json({ ok: true as const, statuses: result.statuses });
     },
   );
+
+  app.get("/api/orders/:id", requireUser(db), zValidator("param", orderParam), async (c) => {
+    const detail = await getOrderDetail(db, c.req.valid("param").id);
+    if (detail === null) return c.json({ error: "Objednávka sa nenašla" }, 404);
+    return c.json(detail);
+  });
 
   // Zmena stavu riadku objednávky (#25) — rovnaké oprávnenie ako spustenie
   // importu (`requireRole("admin", "manazer")`): manažér stavy mení, `citanie`/

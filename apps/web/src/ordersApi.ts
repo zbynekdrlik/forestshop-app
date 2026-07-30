@@ -102,6 +102,36 @@ export async function triggerOrdersIngest(): Promise<OrdersIngestOutcome> {
   return ordersIngestOutcomeSchema.parse(await readJson(response, "Import objednávok sa nepodarilo spustiť"));
 }
 
+// issue 59: nastavenie, ktoré Shoptet stavy sa počítajú ako "objednávka sa
+// ešte vybavuje" (rozhoduje o obsahu `fetchOpenOrders` vyššie).
+const openStatusesConfigSchema = z.object({
+  statuses: z.array(z.string()),
+  // Distinct hodnoty `status_name`, aké appka skutočne videla v exportoch —
+  // pomôcka pri editácii (over preklep), nikdy sa neposiela naspäť pri uložení.
+  knownStatuses: z.array(z.string()),
+});
+
+export type OpenStatusesConfig = z.infer<typeof openStatusesConfigSchema>;
+
+export async function fetchOpenStatusesConfig(): Promise<OpenStatusesConfig> {
+  const response = await fetch("/api/orders/open-statuses");
+  return openStatusesConfigSchema.parse(await readJson(response, "Nastavenie otvorených stavov sa nepodarilo načítať"));
+}
+
+const saveOpenStatusesResultSchema = z.object({ ok: z.literal(true), statuses: z.array(z.string()) });
+
+export async function saveOpenStatuses(statuses: readonly string[]): Promise<readonly string[]> {
+  const response = await fetch("/api/orders/open-statuses", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ statuses }),
+  });
+  const telo = saveOpenStatusesResultSchema.parse(
+    await readJson(response, "Nastavenie otvorených stavov sa nepodarilo uložiť"),
+  );
+  return telo.statuses;
+}
+
 export async function fetchOpenOrders(): Promise<readonly SupplierOpenOrders[]> {
   const response = await fetch("/api/orders/open");
   const parsed = openOrdersSchema.parse(

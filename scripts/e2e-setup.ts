@@ -54,6 +54,12 @@ const E2E_SKUPINY_EMAIL = "e2e-skupiny@forestshop.sk"; // musí sa zhodovať s h
 // e-mail), nie flaka. Vlastný e-mail = vlastný rate-limit priestor.
 const E2E_NAV_EMAIL = "e2e-nav@forestshop.sk"; // musí sa zhodovať s hodnotou v nav.spec.ts
 
+// issue 59: rovnaký mechanizmus a dôvod ako `E2E_NAV_EMAIL`/`E2E_SKUPINY_EMAIL`
+// vyššie — balík je UŽ na hranici `MAX_ATTEMPTS` (komentár vyššie), takže
+// nový test (nastavenie otvorených stavov) dostáva VLASTNÝ izolovaný účet
+// namiesto ďalšieho prihlásenia pod zdieľaným `e2e@forestshop.sk`.
+const E2E_OTVORENE_STAVY_EMAIL = "e2e-otvorene-stavy@forestshop.sk"; // musí sa zhodovať s hodnotou v orders.spec.ts
+
 const { db, pool } = createDb();
 // Konštantný literál bez interpolácie — obyčajný reťazec je tu rovnako bezpečný
 // ako `sql` tagovaná šablóna (tú používa ekvivalentný apps/api/tests/helpers/db.ts),
@@ -105,6 +111,12 @@ await db.insert(users).values({
 });
 await db.insert(users).values({
   email: E2E_NAV_EMAIL,
+  passwordHash: await hashPassword(E2E_HESLO),
+  displayName: "E2E Manažér",
+  role: "manazer",
+});
+await db.insert(users).values({
+  email: E2E_OTVORENE_STAVY_EMAIL,
   passwordHash: await hashPassword(E2E_HESLO),
   displayName: "E2E Manažér",
   role: "manazer",
@@ -206,6 +218,16 @@ await db.insert(orderLines).values({
   orderId: objednavkaUzavreta.id,
   variantCode: "40287",
   quantity: 3,
+  // `state: "skladom"` (NIE predvolené "objednane") — `mail.ts`'s
+  // `loadOutstandingLines` agreguje LEN riadky v stave "objednane" naprieč
+  // VŠETKÝMI objednávkami toho istého dodávateľa, bez ohľadu na
+  // `order.status_name` (mail agregácia a Shoptet-ov stav objednávky sú
+  // zámerne nezávislé, viď `.claude/rules/orders.md`). Default "objednane"
+  // by preto TÚTO objednávku prisčítal do "(bez dodávateľa)" mailového
+  // náhľadu (1 ks → 4 ks) a rozbil `orders.spec.ts`'s existujúci mailový
+  // test, hoci s "Na objednanie" zoznamom (predmet TOHTO ticketu) to
+  // nemá nič spoločné.
+  state: "skladom",
 });
 
 // F4 (#45): jeden UŽ NAVRHNUTÝ (nepotvrdený) pairing kandidát — simuluje to,
