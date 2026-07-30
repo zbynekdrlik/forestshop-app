@@ -23,10 +23,20 @@ export interface SupplierLink {
 
 const URL_RE = /https?:\/\/\S+/i;
 
+// `internalNote` je ručne písaný voľný text (issue 70) — URL v ňom je bežne
+// nasledovaná koncovou interpunkciou ("...produkt.") alebo uzatvorená v
+// zátvorke/úvodzovkách ("(pozri https://...)"), ktorá do samotného odkazu
+// nepatrí. `URL_RE`'s `\S+` je pažravý a zoberie ju tiež, preto sa taký beh
+// znakov po matchi orežú. Poznámka s VIACERÝMI odkazmi (issue 70's test)
+// zámerne berie len PRVÝ výskyt — žiadny zoznam odkazov sa v UI zatiaľ
+// nezobrazuje.
+const TRAILING_PUNCTUATION_RE = /[)\]}>.,;:!?'"]+$/;
+
 export function extractSupplierLink(internalNote: string | null): SupplierLink {
   const raw = (internalNote ?? "").trim();
   if (raw === "") return { url: null, note: null };
   const match = URL_RE.exec(raw);
   if (match === null) return { url: null, note: raw };
-  return { url: match[0], note: raw };
+  const url = match[0].replace(TRAILING_PUNCTUATION_RE, "");
+  return { url, note: raw };
 }
