@@ -22,7 +22,7 @@ describe("createShutdownHandler", () => {
   let poolEnd: (() => Promise<void>) | undefined;
 
   afterEach(async () => {
-    server?.closeAllConnections?.();
+    server?.closeAllConnections();
     await poolEnd?.().catch(() => undefined);
     server = undefined;
     poolEnd = undefined;
@@ -79,7 +79,7 @@ describe("createShutdownHandler", () => {
 
   it("vynúti exit(1), keď sa server.close() nestihne skončiť včas", async () => {
     const neverClosingServer = {
-      close: (_cb?: (err?: Error) => void) => {
+      close: () => {
         // zámerne nikdy nezavolá callback — simuluje zaseknuté keep-alive spojenie
       },
     };

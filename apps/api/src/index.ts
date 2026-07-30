@@ -20,10 +20,11 @@ import {
   sessionCleanupJob,
 } from "./modules/scheduler/jobs.js";
 import { startScheduler } from "./modules/scheduler/scheduler.js";
+import { createShutdownHandler } from "./shutdown.js";
 import { appVersion } from "./version.js";
 
 const env = loadEnv();
-const { db } = createDb(env.DATABASE_URL);
+const { db, pool } = createDb(env.DATABASE_URL);
 
 // Migrácie beží aplikácia sama pri štarte — nasadenie tak nemá druhý, samostatne
 // zlyhateľný krok. Drizzle spúšťa každú migráciu vo VLASTNEJ transakcii, takže
@@ -131,5 +132,19 @@ if (existsSync(publicDir)) {
   );
 }
 
-serve({ fetch: app.fetch, port: env.PORT });
+const server = serve({ fetch: app.fetch, port: env.PORT });
 console.log(JSON.stringify({ msg: "api beží", port: env.PORT, version: appVersion() }));
+
+// issue 78: appka nemala žiadny SIGTERM/SIGINT handler — v produkčnom
+// kontajneri (bez init procesu, appka je PID 1) jadro preto default
+// dispozíciu signálu vôbec neaplikovalo a appka SIGTERM úplne ignorovala,
+// kým ju Docker po stop_grace_period nezabil SIGKILLom (viď shutdown.ts pre
+// plné vysvetlenie aj docker-events dôkaz). Explicitný handler toto
+// obchádza — signál sa vždy doručí, bez ohľadu na PID.
+const shutdown = createShutdownHandler({ server, pool });
+process.on("SIGTERM", () => {
+  shutdown("SIGTERM");
+});
+process.on("SIGINT", () => {
+  shutdown("SIGINT");
+});
