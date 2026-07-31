@@ -223,3 +223,22 @@ paths:
   `docker-container` drivera, nie o vždy-zlyhá chybu. Fix je jeden riadok
   (`uses: docker/setup-buildx-action@v3`), nie retry/`continue-on-error`
   okolo push kroku.
+
+- **Rýchla READ-ONLY kontrola produkčných dát po deployi (napr. "nezmenil
+  som počet riadkov/objednávok") ide cez `postgres` službu, NIE `app`** —
+  `docker compose -f docker-compose.prod.yml exec` cieli na kontajner
+  bežiaci PRIAMO Postgres, appka sama nemá `psql` nainštalované:
+  ```
+  ssh newlevel@dev2
+  cd /srv/forestshop
+  docker compose -f docker-compose.prod.yml exec -T postgres \
+    psql -U forestshop -d forestshop -t -c \
+    "select count(*) from order_line;"
+  ```
+  `"order"` je rezervované SQL kľúčové slovo (rovnaký dôvod ako
+  `.claude/rules/testing.md`'s `withCleanDb()` TRUNCATE poznámka) — v
+  priamom `-c` SQL stringu ho treba ručne uvodzovať (`"order"`), inak psql
+  ohlási syntax error. `-t` (tuples-only) vynechá hlavičku stĺpca, takže
+  výstup je priamo porovnateľné číslo. Použité pri issue 99's post-deploy
+  overení, že zmena UI odkazu nezmenila žiadny riadok v `order`/`order_line`/
+  `product_supplier_override`.
