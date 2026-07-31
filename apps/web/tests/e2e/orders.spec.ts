@@ -84,18 +84,30 @@ test("manažér filtruje podľa dodávateľa, vidí súhrn ostáva vybaviť a sk
   await page.getByTestId("orders-hide-resolved-toggle").click();
   await expect(page.getByTestId("supplier-DODAVATEL-TEST-1")).toBeVisible();
 
-  // issue 95: stránka sa NIKDY nesmie posúvať vodorovne, na žiadnej z troch
-  // testovaných šírok — keď je tabuľka širšia než dostupné miesto, posúva sa
-  // len jej VLASTNÝ obal (`.orders-table-wrap`), nikdy `document.body`.
-  // Rovnaký účet z tohto testu ostáva prihlásený, žiadne ďalšie prihlásenie
-  // netreba (šetrí `MAX_ATTEMPTS` rozpočet — `.claude/rules/frontend-design.md`).
-  for (const width of [1280, 1600, 1920]) {
+  // issue 95: stránka sa NIKDY nesmie posúvať vodorovne, na žiadnej zo
+  // štyroch testovaných šírok — keď je tabuľka širšia než dostupné miesto,
+  // posúva sa len jej VLASTNÝ obal (`.orders-table-wrap`), nikdy
+  // `document.body`. Rovnaký účet z tohto testu ostáva prihlásený, žiadne
+  // ďalšie prihlásenie netreba (šetrí `MAX_ATTEMPTS` rozpočet —
+  // `.claude/rules/frontend-design.md`).
+  //
+  // issue 105 bod 1: naživo namerané pretekanie hlavičiek stĺpcov
+  // (`th.scrollWidth > th.clientWidth`, napr. "OBJEDNANÉ"/"OBJEDNÁVKA" sa pri
+  // 1280px zlievali so susednou hlavičkou) sa unit testom (JSDOM nerenderuje
+  // skutočné šírky) ani doterajším 3-šírkovým behom (chýbalo 1440px)
+  // nezachytilo — teraz sa kontroluje KAŽDÁ `<th>` na VŠETKÝCH štyroch
+  // šírkach, ktoré ticket predpisuje.
+  for (const width of [1280, 1440, 1600, 1920]) {
     await page.setViewportSize({ width, height: 900 });
-    const { bodyWidth, viewportWidth } = await page.evaluate(() => ({
+    const { bodyWidth, viewportWidth, pretekajuceHlavicky } = await page.evaluate(() => ({
       bodyWidth: document.body.scrollWidth,
       viewportWidth: window.innerWidth,
+      pretekajuceHlavicky: [...document.querySelectorAll<HTMLTableCellElement>(".orders-table th")]
+        .filter((th) => th.scrollWidth > th.clientWidth)
+        .map((th) => `"${th.textContent}" (${String(th.scrollWidth)}px text vs ${String(th.clientWidth)}px bunka)`),
     }));
     expect(bodyWidth, `šírka okna ${String(width)}px`).toBeLessThanOrEqual(viewportWidth);
+    expect(pretekajuceHlavicky, `pretekajúce hlavičky pri ${String(width)}px`).toEqual([]);
   }
 
   // Priblíženie prehliadača (majiteľ: "ked aj scalujem tak sa ten stred
