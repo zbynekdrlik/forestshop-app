@@ -1,8 +1,9 @@
 import { eq } from "drizzle-orm";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { orderLines, orders, productSupplierOverrides, users } from "../src/db/schema.js";
 import { createApp } from "../src/http/app.js";
 import { resetLoginRateLimit } from "../src/http/login-rate-limit.js";
+import { log } from "../src/logger.js";
 import { hashPassword } from "../src/modules/auth/passwords.js";
 import type { UserRole } from "../src/modules/auth/service.js";
 import { insertTestVariant, insertTestVariantForProduct } from "./helpers/orders.js";
@@ -240,6 +241,42 @@ it("priradenie riadku, ktorého produkt UŽ má dodávateľa v katalógu, vráti
 
   const override = await db.select().from(productSupplierOverrides).where(eq(productSupplierOverrides.productKey, "N-D"));
   expect(override).toHaveLength(0);
+});
+
+// issue 89 (review PR 87): predtým sa vracalo pred `log.info` skorej v tomto
+// súbore (ten sa netýka tejto vetvy), takže odmietnutý zápis nezanechal
+// ŽIADNU stopu — teraz musí zanechať `log.warn` s kým, ktorým riadkom a
+// akou hodnotou sa pokúsil priradiť.
+it("priradenie riadku, ktorého produkt UŽ má dodávateľa, zaznamená log.warn s aktérom, riadkom a pokúšanou hodnotou", async () => {
+  const { app, cookie, db } = await boot("manazer");
+  await insertTestVariant(db, "N-LOG", "Existujúci Katalógový Dodávateľ");
+  const [objednavka] = await db
+    .insert(orders)
+    .values({ externalOrderId: "6007", customerName: "Zákazník", placedAt: new Date("2026-07-08T00:00:00Z") })
+    .returning();
+  if (objednavka === undefined) throw new Error("insert zlyhal");
+  const [line] = await db.insert(orderLines).values({ orderId: objednavka.id, variantCode: "N-LOG", quantity: 1 }).returning();
+  if (line === undefined) throw new Error("insert zlyhal");
+
+  const warnSpy = vi.spyOn(log, "warn").mockImplementation(() => undefined);
+  try {
+    const res = await app.request(`/api/orders/lines/${line.id}/supplier`, {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({ supplier: "Nový Pokus O Priradenie" }),
+    });
+    expect(res.status).toBe(409);
+
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    const [zaznam, hlaska] = warnSpy.mock.calls[0] ?? [];
+    expect(typeof hlaska).toBe("string");
+    const payload = zaznam as Record<string, unknown>;
+    expect(typeof payload["actorUserId"]).toBe("string");
+    expect(payload["lineId"]).toBe(line.id);
+    expect(payload["supplier"]).toBe("Nový Pokus O Priradenie");
+  } finally {
+    warnSpy.mockRestore();
+  }
 });
 
 // issue 86 (nezávislý audit): `.max(200)` na `orderLineSupplierBody`,

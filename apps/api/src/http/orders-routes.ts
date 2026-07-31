@@ -177,7 +177,15 @@ export function registerOrdersRoutes(
       // issue 86: produkt medzitým dostal dodávateľa v katalógu (súbeh s
       // importom, alebo zabudnutá otvorená stránka) — ručné priradenie sa už
       // netýka tohto riadku, `assignOrderLineSupplier` nič nezapísala.
+      // issue 89 (review PR 87): predtým sa vracalo PRED `log.info` nižšie,
+      // takže odmietnutý zápis nezanechal žiadnu stopu — `warn`, lebo ide o
+      // odmietnutý/zablokovaný zápis (anomália nad bežnú prevádzku), nie
+      // bežný informačný záznam.
       if (result === "already_has_supplier") {
+        log.warn(
+          { actorUserId: user.userId, lineId, supplier },
+          "odmietnuté ručné priradenie dodávateľa — produkt už má dodávateľa v katalógu",
+        );
         return c.json({ error: "Produkt už má dodávateľa v katalógu — ručné priradenie nie je možné" }, 409);
       }
       log.info({ actorUserId: user.userId, lineId, supplier }, "ručné priradenie dodávateľa riadku objednávky");
