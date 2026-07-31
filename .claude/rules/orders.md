@@ -319,23 +319,44 @@ paths:
   appkine `order.comment` (issue 64, tiež interné). Pri KAŽDOM ďalšom poli
   z exportu, kde staršia dokumentácia/appka používa nejaké meno na
   obrazovke — over VÝZNAM stĺpca na reálnych dátach (nie z nálepky v UI).
-- **Shoptet admin GET deep-link na objednávku podľa jej KÓDU (nemáme interné
-  Shoptet id) je `/admin/vyhladavanie/?string=<kód>&src=orders` — NIE
-  `?code=<kód>` na `objednavky-detail/`.** Issue 65: stará appka's
+- **Shoptet admin GET deep-link na objednávku podľa jej KÓDU (CSV export
+  NEMÁ interné Shoptet id) je `/admin/vyhladavanie/?string=<kód>&src=orders`
+  — NIE `?code=<kód>` na `objednavky-detail/`.** Issue 65: stará appka's
   `webreview/static/app.js:2253-2260` (staršie, NEFUNKČNÉ zistenie) používa
   práve ten druhý tvar — ale NOVŠIE, naživo overené zistenie (2026-07-22,
   `parovanie_produktov/src/parovanie/posta_uncollected.py:70-76` +
   `orders_reminder.py:36-38`) dokazuje, že Shoptet admin `?code=`/`?query=`
-  na `objednavky-detail/` TICHO IGNORUJE — funguje LEN globálne
-  vyhľadávanie. Pri CITOVANÍ konkrétnych riadkov starej appky ako
-  referencie pre nejaké správanie VŽDY over, či v tom istom repozitári
-  neexistuje NOVŠIE zistenie, ktoré ho vyvracia (grep na kľúčové slovo,
-  napr. `admin_link`/`ADMIN_ORDER_LINK`) — nie je isté, že prvý nájdený
-  výskyt je ešte platný. Doména admin rozhrania patrí do `env.ts`'s novej,
-  NIE-tajnej premennej (`SHOPTET_ADMIN_BASE_URL`, rozumný default = reálna
-  produkčná hodnota) — nikdy natvrdo v kóde, presne ako `SHOPTET_EXPORT_URL`/
-  `SHOPTET_ORDERS_URL` vyššie (aj keď táto NENESIE `hash`, teda nie je
-  tajomstvo).
+  na `objednavky-detail/` TICHO IGNORUJE, keď sa doň pošle KÓD (nie interné
+  id) — vtedy funguje LEN globálne vyhľadávanie. Pri CITOVANÍ konkrétnych
+  riadkov starej appky ako referencie pre nejaké správanie VŽDY over, či v
+  tom istom repozitári neexistuje NOVŠIE zistenie, ktoré ho vyvracia (grep
+  na kľúčové slovo, napr. `admin_link`/`ADMIN_ORDER_LINK`) — nie je isté, že
+  prvý nájdený výskyt je ešte platný. Doména admin rozhrania patrí do
+  `env.ts`'s novej, NIE-tajnej premennej (`SHOPTET_ADMIN_BASE_URL`, rozumný
+  default = reálna produkčná hodnota) — nikdy natvrdo v kóde, presne ako
+  `SHOPTET_EXPORT_URL`/`SHOPTET_ORDERS_URL` vyššie (aj keď táto NENESIE
+  `hash`, teda nie je tajomstvo).
+- **AKTUALIZÁCIA (issue 120, 2026-07-31): appka INTERNÉ Shoptet id predsa
+  MÁ — len nie z CSV. Vyššie zdokumentované "nemáme interné Shoptet id"
+  platilo (a stále platí) LEN pre `SHOPTET_ORDERS_URL`'s CSV export (67
+  stĺpcov, `patternId=-9`) — ten ho naozaj vôbec nenesie. Existuje ale
+  SAMOSTATNÝ XML export objednávok (`patternId=-11`, dovtedy len
+  poznamenaný v pamäti appky "pre neskoršie fázy", nikdy neskúšaný), ktorý
+  `<ORDER_ID>` NESIE, hneď pred objednávkovým `<CODE>` na KAŽDEJ objednávke
+  (naživo overené: kód `20260897` → `ORDER_ID` `58656`). S TÝMTO id
+  `/admin/objednavky-detail/?id=<id>` UŽ FUNGUJE — appka ho teraz sťahuje
+  BEST-EFFORT vedľa CSV (`modules/orders/fetcher.ts`'s
+  `createHttpOrderIdsFetcher` + `parser.ts`'s `extractOrderIdsFromXml`,
+  nová nepovinná premenná `SHOPTET_ORDERS_XML_URL`) a ukladá do
+  `order.shoptet_order_id` (migrácia 0016, `COALESCE`-ovaný refresh —
+  chýbajúca premenná/zlyhaný fetch NIKDY nevynuluje predtým zistené id).
+  `queries.ts`'s `buildShoptetAdminOrderUrl` použije priamy odkaz na detail,
+  keď id pozná, inak padá späť na vyhľadávanie vyššie. Poučenie pre ĎALŠIE
+  podobné "toto pole/možnosť Shoptet nemá" zistenie: over VŠETKY dostupné
+  export FORMÁTY (appka mala v pamäti aj `orders.xml`/`productsComplete.xml`
+  alternatívy, nikdy vyskúšané, lebo CSV dovtedy stačilo) predtým, než sa
+  záver zovšeobecní na "Shoptet to nemá vôbec" — mal len iný, dovtedy
+  neotestovaný export.
 - **`fixtures/orders-sample.csv` je RUČNE vyrobená (nie výrez reálneho
   exportu ako katalógova fixtúra), takže sa smie prepísať CELÁ pythonom —
   žiadny byte-for-byte jeden-riadok postup ako `.claude/rules/catalog.md`
