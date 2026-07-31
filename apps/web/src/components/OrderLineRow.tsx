@@ -1,4 +1,4 @@
-import { useEffect, useState, type JSX } from "react";
+import { useEffect, useRef, useState, type JSX } from "react";
 import type { OrderLine } from "../ordersApi.js";
 import { formatVariantTotalChip, type VariantTotal } from "../ordersSummary.js";
 
@@ -63,7 +63,22 @@ export function OrderLineRow({
   // `assignSupplier`). Bez tohto by po uložení zostal v poli VIDIEŤ starý
   // koncept, keď riadok NEZMENÍ skupinu (rovnaký pravopis po normalizácii).
   const [supplierDraft, setSupplierDraft] = useState(line.manualSupplierOverride ?? "");
+  // issue 89 (nezávislý audit, objavené novým testom `OrdersSection
+  // .assignSupplier.test.tsx`): tento efekt PREDTÝM bežal aj pri PRVOM
+  // mountnutí (React spúšťa `useEffect` vždy po prvom commite, bez ohľadu
+  // na to, či sa "závislosť skutočne zmenila"), čo bolo úplne zbytočné
+  // (`useState` vyššie už štartuje s TOU ISTOU hodnotou) — a navyše
+  // pretekové: rýchla interakcia hneď po mounte (presne to, čo nový test
+  // robí) mohla zachytiť tento oneskorený "reset na ''" AŽ PO tom, čo
+  // manažér už stihol napísať koncept, a ticho ho vymazať (~1 z ~150
+  // lokálnych behov). Skip na prvom mounte odstraňuje pretek — efekt teraz
+  // reaguje len na SKUTOČNÚ zmenu `manualSupplierOverride` po uložení.
+  const isFirstMount = useRef(true);
   useEffect(() => {
+    if (isFirstMount.current) {
+      isFirstMount.current = false;
+      return;
+    }
     setSupplierDraft(line.manualSupplierOverride ?? "");
   }, [line.manualSupplierOverride]);
   const supplierBusyHere = busySupplierLineId === line.lineId;
