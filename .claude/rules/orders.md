@@ -269,3 +269,21 @@ paths:
   banner automaticky. Pri pridávaní ďalšieho chybového stavu na už
   používanú zápisovú trasu najprv over, či `readJson` volajúcej funkcie už
   nerieši všeobecný prípad — často áno.
+- **Nezávislý audit k issue 86 upozornil na napätie medzi novým 409
+  (`already_has_supplier`, vyššie) a `.claude/rules/testing.md`'s pravidlom
+  "bežné, OČAKÁVANÉ doménové zlyhanie, ktoré sa niekedy overuje aj cez
+  Playwright, nesmie vracať 4xx/5xx" (Chromium loguje "Failed to load
+  resource" pre KAŽDÝ `fetch()` s ne-2xx odpoveďou, a nulová-konzola asercia
+  v `orders.spec.ts` by na to spadla). Tento 409 je ARGUMENTOVATEĽNE presne
+  taký prípad — súbeh (produkt medzitým dostal dodávateľa inou cestou) je
+  bežná, očakávaná situácia, nie chyba servera. **Nemení sa na 200
+  `{ok:false,error}`** (predpísaný vzor by bol rovnaký ako
+  `/api/catalog/ingest`'s `{status:"busy"}`) — issue 89 to necháva zámerne
+  otvorené, lebo dnešný `orders.spec.ts` tento konkrétny 409 vôbec
+  neoveruje cez Playwright. Kto napíše PRVÝ e2e test tejto hlášky
+  (banner po zamietnutom priradení), MUSÍ sa s týmto napätím vysporiadať
+  ZÁMERNE — buď zmenou trasy na 200 `{ok:false,error}` (rovnaký vzor ako
+  `sendSupplierOrderMail`), alebo explicitným filtrom v `jeOcakavane`
+  (rovnaký vzor ako existujúca `/api/me` 401 výnimka). **Zakázané: "opraviť"
+  to rozšírením konzolovej výnimky na hocijakú ĎALŠIU cestu/kód bez tejto
+  úvahy** — presne to `testing.md` výslovne zakazuje.
