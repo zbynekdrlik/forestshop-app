@@ -101,6 +101,55 @@ test("STAV je celý čitateľný a POZNÁMKY pole je dosť široké na všetkýc
         .filter((h) => h > 100);
     });
     expect(vysokeKompaktneRiadky, `príliš vysoké riadky pri ${String(width)}px`).toEqual([]);
+
+    // issue 111 body 1+2: číslo objednávky ANI kód produktu sa nesmú
+    // zalomiť na viac riadkov, na ŽIADNEJ zo 4 šírok — kontroluje sa AJ
+    // `white-space: nowrap` (mechanizmus, ktorý garantuje toto natrvalo, aj
+    // pre BUDÚCI dlhší obsah, nie len dnešný zmeraný obsah fixtúry) AJ
+    // skutočný počet zalomených riadkov (`getClientRects().length > 1` —
+    // funguje pre `<a>`/text-node vo VNÚTRI bunky; na `<td>` samotnej by to
+    // vždy vrátilo 1, keďže je to blokový box, nie inline text).
+    const zalomeneObjednavky = await page.evaluate(() => {
+      const odkazy = [...document.querySelectorAll<HTMLAnchorElement>(".ord-order-cell a.ord-admin-link")];
+      const prvy = odkazy.at(0);
+      return {
+        pocetZalomenych: odkazy.filter((a) => a.getClientRects().length > 1).length,
+        whiteSpace: prvy !== undefined ? getComputedStyle(prvy).whiteSpace : null,
+      };
+    });
+    expect(zalomeneObjednavky.pocetZalomenych, `zalomené čísla objednávky pri ${String(width)}px`).toBe(0);
+    expect(zalomeneObjednavky.whiteSpace, `.ord-admin-link white-space pri ${String(width)}px`).toBe("nowrap");
+
+    const zalomeneKody = await page.evaluate(() => {
+      const bunky = [...document.querySelectorAll<HTMLTableCellElement>(".ord-code-cell")];
+      const pocetZalomenych = bunky.filter((td) => {
+        const textNode = [...td.childNodes].find((n) => n.nodeType === Node.TEXT_NODE && n.textContent?.trim() !== "");
+        if (!textNode) return false;
+        const range = document.createRange();
+        range.selectNodeContents(textNode);
+        return range.getClientRects().length > 1;
+      }).length;
+      const prva = bunky.at(0);
+      return { pocetZalomenych, whiteSpace: prva !== undefined ? getComputedStyle(prva).whiteSpace : null };
+    });
+    expect(zalomeneKody.pocetZalomenych, `zalomené kódy produktu pri ${String(width)}px`).toBe(0);
+    expect(zalomeneKody.whiteSpace, `.ord-code-cell white-space pri ${String(width)}px`).toBe("nowrap");
+
+    // issue 111 bod 5: pri 1280px sa žiadna `.orders-table-wrap` skupina
+    // nesmie posúvať vodorovne (predtým 💾 tlačidlo bolo za viditeľným
+    // okrajom, kým manažér nescrolloval).
+    if (width === 1280) {
+      const pretekajuceObaly = await page.evaluate(() => {
+        return [...document.querySelectorAll(".orders-table-wrap")].filter((w) => w.scrollWidth > w.clientWidth)
+          .length;
+      });
+      expect(pretekajuceObaly, "pretekajúce .orders-table-wrap pri 1280px").toBe(0);
+
+      const strankaSaPosuva = await page.evaluate(
+        () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+      );
+      expect(strankaSaPosuva, "stránka sa vodorovne posúva pri 1280px").toBe(false);
+    }
   }
 
   expect(chyby).toEqual([]);
