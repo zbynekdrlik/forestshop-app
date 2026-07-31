@@ -106,3 +106,26 @@ export function formatVariantTotalChip(vt: VariantTotal): { readonly text: strin
     title: `Spolu vo všetkých objednávkach: ${String(vt.total)} ks · nevybavené: ${String(vt.remaining)} ks`,
   };
 }
+
+// issue 65 — priamy náprotivok starej appky's `orderAgeDays`/`STALE_ORDER_DAYS`
+// (`app.js:169-176`, `>14` → badge). `placedAt` tu nesie plný timestamp
+// (issue 59), na rozdiel od starej appky's dátum-bez-času `orderDate` —
+// počítanie priamo od neho (nie od polnoci dňa objednávky) je presnejšie a
+// nestráca informáciu orezaním na dátum.
+export const STALE_ORDER_LINE_DAYS = 14;
+
+export function orderLineAgeDays(placedAt: string, now: Date = new Date()): number {
+  const placedMs = new Date(placedAt).getTime();
+  return Math.max(0, Math.floor((now.getTime() - placedMs) / 86_400_000));
+}
+
+// Badge sa zobrazí LEN pre NEVYBAVENÝ riadok (`isLineResolved` vyššie — tá
+// istá kanonická definícia ako všade inde, nikdy nová) starší než
+// `STALE_ORDER_LINE_DAYS`. Hranica: presne 14 dní → BEZ badge (`14 > 14` je
+// `false`), 15 dní → S badge — rovnaké správanie ako stará appka.
+export function isStaleOrderLine(
+  line: Pick<OrderLine, "ordered" | "state" | "placedAt">,
+  now: Date = new Date(),
+): boolean {
+  return !isLineResolved(line) && orderLineAgeDays(line.placedAt, now) > STALE_ORDER_LINE_DAYS;
+}
