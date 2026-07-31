@@ -1,6 +1,7 @@
 import { expect, it, vi } from "vitest";
 import {
   OrdersUnauthorizedError,
+  assignOrderLineSupplier,
   fetchOpenOrders,
   fetchOpenStatusesConfig,
   fetchSupplierOrderMailPreview,
@@ -156,6 +157,46 @@ it("updateOrderLineOrdered pri 401 vyhodí OrdersUnauthorizedError", async () =>
   await expect(updateOrderLineOrdered("11111111-1111-1111-1111-111111111111", true)).rejects.toBeInstanceOf(
     OrdersUnauthorizedError,
   );
+});
+
+// issue 89 (review PR 87), nález 4: doteraz žiadny test tohto súboru
+// nevolal `assignOrderLineSupplier` — tvrdenie "netreba meniť frontend,
+// slovenská hláška prejde sama" nebolo ničím kryté.
+it("assignOrderLineSupplier pošle POST na správnu trasu s telom { supplier }", async () => {
+  const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ ok: true, supplier: "Alfa" }), { status: 200 }));
+  vi.stubGlobal("fetch", fetchMock);
+
+  await assignOrderLineSupplier("11111111-1111-1111-1111-111111111111", "Alfa");
+
+  expect(fetchMock).toHaveBeenCalledWith(
+    "/api/orders/lines/11111111-1111-1111-1111-111111111111/supplier",
+    expect.objectContaining({
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ supplier: "Alfa" }),
+    }),
+  );
+});
+
+it("assignOrderLineSupplier pri 409 (produkt už má dodávateľa) vyhodí Error so slovenskou hláškou z tela odpovede", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: "Produkt už má dodávateľa v katalógu — ručné priradenie nie je možné" }), {
+        status: 409,
+      }),
+    ),
+  );
+  await expect(assignOrderLineSupplier("11111111-1111-1111-1111-111111111111", "Konkurenčný Zápis")).rejects.toThrow(
+    "Produkt už má dodávateľa v katalógu — ručné priradenie nie je možné",
+  );
+});
+
+it("assignOrderLineSupplier pri 401 vyhodí OrdersUnauthorizedError", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("", { status: 401 })));
+  await expect(
+    assignOrderLineSupplier("11111111-1111-1111-1111-111111111111", "Alfa"),
+  ).rejects.toBeInstanceOf(OrdersUnauthorizedError);
 });
 
 it("setSupplierLinesOrdered pošle PUT s URL-enkódovaným menom dodávateľa a vráti počet zmenených riadkov", async () => {

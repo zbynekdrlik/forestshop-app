@@ -185,6 +185,15 @@ export function OrdersSection({
             return;
           }
           setStateError(err instanceof Error ? err.message : "Priradenie dodávateľa sa nepodarilo.");
+          // issue 89 (review PR 87): predtým sa `load()` volalo LEN v úspešnej
+          // vetve vyššie — pri zamietnutí (napr. server vráti 409, lebo
+          // produkt medzitým dostal dodávateľa v katalógu inou cestou, súbeh s
+          // importom alebo dlho otvorená stránka iného manažéra) zoznam
+          // zostal STARÝ a vstupné pole na priradenie by tak ostalo viditeľné
+          // navždy — manažér by mohol skúšať donekonečna. `load()` mení len
+          // `suppliers`/`loaded`/`error`, nikdy `stateError` (nezávislý stav
+          // vyššie), takže táto hláška ostáva viditeľná aj po refetchi.
+          load();
         })
         .finally(() => {
           setBusySupplierLineId(null);
