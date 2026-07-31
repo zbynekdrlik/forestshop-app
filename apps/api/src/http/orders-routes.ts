@@ -49,12 +49,16 @@ export function registerOrdersRoutes(
   app: Hono<AppBindings>,
   db: Database,
   runOrdersIngest: RunOrdersIngest | undefined,
+  // issue 65: `env.ts`'s `SHOPTET_ADMIN_BASE_URL` — základ priameho odkazu
+  // do Shoptet administrácie pri každom riadku (`queries.ts`'s
+  // `buildShoptetAdminOrderUrl`).
+  adminBaseUrl: string,
 ): void {
   // Čítacie trasy — rovnaké oprávnenie ako katalógové čítanie
   // (`requireUser`, žiadne obmedzenie roly): každý prihlásený používateľ smie
   // vidieť otvorené objednávky, len SPÚŠŤANIE importu (nižšie) je vyhradené.
   app.get("/api/orders/open", requireUser(db), async (c) =>
-    c.json({ suppliers: await listOpenOrderLinesBySupplier(db) }),
+    c.json({ suppliers: await listOpenOrderLinesBySupplier(db, adminBaseUrl) }),
   );
 
   // issue 59: nastavenie, ktoré Shoptet stavy sa počítajú ako "objednávka sa

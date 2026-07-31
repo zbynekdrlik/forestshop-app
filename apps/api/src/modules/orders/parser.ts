@@ -202,6 +202,11 @@ export interface OrderLineCandidate {
   readonly customerName: string;
   // issue 59: Shoptet-ov stav objednávky, normalizovaný (`normalizeStatusName`).
   readonly statusName: string;
+  // issue 65: zákaznícky odkaz k objednávke (export's `remark` stĺpec — NIE
+  // `shopRemark`, interná poznámka predajne, `.claude/rules/orders.md`).
+  // Nepovinný stĺpec exportu — chýbajúci alebo prázdny (po orezaní) sa
+  // mapuje na `null`, nikdy na prázdny reťazec.
+  readonly remark: string | null;
   readonly placedAt: Date;
   readonly variantCode: string;
   readonly quantity: number;
@@ -278,11 +283,14 @@ export function mapOrderRow(row: Readonly<Record<string, string>>): {
     };
   }
 
+  const rawRemark = (row["remark"] ?? "").trim();
+
   return {
     record: {
       externalOrderId,
       customerName: customerNameOf(row),
       statusName: normalizeStatusName(row["statusName"] ?? ""),
+      remark: rawRemark === "" ? null : rawRemark,
       placedAt,
       variantCode,
       quantity,

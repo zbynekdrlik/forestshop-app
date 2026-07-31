@@ -58,7 +58,7 @@ function buildCsv(header: readonly string[], rows: readonly Record<string, strin
   return Buffer.from(lines.join("\r\n") + "\r\n", "utf-8");
 }
 
-const HEADER = ["code", "date", "statusName", "billFullName", "deliveryFullName", "itemName", "itemAmount", "itemCode"] as const;
+const HEADER = ["code", "date", "statusName", "billFullName", "deliveryFullName", "itemName", "itemAmount", "itemCode", "remark"] as const;
 
 it("prijme fixtúru: reálne položky zapíše, duplicitný riadok sčíta, pseudo-položky aj neznámy variant preskočí", async () => {
   const { db, dir } = await boot();
@@ -96,9 +96,13 @@ it("prijme fixtúru: reálne položky zapíše, duplicitný riadok sčíta, pseu
   // issue 59: fixtúra nesie order 20300001 v stave "Vybavuje sa" (otvorená),
   // 20300002 v stave "Vybavená" (uzavretá) — presne to appka teraz ukladá.
   expect(order1[0]?.statusName).toBe("Vybavuje sa");
+  // issue 65: fixtúra nesie order 20300001 so zákazníckym odkazom (`remark`).
+  expect(order1[0]?.remark).toBe("Prosím doručiť len v piatok, ďakujem");
   const order2 = await db.select().from(orders).where(eq(orders.externalOrderId, "20300002"));
   expect(order2[0]?.customerName).toBe("Eva Malá"); // fallback na deliveryFullName
   expect(order2[0]?.statusName).toBe("Vybavená");
+  // issue 65: order 20300002 nemá vo fixtúre vyplnený `remark` → `null`.
+  expect(order2[0]?.remark).toBeNull();
 });
 
 // issue 59: `status_name` je VŽDY Shoptetovo pole (na rozdiel od `comment`/
@@ -122,6 +126,40 @@ it("objednávka nesie stav zo Shoptetu a re-import ho osvieži, keď sa v Shopte
   await ingestOrders(db, { fetchExport: fetcherOf(uzavreta), now: NOW, rawDir: dir, windowStart: WINDOW_START, windowEnd: WINDOW_END });
   const [druhyRead] = await db.select().from(orders).where(eq(orders.externalOrderId, "9101"));
   expect(druhyRead?.statusName).toBe("Vybavena");
+});
+
+// issue 65: `remark` (zákaznícky odkaz) je rovnaká rodina ako `status_name`
+// vyššie — VŽDY Shoptetovo pole (na rozdiel od `comment`), re-import ho MUSÍ
+// osviežiť.
+it("remark je Shoptetovo pole a re-import ho osvieži, keď sa v Shoptete zmení", async () => {
+  const { db, dir } = await boot();
+  await insertTestVariant(db, "40237/XL");
+
+  const bezOdkazu = buildCsv(HEADER, [
+    { code: "9102", date: "2026-07-01 10:00:00", statusName: "Vybavuje sa", billFullName: "X", itemName: "Y", itemAmount: "1", itemCode: "40237/XL" },
+  ]);
+  await ingestOrders(db, { fetchExport: fetcherOf(bezOdkazu), now: NOW, rawDir: dir, windowStart: WINDOW_START, windowEnd: WINDOW_END });
+  const [prvyRead] = await db.select().from(orders).where(eq(orders.externalOrderId, "9102"));
+  expect(prvyRead?.remark).toBeNull();
+
+  // ASCII-only text (rovnaký dôvod ako inde v tomto súbore — `buildCsv`
+  // produkuje UTF-8, ale `ingestOrders` VŽDY dekóduje ako windows-1250,
+  // takže diakritika by na druhej strane vyšla ako mojibake).
+  const sOdkazom = buildCsv(HEADER, [
+    {
+      code: "9102",
+      date: "2026-07-01 10:00:00",
+      statusName: "Vybavuje sa",
+      billFullName: "X",
+      itemName: "Y",
+      itemAmount: "1",
+      itemCode: "40237/XL",
+      remark: "Zavolajte pred dorucenim",
+    },
+  ]);
+  await ingestOrders(db, { fetchExport: fetcherOf(sOdkazom), now: NOW, rawDir: dir, windowStart: WINDOW_START, windowEnd: WINDOW_END });
+  const [druhyRead] = await db.select().from(orders).where(eq(orders.externalOrderId, "9102"));
+  expect(druhyRead?.remark).toBe("Zavolajte pred dorucenim");
 });
 
 it("re-import tej istej fixtúry je idempotentný — žiadne duplicitné riadky, množstvo ostáva rovnaké", async () => {
@@ -164,6 +202,10 @@ it("re-import NIKDY neprepíše ručne nastavený stav riadku ani komentár obje
 
   const [reread] = await db.select().from(orders).where(eq(orders.externalOrderId, "20300001"));
   expect(reread?.comment).toBe("Zavolať zákazníkovi");
+  // issue 65: `remark` sa AJ TAK osviežuje (je to Shoptetovo pole) — tu
+  // ostáva len nezmenené, lebo fixtúra sa re-importuje bez zmeny; skutočnú
+  // zmenu dokazuje samostatný test vyššie ("remark je Shoptetovo pole…").
+  expect(reread?.remark).toBe("Prosím doručiť len v piatok, ďakujem");
   const [rereadLine] = await db.select().from(orderLines).where(eq(orderLines.orderId, order1.id));
   expect(rereadLine?.state).toBe("skladom");
   expect(rereadLine?.quantity).toBe(3); // množstvo sa AJ TAK osviežuje

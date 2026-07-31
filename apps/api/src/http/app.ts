@@ -35,6 +35,11 @@ export function createApp(
     readonly runIngest?: RunIngest;
     readonly runOrdersIngest?: RunOrdersIngest;
     readonly sendSupplierMail?: MailTransport;
+    // issue 65: `env.ts`'s `SHOPTET_ADMIN_BASE_URL` — má vždy hodnotu (zod
+    // default), preto voliteľný parameter s vlastným defaultom tu, nie
+    // `?:` ako `runIngest`/ostatné (tie chýbajú, keď zodpovedajúca URL nie
+    // je nastavená; toto vždy JE nastavené, aspoň na predvolenú hodnotu).
+    readonly adminBaseUrl?: string;
   },
 ): Hono<AppBindings> {
   const app = new Hono<AppBindings>();
@@ -124,7 +129,10 @@ export function createApp(
   );
 
   registerCatalogRoutes(app, db, options.runIngest);
-  registerOrdersRoutes(app, db, options.runOrdersIngest);
+  // issue 65: rovnaký default ako `env.ts`'s `SHOPTET_ADMIN_BASE_URL` — testy
+  // aj lokálny vývoj bez explicitne odovzdanej hodnoty dostanú tú istú
+  // rozumnú predvolenú doménu, nikdy prázdny/neplatný reťazec.
+  registerOrdersRoutes(app, db, options.runOrdersIngest, options.adminBaseUrl ?? "https://www.forestshop.sk");
   registerSchedulerRoutes(app, db);
   registerSupplierRoutes(app, db, options.sendSupplierMail);
   registerPairingRoutes(app, db);

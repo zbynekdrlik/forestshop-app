@@ -69,6 +69,48 @@ describe("mapOrderRow — reálna položka", () => {
     expect(mapped.record?.customerName).toBe("Ján Novák");
     // issue 59: fixtúra nesie order 20300001 v stave "Vybavuje sa".
     expect(mapped.record?.statusName).toBe("Vybavuje sa");
+    // issue 65: fixtúra nesie order 20300001 so zákazníckym odkazom (`remark`
+    // stĺpec — NIE `shopRemark`, `.claude/rules/orders.md`).
+    expect(mapped.record?.remark).toBe("Prosím doručiť len v piatok, ďakujem");
+  });
+
+  // issue 65: order 20300002 (fixtúra) nemá vyplnený `remark` — prázdny
+  // (po orezaní) stĺpec sa mapuje na `null`, nikdy na prázdny reťazec.
+  it("prázdny remark sa mapuje na null, nie na prázdny reťazec", () => {
+    const csv = parseShoptetOrdersCsv(FIXTURE);
+    const rows = [...csv.rows()];
+    const real = rows.find((r) => r["itemCode"] === "40238/M");
+    if (real === undefined) throw new Error("fixtúra nemá očakávaný riadok");
+    const mapped = mapOrderRow(real);
+    expect(mapped.record?.remark).toBeNull();
+  });
+
+  // issue 65: chýbajúci stĺpec `remark` úplne (nie len prázdny) sa má
+  // správať rovnako ako prázdny — appka nesmie spadnúť na chýbajúcom
+  // nepovinnom stĺpci exportu.
+  it("chýbajúci stĺpec remark na riadku → null (nikdy nevyhodí)", () => {
+    const mapped = mapOrderRow({
+      code: "20300006",
+      date: "2026-06-16 08:00:00",
+      billFullName: "X",
+      itemName: "Y",
+      itemAmount: "1",
+      itemCode: "40238/M",
+    });
+    expect(mapped.record?.remark).toBeNull();
+  });
+
+  it("remark s okolitými medzerami sa orezáva", () => {
+    const mapped = mapOrderRow({
+      code: "20300007",
+      date: "2026-06-16 08:00:00",
+      billFullName: "X",
+      itemName: "Y",
+      itemAmount: "1",
+      itemCode: "40238/M",
+      remark: "  volať pred doručením  ",
+    });
+    expect(mapped.record?.remark).toBe("volať pred doručením");
   });
 
   // issue 59: normalizácia (NFC + orez) musí bežať aj v `mapOrderRow`, nie

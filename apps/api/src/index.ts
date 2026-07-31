@@ -90,6 +90,7 @@ const app = createApp(db, {
   ...(runIngest === undefined ? {} : { runIngest }),
   ...(runOrdersIngest === undefined ? {} : { runOrdersIngest }),
   ...(sendSupplierMail === undefined ? {} : { sendSupplierMail }),
+  adminBaseUrl: env.SHOPTET_ADMIN_BASE_URL,
 });
 
 // F2 (#12/#3) + F3 (#22/#28): nočný import katalógu/objednávok, mazanie

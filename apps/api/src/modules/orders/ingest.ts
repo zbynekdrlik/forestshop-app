@@ -190,7 +190,10 @@ export async function ingestOrders(db: Database, options: OrdersIngestOptions): 
   // `${externalOrderId}:${variantCode}`) — zámerne, aby žiadna voľba
   // oddeľovača (dvojbodka, medzera, akýkoľvek znak) nemohla teoreticky
   // kolidovať s obsahom niektorého z oboch reťazcov.
-  const orderInfo = new Map<string, { customerName: string; placedAt: Date; statusName: string }>();
+  const orderInfo = new Map<
+    string,
+    { customerName: string; placedAt: Date; statusName: string; remark: string | null }
+  >();
   const lineTotals = new Map<string, Map<string, { externalOrderId: string; variantCode: string; quantity: number }>>();
   for (const candidate of candidates) {
     if (!orderInfo.has(candidate.externalOrderId)) {
@@ -198,6 +201,7 @@ export async function ingestOrders(db: Database, options: OrdersIngestOptions): 
         customerName: candidate.customerName,
         placedAt: candidate.placedAt,
         statusName: candidate.statusName,
+        remark: candidate.remark,
       });
     }
     let byVariant = lineTotals.get(candidate.externalOrderId);
@@ -276,6 +280,7 @@ export async function ingestOrders(db: Database, options: OrdersIngestOptions): 
               externalOrderId,
               customerName: info.customerName,
               statusName: info.statusName,
+              remark: info.remark,
               placedAt: info.placedAt,
             })),
           )
@@ -286,10 +291,13 @@ export async function ingestOrders(db: Database, options: OrdersIngestOptions): 
             // ho nesmie prepísať/vynulovať. `status_name` (issue 59) je presný
             // OPAK — je to VŽDY Shoptetovo pole, re-import ho preto MUSÍ
             // osviežiť (objednávka prejde "Vybavuje sa" → "Vybavená" len tak,
-            // že ju appka pri ďalšom importe znova uvidí).
+            // že ju appka pri ďalšom importe znova uvidí). `remark` (issue 65,
+            // zákaznícky odkaz) je rovnaká rodina ako `status_name` — VŽDY
+            // Shoptetovo pole, re-import ho preto tiež osvieži.
             set: {
               customerName: sql`excluded.customer_name`,
               statusName: sql`excluded.status_name`,
+              remark: sql`excluded.remark`,
               placedAt: sql`excluded.placed_at`,
             },
           })

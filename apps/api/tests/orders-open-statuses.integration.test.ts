@@ -65,7 +65,7 @@ it("zoznam 'Na objednanie' ukáže len objednávky s nastaveným otvoreným stav
   if (uzavreta === undefined) throw new Error("insert zlyhal");
   await db.insert(orderLines).values({ orderId: uzavreta.id, variantCode: "A-1", quantity: 1 });
 
-  const suppliers = await listOpenOrderLinesBySupplier(db);
+  const suppliers = await listOpenOrderLinesBySupplier(db, "https://test.example");
   const alfa = suppliers.find((s) => s.supplier === "Dodávateľ Alfa");
   expect(alfa?.lines.map((l) => l.externalOrderId)).toEqual(["8001"]);
 });
@@ -85,7 +85,7 @@ it("bez nastaveného otvoreného stavu (prázdny order_open_status) sa vráti pr
 
   await db.delete(orderOpenStatuses);
 
-  const suppliers = await listOpenOrderLinesBySupplier(db);
+  const suppliers = await listOpenOrderLinesBySupplier(db, "https://test.example");
   expect(suppliers).toEqual([]);
 });
 

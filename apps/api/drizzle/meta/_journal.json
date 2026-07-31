@@ -106,6 +106,13 @@
       "when": 1785451172253,
       "tag": "0014_nasty_professor_monster",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1785499253415,
+      "tag": "0015_wealthy_spectrum",
+      "breakpoints": true
     }
   ]
 }
