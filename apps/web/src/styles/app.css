@@ -1213,24 +1213,36 @@ tr:last-child td {
    produkcii, 37 ostrých riadkov — nie proti e2e fixtúre, rovnaká metodika
    ako issue 107/111): `col-notes` má len ~0,5 percentuálneho bodu rezervy
    nad testovaným prahom "komentárové pole ≥160px" (`orders-layout.spec.
-   ts`); `col-supplier` má naživo 3 riadky s ručným priradením dodávateľa
-   (`.ord-supplier-assign`, na rozdiel od staršieho — dnes už neplatného —
-   komentára "žiadny živý riadok ho dnes nemá") a zúženie ich poslalo nad
-   120px; `col-customer` sa dnes už takmer VŽDY zalamuje (mená zákazníkov),
-   `col-qty`/`col-state`/`col-order` majú nulovú/zápornú rezervu. JEDINÝ
-   stĺpec, kde zúženie o 3 body naživo NEZMENILO žiadnu výšku riadku
-   (min/median/max identické pred aj po, 0 nad 120, na 1280 aj 1920px) je
-   `col-product` — má z issue 117 veľkú rezervu (dlhé názvy produktov
-   dnešnej živej dávky sa nedostávajú na hranicu zalomenia pri tomto
-   zúžení). Súčet ostáva 100%. */
+   ts`); `col-customer` sa dnes už takmer VŽDY zalamuje (mená zákazníkov);
+   `col-qty`/`col-state`/`col-order` majú nulovú/zápornú rezervu.
+
+   OPRAVA po prvom nasadení (ten istý deň): prvý pokus vzal celých 3 body z
+   `col-product` samotného (17.4%→14.4%) — naživo overené OK proti vtedajšej
+   živej dávke (37 riadkov), ale HNEĎ po merge/deploji prišla NOVÁ reálna
+   objednávka (20261267, extrémne dlhý názov produktu — "TETRAO šnúra na
+   čistenie guľovnice cal .30, .308 win, 30-06, ...") a jej riadok vyskočil
+   na 134px (nad 120px strop) — pri PÔVODNEJ šírke 17.4% by bol býval na
+   114.5px (tesne pod stropom, nie nad ním). Živé stĺpcové rozpočty NEMAJÚ
+   pevný strop obsahu (produktový katalóg rastie), takže "0 riadkov nad
+   120px dnes" nikdy nezaručuje totéž zajtra pri KAŽDOM možnom zúžení —
+   treba nájsť, KDE presne je hranica (nie len overiť JEDEN kandidát), a
+   nechať rezervu POD ňou, nie na nej. Opätovné živé meranie (`page.
+   addStyleTag`, tá istá produkcia) ukázalo: `col-product` znesie zúženie
+   len do 15.4% (o 2.0 bodu — 14.9% ešte OK, 14.4% už zlomí spomínaný
+   riadok na 134px, teda skutočná hranica je MEDZI 14.9% a 14.4%);
+   `col-supplier` (14%) má samostatnú rezervu do 13% (o 1.0 bod — 12.5% už
+   pošle VŠETKY 3 živé `supplierAssignable` riadky nad 120px, na 142.5px).
+   Potrebných +3 body pre `col-date` teraz idú z OBOCH darcov naraz (2.0 +
+   1.0), každý s bezpečnou rezervou POD svojou zmeranou hranicou, nie na
+   nej. Súčet ostáva 100%. */
 .col-product {
-  width: 14.4%;
+  width: 15.4%;
 }
 .col-qty {
   width: 4%;
 }
 .col-supplier {
-  width: 14%;
+  width: 13%;
 }
 .col-state {
   width: 13.5%;
