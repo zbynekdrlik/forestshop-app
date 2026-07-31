@@ -137,12 +137,17 @@ it("hlavička tabuľky má 10 stĺpcov (zlúčené VEĽKOSŤ/PRIRADENIE DODÁVAT
 });
 
 it("zlúčená bunka DODÁVATEĽ drží odkaz na dodávateľa AJ priradenie v tom istom stĺpci", async () => {
-  fetchOpenOrders.mockResolvedValue([{ supplier: "Dodávateľ Alfa", lines: [LINE_STARA], email: null }]);
+  // issue 107 bod 3: `.ord-supplier-assign` sa už nevykresľuje pre
+  // neradiťeľné riadky (`LINE_STARA` má `supplierAssignable: false`) —
+  // tento test overuje SKUTOČNÝ DOM zlúčenie (ten istý rodičovský `<td>`),
+  // preto potrebuje riadok, kde sa blok priradenia vôbec vykreslí.
+  const riadokRaditelny = { ...LINE_STARA, supplierAssignable: true };
+  fetchOpenOrders.mockResolvedValue([{ supplier: "Dodávateľ Alfa", lines: [riadokRaditelny], email: null }]);
 
   render(<OrdersSection role="manazer" onSessionExpired={() => {}} />);
 
-  const odkazBunka = await screen.findByTestId(`supplier-link-${LINE_STARA.lineId}`);
-  const priradenieBunka = await screen.findByTestId(`supplier-assign-cell-${LINE_STARA.lineId}`);
+  const odkazBunka = await screen.findByTestId(`supplier-link-${riadokRaditelny.lineId}`);
+  const priradenieBunka = await screen.findByTestId(`supplier-assign-cell-${riadokRaditelny.lineId}`);
   expect(odkazBunka.closest("td")).toBe(priradenieBunka.closest("td"));
 });
 

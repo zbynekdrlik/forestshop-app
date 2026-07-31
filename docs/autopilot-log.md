@@ -1411,3 +1411,42 @@ nové heslo sa nikde v pushnutom obsahu nenachádza.
   `order_line`=868, objednávky s komentárom=0, `order`=528 — presne
   zhodné s očakávanou základňou pred aj po zásahu.
 - Discord run-card odoslaný (`notify --run-card`, potvrdené doručenie).
+
+## Issue #105 — Na objednanie: hlavičky sa zlievajú, KÓD zdvojuje veľkosť, riadok 135 px vysoký
+
+- Live re-check po issue 95 (v0.3.0-dev.60) pri 1280/1600/1920px našiel 3
+  zvyškové chyby: 4 hlavičky pretekali svoje bunky (`OBJEDNANÉ`/`OBJEDNÁVKA`/
+  `MNOŽSTVO`/`DÁTUM OBJEDNÁVKY`, najhoršie pri 1280px = tabuľkin skutočný
+  floor `min-width:64rem`); KÓD stĺpec zdvojoval veľkosť (`62621/5252`);
+  riadok 135px vysoký (comment/supplier-assign vstup+tlačidlo zalomené pod
+  seba).
+- Design-rozhodnutie zapísané PRED kódom:
+  `https://github.com/zbynekdrlik/forestshop-app/issues/105#issuecomment-5144365445`.
+- RED→GREEN: `b3f006f` (red: `shouldShowSizeLabel` unit test) → `fc49f9a`
+  (green: fix v `ordersSummary.ts`/`OrderLineRow.tsx` — sizeLabel je
+  server-side literálny suffix `variantCode`u, `splitCode` v
+  `map-row.ts`, pripájanie preto vždy duplikovalo). `ae11b4e` (red:
+  rozšírený e2e width-check na 1440px + assercia na `th` pretekanie,
+  potvrdené RED reálnym behom so starým CSS/TSX) → `cc3d2ba` (green:
+  skrátené 4 hlavičky — checkbox stĺpec dostal ikonu "✓", `Č. obj.`, `Ks`,
+  `Dátum obj.`, malá rezerva v colgroup percentách; `.ord-comment-input`/
+  `.ord-supplier-assign-input` `flex-basis:0` + `flex-grow:1` + tuned
+  `min-width` namiesto fixnej `width` — flexbox gotcha: `flex-basis`
+  rozhoduje o zalomení pod `flex-wrap:wrap`, nie post-shrink veľkosť;
+  `flex-shrink:0` na susedných tlačidlách; `.orders-table td` vertikálny
+  padding 12px→8px). `8d00de2` (playbook: `DOM.Iterable` potrebné pre
+  NodeList spread v e2e tsconfig).
+- Shared PR: `#106`. CI zelené na `dev` pushi aj oboch PR CI behoch (5/5
+  jobs); main CI + Deploy zelené bez retry.
+- Nezávislý code review (general-purpose subagent na diff PR #106): 0 🔴
+  0 🟡, 2 🔵 (obe explicitne "fine as-is" — DOM.Iterable doplnené do
+  playbooku, endsWith bez case-guard zámerne ponechané pre nedosiahnuteľný
+  prípad).
+- Live overenie (`https://forestshop-novy.newlevel.media/?tab=orders`,
+  39 reálnych riadkov): 0 pretekajúcich `<th>` pri 1280/1440/1600/1920px;
+  KÓD naživo potvrdené presne uvedené príklady z ticketu ("62621/52",
+  "61759/XL", "15813/120") bez zdvojenia; 0/39 comment ciel a 0/39
+  supplier-assign ciel zalomených pri 1280px; výška riadku 84.5–116px
+  (predtým 135px); 0 console chýb/varovaní; verzia vo footeri
+  `v0.3.0-dev.61` zodpovedá `/api/version`.
+- Discord run-card odoslaný (`notify --run-card`, potvrdené doručenie).

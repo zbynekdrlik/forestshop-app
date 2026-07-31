@@ -218,51 +218,63 @@ export function OrderLineRow({
             <span className="ord-supplier-note" title={line.supplierNote}>
               {line.supplierNote}
             </span>
+          ) : line.supplierAssignable ? (
+            // issue 107 bod 3: majiteľ, komentár #1: "neviem čo tam je
+            // Priradenie dodávateľa stĺpec" — namiesto holej pomlčky (predtým
+            // aj tu, aj v `.ord-supplier-assign` nižšie — DVE pomlčky nad
+            // sebou) je tu teraz VIDITEĽNÝ popis toho, čo vstup pod ním robí.
+            // Zámerne v TEJTO, už existujúcej bunke (nie nový riadok pod
+            // vstupom) — pridanie ĎALŠIEHO riadku by pri úzkom stĺpci
+            // (input+button už zapĺňajú takmer celú šírku) posunulo výšku
+            // riadku nad issue 105's ~95px invariant (živo zmerané: 85px →
+            // 103.5px s popisom na vlastnom riadku).
+            <span className="ord-supplier-assign-hint">Priradiť dodávateľa</span>
           ) : line.externalCode === null ? (
             "—"
           ) : null}
           {line.externalCode !== null && <div className="ord-supplier-code">kód {line.externalCode}</div>}
         </div>
-        <div className="ord-supplier-assign" data-testid={`supplier-assign-cell-${line.lineId}`}>
-          {line.supplierAssignable ? (
-            <>
-              <input
-                type="text"
-                // Jeden zdieľaný `<datalist id="known-suppliers">` (rendrovaný
-                // raz v `OrdersSection.tsx`, z UŽ načítaných skupín) — žiadna
-                // nová GET trasa netreba len na našepkávanie.
-                list="known-suppliers"
-                className="ord-supplier-assign-input"
-                data-testid={`supplier-assign-input-${line.lineId}`}
-                aria-label={`Priradiť dodávateľa riadku objednávky ${line.externalOrderId} / ${line.variantCode}`}
-                placeholder="priradiť dodávateľa…"
-                value={supplierDraft}
-                disabled={supplierBusyHere}
-                onChange={(e) => {
-                  setSupplierDraft(e.target.value);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    saveSupplier();
-                  }
-                }}
-              />
-              <button
-                type="button"
-                className="btn sm good"
-                data-testid={`supplier-assign-save-${line.lineId}`}
-                aria-label={`Uložiť priradenie dodávateľa riadku objednávky ${line.externalOrderId} / ${line.variantCode}`}
-                disabled={supplierBusyHere || supplierDraft.trim() === ""}
-                onClick={saveSupplier}
-              >
-                💾
-              </button>
-            </>
-          ) : (
-            "—"
-          )}
-        </div>
+        {/* pri neradiťeľnom riadku (100 % dnešných ostrých dát) sa TENTO blok
+            predtým vykresľoval VŽDY, len s holou pomlčkou "—" bez
+            akéhokoľvek významu. Teraz sa nevykreslí VÔBEC (žiadny prvok,
+            žiadny prázdny <div>) — presne to, čo test v
+            `OrderLineRow.supplierAssignCell.test.tsx` overuje. */}
+        {line.supplierAssignable && (
+          <div className="ord-supplier-assign" data-testid={`supplier-assign-cell-${line.lineId}`}>
+            <input
+              type="text"
+              // Jeden zdieľaný `<datalist id="known-suppliers">` (rendrovaný
+              // raz v `OrdersSection.tsx`, z UŽ načítaných skupín) — žiadna
+              // nová GET trasa netreba len na našepkávanie.
+              list="known-suppliers"
+              className="ord-supplier-assign-input"
+              data-testid={`supplier-assign-input-${line.lineId}`}
+              aria-label={`Priradiť dodávateľa riadku objednávky ${line.externalOrderId} / ${line.variantCode}`}
+              placeholder="priradiť dodávateľa…"
+              value={supplierDraft}
+              disabled={supplierBusyHere}
+              onChange={(e) => {
+                setSupplierDraft(e.target.value);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  saveSupplier();
+                }
+              }}
+            />
+            <button
+              type="button"
+              className="btn sm good"
+              data-testid={`supplier-assign-save-${line.lineId}`}
+              aria-label={`Uložiť priradenie dodávateľa riadku objednávky ${line.externalOrderId} / ${line.variantCode}`}
+              disabled={supplierBusyHere || supplierDraft.trim() === ""}
+              onClick={saveSupplier}
+            >
+              💾
+            </button>
+          </div>
+        )}
       </td>
       <td>
         {canChangeState ? (

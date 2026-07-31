@@ -831,14 +831,29 @@ tr:last-child td {
   font-weight: var(--fs-weight-medium);
   color: var(--fs-ink-muted);
 }
+/* issue 107 bod 1: majiteľ, live nameraná chyba — natívna šípka rozbaľovača
+   sa vykresľuje VNÚTRI paddingu, ale nič v CSS s jej priestorom nepočíta
+   (`padding-right` bol celý priestor, ktorý appka "vidí"), takže reálne
+   viditeľné miesto na text bolo o ~15–20px menšie, než čokoľvek deklarované
+   — pri úzkom `col-state` stĺpci (≤1600px) sa najdlhší stav ("Nevybavené"/
+   "Nedostupné", ~83px textu) neskrátil na scrollWidth (žiadny technický
+   overflow), len sa VIZUÁLNE orezal natívnou šípkou. `appearance: none` +
+   vlastná malá SVG šípka spraví tento priestor DETERMINISTICKÝ (a teda aj
+   testovateľný) namiesto skrytého v réžii prehliadača. */
 .ord-state-select {
   width: 100%;
-  padding: var(--fs-space-2) var(--fs-space-2);
+  appearance: none;
+  padding: var(--fs-space-2) 1.25rem var(--fs-space-2) var(--fs-space-2);
   border: 1px solid var(--fs-border);
   border-radius: var(--fs-radius-sm);
   font: inherit;
   font-size: var(--fs-text-base);
   min-height: 2.25rem;
+  background-color: var(--fs-surface);
+  background-repeat: no-repeat;
+  background-position: right 0.4rem center;
+  background-size: 0.6rem 0.4rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%235c6b60' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 }
 /* issue 95: DODÁVATEĽ + PRIRADENIE DODÁVATEĽA zlúčené do jednej bunky
    (majiteľ, komentár #1: "neviem čo tam je Priradenie dodávateľa stĺpec" —
@@ -872,6 +887,15 @@ tr:last-child td {
   color: var(--fs-ink-muted);
 }
 .ord-supplier-code {
+  font-size: var(--fs-text-xs);
+  color: var(--fs-ink-faint);
+}
+/* issue 107 bod 3: majiteľ, komentár #1: "neviem čo tam je Priradenie
+   dodávateľa stĺpec" — nahrádza predtým holú pomlčku (bod vyššie v `.tsx`),
+   rovnaký vizuálny jazyk ako `.ord-supplier-code` (tichý, faint text nad
+   ovládacím prvkom pod ním), žiadny extra riadok výšky navyše — vykresľuje
+   sa v UŽ EXISTUJÚCOM mieste (`.ord-supplier-cell`), nie v novom bloku. */
+.ord-supplier-assign-hint {
   font-size: var(--fs-text-xs);
   color: var(--fs-ink-faint);
 }
@@ -1027,36 +1051,67 @@ tr:last-child td {
    "✓", `SupplierOrderGroup.tsx`) pridaná malá rezerva pre "Č. obj."/"Dátum
    obj." — `col-order` 8%→9%, `col-date` 7%→8%, vzaté z `col-product` 20%→19%
    a `col-supplier` 15%→14% (obe majú veľkú rezervu oproti svojmu skutočnému
-   obsahu, pozri prepočet v komentári k tomuto ticketu). Súčet ostáva 100%. */
+   obsahu, pozri prepočet v komentári k tomuto ticketu).
+
+   issue 107 body 1+2: majiteľ, live nameraná chyba — STAV orezaný text
+   (bod 1) a POZNÁMKY príliš úzke pole (bod 2) obe potrebovali OVEĽA väčší
+   podiel, než mala akákoľvek jednotlivá "rezerva" úprava doteraz. Živo
+   zmerané (throwaway Playwright skript proti lokálnym dev serverom, rovnaký
+   postup ako issue 105): `col-state` potrebuje aspoň ~14 % (pri tabuľkinej
+   "floor" šírke 1024px, `.ord-state-select`'s `appearance:none` vlastná
+   šípka nižšie), aby sa "Nevybavené"/"Nedostupné" (~83px textu) zmestili aj
+   s bezpečnou rezervou; `col-notes` potrebuje aspoň ~24-25 % (odvodené zo
+   `.ord-comment-input`'s reálne zmeraného vzťahu `cellWidth = inputWidth +
+   button(53px) + gap(4px)`, aby `input >= 160px`, ako žiada zadanie).
+   Financované naprieč stĺpcami, KTORÉ majú preukázateľnú rezervu (živo
+   zmerané cez skutočnú produkciu — `vychod@varos.sk` účet na
+   `forestshop-novy.newlevel.media`, nie len e2e fixtúru): `col-supplier`
+   (14%→11%, NIE agresívnejšie — prvý pokus 8% spôsobil, že "Odkaz na
+   dodávateľa" odkaz, ktorý má DNES 92 % živých riadkov, sa zalamoval o
+   ĎALŠIE riadky navyše (živo zmerané: 85px→111.5px), presný opak "efektívnej
+   práce"; 11% drží tento bežný prípad na pôvodnej výške) — bezpečné brať
+   aspoň TOĽKO, lebo issue 107 bod 3 odstránilo priradenie-dodávateľa
+   fallback pomlčku, takže stĺpec už nedrží input+tlačidlo pre 100 % dnešných
+   ostrých riadkov (tie sa vykreslia len pri zriedkavom `supplierAssignable`
+   riadku, dnes 0 z 39); `col-product` (19%→10%) — dlhé názvy produktov sa aj
+   tak zalamujú na viac riadkov bez ohľadu na % (najdlhší živý názov má >90
+   znakov, živo overené), takže miernejšie percento nemení kvalitatívne nič;
+   `col-order`/`col-code`/`col-ordered` po malých kúskoch (číslo objednávky/
+   kód variantu/checkbox potrebujú menej, než čo ich hlavička už dnes má).
+   `col-customer` len -2% (10%→8%, NIE menej — `th.scrollWidth` skutočne
+   PRETEKALO pri agresívnejšom 7% pokuse, živo zachytené existujúcim
+   regresným e2e testom). `col-qty`/`col-date` NEDOTKNUTÉ — ich obsah
+   (množstvo, dátum) je už dnes tesný, ďalšie oberanie by ich reálne
+   pretieklo. Súčet ostáva 100%. */
 .col-ordered {
-  width: 6%;
+  width: 5%;
 }
 .col-order {
-  width: 9%;
+  width: 7%;
 }
 .col-customer {
-  width: 10%;
-}
-.col-code {
   width: 8%;
 }
+.col-code {
+  width: 7%;
+}
 .col-product {
-  width: 19%;
+  width: 10%;
 }
 .col-qty {
   width: 5%;
 }
 .col-supplier {
-  width: 14%;
+  width: 11%;
 }
 .col-state {
-  width: 9%;
+  width: 14%;
 }
 .col-date {
   width: 8%;
 }
 .col-notes {
-  width: 12%;
+  width: 25%;
 }
 
 /* issue 59: nastavenie otvorených stavov objednávok — rovnaký vizuálny
