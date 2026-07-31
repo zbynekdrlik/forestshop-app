@@ -287,3 +287,20 @@ paths:
   (rovnaký vzor ako existujúca `/api/me` 401 výnimka). **Zakázané: "opraviť"
   to rozšírením konzolovej výnimky na hocijakú ĎALŠIU cestu/kód bez tejto
   úvahy** — presne to `testing.md` výslovne zakazuje.
+- **Zápis, ktorý je vlastníctvom OBJEDNÁVKY (nie riadku) a zobrazuje sa na
+  VIACERÝCH riadkoch naraz, potrebuje NAVYŠE "dirty" strážcu na reset efekte,
+  nielen "skip prvý mount" guard.** Issue 64 (`PUT /api/orders/:id/comment` +
+  `OrderLineRow.tsx`'s editovateľná bunka "Komentár"): `OrdersSection.tsx`'s
+  `changeComment` aktualizuje `line.comment` na VŠETKÝCH riadkoch s rovnakým
+  `orderId` (správne — poznámka patrí objednávke). Ale to znamená, že
+  uloženie cez RIADOK B tej istej objednávky spustí `OrderLineRow.tsx`'s
+  reset efekt AJ na RIADKU A — ktorý efekt (bez ďalšieho stráženia) nevie
+  rozlíšiť "toto sa zmenilo, lebo som si to sám uložil" od "toto sa zmenilo,
+  lebo niekto INÝ uložil poznámku tej istej objednávky odinakiaľ", a ticho
+  by prepísal riadku A ešte NEULOŽENÝ rozpísaný koncept (našlo code review
+  pred mergom, nie žiadny test — pozri `frontend-design.md`'s zodpovedajúci
+  bod pre samotnú opravu). Test na KAŽDÉ ĎALŠIE pole vlastnené OBJEDNÁVKOU
+  (nie riadkom), ktoré appka niekedy pridá s rovnakým "zobrazí sa na
+  viacerých riadkoch" tvarom: má reset efekt na to pole `isDirty` strážcu,
+  alebo len "skip prvý mount"? Ten druhý nestačí, keď zdroj resetu môže byť
+  ULOŽENIE NA INOM RIADKU, nielen vlastné prvé mountnutie.

@@ -113,3 +113,22 @@ paths:
   dodávateľa" test) is `fireEvent.change` followed by `fireEvent.click`
   on the actual save/submit BUTTON — use that, not a keyDown-Enter
   shortcut, for any new form-field-plus-save-button interaction test.
+- **The "controlled draft reset via `useEffect` + skip-first-mount" pattern
+  (established for `supplierDraft`, issue 63) needs an EXTRA "dirty" guard
+  when the same prop can change for a reason OTHER than "this row's own
+  save resolved".** Issue 64's `commentDraft` in `OrderLineRow.tsx`:
+  `line.comment` is shared across every row of the same order
+  (`OrdersSection.tsx`'s `changeComment` updates all of them on any one
+  row's save), so the reset effect fires on EVERY sibling row too — not
+  just the row that actually saved. Without an extra guard, an unsaved
+  draft on row A is silently overwritten the moment row B (same order)
+  saves. Fix: an `isCommentDirty` ref, set on every keystroke, cleared only
+  when THIS row's own save fires; the reset effect skips the reset while
+  dirty. Found by code review (`superpowers:requesting-code-review`)
+  BEFORE merge, not by a test — the existing propagation test only proved
+  the happy path (edit-then-verify-sibling-updates), never two
+  simultaneously-dirty drafts. Test on any FUTURE prop-syncing effect of
+  this shape: does the same prop change for a reason OTHER than "this
+  instance's own action completed"? If yes, "skip first mount" alone is
+  not enough — add the dirty guard too (see `.claude/rules/orders.md`'s
+  matching entry for the full mechanism).
