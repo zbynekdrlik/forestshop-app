@@ -156,13 +156,16 @@ it("zlúčená bunka POZNÁMKY drží poznámku e-shopu AJ komentár v tom istom
   expect(remarkBunka.closest("td")).toBe(commentBunka.closest("td"));
 });
 
-it("chýbajúcu veľkosť a komentár zobrazí ako pomlčku", async () => {
+it("chýbajúci dodávateľ zobrazí ako pomlčku (veľkosť sa pri chýbajúcej hodnote jednoducho nezobrazí)", async () => {
   fetchOpenOrders.mockResolvedValue([{ supplier: "Dodávateľ Alfa", lines: [LINE_NOVA], email: null }]);
 
   render(<OrdersSection role="citanie" onSessionExpired={() => {}} />);
 
   const riadok = await screen.findByTestId(`order-line-${LINE_NOVA.lineId}`);
-  // LINE_NOVA má sizeLabel: null — zobrazí sa pomlčka namiesto prázdneho políčka.
+  // issue 95: `LINE_NOVA` má `sizeLabel: null` — od zlúčenia KÓD+VEĽKOSŤ sa v
+  // tom prípade jednoducho NIČ nevykreslí (žiadna pomlčka náhradou), takže
+  // pomlčka nižšie pochádza zo zlúčenej bunky DODÁVATEĽ (LINE_NOVA má aj
+  // `supplierUrl`/`supplierNote`/`externalCode` všetky `null`).
   expect(riadok.textContent).toContain("—");
 });
 

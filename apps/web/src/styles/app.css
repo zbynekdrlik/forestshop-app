@@ -71,11 +71,6 @@
 
   --fs-content-width: 1120px;
   --fs-sidebar-width: 250px;
-  /* issue 95: rendrovaná výška `.topbar` (sticky, top: 0) — zdieľaný token,
-     aby sticky hlavička tabuľky "Na objednanie" vedela presne, POD čím sa
-     má prilepiť, a nikdy sa s Topbarom neprekrývala. `.topbar` dostáva
-     `min-height` rovný tomuto tokenu, takže obe strany vždy sedia. */
-  --fs-topbar-height: 4.25rem;
 }
 
 /* ---------------- 2. RESET + ZÁKLADNÉ ELEMENTY ---------------- */
@@ -375,8 +370,6 @@ tr:last-child td {
   background: var(--fs-canvas);
   border-bottom: 1px solid var(--fs-border);
   padding: var(--fs-space-5) var(--fs-space-6) var(--fs-space-4);
-  min-height: var(--fs-topbar-height);
-  box-sizing: border-box;
 }
 .topbar-head h1 {
   margin: 0;
@@ -716,14 +709,17 @@ tr:last-child td {
    `.orders-table-wrap`'s `overflow-x: auto` (nutné pre bod 4, "stránka sa
    nesmie posúvať vodorovne") jedným je presne TAKÝTO predok. Keďže obal
    nemá vlastnú vertikálnu scroll oblasť (vysoký je len toľko, koľko je
-   tabuľka), sticky hlavičku posunulo o celú `--fs-topbar-height` NADOL od
-   jej prirodzenej pozície bez toho, aby si tabuľka tento posun vyhradila v
-   toku — hlavička sa tak vizuálne prekryla s prvým riadkom PORTOL a kradla
-   mu kliky ("checkbox.click() … <th>Objednané</th> … intercepts pointer
-   events", `orders.spec.ts`'s test odškrtávania). Fix by vyžadoval úplne
-   iný layout (oddelená hlavička/telo mimo jednej `<table>`) za cenu vyššieho
-   rizika pre existujúcu sadu testov — mimo rozsahu tohto (mäkko formulovaného,
-   "zvážiť") bodu. Rozhodnutie zapísané aj na ticket #95. */
+   tabuľka), sticky hlavičku posunulo o pevný offset NADOL od jej prirodzenej
+   pozície bez toho, aby si tabuľka tento posun vyhradila v toku — hlavička
+   sa tak vizuálne prekryla s prvým riadkom POD ňou a kradla mu kliky
+   ("checkbox.click() … <th>Objednané</th> … intercepts pointer events",
+   `orders.spec.ts`'s test odškrtávania). Fix by vyžadoval úplne iný layout
+   (oddelená hlavička/telo mimo jednej `<table>`) za cenu vyššieho rizika pre
+   existujúcu sadu testov — mimo rozsahu tohto (mäkko formulovaného,
+   "zvážiť") bodu. Skúšaný token (`--fs-topbar-height` + `.topbar`'s
+   `min-height`) bol pre tento účel ZBYTOČNÝ a odstránený — nemenil by nič
+   mimo tejto (zamietnutej) funkcie, len by natvrdo zväčšil výšku Topbaru na
+   VŠETKÝCH obrazovkách bez dôvodu. Rozhodnutie zapísané aj na ticket #95. */
 /* Farby stavu riadku — sémantické (čaká/skladom/nedostupné), vlastná paleta
    tejto appky (nie prevzaté hodnoty starej appky). */
 .orders-table tr.state-caka_sa {
@@ -875,6 +871,13 @@ tr:last-child td {
 }
 .ord-supplier-assign-input {
   width: 8rem;
+  /* code review (issue 95): `width` alone can force the input wider than its
+     ACTUAL column at the table's `min-width: 64rem` floor on a ~1280-1440px
+     laptop viewport (`.col-supplier` computes narrower than 8rem there) —
+     `<td>`s don't clip overflowing children by default, so without this the
+     input would visually bleed into the neighbouring column. `max-width:
+     100%` lets it shrink to whatever the column actually has. */
+  max-width: 100%;
   padding: var(--fs-space-2) var(--fs-space-2);
   border: 1px solid var(--fs-border);
   border-radius: var(--fs-radius-sm);
@@ -948,6 +951,10 @@ tr:last-child td {
 }
 .ord-comment-input {
   width: 10rem;
+  /* code review (issue 95): same overflow safeguard as
+     `.ord-supplier-assign-input` above — `.col-notes` can compute narrower
+     than 10rem at the table's `min-width` floor on a laptop viewport. */
+  max-width: 100%;
   padding: var(--fs-space-2) var(--fs-space-2);
   border: 1px solid var(--fs-border);
   border-radius: var(--fs-radius-sm);
