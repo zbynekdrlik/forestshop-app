@@ -617,14 +617,16 @@ test("manažér ručne priradí dodávateľa riadku bez dodávateľa s našepká
 
   // Riadok BEZ dodávateľa (objednávka 9006, `scripts/e2e-setup.ts`) — pole na
   // priradenie je viditeľné a prázdne (kým riadok DODAVATEL-TEST-1 s
-  // katalógovým dodávateľom žiadne pole nemá, len "—").
+  // katalógovým dodávateľom nemá blok priradenia VÔBEC — issue 107 bod 3
+  // odstránilo predtým holú pomlčku, blok sa dnes nevykreslí vôbec, nie len
+  // zobrazí "—").
   const vstupL = page.getByLabel("Priradiť dodávateľa riadku objednávky 9006 / 60035/L");
   await expect(vstupL).toBeVisible();
   await expect(vstupL).toHaveValue("");
   const bunkaTest1 = page
     .getByTestId("supplier-DODAVATEL-TEST-1")
     .locator("[data-testid^='supplier-assign-cell-']");
-  await expect(bunkaTest1).toHaveText("—");
+  await expect(bunkaTest1).toHaveCount(0);
 
   // Našepkávanie: known-suppliers datalist musí ponúkať UŽ existujúceho
   // dodávateľa (dôkaz, že sa berie zo skutočne načítaných skupín, nie z

@@ -61,8 +61,12 @@ it("neradiťeľný riadok nevykreslí blok priradenia dodávateľa vôbec (žiad
   render(<OrdersSection role="manazer" onSessionExpired={() => {}} />);
 
   const riadok = await screen.findByTestId(`order-line-${RIADOK_NERADITELNY.lineId}`);
+  // Presne CIELENÁ neprítomnosť — `supplier-link-${lineId}` blok (odkaz/kód
+  // dodávateľa, NEZÁVISLÝ od tohto ticketu) legitímne vykresľuje VLASTNÚ
+  // pomlčku, keď riadok nemá ani odkaz, ani kód (`OrderLineRow.tsx:221`) —
+  // preto sa tu neoveruje "žiadna pomlčka nikde v riadku", len skutočná
+  // neprítomnosť TOHTO konkrétneho bloku.
   expect(within(riadok).queryByTestId(`supplier-assign-cell-${RIADOK_NERADITELNY.lineId}`)).toBeNull();
-  expect(riadok.textContent).not.toContain("—");
 });
 
 it("radiťeľný riadok vykreslí blok priradenia AJ s viditeľným popisom, nielen placeholderom", async () => {
@@ -81,7 +85,9 @@ it("radiťeľný riadok vykreslí blok priradenia AJ s viditeľným popisom, nie
   within(blok).getByLabelText(
     `Uložiť priradenie dodávateľa riadku objednávky ${RIADOK_RADITELNY.externalOrderId} / ${RIADOK_RADITELNY.variantCode}`,
   );
-  // Popis viditeľný AJ mimo placeholderu (dnes to prezrádza LEN placeholder) —
-  // majiteľ, komentár #1.
-  expect(blok.textContent).toContain("Priradiť dodávateľa");
+  // Popis viditeľný AJ mimo placeholderu (dnes to prezrádza LEN placeholder)
+  // — majiteľ, prvý komentár. Vykreslí sa v susednej `.ord-supplier-cell`
+  // (nie priamo v `blok`u) — žiadny extra riadok výšky navyše, pozri
+  // `OrderLineRow.tsx`'s komentár k `.ord-supplier-assign-hint`.
+  expect(riadok.textContent).toContain("Priradiť dodávateľa");
 });
