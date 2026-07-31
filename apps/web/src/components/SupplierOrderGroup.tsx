@@ -115,17 +115,18 @@ export function SupplierOrderGroup({
           sa sama nikdy neposúva, posúva sa (keď treba) len táto tabuľka.
           `table-layout: fixed` + `<colgroup>` dávajú stĺpcom percentuálne
           šírky (`app.css`'s `.col-*`) namiesto automatického rozloženia. 13
-          pôvodných stĺpcov je teraz 10 — VEĽKOSŤ zlúčená do KÓD, PRIRADENIE
-          DODÁVATEĽA do DODÁVATEĽ, POZNÁMKA E-SHOPU do POZNÁMOK (majiteľ,
-          komentár #10) — nedôležité/takmer vždy prázdne stĺpce už nedržia
-          šírku PRODUKTU, ktorý ju teraz dostáva najviac. */}
+          pôvodných stĺpcov je teraz 9 — VEĽKOSŤ zlúčená do KÓD (issue 95),
+          PRIRADENIE DODÁVATEĽA do DODÁVATEĽ (issue 95), POZNÁMKA E-SHOPU do
+          POZNÁMOK (issue 95), a stĺpec KÓD celý ODSTRÁNENÝ (issue 117,
+          majiteľ: "kody produktov vobec nepouzivame ... zaberaju miesto") —
+          uvoľnená šírka ide do PRODUKTU/DODÁVATEĽA (`app.css`'s `.col-*`
+          komentár), presne kam majiteľ žiadal. */}
       <div className="orders-table-wrap">
         <table className="orders-table">
           <colgroup>
             <col className="col-ordered" />
             <col className="col-order" />
             <col className="col-customer" />
-            <col className="col-code" />
             <col className="col-product" />
             <col className="col-qty" />
             <col className="col-supplier" />
@@ -151,7 +152,6 @@ export function SupplierOrderGroup({
                 Č. obj.
               </th>
               <th>Zákazník</th>
-              <th title="Kód variantu — obsahuje aj veľkosť, keď ju appka pozná">Kód</th>
               <th>Produkt</th>
               <th title="Množstvo (počet kusov)">Ks</th>
               <th title="Dodávateľ z katalógu, alebo ručné priradenie pri produkte bez katalógového dodávateľa">

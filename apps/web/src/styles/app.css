@@ -843,32 +843,6 @@ tr:last-child td {
   white-space: nowrap;
   cursor: help;
 }
-/* issue 95: KÓD + VEĽKOSŤ zlúčené do jednej bunky (majiteľ, komentár #10:
-   "veľkosť je už súčasťou kódu") — kód je hlavný text, veľkosť (keď appka má
-   samostatnú `sizeLabel` hodnotu) je vedľa neho menším, tlmeným písmom. */
-.ord-code-cell {
-  font-weight: var(--fs-weight-medium);
-  /* issue 111 bod 2: kód produktu sa NIKDY nesmie zalomiť uprostred kódu —
-     rovnaká trvalá poistka ako `.ord-admin-link` vyššie. `.col-code`
-     nižšie dostáva reálny zmeraný priestor; toto je krajný núdzový
-     prípad. Deep code review (issue 111): `ellipsis` platí na CELÚ bunku,
-     vrátane `.ord-size-inline` span-u nižšie, keď je vykreslený
-     (`shouldShowSizeLabel`) — to je ZÁMER, nie medzera: kód (hlavný údaj)
-     je PRVÝ v poradí, takže sa oreže AŽ POSLEDNÝ, veľkosť (druhoradý
-     doplnok, dnes prakticky nikdy nevykreslená — pozri `ordersSummary.ts`'s
-     komentár, `sizeLabel` je skoro vždy už suffixom kódu) sa prípadne
-     orezáva PRVÁ. Žiadna zmena kódu netreba, len tento zápis pre budúceho
-     čitateľa. */
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-.ord-size-inline {
-  margin-left: var(--fs-space-1);
-  font-size: var(--fs-text-xs);
-  font-weight: var(--fs-weight-medium);
-  color: var(--fs-ink-muted);
-}
 /* issue 107 bod 1: majiteľ, live nameraná chyba — natívna šípka rozbaľovača
    sa vykresľuje VNÚTRI paddingu, ale nič v CSS s jej priestorom nepočíta
    (`padding-right` bol celý priestor, ktorý appka "vidí"), takže reálne
@@ -908,8 +882,31 @@ tr:last-child td {
 .ord-supplier-cell {
   max-width: 100%;
 }
+/* issue 119: majiteľ, doslovne "zmen na nejake tlacitko z ikonou ktore
+   otvori na novom okne ten link, lebo teraz to je tazke stlacit" — textový
+   odkaz nahradený ikonovým tlačidlom (`OrderLineRow.tsx` drží `<a>`,
+   skutočná navigácia s `target="_blank"`, len vizuálne štylizovaná).
+   `min-width`/`min-height` 2.25rem = 36px, rovnaký "veľké tlačidlá" rozmer
+   ako `.order-group .btn.sm`/`.ord-state-select` vyššie — spĺňa ticketov
+   akceptačný test (klikacia plocha ≥36×36px pri 1280px). */
 .ord-supplier-link {
-  font-weight: var(--fs-weight-medium);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.25rem;
+  min-height: 2.25rem;
+  padding: var(--fs-space-1);
+  font-size: var(--fs-text-lg);
+  line-height: 1;
+  color: var(--fs-brand);
+  background: var(--fs-surface-alt);
+  border: 1px solid var(--fs-border);
+  border-radius: var(--fs-radius-sm);
+  text-decoration: none;
+}
+.ord-supplier-link:hover {
+  background: var(--fs-brand);
+  color: var(--fs-surface);
 }
 /* issue 70: `supplierNote` je voľný text neobmedzenej dĺžky (na rozdiel od
    krátkych popiskov, kde je `nowrap` bez orezania bezpečný) — orezáva sa
@@ -923,10 +920,6 @@ tr:last-child td {
   white-space: nowrap;
   vertical-align: bottom;
   color: var(--fs-ink-muted);
-}
-.ord-supplier-code {
-  font-size: var(--fs-text-xs);
-  color: var(--fs-ink-faint);
 }
 /* issue 107 bod 3: majiteľ, komentár #1: "neviem čo tam je Priradenie
    dodávateľa stĺpec" — nahrádza predtým holú pomlčku (bod vyššie v `.tsx`),
@@ -1192,17 +1185,25 @@ tr:last-child td {
 .col-customer {
   width: 8%;
 }
-.col-code {
-  width: 10.8%;
-}
+/* issue 117: majiteľ, doslovne "kody produktov vobec nepouzivame ...
+   zaberaju miesto" — `col-code` (10.8%) CELÝ zrušený spolu s bunkou v
+   `OrderLineRow.tsx`. Uvoľnená šírka ide do `col-product` (11.4%→17.4%,
+   +6 percentuálnych bodov — issue 107's nález: dlhý názov produktu je
+   overený hlavný hnací faktor výšky riadku) a `col-supplier` (9.2%→14%,
+   +4.8 — hoci teraz nesie MENŠÍ typický obsah (textový odkaz nahradilo malé
+   ikonové tlačidlo, issue 119, a "kód …" riadok pod ním zmizol, issue 117),
+   zriedkavý `supplierNote`/"Priradiť dodávateľa" text pri riadkoch bez
+   odkazu potrebuje priestor, aby sa nezalomil viac než predtým). Živo
+   overené proti produkcii (39 ostrých riadkov) po nasadení. Súčet ostáva
+   100%. */
 .col-product {
-  width: 11.4%;
+  width: 17.4%;
 }
 .col-qty {
   width: 4%;
 }
 .col-supplier {
-  width: 9.2%;
+  width: 14%;
 }
 .col-state {
   width: 13.5%;

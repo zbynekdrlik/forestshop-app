@@ -1,12 +1,6 @@
 import { useEffect, useRef, useState, type JSX } from "react";
 import type { OrderLine } from "../ordersApi.js";
-import {
-  formatVariantTotalChip,
-  isStaleOrderLine,
-  orderLineAgeDays,
-  shouldShowSizeLabel,
-  type VariantTotal,
-} from "../ordersSummary.js";
+import { formatVariantTotalChip, isStaleOrderLine, orderLineAgeDays, type VariantTotal } from "../ordersSummary.js";
 
 // issue 60: `objednane` je VÝCHODISKOVÝ stav riadku (pred tým, než sa
 // čokoľvek stane), NIE potvrdenie, že manažér objednal — preto sa nazýva
@@ -174,18 +168,6 @@ export function OrderLineRow({
         </a>
       </td>
       <td>{line.customerName}</td>
-      {/* issue 95: KÓD + VEĽKOSŤ zlúčené (majiteľ, komentár #10: "veľkosť je
-          už súčasťou kódu") — veľkosť sa zobrazí len keď appka má samostatnú
-          `sizeLabel` hodnotu (nie každý variant ju má). issue 105 bod 2:
-          `sizeLabel` je server-side odvodené ako suffix `variantCode`u, takže
-          kód ňou takmer vždy UŽ končí — pripájanie by ju zobrazilo dvakrát
-          (`shouldShowSizeLabel`, `ordersSummary.ts`). */}
-      <td className="ord-code-cell">
-        {line.variantCode}
-        {shouldShowSizeLabel(line.variantCode, line.sizeLabel) && (
-          <span className="ord-size-inline">{line.sizeLabel}</span>
-        )}
-      </td>
       <td>{line.variantName}</td>
       <td className="ord-qty">
         {line.quantity} ks
@@ -202,17 +184,25 @@ export function OrderLineRow({
       <td className="ord-supplier-merged">
         <div className="ord-supplier-cell" data-testid={`supplier-link-${line.lineId}`}>
           {line.supplierUrl !== null ? (
+            // issue 119: majiteľ, doslovne "zmen na nejake tlacitko z ikonou
+            // ktore otvori na novom okne ten link, lebo teraz to je tazke
+            // stlacit" — textový odkaz nahradený veľkým ikonovým tlačidlom
+            // (`.ord-supplier-link` v `app.css` teraz štylizuje `<a>` ako
+            // tlačidlo, min. 36×36px klikacej plochy). `aria-label`/`title`
+            // nesú ten istý popis ako predtým (issue 72: variantName sám
+            // nestačí — dva riadky toho istého produktu v rôznych veľkostiach
+            // majú zhodný variantName, líšia sa len variantCode), viditeľný
+            // text je teraz len ikonka (`aria-hidden`, prístupné meno nesie
+            // výlučne `aria-label`).
             <a
               href={line.supplierUrl}
               target="_blank"
               rel="noreferrer noopener"
               className="ord-supplier-link"
-              // issue 72: variantName sám nestačí — dva riadky toho istého
-              // produktu v rôznych veľkostiach majú zhodný variantName, líšia
-              // sa len variantCode.
               aria-label={`Odkaz na dodávateľa — ${line.variantName} (${line.variantCode})`}
+              title={`Otvoriť odkaz na dodávateľa — ${line.variantName} (${line.variantCode})`}
             >
-              Odkaz na dodávateľa
+              <span aria-hidden="true">🔗</span>
             </a>
           ) : line.supplierNote !== null ? (
             <span className="ord-supplier-note" title={line.supplierNote}>
@@ -229,10 +219,17 @@ export function OrderLineRow({
             // riadku nad issue 105's ~95px invariant (živo zmerané: 85px →
             // 103.5px s popisom na vlastnom riadku).
             <span className="ord-supplier-assign-hint">Priradiť dodávateľa</span>
-          ) : line.externalCode === null ? (
+          ) : (
+            // issue 117: `externalCode` (dodávateľský kód) sa už NIKDY
+            // nezobrazuje — majiteľ ho nepoužíva ("kody produktov vobec
+            // nepouzivame"), appka používa výlučne odkaz na dodávateľa.
+            // Predtým sa táto pomlčka potláčala, keď `externalCode` bol
+            // vyplnený (zobrazoval sa namiesto nej samostatný "kód …" riadok)
+            // — bez toho riadku je terajší terminálny stav VŽDY pomlčka,
+            // keď riadok nemá ani odkaz, ani poznámku, ani priradenie
+            // (legitímny, `OrderLineRow.supplierAssignCell.test.tsx`).
             "—"
-          ) : null}
-          {line.externalCode !== null && <div className="ord-supplier-code">kód {line.externalCode}</div>}
+          )}
         </div>
         {/* pri neradiťeľnom riadku (100 % dnešných ostrých dát) sa TENTO blok
             predtým vykresľoval VŽDY, len s holou pomlčkou "—" bez
