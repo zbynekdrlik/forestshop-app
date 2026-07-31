@@ -84,6 +84,36 @@ test("manažér filtruje podľa dodávateľa, vidí súhrn ostáva vybaviť a sk
   await page.getByTestId("orders-hide-resolved-toggle").click();
   await expect(page.getByTestId("supplier-DODAVATEL-TEST-1")).toBeVisible();
 
+  // issue 95: stránka sa NIKDY nesmie posúvať vodorovne, na žiadnej z troch
+  // testovaných šírok — keď je tabuľka širšia než dostupné miesto, posúva sa
+  // len jej VLASTNÝ obal (`.orders-table-wrap`), nikdy `document.body`.
+  // Rovnaký účet z tohto testu ostáva prihlásený, žiadne ďalšie prihlásenie
+  // netreba (šetrí `MAX_ATTEMPTS` rozpočet — `.claude/rules/frontend-design.md`).
+  for (const width of [1280, 1600, 1920]) {
+    await page.setViewportSize({ width, height: 900 });
+    const { bodyWidth, viewportWidth } = await page.evaluate(() => ({
+      bodyWidth: document.body.scrollWidth,
+      viewportWidth: window.innerWidth,
+    }));
+    expect(bodyWidth, `šírka okna ${String(width)}px`).toBeLessThanOrEqual(viewportWidth);
+  }
+
+  // Priblíženie prehliadača (majiteľ: "ked aj scalujem tak sa ten stred
+  // nescaluje") — CSS `zoom` je Chromium's náprotivok Ctrl+/- priblíženia,
+  // `documentElement.clientWidth` sa pod ním prepočíta rovnako ako reálny
+  // prehliadačový zoom.
+  await page.evaluate(() => {
+    document.documentElement.style.zoom = "1.25";
+  });
+  const poZoome = await page.evaluate(() => ({
+    bodyWidth: document.body.scrollWidth,
+    clientWidth: document.documentElement.clientWidth,
+  }));
+  expect(poZoome.bodyWidth).toBeLessThanOrEqual(poZoome.clientWidth);
+  await page.evaluate(() => {
+    document.documentElement.style.zoom = "1";
+  });
+
   expect(chyby).toEqual([]);
 });
 

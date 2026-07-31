@@ -108,7 +108,7 @@ export function App(): JSX.Element {
         >
           <ChangePasswordForm email={me.email} onSessionExpired={reload} />
         </Topbar>
-        <main>
+        <main className={tab?.wide === true ? "main-wide" : undefined}>
           {logoutError !== "" && <p role="alert">{logoutError}</p>}
           {ActiveComponent !== null && <ActiveComponent role={me.role} onSessionExpired={reload} />}
         </main>
