@@ -1,6 +1,6 @@
 import { eq, inArray } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
-import { orderLines, type OrderLineState } from "../../db/schema.js";
+import { orderLines, orders, type OrderLineState } from "../../db/schema.js";
 import { record } from "../audit/service.js";
 import { listOpenOrderLineIdsForSupplier } from "./queries.js";
 
@@ -99,6 +99,50 @@ export async function setOrderLineOrdered(
         from: line.ordered,
         to: input.ordered,
       },
+    });
+
+    return "ok";
+  });
+}
+
+export type SetOrderCommentResult = "ok" | "not_found";
+
+export interface SetOrderCommentInput {
+  readonly orderId: string;
+  readonly comment: string | null;
+  readonly actorUserId: string;
+  readonly now: Date;
+}
+
+// issue 64: manažérova voľná poznámka k CELEJ objednávke (nie k riadku,
+// `order.comment` stĺpec — `.claude/rules/orders.md` vysvetľuje, prečo ho
+// import nikdy neprepíše). Rovnaký vzor ako `setOrderLineState`/
+// `setOrderLineOrdered` vyššie: jedna transakcia, `.for("update")` proti
+// súbežnej zmene TOHO ISTÉHO záznamu (dvaja manažéri upravujú tú istú
+// poznámku súčasne), audit v tej istej transakcii. `comment: null` maže
+// poznámku (prázdny orezaný vstup, mapované v `orders-routes.ts`).
+export async function setOrderComment(
+  db: Database,
+  input: SetOrderCommentInput,
+): Promise<SetOrderCommentResult> {
+  return db.transaction(async (tx) => {
+    const [order] = await tx
+      .select({ comment: orders.comment })
+      .from(orders)
+      .where(eq(orders.id, input.orderId))
+      .for("update")
+      .limit(1);
+    if (order === undefined) return "not_found";
+
+    await tx.update(orders).set({ comment: input.comment }).where(eq(orders.id, input.orderId));
+
+    await record(tx, {
+      at: input.now,
+      actorUserId: input.actorUserId,
+      action: "order.comment.changed",
+      entity: "order",
+      entityId: input.orderId,
+      data: { from: order.comment, to: input.comment },
     });
 
     return "ok";

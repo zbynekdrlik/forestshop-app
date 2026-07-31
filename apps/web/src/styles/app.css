@@ -772,6 +772,27 @@ tr:last-child td {
   font-size: var(--fs-text-sm);
 }
 
+/* issue 64: poznámka k CELEJ objednávke — rovnaký vizuálny jazyk ako
+   `.ord-supplier-assign`/`-input` vyššie (`flex-wrap: wrap`, rovnaký dôvod:
+   bez zalomenia by vstup + tlačidlo pri užšom stĺpci pretiekli do
+   susedného stĺpca). Širšie ako priradenie dodávateľa — voľný text (max
+   2000 znakov) je typicky dlhší než meno dodávateľa. */
+.ord-comment-cell {
+  display: flex;
+  align-items: center;
+  gap: var(--fs-space-1);
+  flex-wrap: wrap;
+  max-width: 220px;
+}
+.ord-comment-input {
+  width: 160px;
+  padding: var(--fs-space-1) var(--fs-space-2);
+  border: 1px solid var(--fs-border);
+  border-radius: var(--fs-radius-sm);
+  font: inherit;
+  font-size: var(--fs-text-sm);
+}
+
 /* issue 59: nastavenie otvorených stavov objednávok — rovnaký vizuálny
    jazyk ako `.autostatus`/`.mail-preview` vyššie (karta na svetlom podklade),
    vlastný namespace, aby sa nekolidovalo s tabuľkovými triedami. */

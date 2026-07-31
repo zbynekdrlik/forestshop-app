@@ -1,22 +1,21 @@
 import { useCallback, useEffect, useState, type JSX } from "react";
 import type { Me } from "../api.js";
 import { isLineResolved } from "../ordersSummary.js";
+import { useSupplierMailActions } from "../useSupplierMailActions.js";
 import { OrderOpenStatusesPanel } from "./OrderOpenStatusesPanel.js";
 import { OrdersToolbar } from "./OrdersToolbar.js";
 import { SupplierOrderGroup } from "./SupplierOrderGroup.js";
 import {
   assignOrderLineSupplier as assignOrderLineSupplierApi,
   fetchOpenOrders,
-  fetchSupplierOrderMailPreview,
   NEZNAMY_DODAVATEL,
   OrdersUnauthorizedError,
-  sendSupplierOrderMail,
   setSupplierEmail,
   setSupplierLinesOrdered,
+  updateOrderComment,
   updateOrderLineOrdered,
   updateOrderLineState,
   type OrderLine,
-  type OrderMailPreview,
   type SupplierOpenOrders,
 } from "../ordersApi.js";
 
@@ -80,12 +79,21 @@ export function OrdersSection({
   const [emailBusy, setEmailBusy] = useState(false);
   const [emailError, setEmailError] = useState("");
 
-  // #31: náhľad + potvrdenie pred odoslaním objednávky mailom.
-  const [previewSupplier, setPreviewSupplier] = useState<string | null>(null);
-  const [preview, setPreview] = useState<OrderMailPreview | null>(null);
-  const [previewError, setPreviewError] = useState("");
-  const [sendBusy, setSendBusy] = useState(false);
-  const [sendResult, setSendResult] = useState<{ readonly supplier: string; readonly message: string } | null>(null);
+  // #31: náhľad + potvrdenie pred odoslaním objednávky mailom — vyňaté do
+  // vlastného hooku (issue 64), aby sa v tomto súbore uvoľnilo miesto pod
+  // eslint `max-lines: 400` pre novú funkciu nižšie (poznámka k objednávke),
+  // BEZ zmeny správania (`useSupplierMailActions.ts`).
+  const {
+    previewSupplier,
+    preview,
+    previewError,
+    sendBusy,
+    sendResult,
+    openPreview,
+    closePreview,
+    confirmSend,
+    copyOrderToClipboard,
+  } = useSupplierMailActions(onSessionExpired);
 
   const load = useCallback(() => {
     fetchOpenOrders()
@@ -271,86 +279,36 @@ export function OrdersSection({
     [emailDraft, onSessionExpired],
   );
 
-  // #31: náhľad pred odoslaním — server prepočíta predmet/telo/adresáta zo
-  // skutočného aktuálneho stavu (nikdy sa nedôveruje tomu, čo je práve
-  // zobrazené na klientovi).
-  const openPreview = useCallback(
-    (supplier: string) => {
-      setPreviewSupplier(supplier);
-      setPreview(null);
-      setPreviewError("");
-      setSendResult(null);
-      fetchSupplierOrderMailPreview(supplier)
-        .then((p) => {
-          setPreview(p);
+  // issue 64: manažérova voľná poznámka k CELEJ objednávke — NEZÁVISLÉ od
+  // riadku (na rozdiel od `changeState`/`changeOrdered` vyššie, kľúčované
+  // `orderId`, nie `lineId`). Po úspechu sa lokálne aktualizujú VŠETKY
+  // riadky s rovnakým `orderId` naprieč VŠETKÝMI skupinami dodávateľov (na
+  // rozdiel od `toggleGroupOrdered`, ktoré mutuje len JEDNU skupinu — jedna
+  // objednávka môže mať riadky u viacerých dodávateľov naraz).
+  const [busyCommentOrderId, setBusyCommentOrderId] = useState<string | null>(null);
+
+  const changeComment = useCallback(
+    (orderId: string, comment: string | null) => {
+      setStateError("");
+      setBusyCommentOrderId(orderId);
+      updateOrderComment(orderId, comment)
+        .then(() => {
+          setSuppliers((current) =>
+            current.map((group) => ({
+              ...group,
+              lines: group.lines.map((line) => (line.orderId === orderId ? { ...line, comment } : line)),
+            })),
+          );
         })
         .catch((err: unknown) => {
           if (err instanceof OrdersUnauthorizedError) {
             onSessionExpired();
             return;
           }
-          setPreviewError(err instanceof Error ? err.message : "Náhľad mailu sa nepodarilo načítať.");
-        });
-    },
-    [onSessionExpired],
-  );
-
-  const closePreview = useCallback(() => {
-    setPreviewSupplier(null);
-    setPreview(null);
-    setPreviewError("");
-  }, []);
-
-  const confirmSend = useCallback(
-    (supplier: string) => {
-      setSendBusy(true);
-      sendSupplierOrderMail(supplier)
-        .then((result) => {
-          setSendResult({
-            supplier,
-            message: result.ok
-              ? `Objednávka bola odoslaná na ${preview?.to ?? "e-mail dodávateľa"}.`
-              : (result.error ?? "Odoslanie sa nepodarilo."),
-          });
-          if (result.ok) {
-            setPreviewSupplier(null);
-            setPreview(null);
-          }
-        })
-        .catch((err: unknown) => {
-          if (err instanceof OrdersUnauthorizedError) {
-            onSessionExpired();
-            return;
-          }
-          setSendResult({ supplier, message: err instanceof Error ? err.message : "Odoslanie sa nepodarilo." });
+          setStateError(err instanceof Error ? err.message : "Uloženie poznámky sa nepodarilo.");
         })
         .finally(() => {
-          setSendBusy(false);
-        });
-    },
-    [onSessionExpired, preview],
-  );
-
-  const copyOrderToClipboard = useCallback(
-    (supplier: string) => {
-      fetchSupplierOrderMailPreview(supplier)
-        .then(async (p) => {
-          try {
-            await navigator.clipboard.writeText(p.body);
-            setSendResult({ supplier, message: "Text objednávky skopírovaný do schránky." });
-          } catch {
-            setSendResult({ supplier, message: "Kopírovanie do schránky sa nepodarilo." });
-          }
-        })
-        .catch((err: unknown) => {
-          if (err instanceof OrdersUnauthorizedError) {
-            onSessionExpired();
-            return;
-          }
-          setSendResult({
-            supplier,
-            message: err instanceof Error ? err.message : "Text objednávky sa nepodarilo pripraviť.",
-          });
+          setBusyCommentOrderId(null);
         });
     },
     [onSessionExpired],
@@ -423,9 +381,11 @@ export function OrdersSection({
           busyOrderedLineId={busyOrderedLineId}
           busyOrderedSupplier={busyOrderedSupplier}
           busySupplierLineId={busySupplierLineId}
+          busyCommentOrderId={busyCommentOrderId}
           onChangeState={changeState}
           onChangeOrdered={changeOrdered}
           onAssignSupplier={assignSupplier}
+          onChangeComment={changeComment}
           editingEmailSupplier={editingEmailSupplier}
           emailDraft={emailDraft}
           emailBusy={emailBusy}
