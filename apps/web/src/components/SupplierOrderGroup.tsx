@@ -130,6 +130,9 @@ export function SupplierOrderGroup({
             <th>Priradenie dodávateľa</th>
             <th>Stav</th>
             <th>Dátum objednávky</th>
+            {/* issue 65: zákaznícky odkaz k objednávke (read-only, `remark`
+                stĺpec exportu — NIE naša vlastná `comment` bunka vpravo). */}
+            <th>Poznámka e-shopu</th>
             <th>Komentár</th>
           </tr>
         </thead>

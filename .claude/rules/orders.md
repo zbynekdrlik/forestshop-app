@@ -304,3 +304,48 @@ paths:
   viacerých riadkoch" tvarom: má reset efekt na to pole `isDirty` strážcu,
   alebo len "skip prvý mount"? Ten druhý nestačí, keď zdroj resetu môže byť
   ULOŽENIE NA INOM RIADKU, nielen vlastné prvé mountnutie.
+- **Export objednávok nesie DVA rôzne "poznámkové" stĺpce — `remark` (stĺpec
+  27, poznámka ZÁKAZNÍKA) a `shopRemark` (stĺpec 28, INTERNÁ poznámka
+  PREDAJNE) — nikdy si ich nezamieňaj podľa mena/nálepky.** Issue 65: stará
+  appka (`parovanie_produktov`) svoju funkciu #101 "Poznámka e-shopu"
+  vystavia `shopRemark` (jej vlastný komentár v `app.py:2978` to hovorí
+  priamo, aj `.claude/skills/shoptet/SKILL.md:92`) — ale TENTO projekt
+  potreboval presný OPAK: čo napísal ZÁKAZNÍK (`remark`), overené na reálnom
+  cachovanom exporte (`parovanie_produktov/data/out/orders_cache.csv`):
+  `remark` malo obsah v 75 z 1974 riadkov a boli to skutočné zákaznícke
+  odkazy ("Prosim poslat co najskorej…"), `shopRemark` malo obsah v 1474
+  riadkoch a boli to interné poznámky PREDAJNE ("Hart nie je tricko vyšiť
+  riešim"). `shopRemark` by navyše koncepčne DUPLIKOVALO už existujúce
+  appkine `order.comment` (issue 64, tiež interné). Pri KAŽDOM ďalšom poli
+  z exportu, kde staršia dokumentácia/appka používa nejaké meno na
+  obrazovke — over VÝZNAM stĺpca na reálnych dátach (nie z nálepky v UI).
+- **Shoptet admin GET deep-link na objednávku podľa jej KÓDU (nemáme interné
+  Shoptet id) je `/admin/vyhladavanie/?string=<kód>&src=orders` — NIE
+  `?code=<kód>` na `objednavky-detail/`.** Issue 65: stará appka's
+  `webreview/static/app.js:2253-2260` (staršie, NEFUNKČNÉ zistenie) používa
+  práve ten druhý tvar — ale NOVŠIE, naživo overené zistenie (2026-07-22,
+  `parovanie_produktov/src/parovanie/posta_uncollected.py:70-76` +
+  `orders_reminder.py:36-38`) dokazuje, že Shoptet admin `?code=`/`?query=`
+  na `objednavky-detail/` TICHO IGNORUJE — funguje LEN globálne
+  vyhľadávanie. Pri CITOVANÍ konkrétnych riadkov starej appky ako
+  referencie pre nejaké správanie VŽDY over, či v tom istom repozitári
+  neexistuje NOVŠIE zistenie, ktoré ho vyvracia (grep na kľúčové slovo,
+  napr. `admin_link`/`ADMIN_ORDER_LINK`) — nie je isté, že prvý nájdený
+  výskyt je ešte platný. Doména admin rozhrania patrí do `env.ts`'s novej,
+  NIE-tajnej premennej (`SHOPTET_ADMIN_BASE_URL`, rozumný default = reálna
+  produkčná hodnota) — nikdy natvrdo v kóde, presne ako `SHOPTET_EXPORT_URL`/
+  `SHOPTET_ORDERS_URL` vyššie (aj keď táto NENESIE `hash`, teda nie je
+  tajomstvo).
+- **`fixtures/orders-sample.csv` je RUČNE vyrobená (nie výrez reálneho
+  exportu ako katalógova fixtúra), takže sa smie prepísať CELÁ pythonom —
+  žiadny byte-for-byte jeden-riadok postup ako `.claude/rules/catalog.md`
+  vyžaduje pre katalógovú fixtúru.** Formát je ale nezvyčajný: KAŽDÉ pole je
+  zacitované (`"code";"date";...`), ALE úplne posledný stĺpec (prázdny,
+  vytvorený koncovou bodkočiarkou na riadku) je BEZ úvodzoviek — obyčajný
+  `csv.writer(..., quoting=csv.QUOTE_ALL)` by ho namiesto toho zapísal ako
+  `""`, čo sa rozíde od pôvodného tvaru (nekriticky pre parser, ale zbytočný
+  šum v diffe). Bezpečný postup (issue 65, pridanie `remark` na order
+  20300001): `csv.reader` (delimiter `;`, quotechar `"`) načíta všetky
+  riadky, uprav cieľové polia, potom RUČNE zlož každý riadok
+  (`";".join(esc(v) for v in row[:-1]) + ";"`, `esc` obaľuje úvodzovkami +
+  zdvojuje vnútorné), NIE `csv.writer` nad celým súborom.

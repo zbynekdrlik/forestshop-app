@@ -772,6 +772,45 @@ tr:last-child td {
   font-size: var(--fs-text-sm);
 }
 
+/* issue 65: priamy odkaz do Shoptet administrácie, malá ikonka hneď za
+   kódom objednávky — nenápadný, nezaberá miesto ako plnohodnotný text. */
+.ord-admin-link {
+  margin-left: var(--fs-space-1);
+  text-decoration: none;
+}
+/* issue 65: upozornenie na starú nevybavenú objednávku (>14 dní) — výrazná
+   farba (`--fs-warning`), rovnaká sémantika ako `.orders-table tr.state-
+   caka_sa` vyššie, ale nezávislá od stavu riadku (môže sa zobraziť pri
+   AKOMKOĽVEK nevybavenom stave). */
+.ord-stale-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: var(--fs-space-2);
+  padding: 0 var(--fs-space-2);
+  font-size: var(--fs-text-xs);
+  font-weight: var(--fs-weight-semibold);
+  color: var(--fs-warning);
+  background: var(--fs-warning-bg);
+  border: 1px solid var(--fs-warning);
+  border-radius: 999px;
+  white-space: nowrap;
+  cursor: help;
+}
+/* issue 65: zákaznícky odkaz k objednávke — read-only, rovnaký orezávací
+   vzor ako `.ord-supplier-note` (issue 70) — voľný text neobmedzenej dĺžky. */
+.ord-remark-cell {
+  max-width: 200px;
+}
+.ord-remark {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+  color: var(--fs-ink-muted);
+}
+
 /* issue 64: poznámka k CELEJ objednávke — rovnaký vizuálny jazyk ako
    `.ord-supplier-assign`/`-input` vyššie (`flex-wrap: wrap`, rovnaký dôvod:
    bez zalomenia by vstup + tlačidlo pri užšom stĺpci pretiekli do

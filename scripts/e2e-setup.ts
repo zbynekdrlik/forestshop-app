@@ -235,6 +235,10 @@ const [objednavkaAlfa] = await db
     externalOrderId: "9001",
     customerName: "E2E Zákazník Alfa",
     comment: "Zavolať pred doručením",
+    // issue 65: zákaznícky odkaz (`remark` — NIE `shopRemark`,
+    // `.claude/rules/orders.md`) — nezávislé pole od manažérovho `comment`
+    // vyššie, appka ho zobrazuje LEN na čítanie.
+    remark: "Prosím doručiť len v piatok",
     statusName: DEFAULT_ORDER_OPEN_STATUS,
     placedAt: new Date("2026-07-20T10:00:00Z"),
   })
@@ -253,7 +257,14 @@ const [objednavkaBezDodavatela] = await db
     externalOrderId: "9002",
     customerName: "E2E Zákazník Bez dodávateľa",
     statusName: DEFAULT_ORDER_OPEN_STATUS,
-    placedAt: new Date("2026-07-21T09:00:00Z"),
+    // issue 65: zámerne HLBOKO v minulosti (nie len "pred pár dňami") —
+    // objednávka 9002 zostáva vo VÝCHODISKOVOM ("objednane"/nevybavenom)
+    // stave počas CELÉHO e2e behu (žiadny test v `orders.spec.ts` ju
+    // nemení), takže je bezpečný, stále platný kandidát na test upozornenia
+    // na staré objednávky (⚠️, `ordersSummary.ts`'s `isStaleOrderLine`) —
+    // pevný dátum v minulosti zostáva "starý" navždy, bez ohľadu na to,
+    // kedy CI beh skutočne prebehne.
+    placedAt: new Date("2020-01-01T09:00:00Z"),
   })
   .returning();
 if (objednavkaBezDodavatela === undefined) {

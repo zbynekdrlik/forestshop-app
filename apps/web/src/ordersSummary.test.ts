@@ -4,6 +4,9 @@ import {
   formatOrderSummaryText,
   formatVariantTotalChip,
   isLineResolved,
+  isStaleOrderLine,
+  orderLineAgeDays,
+  STALE_ORDER_LINE_DAYS,
   summarizeOrderLines,
 } from "./ordersSummary.js";
 
@@ -126,4 +129,41 @@ it("formatVariantTotalChip s ≥2 riadkami vráti text so ZOSTÁVAJÚCIM množst
     text: "Σ spolu 3 ks",
     title: "Spolu vo všetkých objednávkach: 5 ks · nevybavené: 3 ks",
   });
+});
+
+// issue 65 — vek nevybaveného riadku + hranica upozornenia (⚠️).
+const NOW = new Date("2026-08-01T00:00:00Z");
+
+it("orderLineAgeDays vypočíta počet celých dní od placedAt po now", () => {
+  expect(orderLineAgeDays("2026-07-01T00:00:00Z", NOW)).toBe(31);
+  expect(orderLineAgeDays("2026-08-01T00:00:00Z", NOW)).toBe(0);
+});
+
+it("orderLineAgeDays nikdy nevráti záporné číslo (placedAt v budúcnosti)", () => {
+  expect(orderLineAgeDays("2026-08-05T00:00:00Z", NOW)).toBe(0);
+});
+
+it("STALE_ORDER_LINE_DAYS je 14 (rovnaká hranica ako stará appka's STALE_ORDER_DAYS)", () => {
+  expect(STALE_ORDER_LINE_DAYS).toBe(14);
+});
+
+// Presná hranica žiadaná ticketom: 14 dní → BEZ badge, 15 dní → S badge.
+it("isStaleOrderLine — presne 14 dní starý nevybavený riadok NEDOSTANE badge", () => {
+  const placedAt = new Date(NOW.getTime() - 14 * 86_400_000).toISOString();
+  expect(isStaleOrderLine({ state: "objednane", ordered: false, placedAt }, NOW)).toBe(false);
+});
+
+it("isStaleOrderLine — presne 15 dní starý nevybavený riadok DOSTANE badge", () => {
+  const placedAt = new Date(NOW.getTime() - 15 * 86_400_000).toISOString();
+  expect(isStaleOrderLine({ state: "objednane", ordered: false, placedAt }, NOW)).toBe(true);
+});
+
+it("isStaleOrderLine — vybavený riadok (odškrtnutý alebo posunutý stav) NIKDY nedostane badge, aj keby bol veľmi starý", () => {
+  const staryDatum = new Date(NOW.getTime() - 100 * 86_400_000).toISOString();
+  expect(isStaleOrderLine({ state: "objednane", ordered: true, placedAt: staryDatum }, NOW)).toBe(false);
+  expect(isStaleOrderLine({ state: "caka_sa", ordered: false, placedAt: staryDatum }, NOW)).toBe(false);
+});
+
+it("isStaleOrderLine — čerstvý nevybavený riadok nedostane badge", () => {
+  expect(isStaleOrderLine({ state: "objednane", ordered: false, placedAt: NOW.toISOString() }, NOW)).toBe(false);
 });

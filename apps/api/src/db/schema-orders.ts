@@ -56,6 +56,16 @@ export const orders = pgTable(
     // vložené riadky (testy/fixtúry) — produkčný import vždy zapíše
     // skutočnú hodnotu z exportu, nikdy sa nespolieha na tento default.
     statusName: text("status_name").notNull().default("Vybavuje sa"),
+    // issue 65: zákaznícky odkaz k objednávke (Shoptet export's `remark`
+    // stĺpec — NIE `shopRemark`, ktorý je interná poznámka PREDAJNE a
+    // koncepčne duplikuje už existujúce `comment` vyššie; overené naživo na
+    // reálnom exporte + `parovanie_produktov/.claude/skills/shoptet/
+    // SKILL.md:92`). Je to VŽDY Shoptetovo pole (rovnaký zámer ako
+    // `statusName` vyššie, nikdy appkou/manažérom vlastnené na rozdiel od
+    // `comment`) — `ingest.ts` ho preto pri re-importe OSVIEŽI. Nepovinný
+    // stĺpec exportu (veľa objednávok ho nemá vyplnený), read-only na
+    // obrazovke "Na objednanie".
+    remark: text("remark"),
     placedAt: timestamp("placed_at", { withTimezone: true }).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },

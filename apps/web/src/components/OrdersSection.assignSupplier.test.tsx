@@ -31,6 +31,8 @@ const LINE_BEZ_DODAVATELA = {
   externalOrderId: "1003",
   customerName: "Zákazník 3",
   comment: null,
+  remark: null,
+  adminUrl: "https://www.forestshop.sk/admin/vyhladavanie/?string=1003&src=orders",
   placedAt: "2026-07-20T00:00:00.000Z",
   variantCode: "C-1",
   variantName: "Čiapka FOREST 3001",

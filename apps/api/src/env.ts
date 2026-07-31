@@ -16,6 +16,14 @@ const envSchema = z.object({
   // nej appka beží ďalej, len CLI import objednávok zlyhá nahlas hneď na štarte.
   SHOPTET_ORDERS_URL: z.string().url().optional(),
   ORDERS_RAW_DIR: z.string().min(1).default("./data/orders-raw"),
+  // issue 65: základ Shoptet-ovho ADMIN rozhrania (nie exportu) pre priamy
+  // odkaz na objednávku z obrazovky "Na objednanie" — na rozdiel od
+  // `SHOPTET_EXPORT_URL`/`SHOPTET_ORDERS_URL` vyššie NENESIE prihlasovací
+  // `hash`, nie je to tajomstvo (je to len verejná doména obchodu). Má
+  // rozumný default (skutočná produkčná hodnota), ale ostáva
+  // premennou/konfigurovateľnou — nikdy natvrdo v kóde (`.claude/rules/
+  // orders.md`'s zásada "admin base patrí do config/env").
+  SHOPTET_ADMIN_BASE_URL: z.string().url().default("https://www.forestshop.sk"),
   // Odosielanie objednávky dodávateľovi mailom (#31) — rovnaký mechanizmus ako
   // stará appka (SMTP, env premenné). Nepovinné ako `SHOPTET_EXPORT_URL`
   // vyššie: bez `MAIL_HOST` appka beží ďalej, len odoslanie mailom vráti 503
