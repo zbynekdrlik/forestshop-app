@@ -1450,3 +1450,36 @@ nové heslo sa nikde v pushnutom obsahu nenachádza.
   (predtým 135px); 0 console chýb/varovaní; verzia vo footeri
   `v0.3.0-dev.61` zodpovedá `/api/version`.
 - Discord run-card odoslaný (`notify --run-card`, potvrdené doručenie).
+
+## issue 107 — STAV orezaný text, úzke POZNÁMKY, zbytočná pomlčka v DODAVATEL
+
+- Commity na `dev`: `469f462` (bump 0.3.0-dev.63), `26e9e9f` ([red] test:
+  supplier-assign-cell musí zmiznúť pre neradiťeľné riadky), `74ba34c`
+  ([green] bod 3: neradiťeľný riadok nevykreslí blok priradenia dodávateľa
+  vôbec), `002d06a` ([green] popis "Priradiť dodávateľa" presunutý do
+  existujúcej `.ord-supplier-cell` — bez extra riadku výšky), `9e6ad99`
+  ([red] `orders-layout.spec.ts` — STAV orezaný text + úzke POZNÁMKY),
+  `791d78a` ([green] bod 1+2: `.ord-state-select`'s `appearance:none` +
+  vlastná šípka, `col-state` 9%→14%, `col-notes` 12%→25%, financované zo
+  `col-supplier`/`col-product`/ostatných).
+- Shared PR: `#108` (zmergnuté, `49aeb92`). Main CI + Deploy zelené,
+  v0.3.0-dev.63 nasadené.
+- **Live post-deploy overenie odhalilo regresiu** (percentá stĺpcov
+  overené LEN proti e2e fixtúre, nie proti skutočnej produkcii): 92 % z 39
+  ostrých riadkov má "Odkaz na dodávateľa" + "kód XXXX" pod ním — dlhší
+  obsah než e2e fixture testovala — ktorý sa v zúženom `col-supplier`
+  zalomil na viac riadkov (`maxHeight` 85px→212px). Follow-up PR `#109`
+  (`67b023c` bump 0.3.0-dev.64, `f4c67c4` oprava rozpočtu stĺpcov — live
+  overené priamo proti produkcii cez `page.addStyleTag`, žiadny redeploy
+  netreba na vyskúšanie kandidáta) — `col-supplier`/`col-product` späť na
+  13%, financovanie z `col-order`/`col-code`/`col-ordered` (5%) a
+  `col-customer` (8%). Zmergnuté, `69b9e0b`. Main CI + Deploy zelené,
+  v0.3.0-dev.64 nasadené.
+- Live overenie po opravnom deployi (`vychod@varos.sk`, 39 reálnych
+  riadkov, 1280/1440/1600/1920px): 0 orezaných stavov, POZNÁMKY pole
+  164–304px (≥160px), 0 pomlčiek v DODAVATEL bloku, 0 pretekajúcich `<th>`,
+  0 vodorovného skrolovania stránky, `maxHeight` 134/134/114.5/95px
+  (namiesto pôvodných 85–212px), 0 console chýb/varovaní, verzia vo
+  footeri `v0.3.0-dev.64` zodpovedá `/api/version`.
+- Playbook zápis: `.claude/rules/frontend-design.md` — overuj `<colgroup>`
+  percentá proti SKUTOČNEJ produkcii, nie len e2e fixtúre.
