@@ -699,7 +699,13 @@ tr:last-child td {
   table-layout: fixed;
   font-size: var(--fs-text-sm);
 }
-.orders-table th,
+/* Live post-deploy verification (issue 95, 1920px): `overflow-wrap:
+   break-word` on `<th>` too let a narrow single-word header (checkbox
+   column, "OBJEDNANÉ") break MID-WORD across three lines ("OBJE/DNAN/É"),
+   which reads as broken layout — multi-word headers ("Dátum objednávky")
+   still wrap fine at the natural space without it. `<td>` keeps it (needed
+   for long product names/comments in a fixed-width column); `<th>` relies
+   instead on `.col-ordered`'s widened share below to fit on one line. */
 .orders-table td {
   overflow-wrap: break-word;
 }
@@ -965,9 +971,13 @@ tr:last-child td {
 /* issue 95: percentuálne šírky stĺpcov (`SupplierOrderGroup.tsx`'s
    `<colgroup>`) — PRODUKT (najdôležitejší údaj, majiteľ komentár #1: "má len
    97px na dlhý názov") a zlúčené DODÁVATEĽ/POZNÁMKY dostávajú najviac
-   miesta, checkbox/MNOŽSTVO najmenej. Súčet = 100%. */
+   miesta. Súčet = 100%. `col-ordered` 4%→6% (živé overenie na 1920px:
+   pri 4% sa jednoslovná hlavička "OBJEDNANÉ" lámala DOPROSTRIED slova na tri
+   riadky — pozri `overflow-wrap` komentár vyššie) — rozdiel vzatý z
+   `col-qty` (6%→5%) a `col-date` (8%→7%), obe majú krátky obsah s
+   rezervou. */
 .col-ordered {
-  width: 4%;
+  width: 6%;
 }
 .col-order {
   width: 8%;
@@ -982,7 +992,7 @@ tr:last-child td {
   width: 20%;
 }
 .col-qty {
-  width: 6%;
+  width: 5%;
 }
 .col-supplier {
   width: 15%;
@@ -991,7 +1001,7 @@ tr:last-child td {
   width: 9%;
 }
 .col-date {
-  width: 8%;
+  width: 7%;
 }
 .col-notes {
   width: 12%;
