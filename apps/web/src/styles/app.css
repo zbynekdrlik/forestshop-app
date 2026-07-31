@@ -439,7 +439,13 @@ tr:last-child td {
    "priestor bol vyuzity"), nie čitateľný text — zúženie jej VLASTNÉHO
    bočného odsadenia na `--fs-space-1` (4px) len tu (nie globálne pre iné
    obrazovky) uvoľňuje presne toľko miesta, koľko `.orders-table`'s nová
-   `min-width` nižšie potrebuje, aby sa zmestila bez posúvania. */
+   `min-width` nižšie potrebuje, aby sa zmestila bez posúvania. Deep code
+   review (issue 111): toto zúženie sedí na CELEJ `.main-wide` triede (ako
+   `max-width`/`overflow-x` o riadok vyššie, issue 95), nie špecificky na
+   "Na objednanie" — dnes to je jediná `wide: true` obrazovka (`nav.ts`),
+   takže neškodí, ale AK niekedy pribudne DRUHÁ `wide: true` obrazovka s
+   iným typom obsahu (nie hustá tabuľka), over, či jej to tesnejšie
+   odsadenie tiež vyhovuje, skôr než sa naň bude spoliehať mlčky. */
 .main > main.main-wide {
   max-width: none;
   overflow-x: hidden;
@@ -845,7 +851,14 @@ tr:last-child td {
   /* issue 111 bod 2: kód produktu sa NIKDY nesmie zalomiť uprostred kódu —
      rovnaká trvalá poistka ako `.ord-admin-link` vyššie. `.col-code`
      nižšie dostáva reálny zmeraný priestor; toto je krajný núdzový
-     prípad. */
+     prípad. Deep code review (issue 111): `ellipsis` platí na CELÚ bunku,
+     vrátane `.ord-size-inline` span-u nižšie, keď je vykreslený
+     (`shouldShowSizeLabel`) — to je ZÁMER, nie medzera: kód (hlavný údaj)
+     je PRVÝ v poradí, takže sa oreže AŽ POSLEDNÝ, veľkosť (druhoradý
+     doplnok, dnes prakticky nikdy nevykreslená — pozri `ordersSummary.ts`'s
+     komentár, `sizeLabel` je skoro vždy už suffixom kódu) sa prípadne
+     orezáva PRVÁ. Žiadna zmena kódu netreba, len tento zápis pre budúceho
+     čitateľa. */
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
