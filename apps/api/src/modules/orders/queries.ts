@@ -165,7 +165,7 @@ export async function listOpenOrderLinesBySupplier(
   // dodávateľa (buď z katalógu, alebo z ručného priradenia) padnú do JEDNEJ
   // skupiny. `spellingCounts` drží počet riadkov na KAŽDÝ videný pravopis,
   // aby sa dala zvoliť zobrazovaná forma (`pickCanonicalSupplierSpelling`).
-  const NULL_GROUP_KEY = " none";
+  const NULL_GROUP_KEY = " none";
   interface GroupAccumulator {
     readonly lines: OpenOrderLine[];
     readonly spellingCounts: Map<string, number>;
