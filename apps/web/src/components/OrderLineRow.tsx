@@ -25,9 +25,11 @@ export function OrderLineRow({
   supplierBusy,
   variantTotal,
   busySupplierLineId,
+  busyCommentOrderId,
   onChangeState,
   onChangeOrdered,
   onAssignSupplier,
+  onChangeComment,
 }: {
   readonly line: OrderLine;
   readonly canChangeState: boolean;
@@ -51,9 +53,13 @@ export function OrderLineRow({
   // issue 63: riadok, ktorého ručné priradenie dodávateľa PRÁVE TERAZ ukladá
   // (needitovateľné, kým sa neskončí).
   readonly busySupplierLineId: string | null;
+  // issue 64: objednávka (nie riadok — poznámka patrí CELEJ objednávke),
+  // ktorej poznámka PRÁVE TERAZ ukladá.
+  readonly busyCommentOrderId: string | null;
   readonly onChangeState: (lineId: string, newState: OrderLine["state"]) => void;
   readonly onChangeOrdered: (lineId: string, ordered: boolean) => void;
   readonly onAssignSupplier: (lineId: string, supplier: string) => void;
+  readonly onChangeComment: (orderId: string, comment: string | null) => void;
 }): JSX.Element {
   const qtyChip = variantTotal !== undefined ? formatVariantTotalChip(variantTotal) : null;
 
@@ -86,6 +92,30 @@ export function OrderLineRow({
     const trimmed = supplierDraft.trim();
     if (trimmed === "") return;
     onAssignSupplier(line.lineId, trimmed);
+  };
+
+  // issue 64: rovnaký "controlled draft, resetovaný z props po uložení"
+  // vzor ako `supplierDraft` vyššie — vrátane rovnakého "skip prvý mount"
+  // guardu (`.claude/rules/frontend-design.md`'s zdokumentovaný pretek: bez
+  // neho by rýchla interakcia hneď po mounte mohla zachytiť oneskorený
+  // reset a ticho prepísať rozostavaný koncept). NEZÁVISLÝ od `line.comment`
+  // zmeny cez INÝ riadok tej istej objednávky — každý riadok má vlastnú
+  // kópiu draftu, ale všetky sa po uložení prepíšu na TÚ ISTÚ hodnotu
+  // (`OrdersSection.tsx`'s `changeComment` aktualizuje všetky riadky s
+  // rovnakým `orderId`), takže syncujú aj bez zdieľaného stavu.
+  const [commentDraft, setCommentDraft] = useState(line.comment ?? "");
+  const isCommentFirstMount = useRef(true);
+  useEffect(() => {
+    if (isCommentFirstMount.current) {
+      isCommentFirstMount.current = false;
+      return;
+    }
+    setCommentDraft(line.comment ?? "");
+  }, [line.comment]);
+  const commentBusyHere = busyCommentOrderId === line.orderId;
+  const saveComment = (): void => {
+    const trimmed = commentDraft.trim();
+    onChangeComment(line.orderId, trimmed === "" ? null : trimmed);
   };
 
   return (
@@ -211,7 +241,43 @@ export function OrderLineRow({
         )}
       </td>
       <td>{new Date(line.placedAt).toLocaleDateString("sk-SK")}</td>
-      <td>{line.comment ?? "—"}</td>
+      <td className="ord-comment-cell" data-testid={`comment-cell-${line.lineId}`}>
+        {canChangeState ? (
+          <>
+            <input
+              type="text"
+              className="ord-comment-input"
+              data-testid={`comment-input-${line.lineId}`}
+              aria-label={`Poznámka k objednávke ${line.externalOrderId} / ${line.variantCode}`}
+              placeholder="poznámka…"
+              maxLength={2000}
+              value={commentDraft}
+              disabled={commentBusyHere}
+              onChange={(e) => {
+                setCommentDraft(e.target.value);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  saveComment();
+                }
+              }}
+            />
+            <button
+              type="button"
+              className="btn sm good"
+              data-testid={`comment-save-${line.lineId}`}
+              aria-label={`Uložiť poznámku k objednávke ${line.externalOrderId} / ${line.variantCode}`}
+              disabled={commentBusyHere}
+              onClick={saveComment}
+            >
+              💾
+            </button>
+          </>
+        ) : (
+          (line.comment ?? "—")
+        )}
+      </td>
     </tr>
   );
 }

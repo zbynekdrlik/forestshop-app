@@ -91,6 +91,14 @@ const E2E_SUCET_EMAIL = "e2e-sucet@forestshop.sk"; // musí sa zhodovať s hodno
 // `max-lines`, `.claude/rules/testing.md`).
 const E2E_PRIRADENIE_EMAIL = "e2e-priradenie@forestshop.sk"; // musí sa zhodovať s hodnotou v orders-supplier-assign.spec.ts
 
+// issue 64: rovnaký mechanizmus a dôvod ako `E2E_PRIRADENIE_EMAIL` vyššie —
+// zdieľaný `e2e@forestshop.sk` je PRESNE na hranici `MAX_ATTEMPTS` (10
+// prihlásení naprieč `catalog.spec.ts`(3)+`login.spec.ts`(2)+
+// `orders.spec.ts`(3)+`pairing.spec.ts`(2), overené naživo počítaním pred
+// touto zmenou) — nový test (poznámka k objednávke) dostáva VLASTNÝ
+// izolovaný účet namiesto ďalšieho prihlásenia pod zdieľaným.
+const E2E_KOMENTAR_EMAIL = "e2e-komentar@forestshop.sk"; // musí sa zhodovať s hodnotou v orders.spec.ts
+
 const { db, pool } = createDb();
 // Konštantný literál bez interpolácie — obyčajný reťazec je tu rovnako bezpečný
 // ako `sql` tagovaná šablóna (tú používa ekvivalentný apps/api/tests/helpers/db.ts),
@@ -172,6 +180,12 @@ await db.insert(users).values({
 });
 await db.insert(users).values({
   email: E2E_PRIRADENIE_EMAIL,
+  passwordHash: await hashPassword(E2E_HESLO),
+  displayName: "E2E Manažér",
+  role: "manazer",
+});
+await db.insert(users).values({
+  email: E2E_KOMENTAR_EMAIL,
   passwordHash: await hashPassword(E2E_HESLO),
   displayName: "E2E Manažér",
   role: "manazer",

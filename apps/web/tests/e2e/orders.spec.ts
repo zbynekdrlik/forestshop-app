@@ -175,7 +175,13 @@ test("manažér vidí otvorené objednávky zoskupené podľa dodávateľa, konz
   await expect(riadokAlfa).toContainText("46");
   await expect(riadokAlfa).toContainText("2");
   await expect(riadokAlfa).toContainText("Čaká sa");
-  await expect(riadokAlfa).toContainText("Zavolať pred doručením");
+  // issue 64: poznámka k objednávke je pre `canChangeState` role (tento účet
+  // je "manazer") editovateľný `<input>`, nie prostý text — `toContainText`
+  // číta `textContent`, ktorý hodnotu `<input>` NEOBSAHUJE. Skutočnú hodnotu
+  // preto overuje `toHaveValue` na samotnom vstupe (rovnaký dôvod ako
+  // `.claude/rules/testing.md`'s poznámka o jest-dom matcheroch — tu ide o
+  // Playwright, nie vitest, ale princíp "vstup nie je text" je ten istý).
+  await expect(riadokAlfa.getByLabel("Poznámka k objednávke 9001 / 4859/46")).toHaveValue("Zavolať pred doručením");
 
   // issue 67: fixtúra ("4859/46") má reálny holý odkaz na dodávateľa
   // (`internalNote`) aj kód dodávateľa (`externalCode`, "OB832") —
@@ -288,7 +294,13 @@ test("manažér nastaví e-mail dodávateľa a uvidí náhľad mailu so správne
   const skupinaTest1 = page.getByTestId("supplier-DODAVATEL-TEST-1");
   await skupinaTest1.getByRole("button", { name: "Upraviť e-mail" }).click();
   await skupinaTest1.getByLabel("E-mail dodávateľa DODAVATEL-TEST-1").fill("test1@dodavatel.example");
-  await skupinaTest1.getByRole("button", { name: "Uložiť" }).click();
+  // issue 64: `{ exact: true }` — skupina teraz obsahuje AJ tlačidlo na
+  // uloženie poznámky k objednávke ("💾", aria-label "Uložiť poznámku k
+  // objednávke…"), ktorého accessible name OBSAHUJE "Uložiť" ako substring
+  // (rovnaký zistený vzor ako issue 63 nižšie, `.claude/rules/http-routes.md`
+  // susedný komentár vysvetľuje princíp: oprava patrí na stranu TOHTO
+  // (existujúceho, užšieho) locatora).
+  await skupinaTest1.getByRole("button", { name: "Uložiť", exact: true }).click();
   await expect(skupinaTest1.getByText("E-mail dodávateľa: test1@dodavatel.example")).toBeVisible();
   await expect(skupinaTest1.getByRole("button", { name: "✉️ Poslať objednávku e-mailom" })).toBeDisabled();
 
@@ -450,6 +462,60 @@ test("manažér odškrtne riadok ako objednaný a hromadne označí/zruší cel�
   const oznacitTlacidlo = skupina.getByRole("button", { name: "✔ Označiť skupinu ako objednané" });
   await oznacitTlacidlo.click();
   await expect(riadokPoReloade.locator("input[type='checkbox']")).toBeChecked();
+
+  expect(chyby).toEqual([]);
+});
+
+// issue 64: rovnaký mechanizmus a dôvod ako `E2E_PRIRADENIE_EMAIL`/
+// `E2E_OBJEDNANE_EMAIL` vyššie — balík je UŽ na hranici `MAX_ATTEMPTS`
+// (komentár pri `E2E_NAV_EMAIL` v `scripts/e2e-setup.ts`).
+const E2E_KOMENTAR_EMAIL = "e2e-komentar@forestshop.sk";
+
+// issue 64: manažérova voľná poznámka k CELEJ objednávke. Používa objednávku 9001
+// (skupina "DODAVATEL-TEST-1", JEDINÝ riadok, seedovaná s poznámkou "Zavolať
+// pred doručením") — test EDITUJE túto zdieľanú poznámku, ale nepridáva ani
+// nepresúva žiadny riadok (na rozdiel od testu priradenia nižšie), takže
+// nemení počty, na ktoré sa spolieha test odškrtávania vyššie ("skupina má
+// vždy presne 1 riadok"). Poznámka sa na konci VRÁTI na pôvodnú hodnotu —
+// hygiena zdieľaných dát pre prípadné ďalšie testy pridané neskôr v tomto
+// súbore (rovnaká disciplína ako restore-at-end kdekoľvek inde v projekte).
+test("manažér napíše a upraví poznámku k objednávke, zmena pretrvá po obnovení stránky, konzola je čistá", async ({
+  page,
+}) => {
+  const chyby: string[] = [];
+  page.on("console", (m) => {
+    if ((m.type() === "error" || m.type() === "warning") && !jeOcakavane(m)) chyby.push(m.text());
+  });
+  page.on("pageerror", (e) => {
+    chyby.push(e.message);
+  });
+
+  await page.goto("/?tab=orders");
+  await page.getByLabel("E-mail").fill(E2E_KOMENTAR_EMAIL);
+  await page.getByLabel("Heslo").fill(E2E_HESLO);
+  await page.getByRole("button", { name: "Prihlásiť sa" }).click();
+  await expect(page.getByRole("heading", { name: "Na objednanie" })).toBeVisible();
+
+  const vstup = page.getByLabel("Poznámka k objednávke 9001 / 4859/46");
+  await expect(vstup).toHaveValue("Zavolať pred doručením");
+
+  await vstup.fill("Vyzdvihnúť v sklade do piatku");
+  await page.getByLabel("Uložiť poznámku k objednávke 9001 / 4859/46").click();
+  // `toHaveValue` skutočne čaká (opakovane skúša), kým lokálny optimistický
+  // update po vyriešení PUT promisu prejaví — rovnaký dôvod ako `<select>`
+  // v teste stavu vyššie (`.claude/rules/testing.md`).
+  await expect(vstup).toHaveValue("Vyzdvihnúť v sklade do piatku");
+  await expect(page.getByRole("alert")).toHaveCount(0);
+
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Na objednanie" })).toBeVisible();
+  const vstupPoReloade = page.getByLabel("Poznámka k objednávke 9001 / 4859/46");
+  await expect(vstupPoReloade).toHaveValue("Vyzdvihnúť v sklade do piatku");
+
+  // Vrátenie na pôvodnú hodnotu (hygiena zdieľaných fixtúrových dát).
+  await vstupPoReloade.fill("Zavolať pred doručením");
+  await page.getByLabel("Uložiť poznámku k objednávke 9001 / 4859/46").click();
+  await expect(vstupPoReloade).toHaveValue("Zavolať pred doručením");
 
   expect(chyby).toEqual([]);
 });

@@ -193,6 +193,21 @@ export async function assignOrderLineSupplier(lineId: string, supplier: string):
   await readJson(response, "Priradenie dodávateľa sa nepodarilo");
 }
 
+// issue 64: manažérova voľná poznámka k CELEJ objednávke — `orderId` je
+// spoločný pre VŠETKY riadky tej istej objednávky (`OrderLine.orderId`),
+// server-strana `setOrderComment` (`modules/orders/state.ts`) mutuje
+// `order.comment` priamo, nezávisle od `lineId`. Prázdny reťazec (po orezaní
+// na serveri) maže poznámku — volajúci (`OrdersSection.tsx`'s `changeComment`)
+// posiela `comment ?? ""` rovnakým vzorom ako `setSupplierEmail`.
+export async function updateOrderComment(orderId: string, comment: string | null): Promise<void> {
+  const response = await fetch(`/api/orders/${orderId}/comment`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ comment: comment ?? "" }),
+  });
+  await readJson(response, "Uloženie poznámky sa nepodarilo");
+}
+
 const setSupplierLinesOrderedResultSchema = z.object({ ok: z.literal(true), ordered: z.boolean(), lineCount: z.number() });
 
 // issue 60: hromadné označenie/zrušenie CELEJ skupiny dodávateľa naraz — server

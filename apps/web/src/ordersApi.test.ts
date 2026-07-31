@@ -10,6 +10,7 @@ import {
   setSupplierEmail,
   setSupplierLinesOrdered,
   triggerOrdersIngest,
+  updateOrderComment,
   updateOrderLineOrdered,
   updateOrderLineState,
 } from "./ordersApi.js";
@@ -196,6 +197,42 @@ it("assignOrderLineSupplier pri 401 vyhodí OrdersUnauthorizedError", async () =
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("", { status: 401 })));
   await expect(
     assignOrderLineSupplier("11111111-1111-1111-1111-111111111111", "Alfa"),
+  ).rejects.toBeInstanceOf(OrdersUnauthorizedError);
+});
+
+// issue 64: manažérova voľná poznámka k CELEJ objednávke.
+it("updateOrderComment pošle PUT na správnu trasu s telom { comment }", async () => {
+  const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ ok: true, comment: "Zavolať" }), { status: 200 }));
+  vi.stubGlobal("fetch", fetchMock);
+
+  await updateOrderComment("22222222-2222-2222-2222-222222222222", "Zavolať");
+
+  expect(fetchMock).toHaveBeenCalledWith(
+    "/api/orders/22222222-2222-2222-2222-222222222222/comment",
+    expect.objectContaining({
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ comment: "Zavolať" }),
+    }),
+  );
+});
+
+it("updateOrderComment posiela null ako prázdny reťazec (server ho mapuje na vymazanie)", async () => {
+  const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ ok: true, comment: null }), { status: 200 }));
+  vi.stubGlobal("fetch", fetchMock);
+
+  await updateOrderComment("22222222-2222-2222-2222-222222222222", null);
+
+  expect(fetchMock).toHaveBeenCalledWith(
+    "/api/orders/22222222-2222-2222-2222-222222222222/comment",
+    expect.objectContaining({ body: JSON.stringify({ comment: "" }) }),
+  );
+});
+
+it("updateOrderComment pri 401 vyhodí OrdersUnauthorizedError", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("", { status: 401 })));
+  await expect(
+    updateOrderComment("22222222-2222-2222-2222-222222222222", "pokus"),
   ).rejects.toBeInstanceOf(OrdersUnauthorizedError);
 });
 
