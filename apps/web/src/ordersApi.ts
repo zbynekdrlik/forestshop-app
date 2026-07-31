@@ -11,6 +11,15 @@ const orderLineSchema = z.object({
   externalOrderId: z.string(),
   customerName: z.string(),
   comment: z.string().nullable(),
+  // issue 65: zákaznícky odkaz k objednávke (Shoptet export's `remark`
+  // stĺpec — NIE `shopRemark`, interná poznámka predajne, `.claude/rules/
+  // orders.md`). Read-only, appka ho nikdy needituje.
+  remark: z.string().nullable(),
+  // issue 65: priamy odkaz do Shoptet administrácie na TÚTO objednávku.
+  // `.regex` je druhá vrstva overenia (rovnaký zámer ako `supplierUrl`
+  // vyššie, issue 70) — `href` bezpečnosť by nemala závisieť LEN od
+  // backendovho zloženia URL.
+  adminUrl: z.string().regex(/^https?:\/\//),
   placedAt: z.string(),
   variantCode: z.string(),
   variantName: z.string(),

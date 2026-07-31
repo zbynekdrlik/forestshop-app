@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type JSX } from "react";
 import type { OrderLine } from "../ordersApi.js";
-import { formatVariantTotalChip, type VariantTotal } from "../ordersSummary.js";
+import { formatVariantTotalChip, isStaleOrderLine, orderLineAgeDays, type VariantTotal } from "../ordersSummary.js";
 
 // issue 60: `objednane` je VÝCHODISKOVÝ stav riadku (pred tým, než sa
 // čokoľvek stane), NIE potvrdenie, že manažér objednal — preto sa nazýva
@@ -150,7 +150,21 @@ export function OrderLineRow({
           }}
         />
       </td>
-      <td>{line.externalOrderId}</td>
+      <td className="ord-order-cell">
+        {line.externalOrderId}
+        {/* issue 65: priamy odkaz do Shoptet administrácie na TÚTO
+            objednávku (`queries.ts`'s `buildShoptetAdminOrderUrl`). */}
+        <a
+          href={line.adminUrl}
+          target="_blank"
+          rel="noreferrer noopener"
+          className="ord-admin-link"
+          aria-label={`Otvoriť objednávku ${line.externalOrderId} v administrácii Shoptet`}
+          title="Otvoriť v administrácii Shoptet"
+        >
+          🔗
+        </a>
+      </td>
       <td>{line.customerName}</td>
       <td>{line.variantCode}</td>
       <td>{line.variantName}</td>
@@ -255,7 +269,32 @@ export function OrderLineRow({
           STATE_LABELS[line.state]
         )}
       </td>
-      <td>{new Date(line.placedAt).toLocaleDateString("sk-SK")}</td>
+      <td className="ord-date-cell">
+        {new Date(line.placedAt).toLocaleDateString("sk-SK")}
+        {/* issue 65: upozornenie na starú nevybavenú objednávku — priamy
+            náprotivok starej appky's ⚠️ badge (`ordersSummary.ts`'s
+            `isStaleOrderLine`, hranica 14 dní). */}
+        {isStaleOrderLine(line) && (
+          <span
+            className="ord-stale-badge"
+            data-testid={`stale-badge-${line.lineId}`}
+            title={`Nevybavená objednávka stará ${String(orderLineAgeDays(line.placedAt))} dní — pozri, nech nezapadne`}
+          >
+            ⚠️ {orderLineAgeDays(line.placedAt)} dní
+          </span>
+        )}
+      </td>
+      {/* issue 65: zákaznícky odkaz k objednávke — read-only, appka ho
+          nikdy needituje (na rozdiel od `comment` bunky nižšie). */}
+      <td className="ord-remark-cell" data-testid={`remark-cell-${line.lineId}`}>
+        {line.remark !== null ? (
+          <span className="ord-remark" title={line.remark}>
+            🛈 {line.remark}
+          </span>
+        ) : (
+          "—"
+        )}
+      </td>
       <td className="ord-comment-cell" data-testid={`comment-cell-${line.lineId}`}>
         {canChangeState ? (
           <>
