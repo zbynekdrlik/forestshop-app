@@ -103,18 +103,33 @@ export function OrderLineRow({
   // kópiu draftu, ale všetky sa po uložení prepíšu na TÚ ISTÚ hodnotu
   // (`OrdersSection.tsx`'s `changeComment` aktualizuje všetky riadky s
   // rovnakým `orderId`), takže syncujú aj bez zdieľaného stavu.
+  //
+  // Code review (issue 64, pred mergom): keďže poznámka je zdieľaná naprieč
+  // VŠETKÝMI riadkami tej istej objednávky, uloženie poznámky cez INÝ riadok
+  // (napr. riadok B) tej istej objednávky zmení `line.comment` aj na TOMTO
+  // riadku (A) — bez ďalšieho stráženia by vyššie uvedený reset efekt vtedy
+  // zbehol AJ na riadku A a ticho by prepísal jeho ešte NEULOŽENÝ rozpísaný
+  // koncept. `isCommentDirty` sleduje presne toto: nastaví sa pri KAŽDOM
+  // stlačení klávesy vo vstupe, vyčistí sa až pri KLIKU na uložiť TOHTO
+  // riadku (optimisticky — zápis môže ešte bežať, ale vstup je vtedy aj tak
+  // `disabled`, viď `commentBusyHere` nižšie, takže sa medzitým nedá znova
+  // rozpísať). Reset efekt teda prepíše draft LEN keď manažér na TOMTO
+  // riadku práve NIČ nerozpisuje.
   const [commentDraft, setCommentDraft] = useState(line.comment ?? "");
   const isCommentFirstMount = useRef(true);
+  const isCommentDirty = useRef(false);
   useEffect(() => {
     if (isCommentFirstMount.current) {
       isCommentFirstMount.current = false;
       return;
     }
+    if (isCommentDirty.current) return;
     setCommentDraft(line.comment ?? "");
   }, [line.comment]);
   const commentBusyHere = busyCommentOrderId === line.orderId;
   const saveComment = (): void => {
     const trimmed = commentDraft.trim();
+    isCommentDirty.current = false;
     onChangeComment(line.orderId, trimmed === "" ? null : trimmed);
   };
 
@@ -254,6 +269,7 @@ export function OrderLineRow({
               value={commentDraft}
               disabled={commentBusyHere}
               onChange={(e) => {
+                isCommentDirty.current = true;
                 setCommentDraft(e.target.value);
               }}
               onKeyDown={(e) => {
