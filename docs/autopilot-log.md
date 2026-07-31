@@ -1483,3 +1483,42 @@ nové heslo sa nikde v pushnutom obsahu nenachádza.
   footeri `v0.3.0-dev.64` zodpovedá `/api/version`.
 - Playbook zápis: `.claude/rules/frontend-design.md` — overuj `<colgroup>`
   percentá proti SKUTOČNEJ produkcii, nie len e2e fixtúre.
+
+## Issue #111 — číslo objednávky/kód sa lámu, pomlčka v poznámkach, 1280px overflow (2026-07-31)
+
+- Nález pri vlastnej kontrole naživo po nasadení #107's fixu (v0.3.0-dev.65):
+  1) číslo objednávky sa láme na 2-3 riadky (39/39 riadkov pri 1280/1600px),
+  2) kód produktu sa láme (19/39 pri 1600px), 3) rozpočet stĺpcov obrátený
+  (Č.OBJ./KÓD najužšie, POZNÁMKY skoro pätina tabuľky), 4) prázdna pomlčka
+  "—" v POZNÁMKACH (39/39), 5) pri 1280px `.orders-table-wrap` preteká o
+  58px, 💾 tlačidlo za viditeľným okrajom.
+- Design decision zapísaný na tickete PRED prvým commitom
+  (`4eb4f4d` bump 0.3.0-dev.66):
+  https://github.com/zbynekdrlik/forestshop-app/issues/111#issuecomment-5145826005
+- RED→GREEN: `OrderLineRow.remarkCell.test.tsx` (`c1d022e`→`4e32743`) —
+  bare-dash fix, rovnaký tvar ako #107 bod 3.
+- Layout fix (`525bca8`): `.ord-admin-link`/`.ord-code-cell` dostali trvalý
+  `white-space: nowrap` + ellipsis poistku; `.main-wide`'s bočné odsadenie
+  znížené (`--fs-space-6`→`--fs-space-1`, len táto obrazovka) a
+  `.orders-table`'s `min-width` znížené 64rem→63.875rem, aby sa zmestila
+  do reálne dostupnej šírky pri 1280px; celý 10-stĺpcový rozpočet prerobený
+  a živo overený proti produkcii (`page.addStyleTag`, 39 riadkov,
+  `vychod@varos.sk`) na 1280/1440/1600/1920px.
+- PR `#112` zmergnuté (`18ffdec`). Main CI zelené. Deploy job zlyhal raz na
+  tranzientný sieťový timeout (`ghcr.io` pull, `dial tcp ... i/o timeout`) —
+  `gh run rerun --failed` prešiel hneď napodruhé; nešlo o obsah image.
+- Live overenie po deployi (`vychod@varos.sk`, 39 reálnych riadkov,
+  1280/1440/1600/1920px): 0 zalomených čísiel/kódov na VŠETKÝCH šírkach,
+  0 pretekajúcich `.orders-table-wrap`/`<th>`, 0 pomlčiek v poznámkach,
+  STAV/POZNÁMKY rezervy zachované, 0 console chýb/varovaní, verzia
+  `v0.3.0-dev.66` zodpovedá živému DOM-u. Produkčné dáta nedotknuté
+  (order_line 868, ordered 0, state≠'objednane' 0,
+  product_supplier_override 0, "order" 528).
+- Prijatý kompromis: pri 1280px zriedkavý `supplierAssignable` riadok môže
+  zalomiť na 2 riadky (existujúca `flex-wrap` poistka z #105) — priemerná
+  výška riadku pri 1280px vyššia o ~11px, pri 1440px+ rovnaká/lepšia.
+- Playbook zápis: `.claude/rules/frontend-design.md` — 4 nové položky
+  (`getClientRects()` na `<td>` vždy vráti 1, `white-space:nowrap` ako
+  TRVALÁ poistka popri šírke, `.main-wide` odsadenie/`min-width` ako prvá
+  vec na kontrolu pri "tabuľka sa nezmestí", párové porovnanie výšky
+  riadkov namiesto surových min/median/max).

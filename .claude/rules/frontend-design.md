@@ -245,3 +245,49 @@ paths:
   content-shape regression like this one. Any FUTURE `<colgroup>` percentage
   change needs this same live-against-production check before being called
   done, not just a green e2e suite.
+- **`getClientRects().length` on a `<td>`/block element is ALWAYS 1, regardless
+  of how many lines its text wraps onto** — that method reports per-line rects
+  only for an INLINE formatting context (a `<a>`, a `<span>`, or a `Range`
+  over a text node), never for the block box itself. Issue 111's first wrap-
+  detection attempt checked `.ord-code-cell.getClientRects().length > 1` and
+  got `0` even though the text was visibly wrapping 2-3 lines — the fix was
+  `document.createRange().selectNodeContents(textNode); range.getClientRects
+  ().length`, targeting the TEXT NODE inside the cell, not the cell itself.
+  `.ord-admin-link` (an `<a>`, inline) worked fine directly. Any FUTURE "did
+  this wrap" check against a `<td>`/`<div>`/block container needs the Range-
+  over-text-node form, not a direct call on the container.
+- **A "never wraps" requirement needs BOTH a generous measured width AND a
+  permanent `white-space: nowrap` (+`overflow:hidden;text-overflow:ellipsis`
+  fallback) on the element itself** — issue 111 (order # + product code
+  breaking mid-number, the third time a `<colgroup>` budget alone was tried
+  and regressed, after #105/#107) fixed it both ways: `.col-order`/`.col-code`
+  got real measured budget AND `.ord-admin-link`/`.ord-code-cell` got
+  `white-space: nowrap`. The CSS rule is what makes the guarantee survive a
+  FUTURE longer order number or code format without another live-measurement
+  cycle — width alone is only correct until content grows past today's
+  sample.
+- **When a `<colgroup>` budget can't fit inside the viewport's real available
+  width, look at the SCREEN'S OWN padding/min-width first, not just the
+  column percentages.** Issue 111 bod 5: `.orders-table`'s `min-width: 64rem`
+  (1024px) was wider than the ACTUAL content area at 1280px (sidebar 250px +
+  `.main-wide`'s own 2×32px padding = only 966px available) — the table was
+  always horizontally scrolling inside `.orders-table-wrap`, hiding the 💾
+  save button past the visible edge. Shrinking 10 columns to fit 966px alone
+  would have starved every column that matters (measured: avg +20px/row
+  height regression across 34/39 rows). The actual fix reclaimed a few px of
+  `.main-wide`'s OWN horizontal padding (`--fs-space-6` → `--fs-space-1`,
+  scoped to this dense work screen only, not global) AND lowered
+  `.orders-table`'s `min-width` to match — turning an infeasible 966px budget
+  into a workable ~1022px one. Any FUTURE "table doesn't fit at width X" bug:
+  check `main.clientWidth` vs `.orders-table`'s `min-width` BEFORE assuming
+  the fix is purely a `<colgroup>` percentage problem.
+- **Comparing row-height min/median/max ACROSS candidate `<colgroup>`
+  percentages is misleading — the row that LANDS at the median/min RANK
+  changes per candidate**, since other columns' widths shift which rows are
+  short/tall. Issue 111: a candidate showing "median 119px" looked like a
+  disaster next to baseline's "median 85.5px" — but per-row PAIRED
+  comparison (`Map` keyed by `data-testid`, same 39 rows, old height vs new
+  height) showed the true picture: avg +11px, only specific rows changed
+  meaningfully. Always diff the SAME rows before-vs-after (keyed by
+  `data-testid`), never just compare the sorted-height array's summary
+  stats between two differently-configured runs.
