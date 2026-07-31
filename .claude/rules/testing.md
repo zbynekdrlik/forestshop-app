@@ -188,6 +188,27 @@ paths:
   `getByLabel("Stav", { exact: true })`, nový select v `OrdersSection.tsx`
   si ponechal plnohodnotný popis (`"Zmeniť stav riadku objednávky ..."`).
   novo pridaný test.
+- **Rovnaká kolízna trieda ako vyššie platí aj pre ARIA ROLES, nielen
+  `aria-label`/`getByLabel` — konkrétne `page.getByRole("alert")` je
+  nejednoznačný v CELEJ appke, nielen v jednej sekcii.** #115 pridalo nový
+  `<p role="alert">` (staleness upozornenie na "Sync zo Shoptetu", predvolená
+  obrazovka po prihlásení) — `login.spec.ts`'s test zmeny hesla (panel v
+  hlavičke, viditeľný NAD tou istou predvolenou obrazovkou) mal bare
+  `page.getByRole("alert")` a začal padať na "strict mode violation:
+  resolved to 2 elements". Rovnaká oprava ako vyššie: `.filter({ hasText:
+  "..." })` na strane KOLÍDUJÚCEHO (existujúceho) locatora, nikdy
+  odobratím `role="alert"` novému prvku. Test pri KAŽDOM ďalšom
+  `role="alert"`/`role="status"` pridanom do zdieľanej obrazovky: spusti
+  CELÝ e2e balík (nie len nový spec súbor), presne ako pri `aria-label`
+  vyššie.
+- **`job_run` tabuľka má od #115 JEDEN GLOBÁLNY, natrvalo seedovaný riadok**
+  (`scripts/e2e-setup.ts`: umelo zostarnutý úspešný `catalog-import` beh z
+  roku 2020) — kvôli `nav.spec.ts`'s staleness testu. Dôsledok: "Sync zo
+  Shoptetu"/"Plánovač" NIE SÚ prázdne ako predtým (#22-38) — `login.spec.ts`
+  aj `nav.spec.ts` boli upravené, aby to zohľadňovali (`getByTestId("job-
+  catalog-import")` namiesto `scheduler-empty`/`sync-history-empty`). Ďalší
+  nový e2e test, ktorý by očakával PRÁZDNU `job_run`/históriu behov, treba
+  najprv skontrolovať proti tomuto seedu.
 - **Playwright s viacerými workermi (predvolený počet, ako aj CI runner)
   môže byť nestály — všetky e2e spec súbory zdieľajú JEDEN bežiaci API
   server aj JEDNU lokálnu Postgres inštanciu.** #32 (vyriešené): koreňová
