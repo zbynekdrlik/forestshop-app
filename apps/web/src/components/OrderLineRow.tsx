@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState, type JSX } from "react";
 import type { OrderLine } from "../ordersApi.js";
-import { formatVariantTotalChip, isStaleOrderLine, orderLineAgeDays, type VariantTotal } from "../ordersSummary.js";
+import {
+  formatVariantTotalChip,
+  isStaleOrderLine,
+  orderLineAgeDays,
+  shouldShowSizeLabel,
+  type VariantTotal,
+} from "../ordersSummary.js";
 
 // issue 60: `objednane` je VÝCHODISKOVÝ stav riadku (pred tým, než sa
 // čokoľvek stane), NIE potvrdenie, že manažér objednal — preto sa nazýva
@@ -170,10 +176,15 @@ export function OrderLineRow({
       <td>{line.customerName}</td>
       {/* issue 95: KÓD + VEĽKOSŤ zlúčené (majiteľ, komentár #10: "veľkosť je
           už súčasťou kódu") — veľkosť sa zobrazí len keď appka má samostatnú
-          `sizeLabel` hodnotu (nie každý variant ju má). */}
+          `sizeLabel` hodnotu (nie každý variant ju má). issue 105 bod 2:
+          `sizeLabel` je server-side odvodené ako suffix `variantCode`u, takže
+          kód ňou takmer vždy UŽ končí — pripájanie by ju zobrazilo dvakrát
+          (`shouldShowSizeLabel`, `ordersSummary.ts`). */}
       <td className="ord-code-cell">
         {line.variantCode}
-        {line.sizeLabel !== null && <span className="ord-size-inline">{line.sizeLabel}</span>}
+        {shouldShowSizeLabel(line.variantCode, line.sizeLabel) && (
+          <span className="ord-size-inline">{line.sizeLabel}</span>
+        )}
       </td>
       <td>{line.variantName}</td>
       <td className="ord-qty">

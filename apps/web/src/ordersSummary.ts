@@ -129,3 +129,16 @@ export function isStaleOrderLine(
 ): boolean {
   return !isLineResolved(line) && orderLineAgeDays(line.placedAt, now) > STALE_ORDER_LINE_DAYS;
 }
+
+// issue 105 bod 2 — `variants.sizeLabel` (server) je odvodené priamo ako
+// suffix `variantCode`u za prvou lomkou (`apps/api/src/modules/catalog/
+// map-row.ts`'s `splitCode`: `sizeLabel = code.slice(code.indexOf("/") + 1)`),
+// takže KÓD stĺpec, ktorý za kódom pripája veľkosť (issue 95's zlúčenie
+// KÓD+VEĽKOSŤ), zakaždým zobrazoval veľkosť DVAKRÁT ("62621/52" + "52" →
+// "62621/5252"). Veľkosť sa smie pripojiť len vtedy, keď kód ňou ešte
+// nekončí — vždy pravdivé pre katalógové dáta dnes, ale funkcia zostáva
+// všeobecná (nezávisí od `splitCode`u), pre prípad inak odvodeného
+// `sizeLabel`u v budúcnosti.
+export function shouldShowSizeLabel(variantCode: string, sizeLabel: string | null): boolean {
+  return sizeLabel !== null && !variantCode.endsWith(sizeLabel);
+}

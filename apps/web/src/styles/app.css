@@ -709,6 +709,18 @@ tr:last-child td {
 .orders-table td {
   overflow-wrap: break-word;
 }
+/* issue 105 bod 1: `<th>` explicitne NIKDY neláme uprostred slova — 4
+   jednoslovné/dvojslovné hlavičky boli skrátené (`SupplierOrderGroup.tsx`)
+   presne preto, aby sa zmestili na jeden riadok bez tejto potreby; tento
+   riadok dokumentuje a vynucuje invariant nezávisle od budúcej úpravy textu
+   (browser default JE `normal`, ale explicitná deklarácia bráni tichej
+   regresii, keby niekto neskôr pridal `overflow-wrap`/`word-break` na `th`
+   globálne). */
+.orders-table th {
+  overflow-wrap: normal;
+  word-break: normal;
+  hyphens: none;
+}
 /* issue 95 bod 8 ("zvážiť prilepenú hlavičku") — VYSKÚŠANÉ a ZAMIETNUTÉ
    (nájdené reálnym Playwright behom, nie len teoreticky): `position: sticky`
    na `<th>` sa sticky-uje voči NAJBLIŽŠIEMU predkovi so scroll-boxom — a
@@ -754,14 +766,17 @@ tr:last-child td {
 }
 /* issue 95: zvislé zarovnanie hore (nie stred) — zlúčené bunky (DODÁVATEĽ,
    POZNÁMKY) majú viac riadkov obsahu pod sebou a `top` drží prvý riadok
-   zarovnaný s ostatnými bunkami toho istého riadku tabuľky. Trocha
-   veľkorysejší zvislý padding než pôvodný globálny `td` reset (issue 95 bod
-   3: "doladiť hustotu") — stále husté, ale klikacie ciele majú dýchací
-   priestor. */
+   zarovnaný s ostatnými bunkami toho istého riadku tabuľky. issue 105 bod 3:
+   pôvodný `--fs-space-3` (12px) vertikálny padding tu bol o niečo
+   veľkorysejší než globálny `td` reset — teraz späť na `--fs-space-2` (8px),
+   lebo hlavný prispievateľ k 135px vysokému riadku bol zalomený vstup+
+   tlačidlo (opravené nižšie cez `flex-shrink`), nie tento padding; klikacie
+   ciele (checkbox/tlačidlá) majú explicitnú vlastnú výšku nezávislú od
+   paddingu, takže sa nezmenšujú. */
 .orders-table td {
   vertical-align: top;
-  padding-top: var(--fs-space-3);
-  padding-bottom: var(--fs-space-3);
+  padding-top: var(--fs-space-2);
+  padding-bottom: var(--fs-space-2);
 }
 /* issue 95: veľké klikacie ciele (majiteľ: "veľké tlačidlá, nech sa vedia
    zamestnanci rýchlo hýbať") — SCOPED na `.order-group`, nie globálna zmena
@@ -876,13 +891,29 @@ tr:last-child td {
   max-width: 100%;
 }
 .ord-supplier-assign-input {
-  width: 8rem;
-  /* code review (issue 95): `width` alone can force the input wider than its
-     ACTUAL column at the table's `min-width: 64rem` floor on a ~1280-1440px
-     laptop viewport (`.col-supplier` computes narrower than 8rem there) —
-     `<td>`s don't clip overflowing children by default, so without this the
-     input would visually bleed into the neighbouring column. `max-width:
-     100%` lets it shrink to whatever the column actually has. */
+  /* issue 105 bod 3: `width: 8rem` (fixed) + `max-width: 100%` still forced
+     the WHOLE row to wrap onto two lines at the table's floor width. Two
+     flexbox gotchas stacked here (found by measuring the REAL rendered
+     layout, not just reasoning about it):
+     (1) a flex item's default `flex-basis: auto` uses `width` as its basis,
+         and with no `min-width` override the browser won't shrink it below
+         its instrinsic min-content — so it never got small enough to share
+         a line with the button;
+     (2) `flex-basis` (not the post-shrink size) is what decides whether an
+         item fits on the CURRENT line under `flex-wrap: wrap` — so even
+         `flex: 1 1 8rem` (a LARGE preferred size) still wrapped, because
+         8rem alone is bigger than the whole available column at the
+         table's floor width.
+     Fix: `flex-basis: 0` (line-fit uses ~0, i.e. only `min-width` counts for
+     wrapping) + `flex-grow: 1` (it then EXPANDS to fill whatever room is
+     actually left after the button, which is generous again on wider
+     viewports) + a `min-width` small enough to still fit next to the button
+     in the WORST case (measured: ~62px free at 1280px/floor table width —
+     3rem leaves a safety margin). `flex-wrap: wrap` on `.ord-supplier-assign`
+     stays as a fallback for a genuinely narrower window than this table ever
+     reaches. */
+  flex: 1 1 0%;
+  min-width: 3rem;
   max-width: 100%;
   padding: var(--fs-space-2) var(--fs-space-2);
   border: 1px solid var(--fs-border);
@@ -890,6 +921,12 @@ tr:last-child td {
   font: inherit;
   font-size: var(--fs-text-base);
   min-height: 2.25rem;
+}
+/* issue 105 bod 3: the save button next to it must NEVER shrink — it's a
+   large tap target ("veľké tlačidlá", majiteľ) and its size is what the
+   input above is shrinking to make room for. */
+.ord-supplier-assign > button {
+  flex-shrink: 0;
 }
 
 /* issue 65: priamy odkaz do Shoptet administrácie. issue 99: nesie teraz
@@ -956,10 +993,14 @@ tr:last-child td {
   max-width: 100%;
 }
 .ord-comment-input {
-  width: 10rem;
-  /* code review (issue 95): same overflow safeguard as
-     `.ord-supplier-assign-input` above — `.col-notes` can compute narrower
-     than 10rem at the table's `min-width` floor on a laptop viewport. */
+  /* issue 105 bod 3: same fix, same TWO stacked root causes as
+     `.ord-supplier-assign-input` above (see its comment) — this was the MAIN
+     contributor to the reported 135px row height. `col-notes` is narrower
+     than `col-supplier`, so the measured worst-case budget after the button
+     is tighter (~41px at 1280px/floor table width) — `min-width: 2rem`
+     leaves a small safety margin instead of overflowing back into wrap. */
+  flex: 1 1 0%;
+  min-width: 2rem;
   max-width: 100%;
   padding: var(--fs-space-2) var(--fs-space-2);
   border: 1px solid var(--fs-border);
@@ -968,6 +1009,11 @@ tr:last-child td {
   font-size: var(--fs-text-base);
   min-height: 2.25rem;
 }
+/* issue 105 bod 3: same "button never shrinks" guarantee as the supplier
+   assign button above. */
+.ord-comment-cell > button {
+  flex-shrink: 0;
+}
 /* issue 95: percentuálne šírky stĺpcov (`SupplierOrderGroup.tsx`'s
    `<colgroup>`) — PRODUKT (najdôležitejší údaj, majiteľ komentár #1: "má len
    97px na dlhý názov") a zlúčené DODÁVATEĽ/POZNÁMKY dostávajú najviac
@@ -975,12 +1021,18 @@ tr:last-child td {
    pri 4% sa jednoslovná hlavička "OBJEDNANÉ" lámala DOPROSTRIED slova na tri
    riadky — pozri `overflow-wrap` komentár vyššie) — rozdiel vzatý z
    `col-qty` (6%→5%) a `col-date` (8%→7%), obe majú krátky obsah s
-   rezervou. */
+   rezervou.
+
+   issue 105 bod 1: aj po skrátení hlavičiek (checkbox stĺpec teraz ikona
+   "✓", `SupplierOrderGroup.tsx`) pridaná malá rezerva pre "Č. obj."/"Dátum
+   obj." — `col-order` 8%→9%, `col-date` 7%→8%, vzaté z `col-product` 20%→19%
+   a `col-supplier` 15%→14% (obe majú veľkú rezervu oproti svojmu skutočnému
+   obsahu, pozri prepočet v komentári k tomuto ticketu). Súčet ostáva 100%. */
 .col-ordered {
   width: 6%;
 }
 .col-order {
-  width: 8%;
+  width: 9%;
 }
 .col-customer {
   width: 10%;
@@ -989,19 +1041,19 @@ tr:last-child td {
   width: 8%;
 }
 .col-product {
-  width: 20%;
+  width: 19%;
 }
 .col-qty {
   width: 5%;
 }
 .col-supplier {
-  width: 15%;
+  width: 14%;
 }
 .col-state {
   width: 9%;
 }
 .col-date {
-  width: 7%;
+  width: 8%;
 }
 .col-notes {
   width: 12%;
