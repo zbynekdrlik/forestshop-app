@@ -16,6 +16,7 @@
 // na $?, nie len na text výstupu (rovnaká disciplína ako `scripts/catalog-ingest.ts`).
 import { createDb } from "../db/client.js";
 import { loadEnv } from "../env.js";
+import { computeOrderIdsWindowStart } from "../modules/orders/backfill.js";
 import { computeImportWindow, createHttpOrderIdsFetcher, createHttpOrdersExportFetcher } from "../modules/orders/fetcher.js";
 import {
   DEFAULT_ORDERS_IMPORT_WINDOW_DAYS,
@@ -50,6 +51,10 @@ const ordersXmlUrl = env.SHOPTET_ORDERS_XML_URL;
 const { db, pool } = createDb(env.DATABASE_URL);
 let result: OrdersIngestResult;
 try {
+  // issue 132: pozri rovnaký komentár v `index.ts` — XML id-fetch okno sa
+  // sebaozdravujúco predĺži dozadu, keď existuje otvorená objednávka bez id
+  // staršia než predvolené okno.
+  const idsDateFrom = ordersXmlUrl === undefined ? dateFrom : await computeOrderIdsWindowStart(db, dateFrom);
   result = await ingestOrders(db, {
     fetchExport: createHttpOrdersExportFetcher({ url: env.SHOPTET_ORDERS_URL, dateFrom, dateUntil }),
     now,
@@ -58,7 +63,7 @@ try {
     windowEnd: dateUntil,
     ...(ordersXmlUrl === undefined
       ? {}
-      : { fetchOrderIds: createHttpOrderIdsFetcher({ url: ordersXmlUrl, dateFrom, dateUntil }) }),
+      : { fetchOrderIds: createHttpOrderIdsFetcher({ url: ordersXmlUrl, dateFrom: idsDateFrom, dateUntil }) }),
   });
 } finally {
   await pool.end();

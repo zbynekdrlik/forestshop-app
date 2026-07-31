@@ -313,3 +313,36 @@ paths:
   "<the-cells-class>" apps/web/tests/e2e/` across the WHOLE e2e directory
   before considering the removal test-safe, not just the spec file with the
   obviously-related test names.
+- **When a `<colgroup>` column needs MORE width, test EVERY candidate donor
+  column live against production BEFORE picking one — not just the column
+  you'd guess has slack.** Issue 127 (stale-order badge, `.col-date`,
+  overflowing its cell): live-testing (`page.addStyleTag`, 37 real rows,
+  same methodology as issue 107/111) ruled out `col-notes` (only ~0.5
+  percentage-point slack above the tested `≥160px` comment-input floor),
+  `col-supplier` (regressed 3 REAL `supplierAssignable` rows over 120px —
+  the existing code comment "žiadny živý riadok ho dnes nemá" was STALE;
+  production had grown 3 such rows since it was written), `col-customer`
+  (customer names already wrap almost universally, zero slack),
+  `col-qty`/`col-state`/`col-order` (zero or negative slack, measured
+  directly). Only `col-product` had genuine verified slack — a candidate
+  that "should" have slack per an old design comment can be WRONG by the
+  time you need it; test the actual live donor, never assume last-known
+  slack is still there. Any FUTURE column-width increase: test the intended
+  donor's real current content (not just the % on paper) against
+  production first, and be ready to look at 2-3 candidates if the first
+  one's own established comment turns out stale.
+- **A JS-level in-memory rate limiter (`checkLoginRateLimit`,
+  `login-rate-limit.ts`) resets INSTANTLY on API process restart, but a
+  live-verification session hitting it against PRODUCTION has no such
+  reset available — you just wait out the 5-minute window.** Repeated
+  Playwright logins during local column-width measurement (issue 127) hit
+  `MAX_ATTEMPTS=10` against the LOCAL dev API within a few scripts;
+  restarting `pnpm --filter @forestshop/api start` cleared it immediately
+  (module-level singleton, no DB state). The SAME limiter applies to the
+  live production site — hit it there too during repeated
+  `vychod@varos.sk` live-verification logins, and had to wait for the
+  window to clear (no restart available on a shared prod process). Batch
+  live-verification page interactions into ONE login per script/session
+  (reuse the same `page`, just `setViewportSize` between checks) instead
+  of a fresh login per viewport/candidate, to avoid burning through the
+  10-attempt budget on read-only verification work.

@@ -306,14 +306,18 @@ export function OrderLineRow({
         {new Date(line.placedAt).toLocaleDateString("sk-SK")}
         {/* issue 65: upozornenie na starú nevybavenú objednávku — priamy
             náprotivok starej appky's ⚠️ badge (`ordersSummary.ts`'s
-            `isStaleOrderLine`, hranica 14 dní). */}
+            `isStaleOrderLine`, hranica 14 dní). issue 127: viditeľný text
+            skrátený na "N d" (namiesto "N dní") — naživo nameraný odznak
+            pretŕčal svoju bunku (`.col-date`) o ~22px pri 1280px, keďže
+            stĺpec je užší než jeho vlastný obsah. Celý text ("N dní")
+            zostáva v `title` tooltipe pre prístupnosť/čitateľnosť. */}
         {isStaleOrderLine(line) && (
           <span
             className="ord-stale-badge"
             data-testid={`stale-badge-${line.lineId}`}
             title={`Nevybavená objednávka stará ${String(orderLineAgeDays(line.placedAt))} dní — pozri, nech nezapadne`}
           >
-            ⚠️ {orderLineAgeDays(line.placedAt)} dní
+            ⚠️ {orderLineAgeDays(line.placedAt)} d
           </span>
         )}
       </td>

@@ -1647,3 +1647,43 @@ nové heslo sa nikde v pushnutom obsahu nenachádza.
 - Playbook: `.claude/rules/orders.md` updated (see above); memory
   `shoptet-export-urls.md` updated to record the XML export is now
   actively consumed, not just "supplied for later phases".
+
+## Issues 127, 129, 132 — bundled batch (2026-08-01)
+
+- Version bumped to `0.3.0-dev.75` (`c34597b`), first commit on `dev`.
+- Design-decision comments posted on all three tickets BEFORE any code
+  commit (root cause + chosen approach + rejected alternative for each).
+- **#129** (NUL byte in `queries.ts`'s `NULL_GROUP_KEY`): RED test
+  (`1ee8001`, reads raw source bytes, asserts no `\x00`) -> GREEN fix
+  (`a712df9`, replaced with a plain space). `git diff` on `queries.ts` is
+  now a normal text diff. Full 290-test unit suite + 239-test integration
+  suite unaffected.
+- **#132** (id-backfill window widening): RED integration test
+  (`a08724c`, `orders-id-backfill.integration.test.ts` -- module didn't
+  exist yet, confirmed `Cannot find module`) -> GREEN
+  (`cf9efca`, new `apps/api/src/modules/orders/backfill.ts`:
+  `findOldestOpenOrderMissingShoptetId` + `computeOrderIdsWindowStart`,
+  wired into `index.ts` + `cli/orders-ingest.ts`). Self-healing: widens
+  the XML id-fetch window (never the main CSV import's own window) only
+  while an open order is missing its id.
+- **#127** (stale-badge overflow): RED e2e test (`0b47b89`,
+  `orders-layout.spec.ts` -- measured 35.125px spill against the OLD
+  styling, matching the ticket's live-measured ~22-35px depending on day
+  count) -> GREEN (`b637050`): compact badge text ("N d", full "N dni" in
+  `title`), `col-date` 6%->9%, `col-product` 17.4%->14.4%, permanent
+  ellipsis safety net. Every other column tested live against production
+  first (`page.addStyleTag`, 37 real rows) as a candidate width donor --
+  `col-notes`/`col-supplier`/`col-customer`/`col-qty`/`col-state`/
+  `col-order` all regressed something already measured today
+  (comment-input floor, 3 real supplier-assign rows pushed over 120px,
+  near-universal customer-name wrapping, zero/negative slack) --
+  `col-product` was the only column with genuine verified slack.
+- Local full-suite verification before push: typecheck clean, lint clean,
+  API unit (290 tests) + integration (239 tests) green, web unit (236
+  tests) green, full local e2e suite (21 tests, all 6 spec files) green.
+- Pull request opened for this batch: `Closes #127`, `Closes #129`.
+  Issue #132 deliberately NOT closed by that PR -- its acceptance
+  criterion (0 rows using the search fallback once Shoptet has the id)
+  needs a real ingest run against the live XML export post-deploy, same
+  reasoning as the #120 premature-close gotcha above. Will trigger manual
+  ingest post-deploy, verify live, close #132 manually with evidence.
