@@ -53,6 +53,13 @@ services:
       # (#21), bare kľúč preberá `/srv/forestshop/.env`, keď tam je.
       SHOPTET_ORDERS_URL:
       ORDERS_RAW_DIR: /data/orders-raw
+      # issue 65: priamy odkaz do Shoptet administrácie pri riadku objednávky
+      # — NA ROZDIEL od SHOPTET_EXPORT_URL/SHOPTET_ORDERS_URL vyššie toto
+      # NIE JE tajomstvo (žiadny prihlasovací `hash`) a `env.ts`'s zod schéma
+      # má rozumný `.default(...)`, takže appka funguje aj bez tohto riadku
+      # v `/srv/forestshop/.env` — bare kľúč tu je len na to, aby sa dala
+      # doména zmeniť BEZ nového deploy/buildu, keby to niekedy bolo treba.
+      SHOPTET_ADMIN_BASE_URL:
       # Odosielanie objednávky dodávateľovi mailom (#31) — rovnaká úvaha ako
       # SHOPTET_EXPORT_URL vyššie: `.optional()` v `env.ts`, bare kľúč
       # preberá `/srv/forestshop/.env`, keď tam je; keď nie je, appka beží
