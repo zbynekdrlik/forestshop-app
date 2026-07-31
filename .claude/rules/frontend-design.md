@@ -132,3 +132,47 @@ paths:
   instance's own action completed"? If yes, "skip first mount" alone is
   not enough — add the dirty guard too (see `.claude/rules/orders.md`'s
   matching entry for the full mechanism).
+- **`position: sticky` inside a wrapper that needs `overflow-x: auto` (for a
+  wide table's own horizontal scroll) does NOT stick to the viewport — it
+  sticks to that wrapper instead, and breaks.** Issue 95 tried a sticky
+  `<thead>` on the "Na objednanie" table: `.orders-table-wrap`'s required
+  `overflow-x: auto` makes the CSS engine treat the wrapper as a scroll
+  container on BOTH axes (the spec's "if one axis is non-`visible`, compute
+  the other to `auto` too" rule), which re-anchors the sticky `<th>`'s `top`
+  offset to that small, non-scrolling wrapper instead of the page — pushing
+  the header down OVER the first row without the table reserving that space
+  in its layout. Found by a REAL Playwright run, not by inspection:
+  `checkbox.click()` failed with "`<th>Objednané</th>` … intercepts pointer
+  events". Any FUTURE sticky-header attempt on a table that also needs its
+  own horizontal-scroll wrapper needs a genuinely different layout (a
+  separately-positioned header row/element outside the scrolling ancestor,
+  not `position: sticky` on `<th>`/`<thead>` inside it) — don't retry the
+  same approach.
+- **A single-word, ALL-CAPS `<th>` in a narrow `table-layout: fixed` column
+  breaks MID-WORD, not at a word boundary, if `overflow-wrap: break-word`
+  applies to `<th>`.** Issue 95's checkbox-column header "OBJEDNANÉ" (no
+  spaces) wrapped to three lines ("OBJE/DNAN/É") at a 4%-wide column —
+  found only by a LIVE post-deploy Playwright check at 1920px, not by any
+  automated test (unit tests don't render real column widths; the e2e
+  console/scroll-width checks don't inspect visual text wrapping). Fix:
+  scope `overflow-wrap: break-word` to `<td>` only (still needed there for
+  long product names/comments) — multi-word headers ("Dátum objednávky")
+  already wrap fine at their natural space without it — and widen the
+  narrow column's `<colgroup>` percentage until the single word fits on one
+  line. Any FUTURE narrow single-word column header on this table needs the
+  same check: render it at the real column width (not just skim the CSS)
+  before shipping.
+- **Merging two table columns into one WITHOUT touching any test**: keep
+  BOTH original elements (their exact `data-testid`, exact conditional
+  rendering logic) as SIBLING nested elements inside the one merged `<td>`,
+  instead of combining their JSX/conditions into new markup. Issue 95
+  merged VEĽKOSŤ→KÓD (simple inline append, no existing testid to
+  preserve), and DODÁVATEĽ+PRIRADENIE DODÁVATEĽA / POZNÁMKA E-SHOPU+KOMENTÁR
+  (both had existing `data-testid`s multiple unit/e2e tests already
+  targeted) — for the latter two, `OrderLineRow.tsx` renders the ORIGINAL
+  two `<div data-testid="...">` blocks, byte-for-byte unchanged rendering
+  logic, just nested inside one new `<td>` wrapper instead of two `<td>`s.
+  Every existing test kept passing with ZERO test edits. A regression test
+  proving a merge is a REAL DOM merge (not just relabeled headers): assert
+  the two testid'd elements' `.closest("td")` are the SAME node
+  (`OrdersSection.test.tsx`).

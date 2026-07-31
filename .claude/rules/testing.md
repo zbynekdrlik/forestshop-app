@@ -314,3 +314,23 @@ paths:
   ovládacími prvkami v jednej `<td>`: over reálnym Playwright behom (nie
   len vizuálne v prehliadači na širokej obrazovke), že klik na KAŽDÝ prvok
   skutočne trafí TEN prvok, nie souseda pod ním po pretečení.
+- **`apps/web/tests/e2e/*.ts` malo (do issue 95) žiadny VLASTNÝ
+  `tsconfig.json` — spoliehalo sa na `eslint.config.js`'s
+  `allowDefaultProject` fallback na `apps/api/tsconfig.eslint.json`
+  (Node-only `lib: ["ES2023"]`, žiadne DOM).** Kým e2e testy volali len
+  Playwright's vlastné (už typované) API (`page.click`, `expect`, …), to
+  nevadilo. Prvý test, čo volá `page.evaluate(() => document.body...)` (issue
+  95: kontrola `document.body.scrollWidth`/`window.innerWidth` proti
+  vodorovnému posúvaniu stránky), zlyhal na type-aware lint ("unsafe member
+  access .body on a type that cannot be resolved") — `document`/`window` v
+  callbacku nemali odkiaľ dostať typ. Fix: vlastný
+  `apps/web/tests/e2e/tsconfig.json` (rovnaký vzor ako
+  `apps/api/tests/tsconfig.json`/`scripts/tsconfig.json`, `.claude/rules/
+  local-dev.md`), navyše s `"lib": ["ES2023", "DOM"]`, pridaný do root
+  `typecheck` skriptu; `eslint.config.js`'s `allowDefaultProject` zoznam
+  stratil svoj `"apps/web/tests/e2e/*.ts"` riadok (project service si nový
+  reálny tsconfig nájde sám — rovnaký dôvod ako existujúce dva odstránené
+  riadky vedľa neho). Test na KAŽDÝ ďalší `page.evaluate()`/browser-context
+  kód v novom e2e súbore: over, či tento tsconfig existuje a má `DOM` v
+  `lib` — bez neho type-aware lint padne na prvom odkaze na
+  `document`/`window`/`navigator` vnútri callbacku.
