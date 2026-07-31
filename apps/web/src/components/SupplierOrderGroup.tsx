@@ -135,20 +135,30 @@ export function SupplierOrderGroup({
           </colgroup>
           <thead>
             <tr>
-              {/* issue 60: odškrtávacie políčko — JEDINÉ miesto na obrazovke,
-                  ktoré sa smie volať "Objednané" (viď `STATE_LABELS` a stĺpec
-                  dátumu nižšie, obe premenované, aby nekolidovali). */}
-              <th>Objednané</th>
-              <th>Objednávka</th>
+              {/* issue 105 bod 1: pri 1280px (tabuľkin skutočný floor —
+                  `min-width: 64rem`) sa jednoslovné VEĽKÉ hlavičky
+                  ("OBJEDNANÉ"/"OBJEDNÁVKA"/"MNOŽSTVO"/"OBJEDNÁVKY") nezmestili
+                  do svojich úzkych stĺpcov a pretekali do suseda (zmerané
+                  `th.scrollWidth`). Namiesto širších percent (väčší diff,
+                  riziko pre PRODUKT/DODÁVATEĽ) sú 4 popisky skrátené — plný
+                  význam nesie `title`. Checkbox stĺpec: JEDINÉ miesto na
+                  obrazovke, ktoré sa smie týkať "objednané u dodávateľa" (viď
+                  `STATE_LABELS`/dátumový stĺpec nižšie, aby sa nekolidovalo). */}
+              <th title="Objednané u dodávateľa (zaškrtávacie políčko)" aria-label="Objednané u dodávateľa">
+                ✓
+              </th>
+              <th title="Číslo objednávky (klik na kód v riadku otvorí objednávku v administrácii Shoptet)">
+                Č. obj.
+              </th>
               <th>Zákazník</th>
               <th title="Kód variantu — obsahuje aj veľkosť, keď ju appka pozná">Kód</th>
               <th>Produkt</th>
-              <th>Množstvo</th>
+              <th title="Množstvo (počet kusov)">Ks</th>
               <th title="Dodávateľ z katalógu, alebo ručné priradenie pri produkte bez katalógového dodávateľa">
                 Dodávateľ
               </th>
               <th>Stav</th>
-              <th>Dátum objednávky</th>
+              <th title="Dátum objednávky">Dátum obj.</th>
               <th title="Poznámka zákazníka z e-shopu (na čítanie) + vlastná poznámka tímu">Poznámky</th>
             </tr>
           </thead>
