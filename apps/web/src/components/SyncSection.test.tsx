@@ -71,7 +71,11 @@ it("keď zatiaľ žiadny beh nie je zaznamenaný, oba kanály aj história ukazu
 it("zobrazí posledný beh katalógu (OK) aj objednávok (CHYBA) so slovenským detailom v histórii", async () => {
   fetchJobRuns.mockResolvedValue([CATALOG_RUN, ORDERS_RUN]);
 
-  render(<SyncSection role="admin" onSessionExpired={() => {}} />);
+  // #115: explicitné `now` tesne PO `CATALOG_RUN.startedAt` (2026-07-30
+  // 01:00) — bez neho by sa táto asercia po zavedení staleness kontroly
+  // stala časovanou bombou (skutočné "teraz" pri behu CI je vždy neskôr než
+  // natvrdo zapísaný literál vo fixtúre).
+  render(<SyncSection role="admin" onSessionExpired={() => {}} now={new Date("2026-07-30T02:00:00Z")} />);
 
   const katalog = await screen.findByTestId("sync-channel-Katalóg");
   expect(katalog.textContent).toContain("✅ OK");
@@ -97,7 +101,10 @@ it("posledný úspešný beh spred 3 dní ukáže zastaraný/varovný stav, NIE 
   render(<SyncSection role="admin" onSessionExpired={() => {}} />);
 
   const katalog = await screen.findByTestId("sync-channel-Katalóg");
-  expect(katalog.textContent).not.toContain("✅ OK");
+  // Pill (aktuálny STAV) nesmie tvrdiť "OK" — na rozdiel od `lastRunLine`'s
+  // "Posledný beh: … — ✅ OK" nižšie, ktorá popisuje HISTORICKÝ výsledok
+  // toho konkrétneho behu (ten naozaj skončil úspešne) a ostáva nezmenená.
+  expect(katalog.querySelector(".pill")?.textContent).not.toContain("✅ OK");
   expect(katalog.textContent).toContain("Posledný úspešný sync");
   expect(katalog.textContent).toContain("dňami");
 });
