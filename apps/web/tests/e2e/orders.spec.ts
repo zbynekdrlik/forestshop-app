@@ -289,10 +289,13 @@ test("manažér vidí otvorené objednávky zoskupené podľa dodávateľa, konz
   // issue 65: objednávka 9002 zámerne nesie placedAt hlboko v minulosti
   // (`scripts/e2e-setup.ts`) a zostáva NEVYBAVENÁ (predvolený stav) — presne
   // ten prípad, ktorý má dostať upozornenie ⚠️ na starú objednávku.
+  // issue 127: viditeľný text je od tohto ticketu skrátený na "N d" (nie
+  // "N dní") — plný text ostáva v `title` tooltipe, overenom nižšie.
   const staleBadgeBez = riadokBez.locator("[data-testid^='stale-badge-']");
   await expect(staleBadgeBez).toBeVisible();
   await expect(staleBadgeBez).toContainText("⚠️");
-  await expect(staleBadgeBez).toContainText("dní");
+  await expect(staleBadgeBez).toContainText("d");
+  await expect(staleBadgeBez).toHaveAttribute("title", /dní/);
 
   expect(chyby).toEqual([]);
 });

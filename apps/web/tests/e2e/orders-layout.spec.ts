@@ -124,6 +124,30 @@ test("STAV je celý čitateľný a POZNÁMKY pole je dosť široké na všetkýc
     // issue 117 celý stĺpec kódu produktu zrušilo (majiteľ nepoužíva), takže
     // `.ord-code-cell` už v DOM-e vôbec neexistuje.
 
+    // issue 127: odznak veku objednávky (`.ord-stale-badge`) sa CELOU šírkou
+    // musí zmestiť do svojej bunky (`.col-date`) — pred touto opravou
+    // pretŕčal o ~22px pri 1280px do vedľajšieho stĺpca POZNÁMKY. Objednávka
+    // 9002 (`scripts/e2e-setup.ts`) má `placedAt` hlboko v minulosti, takže
+    // odznak sa vždy vykreslí.
+    const staleOdznaky = await page.evaluate(() => {
+      return [...document.querySelectorAll<HTMLElement>("[data-testid^='stale-badge-']")].map((odznak) => {
+        const td = odznak.closest("td");
+        if (td === null) return { spill: null, scrollOverflow: null };
+        const odznakRect = odznak.getBoundingClientRect();
+        const tdRect = td.getBoundingClientRect();
+        return {
+          spill: odznakRect.right - tdRect.right,
+          scrollOverflow: td.scrollWidth > td.clientWidth,
+        };
+      });
+    });
+    expect(staleOdznaky.length, `žiadny stale-badge nájdený pri ${String(width)}px`).toBeGreaterThan(0);
+    for (const { spill, scrollOverflow } of staleOdznaky) {
+      expect(spill, `odznak pretŕča svoju bunku pri ${String(width)}px`).not.toBeNull();
+      expect(spill as number, `odznak pretŕča svoju bunku pri ${String(width)}px`).toBeLessThanOrEqual(0);
+      expect(scrollOverflow, `bunka odznaku posúva obsah pri ${String(width)}px`).toBe(false);
+    }
+
     // issue 111 bod 5: pri 1280px sa žiadna `.orders-table-wrap` skupina
     // nesmie posúvať vodorovne (predtým 💾 tlačidlo bolo za viditeľným
     // okrajom, kým manažér nescrolloval).
