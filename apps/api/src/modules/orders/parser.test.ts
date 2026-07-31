@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   decodeCp1250,
+  extractOrderIdsFromXml,
   mapOrderRow,
   normalizeStatusName,
   parseDelimited,
@@ -13,6 +14,11 @@ import {
 
 const FIXTURE = readFileSync(
   fileURLToPath(new URL("./fixtures/orders-sample.csv", import.meta.url)),
+);
+
+const XML_FIXTURE = readFileSync(
+  fileURLToPath(new URL("./fixtures/orders-sample.xml", import.meta.url)),
+  "utf-8",
 );
 
 describe("decodeCp1250 + parseDelimited", () => {
@@ -259,5 +265,30 @@ describe("normalizeStatusName", () => {
 describe("REQUIRED_ORDER_COLUMNS", () => {
   it("obsahuje statusName (issue 59) — bez neho appka nemá podľa čoho filtrovať 'Na objednanie'", () => {
     expect(REQUIRED_ORDER_COLUMNS).toContain("statusName");
+  });
+});
+
+// issue 120: interné Shoptet id objednávky sa berie z XML exportu
+// (`SHOPTET_ORDERS_XML_URL`), NIE z CSV (ktorý ho vôbec nenesie) — fixtúra
+// nižšie je ručne vyrobená (2 objednávky), rovnaké skutočné hodnoty (id aj
+// kód), aké boli naživo overené na produkcii 2026-07-31.
+describe("extractOrderIdsFromXml", () => {
+  it("vytiahne pár (kód, interné id) pre každú objednávku", () => {
+    const map = extractOrderIdsFromXml(XML_FIXTURE);
+    expect(map.get("20260897")).toBe(58656);
+    expect(map.get("20261244")).toBe(58728);
+    expect(map.size).toBe(2);
+  });
+
+  it("nezamení objednávkové ORDER_ID s kódom POLOŽKY vnútri ORDER_ITEMS", () => {
+    const map = extractOrderIdsFromXml(XML_FIXTURE);
+    // Položkové kódy (40304/L, SHIPPING11, 40259/L) sa nesmú objaviť ako kľúč.
+    expect(map.has("40304/L")).toBe(false);
+    expect(map.has("SHIPPING11")).toBe(false);
+    expect(map.has("40259/L")).toBe(false);
+  });
+
+  it("prázdny XML vráti prázdnu mapu", () => {
+    expect(extractOrderIdsFromXml("<ORDERS></ORDERS>").size).toBe(0);
   });
 });

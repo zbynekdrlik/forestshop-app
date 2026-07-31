@@ -15,6 +15,13 @@ const envSchema = z.object({
   // je prihlasovací údaj, nikdy sa nezapisuje do repa. Nepovinná (#21): bez
   // nej appka beží ďalej, len CLI import objednávok zlyhá nahlas hneď na štarte.
   SHOPTET_ORDERS_URL: z.string().url().optional(),
+  // issue 120: SAMOSTATNÝ XML export objednávok (`patternId=-11`) — jediný
+  // zdroj interného Shoptet id (CSV export vyššie ho nenesie vôbec). Rovnaké
+  // pravidlo ako `SHOPTET_ORDERS_URL`: `hash` je prihlasovací údaj, nikdy do
+  // repa. Nepovinná: bez nej appka beží ďalej presne ako doteraz (odkaz na
+  // objednávku len na vyhľadávanie, `modules/orders/queries.ts`), len bez
+  // tejto premennej nikdy nezíska interné id na priamy odkaz na detail.
+  SHOPTET_ORDERS_XML_URL: z.string().url().optional(),
   ORDERS_RAW_DIR: z.string().min(1).default("./data/orders-raw"),
   // issue 65: základ Shoptet-ovho ADMIN rozhrania (nie exportu) pre priamy
   // odkaz na objednávku z obrazovky "Na objednanie" — na rozdiel od

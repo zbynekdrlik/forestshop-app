@@ -16,7 +16,7 @@
 // na $?, nie len na text výstupu (rovnaká disciplína ako `scripts/catalog-ingest.ts`).
 import { createDb } from "../db/client.js";
 import { loadEnv } from "../env.js";
-import { computeImportWindow, createHttpOrdersExportFetcher } from "../modules/orders/fetcher.js";
+import { computeImportWindow, createHttpOrderIdsFetcher, createHttpOrdersExportFetcher } from "../modules/orders/fetcher.js";
 import {
   DEFAULT_ORDERS_IMPORT_WINDOW_DAYS,
   ingestOrders,
@@ -45,6 +45,8 @@ if (env.SHOPTET_ORDERS_URL === undefined) {
 const now = new Date();
 const { dateFrom, dateUntil } = computeImportWindow(now, DEFAULT_ORDERS_IMPORT_WINDOW_DAYS);
 
+const ordersXmlUrl = env.SHOPTET_ORDERS_XML_URL;
+
 const { db, pool } = createDb(env.DATABASE_URL);
 let result: OrdersIngestResult;
 try {
@@ -54,6 +56,9 @@ try {
     rawDir: env.ORDERS_RAW_DIR,
     windowStart: dateFrom,
     windowEnd: dateUntil,
+    ...(ordersXmlUrl === undefined
+      ? {}
+      : { fetchOrderIds: createHttpOrderIdsFetcher({ url: ordersXmlUrl, dateFrom, dateUntil }) }),
   });
 } finally {
   await pool.end();

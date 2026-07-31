@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   computeImportWindow,
+  createHttpOrderIdsFetcher,
   createHttpOrdersExportFetcher,
   formatDateParam,
   redactSourceLabel,
@@ -116,5 +117,46 @@ describe("createHttpOrdersExportFetcher", () => {
       maxBytes: 10_000,
     });
     await expect(fetcher()).rejects.toThrow(/veľkosť/);
+  });
+});
+
+// issue 120: druhý (XML) export — best-effort zdroj interného Shoptet id,
+// nikdy nesmie ovplyvniť CSV strop/fetcher vyššie (samostatná funkcia,
+// samostatný test súbor by bol zbytočný split — málo testov, rovnaká téma).
+describe("createHttpOrderIdsFetcher", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("pridá dateFrom/dateUntil rovnako ako CSV fetcher a vráti Map(kód → interné id)", async () => {
+    let requestedUrl = "";
+    const xml =
+      "<ORDERS><ORDER><ORDER_ID>58656</ORDER_ID><CODE>20260897</CODE></ORDER></ORDERS>";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation((url: string) => {
+        requestedUrl = url;
+        return Promise.resolve(new Response(xml, { status: 200 }));
+      }),
+    );
+    const fetcher = createHttpOrderIdsFetcher({
+      url: "https://www.forestshop.sk/export/orders.xml?patternId=-11&partnerId=3&hash=tajne",
+      dateFrom: new Date(Date.UTC(2026, 3, 30)),
+      dateUntil: new Date(Date.UTC(2026, 6, 29)),
+    });
+    const map = await fetcher();
+    expect(requestedUrl).toContain("dateFrom=2026-4-30");
+    expect(requestedUrl).toContain("dateUntil=2026-7-29");
+    expect(map.get("20260897")).toBe(58656);
+  });
+
+  it("vyhodí, keď stiahnutie zlyhá s ne-200 stavom", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("", { status: 500 })));
+    const fetcher = createHttpOrderIdsFetcher({
+      url: "https://e.sk/orders.xml",
+      dateFrom: new Date(Date.UTC(2026, 3, 30)),
+      dateUntil: new Date(Date.UTC(2026, 6, 29)),
+    });
+    await expect(fetcher()).rejects.toThrow(/zlyhalo/);
   });
 });

@@ -10,7 +10,7 @@ import { log } from "./logger.js";
 import { createHttpExportFetcher } from "./modules/catalog/fetcher.js";
 import { ingestCatalog } from "./modules/catalog/ingest.js";
 import { createSmtpMailTransport } from "./modules/mail/transport.js";
-import { computeImportWindow, createHttpOrdersExportFetcher } from "./modules/orders/fetcher.js";
+import { computeImportWindow, createHttpOrderIdsFetcher, createHttpOrdersExportFetcher } from "./modules/orders/fetcher.js";
 import { DEFAULT_ORDERS_IMPORT_WINDOW_DAYS, ingestOrders, type RunOrdersIngest } from "./modules/orders/ingest.js";
 import {
   catalogImportJob,
@@ -55,6 +55,12 @@ const runIngest =
 // closure (z `now`, ktoré dostane až v čase behu), nikdy vopred — rovnaká
 // disciplína ako `cli/orders-ingest.ts`.
 const ordersUrl = env.SHOPTET_ORDERS_URL;
+// issue 120: druhý, nepovinný export — jediný zdroj interného Shoptet id.
+// Chýbajúca premenná necháva `fetchOrderIds` úplne mimo `ingestOrders`
+// volania (`exactOptionalPropertyTypes`, rovnaká disciplína ako
+// `runIngest`/`runOrdersIngest` vyššie) — `ingestOrders` to sama osebe berie
+// ako "id zatiaľ neznáme", nikdy ako chybu.
+const ordersXmlUrl = env.SHOPTET_ORDERS_XML_URL;
 const runOrdersIngest: RunOrdersIngest | undefined =
   ordersUrl === undefined
     ? undefined
@@ -66,6 +72,9 @@ const runOrdersIngest: RunOrdersIngest | undefined =
           rawDir: env.ORDERS_RAW_DIR,
           windowStart: dateFrom,
           windowEnd: dateUntil,
+          ...(ordersXmlUrl === undefined
+            ? {}
+            : { fetchOrderIds: createHttpOrderIdsFetcher({ url: ordersXmlUrl, dateFrom, dateUntil }) }),
         });
       };
 
