@@ -4,19 +4,15 @@ import { OrdersSection } from "./OrdersSection.js";
 
 // `updateOrderLineOrdered`/`setSupplierLinesOrdered` mocks moved to
 // `OrdersSection.ordered.test.tsx` alongside the tests that actually
-// exercise them (review of PR 75, finding 6 — same file split).
-const {
-  fetchOpenOrders,
-  updateOrderLineState,
-  setSupplierEmail,
-  fetchSupplierOrderMailPreview,
-  sendSupplierOrderMail,
-} = vi.hoisted(() => ({
+// exercise them (review of PR 75, finding 6 — same file split). issue 118:
+// `fetchSupplierOrderMailPreview`/`sendSupplierOrderMail` mocks moved to
+// `OrdersSection.mailActions.test.tsx` the same way — this file no longer
+// has any test exercising the (now hidden-by-default) mail preview/send
+// flow.
+const { fetchOpenOrders, updateOrderLineState, setSupplierEmail } = vi.hoisted(() => ({
   fetchOpenOrders: vi.fn(),
   updateOrderLineState: vi.fn(),
   setSupplierEmail: vi.fn(),
-  fetchSupplierOrderMailPreview: vi.fn(),
-  sendSupplierOrderMail: vi.fn(),
 }));
 
 // `OrdersUnauthorizedError` ostáva SKUTOČNÁ trieda z reálneho modulu — rovnaký
@@ -29,8 +25,6 @@ vi.mock("../ordersApi.js", async (importOriginal) => {
     fetchOpenOrders,
     updateOrderLineState,
     setSupplierEmail,
-    fetchSupplierOrderMailPreview,
-    sendSupplierOrderMail,
   };
 });
 
@@ -107,13 +101,11 @@ it("zoskupí riadky podľa dodávateľa a zobrazí produkt, veľkosť, množstvo
   const novy = screen.getByTestId(`order-line-${LINE_NOVA.lineId}`);
   expect(novy.textContent).toContain("1002");
   expect(novy.textContent).toContain("Zákazník Nový");
-  expect(novy.textContent).toContain("B-1");
   expect(novy.textContent).toContain("Bunda FOREST 2001");
   expect(novy.textContent).toContain("Skladom");
   expect(novy.textContent).toContain("Zavolať pred doručením");
 
   const stary = screen.getByTestId(`order-line-${LINE_STARA.lineId}`);
-  expect(stary.textContent).toContain("3XL");
   // issue 60: východiskový stav "objednane" sa teraz volá "Nevybavené" — slovo
   // "Objednané" je odteraz VÝLUČNE nové odškrtávacie políčko, nie tento stav.
   expect(stary.textContent).toContain("Nevybavené");
@@ -122,18 +114,20 @@ it("zoskupí riadky podľa dodávateľa a zobrazí produkt, veľkosť, množstvo
 // issue 95: 13 pôvodných stĺpcov → 10 (VEĽKOSŤ zlúčená do KÓD, PRIRADENIE
 // DODÁVATEĽA do DODÁVATEĽ, POZNÁMKA E-SHOPU do POZNÁMOK) — regresný test
 // dokazuje, že ide o SKUTOČNÉ zlúčenie stĺpcov v DOM-e (rovnaký rodičovský
-// `<td>`), nie len premenovanie hlavičiek.
-it("hlavička tabuľky má 10 stĺpcov (zlúčené VEĽKOSŤ/PRIRADENIE DODÁVATEĽA/POZNÁMKA E-SHOPU)", async () => {
+// `<td>`), nie len premenovanie hlavičiek. issue 117: KÓD (variant kódu)
+// stĺpec celý zrušený (majiteľ, "kody produktov vobec nepouzivame") — 10 → 9.
+it("hlavička tabuľky má 9 stĺpcov (KÓD zrušený, zlúčené VEĽKOSŤ/PRIRADENIE DODÁVATEĽA/POZNÁMKA E-SHOPU)", async () => {
   fetchOpenOrders.mockResolvedValue([{ supplier: "Dodávateľ Alfa", lines: [LINE_STARA], email: null }]);
 
   render(<OrdersSection role="manazer" onSessionExpired={() => {}} />);
 
   const hlavicky = await screen.findAllByRole("columnheader");
-  expect(hlavicky).toHaveLength(10);
+  expect(hlavicky).toHaveLength(9);
   const nazvy = hlavicky.map((th) => th.textContent);
   expect(nazvy).not.toContain("Veľkosť");
   expect(nazvy).not.toContain("Priradenie dodávateľa");
   expect(nazvy).not.toContain("Poznámka e-shopu");
+  expect(nazvy).not.toContain("Kód");
 });
 
 it("zlúčená bunka DODÁVATEĽ drží odkaz na dodávateľa AJ priradenie v tom istom stĺpci", async () => {
@@ -161,22 +155,20 @@ it("zlúčená bunka POZNÁMKY drží poznámku e-shopu AJ komentár v tom istom
   expect(remarkBunka.closest("td")).toBe(commentBunka.closest("td"));
 });
 
-it("chýbajúci dodávateľ zobrazí ako pomlčku (veľkosť sa pri chýbajúcej hodnote jednoducho nezobrazí)", async () => {
+it("chýbajúci dodávateľ zobrazí ako pomlčku", async () => {
   fetchOpenOrders.mockResolvedValue([{ supplier: "Dodávateľ Alfa", lines: [LINE_NOVA], email: null }]);
 
   render(<OrdersSection role="citanie" onSessionExpired={() => {}} />);
 
   const riadok = await screen.findByTestId(`order-line-${LINE_NOVA.lineId}`);
-  // issue 95: `LINE_NOVA` má `sizeLabel: null` — od zlúčenia KÓD+VEĽKOSŤ sa v
-  // tom prípade jednoducho NIČ nevykreslí (žiadna pomlčka náhradou), takže
-  // pomlčka nižšie pochádza zo zlúčenej bunky DODÁVATEĽ (LINE_NOVA má aj
-  // `supplierUrl`/`supplierNote`/`externalCode` všetky `null`).
+  // LINE_NOVA má `supplierUrl`/`supplierNote`/`externalCode`/`supplierAssignable`
+  // všetky prázdne/false — pomlčka pochádza zo zlúčenej bunky DODÁVATEĽ.
   expect(riadok.textContent).toContain("—");
 });
 
-// issue 67: odkaz na tovar u dodávateľa a kód dodávateľa — tri tvary, aké
-// export skutočne obsahuje.
-it("riadok s odkazom na dodávateľa zobrazí klikateľný odkaz aj kód dodávateľa", async () => {
+// issue 67: odkaz na tovar u dodávateľa. issue 119: viditeľný text je odteraz
+// len ikonka (icon button), prístupné meno nesie výlučne `aria-label`.
+it("riadok s odkazom na dodávateľa zobrazí klikateľné ikonové tlačidlo, otvárajúce v novej karte", async () => {
   const riadokSOdkazom = {
     ...LINE_STARA,
     supplierUrl: "https://www.huntingshop.eu/wild-t-green-nohavice",
@@ -189,16 +181,17 @@ it("riadok s odkazom na dodávateľa zobrazí klikateľný odkaz aj kód dodáva
 
   const bunka = await screen.findByTestId(`supplier-link-${LINE_STARA.lineId}`);
   // issue 70: aria-label nesie názov produktu, aby riadky nemali rovnaké
-  // prístupné meno — viditeľný text ostáva "Odkaz na dodávateľa". issue 72:
-  // samotný variantName ešte nestačí — dva riadky toho istého produktu v
-  // rôznych veľkostiach majú rovnaký variantName, líšia sa len variantCode —
-  // preto ho aria-label musí niesť tiež.
+  // prístupné meno. issue 72: samotný variantName ešte nestačí — dva riadky
+  // toho istého produktu v rôznych veľkostiach majú rovnaký variantName,
+  // líšia sa len variantCode — preto ho aria-label musí niesť tiež.
   const odkaz = within(bunka).getByRole<HTMLAnchorElement>("link", {
     name: `Odkaz na dodávateľa — ${LINE_STARA.variantName} (${LINE_STARA.variantCode})`,
   });
   expect(odkaz.getAttribute("href")).toBe("https://www.huntingshop.eu/wild-t-green-nohavice");
   expect(odkaz.getAttribute("rel")).toBe("noreferrer noopener");
-  expect(bunka.textContent).toContain("OB832");
+  expect(odkaz.getAttribute("target")).toBe("_blank");
+  // issue 117: `externalCode` (dodávateľský kód) sa už NIKDE nezobrazuje.
+  expect(bunka.textContent).not.toContain("OB832");
 });
 
 // issue 72: dva riadky TOHO ISTÉHO produktu v DVOCH rôznych veľkostiach majú
@@ -256,19 +249,20 @@ it("riadok bez akéhokoľvek údaja o dodávateľovi zobrazí pomlčku", async (
   expect(bunka.textContent).toBe("—");
 });
 
-// issue 70 (code review nález po PR 69): pomlčka sa doteraz potláčala len
-// vtedy, keď bol vyplnený `supplierUrl` alebo `supplierNote` — riadok LEN s
-// `externalCode` (bez odkazu aj bez poznámky) dostal zbytočnú pomlčku hneď
-// vedľa kódu.
-it("riadok len s kódom dodávateľa (bez odkazu aj poznámky) nezobrazí pomlčku", async () => {
+// issue 117: `externalCode` (dodávateľský kód) sa už NIKDY nezobrazuje —
+// majiteľ ho nepoužíva. Riadok LEN s `externalCode` (bez odkazu, poznámky aj
+// priradenia) je odteraz NEROZOZNATEĽNÝ od riadku úplne bez údajov o
+// dodávateľovi — obidva zobrazia pomlčku (predtým, pred issue 117, tu kód
+// potláčal pomlčku a zobrazoval sa namiesto nej).
+it("riadok len s kódom dodávateľa (bez odkazu aj poznámky) zobrazí pomlčku, kód sa nezobrazí", async () => {
   const riadokLenSKodom = { ...LINE_STARA, supplierUrl: null, supplierNote: null, externalCode: "OB832" };
   fetchOpenOrders.mockResolvedValue([{ supplier: "Dodávateľ Alfa", lines: [riadokLenSKodom], email: null }]);
 
   render(<OrdersSection role="citanie" onSessionExpired={() => {}} />);
 
   const bunka = await screen.findByTestId(`supplier-link-${LINE_STARA.lineId}`);
-  expect(bunka.textContent).not.toContain("—");
-  expect(bunka.textContent).toContain("OB832");
+  expect(bunka.textContent).toBe("—");
+  expect(bunka.textContent).not.toContain("OB832");
 });
 
 it("pri 401 zavolá onSessionExpired namiesto zobrazenia všeobecnej chyby", async () => {
@@ -404,76 +398,24 @@ it("manažér nastaví e-mail dodávateľa cez formulár, zobrazenie sa aktualiz
   expect(fetchOpenOrders).toHaveBeenCalledTimes(1);
 });
 
-it("bez e-mailu je tlačidlo na odoslanie mailom disabled s vysvetlením", async () => {
+// issue 118: majiteľ, doslovne "zatial skry este to nebudeme pouzivat" —
+// appka SKRÝVA (nemaže) "📋 Kopírovať objednávku"/"✉️ Poslať objednávku
+// e-mailom" + sprievodný text, `orderScreenFlags.ts`'s
+// `SHOW_ORDER_MAIL_ACTIONS` (predvolene `false`). Platí AJ pre rolu
+// "manazer" (`canChangeState: true`) — na rozdiel od testu vyššie ("rola
+// citanie…"), kde sú skryté z INÉHO dôvodu (žiadne op práva). Samotná
+// funkcionalita (náhľad/odoslanie mailu, kopírovanie) zostáva plne
+// otestovaná v `OrdersSection.mailActions.test.tsx` (flag prepnutý na
+// `true` cez `vi.mock`).
+it("issue 118: aj manažér (canChangeState) nevidí tlačidlá kopírovania/odoslania mailom ani sprievodný text, kým je appka skryje", async () => {
   fetchOpenOrders.mockResolvedValue([{ supplier: "Dodávateľ Alfa", lines: [LINE_STARA], email: null }]);
 
   render(<OrdersSection role="manazer" onSessionExpired={() => {}} />);
 
-  const tlacidlo = await screen.findByRole("button", { name: "✉️ Poslať objednávku e-mailom" });
-  expect(tlacidlo.hasAttribute("disabled")).toBe(true);
-  expect(screen.getByText("Pre odoslanie mailom treba najprv nastaviť e-mail dodávateľa.")).toBeTruthy();
-});
-
-it("s e-mailom a otvorenou položkou manažér otvorí náhľad, potvrdí a mail sa odošle", async () => {
-  fetchOpenOrders.mockResolvedValue([
-    { supplier: "Dodávateľ Alfa", lines: [LINE_STARA], email: "alfa@dodavatel.example" },
-  ]);
-  fetchSupplierOrderMailPreview.mockResolvedValue({
-    supplier: "Dodávateľ Alfa",
-    to: "alfa@dodavatel.example",
-    subject: "Objednávka — Dodávateľ Alfa (1 položka)",
-    body: "Objednávka — Dodávateľ Alfa (1 položka)\nA-1 | 3XL | 2 ks",
-    itemCount: 1,
-  });
-  sendSupplierOrderMail.mockResolvedValue({ ok: true });
-
-  render(<OrdersSection role="manazer" onSessionExpired={() => {}} />);
-
-  const posluTlacidlo = await screen.findByRole("button", { name: "✉️ Poslať objednávku e-mailom" });
-  expect(posluTlacidlo.hasAttribute("disabled")).toBe(false);
-  fireEvent.click(posluTlacidlo);
-
-  await waitFor(() => {
-    expect(fetchSupplierOrderMailPreview).toHaveBeenCalledWith("Dodávateľ Alfa");
-  });
-  const nahlad = await screen.findByTestId("mail-preview-Dodávateľ Alfa");
-  expect(nahlad.textContent).toContain("alfa@dodavatel.example");
-  expect(nahlad.textContent).toContain("Objednávka — Dodávateľ Alfa (1 položka)");
-
-  fireEvent.click(screen.getByRole("button", { name: "Odoslať" }));
-
-  await waitFor(() => {
-    expect(sendSupplierOrderMail).toHaveBeenCalledWith("Dodávateľ Alfa");
-  });
-  await waitFor(() => {
-    expect(screen.getByRole("status").textContent).toContain("odoslaná");
-  });
-  expect(screen.queryByTestId("mail-preview-Dodávateľ Alfa")).toBeNull();
-});
-
-it("kopírovanie objednávky do schránky použije text náhľadu", async () => {
-  fetchOpenOrders.mockResolvedValue([
-    { supplier: "Dodávateľ Alfa", lines: [LINE_STARA], email: "alfa@dodavatel.example" },
-  ]);
-  fetchSupplierOrderMailPreview.mockResolvedValue({
-    supplier: "Dodávateľ Alfa",
-    to: "alfa@dodavatel.example",
-    subject: "Objednávka — Dodávateľ Alfa (1 položka)",
-    body: "Objednávka — Dodávateľ Alfa (1 položka)\nA-1 | 3XL | 2 ks",
-    itemCount: 1,
-  });
-  const writeText = vi.fn().mockResolvedValue(undefined);
-  Object.assign(navigator, { clipboard: { writeText } });
-
-  render(<OrdersSection role="manazer" onSessionExpired={() => {}} />);
-
-  const kopirovat = await screen.findByRole("button", { name: "📋 Kopírovať objednávku" });
-  fireEvent.click(kopirovat);
-
-  await waitFor(() => {
-    expect(writeText).toHaveBeenCalledWith("Objednávka — Dodávateľ Alfa (1 položka)\nA-1 | 3XL | 2 ks");
-  });
-  await waitFor(() => {
-    expect(screen.getByRole("status").textContent).toContain("schránky");
-  });
+  await screen.findByTestId(`order-line-${LINE_STARA.lineId}`);
+  expect(screen.queryByRole("button", { name: "✉️ Poslať objednávku e-mailom" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "📋 Kopírovať objednávku" })).toBeNull();
+  expect(screen.queryByText("Pre odoslanie mailom treba najprv nastaviť e-mail dodávateľa.")).toBeNull();
+  // Hromadné tlačidlo (mimo issue 118's scope) ostáva viditeľné.
+  expect(screen.getByRole("button", { name: "✔ Označiť skupinu ako objednané" })).toBeTruthy();
 });

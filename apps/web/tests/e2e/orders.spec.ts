@@ -212,9 +212,7 @@ test("manažér vidí otvorené objednávky zoskupené podľa dodávateľa, konz
   const riadokAlfa = skupinaDodavatel.locator("[data-testid^='order-line-']");
   await expect(riadokAlfa).toContainText("9001");
   await expect(riadokAlfa).toContainText("E2E Zákazník Alfa");
-  await expect(riadokAlfa).toContainText("4859/46");
   await expect(riadokAlfa).toContainText("Nohavice Hart Wild-T");
-  await expect(riadokAlfa).toContainText("46");
   await expect(riadokAlfa).toContainText("2");
   await expect(riadokAlfa).toContainText("Čaká sa");
   // issue 64: poznámka k objednávke je pre `canChangeState` role (tento účet
@@ -223,21 +221,36 @@ test("manažér vidí otvorené objednávky zoskupené podľa dodávateľa, konz
   // preto overuje `toHaveValue` na samotnom vstupe (rovnaký dôvod ako
   // `.claude/rules/testing.md`'s poznámka o jest-dom matcheroch — tu ide o
   // Playwright, nie vitest, ale princíp "vstup nie je text" je ten istý).
+  // (Aria-label nesie kód "4859/46" — dôkaz, že ide o SPRÁVNY riadok.)
   await expect(riadokAlfa.getByLabel("Poznámka k objednávke 9001 / 4859/46")).toHaveValue("Zavolať pred doručením");
 
   // issue 67: fixtúra ("4859/46") má reálny holý odkaz na dodávateľa
-  // (`internalNote`) aj kód dodávateľa (`externalCode`, "OB832") —
-  // over cez map-row.test.ts, ak sa fixtúra niekedy zmení.
+  // (`internalNote`) — over cez map-row.test.ts, ak sa fixtúra niekedy zmení.
+  // issue 117: dodávateľský kód (`externalCode`, "OB832") sa už NIKDE
+  // nezobrazuje (majiteľ ho nepoužíva) — appka drží už len samotný odkaz.
+  // issue 119: odkaz je teraz veľké IKONOVÉ tlačidlo (nie textový odkaz) —
+  // href/target/rel ostávajú, PLUS klikacia plocha musí byť aspoň 36×36px
+  // pri 1280px (ticketov vlastný akceptačný test).
   const odkazAlfa = riadokAlfa.getByRole("link", { name: "Odkaz na dodávateľa" });
   await expect(odkazAlfa).toHaveAttribute("href", "https://www.huntingshop.eu/wild-t-green-nohavice");
-  await expect(riadokAlfa).toContainText("OB832");
+  await expect(odkazAlfa).toHaveAttribute("target", "_blank");
+  await expect(odkazAlfa).toHaveAttribute("rel", "noreferrer noopener");
+  await expect(riadokAlfa).not.toContainText("OB832");
+  const boxOdkazAlfa = await odkazAlfa.boundingBox();
+  expect(boxOdkazAlfa?.width ?? 0, "šírka klikacej plochy odkazu na dodávateľa pri 1280px").toBeGreaterThanOrEqual(36);
+  expect(boxOdkazAlfa?.height ?? 0, "výška klikacej plochy odkazu na dodávateľa pri 1280px").toBeGreaterThanOrEqual(
+    36,
+  );
 
   // issue 65: zákaznícky odkaz (`remark`, read-only) + priamy odkaz do
   // Shoptet administrácie (`adminUrl`) — objednávka 9001.
   // issue 99: klikateľné je samotné ČÍSLO objednávky (nie samostatná ikonka
   // `🔗` vedľa neho, ktorá predtým niesla ten istý odkaz) — over href/target/
-  // rel AJ to, že viditeľný text odkazu je presne číslo objednávky a žiadna
-  // ikonka nezostala.
+  // rel AJ to, že viditeľný text TOHTO konkrétneho odkazu je presne číslo
+  // objednávky (`toHaveText` je PRESNÁ zhoda — dokazuje, že vnútri NIE JE
+  // žiadna ikonka). issue 119: `🔗` odteraz LEGITÍMNE existuje inde v tom
+  // istom riadku (odkaz na dodávateľa, over vyššie) — kontrola sa preto
+  // SKOPUJE na `adminOdkazAlfa` samotný, nie na celý `riadokAlfa`.
   await expect(riadokAlfa).toContainText("Prosím doručiť len v piatok");
   const adminOdkazAlfa = riadokAlfa.getByRole("link", { name: "Otvoriť objednávku 9001 v administrácii Shoptet" });
   await expect(adminOdkazAlfa).toHaveAttribute(
@@ -247,7 +260,6 @@ test("manažér vidí otvorené objednávky zoskupené podľa dodávateľa, konz
   await expect(adminOdkazAlfa).toHaveAttribute("target", "_blank");
   await expect(adminOdkazAlfa).toHaveText("9001");
   await expect(riadokAlfa.getByRole("link", { name: "Otvoriť objednávku" })).toHaveCount(1);
-  await expect(riadokAlfa).not.toContainText("🔗");
   // Objednávka 9001 je UŽ vybavená (stav "caka_sa") — upozornenie na staré
   // objednávky sa NIKDY nezobrazí pre vybavený riadok, aj keby bol starý.
   await expect(riadokAlfa.locator("[data-testid^='stale-badge-']")).toHaveCount(0);
@@ -264,8 +276,11 @@ test("manažér vidí otvorené objednávky zoskupené podľa dodávateľa, konz
   const riadokBez = skupinaBezDodavatela.locator("[data-testid^='order-line-']").filter({ hasText: "9002" });
   await expect(riadokBez).toContainText("9002");
   await expect(riadokBez).toContainText("E2E Zákazník Bez dodávateľa");
-  await expect(riadokBez).toContainText("40287");
   await expect(riadokBez).toContainText("Čiapka Polar FOREST");
+  // issue 117: variant kód ("40287") sa už NIKDE nezobrazuje viditeľne —
+  // stále však nesie zmysel (a je overiteľný) cez aria-label stavového
+  // selectu tohto riadku.
+  await expect(riadokBez.getByLabel("Zmeniť stav riadku objednávky 9002 / 40287")).toBeVisible();
   // Predvolený stav riadku (schema default "objednane") a chýbajúca veľkosť —
   // issue 60: premenované na "Nevybavené" (slovo "Objednané" teraz patrí
   // výlučne novému odškrtávaciemu políčku).
@@ -331,17 +346,19 @@ test("manažér prepne stav riadku cez select, zmena pretrvá po obnovení strá
   expect(chyby).toEqual([]);
 });
 
-// #31: e-mailový kontakt dodávateľa + náhľad objednávky mailom, cez skutočný
-// prehliadač nad reálne naimportovanými fixtúrovými dátami (`scripts/
-// e2e-setup.ts`). Skutočné ODOSLANIE (SMTP) sa tu zámerne NEKLIKÁ — MAIL_HOST
-// nie je v e2e prostredí nakonfigurovaný (`playwright.config.ts`), takže
-// server by na "Odoslať" vrátil 503, čo by (rovnako ako akýkoľvek iný
-// 4xx/5xx fetch) zalogovalo console error a porušilo jedinú povolenú
-// výnimku (`.claude/rules/testing.md`) — samotné odoslanie je overené
-// integračne (`apps/api/tests/supplier-mail.integration.test.ts`) s falošným
-// transportom. E2E overuje SKUTOČNÝ prehliadačový workflow: nastavenie
-// e-mailu (perzistuje po reloade) a náhľad so správne agregovaným obsahom.
-test("manažér nastaví e-mail dodávateľa a uvidí náhľad mailu so správne agregovaným obsahom, konzola je čistá", async ({ page }) => {
+// #31: e-mailový kontakt dodávateľa, cez skutočný prehliadač nad reálne
+// naimportovanými fixtúrovými dátami (`scripts/e2e-setup.ts`). issue 118:
+// majiteľ, doslovne "zatial skry este to nebudeme pouzivat" — appka SKRÝVA
+// (nemaže) tlačidlá "📋 Kopírovať objednávku"/"✉️ Poslať objednávku
+// e-mailom" (`orderScreenFlags.ts`'s `SHOW_ORDER_MAIL_ACTIONS`), takže sa už
+// nedajú kliknúť naživo — samotný náhľad/odoslanie mailu naďalej overuje
+// `OrdersSection.mailActions.test.tsx` (flag prepnutý na `true`) + backendová
+// logika (`apps/api/tests/supplier-mail.integration.test.ts`). E2E tu overuje
+// SKUTOČNÝ prehliadačový workflow, ktorý ostáva dostupný: nastavenie e-mailu
+// (perzistuje po reloade) + skutočnú NEPRÍTOMNOSŤ oboch skrytých tlačidiel.
+test("manažér nastaví e-mail dodávateľa, zmena pretrvá po obnovení stránky; tlačidlá kopírovania/odoslania mailom sú skryté (issue 118), konzola je čistá", async ({
+  page,
+}) => {
   const chyby: string[] = [];
   page.on("console", (m) => {
     if ((m.type() === "error" || m.type() === "warning") && !jeOcakavane(m)) chyby.push(m.text());
@@ -356,11 +373,6 @@ test("manažér nastaví e-mail dodávateľa a uvidí náhľad mailu so správne
   await page.getByRole("button", { name: "Prihlásiť sa" }).click();
   await expect(page.getByRole("heading", { name: "Na objednanie" })).toBeVisible();
 
-  // Objednávka 9001 (dodávateľ "DODAVATEL-TEST-1") má JEDINÝ riadok vo stave
-  // "caka_sa" (`scripts/e2e-setup.ts`) — teda ŽIADNU otvorenú položku na
-  // objednanie. Tlačidlo odoslania preto musí byť disabled, aj keď sa
-  // e-mail dodávateľa nastaví — overuje, že disabled stav sleduje SKUTOČNÝ
-  // stav riadkov, nie len prítomnosť e-mailu.
   const skupinaTest1 = page.getByTestId("supplier-DODAVATEL-TEST-1");
   await skupinaTest1.getByRole("button", { name: "Upraviť e-mail" }).click();
   await skupinaTest1.getByLabel("E-mail dodávateľa DODAVATEL-TEST-1").fill("test1@dodavatel.example");
@@ -372,7 +384,6 @@ test("manažér nastaví e-mail dodávateľa a uvidí náhľad mailu so správne
   // (existujúceho, užšieho) locatora).
   await skupinaTest1.getByRole("button", { name: "Uložiť", exact: true }).click();
   await expect(skupinaTest1.getByText("E-mail dodávateľa: test1@dodavatel.example")).toBeVisible();
-  await expect(skupinaTest1.getByRole("button", { name: "✉️ Poslať objednávku e-mailom" })).toBeDisabled();
 
   await page.reload();
   await expect(page.getByRole("heading", { name: "Na objednanie" })).toBeVisible();
@@ -380,41 +391,15 @@ test("manažér nastaví e-mail dodávateľa a uvidí náhľad mailu so správne
     page.getByTestId("supplier-DODAVATEL-TEST-1").getByText("E-mail dodávateľa: test1@dodavatel.example"),
   ).toBeVisible();
 
-  // Objednávka 9002 (zástupný dodávateľ "(bez dodávateľa)") má riadok vo
-  // východiskovom stave "objednane" — TÁ skupina má odoslanie povolené,
-  // hneď ako dostane e-mail.
-  const skupinaBezDodavatela = page.getByTestId("supplier-(bez dodávateľa)");
-  await skupinaBezDodavatela.getByRole("button", { name: "Upraviť e-mail" }).click();
-  await skupinaBezDodavatela.getByLabel("E-mail dodávateľa (bez dodávateľa)").fill("nezaradene@example.com");
-  // issue 63: `{ exact: true }` — skupina teraz obsahuje AJ priraďovacie
-  // tlačidlá "💾" (aria-label "Uložiť priradenie dodávateľa…"), ktorých
-  // accessible name OBSAHUJE "Uložiť" ako substring (Playwright's substring
-  // zhoda bez `exact`, `.claude/rules/pairing.md`'s zistený vzor). Oprava je
-  // na strane TOHTO (existujúceho, užšieho) locatora, nie oberaním nového
-  // tlačidla o jeho plnohodnotný popis.
-  await skupinaBezDodavatela.getByRole("button", { name: "Uložiť", exact: true }).click();
-  const poslatTlacidlo = skupinaBezDodavatela.getByRole("button", { name: "✉️ Poslať objednávku e-mailom" });
-  await expect(poslatTlacidlo).toBeEnabled();
-  await poslatTlacidlo.click();
-
-  const nahlad = skupinaBezDodavatela.getByTestId("mail-preview-(bez dodávateľa)");
-  await expect(nahlad).toBeVisible();
-  await expect(nahlad).toContainText("nezaradene@example.com");
-  // "40287" je jednovariantný produkt (žiadna veľkosť) s množstvom 1
-  // (`scripts/e2e-setup.ts`). issue 63: fixtúra pridala ĎALŠIE 2 riadky BEZ
-  // dodávateľa v predvolenom stave "objednane" ("60035/L"/"60035/M", obe
-  // veľkosti odvodené priamo z kódu, `map-row.ts`'s `splitCode`) — mailová
-  // agregácia preto teraz vidí 3 položky, nie 1, zoradené vzostupne podľa
-  // kódu variantu.
-  await expect(nahlad).toContainText("Objednávka — (bez dodávateľa) (3 položky)");
-  await expect(nahlad.locator("pre")).toHaveText(
-    "Objednávka — (bez dodávateľa) (3 položky)\n40287 | 1 ks\n60035/L | L | 1 ks\n60035/M | M | 1 ks",
-  );
-
-  // Zrušenie náhľadu — v tomto teste sa zámerne NEODOSIELA (viď komentár
-  // vyššie).
-  await nahlad.getByRole("button", { name: "Zrušiť" }).click();
-  await expect(nahlad).not.toBeVisible();
+  // issue 118 akceptačné kritérium: naživo overiť, že tlačidlá nie sú na
+  // obrazovke — nikde na celej stránke, bez ohľadu na skupinu/e-mail stav.
+  await expect(page.getByRole("button", { name: "✉️ Poslať objednávku e-mailom" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "📋 Kopírovať objednávku" })).toHaveCount(0);
+  await expect(page.getByText("Pre odoslanie mailom treba najprv nastaviť e-mail dodávateľa.")).toHaveCount(0);
+  // Hromadné tlačidlo (mimo issue 118's scope) ostáva viditeľné.
+  await expect(
+    page.getByTestId("supplier-(bez dodávateľa)").getByRole("button", { name: "✔ Označiť skupinu ako objednané" }),
+  ).toBeVisible();
 
   expect(chyby).toEqual([]);
 });
@@ -637,17 +622,20 @@ test("manažér ručne priradí dodávateľa riadku bez dodávateľa s našepká
   await page.getByLabel("Uložiť priradenie dodávateľa riadku objednávky 9006 / 60035/L").click();
 
   // Refetch po uložení (`OrdersSection.tsx`'s `assignSupplier`) — nová
-  // skupina sa objaví, riadok "60035/L" je v nej.
+  // skupina sa objaví, riadok "60035/L" je v nej. issue 117: variant kód sa
+  // už NIKDE viditeľne nezobrazuje, takže riadok identifikuje priamo
+  // priraďovací vstup (jeho aria-label nesie kód aj po uložení).
   const novaSkupina = page.getByTestId("supplier-E2E Dodávateľ Priradenie");
   await expect(novaSkupina).toBeVisible();
-  await expect(novaSkupina).toContainText("60035/L");
+  await expect(novaSkupina.getByLabel("Priradiť dodávateľa riadku objednávky 9006 / 60035/L")).toHaveValue(
+    "E2E Dodávateľ Priradenie",
+  );
 
   // issue 63 bod 2: priradenie cez JEDNU veľkosť platí aj pre "60035/M" —
   // TEN ISTÝ produkt, iný riadok, nikdy ručne priradený, a napriek tomu je v
   // TEJ ISTEJ novej skupine (produktová perzistencia, `product_supplier_
   // override`).
-  await expect(novaSkupina).toContainText("60035/M");
-  const vstupM = page.getByLabel("Priradiť dodávateľa riadku objednávky 9006 / 60035/M");
+  const vstupM = novaSkupina.getByLabel("Priradiť dodávateľa riadku objednávky 9006 / 60035/M");
   await expect(vstupM).toHaveValue("E2E Dodávateľ Priradenie");
 
   // Pretrvanie po obnovení stránky — priradenie je v DB (`product_supplier_
@@ -655,8 +643,12 @@ test("manažér ručne priradí dodávateľa riadku bez dodávateľa s našepká
   await page.reload();
   await expect(page.getByRole("heading", { name: "Na objednanie" })).toBeVisible();
   const novaSkupinaPoReloade = page.getByTestId("supplier-E2E Dodávateľ Priradenie");
-  await expect(novaSkupinaPoReloade).toContainText("60035/L");
-  await expect(novaSkupinaPoReloade).toContainText("60035/M");
+  await expect(
+    novaSkupinaPoReloade.getByLabel("Priradiť dodávateľa riadku objednávky 9006 / 60035/L"),
+  ).toHaveValue("E2E Dodávateľ Priradenie");
+  await expect(
+    novaSkupinaPoReloade.getByLabel("Priradiť dodávateľa riadku objednávky 9006 / 60035/M"),
+  ).toHaveValue("E2E Dodávateľ Priradenie");
 
   expect(chyby).toEqual([]);
 });

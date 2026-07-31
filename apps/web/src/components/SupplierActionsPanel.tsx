@@ -1,5 +1,6 @@
 import type { JSX } from "react";
 import type { OrderMailPreview, SupplierOpenOrders } from "../ordersApi.js";
+import { SHOW_ORDER_MAIL_ACTIONS } from "./orderScreenFlags.js";
 
 // issue 61 — mechanicky vyňaté z `OrdersSection.tsx` (hlavička skupiny +
 // e-mailový kontakt (#31) + hromadné akcie + náhľad/odoslanie mailom), BEZ
@@ -138,32 +139,40 @@ export function SupplierActionsPanel({
             >
               {group.lines.every((l) => l.ordered) ? "↺ Zrušiť označenie skupiny" : "✔ Označiť skupinu ako objednané"}
             </button>
-            <button
-              type="button"
-              className="btn sm ghost"
-              onClick={() => {
-                onCopyOrderToClipboard(group.supplier);
-              }}
-            >
-              📋 Kopírovať objednávku
-            </button>
-            <button
-              type="button"
-              className="btn sm good"
-              disabled={group.email === null || !group.lines.some((l) => l.state === outstandingState)}
-              title={
-                group.email === null ? "Pre odoslanie mailom treba najprv nastaviť e-mail dodávateľa." : undefined
-              }
-              onClick={() => {
-                onOpenPreview(group.supplier);
-              }}
-            >
-              ✉️ Poslať objednávku e-mailom
-            </button>
+            {/* issue 118: majiteľ, doslovne "zatial skry este to nebudeme
+                pouzivat" — SKRYTÉ (nie zmazané), `orderScreenFlags.ts`'s
+                `SHOW_ORDER_MAIL_ACTIONS` je JEDNO miesto na vrátenie oboch
+                tlačidiel + sprievodného textu nižšie naraz. */}
+            {SHOW_ORDER_MAIL_ACTIONS && (
+              <>
+                <button
+                  type="button"
+                  className="btn sm ghost"
+                  onClick={() => {
+                    onCopyOrderToClipboard(group.supplier);
+                  }}
+                >
+                  📋 Kopírovať objednávku
+                </button>
+                <button
+                  type="button"
+                  className="btn sm good"
+                  disabled={group.email === null || !group.lines.some((l) => l.state === outstandingState)}
+                  title={
+                    group.email === null ? "Pre odoslanie mailom treba najprv nastaviť e-mail dodávateľa." : undefined
+                  }
+                  onClick={() => {
+                    onOpenPreview(group.supplier);
+                  }}
+                >
+                  ✉️ Poslať objednávku e-mailom
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>
-      {canChangeState && group.email === null && (
+      {SHOW_ORDER_MAIL_ACTIONS && canChangeState && group.email === null && (
         <p className="reenote">Pre odoslanie mailom treba najprv nastaviť e-mail dodávateľa.</p>
       )}
       {sendResult?.supplier === group.supplier && <p role="status">{sendResult.message}</p>}

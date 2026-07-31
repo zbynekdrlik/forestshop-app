@@ -120,20 +120,9 @@ test("STAV je celý čitateľný a POZNÁMKY pole je dosť široké na všetkýc
     expect(zalomeneObjednavky.pocetZalomenych, `zalomené čísla objednávky pri ${String(width)}px`).toBe(0);
     expect(zalomeneObjednavky.whiteSpace, `.ord-admin-link white-space pri ${String(width)}px`).toBe("nowrap");
 
-    const zalomeneKody = await page.evaluate(() => {
-      const bunky = [...document.querySelectorAll<HTMLTableCellElement>(".ord-code-cell")];
-      const pocetZalomenych = bunky.filter((td) => {
-        const textNode = [...td.childNodes].find((n) => n.nodeType === Node.TEXT_NODE && n.textContent?.trim() !== "");
-        if (!textNode) return false;
-        const range = document.createRange();
-        range.selectNodeContents(textNode);
-        return range.getClientRects().length > 1;
-      }).length;
-      const prva = bunky.at(0);
-      return { pocetZalomenych, whiteSpace: prva !== undefined ? getComputedStyle(prva).whiteSpace : null };
-    });
-    expect(zalomeneKody.pocetZalomenych, `zalomené kódy produktu pri ${String(width)}px`).toBe(0);
-    expect(zalomeneKody.whiteSpace, `.ord-code-cell white-space pri ${String(width)}px`).toBe("nowrap");
+    // issue 111 bod 2's `.ord-code-cell` zalomenie kontrola je ODSTRÁNENÁ —
+    // issue 117 celý stĺpec kódu produktu zrušilo (majiteľ nepoužíva), takže
+    // `.ord-code-cell` už v DOM-e vôbec neexistuje.
 
     // issue 111 bod 5: pri 1280px sa žiadna `.orders-table-wrap` skupina
     // nesmie posúvať vodorovne (predtým 💾 tlačidlo bolo za viditeľným
