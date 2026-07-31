@@ -923,9 +923,10 @@ tr:last-child td {
 }
 /* issue 107 bod 3: majiteľ, komentár #1: "neviem čo tam je Priradenie
    dodávateľa stĺpec" — nahrádza predtým holú pomlčku (bod vyššie v `.tsx`),
-   rovnaký vizuálny jazyk ako `.ord-supplier-code` (tichý, faint text nad
-   ovládacím prvkom pod ním), žiadny extra riadok výšky navyše — vykresľuje
-   sa v UŽ EXISTUJÚCOM mieste (`.ord-supplier-cell`), nie v novom bloku. */
+   tichý, faint text nad ovládacím prvkom pod ním (rovnaký vizuálny jazyk,
+   aký kedysi niesol `.ord-supplier-code` — odstránené issue 117), žiadny
+   extra riadok výšky navyše — vykresľuje sa v UŽ EXISTUJÚCOM mieste
+   (`.ord-supplier-cell`), nie v novom bloku. */
 .ord-supplier-assign-hint {
   font-size: var(--fs-text-xs);
   color: var(--fs-ink-faint);

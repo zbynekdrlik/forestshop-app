@@ -130,15 +130,8 @@ export function isStaleOrderLine(
   return !isLineResolved(line) && orderLineAgeDays(line.placedAt, now) > STALE_ORDER_LINE_DAYS;
 }
 
-// issue 105 bod 2 — `variants.sizeLabel` (server) je odvodené priamo ako
-// suffix `variantCode`u za prvou lomkou (`apps/api/src/modules/catalog/
-// map-row.ts`'s `splitCode`: `sizeLabel = code.slice(code.indexOf("/") + 1)`),
-// takže KÓD stĺpec, ktorý za kódom pripája veľkosť (issue 95's zlúčenie
-// KÓD+VEĽKOSŤ), zakaždým zobrazoval veľkosť DVAKRÁT ("62621/52" + "52" →
-// "62621/5252"). Veľkosť sa smie pripojiť len vtedy, keď kód ňou ešte
-// nekončí — vždy pravdivé pre katalógové dáta dnes, ale funkcia zostáva
-// všeobecná (nezávisí od `splitCode`u), pre prípad inak odvodeného
-// `sizeLabel`u v budúcnosti.
-export function shouldShowSizeLabel(variantCode: string, sizeLabel: string | null): boolean {
-  return sizeLabel !== null && !variantCode.endsWith(sizeLabel);
-}
+// issue 105 bod 2's `shouldShowSizeLabel` (KÓD+VEĽKOSŤ zlúčenie, issue 95)
+// bola odstránená spolu so svojimi 3 testami — issue 117 zrušilo celý KÓD
+// stĺpec (jej jediné volanie miesto v `OrderLineRow.tsx`), takže funkcia
+// ostala nepoužitá mŕtva produkčná logika (code review PR #124, MVP
+// philosophy: "remove unused code aggressively").

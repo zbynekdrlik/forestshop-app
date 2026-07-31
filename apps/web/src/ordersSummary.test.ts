@@ -6,7 +6,6 @@ import {
   isLineResolved,
   isStaleOrderLine,
   orderLineAgeDays,
-  shouldShowSizeLabel,
   STALE_ORDER_LINE_DAYS,
   summarizeOrderLines,
 } from "./ordersSummary.js";
@@ -169,21 +168,7 @@ it("isStaleOrderLine — čerstvý nevybavený riadok nedostane badge", () => {
   expect(isStaleOrderLine({ state: "objednane", ordered: false, placedAt: NOW.toISOString() }, NOW)).toBe(false);
 });
 
-// issue 105 bod 2 — `variants.sizeLabel` je odvodené priamo ako suffix
-// `variantCode`u za prvou lomkou (`apps/api/src/modules/catalog/map-row.ts`'s
-// `splitCode`), takže KÓD stĺpec pripájajúci veľkosť za kód vždy zdvojoval
-// ("62621/52" + "52" → "62621/5252"). `shouldShowSizeLabel` rozhoduje, či sa
-// veľkosť smie pripojiť: len keď kód EŠTE veľkosťou nekončí.
-it("shouldShowSizeLabel — kód UŽ končí veľkosťou (bežný prípad z katalógu) → veľkosť sa NEpripája znova", () => {
-  expect(shouldShowSizeLabel("62621/52", "52")).toBe(false);
-  expect(shouldShowSizeLabel("61759/XL", "XL")).toBe(false);
-  expect(shouldShowSizeLabel("15813/120", "120")).toBe(false);
-});
-
-it("shouldShowSizeLabel — kód veľkosťou NEkončí → veľkosť sa pripojí", () => {
-  expect(shouldShowSizeLabel("40287", "L")).toBe(true);
-});
-
-it("shouldShowSizeLabel — bez veľkosti (sizeLabel null) sa nikdy nič nepripája", () => {
-  expect(shouldShowSizeLabel("40287", null)).toBe(false);
-});
+// issue 105 bod 2's `shouldShowSizeLabel` tests boli odstránené spolu s
+// funkciou samotnou — issue 117 zrušilo jej jediné volanie miesto
+// (`OrderLineRow.tsx`'s KÓD stĺpec), takže ostala nepoužitá (code review
+// PR #124).
