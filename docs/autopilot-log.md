@@ -1289,3 +1289,57 @@ nové heslo sa nikde v pushnutom obsahu nenachádza.
   reloaded and confirmed exact restoration. Console: 0 errors/0 warnings
   throughout, including on the final reload.
 - Shared PRs: `#90` (four findings), `#91` (follow-up race fix).
+
+## Issue 65 — order remark, Shoptet admin link, stale-order badge
+
+- Design comment (root cause + approach + rejected alternative per
+  sub-point, posted BEFORE any code):
+  https://github.com/zbynekdrlik/forestshop-app/issues/65#issuecomment-5142632080
+- Item 4 (order date) was already implemented before this ticket — no
+  code change, just confirmed in the design comment.
+- Item 1 (customer remark): resolved a genuine conflict between the
+  ticket's title (echoes the legacy app's "Poznámka e-shopu" label, which
+  IS `shopRemark`) and its own body text ("čo napísal zákazník" — which is
+  `remark`). Verified on real cached export data
+  (`parovanie_produktov/data/out/orders_cache.csv`) which field is which;
+  the ticket's explicit body text won. New `order.remark` column
+  (migration `0015_wealthy_spectrum.sql`), refreshed on re-import (always
+  Shoptet-owned, same family as `status_name`).
+- Item 2 (admin link): the ticket cited `app.js:2253-2260` (`?code=` on
+  `objednavky-detail/`) — but a NEWER, live-verified finding in the same
+  sibling repo (`posta_uncollected.py`/`orders_reminder.py`, 2026-07-22)
+  proves that pattern is silently ignored by Shoptet's admin. Used the
+  verified working pattern (`/admin/vyhladavanie/?string=<code>&src=orders`)
+  instead. New non-secret `SHOPTET_ADMIN_BASE_URL` env var.
+- Item 3 (stale badge): reused `isLineResolved`, mirrored the legacy
+  app's `orderAgeDays`/`STALE_ORDER_DAYS=14` behavior. Boundary tested
+  explicitly (14 days → no badge, 15 days → badge) in
+  `ordersSummary.test.ts`.
+- Commits: `80ca2af` (bump 0.3.0-dev.53) → `71f296b` (remark + admin link,
+  backend) → `d13c65a` (stale-badge logic) → `49e25bd` (frontend
+  rendering) → `93a912d` (e2e coverage) → `eaa37cd` (playbook).
+- CI green on `dev` push + PR `#96`; merged to main (`64efdeb`); main CI +
+  Deploy green on their own (no retries); live `/api/version` matched
+  (`0.3.0-dev.53` @ `64efdeb`).
+- **Follow-up found during post-deploy verification**: the new
+  `SHOPTET_ADMIN_BASE_URL` was correctly read server-side (zod default),
+  but `docker-compose.prod.yml` never listed it in the app service's
+  `environment:` block — an operator setting it in `/srv/forestshop/.env`
+  would have had no effect on the container. Fixed with the same bare-key
+  pass-through pattern as `SHOPTET_EXPORT_URL`/`SHOPTET_ORDERS_URL`.
+  Commits: `3f61748` (bump 0.3.0-dev.54) → `38f7655` (compose fix). CI
+  green on `dev` push + PR `#97`; merged to main (`8c7780c`); main CI +
+  Deploy green on their own; live `/api/version` matched (`0.3.0-dev.54`
+  @ `8c7780c`); confirmed the container now genuinely sees the env var
+  (`docker exec ... printenv SHOPTET_ADMIN_BASE_URL`).
+- Live verification (`https://forestshop-novy.newlevel.media`): chips
+  unchanged ("Všetci (39)", "BETALOV (7)", "(bez dodávateľa) (3)"),
+  `product_supplier_override` 0 rows, `order_line.ordered` 0, `order_line`
+  total 868, non-empty `order.comment` 0 — matches the required baseline
+  exactly, before and after. Admin link `href` verified correct on a real
+  row; 18 real unresolved lines currently carry the stale badge with
+  plausible day counts (16, 57, 38, 48…); remark column shows "—" on all
+  39 rows (real data rarely populates it, confirmed against the cached
+  export earlier). Console: 0 errors/0 warnings.
+- Shared PRs: `#96` (main implementation), `#97` (compose wiring
+  follow-up).
