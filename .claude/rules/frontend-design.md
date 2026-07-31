@@ -213,3 +213,35 @@ paths:
   first try. This is free (no deploy needed) and catches exactly the
   flex-basis trap above, which pure CSS reasoning does not surface until you
   see it render.
+- **A `<colgroup>` percentage budget MUST be verified against REAL PRODUCTION
+  content shape, not just the e2e fixture — the fixture's short, simple test
+  data can hide a regression that only shows up on real rows.** Issue 107
+  bodies 1+2 needed `col-state`/`col-notes` to grow a lot (9%→14%, 12%→24%),
+  funded partly by shrinking `col-supplier` (14%→8-11%). That passed the FULL
+  e2e suite and looked fine against the seeded fixture (`orders.spec.ts`'s
+  `4859/46` row, plain "Odkaz na dodávateľa" link, no `externalCode`) — but
+  after deploying, live measurement against `forestshop-novy.newlevel.media`
+  (`vychod@varos.sk`) showed 92% of the 39 real rows carry that same link
+  text PLUS a second "kód XXXX" line under it (`OrderLineRow.tsx`'s
+  `.ord-supplier-code`, driven by `externalCode` — present on real supplier
+  data, absent from the lean fixture), which wrapped across noticeably more
+  lines once the column narrowed (`maxHeight` 85px→212px, 17/39 rows over
+  100px — the opposite of the ticket's own "efektívna práca" goal). Fixed by
+  re-verifying candidate `<colgroup>` percentages LIVE against production
+  BEFORE settling on the final numbers, using `page.addStyleTag({content:
+  ".col-x{width:Y%!important}"})` against the ALREADY-DEPLOYED page — this
+  swaps column percentages in the live DOM instantly, no redeploy needed per
+  candidate, so a wrong split (`col-product` at 12% made things worse, not
+  better — `maxHeight` 173px vs 13%'s 134px) can be caught and corrected in
+  seconds. **Two things to get right when doing this:** (1) test a COMPLETE
+  set of column percentages that sums to exactly 100 each time — overriding
+  just ONE column via `addStyleTag` while the others stay at their deployed
+  values does NOT sum to 100 and produces misleading cross-column overflow
+  (a `.col-product` override alone made `Zákazník`'s header "overflow", which
+  had nothing to do with product); (2) log into the REAL account
+  (`vychod@varos.sk`, see the `forestshop-app-login` memory note) to see the
+  REAL 39-row dataset, not an isolated e2e account — the e2e fixture's
+  fixtures are deliberately minimal and will never reproduce a real
+  content-shape regression like this one. Any FUTURE `<colgroup>` percentage
+  change needs this same live-against-production check before being called
+  done, not just a green e2e suite.
