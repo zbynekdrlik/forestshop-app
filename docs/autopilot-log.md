@@ -1687,3 +1687,45 @@ nové heslo sa nikde v pushnutom obsahu nenachádza.
   needs a real ingest run against the live XML export post-deploy, same
   reasoning as the #120 premature-close gotcha above. Will trigger manual
   ingest post-deploy, verify live, close #132 manually with evidence.
+
+## Post-deploy findings on the 127/129/132 batch (same day)
+
+- **#127 regression, found by post-deploy live verification (not caught
+  pre-merge):** the first fix took the full +3 points col-date needed
+  entirely from col-product. Live-verified OK against production's data
+  AT THAT MOMENT — but a genuinely new real order (20261267, an
+  exceptionally long product name) arrived right after deploy and its row
+  crossed 120px (134px; would have been 114.5px at the original width).
+  Live column budgets have no content ceiling, so verifying ONE candidate
+  against a snapshot never proves a NEW future row won't hit the same
+  boundary. Fix (PR to main, commit `50894bf`): found the actual safe
+  boundary per donor column (not just one candidate) — col-product
+  tolerates down to 15.4% (not 14.4%), col-supplier has a separate 1-point
+  budget down to 13%. Re-verified live after redeploy (`v0.3.0-dev.76`):
+  max back to 114.5px, 0 over 120px.
+- **GitHub auto-close false-positives, hit 3 times in this batch:**
+  GitHub's closing-keyword scan matches `close|closes|closed|fix|...`
+  immediately followed by `#N` ANYWHERE in a PR body, with NO word-boundary
+  exemption for compound words — "auto-closed #132" matched as "closed
+  #132" and closed #132 prematurely (twice, from two different PR bodies
+  discussing the earlier premature-close incident). Neither PR had a
+  `Closes #N` trailer for that issue. Lesson for ANY future PR body: never
+  write ANY of those keywords immediately before a bare issue number,
+  including inside a compound/hyphenated word — reopen + comment
+  immediately if it happens, and reword to avoid the pattern entirely
+  (e.g. spell out "auto closed" as two words, or refer to the issue as
+  "issue 132" instead of "#132" when discussing it in prose near those
+  verbs).
+- **#132's real root cause was deeper than the first fix (window
+  widening alone):** discovered ONLY by triggering a REAL production
+  ingest and checking the DB directly — the widened XML id-fetch window
+  correctly found the order's id, but the COALESCE write only happens
+  inside the CSV-driven upsert loop (`orderInfo`), which never contains
+  an order older than the CSV's own (intentionally unwidened) 90-day
+  window. Second fix (PR to main, commit `5eb8a8f`): a direct backfill
+  UPDATE for every XML-known id not covered by the CSV batch. Verified
+  live after redeploy (`v0.3.0-dev.77`): DB shows both 20260739
+  (id 58184) and 20260740 (id 58187) with ids; 0/37 "Na objednanie" rows
+  use the search-fallback link (was 1/37).
+- All three per-ticket Discord cards fired after final verification
+  (`v0.3.0-dev.77`).
