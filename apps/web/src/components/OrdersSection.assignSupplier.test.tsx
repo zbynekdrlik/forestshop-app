@@ -50,9 +50,36 @@ afterEach(() => {
   vi.resetAllMocks();
 });
 
-function vstupNaPriradenie() {
-  return screen.findByLabelText(
+// Rovnaký vzor interakcie ako existujúci "manažér nastaví e-mail dodávateľa"
+// test vyššie v `OrdersSection.test.tsx` — `fireEvent.change` + KLIK na
+// uloženie (nie `keyDown`+Enter).
+//
+// Pôvodná verzia tohto testu bola preukázateľne krehká, a to DVOMA rôznymi
+// pretekmi (obidva nájdené AŽ opakovaným behom, nie na prvý pokus — CI to
+// raz skutočne zachytilo na `main`):
+// 1) `fireEvent.change` hneď nasledované `fireEvent.keyDown` na TOM ISTOM
+//    ťahu — v ~1 z 8 lokálnych behov `saveSupplier()` vôbec nezavolal
+//    `onAssignSupplier`. Fix: klik na uložiť tlačidlo namiesto keyDown.
+// 2) Skutočná PRÍČINA (`OrderLineRow.tsx`'s efekt na `manualSupplierOverride`
+//    bežal aj pri PRVOM mounte, viď jeho komentár) — rýchla interakcia HNEĎ
+//    po objavení riadku mohla zachytiť tento oneskorený "reset na ''" AŽ PO
+//    napísaní konceptu a ticho ho vymazať (~1 zo ~150 behov). Opravené v
+//    `OrderLineRow.tsx` (skip efektu na prvom mounte) — nie workaroundom tu
+//    v teste, lebo išlo o skutočný pretek v produkčnom kóde, nie len o
+//    krehkú simuláciu interakcie.
+async function vyplnAUloz(hodnota: string) {
+  const vstup = await screen.findByLabelText<HTMLInputElement>(
     `Priradiť dodávateľa riadku objednávky ${LINE_BEZ_DODAVATELA.externalOrderId} / ${LINE_BEZ_DODAVATELA.variantCode}`,
+  );
+  // `fireEvent.change` je od RTL synchrónne zabalené v `act()` — hodnota je
+  // commitnutá HNEĎ, žiadny `waitFor` (async poll cez `setInterval`) tu
+  // netreba a jeho pridanie by len vnieslo zbytočné časové okno.
+  fireEvent.change(vstup, { target: { value: hodnota } });
+  expect(vstup.value).toBe(hodnota);
+  fireEvent.click(
+    screen.getByLabelText(
+      `Uložiť priradenie dodávateľa riadku objednávky ${LINE_BEZ_DODAVATELA.externalOrderId} / ${LINE_BEZ_DODAVATELA.variantCode}`,
+    ),
   );
 }
 
@@ -63,10 +90,7 @@ it("úspešné priradenie dodávateľa spraví refetch zoznamu", async () => {
   assignOrderLineSupplier.mockResolvedValue(undefined);
 
   render(<OrdersSection role="manazer" onSessionExpired={() => {}} />);
-
-  const vstup = await vstupNaPriradenie();
-  fireEvent.change(vstup, { target: { value: "Nový Dodávateľ" } });
-  fireEvent.keyDown(vstup, { key: "Enter" });
+  await vyplnAUloz("Nový Dodávateľ");
 
   await waitFor(() => {
     expect(assignOrderLineSupplier).toHaveBeenCalledWith(LINE_BEZ_DODAVATELA.lineId, "Nový Dodávateľ");
@@ -92,10 +116,7 @@ it("zamietnuté priradenie (409) zobrazí slovenskú hlášku A ZÁROVEŇ sprav�
   );
 
   render(<OrdersSection role="manazer" onSessionExpired={() => {}} />);
-
-  const vstup = await vstupNaPriradenie();
-  fireEvent.change(vstup, { target: { value: "Konkurenčný Zápis" } });
-  fireEvent.keyDown(vstup, { key: "Enter" });
+  await vyplnAUloz("Konkurenčný Zápis");
 
   await waitFor(() => {
     expect(screen.getByRole("alert").textContent).toBe(
