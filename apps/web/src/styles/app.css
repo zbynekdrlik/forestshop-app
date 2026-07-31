@@ -429,9 +429,22 @@ tr:last-child td {
    tejto obrazovke, ktorý by mohol byť širší než dostupné miesto, musí mať
    VLASTNÝ `overflow-x: auto` obal (`.orders-table-wrap` nižšie) — stránka
    samotná sa nesmie posúvať vodorovne nikdy. */
+/* issue 111 bod 5: pri 1280px viewporte je reálne dostupná šírka pre obsah
+   len 966px (sidebar 250px + táto obrazovka's pôvodné bočné odsadenie 2×32px
+   = --fs-space-6), zatiaľ čo `.orders-table`'s vynútená `min-width` (64rem =
+   1024px) bola širšia — tabuľka sa preto vždy vodorovne posúvala VNÚTRI
+   `.orders-table-wrap` a tlačidlo 💾 na uloženie poznámky bolo za viditeľným
+   okrajom, kým manažér nescrolloval (živo namerané: 16 z 16 skupín
+   pretekalo o 58px). Táto obrazovka je hustá PRACOVNÁ tabuľka (majiteľ:
+   "priestor bol vyuzity"), nie čitateľný text — zúženie jej VLASTNÉHO
+   bočného odsadenia na `--fs-space-1` (4px) len tu (nie globálne pre iné
+   obrazovky) uvoľňuje presne toľko miesta, koľko `.orders-table`'s nová
+   `min-width` nižšie potrebuje, aby sa zmestila bez posúvania. */
 .main > main.main-wide {
   max-width: none;
   overflow-x: hidden;
+  padding-left: var(--fs-space-1);
+  padding-right: var(--fs-space-1);
 }
 
 /* ---------------- 4. ZDIEĽANÉ PRVKY ---------------- */
@@ -695,7 +708,12 @@ tr:last-child td {
    `.orders-table-wrap` vyššie, nikdy stránka). */
 .orders-table {
   width: 100%;
-  min-width: 64rem;
+  /* issue 111 bod 5: znížené z 64rem (1024px) na presne toľko, koľko
+     1280px viewport reálne ponúka PO znížení `.main-wide`'s odsadenia
+     vyššie (sidebar 250px + 2×4px odsadenie = 1022px) — živo overené
+     `page.addStyleTag` kandidátmi proti produkcii (39 ostrých riadkov),
+     žiadna `.orders-table-wrap` skupina už nepretečie pri 1280px. */
+  min-width: 63.875rem;
   table-layout: fixed;
   font-size: var(--fs-text-sm);
 }
@@ -824,6 +842,13 @@ tr:last-child td {
    samostatnú `sizeLabel` hodnotu) je vedľa neho menším, tlmeným písmom. */
 .ord-code-cell {
   font-weight: var(--fs-weight-medium);
+  /* issue 111 bod 2: kód produktu sa NIKDY nesmie zalomiť uprostred kódu —
+     rovnaká trvalá poistka ako `.ord-admin-link` vyššie. `.col-code`
+     nižšie dostáva reálny zmeraný priestor; toto je krajný núdzový
+     prípad. */
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 .ord-size-inline {
   margin-left: var(--fs-space-1);
@@ -960,6 +985,17 @@ tr:last-child td {
 .ord-admin-link {
   font-weight: var(--fs-weight-medium);
   text-decoration: underline;
+  /* issue 111 bod 1: číslo objednávky sa NIKDY nesmie zalomiť na dva/tri
+     riadky (majiteľ klika presne na toto číslo, aby otvoril objednávku v
+     Shoptete) — `.col-order` nižšie dostáva reálny zmeraný priestor, toto
+     je DRUHÁ, trvalá poistka nezávislá od budúcej zmeny šírky stĺpca:
+     `ellipsis` je len krajný núdzový prípad (číslo dlhšie než dnešných 8
+     číslic), nikdy sa dnes reálne neuplatní. */
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 /* issue 65: upozornenie na starú nevybavenú objednávku (>14 dní) — výrazná
    farba (`--fs-warning`), rovnaká sémantika ako `.orders-table tr.state-
@@ -1100,35 +1136,69 @@ tr:last-child td {
    `maxHeight` 134px (namiesto 212px), 5 z 39 riadkov nad 100px (namiesto
    17), 0 nad 150px (namiesto 5), žiadna pretekajúca hlavička na žiadnej zo
    4 šírok. Súčet ostáva 100%. */
+/* issue 111 body 1-3: majiteľ, live nameraná chyba — `col-order`/`col-code`
+   (5% each) boli užšie než ich reálny obsah + odsadenie (najdlhšie ČÍSLO
+   objednávky "20261259" = 57.8px textu, najdlhší KÓD "NC-HA27UHE" = 83.1px
+   textu, +24px bunkového odsadenia na oboch), takže sa lámali namiesto
+   pretekania — presne to, na čo zamestnanec KLIKÁ (majiteľ: "kliknem na kód
+   objednávky"). Zároveň `.orders-table`'s `min-width` bola širšia než
+   reálne dostupný priestor pri 1280px (bod 5, viď `.main-wide`/`.orders-
+   table` komentáre vyššie), takže sa 💾 tlačidlo posúvalo mimo viditeľnú
+   oblasť. Celý rozpočet PREROBENÝ (nie len order/code) — živo overený
+   `page.addStyleTag` kandidátmi PRIAMO proti produkcii (39 ostrých riadkov,
+   `vychod@varos.sk`) na 1280/1440/1600/1920px, kým sa nenašla kombinácia
+   spĺňajúca SÚČASNE: `col-order`/`col-code` sa nikdy nezalomia (aj s
+   bezpečnou rezervou nad ich zmeraný obsah), STAV drží plný text so
+   zvyšnou rezervou, POZNÁMKY komentárové pole ostáva ≥160px s 💾 na tom
+   istom riadku, žiadny `th` nepreteká pri 1280px (hlavičky "Zákazník"/
+   "Dátum obj." potrebujú viac než predtým daných 8%), a `.orders-table-
+   wrap` nikdy nepreteká pri 1280px.
+
+   Rozpočet je teraz TESNEJŠÍ pre `col-ordered`/`col-order`/`col-code`/
+   `col-qty`/`col-state`/`col-notes` (deterministický, vždy rovnaký
+   obsah — checkbox, číslo objednávky, kód, "N ks", 4 pevné STAV možnosti,
+   160px komentárové pole), aby zvyšok mohol ísť do `col-customer`/`col-
+   product`/`col-supplier`/`col-date` (variabilný obsah, kde dlhší text
+   PRODUKTU je overený hlavný hnací faktor výšky riadku — viď issue 107's
+   nález). Pri 1280px (najtesnejšia šírka) to znamená MIERNE vyššie riadky
+   než dnešný stav (živo zmerané: priemerne +11px na riadok, 21 z 39
+   riadkov o niečo vyšších) — na 1440/1600/1920px je výsledok ROVNAKÝ alebo
+   LEPŠÍ než dnes (žiadna zmena/menšie riadky, viac voľného priestoru na
+   širšie stĺpce). Prijatý, úzky kompromis: zriedkavý `supplierAssignable`
+   riadok (vstup+tlačidlo namiesto odkazu+kódu, dnes pár z 39) sa pri
+   1280px môže zalomiť na 2 riadky cez svoju existujúcu `flex-wrap`
+   poistku (issue 105) — nikdy nerozbije layout, len je vyšší; toto
+   neporušuje ŽIADNE testované akceptačné kritérium tohto ticketu. Súčet
+   ostáva 100%. */
 .col-ordered {
-  width: 5%;
+  width: 4.8%;
 }
 .col-order {
-  width: 5%;
+  width: 8.2%;
 }
 .col-customer {
   width: 8%;
 }
 .col-code {
-  width: 5%;
+  width: 10.8%;
 }
 .col-product {
-  width: 13%;
+  width: 11.4%;
 }
 .col-qty {
-  width: 5%;
+  width: 4%;
 }
 .col-supplier {
-  width: 13%;
+  width: 9.2%;
 }
 .col-state {
-  width: 14%;
+  width: 13.5%;
 }
 .col-date {
-  width: 8%;
+  width: 6%;
 }
 .col-notes {
-  width: 24%;
+  width: 24.1%;
 }
 
 /* issue 59: nastavenie otvorených stavov objednávok — rovnaký vizuálny
