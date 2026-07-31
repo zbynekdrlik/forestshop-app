@@ -37,11 +37,12 @@ test("manažér sa prihlási, vidí svoje meno a verziu, konzola je čistá", as
   await expect(page.getByTestId("greeting")).toContainText("E2E Manažér");
   await expect(page.getByTestId("version")).toHaveText(/^v\d+\.\d+\.\d+/);
 
-  // F2 (#12/#3): manažér vidí sekciu "Plánovač" — e2e-setup.ts nespúšťa žiaden
-  // tick, takže `job_run` je prázdna a musí sa zobraziť informačná veta, nie
-  // holá/rozbitá tabuľka.
+  // F2 (#12/#3): manažér vidí sekciu "Plánovač". `e2e-setup.ts` nespúšťa
+  // žiaden tick (#115 pridalo LEN jeden umelo zostarnutý `job_run` riadok pre
+  // katalóg, kvôli `nav.spec.ts`'s staleness testu) — tabuľka teda ukazuje
+  // PRESNE tento jeden riadok, nie je prázdna, ale ani nie je "rozbitá".
   await expect(page.getByRole("heading", { name: "Plánovač" })).toBeVisible();
-  await expect(page.getByTestId("scheduler-empty")).toHaveText("Žiadny beh zatiaľ nie je zaznamenaný.");
+  await expect(page.getByTestId("job-catalog-import")).toBeVisible();
 
   // #57: odhlásenie žije v menu používateľa v hlavičke (klik na meno ho rozbalí).
   await page.getByTestId("greeting").click();
@@ -109,7 +110,15 @@ test("zmena hesla: zlé staré heslo/nezhoda odmietnuté, úspešná zmena zruš
   await page.getByLabel("Nové heslo", { exact: true }).fill(NOVE_HESLO);
   await page.getByLabel("Nové heslo znova").fill(NOVE_HESLO);
   await page.getByRole("button", { name: "Zmeniť heslo" }).click();
-  await expect(page.getByRole("alert")).toHaveText("Nesprávne staré heslo");
+  // #115: bare `getByRole("alert")` je odteraz nejednoznačný — na predvolenej
+  // obrazovke "Sync zo Shoptetu" pod týmto panelom svieti aj `role="alert"`
+  // staleness upozornenie (`sync-stale-Katalóg`). Rovnaký vzor ako
+  // `.claude/rules/testing.md`'s existujúca kolízna poznámka pri
+  // `getByLabel`u: oprava na strane KOLÍDUJÚCEHO (existujúceho) locatora
+  // (`.filter({ hasText })`), nie odobratím `role="alert"` novému prvku.
+  await expect(page.getByRole("alert").filter({ hasText: "Nesprávne staré heslo" })).toHaveText(
+    "Nesprávne staré heslo",
+  );
 
   // Nezhodujúce sa potvrdenie nového hesla — odmietnuté klientom, server sa
   // vôbec nevolá.
@@ -117,7 +126,9 @@ test("zmena hesla: zlé staré heslo/nezhoda odmietnuté, úspešná zmena zruš
   await page.getByLabel("Nové heslo", { exact: true }).fill(NOVE_HESLO);
   await page.getByLabel("Nové heslo znova").fill("ine-heslo-nez-vyssie");
   await page.getByRole("button", { name: "Zmeniť heslo" }).click();
-  await expect(page.getByRole("alert")).toHaveText("Nové heslo a jeho potvrdenie sa nezhodujú");
+  await expect(
+    page.getByRole("alert").filter({ hasText: "Nové heslo a jeho potvrdenie sa nezhodujú" }),
+  ).toHaveText("Nové heslo a jeho potvrdenie sa nezhodujú");
 
   // Úspešná zmena.
   await page.getByLabel("Staré heslo").fill(E2E_HESLO);

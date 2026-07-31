@@ -2,7 +2,7 @@ import { desc, eq, sql } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
 import { jobRuns } from "../../db/schema.js";
 import { log } from "../../logger.js";
-import type { DailySchedule, ScheduledJob } from "./types.js";
+import type { Schedule, ScheduledJob } from "./types.js";
 
 // Zámok naplánovaných úloh — VLASTNÝ, samostatný kľúč (advisory zámky zdieľajú
 // JEDEN priestor bez ohľadu na to, ktorá funkcia ho vzala, `.claude/rules/
@@ -14,21 +14,35 @@ function utcDateKey(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
-// Splatná = dnešný UTC kalendárny deň ešte nemá ŽIADEN riadok (running,
-// success AJ failure sa počítajú — zlyhaný beh sa dnes už neopakuje, čaká na
-// zajtrajší tick, presne ako úspešný) A aktuálny čas dosiahol naplánovanú
-// hodinu:minútu. Prvá podmienka (nie druhá) je to, čo úlohu robí odolnou voči
+// Kľúč periódy podľa druhu rozvrhu — `daily` periodizuje podľa UTC
+// kalendárneho dňa (nezmenené), `hourly` (#115) podľa UTC dňa+hodiny, aby sa
+// tá istá hodina neopakovala dvakrát. Rovnaký beh v RÔZNYCH periódach (napr.
+// 23:00 včera vs. 01:00 dnes pri `daily`, alebo 10:xx vs. 11:xx pri `hourly`)
+// má rôzny kľúč → znova splatná.
+function periodKey(schedule: Schedule, d: Date): string {
+  if (schedule.kind === "daily") return utcDateKey(d);
+  return `${utcDateKey(d)}T${String(d.getUTCHours()).padStart(2, "0")}`;
+}
+
+// Splatná = aktuálna perióda (deň pri `daily`, deň+hodina pri `hourly`) ešte
+// nemá ŽIADEN riadok (running, success AJ failure sa počítajú — zlyhaný beh
+// sa v tejto perióde už neopakuje, čaká na ďalšiu, presne ako úspešný) A
+// aktuálny čas v rámci periódy dosiahol naplánovanú minútu (`daily` navyše aj
+// hodinu). Prvá podmienka (nie druhá) je to, čo úlohu robí odolnou voči
 // reštartu kontajnera — splatnosť sa odvodzuje z PERZISTOVANÉHO posledného
 // behu, nie z pamäte procesu.
 export function isDue(
-  schedule: DailySchedule,
+  schedule: Schedule,
   now: Date,
   lastRun: { readonly startedAt: Date } | null,
 ): boolean {
-  if (lastRun !== null && utcDateKey(lastRun.startedAt) === utcDateKey(now)) return false;
-  const targetMinuteOfDay = schedule.hourUtc * 60 + schedule.minuteUtc;
-  const nowMinuteOfDay = now.getUTCHours() * 60 + now.getUTCMinutes();
-  return nowMinuteOfDay >= targetMinuteOfDay;
+  if (lastRun !== null && periodKey(schedule, lastRun.startedAt) === periodKey(schedule, now)) return false;
+  if (schedule.kind === "daily") {
+    const targetMinuteOfDay = schedule.hourUtc * 60 + schedule.minuteUtc;
+    const nowMinuteOfDay = now.getUTCHours() * 60 + now.getUTCMinutes();
+    return nowMinuteOfDay >= targetMinuteOfDay;
+  }
+  return now.getUTCMinutes() >= schedule.minuteUtc;
 }
 
 /**

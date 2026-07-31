@@ -291,3 +291,25 @@ paths:
   meaningfully. Always diff the SAME rows before-vs-after (keyed by
   `data-testid`), never just compare the sorted-height array's summary
   stats between two differently-configured runs.
+- **Removing a `<colgroup>` COLUMN entirely (not just resizing it) needs a
+  grep across ALL e2e spec files for its CSS class, not just the spec file
+  you're already editing** — this table's e2e coverage is split across
+  `orders.spec.ts` (functional flows) and `orders-layout.spec.ts` (column-
+  width/wrap regressions, issue 107), and a class-specific check can live in
+  either one independently of which file you're touching. Issue 117 removed
+  `.ord-code-cell` (the whole KÓD column) — `orders.spec.ts` had several
+  `variantCode`-in-visible-text assertions (`toContainText("4859/46")`, a
+  bare `toContainText("46")` fragment, `toContainText("60035/L")`, …) that
+  silently kept passing in a first local run because they happened to sit
+  in tests unrelated to the removed cell, but `orders-layout.spec.ts` had an
+  ENTIRE dedicated check (`zalomeneKody`, issue 111's wrap-detection) built
+  directly on `document.querySelectorAll(".ord-code-cell")` that CI caught
+  failing on the first push (the local pre-push run only covered
+  `orders.spec.ts` + `orders-layout.spec.ts` together, but a leftover
+  fragment assertion — `toContainText("46")` — still slipped through both
+  local AND the first CI run, since it read as part of an unrelated
+  assertion chain; only the SECOND CI run, after fixing the first failure,
+  surfaced it). Any FUTURE full-column removal: `grep -rn
+  "<the-cells-class>" apps/web/tests/e2e/` across the WHOLE e2e directory
+  before considering the removal test-safe, not just the spec file with the
+  obviously-related test names.

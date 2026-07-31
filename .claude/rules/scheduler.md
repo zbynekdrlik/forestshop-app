@@ -5,6 +5,8 @@ paths:
   - "apps/api/src/http/scheduler-routes.ts"
   - "apps/web/src/schedulerApi.ts"
   - "apps/web/src/components/SchedulerSection.tsx"
+  - "apps/web/src/components/SyncSection.tsx"
+  - "apps/web/src/syncStatus.ts"
 ---
 
 # Plánovač úloh (F2)
@@ -17,14 +19,21 @@ paths:
   sám žiadnu doménovú logiku nemá a nemá ju ani získať. `run()` nikdy
   nezachytáva vlastné výnimky — necháva ich prejsť, `scheduler.ts`'s
   `executeJob` ich odchytí a zapíše ako `job_run.status = "failure"`.
-- **Rozvrh je len denná hodina:minúta v UTC (`DailySchedule`), žiadny cron
-  výraz.** `isDue()` (`scheduler.ts`) je čistá funkcia — nová úloha dostáva
-  vlastný `{ hourUtc, minuteUtc }`; zvoľ ho aspoň 15 min od existujúcich, aby
-  sa neprekrývali zbytočne (nie je to tvrdá závislosť, len aby operátor v
-  logoch/`job_run` vedel odlíšiť poradie). Dnes zaregistrované: 01:00 import
-  katalógu, 01:15 mazanie surových exportov katalógu, 01:30 mazanie relácií,
-  01:45 import objednávok (`ordersImportJob`, #22), 02:00 mazanie surových
-  exportov objednávok (`pruneRawOrdersJob`, #28).
+- **Rozvrh je diskriminovaná únia `Schedule = DailySchedule | HourlySchedule`
+  (`kind: "daily" | "hourly"`, `types.ts`), žiadny cron výraz.** `isDue()`
+  (`scheduler.ts`) je čistá funkcia — periodizuje podľa `kind` (`daily`: UTC
+  kalendárny deň, `hourly`: UTC deň+hodina, #115). Nová `daily` úloha dostáva
+  vlastný `{ kind: "daily", hourUtc, minuteUtc }`; zvoľ ho aspoň 15 min od
+  existujúcich `daily` úloh, aby sa neprekrývali zbytočne (nie je to tvrdá
+  závislosť, len aby operátor v logoch/`job_run` vedel odlíšiť poradie). Nová
+  `hourly` úloha dostáva `{ kind: "hourly", minuteUtc }` — nemá `hourUtc`,
+  beží v KAŽDEJ UTC hodine. Dnes zaregistrované: 01:00 import katalógu
+  (`daily`), 01:15 mazanie surových exportov katalógu (`daily`), 01:30
+  mazanie relácií (`daily`), :45 KAŽDÚ hodinu import objednávok
+  (`ordersImportJob`, `hourly` od #115, pôvodne `daily` #22), 02:00 mazanie
+  surových exportov objednávok (`pruneRawOrdersJob`, `daily`, #28). Pridanie
+  ďalšieho `kind` (napr. "weekly") by znamenalo rozšíriť `periodKey()`
+  (`scheduler.ts`) o ďalšiu vetvu — rovnaký vzor ako `hourly`.
 - **Job NEPOTREBUJE vlastný advisory zámok, keď buď (a) volaná business
   funkcia už berie svoj vlastný vnútri seba** (`catalogImportJob`/
   `ordersImportJob` → `ingestCatalog`/`ingestOrders`), **alebo (b) sa vôbec

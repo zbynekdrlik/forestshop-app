@@ -66,7 +66,7 @@ it("manazer vidí posledný beh každej úlohy", async () => {
 
   const job: ScheduledJob = {
     name: "test-job",
-    schedule: { hourUtc: 1, minuteUtc: 0 },
+    schedule: { kind: "daily", hourUtc: 1, minuteUtc: 0 },
     run: () => Promise.resolve({ detail: { removed: 3 } }),
   };
   await tick(db, [job], NOW);

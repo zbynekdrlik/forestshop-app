@@ -19,7 +19,7 @@ const NASLEDUJUCI_DEN = new Date("2026-07-30T01:00:00Z");
 function fakeJob(overrides: Partial<ScheduledJob> = {}): ScheduledJob {
   return {
     name: "fake-job",
-    schedule: { hourUtc: 1, minuteUtc: 0 },
+    schedule: { kind: "daily", hourUtc: 1, minuteUtc: 0 },
     run: () => Promise.resolve({ detail: { ok: true } }),
     ...overrides,
   };

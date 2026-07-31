@@ -4,6 +4,7 @@ import { CatalogUnauthorizedError, triggerCatalogIngest, type CatalogIngestOutco
 import { OrdersUnauthorizedError, triggerOrdersIngest, type OrdersIngestOutcome } from "../ordersApi.js";
 import { fetchJobRuns, SchedulerUnauthorizedError, type JobRun } from "../schedulerApi.js";
 import { detailText, jobLabel, STATUS_LABELS } from "../schedulerLabels.js";
+import { CATALOG_STALE_AFTER_MS, computeSyncStatus, ORDERS_STALE_AFTER_MS } from "../syncStatus.js";
 
 // Rovnaké dve role, ktoré server vyžaduje pre `GET /api/scheduler/runs`
 // AJ pre obe ručné tlačidlá importu (`requireRole("admin", "manazer")`,
@@ -63,26 +64,37 @@ function IngestChannel({
   busy,
   notice,
   onRun,
+  now,
+  staleAfterMs,
 }: {
   readonly title: string;
   readonly run: JobRun | undefined;
   readonly busy: boolean;
   readonly notice: Notice | null;
   readonly onRun: () => void;
+  readonly now: Date;
+  readonly staleAfterMs: number;
 }): JSX.Element {
+  // #115: JEDINÝ zdroj pravdy pre pill — `computeSyncStatus` porovnáva vek
+  // POSLEDNÉHO úspešného behu s prahom (`staleAfterMs`), namiesto pôvodného
+  // "OK, pokiaľ posledný beh neskončil chybou" bez ohľadu na to, ako dávno.
+  const status = computeSyncStatus(run, now, staleAfterMs);
   return (
     <div className="autostatus" data-testid={`sync-channel-${title}`}>
       <div className="autohead">
         <h3>{title}</h3>
-        <span className={"pill " + (run?.status === "failure" ? "off" : "on")}>
-          {run === undefined ? "zatiaľ nič" : run.status === "failure" ? "❌ CHYBA" : "✅ OK"}
-        </span>
+        <span className={"pill " + status.pillClass}>{status.pillText}</span>
         <button type="button" className="btn sm ghost" disabled={busy} onClick={onRun}>
           {busy ? "Sťahujem…" : "⚡ Stiahnuť teraz"}
         </button>
       </div>
       <div className="autometa">{lastRunLine(run)}</div>
       {run?.status === "failure" && <div className="autoerr">❌ {run.errorMessage ?? "Beh zlyhal."}</div>}
+      {status.warningText !== null && (
+        <p role="alert" className="autostale" data-testid={`sync-stale-${title}`}>
+          {status.warningText}
+        </p>
+      )}
       {notice !== null && (
         <p role={notice.kind === "warning" ? "alert" : "status"}>{notice.text}</p>
       )}
@@ -93,9 +105,15 @@ function IngestChannel({
 export function SyncSection({
   role,
   onSessionExpired,
+  now = new Date(),
 }: {
   readonly role: Me["role"];
   readonly onSessionExpired: () => void;
+  // #115: voliteľné, na testovateľnosť staleness kontroly (bez neho by
+  // testy so ZAFIXOVANÝMI dátumami vo fixtúrach postupne "zostarli" spolu so
+  // skutočným časom behu CI — presne ten druh časovanej bomby, kvôli ktorej
+  // tento ticket vôbec vznikol).
+  readonly now?: Date;
 }): JSX.Element {
   const [runs, setRuns] = useState<readonly JobRun[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -178,8 +196,24 @@ export function SyncSection({
       {error !== "" && <p role="alert">{error}</p>}
       {loaded && (
         <>
-          <IngestChannel title="Katalóg" run={catalogRun} busy={catalogBusy} notice={catalogNotice} onRun={runCatalog} />
-          <IngestChannel title="Objednávky" run={ordersRun} busy={ordersBusy} notice={ordersNotice} onRun={runOrders} />
+          <IngestChannel
+            title="Katalóg"
+            run={catalogRun}
+            busy={catalogBusy}
+            notice={catalogNotice}
+            onRun={runCatalog}
+            now={now}
+            staleAfterMs={CATALOG_STALE_AFTER_MS}
+          />
+          <IngestChannel
+            title="Objednávky"
+            run={ordersRun}
+            busy={ordersBusy}
+            notice={ordersNotice}
+            onRun={runOrders}
+            now={now}
+            staleAfterMs={ORDERS_STALE_AFTER_MS}
+          />
 
           <h3>História behov</h3>
           {runs.length === 0 ? (

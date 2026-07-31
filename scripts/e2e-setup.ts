@@ -9,7 +9,8 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { createDb } from "../apps/api/src/db/client.js";
-import { orderLines, orderOpenStatuses, orders, pairings, users } from "../apps/api/src/db/schema.js";
+import { jobRuns, orderLines, orderOpenStatuses, orders, pairings, users } from "../apps/api/src/db/schema.js";
+import { CATALOG_IMPORT_JOB_NAME } from "../apps/api/src/modules/scheduler/jobs.js";
 import { hashPassword } from "../apps/api/src/modules/auth/passwords.js";
 import { ingestCatalog } from "../apps/api/src/modules/catalog/ingest.js";
 import { DEFAULT_SNAPSHOT_LIMITS } from "../apps/api/src/modules/catalog/validation.js";
@@ -403,6 +404,23 @@ await db.insert(orderLines).values([
 await db.insert(pairings).values({
   variantCode: "40287",
   supplierUrl: "https://www.grube.sk/p/ciapka-polar-forest/1",
+});
+
+// #115 (majiteľ: "nemoze tam bezat ok ked posledny sync bol dni dozadu!!!") —
+// jeden UMELO ZOSTARNUTÝ, ÚSPEŠNÝ `job_run` pre import katalógu (nikdy sa
+// nedotýka produkčných dát — toto je izolovaná testovacia DB), aby
+// `nav.spec.ts`'s test staleness upozornenia mal čo overiť. Pevný dátum
+// hlboko v minulosti (rovnaký vzor ako `objednavkaBezDodavatela.placedAt`
+// vyššie) — zostáva "starý" navždy, bez ohľadu na to, kedy CI beh skutočne
+// prebehne. `catalog-import` (nie `orders-import`) — `nav.spec.ts`'s ostatné
+// testy neoverujú konkrétny obsah kanála "Objednávky", takže sa tu
+// nekolíduje so žiadnym existujúcim tvrdením.
+await db.insert(jobRuns).values({
+  jobName: CATALOG_IMPORT_JOB_NAME,
+  startedAt: new Date("2020-01-01T09:00:00Z"),
+  finishedAt: new Date("2020-01-01T09:00:05Z"),
+  status: "success",
+  detail: { variantCount: 1 },
 });
 
 await pool.end();

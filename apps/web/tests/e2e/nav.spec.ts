@@ -57,9 +57,12 @@ test("ľavé menu má presne dva priečinky s jednou záložkou každý, klik pr
 // #57: obrazovka konsoliduje "čo a kedy sa naposledy stiahlo zo Shoptetu" +
 // tlačidlo na okamžité stiahnutie — dnes roztrúsené (tlačidlo v katalógu,
 // história v plánovači). `scripts/e2e-setup.ts` nespúšťa žiaden scheduler tick
-// a katalógový snapshot pre `catalog.spec.ts` vkladá priamo (obchádza
-// scheduler), takže `job_run` je pri tomto teste prázdna — rovnaký stav ako
-// login.spec.ts's "Plánovač" prázdny zoznam.
+// pre OBJEDNÁVKY a katalógový snapshot pre `catalog.spec.ts` vkladá priamo
+// (obchádza scheduler) — kanál "Objednávky" je preto pri tomto teste stále
+// "zatiaľ nikdy". Kanál "Katalóg" ale #115 seeduje UMELO ZOSTARNUTÝM,
+// úspešným `job_run` (2020, hlboko v minulosti, produkčných dát sa to
+// netýka) — presne to, čo umožňuje overiť staleness upozornenie naživo cez
+// skutočný prehliadač, bez zásahu do reálnych dát.
 test("Sync zo Shoptetu ukazuje stav katalógu aj objednávok a tlačidlo 'Stiahnuť teraz', konzola je čistá", async ({ page }) => {
   const chyby: string[] = [];
   page.on("console", (m) => {
@@ -74,15 +77,21 @@ test("Sync zo Shoptetu ukazuje stav katalógu aj objednávok a tlačidlo 'Stiahn
   await page.getByLabel("Heslo").fill(E2E_HESLO);
   await page.getByRole("button", { name: "Prihlásiť sa" }).click();
 
+  // #115: katalóg má seedovaný, roky starý úspešný beh — pill NESMIE ukázať
+  // "✅ OK", musí ukázať zastaraný/varovný stav so slovenským vysvetlením
+  // (nie "zatiaľ nikdy" — ten beh SKUTOČNE prebehol, len je príliš starý).
   const katalog = page.getByTestId("sync-channel-Katalóg");
-  await expect(katalog).toContainText("Posledný beh: zatiaľ nikdy");
+  await expect(katalog.locator(".pill")).not.toHaveText("✅ OK");
+  await expect(page.getByTestId("sync-stale-Katalóg")).toContainText("Posledný úspešný sync");
   await expect(katalog.getByRole("button", { name: "⚡ Stiahnuť teraz" })).toBeVisible();
 
   const objednavky = page.getByTestId("sync-channel-Objednávky");
   await expect(objednavky).toContainText("Posledný beh: zatiaľ nikdy");
   await expect(objednavky.getByRole("button", { name: "⚡ Stiahnuť teraz" })).toBeVisible();
 
-  await expect(page.getByTestId("sync-history-empty")).toHaveText("Žiadny beh zatiaľ nie je zaznamenaný.");
+  // História už nie je prázdna (katalógový beh vyššie) — "sync-history-empty"
+  // testid sa preto už nevykresľuje; namiesto neho overíme priamo riadok.
+  await expect(page.getByTestId("sync-job-catalog-import")).toBeVisible();
 
   expect(chyby).toEqual([]);
 });
