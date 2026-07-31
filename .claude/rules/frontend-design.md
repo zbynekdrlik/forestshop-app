@@ -176,3 +176,40 @@ paths:
   proving a merge is a REAL DOM merge (not just relabeled headers): assert
   the two testid'd elements' `.closest("td")` are the SAME node
   (`OrdersSection.test.tsx`).
+- **A flex item's `flex-basis` — NOT its post-shrink rendered size — decides
+  whether it fits on the current line under `flex-wrap: wrap`.** Issue 105's
+  `.ord-comment-cell`/`.ord-supplier-assign` (issue 63's established pattern:
+  `display: flex; flex-wrap: wrap` on the cell so an overflowing input+button
+  wraps INSIDE the cell instead of bleeding into the neighbour column) still
+  wrapped onto two lines at the table's narrowest real width, making rows
+  135px tall — even after giving the `<input>` a `min-width` and relying on
+  `flex-shrink`. Root cause: with `width: 8rem/10rem` (fixed) and no `flex`
+  shorthand, the item's `flex-basis: auto` resolves to that `width`, and
+  **flex-basis is what the wrapping algorithm measures BEFORE any shrinking
+  happens** — a large flex-basis wraps regardless of how small `min-width`
+  allows the item to actually shrink afterward. Fix: `flex: 1 1 0%` (a ~0
+  flex-basis, so the item always "fits" for wrapping purposes) + `flex-grow:
+  1` (it then expands to fill whatever room the line actually has) + a small
+  `min-width` sized to the WORST-CASE measured column width (never guessed —
+  see below) + `flex-shrink: 0` on the sibling button so its tap target never
+  shrinks. `flex-wrap: wrap` stays on the parent as a safety net (issue 63's
+  original reason), it just stops triggering once the basis is right. Any
+  FUTURE flex-wrap cell with a shrinkable input + a fixed sibling (button/
+  icon) that still wraps unexpectedly: check whether the shrinkable item has
+  `flex: 1 1 0` — a `width`/large `flex-basis` on it is the same trap, no
+  matter how small its `min-width` is.
+- **Measure real column budgets with a throwaway Playwright script against
+  the LOCAL dev servers, never hand-derive px-per-character or eyeball a
+  screenshot, before tuning `min-width`/`colgroup` percentages.** Issue 105:
+  `pnpm --filter @forestshop/web dev` + `pnpm --filter @forestshop/api start`
+  (env `DATABASE_URL`/`SESSION_COOKIE_SECURE=false`, `.claude/rules/
+  local-dev.md`'s local DB) + a one-off Node script requiring the workspace's
+  own `apps/web/node_modules/@playwright/test` (`createRequire` from an
+  `.mjs` file) logging in as the seeded e2e user and reading real
+  `getBoundingClientRect()`/`scrollWidth`/`clientWidth` values at each target
+  viewport gave EXACT numbers (e.g. "98.33px available after the save
+  button's real 53px width") that a first `min-width` guess (3.5rem) missed
+  by enough to still wrap — the second, measured attempt (2rem/3rem) worked
+  first try. This is free (no deploy needed) and catches exactly the
+  flex-basis trap above, which pure CSS reasoning does not surface until you
+  see it render.
