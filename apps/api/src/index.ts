@@ -10,6 +10,7 @@ import { log } from "./logger.js";
 import { createHttpExportFetcher } from "./modules/catalog/fetcher.js";
 import { ingestCatalog } from "./modules/catalog/ingest.js";
 import { createSmtpMailTransport } from "./modules/mail/transport.js";
+import { computeOrderIdsWindowStart } from "./modules/orders/backfill.js";
 import { computeImportWindow, createHttpOrderIdsFetcher, createHttpOrdersExportFetcher } from "./modules/orders/fetcher.js";
 import { DEFAULT_ORDERS_IMPORT_WINDOW_DAYS, ingestOrders, type RunOrdersIngest } from "./modules/orders/ingest.js";
 import {
@@ -61,11 +62,19 @@ const ordersUrl = env.SHOPTET_ORDERS_URL;
 // `runIngest`/`runOrdersIngest` vyššie) — `ingestOrders` to sama osebe berie
 // ako "id zatiaľ neznáme", nikdy ako chybu.
 const ordersXmlUrl = env.SHOPTET_ORDERS_XML_URL;
+// issue 132: XML id-fetch okno (LEN preň, nikdy pre hlavný CSV import vyššie
+// — ten má vlastnú, nezávislú akceptančnú logiku, `.claude/rules/orders.md`)
+// sa sebaozdravujúco predĺži dozadu, keď v DB existuje otvorená objednávka
+// bez `shoptet_order_id` staršia než predvolené 90-dňové okno
+// (`backfill.ts`'s `computeOrderIdsWindowStart`) — inak taká objednávka
+// (napr. 20260739/20260740) nikdy nedostane svoje id, hoci Shoptet ho má a
+// objednávka ostáva otvorená.
 const runOrdersIngest: RunOrdersIngest | undefined =
   ordersUrl === undefined
     ? undefined
-    : (now: Date) => {
+    : async (now: Date) => {
         const { dateFrom, dateUntil } = computeImportWindow(now, DEFAULT_ORDERS_IMPORT_WINDOW_DAYS);
+        const idsDateFrom = ordersXmlUrl === undefined ? dateFrom : await computeOrderIdsWindowStart(db, dateFrom);
         return ingestOrders(db, {
           fetchExport: createHttpOrdersExportFetcher({ url: ordersUrl, dateFrom, dateUntil }),
           now,
@@ -74,7 +83,7 @@ const runOrdersIngest: RunOrdersIngest | undefined =
           windowEnd: dateUntil,
           ...(ordersXmlUrl === undefined
             ? {}
-            : { fetchOrderIds: createHttpOrderIdsFetcher({ url: ordersXmlUrl, dateFrom, dateUntil }) }),
+            : { fetchOrderIds: createHttpOrderIdsFetcher({ url: ordersXmlUrl, dateFrom: idsDateFrom, dateUntil }) }),
         });
       };
 
