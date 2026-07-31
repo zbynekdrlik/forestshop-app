@@ -86,6 +86,48 @@ it("napísanie a uloženie poznámky sa lokálne prejaví na VŠETKÝCH riadkoch
   expect(fetchOpenOrders).toHaveBeenCalledTimes(1);
 });
 
+// Code review (issue 64, pred mergom): keďže poznámka je zdieľaná naprieč
+// VŠETKÝMI riadkami tej istej objednávky, uloženie cez INÝ riadok (B) tej
+// istej objednávky predtým ticho PREPÍSALO nerozostavaný, ešte NEULOŽENÝ
+// koncept na riadku A — `OrderLineRow.tsx`'s reset efekt na `line.comment`
+// nerozlišoval "toto sa zmenilo, lebo SOM to práve JA uložil" od "toto sa
+// zmenilo, lebo niekto INÝ uložil poznámku tej istej objednávky odinakiaľ".
+// `isCommentDirty` guard to rieši — reset sa vynechá, kým riadok drží
+// neuložený koncept.
+it("nerozostavaný koncept na riadku A PREŽIJE uloženie poznámky cez riadok B tej istej objednávky", async () => {
+  fetchOpenOrders.mockResolvedValue([{ supplier: "(bez dodávateľa)", lines: [RIADOK_1, RIADOK_2], email: null }]);
+  updateOrderComment.mockResolvedValue(undefined);
+
+  render(<OrdersSection role="manazer" onSessionExpired={() => {}} />);
+
+  // Manažér rozpíše koncept na riadku A, ale NEULOŽÍ ho.
+  const vstupA = await screen.findByLabelText<HTMLInputElement>(
+    `Poznámka k objednávke ${RIADOK_1.externalOrderId} / ${RIADOK_1.variantCode}`,
+  );
+  fireEvent.change(vstupA, { target: { value: "Rozpísaný, ešte neuložený koncept" } });
+  expect(vstupA.value).toBe("Rozpísaný, ešte neuložený koncept");
+
+  // Medzitým uloží INÚ poznámku cez riadok B TEJ ISTEJ objednávky.
+  const vstupB = screen.getByLabelText<HTMLInputElement>(
+    `Poznámka k objednávke ${RIADOK_2.externalOrderId} / ${RIADOK_2.variantCode}`,
+  );
+  fireEvent.change(vstupB, { target: { value: "Poznámka uložená cez riadok B" } });
+  fireEvent.click(
+    screen.getByLabelText(`Uložiť poznámku k objednávke ${RIADOK_2.externalOrderId} / ${RIADOK_2.variantCode}`),
+  );
+  await waitFor(() => {
+    expect(updateOrderComment).toHaveBeenCalledWith(ORDER_ID, "Poznámka uložená cez riadok B");
+  });
+  // Riadok B (ten, čo reálne uložil) sa synchronizuje na uloženú hodnotu.
+  await waitFor(() => {
+    expect(vstupB.value).toBe("Poznámka uložená cez riadok B");
+  });
+
+  // Riadok A NEBOL uložený — jeho rozostavaný koncept musí PREŽIŤ, nesmie sa
+  // ticho prepísať na hodnotu, ktorú práve uložil riadok B.
+  expect(vstupA.value).toBe("Rozpísaný, ešte neuložený koncept");
+});
+
 it("prázdny vstup uloží null (vymazanie poznámky)", async () => {
   const RIADOK_S_POZNAMKOU = { ...RIADOK_1, comment: "stará poznámka" };
   fetchOpenOrders.mockResolvedValue([{ supplier: "(bez dodávateľa)", lines: [RIADOK_S_POZNAMKOU], email: null }]);
