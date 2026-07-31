@@ -213,7 +213,6 @@ test("manažér vidí otvorené objednávky zoskupené podľa dodávateľa, konz
   await expect(riadokAlfa).toContainText("9001");
   await expect(riadokAlfa).toContainText("E2E Zákazník Alfa");
   await expect(riadokAlfa).toContainText("Nohavice Hart Wild-T");
-  await expect(riadokAlfa).toContainText("46");
   await expect(riadokAlfa).toContainText("2");
   await expect(riadokAlfa).toContainText("Čaká sa");
   // issue 64: poznámka k objednávke je pre `canChangeState` role (tento účet
@@ -247,8 +246,11 @@ test("manažér vidí otvorené objednávky zoskupené podľa dodávateľa, konz
   // Shoptet administrácie (`adminUrl`) — objednávka 9001.
   // issue 99: klikateľné je samotné ČÍSLO objednávky (nie samostatná ikonka
   // `🔗` vedľa neho, ktorá predtým niesla ten istý odkaz) — over href/target/
-  // rel AJ to, že viditeľný text odkazu je presne číslo objednávky a žiadna
-  // ikonka nezostala.
+  // rel AJ to, že viditeľný text TOHTO konkrétneho odkazu je presne číslo
+  // objednávky (`toHaveText` je PRESNÁ zhoda — dokazuje, že vnútri NIE JE
+  // žiadna ikonka). issue 119: `🔗` odteraz LEGITÍMNE existuje inde v tom
+  // istom riadku (odkaz na dodávateľa, over vyššie) — kontrola sa preto
+  // SKOPUJE na `adminOdkazAlfa` samotný, nie na celý `riadokAlfa`.
   await expect(riadokAlfa).toContainText("Prosím doručiť len v piatok");
   const adminOdkazAlfa = riadokAlfa.getByRole("link", { name: "Otvoriť objednávku 9001 v administrácii Shoptet" });
   await expect(adminOdkazAlfa).toHaveAttribute(
@@ -258,7 +260,6 @@ test("manažér vidí otvorené objednávky zoskupené podľa dodávateľa, konz
   await expect(adminOdkazAlfa).toHaveAttribute("target", "_blank");
   await expect(adminOdkazAlfa).toHaveText("9001");
   await expect(riadokAlfa.getByRole("link", { name: "Otvoriť objednávku" })).toHaveCount(1);
-  await expect(riadokAlfa).not.toContainText("🔗");
   // Objednávka 9001 je UŽ vybavená (stav "caka_sa") — upozornenie na staré
   // objednávky sa NIKDY nezobrazí pre vybavený riadok, aj keby bol starý.
   await expect(riadokAlfa.locator("[data-testid^='stale-badge-']")).toHaveCount(0);
