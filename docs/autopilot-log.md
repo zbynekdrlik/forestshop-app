@@ -1602,3 +1602,48 @@ nové heslo sa nikde v pushnutom obsahu nenachádza.
   TRVALÁ poistka popri šírke, `.main-wide` odsadenie/`min-width` ako prvá
   vec na kontrolu pri "tabuľka sa nezmestí", párové porovnanie výšky
   riadkov namiesto surových min/median/max).
+
+## Issue #120 (2026-07-31) — order admin link opens objednavky-detail via internal Shoptet id
+
+- Version bump `175ffe9` (0.3.0-dev.72). Design comment posted BEFORE code:
+  https://github.com/zbynekdrlik/forestshop-app/issues/120#issuecomment-5147522527
+  — investigated the REAL Shoptet exports live on dev2: the CSV order export
+  (`SHOPTET_ORDERS_URL`, 67 columns) genuinely has no internal order id (the
+  older `.claude/rules/orders.md` note was correct for CSV); a SEPARATE XML
+  export (`patternId=-11`) does carry `<ORDER_ID>`, verified live
+  (`20260897` → `58656`).
+- Feature commit `e572ef9`: `SHOPTET_ORDERS_XML_URL` (optional, best-effort),
+  `createHttpOrderIdsFetcher`/`extractOrderIdsFromXml`, migration 0016
+  (`order.shoptet_order_id` nullable integer, `COALESCE`-refreshed),
+  `buildShoptetAdminOrderUrl` builds `/admin/objednavky-detail/?id=<id>` when
+  known else falls back to the existing `/admin/vyhladavanie/` search link.
+  Tests: `queries.test.ts` (new, unit), `parser.test.ts` +
+  `fetcher.test.ts` additions (unit), `orders-ingest.integration.test.ts` +
+  `orders-http-annotations.integration.test.ts` additions (integration,
+  best-effort-failure + COALESCE-preserves-old-id cases). No RED/GREEN split
+  (feature, not a bug fix — tests written alongside implementation per
+  tdd-workflow.md).
+- Commit `1fc2106`: wired `SHOPTET_ORDERS_XML_URL:` (bare key) into
+  `docker-compose.prod.yml`; updated `.claude/rules/orders.md`'s stale
+  "Shoptet admin has no internal id" note (only ever true for CSV).
+- Configured `SHOPTET_ORDERS_XML_URL` in `/srv/forestshop/.env` on dev2
+  BEFORE the PR merged, so the very first deploy would pick it up.
+- PR #128 merged (`29a85476`). Main CI + Deploy green.
+- Post-deploy: triggered a manual "Stiahnuť teraz" orders import — DB shows
+  531/533 orders now carry `shoptet_order_id`. Order `20260921` resolved to
+  `id=58728` — the EXACT example id the owner gave in the ticket. Row height
+  at 1280px unchanged (min 79.5 / median 91 / max 114.5, 0 over 120), 0
+  console errors/warnings.
+- **Left OPEN**: the ticket's own acceptance criterion (click ≥2 links,
+  confirm Shoptet renders the correct order) needs a real login to Shoptet's
+  OWN admin (`forestshop.sk/admin`, separate from the app) — asked the owner
+  for it (comment + `needs-answer` label on #120), tracked, not fabricated.
+  Everything else (code, migration, deploy, DB enrichment, no regressions)
+  is done and verified.
+- Filed #129 (pre-existing, unrelated): a stray NUL byte in
+  `queries.ts`'s `NULL_GROUP_KEY` (from issue 63's `ead8ae3`, long before
+  this PR) makes `git diff` treat the whole file as binary — found by the
+  code-review subagent dispatched before merge, confirmed independently.
+- Playbook: `.claude/rules/orders.md` updated (see above); memory
+  `shoptet-export-urls.md` updated to record the XML export is now
+  actively consumed, not just "supplied for later phases".
