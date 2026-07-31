@@ -341,6 +341,27 @@ export async function ingestOrders(db: Database, options: OrdersIngestOptions): 
         for (const row of inserted) orderIdByExternalId.set(row.externalOrderId, row.id);
       }
 
+      // issue 132: `orderIdsByCode` (best-effort XML fetch, prípadne
+      // ROZŠÍRENÉ za CSV okno cez `backfill.ts`'s `computeOrderIdsWindowStart`
+      // — pozri `index.ts`/`cli/orders-ingest.ts`) môže poznať objednávku,
+      // ktorá v TOMTO behu CSV vôbec NIE JE (staršia než jeho vlastné,
+      // NEROZŠÍRENÉ okno — CSV okno sa zámerne nemení, aby sa nedotkla
+      // `previousLineRatio` akceptančná logika vyššie). Bez tohto kroku by
+      // upsert cyklus vyššie (ktorý ide LEN cez `orderInfo`, postavené z CSV)
+      // taký záznam nikdy nenavštívil, takže jeho `shoptetOrderId` by sa
+      // nikdy nezapísal, hoci XML mapa ho pozná. Priamy `UPDATE` namiesto
+      // upsertu — objednávka MUSÍ už v DB existovať (z predošlého importu),
+      // tento krok jej nikdy nezakladá nový riadok len z XML dát (tie
+      // nenesú `customerName` ani ostatné povinné polia). `COALESCE` chráni
+      // už zistené id rovnako ako hlavný upsert vyššie.
+      for (const [externalOrderId, shoptetOrderId] of orderIdsByCode) {
+        if (orderInfo.has(externalOrderId)) continue;
+        await tx
+          .update(orders)
+          .set({ shoptetOrderId: sql`coalesce(${orders.shoptetOrderId}, ${shoptetOrderId})` })
+          .where(eq(orders.externalOrderId, externalOrderId));
+      }
+
       // Overenie proti `variant` tabuľke je AUTORITA nad tým, čo je skutočný
       // produkt (prefix-filter v `parser.ts` je len prvé, DB-nezávislé sito) —
       // položka, ktorú Shoptet vráti, ale náš katalóg ju nepozná (napr. dávno
