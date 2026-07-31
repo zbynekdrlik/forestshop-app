@@ -9,7 +9,7 @@ import { ORDERS_EXPORT_URL_NOT_CONFIGURED, type OrdersIngestResult, type RunOrde
 import { listKnownStatusNames, listOpenStatusNames, replaceOpenStatusNames } from "../modules/orders/open-statuses.js";
 import { getOrderDetail, listOpenOrderLinesBySupplier } from "../modules/orders/queries.js";
 import { assignOrderLineSupplier } from "../modules/orders/supplier-assignment.js";
-import { setOrderLineOrdered, setOrderLineState } from "../modules/orders/state.js";
+import { setOrderComment, setOrderLineOrdered, setOrderLineState } from "../modules/orders/state.js";
 import { requireRole, requireUser, type AppBindings } from "./middleware.js";
 import { requireSameOrigin } from "./origin-check.js";
 
@@ -28,6 +28,12 @@ const orderLineOrderedBody = z.object({ ordered: z.boolean() });
 // v projekte (`catalog-routes.ts`, `pairing-routes.ts`) — hodnota sa neskôr
 // vkladá aj do mailu dodávateľovi, chýbajúci limit bol prehliadnutá medzera.
 const orderLineSupplierBody = z.object({ supplier: z.string().trim().min(1).max(200) });
+// issue 64: manažérova voľná poznámka k CELEJ objednávke — na rozdiel od
+// `orderLineSupplierBody` vyššie ZÁMERNE bez `.min(1)` (prázdny orezaný vstup
+// je platný spôsob, ako poznámku vymazať, route ho mapuje na `null`). Cap
+// 2000 znakov — rovnaká horná hranica ako legacy appka's `ORDER_COMMENT_MAX`
+// (`parovanie_produktov/webreview/app.py`, čítané len pre správanie).
+const orderCommentBody = z.object({ comment: z.string().trim().max(2000) });
 // issue 59: `min(1)` len zachytí zjavne prázdny request skôr, než sa vôbec
 // dostane k `replaceOpenStatusNames` — SKUTOČNÉ čistenie (normalizácia,
 // orezanie prázdnych/duplicít po trime) beží až v module, lebo "['   ']"
@@ -92,6 +98,41 @@ export function registerOrdersRoutes(
     if (detail === null) return c.json({ error: "Objednávka sa nenašla" }, 404);
     return c.json(detail);
   });
+
+  // issue 64: manažérova voľná poznámka k CELEJ objednávke (`order.comment`,
+  // stĺpec existuje od F3 (#21), import ho nikdy neprepíše — `.claude/rules/
+  // orders.md`). Trojsegmentová cesta (`:id`/`comment`) sa NEKOLÍDUJE s
+  // dvojsegmentovým `GET /api/orders/:id` vyššie ani so 4/5-segmentovými
+  // `/api/orders/lines/...` trasami nižšie (`.claude/rules/http-routes.md`'s
+  // upozornenie platí len pre trasy s ROVNAKÝM počtom segmentov). Rovnaké
+  // oprávnenie ako ostatné zápisy v tomto súbore.
+  app.put(
+    "/api/orders/:id/comment",
+    requireSameOrigin(),
+    requireUser(db),
+    requireRole("admin", "manazer"),
+    zValidator("param", orderParam),
+    zValidator("json", orderCommentBody),
+    async (c) => {
+      const { id } = c.req.valid("param");
+      const { comment } = c.req.valid("json");
+      const user = c.get("user");
+      const now = new Date();
+      const normalizedComment = comment === "" ? null : comment;
+
+      const result = await setOrderComment(db, {
+        orderId: id,
+        comment: normalizedComment,
+        actorUserId: user.userId,
+        now,
+      });
+      if (result === "not_found") {
+        return c.json({ error: "Objednávka sa nenašla" }, 404);
+      }
+      log.info({ actorUserId: user.userId, orderId: id }, "zmena poznámky k objednávke");
+      return c.json({ ok: true as const, comment: normalizedComment });
+    },
+  );
 
   // Zmena stavu riadku objednávky (#25) — rovnaké oprávnenie ako spustenie
   // importu (`requireRole("admin", "manazer")`): manažér stavy mení, `citanie`/
