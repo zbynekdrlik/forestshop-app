@@ -29,7 +29,7 @@ const EXPORT_URL_NOT_CONFIGURED = "Import katalógu nie je nakonfigurovaný (ch�
 export function catalogImportJob(runIngest: RunIngest | undefined): ScheduledJob {
   return {
     name: CATALOG_IMPORT_JOB_NAME,
-    schedule: { hourUtc: 1, minuteUtc: 0 },
+    schedule: { kind: "daily", hourUtc: 1, minuteUtc: 0 },
     async run(_db, now) {
       if (runIngest === undefined) throw new Error(EXPORT_URL_NOT_CONFIGURED);
       const result = await runIngest(now);
@@ -42,7 +42,7 @@ export function catalogImportJob(runIngest: RunIngest | undefined): ScheduledJob
 export function pruneRawExportsJob(keepDays = 30): ScheduledJob {
   return {
     name: PRUNE_RAW_EXPORTS_JOB_NAME,
-    schedule: { hourUtc: 1, minuteUtc: 15 },
+    schedule: { kind: "daily", hourUtc: 1, minuteUtc: 15 },
     async run(db, now) {
       const result = await pruneRawSnapshots(db, { keepDays, now });
       return { detail: result };
@@ -54,7 +54,7 @@ export function pruneRawExportsJob(keepDays = 30): ScheduledJob {
 export function sessionCleanupJob(): ScheduledJob {
   return {
     name: SESSION_CLEANUP_JOB_NAME,
-    schedule: { hourUtc: 1, minuteUtc: 30 },
+    schedule: { kind: "daily", hourUtc: 1, minuteUtc: 30 },
     async run(db, now) {
       const result = await cleanupExpiredSessions(db, now);
       return { detail: result };
@@ -63,11 +63,11 @@ export function sessionCleanupJob(): ScheduledJob {
 }
 
 /**
- * Nočný import objednávok (#22) — rovnaký vzor ako `catalogImportJob`, volá
- * EXISTUJÚCI `ingestOrders` (cez `runOrdersIngest` closure z `index.ts`),
- * nič sa nereimplementuje. Žiadny nový advisory lock na tejto úrovni —
- * `ingestOrders` (`orders/ingest.ts`) už berie svoj vlastný
- * (`INGEST_ORDERS_ADVISORY_LOCK_KEY`) vnútri seba, presne ako
+ * Import objednávok (#22, hodinová kadencia od #115) — rovnaký vzor ako
+ * `catalogImportJob`, volá EXISTUJÚCI `ingestOrders` (cez `runOrdersIngest`
+ * closure z `index.ts`), nič sa nereimplementuje. Žiadny nový advisory lock
+ * na tejto úrovni — `ingestOrders` (`orders/ingest.ts`) už berie svoj
+ * vlastný (`INGEST_ORDERS_ADVISORY_LOCK_KEY`) vnútri seba, presne ako
  * `catalogImportJob` nepridáva zámok navyše. Keď `SHOPTET_ORDERS_URL` nie je
  * nakonfigurované, job VYHODÍ — `scheduler.ts` to zapíše ako "failure" s
  * touto správou, namiesto toho, aby beh ticho preskočil bez záznamu.
@@ -75,9 +75,11 @@ export function sessionCleanupJob(): ScheduledJob {
 export function ordersImportJob(runOrdersIngest: RunOrdersIngest | undefined): ScheduledJob {
   return {
     name: ORDERS_IMPORT_JOB_NAME,
-    // Ďalší voľný 15-minútový slot v registri (01:00 import katalógu, 01:15
-    // mazanie surových exportov katalógu, 01:30 mazanie relácií).
-    schedule: { hourUtc: 1, minuteUtc: 45 },
+    // #115 (majiteľ: "sync zo shoptetu ma bezat kazdu hodinu"): predtým raz
+    // denne o 01:45 (`kind: "daily"`), teraz KAŽDÚ hodinu o :45 — `isDue()`
+    // (`scheduler.ts`) periodizuje `hourly` podľa UTC dňa+hodiny, takže sa v
+    // tej istej hodine nezopakuje, ale v ĎALŠEJ hodine áno.
+    schedule: { kind: "hourly", minuteUtc: 45 },
     async run(_db, now) {
       if (runOrdersIngest === undefined) throw new Error(ORDERS_EXPORT_URL_NOT_CONFIGURED);
       const result = await runOrdersIngest(now);
@@ -96,7 +98,7 @@ export function pruneRawOrdersJob(rawDir: string, keepDays = 30): ScheduledJob {
   return {
     name: PRUNE_RAW_ORDERS_JOB_NAME,
     // Ďalší voľný slot po `ordersImportJob` (01:45).
-    schedule: { hourUtc: 2, minuteUtc: 0 },
+    schedule: { kind: "daily", hourUtc: 2, minuteUtc: 0 },
     async run(_db, now) {
       const result = await pruneRawOrders(rawDir, { keepDays, now });
       return { detail: result };
