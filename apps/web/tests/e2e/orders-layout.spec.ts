@@ -88,9 +88,13 @@ test("STAV je celý čitateľný a POZNÁMKY pole je dosť široké na všetkýc
     }
 
     // issue 107 bod 2 (regresia issue 105): riadky BEZ bloku priradenia
-    // dodávateľa (žiadny živý riadok ho dnes nemá) ostávajú kompaktné —
-    // riadky S ním (zriedkavé, `supplierAssignable`) sú vyňaté zámerne: aj
-    // živá produkcia bežne prekračuje ~95px kvôli dlhým názvom produktov
+    // dodávateľa ostávajú kompaktné — riadky S ním (zriedkavé,
+    // `supplierAssignable`) sú vyňaté zámerne. AKTUALIZÁCIA (issue 127,
+    // 2026-08-01): "žiadny živý riadok ho dnes nemá" (pôvodný komentár tu)
+    // je ZASTARANÉ — produkcia má dnes 3 také riadky (naživo overené proti
+    // `vychod@varos.sk`), preto sa toto vylúčenie z výškovej kontroly stále
+    // uplatňuje aj naživo, nielen teoreticky. Aj živá produkcia bežne
+    // prekračuje ~95px kvôli dlhým názvom produktov
     // (`.claude/rules/frontend-design.md`), takže tento test overuje presne
     // to, čo je v scope tohto ticketu — POZNÁMKY stĺpec už nespôsobuje
     // zalomenie vstup+tlačidlo, nie univerzálny strop na VŠETKY možné riadky.
