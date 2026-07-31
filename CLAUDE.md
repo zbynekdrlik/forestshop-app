@@ -22,6 +22,18 @@ nasadenie na dev2 cez GHCR a Cloudflare tunel.
 body,title,state,labels,comments` namiesto toho (žiadne Projects polia sa
 nepýtajú, takže to prejde).
 
+**`Closes #N` v tele PR zavrie ticket AUTOMATICKY v momente mergu — nie až po
+nasadení/naživo overení.** Issue 120 (2026-07-31): PR malo `Closes #120`,
+GitHub ho zavrel presne v čase merge commitu, hoci ticket mal ešte
+neoverenú (na credential čakajúcu) akceptačnú podmienku ("naživo klikni a
+over"). Keď ticket má AKÚKOĽVEK acceptančnú podmienku, ktorú nejde overiť
+PRED mergom (živý klik vyžadujúci cudzie prihlásenie, manuálne potvrdenie
+treťou stranou a pod.), NEPÍŠ `Closes #N` do tela PR — nechaj ticket
+zavrieť RUČNE (`gh issue close`) až PO skutočnom overení, alebo (ak sa
+merguje aj tak) rovno po merge over stav (`gh issue view --json state`) a
+znovu otvor (`gh issue reopen`) s vysvetľujúcim komentárom, presne ako sa
+to riešilo tu.
+
 **Airuleset's `block-sensitive-staging.sh` (globálny `git add`/`git commit`
 hook) hlási FALOŠNÝ pozitív na plný 40-znakový git SHA v ktoromkoľvek
 súbore/commit správe** — jeho "40+ char hex blob (possible key/token)"
