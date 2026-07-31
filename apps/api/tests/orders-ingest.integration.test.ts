@@ -184,6 +184,50 @@ it("uloží interné Shoptet id z fetchOrderIds vedľa CSV importu", async () =>
   expect(rows?.shoptetOrderId).toBe(58728);
 });
 
+// issue 132: `fetchOrderIds` môže byť (cez `computeOrderIdsWindowStart`,
+// `backfill.ts`) NAMERANÉ na ŠIRŠIE okno než hlavný CSV import — pozná teda
+// aj objednávky, ktoré CSV export tohto behu vôbec NENESIE (staršie než
+// jeho vlastné, nerozšírené okno). Bez samostatného backfill kroku by ich
+// `shoptetOrderId` NIKDY nedostal zápis, lebo hlavný upsert cyklus prechádza
+// LEN `orderInfo` (postavené z CSV) — `orderIdsByCode.get(externalOrderId)`
+// sa vôbec nezavolá pre id, ktorého kľúč v `orderInfo` chýba.
+it("fetchOrderIds pozná objednávku, ktorá NIE JE v tomto behu CSV (staršia než jeho okno) — id sa napriek tomu zapíše", async () => {
+  const { db, dir } = await boot();
+  await insertTestVariant(db, "40237/XL");
+
+  // Objednávka 9106 UŽ existuje v DB (predchádzajúci import), otvorená,
+  // bez interného id — presne stav 20260739 pred touto opravou.
+  await db.insert(orders).values({
+    externalOrderId: "9106",
+    customerName: "Starý zákazník",
+    statusName: "Vybavuje sa",
+    placedAt: new Date("2026-01-01T00:00:00Z"),
+    shoptetOrderId: null,
+  });
+
+  // Tento beh CSV nesie LEN inú, novšiu objednávku (9107) — 9106 v ňom
+  // vôbec nie je, presne ako keď je staršia než CSV okno.
+  const csv = buildCsv(HEADER, [
+    { code: "9107", date: "2026-07-01 10:00:00", statusName: "Vybavuje sa", billFullName: "X", itemName: "Y", itemAmount: "1", itemCode: "40237/XL" },
+  ]);
+  const result = await ingestOrders(db, {
+    fetchExport: fetcherOf(csv),
+    now: NOW,
+    rawDir: dir,
+    windowStart: WINDOW_START,
+    windowEnd: WINDOW_END,
+    // Rozšírená XML mapa (ako by ju vrátil computeOrderIdsWindowStart-om
+    // rozšírený fetch) — pozná AJ 9106, hoci CSV vyššie ju nenesie.
+    fetchOrderIds: () => Promise.resolve(new Map([["9107", 58729], ["9106", 58184]])),
+  });
+
+  expect(result.status).toBe("accepted");
+  const [stara] = await db.select().from(orders).where(eq(orders.externalOrderId, "9106"));
+  expect(stara?.shoptetOrderId).toBe(58184);
+  const [nova] = await db.select().from(orders).where(eq(orders.externalOrderId, "9107"));
+  expect(nova?.shoptetOrderId).toBe(58729);
+});
+
 it("zlyhaný fetchOrderIds NEODMIETNE import CSV — objednávka sa uloží bez id", async () => {
   const { db, dir } = await boot();
   await insertTestVariant(db, "40237/XL");
