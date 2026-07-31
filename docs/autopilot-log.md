@@ -3,6 +3,40 @@
 Terse per-ticket log of autopilot-worker cycles: issue(s), commit SHAs,
 RED→GREEN test names, key decisions, and the shared PR.
 
+## 2026-07-31 — #115 (hourly orders sync + no more false "OK") + #116 closed obsolete
+
+- STEP 0: #116 (remark on "Na objednanie") found ALREADY IMPLEMENTED via
+  #65/#95/#111 (parser, API, `OrderLineRow.tsx`'s `.ord-remark`, truncation
+  + tooltip, all with existing tests) — closed as obsolete, evidence:
+  https://github.com/zbynekdrlik/forestshop-app/issues/116#issuecomment-5146716654
+  Dropped from the batch; #115 proceeded solo.
+- Version bump `b7e17dd` (0.3.0-dev.69→.70), first commit on `dev`.
+- Design decision posted BEFORE the feature commit:
+  https://github.com/zbynekdrlik/forestshop-app/issues/115#issuecomment-5146738208
+- `381e47f` (feat): `Schedule` becomes discriminated union
+  `DailySchedule | HourlySchedule` (`types.ts`); `isDue()`/`periodKey()`
+  (`scheduler.ts`) periodize by UTC day (daily) or UTC day+hour (hourly);
+  `ordersImportJob` → `{ kind: "hourly", minuteUtc: 45 }`. Tests:
+  `scheduler.test.ts` (12, daily unchanged + new hourly boundaries incl.
+  midnight rollover).
+- RED `c5d2706` / GREEN `5f70a36`: `syncStatus.test.ts`
+  ("posledný úspešný sync spred 3 dní…") failed against non-existent
+  `computeSyncStatus`; `SyncSection.test.tsx`'s new stale-run test failed
+  showing `✅ OK` for a 3-day-old run. Fixed via `apps/web/src/syncStatus.ts`
+  (`computeSyncStatus`, threshold = 2× each channel's own configured
+  cadence: orders 2h, catalog 48h) wired into `SyncSection.tsx`
+  (`IngestChannel` now takes `now`/`staleAfterMs`). e2e `nav.spec.ts`
+  proves it live against a seeded aged `job_run` (`scripts/e2e-setup.ts`,
+  isolated test DB, never production) — required updating
+  `login.spec.ts`'s two `getByRole("alert")` assertions with
+  `.filter({ hasText })` since the new stale banner shares that role on
+  the default "sync" tab (same collision-fix pattern as the existing
+  `getByLabel` note in `.claude/rules/testing.md`).
+- Post-review fixes (both 🔵, non-blocking, folded into the merge):
+  `jobs.ts`'s `pruneRawOrdersJob` comment updated (was still describing
+  the old daily orders cadence); this log entry itself was the second nit.
+- PR #125 (`dev` → `main`), auto-merged per default policy once all gates green.
+
 ## 2026-07-31 — #117 + #118 + #119 (bundle: drop KÓD column, hide mail actions, big supplier icon button)
 
 - Version bump `c8853bb` (0.3.0-dev.68→.69), first commit on `dev` after

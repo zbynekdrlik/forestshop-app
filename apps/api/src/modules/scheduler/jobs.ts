@@ -97,7 +97,12 @@ export function ordersImportJob(runOrdersIngest: RunOrdersIngest | undefined): S
 export function pruneRawOrdersJob(rawDir: string, keepDays = 30): ScheduledJob {
   return {
     name: PRUNE_RAW_ORDERS_JOB_NAME,
-    // Ďalší voľný slot po `ordersImportJob` (01:45).
+    // Zostáva DENNÁ (nie hodinová) — mazanie starých surových exportov
+    // netreba spúšťať častejšie. #115: `ordersImportJob` je odteraz hodinová
+    // (:45 každú hodinu), takže tento denný beh o 02:00 sa s ním bude
+    // prekrývať KAŽDÝ deň (nie len raz), nie iba pri tomto jednom sedení —
+    // neprekáža, `pruneRawOrders` nemá žiadny DB advisory zámok (viď komentár
+    // vyššie), takže si nekonkuruje.
     schedule: { kind: "daily", hourUtc: 2, minuteUtc: 0 },
     async run(_db, now) {
       const result = await pruneRawOrders(rawDir, { keepDays, now });
