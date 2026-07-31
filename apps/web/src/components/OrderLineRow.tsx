@@ -151,9 +151,11 @@ export function OrderLineRow({
         />
       </td>
       <td className="ord-order-cell">
-        {line.externalOrderId}
         {/* issue 65: priamy odkaz do Shoptet administrácie na TÚTO
-            objednávku (`queries.ts`'s `buildShoptetAdminOrderUrl`). */}
+            objednávku (`queries.ts`'s `buildShoptetAdminOrderUrl`).
+            issue 99: klikateľné je samotné ČÍSLO objednávky (majiteľ žiadal
+            doslovne "keď kliknem na kód objednávky") — pôvodná samostatná
+            ikonka `🔗` vedľa čísla zanikla, `line.adminUrl` sa nemení. */}
         <a
           href={line.adminUrl}
           target="_blank"
@@ -162,7 +164,7 @@ export function OrderLineRow({
           aria-label={`Otvoriť objednávku ${line.externalOrderId} v administrácii Shoptet`}
           title="Otvoriť v administrácii Shoptet"
         >
-          🔗
+          {line.externalOrderId}
         </a>
       </td>
       <td>{line.customerName}</td>
