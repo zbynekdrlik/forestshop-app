@@ -66,6 +66,18 @@ export const orders = pgTable(
     // stĺpec exportu (veľa objednávok ho nemá vyplnený), read-only na
     // obrazovke "Na objednanie".
     remark: text("remark"),
+    // issue 120: Shoptet-ovo INTERNÉ (nie zákazníkovi viditeľné) číselné id
+    // objednávky — JEDINÉ, ktoré Shoptet admin's `/admin/objednavky-detail/
+    // ?id=<toto>` prijme (`?code=`/`?string=` na tejto trase ticho ignoruje,
+    // funguje len `/admin/vyhladavanie/?string=`, `.claude/rules/orders.md`).
+    // CSV export (`SHOPTET_ORDERS_URL`) toto pole VÔBEC nenesie — jediný
+    // zdroj je samostatný XML export (`SHOPTET_ORDERS_XML_URL`, nepovinný
+    // ako ostatné `SHOPTET_*` premenné), ktorý `ingest.ts` sťahuje NAVYŠE k
+    // CSV, cez to isté `dateFrom`/`dateUntil` okno. Nullable a refreshované
+    // LEN cez `COALESCE(excluded, staré)` (`ingest.ts`) — keď XML fetch
+    // zlyhá alebo premenná nie je nastavená, predošlá zistená hodnota
+    // PREŽIJE, nikdy sa nevynuluje na `null`.
+    shoptetOrderId: integer("shoptet_order_id"),
     placedAt: timestamp("placed_at", { withTimezone: true }).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },

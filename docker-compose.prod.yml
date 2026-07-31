@@ -52,6 +52,12 @@ services:
       # Rovnaká úvaha ako SHOPTET_EXPORT_URL vyššie — `.optional()` v `env.ts`
       # (#21), bare kľúč preberá `/srv/forestshop/.env`, keď tam je.
       SHOPTET_ORDERS_URL:
+      # issue 120: SAMOSTATNÝ XML export objednávok — jediný zdroj interného
+      # Shoptet id (CSV vyššie ho nenesie). Rovnaká úvaha ako SHOPTET_ORDERS_URL:
+      # `.optional()` v `env.ts`, bare kľúč preberá `/srv/forestshop/.env`, keď
+      # tam je; keď nie je, appka beží ďalej, odkaz na objednávku len padá
+      # späť na vyhľadávanie.
+      SHOPTET_ORDERS_XML_URL:
       ORDERS_RAW_DIR: /data/orders-raw
       # issue 65: priamy odkaz do Shoptet administrácie pri riadku objednávky
       # — NA ROZDIEL od SHOPTET_EXPORT_URL/SHOPTET_ORDERS_URL vyššie toto

@@ -106,3 +106,28 @@ it("vráti priamy odkaz do Shoptet administrácie pri riadku, zložený z nakonf
     "https://admin.example.sk/admin/vyhladavanie/?string=7003%20%26%20test&src=orders",
   );
 });
+
+// issue 120: keď appka POZNÁ interné Shoptet id objednávky (`shoptet_order_
+// id`, naplnené XML obohatením v `ingest.ts`), odkaz ide PRIAMO na detail
+// objednávky, nie na vyhľadávanie — presne to, čo majiteľ v tickete žiadal.
+it("keď je známe interné Shoptet id, odkaz ide priamo na objednavky-detail namiesto vyhľadávania", async () => {
+  const { app, cookie, db } = await boot("manazer", "https://admin.example.sk");
+  await insertTestVariant(db, "ADM-2", "Dodávateľ Admin");
+
+  const [objednavka] = await db
+    .insert(orders)
+    .values({
+      externalOrderId: "7004",
+      customerName: "Zákazník",
+      placedAt: new Date("2026-07-13T00:00:00Z"),
+      shoptetOrderId: 58728,
+    })
+    .returning();
+  if (objednavka === undefined) throw new Error("insert zlyhal");
+  await db.insert(orderLines).values({ orderId: objednavka.id, variantCode: "ADM-2", quantity: 1 });
+
+  const res = await app.request("/api/orders/open", { headers: { cookie } });
+  const telo = (await res.json()) as { suppliers: { lines: { externalOrderId: string; adminUrl: string }[] }[] };
+  const line = telo.suppliers.flatMap((s) => s.lines).find((l) => l.externalOrderId === "7004");
+  expect(line?.adminUrl).toBe("https://admin.example.sk/admin/objednavky-detail/?id=58728");
+});

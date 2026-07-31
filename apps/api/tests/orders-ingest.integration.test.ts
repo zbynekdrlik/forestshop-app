@@ -162,6 +162,76 @@ it("remark je Shoptetovo pole a re-import ho osvieži, keď sa v Shoptete zmení
   expect(druhyRead?.remark).toBe("Zavolajte pred dorucenim");
 });
 
+// issue 120: `fetchOrderIds` je BEST-EFFORT obohatenie o interné Shoptet id
+// (XML export) — samostatná fáza od hlavného CSV importu vyššie.
+it("uloží interné Shoptet id z fetchOrderIds vedľa CSV importu", async () => {
+  const { db, dir } = await boot();
+  await insertTestVariant(db, "40237/XL");
+
+  const csv = buildCsv(HEADER, [
+    { code: "9103", date: "2026-07-01 10:00:00", statusName: "Vybavuje sa", billFullName: "X", itemName: "Y", itemAmount: "1", itemCode: "40237/XL" },
+  ]);
+  await ingestOrders(db, {
+    fetchExport: fetcherOf(csv),
+    now: NOW,
+    rawDir: dir,
+    windowStart: WINDOW_START,
+    windowEnd: WINDOW_END,
+    fetchOrderIds: () => Promise.resolve(new Map([["9103", 58728]])),
+  });
+
+  const [rows] = await db.select().from(orders).where(eq(orders.externalOrderId, "9103"));
+  expect(rows?.shoptetOrderId).toBe(58728);
+});
+
+it("zlyhaný fetchOrderIds NEODMIETNE import CSV — objednávka sa uloží bez id", async () => {
+  const { db, dir } = await boot();
+  await insertTestVariant(db, "40237/XL");
+
+  const csv = buildCsv(HEADER, [
+    { code: "9104", date: "2026-07-01 10:00:00", statusName: "Vybavuje sa", billFullName: "X", itemName: "Y", itemAmount: "1", itemCode: "40237/XL" },
+  ]);
+  const result = await ingestOrders(db, {
+    fetchExport: fetcherOf(csv),
+    now: NOW,
+    rawDir: dir,
+    windowStart: WINDOW_START,
+    windowEnd: WINDOW_END,
+    fetchOrderIds: () => Promise.reject(new Error("XML export nedostupný")),
+  });
+
+  expect(result.status).toBe("accepted");
+  const [rows] = await db.select().from(orders).where(eq(orders.externalOrderId, "9104"));
+  expect(rows?.shoptetOrderId).toBeNull();
+});
+
+// issue 120: re-import BEZ `fetchOrderIds` (napr. XML premenná dočasne
+// nenastavená) NESMIE vynulovať predtým zistené id — COALESCE v `ingest.ts`
+// chráni starú hodnotu.
+it("re-import bez fetchOrderIds nevynuluje predtým zistené interné Shoptet id", async () => {
+  const { db, dir } = await boot();
+  await insertTestVariant(db, "40237/XL");
+
+  const csv = buildCsv(HEADER, [
+    { code: "9105", date: "2026-07-01 10:00:00", statusName: "Vybavuje sa", billFullName: "X", itemName: "Y", itemAmount: "1", itemCode: "40237/XL" },
+  ]);
+  await ingestOrders(db, {
+    fetchExport: fetcherOf(csv),
+    now: NOW,
+    rawDir: dir,
+    windowStart: WINDOW_START,
+    windowEnd: WINDOW_END,
+    fetchOrderIds: () => Promise.resolve(new Map([["9105", 58728]])),
+  });
+
+  // Re-import BEZ fetchOrderIds vôbec — rovnaká situácia ako appka bez
+  // nastavenej SHOPTET_ORDERS_XML_URL.
+  await ingestOrders(db, { fetchExport: fetcherOf(csv), now: NOW, rawDir: dir, windowStart: WINDOW_START, windowEnd: WINDOW_END });
+
+  const [rows] = await db.select().from(orders).where(eq(orders.externalOrderId, "9105"));
+  expect(rows?.shoptetOrderId).toBe(58728);
+});
+
 it("re-import tej istej fixtúry je idempotentný — žiadne duplicitné riadky, množstvo ostáva rovnaké", async () => {
   const { db, dir } = await boot();
   await insertTestVariant(db, "40237/XL");

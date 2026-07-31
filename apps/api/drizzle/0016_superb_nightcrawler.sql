@@ -1,0 +1,1 @@
+ALTER TABLE "order" ADD COLUMN "shoptet_order_id" integer;

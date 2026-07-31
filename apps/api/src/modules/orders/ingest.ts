@@ -4,7 +4,7 @@ import type { Database } from "../../db/client.js";
 import { orderLines, orders, variants } from "../../db/schema.js";
 import { log } from "../../logger.js";
 import { storeRawSnapshot } from "../catalog/raw-store.js";
-import { redactSourceLabel } from "./fetcher.js";
+import { redactSourceLabel, type OrderIdsFetcher } from "./fetcher.js";
 import {
   decodeCp1250,
   mapOrderRow,
@@ -80,6 +80,13 @@ export interface OrdersIngestOptions {
   readonly windowStart: Date;
   readonly windowEnd: Date;
   readonly limits?: OrdersAcceptanceLimits;
+  // issue 120: nepovinné BEST-EFFORT obohatenie o interné Shoptet id
+  // (`fetcher.ts`'s `createHttpOrderIdsFetcher`) — chýbajúca premenná ALEBO
+  // zlyhané stiahnutie NIKDY nesmie spadnúť/odmietnuť celý import objednávok
+  // (id je len vylepšenie odkazu do administrácie, nikdy podmienka
+  // prijatia dát). Pri zlyhaní sa jednoducho zaloguje varovanie a použije
+  // sa prázdna mapa — `COALESCE` v zápise nižšie ochráni predtým zistené id.
+  readonly fetchOrderIds?: OrderIdsFetcher;
 }
 
 export type OrdersIngestResult =
@@ -117,8 +124,28 @@ function chunk<T>(items: readonly T[], size: number): T[][] {
   return out;
 }
 
+// issue 120: XML fetch je BEST-EFFORT — samostatná funkcia (nie inline v
+// `ingestOrders`), aby chyba tvaru výnimky/rejection nikdy neprepadla mimo
+// tohto `try`. Chýbajúca premenná (`fetchOrderIds === undefined`, appka
+// bežiaca bez `SHOPTET_ORDERS_XML_URL`) aj zlyhané stiahnutie dopadnú
+// rovnako — prázdna mapa + zalogované varovanie, import CSV pokračuje
+// úplne nezávisle.
+async function fetchOrderIdsBestEffort(fetchOrderIds: OrderIdsFetcher | undefined): Promise<ReadonlyMap<string, number>> {
+  if (fetchOrderIds === undefined) return new Map();
+  try {
+    return await fetchOrderIds();
+  } catch (error) {
+    log.warn(
+      { errorMessage: error instanceof Error ? error.message : String(error) },
+      "nepodarilo sa stiahnuť interné Shoptet id objednávok (XML export) — odkazy na objednávku dočasne zostanú na vyhľadávaní",
+    );
+    return new Map();
+  }
+}
+
 export async function ingestOrders(db: Database, options: OrdersIngestOptions): Promise<OrdersIngestResult> {
   const download = await options.fetchExport();
+  const orderIdsByCode = await fetchOrderIdsBestEffort(options.fetchOrderIds);
   const byteSize = download.body.byteLength;
 
   if (byteSize === 0) {
@@ -282,6 +309,7 @@ export async function ingestOrders(db: Database, options: OrdersIngestOptions): 
               statusName: info.statusName,
               remark: info.remark,
               placedAt: info.placedAt,
+              shoptetOrderId: orderIdsByCode.get(externalOrderId) ?? null,
             })),
           )
           .onConflictDoUpdate({
@@ -293,12 +321,20 @@ export async function ingestOrders(db: Database, options: OrdersIngestOptions): 
             // osviežiť (objednávka prejde "Vybavuje sa" → "Vybavená" len tak,
             // že ju appka pri ďalšom importe znova uvidí). `remark` (issue 65,
             // zákaznícky odkaz) je rovnaká rodina ako `status_name` — VŽDY
-            // Shoptetovo pole, re-import ho preto tiež osvieži.
+            // Shoptetovo pole, re-import ho preto tiež osvieži. `shoptet_
+            // order_id` (issue 120) je NAVYŠE COALESCE-ovaný, nie priamo
+            // prepísaný ako predošlé dve — na rozdiel od nich pochádza z
+            // BEST-EFFORT XML fetchu, ktorý tento konkrétny beh môže
+            // zlyhať/chýbať (premenná nenastavená), a re-import bez neho
+            // nesmie vynulovať predtým zistené id (`"order"."shoptet_order_
+            // id"` = hodnota RIADKU PRED týmto UPDATE-om — presne to, čo
+            // `coalesce` potrebuje ako záchrannú sieť).
             set: {
               customerName: sql`excluded.customer_name`,
               statusName: sql`excluded.status_name`,
               remark: sql`excluded.remark`,
               placedAt: sql`excluded.placed_at`,
+              shoptetOrderId: sql`coalesce(excluded.shoptet_order_id, "order"."shoptet_order_id")`,
             },
           })
           .returning({ id: orders.id, externalOrderId: orders.externalOrderId });

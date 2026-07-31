@@ -184,6 +184,42 @@ export function parseShopLocalDateTime(raw: string, timeZone = "Europe/Bratislav
   return new Date(guessUtc - offsetMs);
 }
 
+// issue 120: interné (nie zákazníkovi viditeľné) Shoptet id objednávky.
+// CSV export (vyššie v tomto súbore) toto pole VÔBEC nenesie — jediný
+// zdroj je SAMOSTATNÝ XML export (`patternId=-11`, `SHOPTET_ORDERS_XML_URL`),
+// ktorý appka sťahuje NAVYŠE k CSV, cez rovnaké `dateFrom`/`dateUntil` okno
+// (`fetcher.ts`'s `createHttpOrderIdsFetcher`). Naživo overené (dev2,
+// 2026-07-31): objednávka `20260897` → `<ORDER_ID>58656</ORDER_ID>`, presne
+// v ráde veľkosti majiteľovho príkladu (`id=58728` pre podobne nedávnu
+// objednávku) — `.claude/rules/orders.md`'s staršia poznámka
+// ("Shoptet admin nemá interné id") bola overená len proti CSV, nikdy proti
+// tomto XML exportu.
+//
+// Zámerne JEDNODUCHÝ regex, nie plnohodnotný XML parser/DOM — z 70+ MB
+// súboru potrebujeme presne DVE polia. `<ORDER_ID>` je vždy BEZPROSTREDNE
+// pred OBJEDNÁVKOVÝM (nie položkovým) `<CODE>` — položky vnútri
+// `<ORDER_ITEMS>` majú vlastný `<CODE>` (kód variantu), ale NIKDY pred sebou
+// `<ORDER_ID>` (to sa v súbore vyskytuje presne raz na objednávku, hneď na
+// začiatku `<ORDER>` bloku) — pár preto nemôže omylom zachytiť položkový kód.
+const ORDER_ID_CODE_PAIR_RE = /<ORDER_ID>(\d+)<\/ORDER_ID>\s*<CODE>([^<]*)<\/CODE>/g;
+
+/**
+ * Vytiahne `Map<kód objednávky, interné Shoptet id>` zo surového XML tela
+ * (`SHOPTET_ORDERS_XML_URL` export). Prázdny/nerozpoznaný kód sa preskočí —
+ * rovnaká disciplína ako `mapOrderRow`'s `empty_order_code`, nikdy
+ * neuloží nezmyselný kľúč.
+ */
+export function extractOrderIdsFromXml(xml: string): Map<string, number> {
+  const map = new Map<string, number>();
+  for (const match of xml.matchAll(ORDER_ID_CODE_PAIR_RE)) {
+    const orderId = Number(match[1]);
+    const code = (match[2] ?? "").trim();
+    if (code === "" || !Number.isFinite(orderId)) continue;
+    map.set(code, orderId);
+  }
+  return map;
+}
+
 export type OrderRowIssueKind =
   | "empty_order_code"
   | "empty_item_code"
