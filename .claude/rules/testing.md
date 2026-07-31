@@ -334,3 +334,12 @@ paths:
   kód v novom e2e súbore: over, či tento tsconfig existuje a má `DOM` v
   `lib` — bez neho type-aware lint padne na prvom odkaze na
   `document`/`window`/`navigator` vnútri callbacku.
+- **`"lib": ["ES2023", "DOM"]` v `apps/web/tests/e2e/tsconfig.json` (bod
+  vyššie) NESTAČÍ na `[...nodeList]` spread cez viacero prvkov** — issue 105
+  (kontrola pretekania KAŽDEJ `<th>` cez `[...document.querySelectorAll(...)]`
+  v `page.evaluate()`) narazila na `TS2488: Type 'NodeListOf<...>' must have a
+  '[Symbol.iterator]()' method`. `NodeListOf`'s iterátor žije v samostatnej
+  `DOM.Iterable` lib-e, nie v `DOM` — pridaj `"DOM.Iterable"` do `lib` poľa
+  hneď vedľa `"DOM"`. Test na KAŽDÝ ďalší e2e `page.evaluate()` kód, ktorý
+  spreadne/iteruje `querySelectorAll`/`getElementsByClassName` výsledok
+  (`[...xs]`, `for...of`): over, že tsconfig má aj `DOM.Iterable`, nielen `DOM`.
