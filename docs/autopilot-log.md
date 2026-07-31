@@ -3,6 +3,52 @@
 Terse per-ticket log of autopilot-worker cycles: issue(s), commit SHAs,
 RED→GREEN test names, key decisions, and the shared PR.
 
+## 2026-07-31 — #117 + #118 + #119 (bundle: drop KÓD column, hide mail actions, big supplier icon button)
+
+- Version bump `c8853bb` (0.3.0-dev.68→.69), first commit on `dev` after
+  main caught up.
+- Design decisions posted per-ticket BEFORE the feature commit:
+  https://github.com/zbynekdrlik/forestshop-app/issues/117#issuecomment-5146452081
+  https://github.com/zbynekdrlik/forestshop-app/issues/118#issuecomment-5146459218
+  https://github.com/zbynekdrlik/forestshop-app/issues/119#issuecomment-5146459969
+- Main feature commit `6531b04`: `col-code`/`ord-code-cell`/`.ord-size-inline`/
+  `.ord-supplier-code` removed entirely (117); `orderScreenFlags.ts`'s
+  `SHOW_ORDER_MAIL_ACTIONS` (default `false`) gates the two mail-action
+  buttons + hint in `SupplierActionsPanel.tsx` (118), existing functionality
+  tests moved intact to new `OrdersSection.mailActions.test.tsx` (flag
+  forced `true` via `vi.mock`); supplier link restyled to a 36×36px icon
+  button (`🔗`, `aria-hidden`), same `href`/`target`/`rel`/`aria-label`
+  (119). Freed colgroup width: `col-product` 11.4%→17.4%, `col-supplier`
+  9.2%→14%.
+- CI round 1 failed on e2e: two assertions in `orders.spec.ts` were made
+  stale by the diff itself — `toContainText("46")` (leftover variant-code
+  fragment) and `not.toContainText("🔗")` (issue 99's admin-link check,
+  now legitimately false since #119 adds its OWN 🔗 elsewhere in the row)
+  — fixed in `e1e4afc`, verified locally first (21/21 e2e, 231/231 unit).
+- PR #124, all gates green, `/requesting-code-review` (general-purpose
+  subagent) surfaced 2 🔵: `shouldShowSizeLabel` left as dead code
+  (its only call site was the removed KÓD cell) and a stale CSS comment
+  referencing the now-deleted `.ord-supplier-code` — both fixed in
+  `78dfb5e` (228/228 unit after removing 3 now-pointless tests).
+- Merged `ca858df`. Main CI + Deploy green.
+- Live verification (`forestshop-novy.newlevel.media`, `vychod@varos.sk`,
+  39 real rows, 16 supplier groups) at 1280/1440/1600/1920px: version
+  `v0.3.0-dev.69` read from DOM; KÓD header absent (9 columns, was 10);
+  0 rows with `variantCode`/`externalCode` text anywhere; 0 order-number
+  wraps; 0 `.orders-table-wrap`/`<th>` overflow; 0 page horizontal scroll;
+  0 copy/email buttons or hint text (16/16 bulk "✔ Označiť skupinu" buttons
+  still present); 31 supplier icon links, all ≥36×36px click target,
+  target=_blank + rel containing noopener; 0 console errors/warnings on a
+  fresh navigation. Row height at 1280px: min 79px, median 91px, **max
+  114.5px** (target was <120px; before this PR: median 95px, max 173px,
+  7/39 rows >120px) — target met. At 1440/1600/1920px max dropped to 98px.
+- Playbook: no new gotcha filed — this bundle's live-measurement/colgroup
+  method was already fully covered by existing `.claude/rules/
+  frontend-design.md` entries (issues 105/107/111); the two review findings
+  (dead code from a removed call site, a stale cross-reference comment) are
+  process learnings already covered by `no-dropped-work.md`/code-review
+  discipline, not new project-specific knowledge.
+
 ## 2026-07-31 — #64 (order-comment write path — "Na objednanie" poznámka)
 
 - `PUT /api/orders/:id/comment` (`orders-routes.ts` + `state.ts`'s new
