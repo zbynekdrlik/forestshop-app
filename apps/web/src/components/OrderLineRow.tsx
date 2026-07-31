@@ -327,13 +327,17 @@ export function OrderLineRow({
       <td className="ord-notes-merged">
         {/* issue 65: zákaznícky odkaz k objednávke — read-only, appka ho
             nikdy needituje (na rozdiel od `comment` bloku nižšie). */}
+        {/* issue 111 bod 4: predtým sa tu VŽDY vykresľovala holá pomlčka "—",
+            keď objednávka nemá poznámku e-shopu (100 % dnešných ostrých dát)
+            — presne ten istý zbytočný riadok navyše, aký #107 bod 3 už
+            odstránilo z priradenia dodávateľa. Keď `remark` je `null`,
+            nevykreslí sa NIČ (žiadny prvok, žiadny prázdny <span>) —
+            `OrderLineRow.remarkCell.test.tsx` to overuje. */}
         <div className="ord-remark-cell" data-testid={`remark-cell-${line.lineId}`}>
-          {line.remark !== null ? (
+          {line.remark !== null && (
             <span className="ord-remark" title={line.remark}>
               🛈 {line.remark}
             </span>
-          ) : (
-            "—"
           )}
         </div>
         <div className="ord-comment-cell" data-testid={`comment-cell-${line.lineId}`}>
