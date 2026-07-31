@@ -772,11 +772,13 @@ tr:last-child td {
   font-size: var(--fs-text-sm);
 }
 
-/* issue 65: priamy odkaz do Shoptet administrácie, malá ikonka hneď za
-   kódom objednávky — nenápadný, nezaberá miesto ako plnohodnotný text. */
+/* issue 65: priamy odkaz do Shoptet administrácie. issue 99: nesie teraz
+   samotné ČÍSLO objednávky (predtým osamotenú ikonku `🔗` vedľa neho) —
+   preto musí byť vizuálne rozpoznateľné ako odkaz (podčiarknutie + farba z
+   globálneho `a` resetu), nie ticho splynúť s okolitým textom bunky. */
 .ord-admin-link {
-  margin-left: var(--fs-space-1);
-  text-decoration: none;
+  font-weight: var(--fs-weight-medium);
+  text-decoration: underline;
 }
 /* issue 65: upozornenie na starú nevybavenú objednávku (>14 dní) — výrazná
    farba (`--fs-warning`), rovnaká sémantika ako `.orders-table tr.state-

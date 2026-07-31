@@ -192,12 +192,20 @@ test("manažér vidí otvorené objednávky zoskupené podľa dodávateľa, konz
 
   // issue 65: zákaznícky odkaz (`remark`, read-only) + priamy odkaz do
   // Shoptet administrácie (`adminUrl`) — objednávka 9001.
+  // issue 99: klikateľné je samotné ČÍSLO objednávky (nie samostatná ikonka
+  // `🔗` vedľa neho, ktorá predtým niesla ten istý odkaz) — over href/target/
+  // rel AJ to, že viditeľný text odkazu je presne číslo objednávky a žiadna
+  // ikonka nezostala.
   await expect(riadokAlfa).toContainText("Prosím doručiť len v piatok");
   const adminOdkazAlfa = riadokAlfa.getByRole("link", { name: "Otvoriť objednávku 9001 v administrácii Shoptet" });
   await expect(adminOdkazAlfa).toHaveAttribute(
     "href",
     "https://www.forestshop.sk/admin/vyhladavanie/?string=9001&src=orders",
   );
+  await expect(adminOdkazAlfa).toHaveAttribute("target", "_blank");
+  await expect(adminOdkazAlfa).toHaveText("9001");
+  await expect(riadokAlfa.getByRole("link", { name: "Otvoriť objednávku" })).toHaveCount(1);
+  await expect(riadokAlfa).not.toContainText("🔗");
   // Objednávka 9001 je UŽ vybavená (stav "caka_sa") — upozornenie na staré
   // objednávky sa NIKDY nezobrazí pre vybavený riadok, aj keby bol starý.
   await expect(riadokAlfa.locator("[data-testid^='stale-badge-']")).toHaveCount(0);
