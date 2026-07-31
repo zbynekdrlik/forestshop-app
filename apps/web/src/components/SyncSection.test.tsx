@@ -83,6 +83,25 @@ it("zobrazí posledný beh katalógu (OK) aj objednávok (CHYBA) so slovenským 
   expect(screen.getByTestId("sync-job-orders-import").textContent).toContain("Import objednávok");
 });
 
+// #115 (majiteľ: "nemoze tam bezat ok ked posledny sync bol dni dozadu!!!") —
+// posledný ÚSPEŠNÝ beh spred 3 dní nesmie ukázať zelené "✅ OK". Dátum je
+// relatívny k reálnemu "teraz" (nie natvrdo zapísaný literál) — inak by sa
+// táto asercia sama stala časovanou bombou presne z toho istého dôvodu, pre
+// ktorý táto oprava vôbec vznikla.
+it("posledný úspešný beh spred 3 dní ukáže zastaraný/varovný stav, NIE '✅ OK'", async () => {
+  const predTromiDnami = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+  fetchJobRuns.mockResolvedValue([
+    { ...CATALOG_RUN, startedAt: predTromiDnami, finishedAt: predTromiDnami },
+  ]);
+
+  render(<SyncSection role="admin" onSessionExpired={() => {}} />);
+
+  const katalog = await screen.findByTestId("sync-channel-Katalóg");
+  expect(katalog.textContent).not.toContain("✅ OK");
+  expect(katalog.textContent).toContain("Posledný úspešný sync");
+  expect(katalog.textContent).toContain("dňami");
+});
+
 it("klik na 'Stiahnuť teraz' pre katalóg spustí triggerCatalogIngest a zobrazí výsledok", async () => {
   fetchJobRuns.mockResolvedValue([]);
   triggerCatalogIngest.mockResolvedValue({ status: "accepted", snapshotId: "s1", variantCount: 35, productCount: 8, missingCount: 0, issueCount: 0 });
