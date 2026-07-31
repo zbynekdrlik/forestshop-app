@@ -34,16 +34,17 @@ merguje aj tak) rovno po merge over stav (`gh issue view --json state`) a
 znovu otvor (`gh issue reopen`) s vysvetľujúcim komentárom, presne ako sa
 to riešilo tu.
 
-**GitHub-ova detekcia zatváracích kľúčových slov chytá `close/closes/
-closed/fix/fixes/fixed/resolve/resolves/resolved` BEZPROSTREDNE pred
-`#N` KDEKOĽVEK v tele PR — bez ohľadu na slovné hranice, aj vnútri
-zloženého slova.** Issues 127/132 (2026-08-01): telo PR NEMALO `Closes
-#N`, ale vetu "prematurely **auto-closed #132**" (diskusia o predošlom
-predčasnom zavretí) — GitHub to vyhodnotil rovnako, ako keby tam bolo
-"Closed #132", a ticket znova ticho zavrel. Pri PÍSANÍ o tickete v tele
-PR/komentári (nie ako riadok `Closes #N`) sa vyhni AKÉMUKOĽVEK z tých
-slovies bezprostredne pred číslom problému — aj v zloženinách
-("auto-closed", "un-fixed" a pod.); ak treba opísať zavretie/opravu v
+**GitHub-ova detekcia zatváracích kľúčových slov chytá tvary slovies
+zavrieť/opraviť/vyriešiť (v angličtine) BEZPROSTREDNE pred `#N` KDEKOĽVEK
+v tele PR — bez ohľadu na slovné hranice, aj vnútri zloženého slova.**
+Issues 127/132 (2026-08-01): telo PR NEMALO štandardný riadok pre
+automatické zatvorenie, ale vetu popisujúcu predošlé PREDČASNÉ zatvorenie
+tvaru "auto-" + sloveso v minulom čase + "#132" — GitHub to vyhodnotil
+rovnako, akoby tam bol ten riadok priamo, a ticket znova ticho zavrel. Pri
+PÍSANÍ o tickete v tele PR/komentári (mimo úmyselného riadku na
+automatické zatvorenie) sa vyhni AKÉMUKOĽVEK z tých slovies (anglicky:
+close/fix/resolve a ich tvary) bezprostredne pred číslom problému — aj v
+zloženinách; ak treba opísať zavretie/opravu v
 minulom čase, rozdeľ slovo a číslo ("bol predtým zavretý, viď #132") alebo
 napíš číslo ticketu slovom ("issue 132" namiesto "#132" v danej vete).
 
