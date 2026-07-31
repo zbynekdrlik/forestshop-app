@@ -422,6 +422,17 @@ tr:last-child td {
   max-width: var(--fs-content-width);
   width: 100%;
 }
+/* issue 95: obrazovky označené `nav.ts`'s `wide: true` (dnes len "Na
+   objednanie") strácajú čítací strop — hustá pracovná tabuľka smie využiť
+   celú šírku okna namiesto toho, aby zostala uprostred s prázdnymi bokmi aj
+   pri 1600/1920px. `overflow-x: hidden` je zámerná poistka: KAŽDÝ prvok v
+   tejto obrazovke, ktorý by mohol byť širší než dostupné miesto, musí mať
+   VLASTNÝ `overflow-x: auto` obal (`.orders-table-wrap` nižšie) — stránka
+   samotná sa nesmie posúvať vodorovne nikdy. */
+.main > main.main-wide {
+  max-width: none;
+  overflow-x: hidden;
+}
 
 /* ---------------- 4. ZDIEĽANÉ PRVKY ---------------- */
 .btn {
@@ -668,9 +679,47 @@ tr:last-child td {
   border-radius: var(--fs-radius-sm);
 }
 
+/* issue 95: KAŽDÁ skupina dodávateľa dostane VLASTNÝ vodorovný posuvný obal
+   okolo svojej `<table>` — stránka (`.main-wide`, vyššie) sa nikdy neposúva
+   vodorovne sama, posúva sa (keď treba) len tento obal. `min-width` na
+   tabuľke nižšie zaručuje, že stĺpce nedostanú menej miesta, než je čitateľné,
+   aj keby bolo okno naozaj úzke — vtedy sa jednoducho aktivuje toto posúvanie. */
+.orders-table-wrap {
+  overflow-x: auto;
+}
+/* issue 95: `table-layout: fixed` + percentuálne `<col>` (`SupplierOrderGroup
+   .tsx`'s `<colgroup>`) namiesto pôvodného automatického rozloženia — dôležité
+   stĺpce (PRODUKT, zlúčený DODÁVATEĽ, zlúčené POZNÁMKY) dostávajú najviac
+   miesta, prázdne/úzke stĺpce (checkbox, MNOŽSTVO) najmenej. `min-width`
+   zaručuje čitateľnú minimálnu šírku pri úzkom okne (vtedy sa posúva LEN
+   `.orders-table-wrap` vyššie, nikdy stránka). */
 .orders-table {
+  width: 100%;
+  min-width: 64rem;
+  table-layout: fixed;
   font-size: var(--fs-text-sm);
 }
+.orders-table th,
+.orders-table td {
+  overflow-wrap: break-word;
+}
+/* issue 95 bod 8 ("zvážiť prilepenú hlavičku") — VYSKÚŠANÉ a ZAMIETNUTÉ
+   (nájdené reálnym Playwright behom, nie len teoreticky): `position: sticky`
+   na `<th>` sa sticky-uje voči NAJBLIŽŠIEMU predkovi so scroll-boxom — a
+   `.orders-table-wrap`'s `overflow-x: auto` (nutné pre bod 4, "stránka sa
+   nesmie posúvať vodorovne") jedným je presne TAKÝTO predok. Keďže obal
+   nemá vlastnú vertikálnu scroll oblasť (vysoký je len toľko, koľko je
+   tabuľka), sticky hlavičku posunulo o pevný offset NADOL od jej prirodzenej
+   pozície bez toho, aby si tabuľka tento posun vyhradila v toku — hlavička
+   sa tak vizuálne prekryla s prvým riadkom POD ňou a kradla mu kliky
+   ("checkbox.click() … <th>Objednané</th> … intercepts pointer events",
+   `orders.spec.ts`'s test odškrtávania). Fix by vyžadoval úplne iný layout
+   (oddelená hlavička/telo mimo jednej `<table>`) za cenu vyššieho rizika pre
+   existujúcu sadu testov — mimo rozsahu tohto (mäkko formulovaného,
+   "zvážiť") bodu. Skúšaný token (`--fs-topbar-height` + `.topbar`'s
+   `min-height`) bol pre tento účel ZBYTOČNÝ a odstránený — nemenil by nič
+   mimo tejto (zamietnutej) funkcie, len by natvrdo zväčšil výšku Topbaru na
+   VŠETKÝCH obrazovkách bez dôvodu. Rozhodnutie zapísané aj na ticket #95. */
 /* Farby stavu riadku — sémantické (čaká/skladom/nedostupné), vlastná paleta
    tejto appky (nie prevzaté hodnoty starej appky). */
 .orders-table tr.state-caka_sa {
@@ -697,9 +746,40 @@ tr:last-child td {
 .orders-table tr.ordered {
   opacity: 0.55;
 }
+/* issue 95: zvislé zarovnanie hore (nie stred) — zlúčené bunky (DODÁVATEĽ,
+   POZNÁMKY) majú viac riadkov obsahu pod sebou a `top` drží prvý riadok
+   zarovnaný s ostatnými bunkami toho istého riadku tabuľky. Trocha
+   veľkorysejší zvislý padding než pôvodný globálny `td` reset (issue 95 bod
+   3: "doladiť hustotu") — stále husté, ale klikacie ciele majú dýchací
+   priestor. */
+.orders-table td {
+  vertical-align: top;
+  padding-top: var(--fs-space-3);
+  padding-bottom: var(--fs-space-3);
+}
+/* issue 95: veľké klikacie ciele (majiteľ: "veľké tlačidlá, nech sa vedia
+   zamestnanci rýchlo hýbať") — SCOPED na `.order-group`, nie globálna zmena
+   `.btn.sm`/checkboxu, ktoré používajú aj iné obrazovky (Sync/Zmena hesla)
+   mimo tohto ticketu. */
+.order-group .btn.sm {
+  padding: var(--fs-space-2) var(--fs-space-4);
+  font-size: var(--fs-text-base);
+  min-height: 2.25rem;
+}
+.order-group input[type="checkbox"] {
+  width: 1.375rem;
+  height: 1.375rem;
+  accent-color: var(--fs-brand);
+  cursor: pointer;
+}
+.order-group input[type="checkbox"]:disabled {
+  cursor: not-allowed;
+}
+/* issue 95 bod 3: zarovnanie čísiel doprava. */
 .ord-qty {
   font-weight: var(--fs-weight-semibold);
   color: var(--fs-ink);
+  text-align: right;
 }
 /* issue 62: súčet kusov toho istého produktu naprieč objednávkami dodávateľa
    — neklikateľná pilulka, zámerne odlišná od interaktívneho `.chip`
@@ -718,16 +798,41 @@ tr:last-child td {
   white-space: nowrap;
   cursor: help;
 }
+/* issue 95: KÓD + VEĽKOSŤ zlúčené do jednej bunky (majiteľ, komentár #10:
+   "veľkosť je už súčasťou kódu") — kód je hlavný text, veľkosť (keď appka má
+   samostatnú `sizeLabel` hodnotu) je vedľa neho menším, tlmeným písmom. */
+.ord-code-cell {
+  font-weight: var(--fs-weight-medium);
+}
+.ord-size-inline {
+  margin-left: var(--fs-space-1);
+  font-size: var(--fs-text-xs);
+  font-weight: var(--fs-weight-medium);
+  color: var(--fs-ink-muted);
+}
 .ord-state-select {
-  padding: var(--fs-space-1) var(--fs-space-2);
+  width: 100%;
+  padding: var(--fs-space-2) var(--fs-space-2);
   border: 1px solid var(--fs-border);
   border-radius: var(--fs-radius-sm);
   font: inherit;
-  font-size: var(--fs-text-sm);
+  font-size: var(--fs-text-base);
+  min-height: 2.25rem;
+}
+/* issue 95: DODÁVATEĽ + PRIRADENIE DODÁVATEĽA zlúčené do jednej bunky
+   (majiteľ, komentár #1: "neviem čo tam je Priradenie dodávateľa stĺpec" —
+   je vidieť len pri riadkoch bez katalógového dodávateľa, `supplierAssignable`
+   nižšie). Vnútri sú DVA pôvodné testid-ované bloky (`.ord-supplier-cell`/
+   `.ord-supplier-assign`, nezmenené) len vedľa seba v JEDNEJ bunke namiesto
+   dvoch samostatných stĺpcov. */
+.ord-supplier-merged {
+  display: flex;
+  flex-direction: column;
+  gap: var(--fs-space-1);
 }
 /* issue 67: odkaz/kód dodávateľa pri riadku objednávky. */
 .ord-supplier-cell {
-  max-width: 220px;
+  max-width: 100%;
 }
 .ord-supplier-link {
   font-weight: var(--fs-weight-medium);
@@ -752,24 +857,33 @@ tr:last-child td {
 /* issue 63: ručné priradenie dodávateľa riadku bez dodávateľa — vstup +
    uložiť, rovnaký vizuálny jazyk ako `.ord-state-select`/`.btn.sm`. `flex` +
    `flex-wrap: wrap` (NIE `white-space: nowrap`) — bez zalomenia by vstup +
-   tlačidlo pri užšom stĺpci pretiekli VIZUÁLNE do susedného stĺpca "Stav" a
-   jeho `<select>` (neskôr v DOM-e, teda navrchu) by kradol kliky mierené na
+   tlačidlo pri užšom stĺpci pretiekli VIZUÁLNE do susedného stĺpca a jeho
+   `<select>`/vstup (neskôr v DOM-e, teda navrchu) by kradol kliky mierené na
    toto tlačidlo (zistené reálnym Playwright behom — `locator.click` padalo
-   na "select ... intercepts pointer events", nie flaka). */
+   na "select ... intercepts pointer events", nie flaka). issue 95: šírka v
+   `rem` (nie natvrdo v px), o čosi širšia pre väčšie písmo/tlačidlo. */
 .ord-supplier-assign {
   display: flex;
   align-items: center;
   gap: var(--fs-space-1);
   flex-wrap: wrap;
-  max-width: 160px;
+  max-width: 100%;
 }
 .ord-supplier-assign-input {
-  width: 110px;
-  padding: var(--fs-space-1) var(--fs-space-2);
+  width: 8rem;
+  /* code review (issue 95): `width` alone can force the input wider than its
+     ACTUAL column at the table's `min-width: 64rem` floor on a ~1280-1440px
+     laptop viewport (`.col-supplier` computes narrower than 8rem there) —
+     `<td>`s don't clip overflowing children by default, so without this the
+     input would visually bleed into the neighbouring column. `max-width:
+     100%` lets it shrink to whatever the column actually has. */
+  max-width: 100%;
+  padding: var(--fs-space-2) var(--fs-space-2);
   border: 1px solid var(--fs-border);
   border-radius: var(--fs-radius-sm);
   font: inherit;
-  font-size: var(--fs-text-sm);
+  font-size: var(--fs-text-base);
+  min-height: 2.25rem;
 }
 
 /* issue 65: priamy odkaz do Shoptet administrácie. issue 99: nesie teraz
@@ -783,11 +897,13 @@ tr:last-child td {
 /* issue 65: upozornenie na starú nevybavenú objednávku (>14 dní) — výrazná
    farba (`--fs-warning`), rovnaká sémantika ako `.orders-table tr.state-
    caka_sa` vyššie, ale nezávislá od stavu riadku (môže sa zobraziť pri
-   AKOMKOĽVEK nevybavenom stave). */
+   AKOMKOĽVEK nevybavenom stave). issue 95: teraz vlastný riadok POD dátumom
+   (nie inline vedľa), aby sa v užšom zlúčenom stĺpci nezalamoval do stredu
+   textu dátumu. */
 .ord-stale-badge {
   display: inline-flex;
   align-items: center;
-  margin-left: var(--fs-space-2);
+  margin-top: var(--fs-space-1);
   padding: 0 var(--fs-space-2);
   font-size: var(--fs-text-xs);
   font-weight: var(--fs-weight-semibold);
@@ -798,10 +914,19 @@ tr:last-child td {
   white-space: nowrap;
   cursor: help;
 }
+/* issue 95: POZNÁMKA E-SHOPU (`remark`, read-only) + KOMENTÁR zlúčené do
+   jednej bunky "Poznámky" (majiteľ, komentár #10) — vnútri sú DVA pôvodné
+   testid-ované bloky (`.ord-remark-cell`/`.ord-comment-cell`, nezmenené),
+   pod sebou namiesto dvoch samostatných stĺpcov. */
+.ord-notes-merged {
+  display: flex;
+  flex-direction: column;
+  gap: var(--fs-space-2);
+}
 /* issue 65: zákaznícky odkaz k objednávke — read-only, rovnaký orezávací
    vzor ako `.ord-supplier-note` (issue 70) — voľný text neobmedzenej dĺžky. */
 .ord-remark-cell {
-  max-width: 200px;
+  max-width: 100%;
 }
 .ord-remark {
   display: inline-block;
@@ -816,22 +941,60 @@ tr:last-child td {
 /* issue 64: poznámka k CELEJ objednávke — rovnaký vizuálny jazyk ako
    `.ord-supplier-assign`/`-input` vyššie (`flex-wrap: wrap`, rovnaký dôvod:
    bez zalomenia by vstup + tlačidlo pri užšom stĺpci pretiekli do
-   susedného stĺpca). Širšie ako priradenie dodávateľa — voľný text (max
-   2000 znakov) je typicky dlhší než meno dodávateľa. */
+   susedného stĺpca). issue 95: šírka v `rem` (nie natvrdo v px). */
 .ord-comment-cell {
   display: flex;
   align-items: center;
   gap: var(--fs-space-1);
   flex-wrap: wrap;
-  max-width: 220px;
+  max-width: 100%;
 }
 .ord-comment-input {
-  width: 160px;
-  padding: var(--fs-space-1) var(--fs-space-2);
+  width: 10rem;
+  /* code review (issue 95): same overflow safeguard as
+     `.ord-supplier-assign-input` above — `.col-notes` can compute narrower
+     than 10rem at the table's `min-width` floor on a laptop viewport. */
+  max-width: 100%;
+  padding: var(--fs-space-2) var(--fs-space-2);
   border: 1px solid var(--fs-border);
   border-radius: var(--fs-radius-sm);
   font: inherit;
-  font-size: var(--fs-text-sm);
+  font-size: var(--fs-text-base);
+  min-height: 2.25rem;
+}
+/* issue 95: percentuálne šírky stĺpcov (`SupplierOrderGroup.tsx`'s
+   `<colgroup>`) — PRODUKT (najdôležitejší údaj, majiteľ komentár #1: "má len
+   97px na dlhý názov") a zlúčené DODÁVATEĽ/POZNÁMKY dostávajú najviac
+   miesta, checkbox/MNOŽSTVO najmenej. Súčet = 100%. */
+.col-ordered {
+  width: 4%;
+}
+.col-order {
+  width: 8%;
+}
+.col-customer {
+  width: 10%;
+}
+.col-code {
+  width: 8%;
+}
+.col-product {
+  width: 20%;
+}
+.col-qty {
+  width: 6%;
+}
+.col-supplier {
+  width: 15%;
+}
+.col-state {
+  width: 9%;
+}
+.col-date {
+  width: 8%;
+}
+.col-notes {
+  width: 12%;
 }
 
 /* issue 59: nastavenie otvorených stavov objednávok — rovnaký vizuálny

@@ -12,7 +12,12 @@ export default tseslint.config(
           allowDefaultProject: [
             "apps/api/*.config.ts",
             "apps/web/*.config.ts",
-            "apps/web/tests/e2e/*.ts",
+            // "apps/web/tests/e2e/*.ts" REMOVED (issue 95) — the directory now
+            // has its own real tsconfig.json (needed "DOM" lib for
+            // `page.evaluate()` callbacks referencing `document`/`window`,
+            // which the API's default project's Node-only `lib` doesn't have)
+            // wired into root `typecheck`; project service finds it on its
+            // own, same reason as the two removals below.
             // "scripts/*.ts" REMOVED (final-wave-b, item 1/issue #4) — scripts/
             // now has its own real tsconfig (`scripts/tsconfig.json`, wired into
             // `pnpm typecheck`), so typescript-eslint's project service finds it

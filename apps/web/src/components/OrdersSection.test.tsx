@@ -119,13 +119,53 @@ it("zoskupí riadky podľa dodávateľa a zobrazí produkt, veľkosť, množstvo
   expect(stary.textContent).toContain("Nevybavené");
 });
 
-it("chýbajúcu veľkosť a komentár zobrazí ako pomlčku", async () => {
+// issue 95: 13 pôvodných stĺpcov → 10 (VEĽKOSŤ zlúčená do KÓD, PRIRADENIE
+// DODÁVATEĽA do DODÁVATEĽ, POZNÁMKA E-SHOPU do POZNÁMOK) — regresný test
+// dokazuje, že ide o SKUTOČNÉ zlúčenie stĺpcov v DOM-e (rovnaký rodičovský
+// `<td>`), nie len premenovanie hlavičiek.
+it("hlavička tabuľky má 10 stĺpcov (zlúčené VEĽKOSŤ/PRIRADENIE DODÁVATEĽA/POZNÁMKA E-SHOPU)", async () => {
+  fetchOpenOrders.mockResolvedValue([{ supplier: "Dodávateľ Alfa", lines: [LINE_STARA], email: null }]);
+
+  render(<OrdersSection role="manazer" onSessionExpired={() => {}} />);
+
+  const hlavicky = await screen.findAllByRole("columnheader");
+  expect(hlavicky).toHaveLength(10);
+  const nazvy = hlavicky.map((th) => th.textContent);
+  expect(nazvy).not.toContain("Veľkosť");
+  expect(nazvy).not.toContain("Priradenie dodávateľa");
+  expect(nazvy).not.toContain("Poznámka e-shopu");
+});
+
+it("zlúčená bunka DODÁVATEĽ drží odkaz na dodávateľa AJ priradenie v tom istom stĺpci", async () => {
+  fetchOpenOrders.mockResolvedValue([{ supplier: "Dodávateľ Alfa", lines: [LINE_STARA], email: null }]);
+
+  render(<OrdersSection role="manazer" onSessionExpired={() => {}} />);
+
+  const odkazBunka = await screen.findByTestId(`supplier-link-${LINE_STARA.lineId}`);
+  const priradenieBunka = await screen.findByTestId(`supplier-assign-cell-${LINE_STARA.lineId}`);
+  expect(odkazBunka.closest("td")).toBe(priradenieBunka.closest("td"));
+});
+
+it("zlúčená bunka POZNÁMKY drží poznámku e-shopu AJ komentár v tom istom stĺpci", async () => {
+  fetchOpenOrders.mockResolvedValue([{ supplier: "Dodávateľ Alfa", lines: [LINE_STARA], email: null }]);
+
+  render(<OrdersSection role="manazer" onSessionExpired={() => {}} />);
+
+  const remarkBunka = await screen.findByTestId(`remark-cell-${LINE_STARA.lineId}`);
+  const commentBunka = await screen.findByTestId(`comment-cell-${LINE_STARA.lineId}`);
+  expect(remarkBunka.closest("td")).toBe(commentBunka.closest("td"));
+});
+
+it("chýbajúci dodávateľ zobrazí ako pomlčku (veľkosť sa pri chýbajúcej hodnote jednoducho nezobrazí)", async () => {
   fetchOpenOrders.mockResolvedValue([{ supplier: "Dodávateľ Alfa", lines: [LINE_NOVA], email: null }]);
 
   render(<OrdersSection role="citanie" onSessionExpired={() => {}} />);
 
   const riadok = await screen.findByTestId(`order-line-${LINE_NOVA.lineId}`);
-  // LINE_NOVA má sizeLabel: null — zobrazí sa pomlčka namiesto prázdneho políčka.
+  // issue 95: `LINE_NOVA` má `sizeLabel: null` — od zlúčenia KÓD+VEĽKOSŤ sa v
+  // tom prípade jednoducho NIČ nevykreslí (žiadna pomlčka náhradou), takže
+  // pomlčka nižšie pochádza zo zlúčenej bunky DODÁVATEĽ (LINE_NOVA má aj
+  // `supplierUrl`/`supplierNote`/`externalCode` všetky `null`).
   expect(riadok.textContent).toContain("—");
 });
 

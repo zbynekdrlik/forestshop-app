@@ -168,9 +168,14 @@ export function OrderLineRow({
         </a>
       </td>
       <td>{line.customerName}</td>
-      <td>{line.variantCode}</td>
+      {/* issue 95: KÓD + VEĽKOSŤ zlúčené (majiteľ, komentár #10: "veľkosť je
+          už súčasťou kódu") — veľkosť sa zobrazí len keď appka má samostatnú
+          `sizeLabel` hodnotu (nie každý variant ju má). */}
+      <td className="ord-code-cell">
+        {line.variantCode}
+        {line.sizeLabel !== null && <span className="ord-size-inline">{line.sizeLabel}</span>}
+      </td>
       <td>{line.variantName}</td>
-      <td>{line.sizeLabel ?? "—"}</td>
       <td className="ord-qty">
         {line.quantity} ks
         {qtyChip !== null && (
@@ -179,68 +184,74 @@ export function OrderLineRow({
           </span>
         )}
       </td>
-      <td className="ord-supplier-cell" data-testid={`supplier-link-${line.lineId}`}>
-        {line.supplierUrl !== null ? (
-          <a
-            href={line.supplierUrl}
-            target="_blank"
-            rel="noreferrer noopener"
-            className="ord-supplier-link"
-            // issue 72: variantName sám nestačí — dva riadky toho istého
-            // produktu v rôznych veľkostiach majú zhodný variantName, líšia
-            // sa len variantCode.
-            aria-label={`Odkaz na dodávateľa — ${line.variantName} (${line.variantCode})`}
-          >
-            Odkaz na dodávateľa
-          </a>
-        ) : line.supplierNote !== null ? (
-          <span className="ord-supplier-note" title={line.supplierNote}>
-            {line.supplierNote}
-          </span>
-        ) : line.externalCode === null ? (
-          "—"
-        ) : null}
-        {line.externalCode !== null && <div className="ord-supplier-code">kód {line.externalCode}</div>}
-      </td>
-      <td className="ord-supplier-assign" data-testid={`supplier-assign-cell-${line.lineId}`}>
-        {line.supplierAssignable ? (
-          <>
-            <input
-              type="text"
-              // Jeden zdieľaný `<datalist id="known-suppliers">` (rendrovaný
-              // raz v `OrdersSection.tsx`, z UŽ načítaných skupín) — žiadna
-              // nová GET trasa netreba len na našepkávanie.
-              list="known-suppliers"
-              className="ord-supplier-assign-input"
-              data-testid={`supplier-assign-input-${line.lineId}`}
-              aria-label={`Priradiť dodávateľa riadku objednávky ${line.externalOrderId} / ${line.variantCode}`}
-              placeholder="priradiť dodávateľa…"
-              value={supplierDraft}
-              disabled={supplierBusyHere}
-              onChange={(e) => {
-                setSupplierDraft(e.target.value);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  saveSupplier();
-                }
-              }}
-            />
-            <button
-              type="button"
-              className="btn sm good"
-              data-testid={`supplier-assign-save-${line.lineId}`}
-              aria-label={`Uložiť priradenie dodávateľa riadku objednávky ${line.externalOrderId} / ${line.variantCode}`}
-              disabled={supplierBusyHere || supplierDraft.trim() === ""}
-              onClick={saveSupplier}
+      {/* issue 95: DODÁVATEĽ + PRIRADENIE DODÁVATEĽA zlúčené do jednej bunky
+          (majiteľ, komentár #1) — oba vnorené bloky nižšie sú BEZ ZMENY
+          (rovnaké testid, rovnaká logika), len vedľa seba v jednej `<td>`
+          namiesto dvoch samostatných stĺpcov. */}
+      <td className="ord-supplier-merged">
+        <div className="ord-supplier-cell" data-testid={`supplier-link-${line.lineId}`}>
+          {line.supplierUrl !== null ? (
+            <a
+              href={line.supplierUrl}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="ord-supplier-link"
+              // issue 72: variantName sám nestačí — dva riadky toho istého
+              // produktu v rôznych veľkostiach majú zhodný variantName, líšia
+              // sa len variantCode.
+              aria-label={`Odkaz na dodávateľa — ${line.variantName} (${line.variantCode})`}
             >
-              💾
-            </button>
-          </>
-        ) : (
-          "—"
-        )}
+              Odkaz na dodávateľa
+            </a>
+          ) : line.supplierNote !== null ? (
+            <span className="ord-supplier-note" title={line.supplierNote}>
+              {line.supplierNote}
+            </span>
+          ) : line.externalCode === null ? (
+            "—"
+          ) : null}
+          {line.externalCode !== null && <div className="ord-supplier-code">kód {line.externalCode}</div>}
+        </div>
+        <div className="ord-supplier-assign" data-testid={`supplier-assign-cell-${line.lineId}`}>
+          {line.supplierAssignable ? (
+            <>
+              <input
+                type="text"
+                // Jeden zdieľaný `<datalist id="known-suppliers">` (rendrovaný
+                // raz v `OrdersSection.tsx`, z UŽ načítaných skupín) — žiadna
+                // nová GET trasa netreba len na našepkávanie.
+                list="known-suppliers"
+                className="ord-supplier-assign-input"
+                data-testid={`supplier-assign-input-${line.lineId}`}
+                aria-label={`Priradiť dodávateľa riadku objednávky ${line.externalOrderId} / ${line.variantCode}`}
+                placeholder="priradiť dodávateľa…"
+                value={supplierDraft}
+                disabled={supplierBusyHere}
+                onChange={(e) => {
+                  setSupplierDraft(e.target.value);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    saveSupplier();
+                  }
+                }}
+              />
+              <button
+                type="button"
+                className="btn sm good"
+                data-testid={`supplier-assign-save-${line.lineId}`}
+                aria-label={`Uložiť priradenie dodávateľa riadku objednávky ${line.externalOrderId} / ${line.variantCode}`}
+                disabled={supplierBusyHere || supplierDraft.trim() === ""}
+                onClick={saveSupplier}
+              >
+                💾
+              </button>
+            </>
+          ) : (
+            "—"
+          )}
+        </div>
       </td>
       <td>
         {canChangeState ? (
@@ -286,54 +297,60 @@ export function OrderLineRow({
           </span>
         )}
       </td>
-      {/* issue 65: zákaznícky odkaz k objednávke — read-only, appka ho
-          nikdy needituje (na rozdiel od `comment` bunky nižšie). */}
-      <td className="ord-remark-cell" data-testid={`remark-cell-${line.lineId}`}>
-        {line.remark !== null ? (
-          <span className="ord-remark" title={line.remark}>
-            🛈 {line.remark}
-          </span>
-        ) : (
-          "—"
-        )}
-      </td>
-      <td className="ord-comment-cell" data-testid={`comment-cell-${line.lineId}`}>
-        {canChangeState ? (
-          <>
-            <input
-              type="text"
-              className="ord-comment-input"
-              data-testid={`comment-input-${line.lineId}`}
-              aria-label={`Poznámka k objednávke ${line.externalOrderId} / ${line.variantCode}`}
-              placeholder="poznámka…"
-              maxLength={2000}
-              value={commentDraft}
-              disabled={commentBusyHere}
-              onChange={(e) => {
-                isCommentDirty.current = true;
-                setCommentDraft(e.target.value);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  saveComment();
-                }
-              }}
-            />
-            <button
-              type="button"
-              className="btn sm good"
-              data-testid={`comment-save-${line.lineId}`}
-              aria-label={`Uložiť poznámku k objednávke ${line.externalOrderId} / ${line.variantCode}`}
-              disabled={commentBusyHere}
-              onClick={saveComment}
-            >
-              💾
-            </button>
-          </>
-        ) : (
-          (line.comment ?? "—")
-        )}
+      {/* issue 95: POZNÁMKA E-SHOPU (`remark`, read-only) + KOMENTÁR zlúčené
+          do jednej bunky "Poznámky" (majiteľ, komentár #10) — oba vnorené
+          bloky nižšie sú BEZ ZMENY (rovnaké testid, rovnaká logika), len pod
+          sebou v jednej `<td>` namiesto dvoch samostatných stĺpcov. */}
+      <td className="ord-notes-merged">
+        {/* issue 65: zákaznícky odkaz k objednávke — read-only, appka ho
+            nikdy needituje (na rozdiel od `comment` bloku nižšie). */}
+        <div className="ord-remark-cell" data-testid={`remark-cell-${line.lineId}`}>
+          {line.remark !== null ? (
+            <span className="ord-remark" title={line.remark}>
+              🛈 {line.remark}
+            </span>
+          ) : (
+            "—"
+          )}
+        </div>
+        <div className="ord-comment-cell" data-testid={`comment-cell-${line.lineId}`}>
+          {canChangeState ? (
+            <>
+              <input
+                type="text"
+                className="ord-comment-input"
+                data-testid={`comment-input-${line.lineId}`}
+                aria-label={`Poznámka k objednávke ${line.externalOrderId} / ${line.variantCode}`}
+                placeholder="poznámka…"
+                maxLength={2000}
+                value={commentDraft}
+                disabled={commentBusyHere}
+                onChange={(e) => {
+                  isCommentDirty.current = true;
+                  setCommentDraft(e.target.value);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    saveComment();
+                  }
+                }}
+              />
+              <button
+                type="button"
+                className="btn sm good"
+                data-testid={`comment-save-${line.lineId}`}
+                aria-label={`Uložiť poznámku k objednávke ${line.externalOrderId} / ${line.variantCode}`}
+                disabled={commentBusyHere}
+                onClick={saveComment}
+              >
+                💾
+              </button>
+            </>
+          ) : (
+            (line.comment ?? "—")
+          )}
+        </div>
       </td>
     </tr>
   );

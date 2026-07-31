@@ -17,6 +17,13 @@ export interface NavTab {
   readonly id: string;
   readonly label: string;
   readonly Component: ComponentType<SectionProps>;
+  // issue 95: `true` pre obrazovky, ktoré potrebujú viac než pohodlnú čítaciu
+  // šírku (`--fs-content-width`, 1120px) — hustá pracovná tabuľka ("Na
+  // objednanie") sa inak nikdy nerozšíri na šírku okna nad týmto stropom.
+  // `App.tsx` na základe tohto pridá `<main>`u triedu `main-wide`
+  // (`app.css`), ktorá strop zruší LEN pre túto jednu záložku — ostatné
+  // (Sync/Katalóg/Párovanie/Plánovač) ostávajú na pôvodnej čítacej šírke.
+  readonly wide?: boolean;
 }
 
 export interface NavFolder {
@@ -38,7 +45,7 @@ export const NAV: readonly NavFolder[] = [
   {
     id: "eshop",
     label: "Eshop",
-    tabs: [{ id: "orders", label: "Na objednanie", Component: OrdersSection }],
+    tabs: [{ id: "orders", label: "Na objednanie", Component: OrdersSection, wide: true }],
   },
 ];
 

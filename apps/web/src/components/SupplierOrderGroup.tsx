@@ -111,54 +111,71 @@ export function SupplierOrderGroup({
         onClosePreview={onClosePreview}
         onConfirmSend={onConfirmSend}
       />
-      <table className="orders-table">
-        <thead>
-          <tr>
-            {/* issue 60: odškrtávacie políčko — JEDINÉ miesto na obrazovke,
-                ktoré sa smie volať "Objednané" (viď `STATE_LABELS` a stĺpec
-                dátumu nižšie, obe premenované, aby nekolidovali). */}
-            <th>Objednané</th>
-            <th>Objednávka</th>
-            <th>Zákazník</th>
-            <th>Kód</th>
-            <th>Produkt</th>
-            <th>Veľkosť</th>
-            <th>Množstvo</th>
-            <th>Dodávateľ</th>
-            {/* issue 63: ručné priradenie dodávateľa — prázdne pre riadky,
-                ktoré ho nepotrebujú (`line.supplierAssignable === false`). */}
-            <th>Priradenie dodávateľa</th>
-            <th>Stav</th>
-            <th>Dátum objednávky</th>
-            {/* issue 65: zákaznícky odkaz k objednávke (read-only, `remark`
-                stĺpec exportu — NIE naša vlastná `comment` bunka vpravo). */}
-            <th>Poznámka e-shopu</th>
-            <th>Komentár</th>
-          </tr>
-        </thead>
-        <tbody>
-          {visibleLines.map((line) => (
-            <OrderLineRow
-              key={line.lineId}
-              line={line}
-              canChangeState={canChangeState}
-              busyLineId={busyLineId}
-              busyOrderedLineId={busyOrderedLineId}
-              // Review of PR 75, finding 6: kým hromadná akcia pre TOHTO
-              // dodávateľa beží, žiadny riadok jeho skupiny sa nesmie dať
-              // meniť per-riadkovo naraz.
-              supplierBusy={busyOrderedSupplier === group.supplier}
-              variantTotal={variantTotals.get(line.variantCode)}
-              busySupplierLineId={busySupplierLineId}
-              busyCommentOrderId={busyCommentOrderId}
-              onChangeState={onChangeState}
-              onChangeOrdered={onChangeOrdered}
-              onAssignSupplier={onAssignSupplier}
-              onChangeComment={onChangeComment}
-            />
-          ))}
-        </tbody>
-      </table>
+      {/* issue 95: vlastný vodorovný posuvný obal — stránka (`.main-wide`)
+          sa sama nikdy neposúva, posúva sa (keď treba) len táto tabuľka.
+          `table-layout: fixed` + `<colgroup>` dávajú stĺpcom percentuálne
+          šírky (`app.css`'s `.col-*`) namiesto automatického rozloženia. 13
+          pôvodných stĺpcov je teraz 10 — VEĽKOSŤ zlúčená do KÓD, PRIRADENIE
+          DODÁVATEĽA do DODÁVATEĽ, POZNÁMKA E-SHOPU do POZNÁMOK (majiteľ,
+          komentár #10) — nedôležité/takmer vždy prázdne stĺpce už nedržia
+          šírku PRODUKTU, ktorý ju teraz dostáva najviac. */}
+      <div className="orders-table-wrap">
+        <table className="orders-table">
+          <colgroup>
+            <col className="col-ordered" />
+            <col className="col-order" />
+            <col className="col-customer" />
+            <col className="col-code" />
+            <col className="col-product" />
+            <col className="col-qty" />
+            <col className="col-supplier" />
+            <col className="col-state" />
+            <col className="col-date" />
+            <col className="col-notes" />
+          </colgroup>
+          <thead>
+            <tr>
+              {/* issue 60: odškrtávacie políčko — JEDINÉ miesto na obrazovke,
+                  ktoré sa smie volať "Objednané" (viď `STATE_LABELS` a stĺpec
+                  dátumu nižšie, obe premenované, aby nekolidovali). */}
+              <th>Objednané</th>
+              <th>Objednávka</th>
+              <th>Zákazník</th>
+              <th title="Kód variantu — obsahuje aj veľkosť, keď ju appka pozná">Kód</th>
+              <th>Produkt</th>
+              <th>Množstvo</th>
+              <th title="Dodávateľ z katalógu, alebo ručné priradenie pri produkte bez katalógového dodávateľa">
+                Dodávateľ
+              </th>
+              <th>Stav</th>
+              <th>Dátum objednávky</th>
+              <th title="Poznámka zákazníka z e-shopu (na čítanie) + vlastná poznámka tímu">Poznámky</th>
+            </tr>
+          </thead>
+          <tbody>
+            {visibleLines.map((line) => (
+              <OrderLineRow
+                key={line.lineId}
+                line={line}
+                canChangeState={canChangeState}
+                busyLineId={busyLineId}
+                busyOrderedLineId={busyOrderedLineId}
+                // Review of PR 75, finding 6: kým hromadná akcia pre TOHTO
+                // dodávateľa beží, žiadny riadok jeho skupiny sa nesmie dať
+                // meniť per-riadkovo naraz.
+                supplierBusy={busyOrderedSupplier === group.supplier}
+                variantTotal={variantTotals.get(line.variantCode)}
+                busySupplierLineId={busySupplierLineId}
+                busyCommentOrderId={busyCommentOrderId}
+                onChangeState={onChangeState}
+                onChangeOrdered={onChangeOrdered}
+                onAssignSupplier={onAssignSupplier}
+                onChangeComment={onChangeComment}
+              />
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
