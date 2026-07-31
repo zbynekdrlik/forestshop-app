@@ -190,6 +190,18 @@ test("manažér vidí otvorené objednávky zoskupené podľa dodávateľa, konz
   await expect(odkazAlfa).toHaveAttribute("href", "https://www.huntingshop.eu/wild-t-green-nohavice");
   await expect(riadokAlfa).toContainText("OB832");
 
+  // issue 65: zákaznícky odkaz (`remark`, read-only) + priamy odkaz do
+  // Shoptet administrácie (`adminUrl`) — objednávka 9001.
+  await expect(riadokAlfa).toContainText("Prosím doručiť len v piatok");
+  const adminOdkazAlfa = riadokAlfa.getByRole("link", { name: "Otvoriť objednávku 9001 v administrácii Shoptet" });
+  await expect(adminOdkazAlfa).toHaveAttribute(
+    "href",
+    "https://www.forestshop.sk/admin/vyhladavanie/?string=9001&src=orders",
+  );
+  // Objednávka 9001 je UŽ vybavená (stav "caka_sa") — upozornenie na staré
+  // objednávky sa NIKDY nezobrazí pre vybavený riadok, aj keby bol starý.
+  await expect(riadokAlfa.locator("[data-testid^='stale-badge-']")).toHaveCount(0);
+
   // Objednávka 9002 je nad variantom "40287", ktorý nemá dodávateľa
   // (`product.supplier` je `null`) — zoskupí sa pod zástupný kľúč, nie pod
   // "null" a nezmizne.
@@ -208,6 +220,14 @@ test("manažér vidí otvorené objednávky zoskupené podľa dodávateľa, konz
   // issue 60: premenované na "Nevybavené" (slovo "Objednané" teraz patrí
   // výlučne novému odškrtávaciemu políčku).
   await expect(riadokBez).toContainText("Nevybavené");
+
+  // issue 65: objednávka 9002 zámerne nesie placedAt hlboko v minulosti
+  // (`scripts/e2e-setup.ts`) a zostáva NEVYBAVENÁ (predvolený stav) — presne
+  // ten prípad, ktorý má dostať upozornenie ⚠️ na starú objednávku.
+  const staleBadgeBez = riadokBez.locator("[data-testid^='stale-badge-']");
+  await expect(staleBadgeBez).toBeVisible();
+  await expect(staleBadgeBez).toContainText("⚠️");
+  await expect(staleBadgeBez).toContainText("dní");
 
   expect(chyby).toEqual([]);
 });
