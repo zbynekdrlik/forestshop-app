@@ -223,46 +223,51 @@ export function OrderLineRow({
           ) : null}
           {line.externalCode !== null && <div className="ord-supplier-code">kód {line.externalCode}</div>}
         </div>
-        <div className="ord-supplier-assign" data-testid={`supplier-assign-cell-${line.lineId}`}>
-          {line.supplierAssignable ? (
-            <>
-              <input
-                type="text"
-                // Jeden zdieľaný `<datalist id="known-suppliers">` (rendrovaný
-                // raz v `OrdersSection.tsx`, z UŽ načítaných skupín) — žiadna
-                // nová GET trasa netreba len na našepkávanie.
-                list="known-suppliers"
-                className="ord-supplier-assign-input"
-                data-testid={`supplier-assign-input-${line.lineId}`}
-                aria-label={`Priradiť dodávateľa riadku objednávky ${line.externalOrderId} / ${line.variantCode}`}
-                placeholder="priradiť dodávateľa…"
-                value={supplierDraft}
-                disabled={supplierBusyHere}
-                onChange={(e) => {
-                  setSupplierDraft(e.target.value);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    saveSupplier();
-                  }
-                }}
-              />
-              <button
-                type="button"
-                className="btn sm good"
-                data-testid={`supplier-assign-save-${line.lineId}`}
-                aria-label={`Uložiť priradenie dodávateľa riadku objednávky ${line.externalOrderId} / ${line.variantCode}`}
-                disabled={supplierBusyHere || supplierDraft.trim() === ""}
-                onClick={saveSupplier}
-              >
-                💾
-              </button>
-            </>
-          ) : (
-            "—"
-          )}
-        </div>
+        {/* issue 107 bod 3: majiteľ, komentár #1: "neviem čo tam je Priradenie
+            dodávateľa stĺpec" — pri neradiťeľnom riadku (100 % dnešných ostrých
+            dát) sa TENTO blok predtým vykresľoval VŽDY, len s holou pomlčkou
+            "—" bez akéhokoľvek významu. Teraz sa nevykreslí VÔBEC (žiadny
+            prvok, žiadny prázdny <div>) — presne to, čo test v
+            `OrderLineRow.supplierAssignCell.test.tsx` overuje. */}
+        {line.supplierAssignable && (
+          <div className="ord-supplier-assign" data-testid={`supplier-assign-cell-${line.lineId}`}>
+            {/* Krátky viditeľný popis (nielen placeholder) — predtým účel poľa
+                prezrádzal LEN placeholder, presne na čo sa majiteľ sťažoval. */}
+            <span className="ord-supplier-assign-label">Priradiť dodávateľa:</span>
+            <input
+              type="text"
+              // Jeden zdieľaný `<datalist id="known-suppliers">` (rendrovaný
+              // raz v `OrdersSection.tsx`, z UŽ načítaných skupín) — žiadna
+              // nová GET trasa netreba len na našepkávanie.
+              list="known-suppliers"
+              className="ord-supplier-assign-input"
+              data-testid={`supplier-assign-input-${line.lineId}`}
+              aria-label={`Priradiť dodávateľa riadku objednávky ${line.externalOrderId} / ${line.variantCode}`}
+              placeholder="priradiť dodávateľa…"
+              value={supplierDraft}
+              disabled={supplierBusyHere}
+              onChange={(e) => {
+                setSupplierDraft(e.target.value);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  saveSupplier();
+                }
+              }}
+            />
+            <button
+              type="button"
+              className="btn sm good"
+              data-testid={`supplier-assign-save-${line.lineId}`}
+              aria-label={`Uložiť priradenie dodávateľa riadku objednávky ${line.externalOrderId} / ${line.variantCode}`}
+              disabled={supplierBusyHere || supplierDraft.trim() === ""}
+              onClick={saveSupplier}
+            >
+              💾
+            </button>
+          </div>
+        )}
       </td>
       <td>
         {canChangeState ? (

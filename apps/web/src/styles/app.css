@@ -890,6 +890,16 @@ tr:last-child td {
   flex-wrap: wrap;
   max-width: 100%;
 }
+/* issue 107 bod 3: krátky viditeľný popis nad vstupom (nie vedľa) —
+   `flex-basis: 100%` ho vynúti na VLASTNÝ riadok pod `.ord-supplier-assign`'s
+   `flex-wrap: wrap`, takže nekonkuruje o horizontálny priestor s
+   vstupom/tlačidlom (presne ten priestor, ktorý si issue 105 bod 3 draho
+   zmeral pre input+button pár). */
+.ord-supplier-assign-label {
+  flex-basis: 100%;
+  font-size: var(--fs-text-xs);
+  color: var(--fs-ink-faint);
+}
 .ord-supplier-assign-input {
   /* issue 105 bod 3: `width: 8rem` (fixed) + `max-width: 100%` still forced
      the WHOLE row to wrap onto two lines at the table's floor width. Two
