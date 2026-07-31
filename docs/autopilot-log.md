@@ -1204,3 +1204,52 @@ nové heslo sa nikde v pushnutom obsahu nenachádza.
   push and PR `#84`; main CI + Deploy green on merge `3e66505`; live
   `/api/version` matched (`0.3.0-dev.44` @ `3e66505`).
 - Shared PR: `#84`.
+
+## Issue 89: PR 87 review findings (409 refetch, log, playbook, unit test)
+
+- Four small hardening findings from an independent code review of PR 87
+  (issue 86): (1) `OrdersSection.tsx`'s `assignSupplier` refetched only on
+  success — added `load()` to the `.catch()` too, RED (`OrdersSection
+  .assignSupplier.test.tsx`) before GREEN, so a rejected assignment (e.g.
+  the 409) no longer leaves the list stale forever; (2) `orders-routes.ts`
+  returned before `log.info` on the `already_has_supplier` 409 branch —
+  added `log.warn` with actorUserId/lineId/supplier, test spies on the real
+  pino `log.warn`; (3) `.claude/rules/orders.md` records the tension
+  between this 409 and `testing.md`'s no-4xx-for-Playwright-exercised-
+  domain-failures rule, deliberately not changed to 200 (no e2e exercises
+  this banner yet); (4) `ordersApi.test.ts` had zero coverage of
+  `assignOrderLineSupplier` — added 3 tests (POST shape, 409 Slovak
+  message surfacing, 401 mapping). Fifth review finding (a cleanup
+  migration for dormant `product_supplier_override` rows) skipped —
+  production table verified empty (0 rows).
+- Design writeup posted to issue 89 BEFORE the first commit (root cause +
+  approach + rejected alternative per finding).
+- Commits: `833af25` (bump 0.3.0-dev.48) → `64cd4ee` (RED, finding 1) →
+  `de7034c` (GREEN, finding 1) → `58b705e` (finding 2 + test) → `e41237a`
+  (finding 4) → `4b3bd81` (finding 3, playbook).
+- CI green on `dev` push + PR `#90`; merged to main (`0f60247`) — but
+  main's `check` job then FAILED once (flaked), see follow-up below.
+- **Follow-up discovered during verification**: the new
+  `OrdersSection.assignSupplier.test.tsx` test flaked on main's CI
+  (~1-in-150 reproduced locally). Root cause: `OrderLineRow.tsx`'s
+  `useEffect` resetting the supplier-draft from `manualSupplierOverride`
+  ran on every MOUNT too (not just on a genuine later change — `useEffect`
+  always fires once after first commit regardless of whether the
+  dependency "actually changed"), which could race with an interaction
+  immediately after a row appears and silently wipe a just-typed value.
+  Fixed with a `useRef` mount-skip guard in `OrderLineRow.tsx`; verified
+  with a 300-iteration stress loop (0 failures after, several before).
+  Finding + fix recorded on issue 89 (already closed by PR 90's merge).
+  Commits: `dd45e1c` (bump 0.3.0-dev.49) → `fc53463` (mount-race fix).
+  CI green on `dev` push + PR `#91`; merged to main (`0c3ae7f`); main CI +
+  Deploy green on their own (no retries); live `/api/version` matched
+  (`0.3.0-dev.49` @ `0c3ae7f`).
+- Live verification (`https://forestshop-novy.newlevel.media`): baseline
+  confirmed before AND after (v0.3.0-dev.49, "Všetci (39)", "BETALOV (7)",
+  "(bez dodávateľa) (3)", "Ostáva vybaviť 39 z 39", `product_supplier
+  _override` 0 rows) — assigned a throwaway supplier to line `20261263 /
+  40690/122`, watched it move groups (3→2, "Všetci" stayed 39, new group
+  appeared), deleted the resulting override row directly in the DB,
+  reloaded and confirmed exact restoration. Console: 0 errors/0 warnings
+  throughout, including on the final reload.
+- Shared PRs: `#90` (four findings), `#91` (follow-up race fix).

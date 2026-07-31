@@ -81,3 +81,35 @@ paths:
   individual-item action + a group/bulk action touching the same items),
   add BOTH disables in the SAME change, don't wait for a second review pass
   to catch the missing direction.
+- **A `useEffect` that syncs local state FROM a prop (`setSupplierDraft(line
+  .manualSupplierOverride ?? "")` in `OrderLineRow.tsx`, issue 63) ALSO
+  fires on the component's very first MOUNT** — `useEffect` always runs
+  once after the first commit regardless of whether its dependency
+  "actually changed", and the `useState` initializer right above it
+  ALREADY captures that same starting value, making the mount-time firing
+  pure redundancy. That redundant firing is not just wasted work: it is a
+  RACE, because it is scheduled as a passive effect and may not flush
+  before a fast interaction that happens right after the row first
+  appears (issue 89, found by a brand-new test that was the first thing
+  in this codebase to interact with this exact field — reproduced at
+  ~1-in-150 in a local stress loop, and it flaked once for real on main's
+  CI). Fixed with a `useRef` "skip the first run" guard so the effect only
+  fires on a genuine LATER change of the watched prop. Any NEW
+  prop-syncing `useEffect` added to a row/item component in this codebase
+  needs the same guard UNLESS the mount-time run is provably harmless
+  (i.e. truly a no-op, not just usually fast enough to lose the race).
+- **This project's vitest setup has NO `@testing-library/jest-dom`
+  matchers wired up** — `expect(input).toHaveValue(x)` /
+  `expect(checkbox).toBeChecked()` fail with `Invalid Chai property`, not
+  a normal assertion failure. Existing tests already avoid this
+  (`checkbox.checked`, plain property reads) — a NEW test needing to
+  assert a controlled input's value must read `(input as
+  HTMLInputElement).value` directly, never reach for a jest-dom matcher.
+- **`fireEvent.change(input, ...)` immediately followed by
+  `fireEvent.keyDown(input, { key: "Enter" })` in the SAME synchronous
+  block is measurably flaky** (issue 89: ~1-in-8 local runs never
+  triggered the Enter handler's save call at all). The established,
+  reliable pattern already used elsewhere in this file (the "e-mail
+  dodávateľa" test) is `fireEvent.change` followed by `fireEvent.click`
+  on the actual save/submit BUTTON — use that, not a keyDown-Enter
+  shortcut, for any new form-field-plus-save-button interaction test.
