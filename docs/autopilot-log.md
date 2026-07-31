@@ -3,6 +3,42 @@
 Terse per-ticket log of autopilot-worker cycles: issue(s), commit SHAs,
 RED→GREEN test names, key decisions, and the shared PR.
 
+## 2026-07-31 — #64 (order-comment write path — "Na objednanie" poznámka)
+
+- `PUT /api/orders/:id/comment` (`orders-routes.ts` + `state.ts`'s new
+  `setOrderComment`) — transaction + `FOR UPDATE` + audit, same shape as
+  sibling `setOrderLineState`/`setOrderLineOrdered`. `order.comment` column
+  pre-existed (F3, ingest never overwrites it) — no migration.
+- `OrderLineRow.tsx`'s "Komentár" cell becomes an editable input+save for
+  `canChangeState` roles; `OrdersSection.tsx`'s `changeComment` updates
+  every line sharing the edited row's `orderId` (comment is order-scoped).
+- Enabling refactor (same PR): #31 mail-preview/send state+handlers
+  mechanically extracted from `OrdersSection.tsx` into
+  `useSupplierMailActions.ts` (no behavior change) to stay under eslint
+  `max-lines: 400`.
+- Deep code review (pre-merge) found one real Important issue: a save on
+  row B of an order could silently clobber an unsaved draft on row A of
+  the SAME order (both share `orderId`). Fixed with an `isCommentDirty`
+  ref guard in `OrderLineRow.tsx`. RED regression test:
+  `OrdersSection.comment.test.tsx` "nerozostavaný koncept na riadku A
+  PREŽIJE uloženie poznámky cez riadok B" — confirmed RED against the
+  pre-fix code (`79480c6`), GREEN after (`03186ca`).
+- New backend tests: `orders-http-comment.integration.test.ts` (6). New
+  frontend tests: `ordersApi.test.ts` (+3), `OrdersSection.comment.test.tsx`
+  (5, incl. the regression test above). New e2e test in `orders.spec.ts`
+  under a fresh isolated account (`e2e-komentar@forestshop.sk` — the
+  shared `e2e@forestshop.sk` was already at `MAX_ATTEMPTS=10` across all
+  spec files) plus two pre-existing tests fixed for the new UI colliding
+  with them (`{exact:true}` on a substring-matched "Uložiť" button;
+  `toContainText`→`toHaveValue` since the comment moved from text to an
+  `<input>`).
+- PR #93, merged `6b57422e`, deployed + verified live (v0.3.0-dev.51):
+  wrote a note on order 20261228 (2 lines) via one row's input, confirmed
+  it appeared on BOTH lines before any reload, confirmed it survived a
+  reload, then cleared it back to the original empty value via the same
+  UI flow — restored state confirmed via DB query (`comment` = NULL) and a
+  second reload. 0 console errors/warnings throughout.
+
 ## 2026-07-31 — #86 (supplier-assignment write-side gaps, found by independent audit of #63)
 
 - **Finding 1**: `assignOrderLineSupplier` (`supplier-assignment.ts`) never
