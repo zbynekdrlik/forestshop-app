@@ -1023,6 +1023,16 @@ tr:last-child td {
   border-radius: 999px;
   white-space: nowrap;
   cursor: help;
+  /* issue 127: trvalá poistka pre BUDÚCI, ešte dlhší počet dní (rovnaký vzor
+     ako `.ord-admin-link`/`.ord-code-cell`, issue 111) — `col-date`'s
+     rozšírená šírka vyššie pokrýva dnešný aj rozumne budúci (3-ciferný)
+     obsah s rezervou, ale keby ju predsa niekedy prekročil, odznak sa
+     orezáva SÁM (nikdy nepreteká vizuálne do suseda). `max-width: 100%`
+     viaže orezanie na skutočnú dostupnú šírku bunky, nie na pevné číslo.
+     `title` (naďalej celý text "N dní") ostáva jediný zdroj plnej hodnoty. */
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 /* issue 95: POZNÁMKA E-SHOPU (`remark`, read-only) + KOMENTÁR zlúčené do
    jednej bunky "Poznámky" (majiteľ, komentár #10) — vnútri sú DVA pôvodné
@@ -1197,8 +1207,24 @@ tr:last-child td {
    odkazu potrebuje priestor, aby sa nezalomil viac než predtým). Živo
    overené proti produkcii (39 ostrých riadkov) po nasadení. Súčet ostáva
    100%. */
+/* issue 127: majiteľ, live nameraná chyba — odznak veku objednávky
+   (`.ord-stale-badge`, `.col-date`) pretŕčal svoju bunku o ~22px pri
+   1280px. Skúšaní darcovia šírky (živo, `page.addStyleTag` priamo proti
+   produkcii, 37 ostrých riadkov — nie proti e2e fixtúre, rovnaká metodika
+   ako issue 107/111): `col-notes` má len ~0,5 percentuálneho bodu rezervy
+   nad testovaným prahom "komentárové pole ≥160px" (`orders-layout.spec.
+   ts`); `col-supplier` má naživo 3 riadky s ručným priradením dodávateľa
+   (`.ord-supplier-assign`, na rozdiel od staršieho — dnes už neplatného —
+   komentára "žiadny živý riadok ho dnes nemá") a zúženie ich poslalo nad
+   120px; `col-customer` sa dnes už takmer VŽDY zalamuje (mená zákazníkov),
+   `col-qty`/`col-state`/`col-order` majú nulovú/zápornú rezervu. JEDINÝ
+   stĺpec, kde zúženie o 3 body naživo NEZMENILO žiadnu výšku riadku
+   (min/median/max identické pred aj po, 0 nad 120, na 1280 aj 1920px) je
+   `col-product` — má z issue 117 veľkú rezervu (dlhé názvy produktov
+   dnešnej živej dávky sa nedostávajú na hranicu zalomenia pri tomto
+   zúžení). Súčet ostáva 100%. */
 .col-product {
-  width: 17.4%;
+  width: 14.4%;
 }
 .col-qty {
   width: 4%;
@@ -1210,7 +1236,7 @@ tr:last-child td {
   width: 13.5%;
 }
 .col-date {
-  width: 6%;
+  width: 9%;
 }
 .col-notes {
   width: 24.1%;
