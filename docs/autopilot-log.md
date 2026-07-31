@@ -1343,3 +1343,71 @@ nové heslo sa nikde v pushnutom obsahu nenachádza.
   export earlier). Console: 0 errors/0 warnings.
 - Shared PRs: `#96` (main implementation), `#97` (compose wiring
   follow-up).
+
+## Issue 95 — "Na objednanie" prerobené na rýchlu pracovnú obrazovku
+
+- Root cause + zvolený prístup + zamietnutá alternatíva zapísané na ticket
+  PRED prvým commitom (issue komentár
+  `#issuecomment-5143605125`): fixný `--fs-content-width` (1120px) na
+  `.main > main` capoval VŠETKY záložky vrátane hustej tabuľky; tabuľka
+  nemala vlastný `overflow-x` obal (posúvala sa celá stránka); 13 stĺpcov,
+  viaceré takmer vždy prázdne/duplicitné, kradli miesto stĺpcu PRODUKT;
+  malé klikacie ciele. Zamietnutá alternatíva: prerobenie z `<table>` na
+  kartový layout (vyššie riziko pre celú existujúcu testovú sadu, bez
+  reálneho prínosu navyše).
+- Implementácia: `nav.ts`'s `wide` príznak (len záložka "orders") →
+  `.main-wide` (ostatné obrazovky nezmenené) · `.orders-table-wrap`
+  (overflow-x: auto) + `table-layout: fixed` + `<colgroup>` na KAŽDEJ
+  skupine dodávateľa · presne tri zlúčenia stĺpcov, ktoré majiteľ sám
+  navrhol (issue komentáre #10/#11): VEĽKOSŤ→KÓD (inline), PRIRADENIE
+  DODÁVATEĽA→DODÁVATEĽ (jedna bunka, oba pôvodné testid-y zachované ako
+  vnorené prvky), POZNÁMKA E-SHOPU+KOMENTÁR→POZNÁMKY (rovnaký vzor) — 13 →
+  10 stĺpcov, nulová zmena správania/testid-ov · väčšie klikacie ciele
+  scoped cez `.order-group ...` (Sync/ZmenaHesla obrazovky nedotknuté) ·
+  zvyšné natvrdo px hodnoty prevedené na `rem`.
+- **Sticky hlavička (mäkký bod 8 "zvážiť") vyskúšaná a ZAMIETNUTÁ**:
+  `.orders-table-wrap`'s nutné `overflow-x: auto` robí z obalu scroll
+  kontajner AJ pre zvislú os (CSS overflow computed-value pravidlo), čo
+  presticky-uje `position: sticky` th voči tomuto malému obalu namiesto
+  viewportu a posunie hlavičku CEZ prvý riadok bez toho, aby si tabuľka
+  posun vyhradila v toku — reálny Playwright beh to chytil ako zlyhané
+  `checkbox.click()` ("`<th>` intercepts pointer events"), nie len
+  teoreticky. Fix by vyžadoval iný layout (mimo jednej `<table>`) za cenu
+  vyššieho rizika — mimo rozsahu mäkko formulovaného bodu. Rozhodnutie aj
+  na tickete a v `app.css` komentári.
+- Deep code review (`superpowers:requesting-code-review`, dispatched
+  subagent) našiel 2× 🟡 + 1× 🔵, všetky opravené v tej istej PR: orphaned
+  `--fs-topbar-height`/`.topbar` min-height (zostatok po zamietnutej sticky
+  funkcii, menil výšku Topbaru na VŠETKÝCH obrazovkách bezdôvodne) →
+  odstránené; `.ord-supplier-assign-input`/`.ord-comment-input` mohli pri
+  `min-width: 64rem` stropu na ~1280-1440px vizuálne pretiecť do suseda →
+  pridané `max-width: 100%`; zastaraný komentár v existujúcom teste →
+  opravený.
+- **Živé post-deploy overenie odhalilo ĎALŠÍ nález** (po prvom merge):
+  hlavička odškrtávacieho stĺpca ("OBJEDNANÉ") sa pri 4% šírke lámala
+  UPROSTRED slova na tri riadky — spôsobené globálnym `overflow-wrap:
+  break-word` aplikovaným aj na `<th>`. Fix: `overflow-wrap: break-word`
+  teraz len na `<td>`, `col-ordered` 4%→6% (vzaté z `col-qty`/`col-date`,
+  obe mali rezervu). Samostatná PR #103, samostatný CI cyklus (vrátane
+  version-bump, keďže dev sa medzičasom zrovnal s main po merge #102).
+- Testy: 3 nové vitest regresné testy (10 stĺpcov v hlavičke, zlúčené
+  bunky Dodávateľ/Poznámky zdieľajú rodičovský `<td>`) + nové e2e
+  assercie (žiadne vodorovné posúvanie stránky na 1280/1600/1920px + pod
+  1.25× zoomom, v rámci existujúceho prvého testu, bez ďalšieho
+  prihlásenia). Nový `apps/web/tests/e2e/tsconfig.json` (DOM lib) pre
+  `page.evaluate()` type-aware lint.
+- Commits: `78d7741` (bump .58) → `856dd30` (hlavná prerábka) →
+  `477d7a9` (review fixes) → `8dfc414` (merge main) → `8c8e200` (header
+  wrap fix) → `3d6f048` (bump .59). Shared PRs: `#102` (hlavná prerábka +
+  review fixy), `#103` (header-wrap doladenie).
+- CI zelené na oboch `dev` pushoch aj oboch PR (10/10 checks); main CI +
+  Deploy zelené na oboch mergoch bez retry. Live `/api/version` = verzia
+  vo footeri (`v0.3.0-dev.59`) na oboch nasadeniach.
+- Live overenie (`https://forestshop-novy.newlevel.media/?tab=orders`):
+  `document.body.scrollWidth <= window.innerWidth` na 1280/1600/1920px aj
+  pod 1.25× zoomom; 160 `<th>` (16 skupín × 10 zlúčených stĺpcov)
+  potvrdených cez DOM; 0 console chýb/varovaní. Produkčné dáta nedotknuté
+  (len čítanie): `product_supplier_override`=0, `order_line.ordered`=0,
+  `order_line`=868, objednávky s komentárom=0, `order`=528 — presne
+  zhodné s očakávanou základňou pred aj po zásahu.
+- Discord run-card odoslaný (`notify --run-card`, potvrdené doručenie).
