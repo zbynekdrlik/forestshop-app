@@ -2151,3 +2151,39 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
   already documents for the `display:flex`-on-`<td>` class of bug — this
   ticket was a second, predicted instance of exactly that documented
   pattern, confirming the existing entry rather than adding a new one.
+
+## 2026-08-01 — #164 (import internej poznámky e-shopu, obojsmerné)
+
+- Solo ticket (Scope-gate: schema-migration), version bump `a8c327e`
+  (0.3.0-dev.97→.98), first commit.
+- Design comment BEFORE first code commit: issue-comment-5152963337 — root
+  cause (parser nikdy nečítal `shopRemark`), zvolený prístup (surová
+  hodnota v DB, odvodená pri dopyte cez `extractForeignShopRemark` — tenký
+  wrapper nad existujúcim `mergeShopRemark(raw, null)`), zamietnutá
+  alternatíva (ukladať odvodenú hodnotu priamo / prepisovať appkin
+  `comment` z importu).
+- STEP 0 validation comment: issue-comment-5152965388 (grep na main HEAD
+  1715dc3 potvrdil 0 skutočného kódu čítajúceho `shopRemark`).
+- RED→GREEN reťaz (7 párov): `extractForeignShopRemark` (note-block.ts) →
+  parser (`mapOrderRow`) → `ingest.ts` storage+refresh (integračný test
+  proti reálnemu Postgresu, RED overené `git stash` na `queries.ts`/
+  `ingest.ts`) → `queries.ts` HTTP expozícia → `OrderLineRow.tsx` UI
+  vykreslenie. Plus explicitný "kruh sa uzavrie" test (comment prežije
+  re-import nedotknutý, shop_remark sa AJ TAK osvieži, v tom istom teste).
+- 17 existujúcich fixtúrových `OrderLine` objektov (vitest test súbory)
+  dostalo explicitné `shopRemark: null` (zavedená konvencia repa — Python
+  regex insert za `remark: ...,`).
+- E2E: objednávka 9001 (`scripts/e2e-setup.ts`) dostala reálnu hodnotu
+  `shopRemark`, `orders.spec.ts` ju overuje. Row-height strop v
+  `orders-layout.spec.ts` zdvihnutý 100px→115px (naživo namerané 108.5px —
+  tretí stĺpcovaný riadok v zlúčenej bunke Poznámky, nie regresia
+  zalomenia vstup+tlačidlo, tá asercia sa nemenila).
+- Fixtúra `orders-sample.csv` (order 20300001) dostala reálnu `shopRemark`
+  hodnotu — presný postup z `.claude/rules/orders.md` (csv.reader + ručné
+  poskladanie riadku, žiadny `csv.writer` nad celým súborom).
+- PR #168, CI (push aj pull_request) — pozri completion report pre finálny
+  stav.
+- Playbook: nový bod v `.claude/rules/orders.md` — 3-krokový checklist pri
+  pridávaní ĎALŠIEHO poľa na `OpenOrderLine` (surové+odvodené polia,
+  17-súborová fixtúrová konvencia, row-height strop treba pri KAŽDOM
+  ďalšom stĺpcovanom riadku v "Poznámky" bunke naživo premerať).

@@ -386,3 +386,30 @@ paths:
   value={line.state}>` (`OrderLineRow.tsx`) sú viazané PRIAMO na
   server-potvrdenú hodnotu z props, takže zamietnutý zápis sa NIKDY netvári
   ako uložený už len vďaka existujúcemu dizajnu.
+- **Pridanie ĎALŠIEHO poľa na `OpenOrderLine` (issue 164, `shopRemark` —
+  interná poznámka e-shopu, export's stĺpec 28) je 3-krokový checklist,
+  nielen "pridaj stĺpec":** (1) **SUROVÁ hodnota v DB, ODVODENÁ hodnota v
+  API** — rovnaký vzor ako `internalNote` (surové) →
+  `resolveEffectiveSupplierLink` (odvodené pri dopyte, issue 67/70): nový
+  `order.shop_remark` stĺpec nesie presne to, čo prišlo z exportu (môže
+  niesť aj appkin vlastný `note-block.ts` blok), `queries.ts` ho až PRI
+  DOPYTE rozdelí (`extractForeignShopRemark`) na to, čo appka smie ukázať.
+  Nikdy neuklad ODVODENÚ hodnotu priamo do DB — znemožnilo by to spätné
+  odvodenie pri zmene formátu oddeľovačov. (2) **KAŽDÝ existujúci fixtúrový
+  objekt `OrderLine` naprieč VŠETKÝMI test súbormi (17 pri issue 164, `grep
+  -rl "manualSupplierOverride" apps/web/src`) potrebuje explicitné nové pole**
+  — zavedená konvencia tohto repa je "každé pole sa nastavuje explicitne,
+  nikdy sa nespolieha na `undefined`" (over: KAŽDÝ existujúci fixtúrový
+  objekt už mal explicitný `remark:`, keď sa to pole pridávalo). Skript
+  (Python regex vkladajúci nový riadok hneď za `remark: ...,` vo všetkých 17
+  súboroch naraz) je rýchlejší než ručná úprava. (3) **Nová stĺpcovaná
+  (stacked) položka v zlúčenej bunke "Poznámky" (`.ord-notes-merged`) RASTIE
+  výšku riadku pre riadky, čo majú VŠETKY voliteľné poznámky naraz** —
+  `apps/web/tests/e2e/orders-layout.spec.ts`'s "kompaktné riadky" strop
+  (predtým 100px, ešte predtým z issue 105/107/111/127) treba pri PRIDANÍ
+  ĎALŠEJ voliteľnej stĺpcovanej položky do tejto bunky prehodnotiť a
+  ZMERAŤ naživo (nie odhadnúť) — issue 164 zdvihlo strop na 115px (namerané
+  108.5px pri riadku so VŠETKÝMI tromi poznámkami naraz). Over VŽDY
+  OSOBITNE, že to nie je návrat "vstup+tlačidlo sa zalomí na dva riadky"
+  regresie (samostatná asercia `naTomIstomRiadku`, tá sa NEMENÍ) — len
+  legitímny rast obsahu smie posunúť tento strop, nikdy zalomenie.
