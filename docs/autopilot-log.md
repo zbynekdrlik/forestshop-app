@@ -1729,3 +1729,44 @@ nové heslo sa nikde v pushnutom obsahu nenachádza.
   use the search-fallback link (was 1/37).
 - All three per-ticket Discord cards fired after final verification
   (`v0.3.0-dev.77`).
+
+## Issue 121 — manuálny odkaz na dodávateľa (doplniť/upraviť pri každom produkte)
+
+- PR #138, merge `6b67f75`, deployed `v0.3.0-dev.80` (curl `/api/version` matches
+  merge SHA exactly).
+- Design comment posted BEFORE first commit:
+  https://github.com/zbynekdrlik/forestshop-app/issues/121#issuecomment-5148523005
+- New table `product_supplier_link_override` (migration 0017) — mirrors
+  `product_supplier_override` but the stored link ALWAYS wins over the
+  Shoptet-extracted `internalNote` link (no "already has one" 409 gate — the
+  owner wants every product editable, including ones that already have a
+  link). New pure resolver `effective-supplier-link.ts`
+  (`resolveEffectiveSupplierLink`) shared by all three read paths
+  (`queries.ts` ×2, `mail.ts`).
+- Frontend: pencil toggle SIBLING of (never inside) the existing tested
+  `.ord-supplier-cell` div — the inline edit input only renders while open,
+  so it adds zero row height to the 34+ rows not being edited (protects the
+  issue 105/107/111/127 ~120px row-height ceiling).
+- Code review (background subagent, PR 138 diff) found 2 🔵 (no 🔴/🟡):
+  coverage gap (only 1 of 3 read paths had a direct test) — fixed with 2
+  more integration tests (`getOrderDetail` + supplier mail preview); the
+  second (`SELECT` without `FOR UPDATE` on the audit "previous value" read)
+  mirrors the EXISTING accepted pattern in `assignOrderLineSupplier` — left
+  as-is, consistency with established repo convention.
+- e2e: new isolated login (`e2e-odkaz@forestshop.sk`) + seeded order 9007 on
+  previously-unused single-variant fixture product "278" — NOT `4859/*`
+  (`orders.spec.ts` hard-asserts `4859/46`'s exact href, and the override is
+  product-keyed so touching any `4859/*` variant would have broken it).
+  Bumped `orders.spec.ts`'s shared global count assertions (Všetci 6→7,
+  "(bez dodávateľa)" 3→4) — counted explicitly, not guessed.
+- Live post-deploy verification (Playwright, admin account, order 20261059 /
+  12314/3XL8): doplniť → upraviť → reload-persists all confirmed, 0 console
+  errors/warnings. Row-height baseline unchanged (38 rows, min 87.75/med
+  91.25/max 114.5px, 0 over 120px, 38/38 admin links to `objednavky-detail`,
+  0 horizontal scroll) before AND after the test. Production data restored
+  exactly: `product_supplier_link_override` back to 0 rows,
+  `product_supplier_override` unaffected at 0, `order`/`order_line` counts
+  unchanged (534/878). Audit rows (append-only) kept.
+- Issue 121 closed by hand (not via `Closes #`) — this repo's PR body
+  intentionally omits any close keyword since the ticket's acceptance needed
+  a post-deploy live check, per the CLAUDE.md gotcha from #120/#127/#132.

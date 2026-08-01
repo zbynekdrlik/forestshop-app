@@ -364,3 +364,23 @@ paths:
   hneď vedľa `"DOM"`. Test na KAŽDÝ ďalší e2e `page.evaluate()` kód, ktorý
   spreadne/iteruje `querySelectorAll`/`getElementsByClassName` výsledok
   (`[...xs]`, `for...of`): over, že tsconfig má aj `DOM.Iterable`, nielen `DOM`.
+- **Fixtúrový variant pre nový e2e test PRODUKTOVO-kľúčovaného override
+  (`product_supplier_override`, `product_supplier_link_override`) sa nesmie
+  vybrať len podľa "je nepoužitý v `orders.spec.ts`" — musí sa overiť aj, či
+  na NEJAKOM SÚRODENECKOM variante (rovnaký `productKey`) INÝ test hard-
+  coduje presnú hodnotu (napr. `href`).** Issue 121 (manuálny odkaz na
+  dodávateľa): kandidát `"4859/48"` mal reálny fixtúrový `internalNote`
+  odkaz vhodný na test "upraviť EXISTUJÚCI odkaz zo Shoptetu" — ale `"4859/
+  48"` je súrodenec `"4859/46"`, ktorého PRESNÚ `href` hodnotu
+  `orders.spec.ts`'s prvý mailový/odkazový test hard-coduje
+  (`"https://www.huntingshop.eu/wild-t-green-nohavice"`). Keďže override je
+  kľúčovaný `productKey`, nie `variantCode`, prepísanie odkazu cez
+  `"4859/48"` by zmenilo EFEKTÍVNU hodnotu aj pre `"4859/46"` a ticho rozbilo
+  ten vzdialený test. Fix: použiť ÚPLNE INÝ, dovtedy nepoužitý JEDNOVARIANTNÝ
+  produkt (`"278"`) namiesto súrodenca už-testovaného produktu, a namiesto
+  testovania "upraviť EXISTUJÚCI Shoptet odkaz" cez reálne fixtúrové dáta
+  otestovať rovnaké správanie cez VLASTNÝ, práve uložený override (doplniť →
+  upraviť VLASTNÚ hodnotu) — rovnako platný dôkaz "upraviť" cesty, bez
+  rizika medzi-testovej kolízie. Pri KAŽDOM ďalšom produktovo-kľúčovanom
+  override teste: `grep` cieľový `productKey` (nie len `variantCode`) naprieč
+  CELÝM `apps/web/tests/e2e/` predtým, než ho použiješ.

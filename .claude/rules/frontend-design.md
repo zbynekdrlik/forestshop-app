@@ -198,6 +198,38 @@ paths:
   icon) that still wraps unexpectedly: check whether the shrinkable item has
   `flex: 1 1 0` — a `width`/large `flex-basis` on it is the same trap, no
   matter how small its `min-width` is.
+- **A per-row toggle that opens an inline edit control (input+save) must be a
+  SIBLING of an existing tested cell div, never nested INSIDE it — and the
+  edit form itself must render ONLY while open, not always.** Issue 121
+  (manual supplier-LINK override, always-editable — unlike issue 63's
+  gated supplier-name assign): `OrderLineRow.tsx`'s existing
+  `.ord-supplier-cell` div (testid `supplier-link-${lineId}`) has a test
+  asserting its `textContent` is EXACTLY `"—"` for an empty row
+  (`OrdersSection.test.tsx`) — putting the new pencil toggle button INSIDE
+  that div would have broken it (`"—✏️"` ≠ `"—"`). Fix: wrap the existing,
+  UNCHANGED cell div together with the new toggle button in a new
+  `.ord-supplier-row` flex-row wrapper (`app.css`), so the toggle is a
+  sibling, not a child. Second half of the same fix: the toggle itself is
+  ALWAYS rendered (small, `flex-shrink: 0`, adds no height), but the actual
+  `<input>+save` block renders ONLY when `linkEditing` is true — an
+  always-visible input+button on EVERY row (the `.ord-supplier-assign`
+  pattern from issue 63, which IS always-visible but only for the minority
+  of `supplierAssignable` rows) would have added height to ALL 34+ non-gated
+  rows at once and almost certainly broken the issue 105/107/111/127
+  ~120px row-height ceiling. Any FUTURE per-row inline-edit toggle in this
+  table needs BOTH halves: sibling-not-child placement (protects existing
+  exact-textContent tests) AND conditional-render-only-when-open (protects
+  the row-height ceiling).
+- **A draft input for a TOGGLED (open/close) edit control does NOT need the
+  "skip-first-mount + reset `useEffect`" guard** that `supplierDraft`/
+  `commentDraft` (issue 63/64, both ALWAYS-visible inputs) need. Issue 121's
+  `linkDraft`: since the input only exists while `linkEditing` is true, the
+  draft is simply re-seeded FRESH from `line.supplierUrl` at the moment the
+  toggle OPENS (`onClick`), never synced continuously via an effect — there
+  is no mount-time race to guard against, because there is no persistent
+  mounted input to race with. Simpler AND correct. Only reach for the
+  effect-based reset pattern when the input is ALWAYS mounted and its
+  source prop can change while the user might be mid-edit.
 - **Measure real column budgets with a throwaway Playwright script against
   the LOCAL dev servers, never hand-derive px-per-character or eyeball a
   screenshot, before tuning `min-width`/`colgroup` percentages.** Issue 105:
