@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hasOurBlock, mergeShopRemark, NOTE_BLOCK_END, NOTE_BLOCK_START } from "./note-block.js";
+import { extractForeignShopRemark, hasOurBlock, mergeShopRemark, NOTE_BLOCK_END, NOTE_BLOCK_START } from "./note-block.js";
 
 describe("mergeShopRemark", () => {
   it("appends our block to an empty field", () => {
@@ -50,5 +50,29 @@ describe("mergeShopRemark", () => {
     expect(hasOurBlock("Len ručný text")).toBe(false);
     expect(hasOurBlock(mergeShopRemark(null, "x"))).toBe(true);
     expect(hasOurBlock(mergeShopRemark("Ručný text", "x"))).toBe(true);
+  });
+});
+
+// issue 164: čítacia strana (import) — z RAW importovanej hodnoty vytiahne
+// LEN cudziu (nie-appkinu) časť, nikdy náš vlastný blok.
+describe("extractForeignShopRemark", () => {
+  it("vráti null, keď Shoptet nič nemá vyplnené", () => {
+    expect(extractForeignShopRemark(null)).toBeNull();
+  });
+
+  it("vráti celý text, keď v poli nie je náš blok (100% dnešných reálnych dát)", () => {
+    expect(extractForeignShopRemark("Zákazník je stavebná firma, vybaviť prednostne")).toBe(
+      "Zákazník je stavebná firma, vybaviť prednostne",
+    );
+  });
+
+  it("odstráni LEN náš blok, cudzí text pred aj za ním ostáva nedotknutý", () => {
+    const raw = mergeShopRemark("Ručná poznámka predajne PRED", "Naša poznámka") + "\n\nRučná poznámka ZA";
+    expect(extractForeignShopRemark(raw)).toBe("Ručná poznámka predajne PRED\n\nRučná poznámka ZA");
+  });
+
+  it("vráti null, keď v poli je LEN náš blok (žiadny cudzí text)", () => {
+    const raw = mergeShopRemark(null, "Naša poznámka");
+    expect(extractForeignShopRemark(raw)).toBeNull();
   });
 });
