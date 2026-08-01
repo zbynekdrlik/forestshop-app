@@ -202,6 +202,26 @@ export async function assignOrderLineSupplier(lineId: string, supplier: string):
   await readJson(response, "Priradenie dodávateľa sa nepodarilo");
 }
 
+// issue 153: zrkadlí `orderLineSupplierLinkBody` (`apps/api/src/http/
+// orders-routes.ts`) DO ZNAKU — trim, tvar URL, dĺžkový strop, http(s)
+// schéma. NEODVODZUJE sa od žiadnej existujúcej schémy vyššie (tie parsujú
+// ODPOVEĎ zo servera; táto validuje VSTUP PRED odoslaním) — rovnaký duálny
+// vzor ako `adminUrl`/`supplierUrl` (issue 70), zámerne nezdieľaný typový
+// balík (žiadny medzi web/api zatiaľ neexistuje, viď modulový komentár
+// vyššie). Formula-guard (CSV-injection ochrana) sa tu ZÁMERNE neopakuje —
+// je to server-side/CSV-sink kontrola (issue 153's design komentár), nie
+// niečo, čo by zamestnanec pri písaní odkazu mal vidieť ako "chybu vstupu".
+const supplierLinkUrlInput = z.string().trim().max(2000).url().regex(/^https?:\/\//);
+
+/** `null`, keď je `url` (po orezaní) platná — inak zrozumiteľná slovenská
+ * hláška na OKAMŽITÉ odmietnutie V PREHLIADAČI, bez čakania na round-trip
+ * na server (issue 153 — predtým appka kontrolovala len neprázdnosť). */
+export function validateSupplierLinkUrl(url: string): string | null {
+  return supplierLinkUrlInput.safeParse(url).success
+    ? null
+    : "Odkaz musí byť platná adresa začínajúca http:// alebo https://.";
+}
+
 // issue 121: manuálny odkaz na dodávateľa — NA ROZDIEL od priradenia
 // dodávateľa vyššie sa smie upraviť pri KAŽDOM produkte, aj keď už jeden
 // odkaz (zo Shoptetu) má. Rovnaký dôvod na PLNÝ refetch po úspechu ako
