@@ -57,6 +57,11 @@ export function useSupplierDrafts(groups: readonly SupplierOpenOrders[]): Suppli
       const next = new Map(current);
       for (const [lineId, draft] of current) {
         const confirmed = overrideByLineId.get(lineId);
+        // Code review (post-merge): toto porovnáva HODNOTU, nie totožnosť
+        // zápisu — nevie rozlíšiť "toto je MOJE uloženie, čo sa práve
+        // potvrdilo" od "niekto iný náhodou nastavil rovnaký text na tomto
+        // produkte inou cestou". V praxi je výsledok vizuálne identický v
+        // oboch prípadoch (koncept == potvrdená hodnota), takže to nevadí.
         if (confirmed === undefined || draft.trim() === confirmed) {
           next.delete(lineId);
           changed = true;
