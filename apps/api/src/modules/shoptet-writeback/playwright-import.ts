@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { chromium, type Browser, type Page } from "playwright";
 import { log } from "../../logger.js";
+import { loginToShoptetAdmin } from "./admin-login.js";
 import type { ShoptetImportConfig } from "./config.js";
 import { entryKey, hasLogEntries, parseImportLog, pickResultRow, resultExitCode } from "./log-attribution.js";
 
@@ -64,22 +65,6 @@ export function resolveChromiumExecutablePath(env: NodeJS.ProcessEnv = process.e
 async function rowTexts(page: Page): Promise<string[]> {
   const raw = await page.locator("tr").allTextContents();
   return raw.map((t) => t.replace(/\s+/g, " ").trim());
-}
-
-async function login(page: Page, config: ShoptetImportConfig): Promise<void> {
-  await page.goto(config.loginUrl, { waitUntil: "domcontentloaded" });
-  await page.getByPlaceholder("E-mail").fill(config.user);
-  await page.getByPlaceholder("Vaše heslo").fill(config.password);
-  await page.getByRole("button", { name: "Prihlásenie" }).click();
-  await page.waitForLoadState("networkidle");
-  // NIKDY substring na URL ("/login") — reálny Shoptet login pre tento obchod
-  // je na `${adminBaseUrl}/admin/` a úspešné prihlásenie sa vráti na TÚ ISTÚ
-  // URL (overené naživo pri návrhu #122: dry-run skript ukázal "[login] OK →
-  // https://www.forestshop.sk/admin/", teda nezmenenú URL). Jediný spoľahlivý
-  // signál zlyhania je, že prihlasovací formulár je STÁLE na stránke.
-  if ((await page.getByPlaceholder("E-mail").count()) > 0) {
-    throw new Error("Prihlásenie do Shoptetu zlyhalo (prihlasovací formulár stále viditeľný) — over SHOPTET_ADMIN_USER/PASSWORD");
-  }
 }
 
 async function captureBaseline(page: Page, config: ShoptetImportConfig): Promise<string | null> {
@@ -169,7 +154,7 @@ export async function runShoptetImport(options: RunShoptetImportOptions): Promis
     const context = await browser.newContext({ acceptDownloads: false });
     const page = await context.newPage();
 
-    await login(page, config);
+    await loginToShoptetAdmin(page, config);
     const baseline = await captureBaseline(page, config);
     log.info({ baseline: baseline === null ? null : "prítomný" }, "shoptet write-back: baseline Logu zachytený");
 

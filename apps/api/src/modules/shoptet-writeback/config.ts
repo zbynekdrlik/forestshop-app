@@ -28,3 +28,28 @@ export function shoptetImportConfigFromBaseUrl(
     password,
   };
 }
+
+/**
+ * Konfigurácia pre issue 123's spätný zápis poznámky (per-objednávka, nie
+ * hromadný CSV import ako vyššie) — zdieľa PRIHLASOVACIU stránku aj
+ * `SHOPTET_ADMIN_USER`/`PASSWORD` s #122 (žiadne nové premenné), ale
+ * NEPOTREBUJE `importUrl`/`logUrl`. `adminBaseUrl` (bez koncového lomítka)
+ * sa navyše nesie priamo — `order-note-playwright.ts` ho potrebuje pre
+ * `buildShoptetAdminOrderUrl` (`modules/orders/queries.ts`), rovnaké
+ * URL-skladanie appka už používa na obrazovke "Na objednanie".
+ */
+export interface OrderNoteWritebackConfig {
+  readonly loginUrl: string;
+  readonly adminBaseUrl: string;
+  readonly user: string;
+  readonly password: string;
+}
+
+export function orderNoteWritebackConfigFromBaseUrl(
+  adminBaseUrl: string,
+  user: string,
+  password: string,
+): OrderNoteWritebackConfig {
+  const base = adminBaseUrl.replace(/\/+$/, "");
+  return { loginUrl: `${base}/admin/`, adminBaseUrl: base, user, password };
+}
