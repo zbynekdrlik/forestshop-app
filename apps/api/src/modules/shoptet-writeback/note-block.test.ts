@@ -51,6 +51,27 @@ describe("mergeShopRemark", () => {
     expect(hasOurBlock(mergeShopRemark(null, "x"))).toBe(true);
     expect(hasOurBlock(mergeShopRemark("Ručný text", "x"))).toBe(true);
   });
+
+  // issue 169: OUR_BLOCK_RE bez /g flagu odstráni pri clear-e (ourNote=null)
+  // len PRVÝ výskyt nášho bloku — druhý by unikol do "cudzej" časti.
+  it("removes BOTH occurrences of our block when the field somehow has two, not just the first", () => {
+    const raw =
+      `Ručná poznámka\n\n` +
+      `${NOTE_BLOCK_START}\nStará poznámka\n${NOTE_BLOCK_END}` +
+      `\n\n` +
+      `${NOTE_BLOCK_START}\nDuplicitná poznámka\n${NOTE_BLOCK_END}`;
+    const cleared = mergeShopRemark(raw, null);
+    expect(cleared).toBe("Ručná poznámka");
+  });
+
+  // issue 169: voliteľný oddeľovací prefix zachytával len `\n{1,2}`, nie
+  // `\r\n` — CRLF-oddelený blok by po odstránení nechal osamotený prázdny
+  // riadok (CR) za sebou.
+  it("removes the block AND its CRLF-style separator, not just LF", () => {
+    const raw = `Ručná poznámka\r\n\r\n${NOTE_BLOCK_START}\r\nZavolať\r\n${NOTE_BLOCK_END}`;
+    const cleared = mergeShopRemark(raw, null);
+    expect(cleared).toBe("Ručná poznámka");
+  });
 });
 
 // issue 164: čítacia strana (import) — z RAW importovanej hodnoty vytiahne
@@ -74,5 +95,17 @@ describe("extractForeignShopRemark", () => {
   it("vráti null, keď v poli je LEN náš blok (žiadny cudzí text)", () => {
     const raw = mergeShopRemark(null, "Naša poznámka");
     expect(extractForeignShopRemark(raw)).toBeNull();
+  });
+
+  // issue 169: DVA naše bloky v raw hodnote (napr. starý bug/ručná
+  // duplikácia priamo v Shoptete) — druhý sa nesmie zobraziť ako cudzí text.
+  it("odstráni OBA naše bloky, druhý nikdy neunikne ako cudzí text", () => {
+    const raw =
+      `Foreign PRED\n\n` +
+      `${NOTE_BLOCK_START}\nStará\n${NOTE_BLOCK_END}` +
+      `\n\n` +
+      `${NOTE_BLOCK_START}\nDuplicitná\n${NOTE_BLOCK_END}` +
+      `\n\nForeign ZA`;
+    expect(extractForeignShopRemark(raw)).toBe("Foreign PRED\n\nForeign ZA");
   });
 });
