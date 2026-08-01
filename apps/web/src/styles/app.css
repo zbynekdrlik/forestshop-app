@@ -889,29 +889,86 @@ tr:last-child td {
   white-space: nowrap;
   cursor: help;
 }
-/* issue 107 bod 1: majiteľ, live nameraná chyba — natívna šípka rozbaľovača
-   sa vykresľuje VNÚTRI paddingu, ale nič v CSS s jej priestorom nepočíta
-   (`padding-right` bol celý priestor, ktorý appka "vidí"), takže reálne
-   viditeľné miesto na text bolo o ~15–20px menšie, než čokoľvek deklarované
-   — pri úzkom `col-state` stĺpci (≤1600px) sa najdlhší stav ("Nevybavené"/
-   "Nedostupné", ~83px textu) neskrátil na scrollWidth (žiadny technický
-   overflow), len sa VIZUÁLNE orezal natívnou šípkou. `appearance: none` +
-   vlastná malá SVG šípka spraví tento priestor DETERMINISTICKÝ (a teda aj
-   testovateľný) namiesto skrytého v réžii prehliadača. */
-.ord-state-select {
+/* issue 161: majiteľ, doslovne "na stav nechcem mat selektor ale 4
+   tlacitka" — `<select>` (bývalá `.ord-state-select`, teraz odstránená;
+   issue 107 bod 1's šípkový problém, ktorý riešila, so selectom zmizol
+   celý) nahradil segmentovaný prepínač so 4 tlačidlami
+   (`OrderLineStateButtons.tsx`). 2×2 mriežka (nie 4 v rade) — `col-state` je
+   len ~138px (13.5 % z ~1022px `min-width`), 4 tlačidlá v jednom rade by
+   boli príliš úzke na čitateľný text aj klik; 2×2 udrží tlačidlá dosť veľké
+   ("veľké tlačidlá", majiteľova stála požiadavka) a nezväčší výšku riadku
+   nad existujúci ~100px strop (issue 105/107/111/127/163,
+   `orders-layout.spec.ts`'s `vysokeKompaktneRiadky`). */
+.ord-state-btn-group {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--fs-space-1);
   width: 100%;
-  appearance: none;
-  padding: var(--fs-space-2) 1.25rem var(--fs-space-2) var(--fs-space-2);
+}
+.ord-state-btn {
+  /* Živo overené proti lokálnemu dev serveru (Playwright, 1280px): CSS Grid
+     položky majú PREDVOLENÉ `min-width: auto`, ktoré rešpektuje intrinzitnú
+     min-content šírku obsahu — jednoslovné popisky ("Nevybavené",
+     "Nedostupné") sa bez explicitného `overflow-wrap` nemajú kde zalomiť,
+     takže ich min-content šírka (~80px) roztiahla `.ord-state-btn-group`
+     (161px scrollWidth) nad reálnu šírku stĺpca (114px) a tlačidlá VIZUÁLNE
+     pretiekli do susedného stĺpca DÁTUM. `min-width: 0` dovolí položke
+     zmenšiť sa POD jej intrinzitnú šírku, `overflow-wrap: break-word`
+     zaručí, že sa dlhší popisok skutočne ZALOMÍ vnútri tlačidla (2 riadky),
+     nikdy neprepíše/nepretečie susedný stĺpec. */
+  min-width: 0;
+  overflow-wrap: break-word;
+  /* `lang="sk"` na `<html>` (`index.html`) dáva Chromiu slovenský slovník
+     delenia slov — namiesto zalomenia uprostred slova na ľubovoľnom mieste
+     (napr. "Nevyba/vené") sa preferuje delenie pri slabike ("Ne-vy-ba-
+     vené"), čitateľnejšie pri tomto úzkom stĺpci. */
+  hyphens: auto;
+  padding: var(--fs-space-1);
+  min-height: 2rem;
   border: 1px solid var(--fs-border);
   border-radius: var(--fs-radius-sm);
+  background: var(--fs-surface);
+  color: var(--fs-ink-muted);
   font: inherit;
-  font-size: var(--fs-text-base);
-  min-height: 2.25rem;
-  background-color: var(--fs-surface);
-  background-repeat: no-repeat;
-  background-position: right 0.4rem center;
-  background-size: 0.6rem 0.4rem;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%235c6b60' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  font-size: var(--fs-text-xs);
+  font-weight: var(--fs-weight-medium);
+  line-height: 1.15;
+  text-align: center;
+  cursor: pointer;
+}
+.ord-state-btn:hover:not(:disabled) {
+  border-color: var(--fs-brand);
+}
+.ord-state-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+/* Aktívny stav NIKDY len farbou (kontrast/farbosleposť, ticketov explicitný
+   akceptačný bod) — plná výplň + hrubší rám + tučné písmo, tri nezávislé
+   signály naraz. */
+.ord-state-btn.active {
+  border-width: 2px;
+  font-weight: var(--fs-weight-bold);
+}
+.ord-state-btn-objednane.active {
+  background: var(--fs-surface-alt);
+  border-color: var(--fs-ink-muted);
+  color: var(--fs-ink);
+}
+.ord-state-btn-caka_sa.active {
+  background: var(--fs-warning-bg);
+  border-color: var(--fs-warning);
+  color: var(--fs-warning);
+}
+.ord-state-btn-skladom.active {
+  background: var(--fs-success-bg);
+  border-color: var(--fs-success);
+  color: var(--fs-success);
+}
+.ord-state-btn-nedostupne.active {
+  background: var(--fs-danger-bg);
+  border-color: var(--fs-danger);
+  color: var(--fs-danger);
 }
 /* issue 95: DODÁVATEĽ + PRIRADENIE DODÁVATEĽA zlúčené do jednej bunky
    (majiteľ, komentár #1: "neviem čo tam je Priradenie dodávateľa stĺpec" —
@@ -919,10 +976,18 @@ tr:last-child td {
    nižšie). Vnútri sú DVA pôvodné testid-ované bloky (`.ord-supplier-cell`/
    `.ord-supplier-assign`, nezmenené) len vedľa seba v JEDNEJ bunke namiesto
    dvoch samostatných stĺpcov. */
+/* issue 163: majiteľ, deliaca čiara riadku nelícuje pod touto bunkou —
+   príčina bola `display:flex` PRIAMO na `<td>` (odstránené), ktorý menil box
+   tejto bunky z `table-cell` na flex kontajner nerešpektujúci skutočnú výšku
+   riadku (naživo namerané: 53px vs. riadok 91.5px), takže jej border-bottom
+   sedel vyššie než rám ostatných buniek. `<td>` je teraz normálna tabuľková
+   bunka — jej výška sa riadi rovnakým mechanizmom ako pri VŠETKÝCH ostatných
+   stĺpcoch (max naprieč bunkami riadku), takže border-bottom vždy lícuje, na
+   KAŽDEJ výške obsahu (rôzny zoom/šírka, "skryť vybavené"). Zvislý gap medzi
+   `.ord-supplier-row`/`.ord-supplier-assign` (predtým rodičovský flex `gap`)
+   nesie teraz `.ord-supplier-assign`'s vlastný `margin-top` nižšie. */
 .ord-supplier-merged {
-  display: flex;
-  flex-direction: column;
-  gap: var(--fs-space-1);
+  max-width: 100%;
 }
 /* issue 67: odkaz/kód dodávateľa pri riadku objednávky. */
 .ord-supplier-cell {
@@ -991,6 +1056,10 @@ tr:last-child td {
   gap: var(--fs-space-1);
   flex-wrap: wrap;
   max-width: 100%;
+  /* issue 163: nahrádza rodičovský `.ord-supplier-merged`'s bývalý flex
+     `gap` (odstránené — pozri jeho komentár) — tento blok sa vykresľuje VŽDY
+     AŽ za `.ord-supplier-row`, takže `margin-top` dáva identickú medzeru. */
+  margin-top: var(--fs-space-1);
 }
 .ord-supplier-assign-input {
   /* issue 105 bod 3: `width: 8rem` (fixed) + `max-width: 100%` still forced
@@ -1074,20 +1143,21 @@ tr:last-child td {
   background: var(--fs-brand);
   color: var(--fs-surface);
 }
-/* Vstup + uložiť pri OTVORENEJ úprave — rovnaký "flex-basis: 0 + min-width"
-   vzor ako `.ord-supplier-assign-input` (issue 105 bod 3's komentár
-   vysvetľuje prečo: `flex-basis` rozhoduje o zalomení, nie post-shrink
-   veľkosť). Vykreslí sa LEN keď editing beží (`OrderLineRow.tsx`) — na
-   rozdiel od `.ord-supplier-row` vyššie NEPRIDÁVA výšku KAŽDÉMU riadku,
-   len tomu PRÁVE editovanému (issue 105/107/111/127's odmeraný strop 120px
-   by inak takmer isto prasklo na VŠETKÝCH 37 riadkoch naraz). */
+/* issue 162: majiteľ, políčko na úpravu odkazu bolo v úzkej bunke DODÁVATEĽ
+   (~94px) príliš malé na to, aby bolo vidno reálny odkaz. Tento blok teraz
+   žije vo VLASTNOM rozbaľovacom riadku pod daným riadkom (`colSpan` cez
+   celú tabuľku, `OrderLineRow.tsx`), nie v úzkej bunke ako predtým —
+   `flex-basis: 0` vzor (issue 105 bod 3's komentár vysvetľuje prečo) sa
+   nemení, len rodičovský priestor je teraz oveľa širší, takže vstup sa
+   roztiahne naozaj široko. `max-width` obmedzuje len HORNÚ hranicu na
+   extrémne širokých obrazovkách (ticketov akceptačný test žiada aspoň 3×
+   pôvodných 94px = ≥282px — 40rem = 640px má veľkú rezervu). */
 .ord-supplier-link-edit {
   display: flex;
   align-items: center;
-  gap: var(--fs-space-1);
+  gap: var(--fs-space-2);
   flex-wrap: wrap;
-  max-width: 100%;
-  margin-top: var(--fs-space-1);
+  max-width: 40rem;
 }
 .ord-supplier-link-edit-input {
   flex: 1 1 0%;
@@ -1102,6 +1172,14 @@ tr:last-child td {
 }
 .ord-supplier-link-edit > button {
   flex-shrink: 0;
+}
+/* issue 162: bunka rozbaľovacieho riadku — jemne odlíšené pozadie (signál
+   "toto je vysunutá úprava", nie ďalší bežný riadok dát), rovnaký vodorovný
+   padding ako ostatné bunky (`.orders-table td`'s `--fs-space-3`). */
+.ord-supplier-link-edit-row > td {
+  background: var(--fs-surface-alt);
+  padding-left: var(--fs-space-3);
+  padding-right: var(--fs-space-3);
 }
 
 /* issue 65: priamy odkaz do Shoptet administrácie. issue 99: nesie teraz

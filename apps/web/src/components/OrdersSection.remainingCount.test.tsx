@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useCallback, useMemo, useState, type JSX } from "react";
 import { afterEach, expect, it, vi } from "vitest";
 import { OrdersRemainingCountContext } from "../ordersRemainingCountContext.js";
@@ -86,9 +86,9 @@ it("po zmene stavu posledného nevybaveného riadku odznak klesne na 0, bez nov�
     expect(screen.getByTestId("remaining-count").textContent).toBe("1");
   });
 
-  const select = await screen.findByTestId<HTMLSelectElement>(`state-select-${LINE_NEVYBAVENY.lineId}`);
-  select.value = "skladom";
-  select.dispatchEvent(new Event("change", { bubbles: true }));
+  // issue 161: `<select>` nahradili 4 tlačidlá.
+  await screen.findByTestId(`state-select-${LINE_NEVYBAVENY.lineId}`);
+  fireEvent.click(screen.getByTestId(`state-btn-skladom-${LINE_NEVYBAVENY.lineId}`));
 
   await waitFor(() => {
     expect(screen.getByTestId("remaining-count").textContent).toBe("0");

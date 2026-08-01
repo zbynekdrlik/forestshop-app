@@ -466,3 +466,81 @@ paths:
   "does X survive a re-render/refetch/remount" test in this codebase:
   re-query fresh at assertion time, never trust an element handle captured
   before the change under test.
+- **`display:flex` set DIRECTLY on a `<td>` breaks its participation in
+  normal table-cell height matching** — issue 163 (deliaca čiara nelícuje
+  pod bunkou s odkazom na dodávateľa): `td.ord-supplier-merged` had
+  `display:flex; flex-direction:column; gap` for years (issue 95) with no
+  visible problem, until a taller SIBLING cell in the same row (long
+  product name/notes) made the row genuinely tall — the flex `<td>` sized
+  to its OWN (shorter) content instead of stretching to the row's real
+  height like every other (`display: table-cell`) sibling, so its
+  `border-bottom` sat up to ~44px above the row's actual bottom edge (live
+  measured: `td.getBoundingClientRect().height` 53px vs
+  `tr.getBoundingClientRect().height` 91.5px). This is invisible in a
+  short/uniform-height fixture and only shows up once ANY sibling cell in
+  the row is genuinely taller — exactly why it went unnoticed for 68
+  issues. Fix: never put `display:flex` straight on a `<td>` that needs to
+  match the row's height; wrap its children in an inner `<div>` and put
+  the flex styling there instead (or, if the only purpose was a gap
+  between two always-stacked block children, replace it with `margin-top`
+  on the second child — no wrapper element needed at all, as done here).
+  Regression test for this class of bug: assert `td.getBoundingClientRect
+  ().bottom` equals `tr.getBoundingClientRect().bottom` (±1px) for every
+  row, not just "does it look OK in one screenshot" — a short/uniform e2e
+  fixture will pass a screenshot check while still carrying the bug.
+- **CSS Grid items default to `min-width: auto`, which respects the
+  intrinsic (unwrapped) width of a single unbreakable WORD — the flex
+  `flex-basis`-vs-`min-width` trap issue 105 documented above has a Grid
+  analog, and it bit in the exact same "looks fine in the CSS, breaks only
+  when actually rendered" way.** Issue 161's 2×2 state-button grid
+  (`.ord-state-btn-group { display:grid; grid-template-columns: 1fr 1fr }`)
+  visually overflowed into the NEXT column at 1280px — found ONLY by a
+  live Playwright screenshot + `getBoundingClientRect()` diff against a
+  local dev build (not by reading the CSS, not by the unit tests, which
+  don't render real widths): the group's `scrollWidth` (161px) exceeded
+  its rendered `width` (114px) because Slovak labels ("Nevybavené",
+  "Nedostupné") are single words with no natural break point, and a grid
+  item won't shrink below that intrinsic minimum unless told to. Fix:
+  `min-width: 0` on the grid item + `overflow-wrap: break-word` (letting
+  the label actually wrap inside the button instead of forcing the grid
+  wider); `hyphens: auto` (with `lang="sk"` on `<html>`, already set) is a
+  cheap improvement but not load-bearing — Chromium's Slovak hyphenation
+  dictionary support didn't visibly change the render in this repo's test
+  environment, only `min-width:0` + `overflow-wrap` actually fixed the
+  overflow. Any FUTURE `display:grid`/`display:flex` layout in this app
+  holding short, single-word (especially Slovak) labels in a narrow
+  column needs a REAL rendered-width check (Playwright against a local
+  dev server, not just CSS review) before shipping — this exact overflow
+  is invisible in vitest/jsdom (no real layout) and easy to miss by eye on
+  a wide monitor where the neighboring column happens to have slack.
+- **Moving DOM content out of an existing `<tr>` into a NEW conditional
+  sibling `<tr>` (an "expand row" pattern) breaks any e2e/unit test that
+  scoped its query to the ORIGINAL row (`within(riadok)`,
+  `riadok.getByLabel(...)`), even though the moved content's own testid
+  never changed.** Issue 162 (supplier-link edit input too narrow — moved
+  from inside `td.ord-supplier-merged` into `<tr colSpan={9}>` rendered as
+  a sibling of the main `order-line-<lineId>` row, only while editing):
+  fix in TWO places per affected test file — (1) vitest/testing-library:
+  replace `within(riadok).getByTestId(...)` with plain `screen
+  .getByTestId(...)` (safe when the test renders exactly ONE line, unsafe
+  otherwise — check test fixture size first); (2) Playwright e2e: define
+  `const editRiadok = riadok.locator("xpath=./following-sibling::tr[1]")`
+  and query THAT instead of `riadok` for anything living in the moved
+  content. The xpath locator is lazy (Playwright locators resolve at
+  assertion time, not at `.locator()` call time), so defining it BEFORE
+  the row is even open (before the sibling exists in the DOM) is safe —
+  it only needs to resolve correctly at the point you actually use it.
+- **A NEW row/element's testid must NOT share a `^='...'`-style PREFIX
+  already used elsewhere to find a DIFFERENT element, even if the new
+  element is semantically related.** Issue 162's first attempt named the
+  new expand-row `order-line-<lineId>-link-edit` (seemed natural — it's
+  "the edit row FOR that order line") — but several existing e2e tests use
+  `[data-testid^='order-line-']` to find the MAIN row, and that prefix
+  selector matched the NEW row too the instant it rendered, causing a
+  Playwright strict-mode violation ("resolved to 2 elements") the moment
+  any test opened the editor. Fix: renamed to `link-edit-row-<lineId>`
+  (no shared prefix). Before naming a new sibling/child element with a
+  testid that semantically extends an existing one, `grep -rn
+  "data-testid\^='<prefix>'"` (or the exact base string) across
+  `apps/web/tests/e2e/` to check whether a prefix-match query already
+  exists that the new element would also satisfy.

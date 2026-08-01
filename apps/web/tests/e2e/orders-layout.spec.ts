@@ -34,40 +34,19 @@ test("STAV je celý čitateľný a POZNÁMKY pole je dosť široké na všetkýc
   for (const width of [1280, 1440, 1600, 1920]) {
     await page.setViewportSize({ width, height: 900 });
 
-    // issue 107 bod 1: KAŽDÁ <option> stavu (nie len tá aktuálne vybraná)
-    // musí byť celá viditeľná — `appearance: none` (`app.css`'s
-    // `.ord-state-select`) spravilo priestor na text DETERMINISTICKÝ
-    // (`clientWidth - padding - border`, žiadna skrytá natívna šípka), takže
-    // test už nepotrebuje hádať jej šírku.
+    // issue 161: `<select>` (a issue 107 bod 1's šípkový problém, ktorý
+    // riešila) nahradili 4 tlačidlá — KAŽDÉ musí zobraziť svoj CELÝ text
+    // (zalomenie na 2 riadky je OK, orezanie/vodorovné pretečenie nie).
     const orezaneStavy = await page.evaluate(() => {
-      const select = document.querySelector<HTMLSelectElement>(".ord-state-select");
-      if (!select) return { chyba: "no select found" };
-      const rect = select.getBoundingClientRect();
-      const cs = getComputedStyle(select);
-      const dostupne =
-        rect.width -
-        parseFloat(cs.paddingLeft) -
-        parseFloat(cs.paddingRight) -
-        parseFloat(cs.borderLeftWidth) -
-        parseFloat(cs.borderRightWidth);
-      const merac = document.createElement("span");
-      merac.style.visibility = "hidden";
-      merac.style.position = "absolute";
-      merac.style.whiteSpace = "nowrap";
-      merac.style.font = cs.font;
-      document.body.appendChild(merac);
       const orezane: string[] = [];
-      for (const option of [...select.options]) {
-        merac.textContent = option.textContent;
-        const potrebne = merac.getBoundingClientRect().width;
-        if (potrebne > dostupne) {
-          orezane.push(`"${option.textContent}" (${String(Math.ceil(potrebne))}px text vs ${String(Math.floor(dostupne))}px k dispozícii)`);
+      for (const btn of document.querySelectorAll<HTMLElement>(".ord-state-btn")) {
+        if (btn.scrollWidth > btn.clientWidth + 1) {
+          orezane.push(`"${btn.textContent}" (scrollWidth ${String(btn.scrollWidth)}px vs clientWidth ${String(btn.clientWidth)}px)`);
         }
       }
-      merac.remove();
-      return { orezane };
+      return orezane;
     });
-    expect(orezaneStavy.orezane, `orezané stavy pri ${String(width)}px`).toEqual([]);
+    expect(orezaneStavy, `orezané stavové tlačidlá pri ${String(width)}px`).toEqual([]);
 
     // issue 107 bod 2: pole na poznámku >= 160px pri 1280px, tlačidlo 💾 na
     // TOM ISTOM riadku (nesmie sa vrátiť k zalomeniu z issue 105).
@@ -107,6 +86,25 @@ test("STAV je celý čitateľný a POZNÁMKY pole je dosť široké na všetkýc
         .filter((h) => h > 100);
     });
     expect(vysokeKompaktneRiadky, `príliš vysoké riadky pri ${String(width)}px`).toEqual([]);
+
+    // issue 163: majiteľ, deliaca čiara riadku nelícuje pod bunkou s
+    // odkazom na dodávateľa — príčina bola `display:flex` priamo na
+    // `td.ord-supplier-merged` (odstránené, `app.css`), ktorý bunku
+    // zmenšoval na výšku VLASTNÉHO obsahu namiesto skutočnej výšky riadku
+    // (tú si vynucujú iné, vyššie bunky), takže jej border-bottom sedel
+    // vyššie než u susedných buniek. Kontrola: PRE KAŽDÝ viditeľný riadok
+    // musí spodný okraj tejto bunky lícovať so spodným okrajom riadku
+    // (±1px, subpixelové zaokrúhlenie pri neceločíselnom zoome/DPR).
+    const nezarovnaneDelice = await page.evaluate(() => {
+      return [...document.querySelectorAll<HTMLElement>("tr[data-testid^='order-line-']")]
+        .map((riadok) => {
+          const bunka = riadok.querySelector<HTMLElement>("td.ord-supplier-merged");
+          if (bunka === null) return null;
+          return Math.abs(bunka.getBoundingClientRect().bottom - riadok.getBoundingClientRect().bottom);
+        })
+        .filter((rozdiel): rozdiel is number => rozdiel !== null && rozdiel > 1);
+    });
+    expect(nezarovnaneDelice, `nezarovnané deliace čiary pod bunkou dodávateľa pri ${String(width)}px`).toEqual([]);
 
     // issue 111 body 1+2: číslo objednávky ANI kód produktu sa nesmú
     // zalomiť na viac riadkov, na ŽIADNEJ zo 4 šírok — kontroluje sa AJ
@@ -170,6 +168,27 @@ test("STAV je celý čitateľný a POZNÁMKY pole je dosť široké na všetkýc
       expect(strankaSaPosuva, "stránka sa vodorovne posúva pri 1280px").toBe(false);
     }
   }
+
+  // issue 163: rovnaká deliaca-čiara kontrola aj pri ZAPNUTOM prepínači
+  // "skryť vybavené" — fix je štrukturálny (CSS na `<td>`), nie závislý od
+  // POČTU vykreslených riadkov, ale ticket to explicitne žiada overiť oboma
+  // stavmi prepínača.
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.getByTestId("orders-hide-resolved-toggle").click();
+  const nezarovnaneDeliceSkryte = await page.evaluate(() => {
+    return [...document.querySelectorAll<HTMLElement>("tr[data-testid^='order-line-']")]
+      .map((riadok) => {
+        const bunka = riadok.querySelector<HTMLElement>("td.ord-supplier-merged");
+        if (bunka === null) return null;
+        return Math.abs(bunka.getBoundingClientRect().bottom - riadok.getBoundingClientRect().bottom);
+      })
+      .filter((rozdiel): rozdiel is number => rozdiel !== null && rozdiel > 1);
+  });
+  expect(nezarovnaneDeliceSkryte, "nezarovnané deliace čiary pri zapnutom 'skryť vybavené'").toEqual([]);
+  // Vrátiť prepínač do pôvodného stavu — iné súbežne bežiace e2e spec súbory
+  // (`.claude/rules/testing.md`'s "skryť vybavené" je GLOBÁLNY localStorage
+  // preferencia) nespoliehajú na tento konkrétny účet, ale je to čistejšie.
+  await page.getByTestId("orders-hide-resolved-toggle").click();
 
   expect(chyby).toEqual([]);
 });

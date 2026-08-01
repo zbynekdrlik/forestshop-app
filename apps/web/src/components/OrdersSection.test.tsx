@@ -298,28 +298,49 @@ it("rola sef nevidí select na zmenu stavu, len text", async () => {
   expect(screen.queryByTestId(`state-select-${LINE_STARA.lineId}`)).toBeNull();
 });
 
-it("rola manazer vidí select a zmena stavu sa prejaví lokálne bez nového načítania", async () => {
+it("rola manazer vidí 4 tlačidlá a zmena stavu sa prejaví lokálne bez nového načítania", async () => {
   fetchOpenOrders.mockResolvedValue([{ supplier: "Dodávateľ Alfa", lines: [LINE_STARA], email: null }]);
   updateOrderLineState.mockResolvedValue(undefined);
 
   render(<OrdersSection role="manazer" onSessionExpired={() => {}} />);
 
-  const select = await screen.findByTestId<HTMLSelectElement>(`state-select-${LINE_STARA.lineId}`);
-  expect(select.value).toBe("objednane");
+  await screen.findByTestId(`state-select-${LINE_STARA.lineId}`);
+  // issue 161: `<select>`'s jedna vybraná `<option>` nahradilo `aria-checked`
+  // na PRÁVE aktívnom z 4 tlačidiel.
+  expect(screen.getByTestId(`state-btn-objednane-${LINE_STARA.lineId}`).getAttribute("aria-checked")).toBe("true");
 
-  select.value = "skladom";
-  select.dispatchEvent(new Event("change", { bubbles: true }));
+  fireEvent.click(screen.getByTestId(`state-btn-skladom-${LINE_STARA.lineId}`));
 
   await waitFor(() => {
     expect(updateOrderLineState).toHaveBeenCalledWith(LINE_STARA.lineId, "skladom");
   });
   await waitFor(() => {
-    expect(screen.getByTestId<HTMLSelectElement>(`state-select-${LINE_STARA.lineId}`).value).toBe("skladom");
+    expect(screen.getByTestId(`state-btn-skladom-${LINE_STARA.lineId}`).getAttribute("aria-checked")).toBe("true");
   });
+  expect(screen.getByTestId(`state-btn-objednane-${LINE_STARA.lineId}`).getAttribute("aria-checked")).toBe("false");
   // Presne JEDNO volanie fetchOpenOrders (počiatočné načítanie) — úspešná
   // zmena aktualizuje lokálny stav, netreba refetch.
   expect(fetchOpenOrders).toHaveBeenCalledTimes(1);
   expect(screen.queryByRole("alert")).toBeNull();
+});
+
+// issue 161 (code review finding): klik na UŽ aktívne tlačidlo nesmie poslať
+// zbytočný zápis na server — presne to, čo pôvodný `<select>` robil (výber
+// TEJ ISTEJ `<option>` nikdy nevyvolal `onChange`). Bez tohto testu by
+// budúca zmena `OrderLineStateButtons.tsx`'s `if (!active)` guardu mohla
+// ticho pridať zbytočné PATCH volania a nič by to nezachytilo.
+it("klik na už aktívne stavové tlačidlo nezavolá updateOrderLineState", async () => {
+  fetchOpenOrders.mockResolvedValue([{ supplier: "Dodávateľ Alfa", lines: [LINE_STARA], email: null }]);
+
+  render(<OrdersSection role="manazer" onSessionExpired={() => {}} />);
+
+  await screen.findByTestId(`state-select-${LINE_STARA.lineId}`);
+  const aktivne = screen.getByTestId(`state-btn-objednane-${LINE_STARA.lineId}`);
+  expect(aktivne.getAttribute("aria-checked")).toBe("true");
+
+  fireEvent.click(aktivne);
+
+  expect(updateOrderLineState).not.toHaveBeenCalled();
 });
 
 it("zlyhaná zmena stavu zobrazí slovenskú hlášku zo servera a stav sa nezmení", async () => {
@@ -328,9 +349,8 @@ it("zlyhaná zmena stavu zobrazí slovenskú hlášku zo servera a stav sa nezme
 
   render(<OrdersSection role="manazer" onSessionExpired={() => {}} />);
 
-  const select = await screen.findByTestId<HTMLSelectElement>(`state-select-${LINE_STARA.lineId}`);
-  select.value = "skladom";
-  select.dispatchEvent(new Event("change", { bubbles: true }));
+  await screen.findByTestId(`state-select-${LINE_STARA.lineId}`);
+  fireEvent.click(screen.getByTestId(`state-btn-skladom-${LINE_STARA.lineId}`));
 
   // issue 66: kumulatívny banner (nahrádza pôvodný jediný `<p role="alert">`
   // so surovou serverovou hláškou) — nesie aj nadpis "N položiek"/tlačidlo
@@ -340,7 +360,7 @@ it("zlyhaná zmena stavu zobrazí slovenskú hlášku zo servera a stav sa nezme
       "⚠️ Nepodarilo sa uložiť 1 položku×Zmena stavu — obj. 1001, kód A-1 (Riadok objednávky sa nenašiel)",
     );
   });
-  expect(screen.getByTestId<HTMLSelectElement>(`state-select-${LINE_STARA.lineId}`).value).toBe("objednane");
+  expect(screen.getByTestId(`state-btn-objednane-${LINE_STARA.lineId}`).getAttribute("aria-checked")).toBe("true");
 });
 
 it("zmena stavu pri 401 zavolá onSessionExpired namiesto zobrazenia chyby", async () => {
@@ -350,9 +370,8 @@ it("zmena stavu pri 401 zavolá onSessionExpired namiesto zobrazenia chyby", asy
 
   render(<OrdersSection role="manazer" onSessionExpired={onSessionExpired} />);
 
-  const select = await screen.findByTestId<HTMLSelectElement>(`state-select-${LINE_STARA.lineId}`);
-  select.value = "skladom";
-  select.dispatchEvent(new Event("change", { bubbles: true }));
+  await screen.findByTestId(`state-select-${LINE_STARA.lineId}`);
+  fireEvent.click(screen.getByTestId(`state-btn-skladom-${LINE_STARA.lineId}`));
 
   await waitFor(() => {
     expect(onSessionExpired).toHaveBeenCalledTimes(1);

@@ -2074,3 +2074,40 @@ nové heslo sa nikde v pushnutom obsahu nenachádza.
   draftu — plus wrapper-harness `useCallback` gotcha), `.claude/rules/
   testing.md` (tag-scoped selector sa rozbije pri zmene tagu prvku;
   Enter-vs-Ctrl+Enter potrebuje SKUTOČNÉ stláčanie klávesov, nie `.fill()`).
+
+## Issues 161, 162, 163 — Na objednanie: stavové tlačidlá, širší editor odkazu, opravená deliaca čiara
+
+Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.css`).
+
+- Verzia: `0.3.0-dev.96` (`175895d`).
+- **#163** (deliaca čiara nelícuje pod bunkou dodávateľa): RED
+  `b4f3c0f` (`orders-layout.spec.ts`'s `nezarovnaneDelice` — zlyhalo až
+  44px pri 1280px), GREEN `22224fe` (`app.css`: odstránené `display:flex`
+  z `.ord-supplier-merged`, medzera presunutá na `.ord-supplier-assign`'s
+  `margin-top`). Skutočná príčina: `display:flex` priamo na `<td>` menilo
+  jej box-typ tak, že sa nerozťahovala na výšku riadku ako ostatné bunky.
+- **#162** (editor odkazu na dodávateľa príliš úzky, ~94px): RED `5537bbb`
+  (`orders-supplier-link.spec.ts` — 51.7px < požadovaných 282px), GREEN
+  `6e52339` (`OrderLineRow.tsx`: presunutý do vlastného rozbaľovacieho
+  riadku pod hlavným riadkom, `colSpan={9}`; pridané Escape-to-zrušiť).
+  Naživo overené: input po fixe 579px.
+- **#161** (stav ako 4 tlačidlá namiesto `<select>`u — majiteľova
+  explicitná požiadavka): `822c5d6` (feature, jeden commit — nový súbor
+  `OrderLineStateButtons.tsx` + `orderLineStateLabels.ts`, 2×2 mriežka
+  tlačidiel). Naživo (Playwright proti lokálnemu dev buildu) odhalený a
+  opravený CSS Grid `min-width:auto` overflow bug (tlačidlá pretekali do
+  susedného stĺpca) — pridané `min-width:0`/`overflow-wrap:break-word`.
+- Design komentáre PRED prvým kódovým commitom: issue-comment-5152316395
+  (#161), -5152318281 (#162), -5152320251 (#163).
+- Validačné komentáre (STEP 0, naživo overené proti v0.3.0-dev.95):
+  issue-comment-5152313107 (#161), -5152313661 (#162), -5152314911 (#163).
+- CI (`dev` push `822c5d6`): docker-build/version-check/integration/e2e/
+  check všetky `success` (run 30710242413). PR #165 mergeable/CLEAN.
+- Tickety NEZATVORENÉ cez `Closes #N` — čakajú na živé overenie na
+  produkcii, presne podľa `CLAUDE.md`'s poznámky pre tento repo.
+- Playbook rozšírený: `.claude/rules/frontend-design.md` — `display:flex`
+  priamo na `<td>` rozbíja zarovnanie výšky riadku; CSS Grid `min-width:
+  auto` analog k už zdokumentovanej flex `flex-basis` pasci (issue 105);
+  presun obsahu do NOVÉHO súrodeneckého `<tr>` rozbíja `within(riadok)`-
+  scoped testy (fix: `screen.getByTestId`/Playwright `xpath=./following-
+  sibling::tr[1]`); nový testid nesmie zdieľať existujúci `^='...'` prefix.
