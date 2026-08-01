@@ -457,13 +457,20 @@ export function OrderLineRow({
         <div className="ord-comment-cell" data-testid={`comment-cell-${line.lineId}`}>
           {canChangeState ? (
             <>
-              <input
-                type="text"
+              {/* issue 150: `<textarea>` (nie `<input>`) — Enter vkladá nový
+                  riadok defaultne (žiadny `preventDefault`), uloží LEN
+                  Ctrl/⌘+Enter. Poznámka býva viacriadková (dohoda so
+                  zákazníkom/dodávateľom) a spätne sa zapisuje do Shoptetu,
+                  takže formátovanie má význam — `<input>` by nový riadok
+                  nikdy vizuálne nezobrazil, bez ohľadu na to, čo je v jeho
+                  hodnote uložené. */}
+              <textarea
                 className="ord-comment-input"
                 data-testid={`comment-input-${line.lineId}`}
                 aria-label={`Poznámka k objednávke ${line.externalOrderId} / ${line.variantCode}`}
                 placeholder="poznámka…"
                 maxLength={2000}
+                rows={1}
                 value={commentDraft}
                 disabled={commentBusyHere}
                 onChange={(e) => {
@@ -471,7 +478,7 @@ export function OrderLineRow({
                   setCommentDraft(e.target.value);
                 }}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter") {
+                  if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
                     e.preventDefault();
                     saveComment();
                   }
@@ -482,6 +489,7 @@ export function OrderLineRow({
                 className="btn sm good"
                 data-testid={`comment-save-${line.lineId}`}
                 aria-label={`Uložiť poznámku k objednávke ${line.externalOrderId} / ${line.variantCode}`}
+                title="Uložiť poznámku (Ctrl+Enter)"
                 disabled={commentBusyHere}
                 onClick={saveComment}
               >
@@ -489,7 +497,10 @@ export function OrderLineRow({
               </button>
             </>
           ) : (
-            (line.comment ?? "—")
+            // issue 150: `.ord-comment-display` (CSS `white-space: pre-wrap`)
+            // — už uložený viacriadkový komentár zobrazí svoje zalomenia aj
+            // na čítanie, nielen počas úpravy.
+            <span className="ord-comment-display">{line.comment ?? "—"}</span>
           )}
         </div>
       </td>

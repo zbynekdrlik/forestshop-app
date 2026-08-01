@@ -186,3 +186,38 @@ it("rola citanie vidí poznámku len na čítanie, bez vstupného poľa", async 
     screen.queryByLabelText(`Poznámka k objednávke ${RIADOK_1.externalOrderId} / ${RIADOK_1.variantCode}`),
   ).toBeNull();
 });
+
+// issue 150: pole je odteraz `<textarea>` — obyčajný Enter musí vložiť nový
+// riadok (nesmie uložiť), uloží len Ctrl/⌘+Enter.
+it("Enter v poznámke vloží nový riadok a NEUloží (žiadne volanie updateOrderComment)", async () => {
+  fetchOpenOrders.mockResolvedValue([{ supplier: "(bez dodávateľa)", lines: [RIADOK_1], email: null }]);
+
+  render(<OrdersSection role="manazer" onSessionExpired={() => {}} />);
+
+  const vstup = await screen.findByLabelText<HTMLTextAreaElement>(
+    `Poznámka k objednávke ${RIADOK_1.externalOrderId} / ${RIADOK_1.variantCode}`,
+  );
+  expect(vstup.tagName).toBe("TEXTAREA");
+  fireEvent.change(vstup, { target: { value: "prvý riadok\ndruhý riadok" } });
+  fireEvent.keyDown(vstup, { key: "Enter" });
+
+  expect(vstup.value).toBe("prvý riadok\ndruhý riadok");
+  expect(updateOrderComment).not.toHaveBeenCalled();
+});
+
+it("Ctrl+Enter v poznámke uloží viacriadkový text", async () => {
+  fetchOpenOrders.mockResolvedValue([{ supplier: "(bez dodávateľa)", lines: [RIADOK_1], email: null }]);
+  updateOrderComment.mockResolvedValue(undefined);
+
+  render(<OrdersSection role="manazer" onSessionExpired={() => {}} />);
+
+  const vstup = await screen.findByLabelText<HTMLTextAreaElement>(
+    `Poznámka k objednávke ${RIADOK_1.externalOrderId} / ${RIADOK_1.variantCode}`,
+  );
+  fireEvent.change(vstup, { target: { value: "prvý riadok\ndruhý riadok" } });
+  fireEvent.keyDown(vstup, { key: "Enter", ctrlKey: true });
+
+  await waitFor(() => {
+    expect(updateOrderComment).toHaveBeenCalledWith(ORDER_ID, "prvý riadok\ndruhý riadok");
+  });
+});
