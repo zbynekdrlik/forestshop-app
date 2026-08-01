@@ -71,10 +71,16 @@ export function Sidebar({
                       >
                         <span className="tlabel">{tab.label}</span>
                         {badgeCount !== undefined && (
+                          // Code review (PR 154): `aria-label` NESMIE niesť
+                          // doménovo špecifické slovo ("nevybavených") — táto
+                          // komponenta je zámerne generická pre AKÚKOĽVEK
+                          // budúcu záložku (viď `badgeCounts` prop vyššie),
+                          // takže popis smie použiť len to, čo Sidebar sám
+                          // pozná: číslo + názov TEJTO záložky.
                           <span
                             className="tab-badge"
                             data-testid={`nav-badge-${tab.id}`}
-                            aria-label={`${String(badgeCount)} nevybavených`}
+                            aria-label={`${tab.label}: ${String(badgeCount)}`}
                           >
                             {badgeCount}
                           </span>

@@ -179,7 +179,18 @@ export function OrderLineRow({
   // OTVORENÍ (bez ohľadu na obsah, rovnaký zámer ako stará appka's "opened
   // counts as his"); `supplierDraft`/komentár počítajú len keď sa SKUTOČNE
   // líšia od uloženej hodnoty (nemajú vlastný toggle open/close).
-  const supplierDraftDirty = line.supplierAssignable && supplierDraft.trim() !== "" && supplierDraft.trim() !== (line.manualSupplierOverride ?? "");
+  const trimmedSupplierDraft = supplierDraft.trim();
+  const supplierDraftDirty =
+    line.supplierAssignable && trimmedSupplierDraft !== "" && trimmedSupplierDraft !== (line.manualSupplierOverride ?? "");
+  // Code review (PR 154): `isCommentDirty.current` je REF, nie state — jeho
+  // čítanie tu funguje len preto, že KAŽDÁ jeho mutácia (`onChange` nižšie →
+  // `true`, `saveComment` vyššie → `false`) je v TEJ ISTEJ tikni sprevádzaná
+  // state zmenou, ktorá tento komponent aj tak prekreslí (lokálny
+  // `setCommentDraft`, alebo rodičovský `setBusyCommentOrderId` cez props) —
+  // a nič v tomto strome dnes nie je `React.memo`. Ak by niekedy pribudol
+  // `React.memo` na `OrderLineRow`/`SupplierOrderGroup` (perf krok kvôli
+  // `dirtyEditorLineIds` nižšie), TENTO odvodený signál by mohol prestať
+  // reagovať na správnom tiku bez chyby/varovania — over najprv toto miesto.
   const commentDirtyNow = isCommentDirty.current;
   const hasOpenEditor = linkEditing || supplierDraftDirty || commentDirtyNow;
   useEffect(() => {

@@ -10,6 +10,17 @@ import { useCallback, useState } from "react";
 // (`SupplierOrderGroup.tsx`'s `visibleLines`) aj `OrdersSection.tsx`'s
 // `visibleLinesCount` použijú výsledný set ako VÝNIMKU: vybavený riadok s
 // otvorenou úpravou ostáva viditeľný, kým sa úprava nezavrie/neuloží.
+//
+// Code review (PR 154): `dirtyEditorLineIds` je NOVÝ `Set` pri KAŽDEJ zmene
+// (immutable update vyššie), takže KAŽDÝ `SupplierOrderGroup`/`OrderLineRow`
+// na celej obrazovke sa prekreslí pri otvorení/zavretí ktoréhokoľvek JEDNÉHO
+// riadku — nič v tomto strome dnes nie je `React.memo`. Pri dnešných
+// desiatkach riadkov ("Na objednanie") je to zanedbateľné; ak by objem
+// objednávok narástol natoľko, že by to bolo merateľne pomalé, riešenie je
+// `React.memo` na `SupplierOrderGroup`/`OrderLineRow` s vlastným
+// porovnávačom (len `dirtyEditorLineIds.has(line.lineId)`, nie celý set) —
+// pozri aj `OrderLineRow.tsx`'s komentár pri `commentDirtyNow` predtým, než
+// taký `React.memo` krok urobíš.
 export function useDirtyEditorLineIds(): {
   readonly dirtyEditorLineIds: ReadonlySet<string>;
   readonly setActive: (lineId: string, active: boolean) => void;
