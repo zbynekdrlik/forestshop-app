@@ -544,3 +544,20 @@ paths:
   "data-testid\^='<prefix>'"` (or the exact base string) across
   `apps/web/tests/e2e/` to check whether a prefix-match query already
   exists that the new element would also satisfy.
+- **A vitest unit test that needs a specific DOM element subtype from
+  `screen.getByTestId(...)` should pass the type as a GENERIC ARGUMENT
+  (`screen.getByTestId<HTMLInputElement>(...)`), never an `as
+  HTMLInputElement` cast on the result** — issue 166's RED test wrote
+  `const x = screen.getByTestId(...) as HTMLInputElement;` and eslint
+  flagged it `@typescript-eslint/no-unnecessary-type-assertion`
+  ("unnecessary since it does not change the type of the expression"),
+  even though a DELIBERATE type-mismatch probe (`const x: number =
+  screen.getByTestId(...)`) proved `tsc` itself infers the return as
+  plain `HTMLElement` (no `.value`) without the cast — i.e. the assertion
+  demonstrably DOES narrow the type, yet the rule still fires. Root cause
+  not fully chased down (a typescript-eslint/testing-library-types
+  generic-inference quirk, not a real "assertion does nothing" case) — the
+  reliable fix either way is the generic-argument form, which resolves
+  clean under both `tsc -b` and eslint. Any FUTURE
+  `getByTestId`/`getByLabelText`/etc. result that needs a narrower element
+  type in THIS codebase: use the generic argument, not `as`.
