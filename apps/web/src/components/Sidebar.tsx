@@ -71,7 +71,11 @@ export function Sidebar({
                       >
                         <span className="tlabel">{tab.label}</span>
                         {badgeCount !== undefined && (
-                          <span className="tab-badge" data-testid={`nav-badge-${tab.id}`}>
+                          <span
+                            className="tab-badge"
+                            data-testid={`nav-badge-${tab.id}`}
+                            aria-label={`${String(badgeCount)} nevybavených`}
+                          >
                             {badgeCount}
                           </span>
                         )}
