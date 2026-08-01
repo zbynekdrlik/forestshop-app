@@ -38,4 +38,22 @@ describe("buildWritebackCsv", () => {
     const rows = csv.toString("utf8").slice(1).split("\r\n").filter(Boolean);
     expect(rows[1]).toBe('A;;"note; with ""quotes"""');
   });
+
+  // issue 153: CSV-injection ochrana — KAŽDÁ bunka (nielen `internalNote`,
+  // ktoré prechádza cez URL-tvarovú validáciu, ale aj `code`/`pairCode`,
+  // ktoré prichádzajú z katalógového importu bez akejkoľvek inej kontroly)
+  // začínajúca znakom vzorca sa neutralizuje priamo pri zápise CSV
+  // (`formula-guard.ts`'s `csvSafe`, rovnaký mechanizmus ako referenčná
+  // appka's `_csv_safe`).
+  it("neutralizuje bunku začínajúcu znakom vzorca v KTOROMKOĽVEK stĺpci (CSV-injection ochrana)", () => {
+    const csv = buildWritebackCsv([{ code: "=SUM(A1:A9)", pairCode: "+1", internalNote: "-2+3" }]);
+    const rows = csv.toString("utf8").slice(1).split("\r\n").filter(Boolean);
+    expect(rows[1]).toBe("'=SUM(A1:A9);'+1;'-2+3");
+  });
+
+  it("neutralizácia vzorca funguje aj SÚČASNE s uvodzovaním kvôli oddeľovaču", () => {
+    const csv = buildWritebackCsv([{ code: "A", pairCode: "", internalNote: "=cmd|'/c calc'!A1;X" }]);
+    const rows = csv.toString("utf8").slice(1).split("\r\n").filter(Boolean);
+    expect(rows[1]).toBe(`A;;"'=cmd|'/c calc'!A1;X"`);
+  });
 });
