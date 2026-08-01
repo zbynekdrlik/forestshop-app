@@ -889,29 +889,86 @@ tr:last-child td {
   white-space: nowrap;
   cursor: help;
 }
-/* issue 107 bod 1: majiteľ, live nameraná chyba — natívna šípka rozbaľovača
-   sa vykresľuje VNÚTRI paddingu, ale nič v CSS s jej priestorom nepočíta
-   (`padding-right` bol celý priestor, ktorý appka "vidí"), takže reálne
-   viditeľné miesto na text bolo o ~15–20px menšie, než čokoľvek deklarované
-   — pri úzkom `col-state` stĺpci (≤1600px) sa najdlhší stav ("Nevybavené"/
-   "Nedostupné", ~83px textu) neskrátil na scrollWidth (žiadny technický
-   overflow), len sa VIZUÁLNE orezal natívnou šípkou. `appearance: none` +
-   vlastná malá SVG šípka spraví tento priestor DETERMINISTICKÝ (a teda aj
-   testovateľný) namiesto skrytého v réžii prehliadača. */
-.ord-state-select {
+/* issue 161: majiteľ, doslovne "na stav nechcem mat selektor ale 4
+   tlacitka" — `<select>` (bývalá `.ord-state-select`, teraz odstránená;
+   issue 107 bod 1's šípkový problém, ktorý riešila, so selectom zmizol
+   celý) nahradil segmentovaný prepínač so 4 tlačidlami
+   (`OrderLineStateButtons.tsx`). 2×2 mriežka (nie 4 v rade) — `col-state` je
+   len ~138px (13.5 % z ~1022px `min-width`), 4 tlačidlá v jednom rade by
+   boli príliš úzke na čitateľný text aj klik; 2×2 udrží tlačidlá dosť veľké
+   ("veľké tlačidlá", majiteľova stála požiadavka) a nezväčší výšku riadku
+   nad existujúci ~100px strop (issue 105/107/111/127/163,
+   `orders-layout.spec.ts`'s `vysokeKompaktneRiadky`). */
+.ord-state-btn-group {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--fs-space-1);
   width: 100%;
-  appearance: none;
-  padding: var(--fs-space-2) 1.25rem var(--fs-space-2) var(--fs-space-2);
+}
+.ord-state-btn {
+  /* Živo overené proti lokálnemu dev serveru (Playwright, 1280px): CSS Grid
+     položky majú PREDVOLENÉ `min-width: auto`, ktoré rešpektuje intrinzitnú
+     min-content šírku obsahu — jednoslovné popisky ("Nevybavené",
+     "Nedostupné") sa bez explicitného `overflow-wrap` nemajú kde zalomiť,
+     takže ich min-content šírka (~80px) roztiahla `.ord-state-btn-group`
+     (161px scrollWidth) nad reálnu šírku stĺpca (114px) a tlačidlá VIZUÁLNE
+     pretiekli do susedného stĺpca DÁTUM. `min-width: 0` dovolí položke
+     zmenšiť sa POD jej intrinzitnú šírku, `overflow-wrap: break-word`
+     zaručí, že sa dlhší popisok skutočne ZALOMÍ vnútri tlačidla (2 riadky),
+     nikdy neprepíše/nepretečie susedný stĺpec. */
+  min-width: 0;
+  overflow-wrap: break-word;
+  /* `lang="sk"` na `<html>` (`index.html`) dáva Chromiu slovenský slovník
+     delenia slov — namiesto zalomenia uprostred slova na ľubovoľnom mieste
+     (napr. "Nevyba/vené") sa preferuje delenie pri slabike ("Ne-vy-ba-
+     vené"), čitateľnejšie pri tomto úzkom stĺpci. */
+  hyphens: auto;
+  padding: var(--fs-space-1);
+  min-height: 2rem;
   border: 1px solid var(--fs-border);
   border-radius: var(--fs-radius-sm);
+  background: var(--fs-surface);
+  color: var(--fs-ink-muted);
   font: inherit;
-  font-size: var(--fs-text-base);
-  min-height: 2.25rem;
-  background-color: var(--fs-surface);
-  background-repeat: no-repeat;
-  background-position: right 0.4rem center;
-  background-size: 0.6rem 0.4rem;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%235c6b60' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  font-size: var(--fs-text-xs);
+  font-weight: var(--fs-weight-medium);
+  line-height: 1.15;
+  text-align: center;
+  cursor: pointer;
+}
+.ord-state-btn:hover:not(:disabled) {
+  border-color: var(--fs-brand);
+}
+.ord-state-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+/* Aktívny stav NIKDY len farbou (kontrast/farbosleposť, ticketov explicitný
+   akceptačný bod) — plná výplň + hrubší rám + tučné písmo, tri nezávislé
+   signály naraz. */
+.ord-state-btn.active {
+  border-width: 2px;
+  font-weight: var(--fs-weight-bold);
+}
+.ord-state-btn-objednane.active {
+  background: var(--fs-surface-alt);
+  border-color: var(--fs-ink-muted);
+  color: var(--fs-ink);
+}
+.ord-state-btn-caka_sa.active {
+  background: var(--fs-warning-bg);
+  border-color: var(--fs-warning);
+  color: var(--fs-warning);
+}
+.ord-state-btn-skladom.active {
+  background: var(--fs-success-bg);
+  border-color: var(--fs-success);
+  color: var(--fs-success);
+}
+.ord-state-btn-nedostupne.active {
+  background: var(--fs-danger-bg);
+  border-color: var(--fs-danger);
+  color: var(--fs-danger);
 }
 /* issue 95: DODÁVATEĽ + PRIRADENIE DODÁVATEĽA zlúčené do jednej bunky
    (majiteľ, komentár #1: "neviem čo tam je Priradenie dodávateľa stĺpec" —

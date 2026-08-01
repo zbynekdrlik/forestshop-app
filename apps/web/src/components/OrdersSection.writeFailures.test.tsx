@@ -65,9 +65,11 @@ it("dve nezávislé zlyhania zápisu (iný riadok, iná akcia) sa zobrazia SÚČ
 
   render(<OrdersSection role="manazer" onSessionExpired={() => {}} />);
 
-  const select = await screen.findByTestId<HTMLSelectElement>(`state-select-${LINE_ALFA.lineId}`);
-  select.value = "skladom";
-  select.dispatchEvent(new Event("change", { bubbles: true }));
+  // issue 161: `<select>` nahradili 4 tlačidlá — `state-select-<lineId>` je
+  // teraz `role="radiogroup"` obal, konkrétny stav sa mení klikom na
+  // `state-btn-<hodnota>-<lineId>`.
+  await screen.findByTestId(`state-select-${LINE_ALFA.lineId}`);
+  fireEvent.click(screen.getByTestId(`state-btn-skladom-${LINE_ALFA.lineId}`));
 
   await waitFor(() => {
     expect(screen.getByTestId("order-write-failures").textContent).toContain("Nepodarilo sa uložiť 1 položku");
@@ -87,14 +89,13 @@ it("dve nezávislé zlyhania zápisu (iný riadok, iná akcia) sa zobrazia SÚČ
     "Príznak objednané — obj. 1002, kód B-1 (chyba príznaku)",
   );
   // Zamietnutá zmena sa NIKDY netvári ako uložená.
-  expect(select.value).toBe("objednane");
+  expect(screen.getByTestId(`state-btn-objednane-${LINE_ALFA.lineId}`).getAttribute("aria-checked")).toBe("true");
   expect(checkbox.checked).toBe(false);
 
   // Úspešný opakovaný zápis (riadok Alfa) zmaže LEN jeho položku — druhá
   // (Beta) ostáva viditeľná (legacy `clearToOrderFail`: "drop only ITS line").
   updateOrderLineState.mockResolvedValue(undefined);
-  select.value = "skladom";
-  select.dispatchEvent(new Event("change", { bubbles: true }));
+  fireEvent.click(screen.getByTestId(`state-btn-skladom-${LINE_ALFA.lineId}`));
 
   await waitFor(() => {
     expect(screen.getByTestId("order-write-failures").textContent).toContain("Nepodarilo sa uložiť 1 položku");

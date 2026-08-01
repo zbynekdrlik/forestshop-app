@@ -1,18 +1,8 @@
 import { useEffect, useRef, useState, type JSX } from "react";
 import type { OrderLine } from "../ordersApi.js";
+import { STATE_LABELS } from "../orderLineStateLabels.js";
 import { formatVariantTotalChip, isStaleOrderLine, orderLineAgeDays, type VariantTotal } from "../ordersSummary.js";
-
-// issue 60: `objednane` je VÝCHODISKOVÝ stav riadku (pred tým, než sa
-// čokoľvek stane), NIE potvrdenie, že manažér objednal — preto sa nazýva
-// "Nevybavené", nie "Objednané" (to slovo teraz patrí VÝLUČNE odškrtávaciemu
-// políčku v tomto riadku, `OrderLine["ordered"]`, aby appka nemala na jednej
-// obrazovke tri rôzne veci s tým istým názvom).
-export const STATE_LABELS: Record<OrderLine["state"], string> = {
-  objednane: "Nevybavené",
-  caka_sa: "Čaká sa",
-  skladom: "Skladom",
-  nedostupne: "Nedostupné",
-};
+import { OrderLineStateButtons } from "./OrderLineStateButtons.js";
 
 // issue 162: počet stĺpcov "Na objednanie" tabuľky — MUSÍ sedieť s počtom
 // `<col>` v `SupplierOrderGroup.tsx`'s `<colgroup>` (9). Vlastný rozbaľovací
@@ -375,29 +365,7 @@ export function OrderLineRow({
         </td>
         <td>
           {canChangeState ? (
-            <select
-              // Code review finding (#25): pôvodne bez slova "stav" v
-              // aria-labeli (obchádzka Playwright's substring
-              // `getByLabel("Stav")` kolízie s katalógovým filtrom), čo by
-              // čítačke obrazovky neoznámilo, čo tento prvok robí. Skutočná
-              // oprava patrí na stranu KOLÍDUJÚCEHO testu (`catalog.spec.ts`
-              // teraz používa `{ exact: true }`), nie na obetovanie
-              // prístupnosti tu — tento select smie mať plnohodnotný popis.
-              aria-label={`Zmeniť stav riadku objednávky ${line.externalOrderId} / ${line.variantCode}`}
-              data-testid={`state-select-${line.lineId}`}
-              className="ord-state-select"
-              value={line.state}
-              disabled={busyLineId === line.lineId}
-              onChange={(e) => {
-                onChangeState(line.lineId, e.target.value as OrderLine["state"]);
-              }}
-            >
-              {(Object.keys(STATE_LABELS) as OrderLine["state"][]).map((s) => (
-                <option key={s} value={s}>
-                  {STATE_LABELS[s]}
-                </option>
-              ))}
-            </select>
+            <OrderLineStateButtons line={line} busyLineId={busyLineId} onChangeState={onChangeState} />
           ) : (
             STATE_LABELS[line.state]
           )}

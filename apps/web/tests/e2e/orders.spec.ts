@@ -298,8 +298,9 @@ test("manažér vidí otvorené objednávky zoskupené podľa dodávateľa, konz
   await expect(riadokBez).toContainText("E2E Zákazník Bez dodávateľa");
   await expect(riadokBez).toContainText("Čiapka Polar FOREST");
   // issue 117: variant kód ("40287") sa už NIKDE nezobrazuje viditeľne —
-  // stále však nesie zmysel (a je overiteľný) cez aria-label stavového
-  // selectu tohto riadku.
+  // stále však nesie zmysel (a je overiteľný) cez aria-label na obale
+  // stavových tlačidiel tohto riadku (issue 161: predtým `<select>`, ten
+  // istý `aria-label` ostal zachovaný na `role="radiogroup"` obale).
   await expect(riadokBez.getByLabel("Zmeniť stav riadku objednávky 9002 / 40287")).toBeVisible();
   // Predvolený stav riadku (schema default "objednane") a chýbajúca veľkosť —
   // issue 60: premenované na "Nevybavené" (slovo "Objednané" teraz patrí
@@ -320,14 +321,17 @@ test("manažér vidí otvorené objednávky zoskupené podľa dodávateľa, konz
   expect(chyby).toEqual([]);
 });
 
-// #25: manažér prepne stav riadku cez select v UI a zmena PRETRVÁ po obnovení
-// stránky. Zápis stavu a audit bežia v JEDNEJ transakcii (`modules/orders/
-// state.ts`) — pretrvanie po reloade je teda dôkazom, že transakcia skutočne
-// commitla (audit zápis neyhodil výnimku, ktorá by ju bola vrátila späť).
-// Samotný obsah auditového riadku (kto, kedy, z akého stavu do akého) overuje
+// #25: manažér prepne stav riadku cez tlačidlá v UI (issue 161: predtým
+// `<select>`, majiteľ ho odmietol) a zmena PRETRVÁ po obnovení stránky. Zápis
+// stavu a audit bežia v JEDNEJ transakcii (`modules/orders/state.ts`) —
+// pretrvanie po reloade je teda dôkazom, že transakcia skutočne commitla
+// (audit zápis neyhodil výnimku, ktorá by ju bola vrátila späť). Samotný
+// obsah auditového riadku (kto, kedy, z akého stavu do akého) overuje
 // integračný test (`apps/api/tests/orders-http.integration.test.ts`) priamo
 // nad databázou — tam patrí kontrola stĺpcov DB riadku, nie do e2e.
-test("manažér prepne stav riadku cez select, zmena pretrvá po obnovení stránky, konzola je čistá", async ({ page }) => {
+test("manažér prepne stav riadku klikom na tlačidlo, zmena pretrvá po obnovení stránky, konzola je čistá", async ({
+  page,
+}) => {
   const chyby: string[] = [];
   page.on("console", (m) => {
     if ((m.type() === "error" || m.type() === "warning") && !jeOcakavane(m)) chyby.push(m.text());
@@ -345,26 +349,25 @@ test("manažér prepne stav riadku cez select, zmena pretrvá po obnovení strá
   // Objednávka 9001 (dodávateľ "DODAVATEL-TEST-1") má riadok so stavom
   // "caka_sa" (`scripts/e2e-setup.ts`).
   const riadok = page.getByTestId("supplier-DODAVATEL-TEST-1").locator("[data-testid^='order-line-']");
-  const select = riadok.locator("select");
-  await expect(select).toHaveValue("caka_sa");
+  const tlacidloCakaSa = riadok.getByRole("radio", { name: "Čaká sa" });
+  const tlacidloSkladom = riadok.getByRole("radio", { name: "Skladom" });
+  await expect(tlacidloCakaSa).toHaveAttribute("aria-checked", "true");
 
-  await select.selectOption("skladom");
-  // Nie `toContainText("Skladom")` — VŠETKY štyri `STATE_LABELS` sú vždy
-  // vykreslené ako `<option>` deti selectu bez ohľadu na to, ktorý je
-  // vybraný, takže taká kontrola textu je tautológia (vždy prejde, aj keď sa
-  // zápis nikdy nedokončí). `toHaveValue` na SAMOTNOM selecte skutočne čaká,
-  // kým lokálny optimistický update prebehne (deje sa AŽ po úspešnom
-  // vyriešení PATCH promisu, `OrdersSection.tsx`'s `changeState`), čím
-  // zaručuje, že zápis je na serveri potvrdený PRED nasledujúcim reloadom —
-  // bez tejto zmeny mohol pod pomalším CI behom `page.reload()` predbehnúť
-  // ešte neuzavretý zápis a nasledujúca kontrola po reloade náhodne zlyhala.
-  await expect(select).toHaveValue("skladom");
+  await tlacidloSkladom.click();
+  // `aria-checked` na KONKRÉTNOM tlačidle skutočne čaká, kým lokálny
+  // optimistický update prebehne (deje sa AŽ po úspešnom vyriešení PATCH
+  // promisu, `OrdersSection.tsx`'s `changeState`), čím zaručuje, že zápis je
+  // na serveri potvrdený PRED nasledujúcim reloadom — bez tejto zmeny mohol
+  // pod pomalším CI behom `page.reload()` predbehnúť ešte neuzavretý zápis a
+  // nasledujúca kontrola po reloade náhodne zlyhala.
+  await expect(tlacidloSkladom).toHaveAttribute("aria-checked", "true");
+  await expect(tlacidloCakaSa).toHaveAttribute("aria-checked", "false");
   await expect(page.getByRole("alert")).toHaveCount(0);
 
   await page.reload();
   await expect(page.getByRole("heading", { name: "Na objednanie" })).toBeVisible();
   const riadokPoReloade = page.getByTestId("supplier-DODAVATEL-TEST-1").locator("[data-testid^='order-line-']");
-  await expect(riadokPoReloade.locator("select")).toHaveValue("skladom");
+  await expect(riadokPoReloade.getByRole("radio", { name: "Skladom" })).toHaveAttribute("aria-checked", "true");
 
   expect(chyby).toEqual([]);
 });

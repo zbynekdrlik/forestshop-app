@@ -66,7 +66,12 @@ test("kumulatívne hlásenie o neuložených zmenách drží VIAC zlyhaní naraz
     .getByTestId("supplier-DODAVATEL-TEST-1")
     .locator("[data-testid^='order-line-']")
     .filter({ hasText: "9001" });
-  const selectAlfa = riadokAlfa.locator("select");
+  // issue 161: `<select>` nahradili 4 tlačidlá — obal so skupinovým testid
+  // (`state-select-<lineId>`, teraz `role="radiogroup"`) sa použije LEN na
+  // vyčítanie `lineId`, samotná zmena ide cez konkrétne `role="radio"` tlačidlo.
+  const stavGroupAlfa = riadokAlfa.locator("[data-testid^='state-select-']");
+  const tlacidloCakaSaAlfa = riadokAlfa.getByRole("radio", { name: "Čaká sa" });
+  const tlacidloSkladomAlfa = riadokAlfa.getByRole("radio", { name: "Skladom" });
 
   const riadokBez = page
     .getByTestId("supplier-(bez dodávateľa)")
@@ -74,7 +79,7 @@ test("kumulatívne hlásenie o neuložených zmenách drží VIAC zlyhaní naraz
     .filter({ hasText: "9002" });
   const checkboxBez = riadokBez.locator("input[type='checkbox']");
 
-  const alfaTestId = await selectAlfa.getAttribute("data-testid");
+  const alfaTestId = await stavGroupAlfa.getAttribute("data-testid");
   const alfaLineId = (alfaTestId ?? "").replace("state-select-", "");
   const bezTestId = await checkboxBez.getAttribute("data-testid");
   const bezLineId = (bezTestId ?? "").replace("ordered-checkbox-", "");
@@ -85,17 +90,17 @@ test("kumulatívne hlásenie o neuložených zmenách drží VIAC zlyhaní naraz
 
   // `scripts/e2e-setup.ts`: riadok Alfa (obj. 9001) štartuje v stave
   // "caka_sa" (vybavený), nie vo východiskovom "objednane".
-  await expect(selectAlfa).toHaveValue("caka_sa");
+  await expect(tlacidloCakaSaAlfa).toHaveAttribute("aria-checked", "true");
 
   // 1. zlyhanie: zmena stavu na riadku Alfa (DODAVATEL-TEST-1, obj. 9001).
   await page.evaluate((frag) => {
     (window as unknown as { __zlyhajUrl: Set<string> }).__zlyhajUrl.add(frag);
   }, `/api/orders/lines/${alfaLineId}/state`);
-  await selectAlfa.selectOption("skladom");
+  await tlacidloSkladomAlfa.click();
   await expect(banner).toContainText("Nepodarilo sa uložiť 1 položku");
   await expect(banner).toContainText("obj. 9001");
   // Zamietnutá zmena sa NIKDY netvári ako uložená.
-  await expect(selectAlfa).toHaveValue("caka_sa");
+  await expect(tlacidloCakaSaAlfa).toHaveAttribute("aria-checked", "true");
 
   // 2. NEZÁVISLÉ zlyhanie: iný riadok (obj. 9002, "(bez dodávateľa)"), iná
   // akcia (checkbox "objednané").
@@ -117,7 +122,7 @@ test("kumulatívne hlásenie o neuložených zmenách drží VIAC zlyhaní naraz
     w.__zlyhajUrl.delete(frag);
     w.__uspejUrl.add(frag);
   }, `/api/orders/lines/${alfaLineId}/state`);
-  await selectAlfa.selectOption("skladom");
+  await tlacidloSkladomAlfa.click();
   await expect(banner).toContainText("Nepodarilo sa uložiť 1 položku");
   await expect(banner).not.toContainText("obj. 9001");
   await expect(banner).toContainText("obj. 9002");
