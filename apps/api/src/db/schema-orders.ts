@@ -136,6 +136,32 @@ export const productSupplierOverrides = pgTable("product_supplier_override", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// issue 121: majiteľ, doslovne "ak na produkt nie je odkaz na dodavatela, tak
+// tam ma byt moznost ho doplnit, a vlastne pri kazdom produkte ma byt moznost
+// upravit link na dodavatela". Priamy náprotivok `productSupplierOverrides`
+// vyššie (rovnaké kľúčovanie `product.key`, nie variantom — `internalNote`,
+// z ktorého sa odkaz extrahuje, je vlastnosť CELÉHO produktu naprieč
+// veľkosťami, `.claude/rules/catalog.md`), ale s JEDNÝM podstatným rozdielom:
+// `productSupplierOverrides` je FALLBACK povolený LEN keď katalóg pole nemá
+// (`supplierAssignable`/409 "already_has_supplier" gate) — tu majiteľ výslovne
+// žiada úpravu "pri KAŽDOM produkte", teda AJ keď Shoptet odkaz už poskytuje.
+// Čítacia strana preto VŽDY uprednostní TENTO riadok pred extrahovaným
+// `internalNote` odkazom (`coalesce(override.url, extractSupplierLink(...).url)`,
+// `queries.ts`), nikdy podmienene ako override vyššie. Zápis (`internalNote`
+// samotný) nikdy nemení — nočný katalógový import by ho pri ďalšom behu
+// prepísal (dôvod, prečo appka doteraz nemala VÔBEC žiadnu zápisovú cestu na
+// tento odkaz). `ON DELETE CASCADE` — rovnaký zámer ako `productSupplierOverrides`
+// (produkt sa reálne nikdy nemaže, ale osamotený riadok bez zmyslu nemá dôvod
+// prežiť). Nasledujúci samostatný ticket (#122) spätne zapisuje TENTO odkaz do
+// Shoptetu cez hromadný CSV import — táto tabuľka je jeho zdroj pravdy.
+export const productSupplierLinkOverrides = pgTable("product_supplier_link_override", {
+  productKey: text("product_key")
+    .primaryKey()
+    .references(() => products.key, { onDelete: "cascade" }),
+  url: text("url").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const orderLines = pgTable(
   "order_line",
   {
