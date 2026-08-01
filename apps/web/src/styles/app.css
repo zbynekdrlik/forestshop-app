@@ -1235,10 +1235,18 @@ tr:last-child td {
    jednej bunky "Poznámky" (majiteľ, komentár #10) — vnútri sú DVA pôvodné
    testid-ované bloky (`.ord-remark-cell`/`.ord-comment-cell`, nezmenené),
    pod sebou namiesto dvoch samostatných stĺpcov. */
+/* issue 163 (znovu otvorené — chyba sa presunula do POSLEDNÉHO stĺpca po
+   oprave dodávateľského): rovnaká príčina ako `.ord-supplier-merged` mala
+   pred PR #165 — `display:flex` PRIAMO na `<td>` mení jej box z
+   `table-cell` na flex kontajner nerešpektujúci skutočnú výšku riadku
+   (naživo namerané: rozdiel 19-20.5px naprieč 6 riadkami). `<td>` je teraz
+   normálna tabuľková bunka — jej dvaja potomkovia (`.ord-remark-cell`,
+   `.ord-comment-cell`) sú OBAJA VŽDY vykreslené block-level `<div>`y, takže
+   sa aj bez rodičovského `flex-direction:column` prirodzene poukladajú pod
+   seba; pôvodný `gap` medzi nimi nesie teraz `.ord-comment-cell`'s vlastný
+   `margin-top` nižšie. */
 .ord-notes-merged {
-  display: flex;
-  flex-direction: column;
-  gap: var(--fs-space-2);
+  max-width: 100%;
 }
 /* issue 65: zákaznícky odkaz k objednávke — read-only, rovnaký orezávací
    vzor ako `.ord-supplier-note` (issue 70) — voľný text neobmedzenej dĺžky. */
@@ -1265,6 +1273,10 @@ tr:last-child td {
   gap: var(--fs-space-1);
   flex-wrap: wrap;
   max-width: 100%;
+  /* issue 163: nahrádza rodičovský `.ord-notes-merged`'s bývalý flex `gap`
+     (odstránené, pozri jeho komentár) — tento blok sa vykresľuje VŽDY AŽ za
+     `.ord-remark-cell`, takže `margin-top` dáva identickú medzeru. */
+  margin-top: var(--fs-space-2);
 }
 .ord-comment-input {
   /* issue 105 bod 3: same fix, same TWO stacked root causes as

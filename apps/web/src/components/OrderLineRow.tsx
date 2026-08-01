@@ -74,8 +74,10 @@ export function OrderLineRow({
   readonly onAssignSupplier: (lineId: string, supplier: string) => void;
   // issue 121: manuálny odkaz na dodávateľa — smie sa upraviť pri KAŽDOM
   // riadku (na rozdiel od `onAssignSupplier`, ktorý je len pre riadky bez
-  // katalógového dodávateľa).
-  readonly onSetSupplierLink: (lineId: string, url: string) => void;
+  // katalógového dodávateľa). issue 166: vracia `boolean` — `true` keď vstup
+  // prešiel validáciou a zápis sa spustil, `false` keď bol okamžite
+  // odmietnutý (`saveLink` nižšie podľa toho rozhoduje, či zavrieť editor).
+  readonly onSetSupplierLink: (lineId: string, url: string) => boolean;
   readonly onChangeComment: (orderId: string, comment: string | null) => void;
   // issue 149: hlási RODIČOVI (`OrdersSection.tsx`'s `dirtyEditorLineIds`),
   // či tento riadok PRÁVE TERAZ drží otvorenú/rozpísanú úpravu — výnimka z
@@ -111,9 +113,13 @@ export function OrderLineRow({
   // KAŽDOM otvorení (nie udržiavaný cez `useEffect`), takže nehrozí rovnaký
   // "reset pri prvom mounte"/pretek, aký `supplierDraft`/`commentDraft` museli
   // riešiť guardom (`.claude/rules/frontend-design.md`). Zavretie panelu je
-  // OPTIMISTICKÉ (hneď pri kliku na Uložiť) — jednoduchšie než čakať na
-  // potvrdenie servera, a pri zlyhaní ostáva chyba viditeľná v `stateError`
-  // banneri, manažér otvorí úpravu znova.
+  // OPTIMISTICKÉ len voči ASYNC zlyhaniu zápisu na server (nemožno vedieť
+  // vopred) — vtedy ostáva chyba viditeľná v kumulatívnom `writeFailures`
+  // banneri, manažér otvorí úpravu znova. issue 166: voči SYNCHRÓNNEJ
+  // klientskej validácii (`onSetSupplierLink`'s návratová hodnota) sa
+  // NEZATVÁRA — jej výsledok je známy ešte PRED zavretím, takže `saveLink`
+  // zatvára editor LEN keď bol vstup prijatý; pri odmietnutí ostáva otvorený
+  // so zachovaným textom (predtým sa zatváral vždy, bez ohľadu na výsledok).
   const [linkEditing, setLinkEditing] = useState(false);
   const [linkDraft, setLinkDraft] = useState("");
   const linkBusyHere = busySupplierLinkLineId === line.lineId;
@@ -128,8 +134,10 @@ export function OrderLineRow({
   const saveLink = (): void => {
     const trimmed = linkDraft.trim();
     if (trimmed === "") return;
-    onSetSupplierLink(line.lineId, trimmed);
-    setLinkEditing(false);
+    const accepted = onSetSupplierLink(line.lineId, trimmed);
+    if (accepted) {
+      setLinkEditing(false);
+    }
   };
 
   // issue 64: rovnaký "controlled draft, resetovaný z props po uložení"
