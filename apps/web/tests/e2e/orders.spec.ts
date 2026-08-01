@@ -585,10 +585,31 @@ test("manažér napíše a upraví poznámku k objednávke, zmena pretrvá po ob
   await expect(vstup).toHaveValue("Vyzdvihnúť v sklade do piatku");
   await expect(page.getByRole("alert")).toHaveCount(0);
 
+  // issue 150: pole je odteraz `<textarea>` — Enter vloží nový riadok a
+  // NEULOŽÍ (na rozdiel od predošlého jednoriadkového `<input>`, kde Enter
+  // rovno uložil). Skutočné stláčanie klávesov (`pressSequentially`/`press`),
+  // nie `.fill()`, aby sa overilo reálne správanie klávesnice.
+  await vstup.fill("");
+  await vstup.pressSequentially("prvý riadok");
+  await vstup.press("Enter");
+  await vstup.pressSequentially("druhý riadok (neuložený koncept)");
+  await expect(vstup).toHaveValue("prvý riadok\ndruhý riadok (neuložený koncept)");
+
   await page.reload();
   await expect(page.getByRole("heading", { name: "Na objednanie" })).toBeVisible();
   const vstupPoReloade = page.getByLabel("Poznámka k objednávke 9001 / 4859/46");
+  // Dôkaz, že obyčajný Enter vyššie NEuložil — po obnovení stránky je tam
+  // stále posledná SKUTOČNE uložená hodnota, nie neuložený viacriadkový koncept.
   await expect(vstupPoReloade).toHaveValue("Vyzdvihnúť v sklade do piatku");
+
+  // Ctrl+Enter ULOŽÍ viacriadkový text.
+  await vstupPoReloade.fill("");
+  await vstupPoReloade.pressSequentially("riadok jeden");
+  await vstupPoReloade.press("Enter");
+  await vstupPoReloade.pressSequentially("riadok dva");
+  await vstupPoReloade.press("Control+Enter");
+  await expect(vstupPoReloade).toHaveValue("riadok jeden\nriadok dva");
+  await expect(page.getByRole("alert")).toHaveCount(0);
 
   // Vrátenie na pôvodnú hodnotu (hygiena zdieľaných fixtúrových dát).
   await vstupPoReloade.fill("Zavolať pred doručením");
