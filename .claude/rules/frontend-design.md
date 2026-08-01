@@ -378,3 +378,51 @@ paths:
   (reuse the same `page`, just `setViewportSize` between checks) instead
   of a fresh login per viewport/candidate, to avoid burning through the
   10-attempt budget on read-only verification work.
+- **A React wrapper/harness component that owns state AND is re-rendered
+  BY that state must memoize (`useCallback`) any inline prop function it
+  passes down, or a downstream `useCallback`-memoized effect will refire
+  on every wrapper re-render.** Issue 147's `OrdersRemainingCountContext`
+  test harness (`OrdersSection.remainingCount.test.tsx`) initially passed
+  `onSessionExpired={() => {}}` as a fresh arrow literal on every render —
+  since the harness itself re-renders every time `OrdersSection` calls
+  `setCount` (the exact thing being tested), this broke `OrdersSection
+  .tsx`'s own `useCallback(load, [onSessionExpired])` memoization and
+  caused `fetchOpenOrders` to fire 3× instead of once, ONLY when wrapped
+  in this test's specific harness (not reproducible by rendering
+  `OrdersSection` directly, which is why every other existing test never
+  hit it). Fix: `const onSessionExpired = useCallback(() => {}, [])` (and
+  `useMemo` the Context Provider's `value` object) in the harness itself.
+  Any FUTURE test harness/wrapper that re-renders in response to the
+  thing under test needs the same treatment for every prop it passes down.
+- **A value that must SURVIVE a tab switching away (unmounting the owning
+  component) needs a React Context Provider living ABOVE the nav-switch
+  point (`App.tsx`), not state lifted only as far as the tab's own
+  parent.** Issue 147's nav badge: `OrdersSection` (the data owner) is
+  unmounted the instant the user picks a different tab (`App.tsx` renders
+  only `ActiveComponent`) — a naive "lift state to `App.tsx` via a
+  callback prop" would still need `App.tsx` itself to special-case which
+  tab gets the callback, breaking `nav.ts`'s "no `App.tsx` change to
+  add/move a tab" invariant. The Context (`ordersRemainingCountContext.ts`)
+  decouples "who PUBLISHES" from "who CONSUMES" — `OrdersSection` publishes
+  whenever mounted, `Sidebar` consumes via a generic `badgeCounts` prop
+  keyed by `tab.id`, and the value persists at its LAST KNOWN state once
+  `OrdersSection` unmounts. Any FUTURE cross-tab-surviving value (a
+  pending-count badge, a sync-status dot) should reach for this same
+  shape rather than threading a new prop through `App.tsx`.
+- **A filter/hide rule that can unmount a component mid-edit needs the
+  "has open edit" signal lifted as a LIGHTWEIGHT boolean per item, never
+  the draft text itself.** Issue 149: the naive fix would be lifting the
+  full draft state (`supplierDraft`/`linkDraft`/`commentDraft`) out of
+  `OrderLineRow` into `OrdersSection` so the filter could inspect it —
+  rejected because it would break every existing "controlled draft +
+  skip-first-mount + dirty guard" pattern already established per editor
+  (this file's own earlier entries) for no benefit. Instead
+  `useDirtyEditorLineIds.ts` carries ONLY `Set<lineId>` (open/not), and
+  `OrderLineRow` reports it via a `useEffect([...deps])` whose cleanup ALSO
+  reports `false` (handles both "closed" and "genuinely unmounted for an
+  unrelated reason" in one code path). The single shared predicate
+  (`ordersSummary.ts`'s `isLineHiddenByFilter`) is then the ONE place both
+  the render-filter (`SupplierOrderGroup.tsx`) and the count
+  (`OrdersSection.tsx`) apply the exception — never duplicate the
+  three-way boolean logic (`hideResolved && resolved && !dirty`) inline in
+  two files, they will drift.

@@ -1911,3 +1911,40 @@ nové heslo sa nikde v pushnutom obsahu nenachádza.
   porušenia jedinej povolenej konzolovej výnimky), `CLAUDE.md` (rozšírenie
   existujúcej `Closes #N` poznámky — riziko platí aj pre COMMIT správy,
   nielen telo PR, keďže tento repo merguje merge commitom).
+
+- **Bundle: issues 147+148+149+150 — nav odznak / perzistencia dodávateľa /
+  ochrana rozpísaného editora / viacriadkový komentár** (PR #154, merge
+  `e6cdf94`, v0.3.0-dev.89). Commity `e05995e` (#147: `OrdersRemainingCount
+  Context` + `Sidebar`'s generický `badgeCounts` prop), `f3d47c3` (#148:
+  `ordersDisplayPreferences.ts` extrahované z `hideResolved`'s existujúceho
+  localStorage vzoru), `0e52ee7` (#149: `useDirtyEditorLineIds.ts` +
+  `ordersSummary.ts`'s zdieľaný `isLineHiddenByFilter`), `5e7b627` (#150:
+  `<input>`→`<textarea>`), `5315fe1` (spojenie do `OrdersSection.tsx`),
+  plus testovacie commity `48b8703`/`60a4417`/`2918af5`/`5c5fc99` a
+  review-fix commity `62e677e`/`de80851` (deep code review nálezy — 3 🟡 +
+  2 🔵, opravené: priamy unit test `isLineHiddenByFilter`, odznak-ov
+  `aria-label` prestal niesť doménovo špecifické slovo, dva dokumentačné
+  komentáre pre budúci `React.memo` krok).
+- Design komentáre PRED prvým kódovým commitom na každom ticket-e:
+  issue-comment-5150251505 (#147), -5150253019 (#148), -5150255070 (#149),
+  -5150256490 (#150).
+- Naživo overené na produkcii (`forestshop-novy.newlevel.media`,
+  `vychod@varos.sk`): odznak "Na objednanie: 38" sa objavil po prvej
+  návšteve a PREŽIL prepnutie na "Sync zo Shoptetu" (#147); chip
+  "BETALOV" ostal aktívny po SKUTOČNOM obnovení stránky (#148); riadok
+  (obj. 20261249 / variant 62312) s otvoreným edit panelom odkazu na
+  dodávateľa OSTAL viditeľný pri zapnutom "Skryť vybavené", zmizol až po
+  zavretí editora (#149); Enter vložil nový riadok bez uloženia (obnovenie
+  potvrdilo), Ctrl+Enter uložil viacriadkový text (obnovenie potvrdilo
+  perzistenciu) (#150). Všetko vrátené do pôvodného stavu, baseline po
+  teste nedotknutý: `product_supplier_override|product_supplier_link_
+  override|order|order_line|order_line kde ordered` = `0|0|534|878|0`,
+  presne pôvodná hodnota. Všetky 4 tickety zavreté RUČNE (nie cez PR
+  `Closes #N`) až PO naživo overení, presne podľa `CLAUDE.md`'s
+  poznámky.
+- Playbook rozšírený: `.claude/rules/frontend-design.md` (dva NOVÉ
+  architektonické vzory — Context pre hodnotu prežívajúcu prepnutie
+  záložky; ľahký per-riadkový boolean signál namiesto zdvihnutia celého
+  draftu — plus wrapper-harness `useCallback` gotcha), `.claude/rules/
+  testing.md` (tag-scoped selector sa rozbije pri zmene tagu prvku;
+  Enter-vs-Ctrl+Enter potrebuje SKUTOČNÉ stláčanie klávesov, nie `.fill()`).
