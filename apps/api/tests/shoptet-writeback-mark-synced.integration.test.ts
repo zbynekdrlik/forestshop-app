@@ -61,4 +61,29 @@ describe("markSuppliersLinksSynced", () => {
     await markSuppliersLinksSynced(db, [], new Date("2026-01-02T00:00:00Z"));
     expect((await selectChangedSupplierLinks(db)).productKeys).toEqual(["P4"]);
   });
+
+  it("does NOT mark a row synced if it was edited AGAIN after the run started (race window) — the next run must still pick it up", async () => {
+    await insertTestVariantForProduct(db, "P5", "P5", {});
+    // The run started at 10:00 and selected this row (updatedAt 09:00).
+    // While the (possibly slow, browser-driven) import was still in flight,
+    // the owner edited the SAME override again at 10:05 — AFTER the run's
+    // start time but BEFORE this markSuppliersLinksSynced call actually
+    // executes. Only the 09:00 value ever reached Shoptet; the 10:05 edit
+    // must NOT be silently marked as synced.
+    await db.insert(productSupplierLinkOverrides).values({
+      productKey: "P5",
+      url: "https://x.example/p5-edited-during-run",
+      updatedAt: new Date("2026-01-01T10:05:00Z"),
+    });
+
+    await markSuppliersLinksSynced(db, ["P5"], new Date("2026-01-01T10:00:00Z"));
+
+    const [row] = await db
+      .select({ syncedAt: productSupplierLinkOverrides.syncedAt })
+      .from(productSupplierLinkOverrides)
+      .where(eq(productSupplierLinkOverrides.productKey, "P5"));
+    expect(row?.syncedAt).toBeNull();
+    // and the next scheduled run's selection still includes it
+    expect((await selectChangedSupplierLinks(db)).productKeys).toEqual(["P5"]);
+  });
 });
