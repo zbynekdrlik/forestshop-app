@@ -1,0 +1,1 @@
+ALTER TABLE "product_supplier_link_override" ADD COLUMN "synced_at" timestamp with time zone;
