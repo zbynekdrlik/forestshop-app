@@ -32,6 +32,7 @@ export function OrderLineRow({
   onAssignSupplier,
   onSetSupplierLink,
   onChangeComment,
+  onEditorActivityChange,
 }: {
   readonly line: OrderLine;
   readonly canChangeState: boolean;
@@ -69,6 +70,11 @@ export function OrderLineRow({
   // katalógového dodávateľa).
   readonly onSetSupplierLink: (lineId: string, url: string) => void;
   readonly onChangeComment: (orderId: string, comment: string | null) => void;
+  // issue 149: hlási RODIČOVI (`OrdersSection.tsx`'s `dirtyEditorLineIds`),
+  // či tento riadok PRÁVE TERAZ drží otvorenú/rozpísanú úpravu — výnimka z
+  // "skryť vybavené" filtra, aby riadok nezmizol spod rúk. Nesie len boolean,
+  // nikdy samotný rozpísaný text (ten ostáva výlučne tu, v tomto komponente).
+  readonly onEditorActivityChange: (lineId: string, active: boolean) => void;
 }): JSX.Element {
   const qtyChip = variantTotal !== undefined ? formatVariantTotalChip(variantTotal) : null;
 
@@ -167,6 +173,21 @@ export function OrderLineRow({
     isCommentDirty.current = false;
     onChangeComment(line.orderId, trimmed === "" ? null : trimmed);
   };
+
+  // issue 149: "má tento riadok otvorenú/rozpísanú úpravu" — presne tie tri
+  // editory, ktoré ticket menuje. `linkEditing` počíta ako aktívny hneď pri
+  // OTVORENÍ (bez ohľadu na obsah, rovnaký zámer ako stará appka's "opened
+  // counts as his"); `supplierDraft`/komentár počítajú len keď sa SKUTOČNE
+  // líšia od uloženej hodnoty (nemajú vlastný toggle open/close).
+  const supplierDraftDirty = line.supplierAssignable && supplierDraft.trim() !== "" && supplierDraft.trim() !== (line.manualSupplierOverride ?? "");
+  const commentDirtyNow = isCommentDirty.current;
+  const hasOpenEditor = linkEditing || supplierDraftDirty || commentDirtyNow;
+  useEffect(() => {
+    onEditorActivityChange(line.lineId, hasOpenEditor);
+    return () => {
+      onEditorActivityChange(line.lineId, false);
+    };
+  }, [line.lineId, hasOpenEditor, onEditorActivityChange]);
 
   return (
     <tr

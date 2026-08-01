@@ -11,6 +11,20 @@ export function isLineResolved(line: Pick<OrderLine, "ordered" | "state">): bool
   return line.ordered || line.state !== "objednane";
 }
 
+// issue 149 — jediné miesto rozhodujúce, či "skryť vybavené" riadok SKUTOČNE
+// skryje. Zdieľané medzi `OrdersSection.tsx`'s `visibleLinesCount` (hláška
+// "Všetko vybavené") a `SupplierOrderGroup.tsx`'s `visibleLines` (skutočné
+// vykreslenie) — výnimka je rovnaká na oboch miestach: vybavený riadok s
+// PRÁVE TERAZ otvorenou/rozpísanou úpravou (`dirtyEditorLineIds`,
+// `useDirtyEditorLineIds.ts`) ostáva viditeľný, kým sa úprava nezavrie.
+export function isLineHiddenByFilter(
+  line: Pick<OrderLine, "ordered" | "state" | "lineId">,
+  hideResolved: boolean,
+  dirtyEditorLineIds: ReadonlySet<string>,
+): boolean {
+  return hideResolved && isLineResolved(line) && !dirtyEditorLineIds.has(line.lineId);
+}
+
 export interface OrderLinesSummary {
   readonly total: number;
   readonly remaining: number;
