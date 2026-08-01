@@ -219,14 +219,24 @@ export async function listOpenOrderLinesBySupplier(
     const supplier = groupKey === NULL_GROUP_KEY ? NEZNAMY_DODAVATEL : pickCanonicalSupplierSpelling(acc.spellingCounts);
     return { supplier, lines: acc.lines, email: emailBySupplier.get(supplier) ?? null };
   });
-  // "(bez dodávateľa)" vždy naposledy (rovnaké správanie ako predtým — Postgres
-  // `ASC` triedenie `products.supplier` malo default `NULLS LAST`), zvyšok
-  // abecedne — nič v appke sa nespolieha na presné poradie skupín, ale
-  // deterministický výstup je jednoduchšie testovateľný a menej prekvapivý.
+  // issue 152: skupiny podľa NAJNOVŠEJ objednávky (najčerstvejšia prvá),
+  // pri zhode abecedne — priamy náprotivok starej appky (`app.js:2470-2476`,
+  // `2671-2672`). "(bez dodávateľa)" vždy naposledy (rovnaké správanie ako
+  // predtým — Postgres `ASC` triedenie `products.supplier` malo default
+  // `NULLS LAST`), bez ohľadu na jej vlastnú najnovšiu objednávku.
+  // `acc.lines[0]` je zaručene najnovší riadok DANEJ skupiny — riadky vyššie
+  // (`.orderBy(desc(orders.placedAt), desc(orderLines.id))`) sú UŽ zoradené
+  // najnovšie-prvé PRED zoskupením, takže prvý riadok, aký ktorákoľvek
+  // skupina pri iterácii dostane, je vždy jej najnovší (žiadny ďalší dopyt
+  // ani prepočet netreba). `placedAt` je už ISO 8601 reťazec, takže
+  // reťazcové porovnanie zodpovedá chronologickému poradiu bez parsovania.
   groups.sort((a, b) => {
     const aNull = a.supplier === NEZNAMY_DODAVATEL;
     const bNull = b.supplier === NEZNAMY_DODAVATEL;
     if (aNull !== bNull) return aNull ? 1 : -1;
+    const aNewest = a.lines[0]?.placedAt ?? "";
+    const bNewest = b.lines[0]?.placedAt ?? "";
+    if (aNewest !== bNewest) return aNewest > bNewest ? -1 : 1;
     return a.supplier < b.supplier ? -1 : a.supplier > b.supplier ? 1 : 0;
   });
   return groups;
