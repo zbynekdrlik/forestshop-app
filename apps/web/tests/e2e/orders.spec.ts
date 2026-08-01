@@ -41,13 +41,18 @@ test("manažér filtruje podľa dodávateľa, vidí súhrn ostáva vybaviť a sk
   // súhrn nižšie preto počítajú so 4 riadkami, nie s pôvodnými 2. issue 63:
   // fixtúra pridala ĎALŠIE 2 riadky BEZ dodávateľa ("60035/L"/"60035/M",
   // `orders-supplier-assign.spec.ts`'s fixtúra) — "(bez dodávateľa)" má preto
-  // 3, nie 1, "Všetci" 6, nie 4.
-  await expect(page.getByTestId("supplier-chip-all")).toHaveText("Všetci (6)");
+  // 3, nie 1, "Všetci" 6, nie 4. issue 121: pridala ĎALŠÍ 1 riadok BEZ
+  // dodávateľa ("278", `scripts/e2e-setup.ts`'s komentár vysvetľuje prečo
+  // TENTO produkt) — "(bez dodávateľa)" má preto 4, "Všetci" 7.
+  await expect(page.getByTestId("supplier-chip-all")).toHaveText("Všetci (7)");
   await expect(page.getByTestId("supplier-chip-DODAVATEL-TEST-1")).toHaveText("DODAVATEL-TEST-1 (1)");
-  await expect(page.getByTestId("supplier-chip-(bez dodávateľa)")).toHaveText("(bez dodávateľa) (3)");
+  await expect(page.getByTestId("supplier-chip-(bez dodávateľa)")).toHaveText("(bez dodávateľa) (4)");
 
   const summary = page.getByTestId("orders-summary");
-  await expect(summary).toHaveText("Ostáva vybaviť 5 z 6 · Čaká sa 1");
+  // Nový riadok ("278") štartuje vo VÝCHODISKOVOM ("objednane"/nevybavené)
+  // stave, rovnako ako "40287" — zvyšuje "ostáva vybaviť" aj celkový počet
+  // rovnako o 1 (6 z 6 nevyriešených + 1 vyriešené = 5 z 6 → 6 z 7).
+  await expect(summary).toHaveText("Ostáva vybaviť 6 z 7 · Čaká sa 1");
 
   // Klik na chip DODAVATEL-TEST-1 zúži zoznam len na jeho skupinu.
   await page.getByTestId("supplier-chip-DODAVATEL-TEST-1").click();
@@ -59,7 +64,7 @@ test("manažér filtruje podľa dodávateľa, vidí súhrn ostáva vybaviť a sk
   await page.getByTestId("supplier-chip-(bez dodávateľa)").click();
   await expect(page.getByTestId("supplier-(bez dodávateľa)")).toBeVisible();
   await expect(page.getByTestId("supplier-DODAVATEL-TEST-1")).not.toBeVisible();
-  await expect(summary).toHaveText("(bez dodávateľa): ostáva vybaviť 3 z 3");
+  await expect(summary).toHaveText("(bez dodávateľa): ostáva vybaviť 4 z 4");
 
   // Späť na "Všetci" — obe skupiny opäť viditeľné.
   await page.getByTestId("supplier-chip-all").click();
@@ -270,9 +275,10 @@ test("manažér vidí otvorené objednávky zoskupené podľa dodávateľa, konz
   const skupinaBezDodavatela = page.getByTestId("supplier-(bez dodávateľa)");
   await expect(skupinaBezDodavatela).toBeVisible();
   // issue 63: fixtúra pridala ĎALŠIE 2 riadky BEZ dodávateľa (objednávka
-  // 9006) — skupina má teraz 3 riadky, `.filter({ hasText })` zúži presne na
-  // riadok objednávky 9002 (inak by `[data-testid^='order-line-']` zhodou
-  // troch prvkov spadlo na strict-mode violation).
+  // 9006), issue 121 pridalo ĎALŠÍ 1 (objednávka 9007) — skupina má teraz 4
+  // riadky, `.filter({ hasText })` zúži presne na riadok objednávky 9002
+  // (inak by `[data-testid^='order-line-']` zhodou viacerých prvkov spadlo
+  // na strict-mode violation).
   const riadokBez = skupinaBezDodavatela.locator("[data-testid^='order-line-']").filter({ hasText: "9002" });
   await expect(riadokBez).toContainText("9002");
   await expect(riadokBez).toContainText("E2E Zákazník Bez dodávateľa");
