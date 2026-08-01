@@ -3,13 +3,14 @@ import type { Database } from "../../db/client.js";
 import {
   orderLines,
   orders,
+  productSupplierLinkOverrides,
   productSupplierOverrides,
   products,
   supplierContacts,
   variants,
   type OrderLineState,
 } from "../../db/schema.js";
-import { extractSupplierLink } from "../catalog/supplier-link.js";
+import { resolveEffectiveSupplierLink } from "./effective-supplier-link.js";
 import { listOpenStatusNames } from "./open-statuses.js";
 import { effectiveSupplierSql, normalizedSupplierKeySql, normalizeSupplierKeyJs, pickCanonicalSupplierSpelling } from "./supplier-key.js";
 
@@ -143,6 +144,7 @@ export async function listOpenOrderLinesBySupplier(
       effectiveSupplier: effectiveSupplierSql,
       overrideSupplier: productSupplierOverrides.supplier,
       internalNote: products.internalNote,
+      supplierLinkOverride: productSupplierLinkOverrides.url,
       externalCode: variants.externalCode,
     })
     .from(orderLines)
@@ -150,6 +152,7 @@ export async function listOpenOrderLinesBySupplier(
     .innerJoin(variants, eq(variants.code, orderLines.variantCode))
     .innerJoin(products, eq(products.key, variants.productKey))
     .leftJoin(productSupplierOverrides, eq(productSupplierOverrides.productKey, products.key))
+    .leftJoin(productSupplierLinkOverrides, eq(productSupplierLinkOverrides.productKey, products.key))
     .where(inArray(orders.statusName, [...openStatuses]))
     // Sekundárne triedenie podľa najnovšej objednávky ako prvej v rámci
     // dodávateľa — rovnaký zámer ako katalógov `desc(fetchedAt), desc(id)`
@@ -172,7 +175,7 @@ export async function listOpenOrderLinesBySupplier(
   }
   const bySupplier = new Map<string, GroupAccumulator>();
   for (const row of rows) {
-    const supplierLink = extractSupplierLink(row.internalNote);
+    const supplierLink = resolveEffectiveSupplierLink(row.internalNote, row.supplierLinkOverride);
     const catalogSupplierIsNull = row.catalogSupplier === null;
     const line: OpenOrderLine = {
       lineId: row.lineId,
@@ -339,12 +342,14 @@ export async function getOrderDetail(db: Database, id: string): Promise<OrderDet
       state: orderLines.state,
       ordered: orderLines.ordered,
       internalNote: products.internalNote,
+      supplierLinkOverride: productSupplierLinkOverrides.url,
       externalCode: variants.externalCode,
     })
     .from(orderLines)
     .innerJoin(variants, eq(variants.code, orderLines.variantCode))
     .innerJoin(products, eq(products.key, variants.productKey))
     .leftJoin(productSupplierOverrides, eq(productSupplierOverrides.productKey, products.key))
+    .leftJoin(productSupplierLinkOverrides, eq(productSupplierLinkOverrides.productKey, products.key))
     .where(eq(orderLines.orderId, id))
     // issue 63: `effectiveSupplier` (override-aware) nahradilo priame
     // `products.supplier` v `ORDER BY` — poradie riadkov v detaile objednávky
@@ -359,7 +364,7 @@ export async function getOrderDetail(db: Database, id: string): Promise<OrderDet
     comment: order.comment,
     placedAt: order.placedAt.toISOString(),
     lines: lineRows.map((row) => {
-      const supplierLink = extractSupplierLink(row.internalNote);
+      const supplierLink = resolveEffectiveSupplierLink(row.internalNote, row.supplierLinkOverride);
       return {
         lineId: row.lineId,
         variantCode: row.variantCode,
