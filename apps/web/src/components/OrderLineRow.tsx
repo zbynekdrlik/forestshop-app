@@ -27,12 +27,14 @@ export function OrderLineRow({
   busySupplierLineId,
   busySupplierLinkLineId,
   busyCommentOrderId,
+  pendingSupplierDraft,
   onChangeState,
   onChangeOrdered,
   onAssignSupplier,
   onSetSupplierLink,
   onChangeComment,
   onEditorActivityChange,
+  onSupplierDraftChange,
 }: {
   readonly line: OrderLine;
   readonly canChangeState: boolean;
@@ -62,6 +64,13 @@ export function OrderLineRow({
   // issue 64: objednávka (nie riadok — poznámka patrí CELEJ objednávke),
   // ktorej poznámka PRÁVE TERAZ ukladá.
   readonly busyCommentOrderId: string | null;
+  // issue 151: rozpísaný, ešte neuložený koncept priradenia dodávateľa —
+  // žije v `OrdersSection.tsx`'s `useSupplierDrafts.ts`, NIE lokálne tu
+  // (`useSupplierDrafts.ts` vysvetľuje prečo: priradenie mení SKUPINU
+  // riadku, takže lokálny stav v tejto komponente presun medzi skupinami
+  // neprežije). `undefined`, keď tento riadok nemá rozpísaný koncept —
+  // vtedy sa zobrazuje priamo `line.manualSupplierOverride`.
+  readonly pendingSupplierDraft: string | undefined;
   readonly onChangeState: (lineId: string, newState: OrderLine["state"]) => void;
   readonly onChangeOrdered: (lineId: string, ordered: boolean) => void;
   readonly onAssignSupplier: (lineId: string, supplier: string) => void;
@@ -75,33 +84,23 @@ export function OrderLineRow({
   // "skryť vybavené" filtra, aby riadok nezmizol spod rúk. Nesie len boolean,
   // nikdy samotný rozpísaný text (ten ostáva výlučne tu, v tomto komponente).
   readonly onEditorActivityChange: (lineId: string, active: boolean) => void;
+  // issue 151: hlási RODIČOVI (`OrdersSection.tsx`'s `useSupplierDrafts.ts`)
+  // KAŽDÚ zmenu rozpísaného konceptu priradenia dodávateľa — na rozdiel od
+  // `onEditorActivityChange` vyššie (len boolean) tu ide o SAMOTNÝ TEXT,
+  // lebo ten musí prežiť aj presun riadku medzi skupinami (remount).
+  readonly onSupplierDraftChange: (lineId: string, value: string) => void;
 }): JSX.Element {
   const qtyChip = variantTotal !== undefined ? formatVariantTotalChip(variantTotal) : null;
 
-  // issue 63: lokálny koncept vstupu — controlled, ale RESETOVANÝ z props
-  // vždy, keď server potvrdí novú hodnotu (`line.manualSupplierOverride`
-  // sa zmení po úspešnom uložení + refetchi, `OrdersSection.tsx`'s
-  // `assignSupplier`). Bez tohto by po uložení zostal v poli VIDIEŤ starý
-  // koncept, keď riadok NEZMENÍ skupinu (rovnaký pravopis po normalizácii).
-  const [supplierDraft, setSupplierDraft] = useState(line.manualSupplierOverride ?? "");
-  // issue 89 (nezávislý audit, objavené novým testom `OrdersSection
-  // .assignSupplier.test.tsx`): tento efekt PREDTÝM bežal aj pri PRVOM
-  // mountnutí (React spúšťa `useEffect` vždy po prvom commite, bez ohľadu
-  // na to, či sa "závislosť skutočne zmenila"), čo bolo úplne zbytočné
-  // (`useState` vyššie už štartuje s TOU ISTOU hodnotou) — a navyše
-  // pretekové: rýchla interakcia hneď po mounte (presne to, čo nový test
-  // robí) mohla zachytiť tento oneskorený "reset na ''" AŽ PO tom, čo
-  // manažér už stihol napísať koncept, a ticho ho vymazať (~1 z ~150
-  // lokálnych behov). Skip na prvom mounte odstraňuje pretek — efekt teraz
-  // reaguje len na SKUTOČNÚ zmenu `manualSupplierOverride` po uložení.
-  const isFirstMount = useRef(true);
-  useEffect(() => {
-    if (isFirstMount.current) {
-      isFirstMount.current = false;
-      return;
-    }
-    setSupplierDraft(line.manualSupplierOverride ?? "");
-  }, [line.manualSupplierOverride]);
+  // issue 63 + issue 151: zobrazovaná hodnota je ODVODENÁ z props, nie
+  // lokálny stav — `pendingSupplierDraft` (rodičovská mapa, prežije presun
+  // riadku medzi skupinami) má prednosť pred potvrdenou hodnotou zo servera.
+  // Žiadny `useState`/reset `useEffect`/dirty ref tu netreba: keď rodič
+  // nedrží rozpísaný koncept (`undefined`), zobrazí sa priamo
+  // `line.manualSupplierOverride`; keď drží, zobrazí sa TEN, bez ohľadu na
+  // to, či ide o re-render TEJ ISTEJ inštancie, alebo o čerstvo namontovanú
+  // (rodič zosúlaďuje/čistí mapu sám, `useSupplierDrafts.ts`'s `reconcile`).
+  const supplierDraft = pendingSupplierDraft ?? (line.manualSupplierOverride ?? "");
   const supplierBusyHere = busySupplierLineId === line.lineId;
   const saveSupplier = (): void => {
     const trimmed = supplierDraft.trim();
@@ -375,7 +374,7 @@ export function OrderLineRow({
               value={supplierDraft}
               disabled={supplierBusyHere}
               onChange={(e) => {
-                setSupplierDraft(e.target.value);
+                onSupplierDraftChange(line.lineId, e.target.value);
               }}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {

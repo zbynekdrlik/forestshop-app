@@ -1,5 +1,6 @@
 import type { JSX } from "react";
 import { computeVariantTotals, isLineHiddenByFilter } from "../ordersSummary.js";
+import type { SupplierDraftsApi } from "../useSupplierDrafts.js";
 import { OrderLineRow } from "./OrderLineRow.js";
 import { SupplierActionsPanel } from "./SupplierActionsPanel.js";
 import type { OrderLine, OrderMailPreview, SupplierOpenOrders } from "../ordersApi.js";
@@ -17,6 +18,7 @@ export function SupplierOrderGroup({
   hideResolved,
   dirtyEditorLineIds,
   onEditorActivityChange,
+  supplierDrafts,
   canChangeState,
   busyLineId,
   busyOrderedLineId,
@@ -55,6 +57,11 @@ export function SupplierOrderGroup({
   // manažérovi, ktorý doň ešte niečo píše (`OrdersSection.tsx`'s komentár).
   readonly dirtyEditorLineIds: ReadonlySet<string>;
   readonly onEditorActivityChange: (lineId: string, active: boolean) => void;
+  // issue 151: rozpísaný, ešte neuložený koncept priradenia dodávateľa,
+  // zdvihnutý na úroveň `OrdersSection` (`useSupplierDrafts.ts` vysvetľuje
+  // prečo — prežije presun riadku medzi skupinami, čo lokálny stav v
+  // `OrderLineRow` neprežije).
+  readonly supplierDrafts: SupplierDraftsApi;
   readonly canChangeState: boolean;
   readonly busyLineId: string | null;
   readonly busyOrderedLineId: string | null;
@@ -190,12 +197,14 @@ export function SupplierOrderGroup({
                 busySupplierLineId={busySupplierLineId}
                 busySupplierLinkLineId={busySupplierLinkLineId}
                 busyCommentOrderId={busyCommentOrderId}
+                pendingSupplierDraft={supplierDrafts.draftByLineId.get(line.lineId)}
                 onChangeState={onChangeState}
                 onChangeOrdered={onChangeOrdered}
                 onAssignSupplier={onAssignSupplier}
                 onSetSupplierLink={onSetSupplierLink}
                 onChangeComment={onChangeComment}
                 onEditorActivityChange={onEditorActivityChange}
+                onSupplierDraftChange={supplierDrafts.setDraft}
               />
             ))}
           </tbody>
