@@ -985,6 +985,79 @@ tr:last-child td {
   flex-shrink: 0;
 }
 
+/* issue 121: riadok obsahujúci existujúci obsah bunky (`.ord-supplier-cell`,
+   NEZMENENÝ) + NOVÝ toggle na úpravu odkazu — SÚRODENCI v jednom flex riadku,
+   nie vnorené jeden do druhého (existujúce testy assertujú `.ord-supplier
+   -cell`'s `textContent` PRESNE "—" pre riadok bez údajov, `OrdersSection
+   .test.tsx`). `align-items: center` drží ikonku zarovnanú s odkazom/pomlčkou
+   napriek rôznej výške obsahu. */
+.ord-supplier-row {
+  display: flex;
+  align-items: center;
+  gap: var(--fs-space-1);
+  min-width: 0;
+}
+.ord-supplier-row > .ord-supplier-cell {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+/* "veľké tlačidlá" — rovnaký 2.25rem (36px) klikací rozmer ako
+   `.ord-supplier-link`, aby zamestnanec mohol rýchlo kliknúť aj na úzkej
+   obrazovke (majiteľ, ticketov zámer "rýchla efektívna práca"). Vykresľuje sa
+   VŽDY (na rozdiel od `.ord-supplier-link-edit` nižšie, ktorá sa objaví LEN
+   pri otvorenej úprave) — jediný trvalý pridaný prvok na KAŽDOM riadku, takže
+   nesmie pridávať výšku (`flex-shrink: 0` v riadku, žiadny vlastný blok pod
+   sebou). */
+.ord-supplier-link-edit-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  min-width: 2.25rem;
+  min-height: 2.25rem;
+  padding: var(--fs-space-1);
+  font-size: var(--fs-text-base);
+  line-height: 1;
+  color: var(--fs-ink-muted);
+  background: var(--fs-surface-alt);
+  border: 1px solid var(--fs-border);
+  border-radius: var(--fs-radius-sm);
+  cursor: pointer;
+}
+.ord-supplier-link-edit-toggle:hover {
+  background: var(--fs-brand);
+  color: var(--fs-surface);
+}
+/* Vstup + uložiť pri OTVORENEJ úprave — rovnaký "flex-basis: 0 + min-width"
+   vzor ako `.ord-supplier-assign-input` (issue 105 bod 3's komentár
+   vysvetľuje prečo: `flex-basis` rozhoduje o zalomení, nie post-shrink
+   veľkosť). Vykreslí sa LEN keď editing beží (`OrderLineRow.tsx`) — na
+   rozdiel od `.ord-supplier-row` vyššie NEPRIDÁVA výšku KAŽDÉMU riadku,
+   len tomu PRÁVE editovanému (issue 105/107/111/127's odmeraný strop 120px
+   by inak takmer isto prasklo na VŠETKÝCH 37 riadkoch naraz). */
+.ord-supplier-link-edit {
+  display: flex;
+  align-items: center;
+  gap: var(--fs-space-1);
+  flex-wrap: wrap;
+  max-width: 100%;
+  margin-top: var(--fs-space-1);
+}
+.ord-supplier-link-edit-input {
+  flex: 1 1 0%;
+  min-width: 3rem;
+  max-width: 100%;
+  padding: var(--fs-space-2) var(--fs-space-2);
+  border: 1px solid var(--fs-border);
+  border-radius: var(--fs-radius-sm);
+  font: inherit;
+  font-size: var(--fs-text-base);
+  min-height: 2.25rem;
+}
+.ord-supplier-link-edit > button {
+  flex-shrink: 0;
+}
+
 /* issue 65: priamy odkaz do Shoptet administrácie. issue 99: nesie teraz
    samotné ČÍSLO objednávky (predtým osamotenú ikonku `🔗` vedľa neho) —
    preto musí byť vizuálne rozpoznateľné ako odkaz (podčiarknutie + farba z

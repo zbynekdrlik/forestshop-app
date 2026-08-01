@@ -20,10 +20,12 @@ export function SupplierOrderGroup({
   busyOrderedLineId,
   busyOrderedSupplier,
   busySupplierLineId,
+  busySupplierLinkLineId,
   busyCommentOrderId,
   onChangeState,
   onChangeOrdered,
   onAssignSupplier,
+  onSetSupplierLink,
   onChangeComment,
   editingEmailSupplier,
   emailDraft,
@@ -52,11 +54,14 @@ export function SupplierOrderGroup({
   readonly busyOrderedSupplier: string | null;
   // issue 63: riadok, ktorého ručné priradenie dodávateľa PRÁVE TERAZ ukladá.
   readonly busySupplierLineId: string | null;
+  // issue 121: riadok, ktorého odkaz na dodávateľa PRÁVE TERAZ ukladá.
+  readonly busySupplierLinkLineId: string | null;
   // issue 64: objednávka, ktorej poznámka PRÁVE TERAZ ukladá.
   readonly busyCommentOrderId: string | null;
   readonly onChangeState: (lineId: string, newState: OrderLine["state"]) => void;
   readonly onChangeOrdered: (lineId: string, ordered: boolean) => void;
   readonly onAssignSupplier: (lineId: string, supplier: string) => void;
+  readonly onSetSupplierLink: (lineId: string, url: string) => void;
   readonly onChangeComment: (orderId: string, comment: string | null) => void;
   readonly editingEmailSupplier: string | null;
   readonly emailDraft: string;
@@ -176,10 +181,12 @@ export function SupplierOrderGroup({
                 supplierBusy={busyOrderedSupplier === group.supplier}
                 variantTotal={variantTotals.get(line.variantCode)}
                 busySupplierLineId={busySupplierLineId}
+                busySupplierLinkLineId={busySupplierLinkLineId}
                 busyCommentOrderId={busyCommentOrderId}
                 onChangeState={onChangeState}
                 onChangeOrdered={onChangeOrdered}
                 onAssignSupplier={onAssignSupplier}
+                onSetSupplierLink={onSetSupplierLink}
                 onChangeComment={onChangeComment}
               />
             ))}
