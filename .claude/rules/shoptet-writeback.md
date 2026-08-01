@@ -93,3 +93,57 @@ paths:
   `env.ts`'s nepovinných premenných.** `shoptetWritebackJob` beží na `:50`
   (mimo kolízie s `ordersImportJob`'s `:45`), žiadny nový advisory lock
   (žiadny manuálny trigger v tomto tickete, s ničím nepreteká).
+- **Objednávkový DETAIL (issue 123, na rozdiel od #122's hromadného CSV
+  importu) má ÚPLNE INÝ zápisový mechanizmus — Shoptet nemá hromadný
+  import/API pre poznámku objednávky, len per-objednávkový formulár.**
+  Reálna cesta (`/admin/objednavky-detail/?id=<shoptet_order_id>`, naživo
+  overená na produkčnej objednávke 20261273/`shoptet_order_id=59783`): pole
+  "Poznámka e-shopu" je `<textarea name="shopRemark">` (POZOR: rovnaké meno
+  ako CSV export's `shopRemark` stĺpec z `.claude/rules/orders.md`, ale iný
+  prístupový kanál — obsahovo je to to isté "interná poznámka predajne").
+  Uloženie ide cez horný panel — `<a data-testid="buttonSaveAndStay"
+  rel="saveAndStay">Uložiť</a>`, NIE skutočný `<button>` (rovnaký
+  `getByRole("button", {name})` omyl by tu tichoTimeoutol presne ako pri
+  #122's file-chooser gotcha) — submituje CELÝ stránkový formulár. Overenie
+  zápisu VŽDY čerstvou navigáciou na tú istú URL (nikdy len DOM stav hneď po
+  kliku), presne ako #122's Log-based overenie.
+- **Reálny prehliadač serializuje `<textarea>` hodnotu ako CRLF pri
+  odoslaní formulára (HTML forms spec), ale SKUTOČNÝ Shoptet ju server-side
+  normalizuje na `\n`** (potvrdené naživo: čerstvá navigácia po uložení
+  vrátila čisté `\n`, žiadne `\r`). Fixture (`shoptet-order-detail-
+  fixture.ts`) MUSÍ túto normalizáciu robiť tiež — bez nej by fixture bola
+  príliš zhovievavá (implementácia testovaná proti fixture s `\r\n` by
+  proti reálnemu Shoptetu (ktorý normalizuje) fungovala inak), presne to
+  isté zistenie ako CSV-upload widget vyššie. Test na KAŽDÝ ďalší textarea-
+  zápis: over normalizáciu novej riadka naživo predtým, než fixture
+  postavíš na predpoklade "echo presne to, čo appka pošle".
+- **Appkina poznámka sa do cudzieho poľa NIKDY nezapisuje priamo — vždy ako
+  VLASTNÝ ohraničený blok** (`note-block.ts`'s `mergeShopRemark` — značky
+  `--- poznámka z appky ---` / `--- koniec ---`), aby appka nikdy
+  neprepísala ručne napísaný text okolo. Čisto textová funkcia, žiadny
+  DB/Playwright prístup — ľahko unit-testovateľná (idempotencia, zachovanie
+  okolitého textu, mazanie LEN nášho bloku pri prázdnej poznámke) bez
+  fixtúry vôbec. Rovnaký vzor pre KAŽDÉ ďalšie "appka dopisuje do cudzieho
+  textového poľa, ktoré vlastní niekto iný" zadanie.
+- **`markOrderNoteSynced` (issue 123) sa volá PER OBJEDNÁVKA hneď po jej
+  vlastnom potvrdenom úspechu, NIE dávkovo na konci celého behu ako #122's
+  `markSuppliersLinksSynced`.** Dôvod: #122 je JEDEN hromadný CSV import
+  (všetko naraz alebo nič), tento zápis je slučka cez viacero nezávislých
+  objednávok — zlyhanie na jednej NESMIE stratiť úspech tých pred ňou.
+  Rovnaká `now`-zachytená-PRED-výberom race ochrana ako #122, len
+  aplikovaná na úrovni jedného riadku namiesto zoznamu `productKeys`. Test
+  na KAŽDÝ ďalší "slučka cez N nezávislých vecí, zapisovaných PLAYWRIGHTOM
+  jedna po druhej": mark-as-synced patrí PER POLOŽKA, nie na koniec celej
+  slučky — inak jedna zlá položka zablokuje úspech všetkých ostatných.
+  **Review nájdenie (PR 143):** test tvrdiaci "zlyhanie na jednej
+  neprerušuje zvyšok" musí SKUTOČNE simulovať zlyhanie (fixture metóda
+  `breakOrder(id)` vracajúca stránku bez `shopRemark` poľa) — dva vždy-
+  úspešné objednávky v teste NIKDY nezacvičia try/catch vetvu, aj keď kód
+  za tvrdením skutočne stojí.
+- **Ručné spustenie tohto NOVÉHO joba (bez pridávania HTTP endpointu)
+  funguje IDENTICKÝM `docker cp` postupom ako #122** (bod nižšie, druhý
+  krát overené naživo pri issue 123): `.mjs` skript importujúci
+  `apps/api/dist/...` skopírovaný do `/app/apps/api/` vnútri kontajnera,
+  `docker exec -w /app/apps/api node script.mjs`. `createDb()` (`db/
+  client.ts`) bez argumentu sám číta `DATABASE_URL` z kontajnerovho
+  prostredia — netreba ho manuálne skladať v skripte.

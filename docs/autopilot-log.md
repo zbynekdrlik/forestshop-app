@@ -1830,3 +1830,45 @@ nové heslo sa nikde v pushnutom obsahu nenachádza.
   admin cesty, file-chooser gotcha, Alpine chromium recept, race-condition
   vzor pre "vyber → dlho bežiaci zápis → označ hotové", cp1250 export
   encoding, docker-cp verifikačný postup).
+
+## issue 123 (2026-08-01, 0.3.0-dev.85)
+
+- Spätný zápis appkinej poznámky k objednávke (`order.comment`) do Shoptet-
+  ovho "Poznámka e-shopu" poľa — per-objednávkový Playwright zápis (na
+  rozdiel od issue 122's hromadného CSV importu, Shoptet nemá hromadný
+  mechanizmus pre poznámku objednávky). Nové súbory v `apps/api/src/
+  modules/shoptet-writeback/`: `note-block.ts` (čisto textové zlučovanie —
+  pripojenie/nahradenie/vymazanie VLASTNÉHO ohraničeného bloku, nikdy
+  neprepisuje ručne napísaný text okolo), `admin-login.ts` (zdieľaný login
+  helper extrahovaný z issue 122's `playwright-import.ts`, byte-identická
+  relokácia), `order-note-select.ts`, `order-note-mark-synced.ts` (PER
+  OBJEDNÁVKA, nie dávkovo), `order-note-playwright.ts`, `run-order-note-
+  writeback.ts` (orchestrátor).
+- Migrácia 0019: `order.comment_updated_at`/`comment_synced_at` (nullable
+  timestampy).
+- Nová hodinová úloha `orderNoteWritebackJob` (`:55`, mimo `:45`/`:50`).
+- Design komentár: https://github.com/zbynekdrlik/forestshop-app/issues/123#issuecomment-5149713234
+- Deep review (requesting-code-review skill, subagent): 0 🔴 1 🟡 1 🔵.
+  - 🟡 test "zlyhanie na jednej objednávke neprerušuje zvyšok" v skutočnosti
+    NIKDY nezacvičil zlyhanie (obe testovacie objednávky vždy uspeli) —
+    opravené (`c7fbdf0`): fixture dostala `breakOrder(id)` (stránka bez
+    `shopRemark` poľa), nový test dokazuje skutočný partial-failure prípad.
+  - 🔵 `OUR_BLOCK_RE` bez `/g` flagu strihne len prvý výskyt nášho bloku —
+    zdokumentované ako vedomé (appka nikdy sama neprodukuje druhý blok).
+- PR #143.
+- Naživo overené na PRESNE jednej objednávke (20261273, `shoptet_order_id
+  =59783`): appka → poznámka → spätný zápis (ručne spustený rovnaký kód ako
+  naplánovaná úloha, `docker cp` postup) → Shoptet admin potvrdil presne
+  náš ohraničený blok v `textarea[name=shopRemark]` → poznámka v appke
+  vymazaná → zápis znova → Shoptet pole späť na prázdne. Baseline po teste:
+  `order` 534, `order_line` 878, `product_supplier_link_override` 0,
+  `product_supplier_override` 0 — presne ako pred testom.
+- Testy: 44/44 integration test files (290 testov), unit + web e2e (22/22)
+  všetko zelené.
+- Issue 123 zavreté ručne (nie cez `Closes #` v PR tele) — rovnaký dôvod ako
+  issue 122/120 (acceptancia potrebovala post-deploy živú kontrolu).
+- Playbook rozšírený (`.claude/rules/shoptet-writeback.md`): reálny
+  objednávkový detail tvar (`shopRemark` textarea, `buttonSaveAndStay`
+  odkaz), CRLF→LF normalizácia real Shoptetu (fixture musí kopírovať),
+  per-objednávkové mark-synced zdôvodnenie, docker-cp postup potvrdený aj
+  pre tento druhý modul.
