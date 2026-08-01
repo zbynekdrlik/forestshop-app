@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { chromium, type Browser, type Page } from "playwright";
 import { log } from "../../logger.js";
 import type { ShoptetImportConfig } from "./config.js";
-import { hasLogEntries, parseImportLog, pickResultRow, resultExitCode } from "./log-attribution.js";
+import { entryKey, hasLogEntries, parseImportLog, pickResultRow, resultExitCode } from "./log-attribution.js";
 
 /**
  * Playwright automatizácia hromadného CSV importu do Shoptetu — port zo
@@ -120,7 +120,11 @@ async function pollForResult(
   for (let attempt = 0; attempt < retries; attempt++) {
     const texts = await rowTexts(page);
     const row = pickResultRow(texts, { baseline, expectedRows });
-    if (row !== null) seen.add(row);
+    // entryKey (nie surový text riadku) — Shoptetov '#id' zostáva stabilný
+    // naprieč čítaniami, ale surový text vie tikať (relatívny čas), čo by
+    // "settle" kontrolu nižšie (seen.size !== 1) nechalo nikdy zjednotiť sa
+    // (parovanie_produktov's _read_result má rovnaký dôvod pre _entry_key).
+    if (row !== null) seen.add(entryKey(row));
     if (hasLogEntries(texts)) {
       verdict = row;
       verdictIsReal = true;

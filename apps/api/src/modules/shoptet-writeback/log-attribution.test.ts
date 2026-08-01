@@ -1,11 +1,21 @@
 import { describe, expect, it } from "vitest";
 import {
+  entryKey,
   hasLogEntries,
   logEntryId,
   parseImportLog,
   pickResultRow,
   resultExitCode,
 } from "./log-attribution.js";
+
+describe("entryKey", () => {
+  it("uses Shoptet's own '#id' when the row carries one", () => {
+    expect(entryKey("#12689 26.07.2026 21:00 Spracované: 4.")).toBe("12689");
+  });
+  it("falls back to the raw row text when there is no '#id'", () => {
+    expect(entryKey("bez čísla — starší formát riadku")).toBe("bez čísla — starší formát riadku");
+  });
+});
 
 describe("logEntryId", () => {
   it("reads Shoptet's own leading '#N' entry id", () => {

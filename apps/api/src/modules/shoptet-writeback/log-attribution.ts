@@ -62,7 +62,13 @@ export function hasLogEntries(rowTexts: readonly (string | null | undefined)[]):
   return rowTexts.some((t) => RESULT_ROW_RE.test(t ?? ""));
 }
 
-function entryKey(row: string): string {
+/** Stabilný kľúč jedného riadku Logu na "settle" kontrolu v čítacom pollingu
+ * (`playwright-import.ts`'s `pollForResult`): Shoptetovo '#id', keď ho
+ * riadok nesie, inak surový text ako záloha (ten vie tikať kvôli
+ * relatívnemu času, ale to je jediná dostupná možnosť pri staršom/inom
+ * zobrazení bez '#id' — rovnaký kompromis ako `parovanie_produktov`'s
+ * `_entry_key`). */
+export function entryKey(row: string): string {
   const id = logEntryId(row);
   return id !== null ? String(id) : row;
 }
@@ -124,13 +130,18 @@ export function pickResultRow(
 
 /** Exit-code štýl verdikt z už rozobraného výsledku — nikdy nehlási zlyhaný
  * alebo nečitateľný import ako úspech. */
+/**
+ * `parsed.failed` je `null` len keď text nemá ŽIADNU zmienku o zlyhaní
+ * (ani explicitné "Zlyhanie … N", ani "chyb(y)/chýb: N") — na reálnom
+ * Shoptet výstupe to nastáva PRÁVE pri úplne čistom importe (žiadna
+ * "Zlyhanie variantov: 0." fráza sa vôbec nevypíše, keď nie je čo hlásiť;
+ * pozorované naživo pri návrhu #122). `null` sa preto úmyselne správa ako
+ * "žiadne zlyhanie" (rovnaká sémantika ako sesterský `chunk_outcome`'s
+ * `parsed.get("failed") or 0` — falošné aj `None` aj `0`), NIE ako
+ * "nečitateľné" — tú vetvu už pokrýva `processed === null` vyššie.
+ */
 export function resultExitCode(parsed: ParsedImportLog | null | undefined): number {
   if (!parsed || parsed.processed === null) return 2;
   if (parsed.failed) return 2;
   return 0;
 }
-
-// entryKey je zámerne exportovaná až spolu s prípadným budúcim pollovacím
-// helperom (playwright-import.ts) — read-back retry loop ju potrebuje na
-// "settle" kontrolu (viď parovanie_produktov's _read_result).
-export { entryKey };
