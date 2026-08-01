@@ -77,7 +77,15 @@ export async function insertTestVariantForProduct(
   db: Database,
   productKey: string,
   code: string,
-  options: { readonly sizeLabel?: string | null; readonly supplier?: string | null; readonly productName?: string } = {},
+  options: {
+    readonly sizeLabel?: string | null;
+    readonly supplier?: string | null;
+    readonly productName?: string;
+    // issue 122: write-back CSV needs a real pairCode per variant (Shoptet's
+    // own row-matching column) — default null matches every existing call
+    // (no prior test needed one).
+    readonly pairCode?: string | null;
+  } = {},
 ): Promise<void> {
   const snapshotId = await insertTestSnapshot(db);
   await db
@@ -101,7 +109,7 @@ export async function insertTestVariantForProduct(
     productKey,
     guid: productKey,
     sizeLabel: options.sizeLabel ?? null,
-    pairCode: null,
+    pairCode: options.pairCode ?? null,
     name: options.productName ?? `Test produkt ${productKey}`,
     currency: "EUR",
     price: "10.00",

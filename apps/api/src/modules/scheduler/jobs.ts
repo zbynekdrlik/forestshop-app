@@ -3,6 +3,7 @@ import type { RunIngest } from "../catalog/ingest.js";
 import { pruneRawSnapshots } from "../catalog/raw-store.js";
 import { ORDERS_EXPORT_URL_NOT_CONFIGURED, type RunOrdersIngest } from "../orders/ingest.js";
 import { pruneRawOrders } from "../orders/raw-prune.js";
+import type { WritebackRunResult } from "../shoptet-writeback/run-writeback.js";
 import type { ScheduledJob } from "./types.js";
 
 export const CATALOG_IMPORT_JOB_NAME = "catalog-import";
@@ -10,6 +11,12 @@ export const PRUNE_RAW_EXPORTS_JOB_NAME = "prune-raw-exports";
 export const SESSION_CLEANUP_JOB_NAME = "session-cleanup";
 export const ORDERS_IMPORT_JOB_NAME = "orders-import";
 export const PRUNE_RAW_ORDERS_JOB_NAME = "prune-raw-orders";
+export const SHOPTET_WRITEBACK_JOB_NAME = "shoptet-writeback";
+
+// Rovnaká hláška ako `catalogImportJob`/`ordersImportJob` vyššie — operátor
+// vidí to isté vysvetlenie, keď SHOPTET_ADMIN_USER/PASSWORD chýbajú.
+export const SHOPTET_WRITEBACK_NOT_CONFIGURED =
+  "Spätný zápis odkazov na dodávateľa do Shoptetu nie je nakonfigurovaný (chýba SHOPTET_ADMIN_USER/SHOPTET_ADMIN_PASSWORD)";
 
 // Rovnaká hláška ako `catalog-routes.ts`'s 503 pri ručnom importe bez
 // nakonfigurovaného SHOPTET_EXPORT_URL — operátor vidí to isté vysvetlenie na
@@ -106,6 +113,34 @@ export function pruneRawOrdersJob(rawDir: string, keepDays = 30): ScheduledJob {
     schedule: { kind: "daily", hourUtc: 2, minuteUtc: 0 },
     async run(_db, now) {
       const result = await pruneRawOrders(rawDir, { keepDays, now });
+      return { detail: result };
+    },
+  };
+}
+
+export type RunShoptetWriteback = (db: Parameters<ScheduledJob["run"]>[0], now: Date) => Promise<WritebackRunResult>;
+
+/**
+ * Spätný zápis odkazov na dodávateľa do Shoptetu (issue 122) — hodinovo, na
+ * :50 (mimo kolízie s `ordersImportJob`'s :45). Rovnaký vzor ako
+ * `catalogImportJob`/`ordersImportJob`: dostáva injektovanú `runWriteback`
+ * closure (môže byť `undefined`, keď `SHOPTET_ADMIN_USER`/`PASSWORD` nie sú
+ * nakonfigurované — `index.ts` ju zostaví z `runShoptetWriteback`
+ * (`shoptet-writeback/run-writeback.ts`) + `shoptetImportConfigFromBaseUrl`),
+ * nikdy si business logiku nezostavuje sama. Žiadny nový advisory lock
+ * (rovnaký dôvod ako pri tamtých dvoch: v tomto tickete niet manuálneho
+ * triggeru, teda niet s čím pretekať — `job_run` periodicita scheduler.ts
+ * sama vylučuje duplicitný beh v tej istej hodine). Keď `runWriteback` je
+ * `undefined`, job VYHODÍ — rovnaký vzor ako ostatné nepovinne-nakonfigurované
+ * joby vyššie.
+ */
+export function shoptetWritebackJob(runWriteback: RunShoptetWriteback | undefined): ScheduledJob {
+  return {
+    name: SHOPTET_WRITEBACK_JOB_NAME,
+    schedule: { kind: "hourly", minuteUtc: 50 },
+    async run(db, now) {
+      if (runWriteback === undefined) throw new Error(SHOPTET_WRITEBACK_NOT_CONFIGURED);
+      const result = await runWriteback(db, now);
       return { detail: result };
     },
   };

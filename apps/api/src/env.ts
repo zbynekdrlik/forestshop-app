@@ -41,6 +41,18 @@ const envSchema = z.object({
   MAIL_USER: z.string().optional(),
   MAIL_PASS: z.string().optional(),
   MAIL_FROM: z.string().optional(),
+  // issue 122: spätný zápis odkazu na dodávateľa do Shoptetu cez hromadný CSV
+  // import (Playwright). Skutočné prihlasovacie údaje — rovnaké pravidlo ako
+  // `MAIL_PASS` vyššie, nikdy do repa/commit správy/logu. Obe nepovinné:
+  // bez nich appka beží ďalej, naplánovaná úloha len zlyhá s vysvetlením
+  // "nenakonfigurované" (rovnaký vzor ako `catalogImportJob`/`ordersImportJob`).
+  SHOPTET_ADMIN_USER: z.string().min(1).optional(),
+  SHOPTET_ADMIN_PASSWORD: z.string().min(1).optional(),
+  // Alpine (produkčný Docker image) nemá Playwright's vlastný (glibc-only)
+  // stiahnutý Chromium — `playwright-import.ts`'s `resolveChromiumExecutablePath`
+  // namiesto neho použije apk-nainštalovaný systémový chromium. Nepovinné aj
+  // tu — mimo produkčného image ho netreba, Playwright použije svoj vlastný.
+  CHROMIUM_EXECUTABLE_PATH: z.string().min(1).optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

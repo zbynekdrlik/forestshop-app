@@ -160,6 +160,15 @@ export const productSupplierLinkOverrides = pgTable("product_supplier_link_overr
     .references(() => products.key, { onDelete: "cascade" }),
   url: text("url").notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  // issue 122: KEDY bol tento riadok naposledy ÚSPEŠNE zapísaný späť do
+  // Shoptetu (potvrdené z Logu — nikdy len "odoslané"). `null` = ešte nikdy.
+  // "Zmenené od posledného zápisu" = `syncedAt IS NULL OR syncedAt <
+  // updatedAt` (select-changes.ts) — to je zdroj pravdy pre to, KTORÉ
+  // produkty CSV write-back nesie, nikdy celý katalóg. Zámerne SAMOSTATNÝ
+  // stĺpec, nie prepočítavaný z `job_run` — viaže sa na KONKRÉTNY riadok
+  // override, nie na "posledný beh úlohy vôbec" (ten mohol zlyhať len na
+  // INOM produkte).
+  syncedAt: timestamp("synced_at", { withTimezone: true }),
 });
 
 export const orderLines = pgTable(

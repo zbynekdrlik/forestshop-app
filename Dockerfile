@@ -1,6 +1,13 @@
 FROM node:24-alpine AS build
 RUN corepack enable
 WORKDIR /app
+# issue 122: apps/api's `playwright` dependency's own postinstall would try to
+# download its bundled (glibc-only) Chromium here too — Playwright does not
+# support Alpine's musl libc for that binary at all, so the download is
+# useless in this stage (build only COMPILES, it never launches a browser)
+# and would just waste build time / risk a flaky network failure. The
+# runtime stage below installs a REAL, working Alpine chromium via apk instead.
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
 COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
@@ -14,6 +21,17 @@ FROM node:24-alpine AS runtime
 RUN corepack enable
 WORKDIR /app
 ENV NODE_ENV=production
+# Same reasoning as the build stage above — never let Playwright's postinstall
+# try (and fail) to download its own bundled Chromium on Alpine.
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+# issue 122: real, working Chromium for Alpine (musl libc) — Playwright's own
+# downloaded browser build targets glibc distros only and will not run here.
+# `playwright-import.ts`'s `resolveChromiumExecutablePath()` finds this
+# automatically at its standard apk-installed path. The extra font/NSS/
+# freetype packages are the standard set needed for headless Chromium to
+# actually render (a bare `chromium` package alone crashes on launch on
+# Alpine — documented Puppeteer/Playwright-on-Alpine requirement).
+RUN apk add --no-cache chromium nss freetype freetype-dev harfbuzz ca-certificates ttf-freefont
 # Produkčné závislosti sa inštalujú znova, nekopírujú sa z build fázy: pnpm robí
 # node_modules zo symlinkov do svojho store, a tie by po skopírovaní ukazovali do
 # prázdna. Natívny modul argon2 sa tak zároveň zostaví pre runtime obraz.
