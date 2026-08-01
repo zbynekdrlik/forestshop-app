@@ -332,8 +332,13 @@ it("zlyhaná zmena stavu zobrazí slovenskú hlášku zo servera a stav sa nezme
   select.value = "skladom";
   select.dispatchEvent(new Event("change", { bubbles: true }));
 
+  // issue 66: kumulatívny banner (nahrádza pôvodný jediný `<p role="alert">`
+  // so surovou serverovou hláškou) — nesie aj nadpis "N položiek"/tlačidlo
+  // "×" aj `what — where (detail)` riadok, `.claude/rules/frontend-design.md`.
   await waitFor(() => {
-    expect(screen.getByRole("alert").textContent).toBe("Riadok objednávky sa nenašiel");
+    expect(screen.getByRole("alert").textContent).toBe(
+      "⚠️ Nepodarilo sa uložiť 1 položku×Zmena stavu — obj. 1001, kód A-1 (Riadok objednávky sa nenašiel)",
+    );
   });
   expect(screen.getByTestId<HTMLSelectElement>(`state-select-${LINE_STARA.lineId}`).value).toBe("objednane");
 });

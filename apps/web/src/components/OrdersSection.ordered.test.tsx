@@ -118,8 +118,11 @@ it("zlyhaná zmena príznaku objednané zobrazí slovenskú hlášku a checkbox 
   const checkbox = await screen.findByTestId<HTMLInputElement>(`ordered-checkbox-${LINE_STARA.lineId}`);
   fireEvent.click(checkbox);
 
+  // issue 66: kumulatívny banner nahrádza pôvodný jediný `<p role="alert">`.
   await waitFor(() => {
-    expect(screen.getByRole("alert").textContent).toBe("Zmena príznaku objednané sa nepodarila");
+    expect(screen.getByRole("alert").textContent).toBe(
+      "⚠️ Nepodarilo sa uložiť 1 položku×Príznak objednané — obj. 1001, kód A-1 (Zmena príznaku objednané sa nepodarila)",
+    );
   });
   expect(screen.getByTestId<HTMLInputElement>(`ordered-checkbox-${LINE_STARA.lineId}`).checked).toBe(false);
 });

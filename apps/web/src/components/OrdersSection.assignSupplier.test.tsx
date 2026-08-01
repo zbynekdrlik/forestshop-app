@@ -108,7 +108,7 @@ it("úspešné priradenie dodávateľa spraví refetch zoznamu", async () => {
 // medzitým dostal dodávateľa inou cestou) predtým NErobilo refetch — stará
 // verzia zoznamu zostala, vstupné pole na priradenie ostalo viditeľné
 // navždy. Teraz sa zoznam obnoví AJ pri zlyhaní, a hláška (nezávislý stav
-// `stateError`) prežije refetch.
+// `writeFailures`) prežije refetch.
 it("zamietnuté priradenie (409) zobrazí slovenskú hlášku A ZÁROVEŇ spraví refetch zoznamu", async () => {
   fetchOpenOrders.mockResolvedValue([
     { supplier: "(bez dodávateľa)", lines: [LINE_BEZ_DODAVATELA], email: null },
@@ -120,9 +120,10 @@ it("zamietnuté priradenie (409) zobrazí slovenskú hlášku A ZÁROVEŇ sprav�
   render(<OrdersSection role="manazer" onSessionExpired={() => {}} />);
   await vyplnAUloz("Konkurenčný Zápis");
 
+  // issue 66: kumulatívny banner nahrádza pôvodný jediný `<p role="alert">`.
   await waitFor(() => {
     expect(screen.getByRole("alert").textContent).toBe(
-      "Produkt už má dodávateľa v katalógu — ručné priradenie nie je možné",
+      "⚠️ Nepodarilo sa uložiť 1 položku×Priradenie dodávateľa — obj. 1003, kód C-1 (Produkt už má dodávateľa v katalógu — ručné priradenie nie je možné)",
     );
   });
   // Počiatočné načítanie + refetch po zlyhaní — samo-vyliečenie stránky,
@@ -130,8 +131,8 @@ it("zamietnuté priradenie (409) zobrazí slovenskú hlášku A ZÁROVEŇ sprav�
   await waitFor(() => {
     expect(fetchOpenOrders).toHaveBeenCalledTimes(2);
   });
-  // Banner prežil refetch (`load()` nemení `stateError`, nezávislý stav).
+  // Banner prežil refetch (`load()` nemení `writeFailures`, nezávislý stav).
   expect(screen.getByRole("alert").textContent).toBe(
-    "Produkt už má dodávateľa v katalógu — ručné priradenie nie je možné",
+    "⚠️ Nepodarilo sa uložiť 1 položku×Priradenie dodávateľa — obj. 1003, kód C-1 (Produkt už má dodávateľa v katalógu — ručné priradenie nie je možné)",
   );
 });

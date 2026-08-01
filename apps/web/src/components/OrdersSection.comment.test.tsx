@@ -165,8 +165,11 @@ it("zlyhané uloženie poznámky zobrazí slovenskú hlášku, bez refetchu", as
     screen.getByLabelText(`Uložiť poznámku k objednávke ${RIADOK_1.externalOrderId} / ${RIADOK_1.variantCode}`),
   );
 
+  // issue 66: kumulatívny banner nahrádza pôvodný jediný `<p role="alert">`.
   await waitFor(() => {
-    expect(screen.getByRole("alert").textContent).toBe("Uloženie poznámky sa nepodarilo");
+    expect(screen.getByRole("alert").textContent).toBe(
+      "⚠️ Nepodarilo sa uložiť 1 položku×Poznámka k objednávke — obj. 1004 (Uloženie poznámky sa nepodarilo)",
+    );
   });
   expect(fetchOpenOrders).toHaveBeenCalledTimes(1);
 });
