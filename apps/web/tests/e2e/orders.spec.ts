@@ -89,6 +89,20 @@ test("manažér filtruje podľa dodávateľa, vidí súhrn ostáva vybaviť a sk
   await page.getByTestId("orders-hide-resolved-toggle").click();
   await expect(page.getByTestId("supplier-DODAVATEL-TEST-1")).toBeVisible();
 
+  // issue 148: vybraný dodávateľ prežije obnovenie stránky (localStorage) —
+  // rovnaký mechanizmus, aký `hideResolved` má už od issue 61 vyššie.
+  await page.getByTestId("supplier-chip-(bez dodávateľa)").click();
+  await expect(page.getByTestId("supplier-chip-(bez dodávateľa)")).toHaveClass(/active/);
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Na objednanie" })).toBeVisible();
+  await expect(page.getByTestId("supplier-chip-(bez dodávateľa)")).toHaveClass(/active/);
+  await expect(page.getByTestId("supplier-(bez dodávateľa)")).toBeVisible();
+  await expect(page.getByTestId("supplier-DODAVATEL-TEST-1")).not.toBeVisible();
+
+  // Späť na "Všetci" — zvyšok testu (šírkové kontroly nižšie) potrebuje OBE skupiny.
+  await page.getByTestId("supplier-chip-all").click();
+  await expect(page.getByTestId("supplier-DODAVATEL-TEST-1")).toBeVisible();
+
   // issue 95: stránka sa NIKDY nesmie posúvať vodorovne, na žiadnej zo
   // štyroch testovaných šírok — keď je tabuľka širšia než dostupné miesto,
   // posúva sa len jej VLASTNÝ obal (`.orders-table-wrap`), nikdy
