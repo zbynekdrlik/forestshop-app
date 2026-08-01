@@ -1770,3 +1770,63 @@ nové heslo sa nikde v pushnutom obsahu nenachádza.
 - Issue 121 closed by hand (not via `Closes #`) — this repo's PR body
   intentionally omits any close keyword since the ticket's acceptance needed
   a post-deploy live check, per the CLAUDE.md gotcha from #120/#127/#132.
+
+## issue 122 (2026-08-01, 0.3.0-dev.83)
+
+- Spätný zápis odkazu na dodávateľa do Shoptetu — hromadný CSV import cez
+  Playwright (majiteľovo doslovné zadanie). Nový modul
+  `apps/api/src/modules/shoptet-writeback/`: `csv.ts` (buildWritebackCsv —
+  code;pairCode;internalNote, UTF-8 BOM, `;`, CRLF), `log-attribution.ts`
+  (pure baseline+expectedRows atribúcia, port zo sesterského
+  `parovanie_produktov`), `config.ts`, `select-changes.ts`
+  (`synced_at IS NULL OR synced_at < updated_at`), `mark-synced.ts`,
+  `playwright-import.ts`, `run-writeback.ts` (orchestrátor).
+- Migrácia 0018: `product_supplier_link_override.synced_at` (nullable
+  timestamp).
+- Nová hodinová úloha `shoptetWritebackJob` (`:50`).
+- Design komentár: https://github.com/zbynekdrlik/forestshop-app/issues/122#issuecomment-5148829794
+- RED/GREEN commity: csv.ts (d3ad809), log-attribution.ts (ec95b38),
+  config.ts (baa0867), select-changes.ts (31e4da3), mark-synced.ts
+  (3360c77), playwright-import.ts (18405c0), run-writeback.ts (9319fde),
+  scheduler wiring (6a14756), deploy wiring (ed2328a).
+- Deep review (requesting-code-review skill, subagent): 0 🔴 1 🟡 3 🔵, všetky
+  opravené pred mergom:
+  - 🟡 race medzi select a mark-synced (aff5047 RED → 01b76f9 GREEN):
+    `markSuppliersLinksSynced` teraz vyžaduje aj `updatedAt <= now` (now =
+    čas ZAČIATKU behu, nie čas zápisu) — úprava počas (dlho bežiaceho)
+    Playwright importu sa už nikdy nestratí.
+  - 🔵 mŕtvy kód `entryKey` (8045f4e) — zapojený do `pollForResult`'s
+    dedup, presne ako sesterský projekt.
+  - 🔵 tichý no-op pre override bez variantu (aea5a81) — teraz zaloguje
+    varovanie.
+  - 🔵 `resultExitCode`'s `failed===null` sémantika — zdokumentovaná
+    (zámerná, nie bug).
+- PR #140 (hlavná implementácia) + PR #141 (kritický fix zistený AŽ pri
+  naživo overovaní): priamy `setInputFiles` na skrytý file input NEFUNGUJE
+  proti reálnemu Shoptetu (React widget potrebuje skutočný file-chooser cez
+  viditeľné tlačidlo "Vyberte súbor") — port presného postupu zo
+  sesterského `parovanie_produktov`. Fixture upravená, aby mala rovnaký
+  tvar (pred touto opravou by testy prešli aj so ZLOU implementáciou).
+- Alpine chromium v produkčnom Docker image (`apk add chromium` + font/NSS/
+  freetype balíky, `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1`) — overené naživo
+  v throwaway kontajneri (Playwright's `chromium.launch({executablePath})`
+  proti apk-installed chromiu) PRED commitnutím.
+- `docker-compose.prod.yml` doplnené o `SHOPTET_ADMIN_USER`/`PASSWORD`
+  (predtým appka mala k dispozícii len `SHOPTET_ADMIN_BASE_URL`, hoci
+  `/srv/forestshop/.env` mal všetky tri kľúče).
+- Naživo overené na PRESNE jednom produkte (Vnadidlo Bukový decht 2,5 l,
+  kód 60286): appka → override → spätný zápis → Shoptet export potvrdil
+  zmenu presne v `internalNote` stĺpci, nič iné sa nedotklo → odkaz vrátený
+  na pôvodnú hodnotu → spätný zápis znova → export potvrdil pôvodnú
+  hodnotu → `product_supplier_link_override` vrátená na 0 riadkov
+  (produkčný baseline pred testom).
+- Testy: 41/41 integration test files (272 testov), 20/20 unit test files
+  (314 testov v apps/api), web e2e 22/22 — všetko zelené IZOLOVANE (nie
+  súbežne s inou DB-závislou suitou, ktorá kolíduje na zdieľanej lokálnej
+  Postgres — nie skutočná chyba, len self-inflicted konkurencia).
+- Issue 122 zavreté ručne (nie cez `Closes #`) s dôkazom v komentári — rovnaký
+  dôvod ako issue 121 (acceptancia potrebovala post-deploy živú kontrolu).
+- Nový playbook súbor `.claude/rules/shoptet-writeback.md` (reálne Shoptet
+  admin cesty, file-chooser gotcha, Alpine chromium recept, race-condition
+  vzor pre "vyber → dlho bežiaci zápis → označ hotové", cp1250 export
+  encoding, docker-cp verifikačný postup).

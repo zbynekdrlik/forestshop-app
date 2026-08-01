@@ -73,3 +73,4 @@ Per-area rules live in `.claude/rules/<area>.md` with `paths:` frontmatter.
 - citlivé hodnoty (heslá/tokeny/hash= sa nikdy nepíšu do repa) → `.claude/rules/sensitive-values.md`
 - frontend dizajn (vizuálne tokeny, nav registry, user-menu, e2e login rate-limit) → `.claude/rules/frontend-design.md`
 - HTTP trasy (Hono, poradie registrácie literal-vs-`:param`) → `.claude/rules/http-routes.md`
+- spätný zápis do Shoptetu (F5 — Playwright import, reálne admin cesty, Alpine chromium) → `.claude/rules/shoptet-writeback.md`
