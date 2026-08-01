@@ -85,9 +85,9 @@ it("neplatný odkaz na dodávateľa necháva editor OTVORENÝ so zachovaným tex
   });
   // Editor musí ostať OTVORENÝ (RED pred opravou: getByTestId tu nič nenájde,
   // lebo editor sa medzitým ticho zavrel) s presne tým textom, čo bol zadaný.
-  const inputPoNeplatnomUlozeni = screen.getByTestId(
+  const inputPoNeplatnomUlozeni = screen.getByTestId<HTMLInputElement>(
     `supplier-link-edit-input-${LINE_ALFA.lineId}`,
-  ) as HTMLInputElement;
+  );
   expect(inputPoNeplatnomUlozeni.value).toBe("toto-nie-je-odkaz");
   expect(setProductSupplierLink).not.toHaveBeenCalled();
 });

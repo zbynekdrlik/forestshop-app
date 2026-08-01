@@ -75,7 +75,8 @@ export function SupplierOrderGroup({
   readonly onChangeState: (lineId: string, newState: OrderLine["state"]) => void;
   readonly onChangeOrdered: (lineId: string, ordered: boolean) => void;
   readonly onAssignSupplier: (lineId: string, supplier: string) => void;
-  readonly onSetSupplierLink: (lineId: string, url: string) => void;
+  // issue 166: `boolean` návratová hodnota — pozri `OrderLineRow.tsx`'s komentár.
+  readonly onSetSupplierLink: (lineId: string, url: string) => boolean;
   readonly onChangeComment: (orderId: string, comment: string | null) => void;
   readonly editingEmailSupplier: string | null;
   readonly emailDraft: string;
