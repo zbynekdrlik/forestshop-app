@@ -147,3 +147,13 @@ paths:
   `docker exec -w /app/apps/api node script.mjs`. `createDb()` (`db/
   client.ts`) bez argumentu sám číta `DATABASE_URL` z kontajnerovho
   prostredia — netreba ho manuálne skladať v skripte.
+- **CSV-injection ochrana (issue 153) sedí v `csv.ts`'s `dataRowToLine`, NIE
+  vo validácii vyššie prúdu.** `formula-guard.ts`'s `csvSafe` sa aplikuje na
+  KAŽDÚ bunku KAŽDÉHO dátového riadku PRIAMO pri zápise CSV — chráni aj
+  `code`/`pairCode` (z katalógového importu, `variants` tabuľka, BEZ
+  akejkoľvek inej kontroly), nielen `internalNote` (ktorý je aj tak už
+  ukotvený `^https?:\/\//`, takže formula-lead hodnota by ním nikdy
+  neprešla). Akýkoľvek BUDÚCI nový stĺpec/hodnota pridaná do
+  `WritebackRow`/`buildWritebackCsv` je automaticky chránená, pokiaľ ide
+  cez `dataRowToLine` — nová cesta k zápisu Shoptet CSV musí VŽDY ísť cez
+  `buildWritebackCsv`, nikdy cez vlastné skladanie stĺpcov mimo neho.
