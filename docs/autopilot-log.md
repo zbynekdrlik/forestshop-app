@@ -3,6 +3,76 @@
 Terse per-ticket log of autopilot-worker cycles: issue(s), commit SHAs,
 RED→GREEN test names, key decisions, and the shared PR.
 
+## 2026-08-01 — #151 (supplier draft lost across group remount) + #152 (sort by newest order)
+
+- Version bump `9029b0a` (0.3.0-dev.90→.91), first commit on `dev`.
+- Design comments BEFORE first code commit, both revised once each
+  investigation found more than initially assumed:
+  https://github.com/zbynekdrlik/forestshop-app/issues/151#issuecomment-5150635978
+  (initial: dirty-ref guard, same shape as `commentDraft`/issue 64) →
+  https://github.com/zbynekdrlik/forestshop-app/issues/151#issuecomment-5150669944
+  (revised AFTER writing + empirically running the regression test: any
+  `manualSupplierOverride` change ALWAYS moves the row to a different
+  `SupplierOrderGroup` — `key={group.supplier}` — which is a React REMOUNT,
+  not a re-render, confirmed via `document.contains()` on the old DOM node
+  returning `false`; a per-instance ref/effect cannot survive that, the
+  draft must live one level up, in `OrdersSection`, which never remounts).
+  https://github.com/zbynekdrlik/forestshop-app/issues/152#issuecomment-5150637223
+  (SQL aggregation rejected — `effectiveSupplier` isn't a plain column
+  `ORDER BY` can use; `acc.lines[0]` from the already-`desc(placedAt)`-sorted
+  rows is free and sufficient).
+- RED `5860661` / GREEN `e67a6dc` (#151): new test in
+  `OrdersSection.assignSupplier.test.tsx` ("rozpísaný, ešte neuložený
+  koncept priradenia dodávateľa na riadku A PREŽIJE uloženie dodávateľa cez
+  SÚRODENECKÝ riadok B") — RED reused the same stale-reference mistake the
+  fix itself had to avoid (see playbook entry below) before landing on the
+  correct fresh-DOM-query assertion. GREEN: new `useSupplierDrafts.ts` hook
+  (`Map<lineId, draft>` living in `OrdersSection`, same principle as
+  existing `useDirtyEditorLineIds.ts`/#149) + `OrderLineRow.tsx`'s
+  `supplierDraft` becomes a derived value
+  (`pendingSupplierDraft ?? line.manualSupplierOverride ?? ""`) instead of
+  local `useState`/reset-`useEffect`/dirty-ref. Also extracted
+  `useSelectedSupplierFallback.ts` (#148 logic, zero behavior change) purely
+  to stay under eslint `max-lines: 400` in `OrdersSection.tsx`.
+- `7f5b839` (feat, #152): `queries.ts`'s `groups.sort` comparator changed
+  from alphabetical to `acc.lines[0].placedAt` descending (tie-break
+  alphabetical, "(bez dodávateľa)" always last, unchanged). New file
+  `orders-http-supplier-order.integration.test.ts` (3 tests: date order incl.
+  reverse-alphabetical fixture, tie-break, "(bez dodávateľa)" last even with
+  the newest order of all).
+- Local verification before push: web unit 275/275, API unit 323/323, API
+  integration 293/293 (45 files), Playwright e2e 24/24 (zero console
+  errors) — all green before the single push/PR/CI cycle.
+- PR #156, merged `796f28c`. Main CI + Deploy both green
+  (v0.3.0-dev.91, commit `796f28c`).
+- Live-verified on production (`forestshop-novy.newlevel.media`): #152 —
+  group order visibly newest-first, "(bez dodávateľa)" last. #151 — since
+  the override tables held 0 rows at verification time (no real product
+  currently had 2+ open unassigned sibling lines), a TEMPORARY test order
+  (`TEST-ISSUE151-VERIFY`, 2 lines of one real unused-in-orders product,
+  RUKAVICE GRAB VEIL M SWEDTEAM variants `5141/M`/`5141/L`) was inserted,
+  the exact bug scenario reproduced (unsaved draft on `5141/M` survived the
+  group-remount triggered by saving `5141/L`'s assignment — both moved into
+  a new "TEST-DODAVATEL-VERIFY — 2 riadky" group live), then fully removed
+  (override row + both order_line rows + the order row; audit_events left,
+  append-only). DB baseline re-checked after cleanup: exactly
+  `0|0|534|878|0`, matching the pre-work baseline. Both issues closed
+  MANUALLY (not via PR `Closes #N`) after this live verification, per
+  `CLAUDE.md`'s note.
+- Playbook: `.claude/rules/frontend-design.md` gets a new entry — a
+  prop-syncing pattern (controlled draft + reset `useEffect` + dirty guard,
+  the established shape for `commentDraft`/#64) is the WRONG fix whenever
+  the prop change also implies the row moves to a different keyed React
+  parent (a group/section reassignment) — that is a REMOUNT, and the fix
+  has to live in the ancestor that survives the remount, not a ref/effect
+  in the component that doesn't. Also: a regression test asserting a value
+  survived a refetch must re-query the DOM fresh, never reuse the
+  pre-refetch element handle — a stale/detached reference keeps its last
+  `.value` regardless of what the live DOM shows, which gives a false GREEN
+  even against genuinely broken code (caught here only because the test was
+  run against unfixed code FIRST and still passed, which is exactly what
+  the RED step exists to catch).
+
 ## 2026-07-31 — #115 (hourly orders sync + no more false "OK") + #116 closed obsolete
 
 - STEP 0: #116 (remark on "Na objednanie") found ALREADY IMPLEMENTED via

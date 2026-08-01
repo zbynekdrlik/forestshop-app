@@ -426,3 +426,43 @@ paths:
   (`OrdersSection.tsx`) apply the exception — never duplicate the
   three-way boolean logic (`hideResolved && resolved && !dirty`) inline in
   two files, they will drift.
+- **A prop-syncing reset pattern (controlled draft + reset `useEffect` +
+  "skip first mount"/dirty guard, the established shape for
+  `supplierDraft`/`commentDraft`, issue 63/64) is the WRONG fix whenever the
+  prop change ALSO implies the row moves to a DIFFERENT keyed React parent
+  — that is a REMOUNT, not a re-render, and no local `useState`/`useEffect`/
+  `ref` survives it.** Issue 151: manual supplier assignment is per-PRODUCT
+  (`productSupplierOverrides` keyed by `productKey`), so any change to
+  `line.manualSupplierOverride` ALSO changes `effectiveSupplier` — which is
+  the `SupplierOrderGroup`'s own React key (`OrdersSection.tsx`'s
+  `key={group.supplier}`). A row whose product just got (re)assigned is
+  moved to a NEW `SupplierOrderGroup` subtree — empirically confirmed
+  (`document.contains()` on the pre-refetch input returned `false`; a fresh
+  `queryByLabelText` found a brand-new node already showing the server
+  value). The fix: lift the value one level up, into the ancestor that does
+  NOT remount (`OrdersSection`, `useSupplierDrafts.ts` — same principle as
+  `useDirtyEditorLineIds.ts`/issue 149, but carrying the actual TEXT instead
+  of a boolean). `OrderLineRow` then DERIVES its displayed value from props
+  (`pendingDraft ?? line.manualSupplierOverride ?? ""`) instead of owning
+  local state — no `useState`, no reset `useEffect`, no dirty ref needed at
+  all, because a derived value is correct on BOTH a re-render AND a fresh
+  mount. Before reaching for the `isCommentDirty`-style guard on a NEW
+  prop-syncing effect, check whether the prop's OWN change can also move
+  the row to a different keyed parent (a group/section/tab reassignment) —
+  if yes, the guard cannot help; lift the state instead.
+- **A regression test asserting "value survived a refetch" MUST re-query
+  the DOM fresh after the refetch — reusing the pre-refetch element handle
+  gives a FALSE GREEN even against genuinely broken code.** Issue 151's
+  first draft of the RED test held onto the `HTMLInputElement` returned by
+  `screen.findByLabelText` BEFORE the refetch and asserted its `.value`
+  AFTER — it passed against the UNFIXED code, because the row had actually
+  been REMOUNTED (see the entry above) and the stale/detached reference
+  just kept echoing whatever `.value` it had at detach time, never the
+  live DOM. Caught only because RED was run against unfixed code FIRST and
+  it still passed (the whole reason the RED step exists) — the fix was to
+  re-run `screen.getByLabelText(...)` (or an equivalent fresh query) AFTER
+  the refetch, inside the final assertion, and add `document.contains()`
+  as a debug check when in doubt whether a handle survived. Any FUTURE
+  "does X survive a re-render/refetch/remount" test in this codebase:
+  re-query fresh at assertion time, never trust an element handle captured
+  before the change under test.
