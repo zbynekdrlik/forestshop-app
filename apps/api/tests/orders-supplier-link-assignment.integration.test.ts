@@ -81,6 +81,65 @@ it("doplnenie odkazu riadku bez odkazu sa uloží a prežije opätovné načíta
   expect(poTelo.suppliers[0]?.lines[0]?.supplierUrl).toBe("https://dodavatel.example.com/produkt");
 });
 
+// issue 121 (review of PR 138, coverage gap): `resolveEffectiveSupplierLink`
+// je zdieľaná ČISTÁ funkcia použitá na TROCH čítacích cestách
+// (`listOpenOrderLinesBySupplier`, `getOrderDetail`, `mail.ts`'s
+// `loadOutstandingLines`) — vyššie overený `/api/orders/open` je len JEDNA
+// z nich. Tento test dokazuje DRUHÚ (`GET /api/orders/:id`), rovnakým
+// vzorom ako existujúci `orders-http.integration.test.ts`'s "detail
+// objednávky nesie odkaz na dodávateľa aj kód dodávateľa" test.
+it("detail objednávky (GET /api/orders/:id) tiež zobrazí uložený odkaz namiesto odkazu zo Shoptetu", async () => {
+  const { app, cookie, db } = await boot("manazer");
+  await insertTestVariant(db, "L-DETAIL", "Dodávateľ", { internalNote: "https://stary-detail.example.com" });
+  const [objednavka] = await db
+    .insert(orders)
+    .values({ externalOrderId: "7009", customerName: "Zákazník", placedAt: new Date("2026-07-09T00:00:00Z") })
+    .returning();
+  if (objednavka === undefined) throw new Error("insert zlyhal");
+  const [line] = await db.insert(orderLines).values({ orderId: objednavka.id, variantCode: "L-DETAIL", quantity: 1 }).returning();
+  if (line === undefined) throw new Error("insert zlyhal");
+
+  await app.request(`/api/orders/lines/${line.id}/supplier-link`, {
+    method: "POST",
+    headers: { cookie, "content-type": "application/json" },
+    body: JSON.stringify({ url: "https://novy-detail.example.com" }),
+  });
+
+  const detailRes = await app.request(`/api/orders/${objednavka.id}`, { headers: { cookie } });
+  const detail = (await detailRes.json()) as { lines: { supplierUrl: string | null }[] };
+  expect(detail.lines[0]?.supplierUrl).toBe("https://novy-detail.example.com");
+});
+
+// issue 121 (review of PR 138, coverage gap): TRETIA čítacia cesta —
+// dodávateľský mailový náhľad (`mail.ts`'s `loadOutstandingLines` cez
+// `buildSupplierOrderMailContent`) musí tiež niesť uložený odkaz, nie
+// odkaz zo Shoptetu — inak by appka poslala dodávateľovi zastaraný/zlý
+// odkaz napriek tomu, že ho manažér práve opravil.
+it("mailový náhľad objednávky dodávateľovi (GET .../order-mail) tiež nesie uložený odkaz", async () => {
+  const { app, cookie, db } = await boot("manazer");
+  await insertTestVariant(db, "L-MAIL", "Dodávateľ Mailový", { internalNote: "https://stary-mail.example.com" });
+  const [objednavka] = await db
+    .insert(orders)
+    .values({ externalOrderId: "7010", customerName: "Zákazník", placedAt: new Date("2026-07-10T00:00:00Z") })
+    .returning();
+  if (objednavka === undefined) throw new Error("insert zlyhal");
+  const [line] = await db.insert(orderLines).values({ orderId: objednavka.id, variantCode: "L-MAIL", quantity: 1 }).returning();
+  if (line === undefined) throw new Error("insert zlyhal");
+
+  await app.request(`/api/orders/lines/${line.id}/supplier-link`, {
+    method: "POST",
+    headers: { cookie, "content-type": "application/json" },
+    body: JSON.stringify({ url: "https://novy-mail.example.com" }),
+  });
+
+  const mailRes = await app.request(`/api/suppliers/${encodeURIComponent("Dodávateľ Mailový")}/order-mail`, {
+    headers: { cookie },
+  });
+  const preview = (await mailRes.json()) as { body: string };
+  expect(preview.body).toContain("https://novy-mail.example.com");
+  expect(preview.body).not.toContain("https://stary-mail.example.com");
+});
+
 // issue 121: NA ROZDIEL od priradenia dodávateľa (#63, 409 keď katalóg už má
 // hodnotu) tu žiadna gate neexistuje — odkaz sa smie upraviť AJ keď Shoptet
 // (`internalNote`) už jeden poskytuje. Naša hodnota má VŽDY prednosť.
