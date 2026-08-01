@@ -84,6 +84,59 @@ it("vráti zákaznícky odkaz (remark) pri riadku, null keď nie je vyplnený", 
   expect(lines.find((l) => l.externalOrderId === "7002")?.remark).toBeNull();
 });
 
+// issue 164: interná poznámka e-shopu (`order.shop_remark`, SUROVÁ v DB) sa
+// na `GET /api/orders/open` vracia ROZDELENÁ — appkin vlastný blok
+// (`note-block.ts`'s oddeľovače) sa NIKDY nezobrazí, len cudzí (ručne
+// napísaný) text okolo neho. Appkina VLASTNÁ poznámka (`comment`) ostáva
+// nezávislé pole, nemení sa touto extrakciou.
+it("vráti internú poznámku e-shopu BEZ nášho vlastného bloku — len cudzí text", async () => {
+  const { app, cookie, db } = await boot("citanie");
+  await insertTestVariant(db, "SHOP-1", "Dodávateľ Shop");
+  await insertTestVariant(db, "SHOP-2", "Dodávateľ Shop");
+  await insertTestVariant(db, "SHOP-3", "Dodávateľ Shop");
+
+  const [sCudzimTextom] = await db
+    .insert(orders)
+    .values({
+      externalOrderId: "7003",
+      customerName: "Zákazník A",
+      shopRemark:
+        "Ručná poznámka predajne\n\n--- poznámka z appky ---\nNaša poznámka\n--- koniec ---",
+      placedAt: new Date("2026-07-12T00:00:00Z"),
+    })
+    .returning();
+  if (sCudzimTextom === undefined) throw new Error("insert zlyhal");
+  await db.insert(orderLines).values({ orderId: sCudzimTextom.id, variantCode: "SHOP-1", quantity: 1 });
+
+  const [lenNasBlok] = await db
+    .insert(orders)
+    .values({
+      externalOrderId: "7004",
+      customerName: "Zákazník B",
+      shopRemark: "--- poznámka z appky ---\nNaša poznámka\n--- koniec ---",
+      placedAt: new Date("2026-07-13T00:00:00Z"),
+    })
+    .returning();
+  if (lenNasBlok === undefined) throw new Error("insert zlyhal");
+  await db.insert(orderLines).values({ orderId: lenNasBlok.id, variantCode: "SHOP-2", quantity: 1 });
+
+  const [bezPoznamky] = await db
+    .insert(orders)
+    .values({ externalOrderId: "7005", customerName: "Zákazník C", placedAt: new Date("2026-07-14T00:00:00Z") })
+    .returning();
+  if (bezPoznamky === undefined) throw new Error("insert zlyhal");
+  await db.insert(orderLines).values({ orderId: bezPoznamky.id, variantCode: "SHOP-3", quantity: 1 });
+
+  const res = await app.request("/api/orders/open", { headers: { cookie } });
+  const telo = (await res.json()) as {
+    suppliers: { lines: { externalOrderId: string; shopRemark: string | null }[] }[];
+  };
+  const lines = telo.suppliers.flatMap((s) => s.lines);
+  expect(lines.find((l) => l.externalOrderId === "7003")?.shopRemark).toBe("Ručná poznámka predajne");
+  expect(lines.find((l) => l.externalOrderId === "7004")?.shopRemark).toBeNull();
+  expect(lines.find((l) => l.externalOrderId === "7005")?.shopRemark).toBeNull();
+});
+
 // issue 65: `adminUrl` je odvodený zo servera (`SHOPTET_ADMIN_BASE_URL`
 // premennej, `env.ts`) + kódu objednávky — over aj to, že sa naozaj vezme
 // nakonfigurovaná doména (nie natvrdo v kóde), aj to, že kód objednávky sa
