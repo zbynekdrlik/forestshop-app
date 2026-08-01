@@ -271,6 +271,11 @@ test("manažér vidí otvorené objednávky zoskupené podľa dodávateľa, konz
   // istom riadku (odkaz na dodávateľa, over vyššie) — kontrola sa preto
   // SKOPUJE na `adminOdkazAlfa` samotný, nie na celý `riadokAlfa`.
   await expect(riadokAlfa).toContainText("Prosím doručiť len v piatok");
+  // issue 164: interná poznámka e-shopu (`shopRemark`, read-only, LEN cudzí
+  // text — appkin vlastný blok nie je v tomto texte prítomný, takže sa
+  // celý zobrazí nezmenený). Nemá žiadny vstup/textarea — appka na ňu nemá
+  // žiadnu zápisovú cestu vôbec.
+  await expect(riadokAlfa).toContainText("Sklad potvrdil, pripravené na vyzdvihnutie");
   const adminOdkazAlfa = riadokAlfa.getByRole("link", { name: "Otvoriť objednávku 9001 v administrácii Shoptet" });
   await expect(adminOdkazAlfa).toHaveAttribute(
     "href",

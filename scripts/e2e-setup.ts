@@ -290,6 +290,10 @@ const [objednavkaAlfa] = await db
     // `.claude/rules/orders.md`) — nezávislé pole od manažérovho `comment`
     // vyššie, appka ho zobrazuje LEN na čítanie.
     remark: "Prosím doručiť len v piatok",
+    // issue 164: SUROVÁ hodnota internej poznámky e-shopu — appka na čítacej
+    // strane (`extractForeignShopRemark`) vráti tento text nezmenený, keďže
+    // neobsahuje náš vlastný blok (`note-block.ts`'s oddeľovače).
+    shopRemark: "Sklad potvrdil, pripravené na vyzdvihnutie",
     statusName: DEFAULT_ORDER_OPEN_STATUS,
     placedAt: new Date("2026-07-20T10:00:00Z"),
   })
