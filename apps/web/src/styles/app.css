@@ -312,6 +312,29 @@ tr:last-child td {
   color: var(--fs-brand-strong);
   font-weight: var(--fs-weight-semibold);
 }
+.tlabel {
+  flex: 1;
+}
+/* issue 147: odznak počtu nevybavených riadkov (dnes len "Na objednanie",
+   ale generický pre AKÚKOĽVEK budúcu záložku — `Sidebar.tsx`'s `badgeCounts`
+   prop). Vlastný dizajn tejto appky (nikdy prevzatý zo starej appky, viď
+   `.claude/rules/frontend-design.md`) — malá guľatá pilulka v brand farbe,
+   `flex-shrink: 0` aby ju dlhší popisok záložky nikdy nestlačil. */
+.tab-badge {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  padding: 0 var(--fs-space-1);
+  border-radius: var(--fs-radius-lg);
+  background: var(--fs-brand);
+  color: #fff;
+  font-size: var(--fs-text-xs);
+  font-weight: var(--fs-weight-semibold);
+  line-height: 1.25rem;
+}
 
 .sidefoot {
   border-top: 1px solid var(--fs-border);
@@ -1181,11 +1204,29 @@ tr:last-child td {
   font: inherit;
   font-size: var(--fs-text-base);
   min-height: 2.25rem;
+  /* issue 150: `<textarea>` (predtým `<input>`) — `line-height`/`min-height`
+     nezmenené (rovnaká predvolená výška riadku ako predtým), `resize:
+     vertical` + `max-height` dovolia manažérovi pole podľa potreby zväčšiť
+     na viac riadkov, bez toho, aby to natrvalo nafúklo výšku VŠETKÝCH
+     riadkov tabuľky (rovnaký ~row-height rozpočet, aký #105/#107/#111/#127
+     doladili) — presiahnutý obsah pri predvolenej výške sa interne posúva
+     (`overflow-y: auto`), nikdy nepretečie do suseda. */
+  line-height: 1.4;
+  resize: vertical;
+  max-height: 6rem;
+  overflow-y: auto;
 }
 /* issue 105 bod 3: same "button never shrinks" guarantee as the supplier
    assign button above. */
 .ord-comment-cell > button {
   flex-shrink: 0;
+}
+/* issue 150: read-only vetva (rola bez `canChangeState`) — zalomenia
+   uloženého viacriadkového komentára musia prežiť aj na čítanie, nielen
+   počas úpravy vo `<textarea>` vyššie. */
+.ord-comment-display {
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 /* issue 95: percentuálne šírky stĺpcov (`SupplierOrderGroup.tsx`'s
    `<colgroup>`) — PRODUKT (najdôležitejší údaj, majiteľ komentár #1: "má len

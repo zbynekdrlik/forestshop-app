@@ -1,7 +1,15 @@
-import { useCallback, useEffect, useState, type JSX } from "react";
+import { useCallback, useContext, useEffect, useState, type JSX } from "react";
 import type { Me } from "../api.js";
-import { isLineResolved } from "../ordersSummary.js";
+import {
+  persistHideResolvedPreference,
+  persistSelectedSupplier,
+  readHideResolvedPreference,
+  readSelectedSupplierPreference,
+} from "../ordersDisplayPreferences.js";
+import { OrdersRemainingCountContext } from "../ordersRemainingCountContext.js";
+import { isLineHiddenByFilter, summarizeOrderLines } from "../ordersSummary.js";
 import { clearWriteFailure, lineWhere, orderWhere, upsertWriteFailure, type OrderWriteFailure } from "../ordersWriteFailures.js";
+import { useDirtyEditorLineIds } from "../useDirtyEditorLineIds.js";
 import { useSupplierEmailEditing } from "../useSupplierEmailEditing.js";
 import { useSupplierMailActions } from "../useSupplierMailActions.js";
 import { OrderOpenStatusesPanel } from "./OrderOpenStatusesPanel.js";
@@ -29,21 +37,6 @@ import {
 // `CatalogPage`'s `IMPORT_ROLES`/`SchedulerSection`'s `SCHEDULER_ROLES`).
 const CAN_CHANGE_STATE_ROLES: ReadonlySet<Me["role"]> = new Set(["admin", "manazer"]);
 
-// issue 61: kľúč pre prepínač "skryť vybavené riadky" — jediný stav, ktorý
-// má prežiť obnovenie stránky (issue to pýta výslovne LEN preň, výber
-// dodávateľa/chipu ostáva zámerne len klientský stav bez perzistencie).
-const HIDE_RESOLVED_STORAGE_KEY = "forestshop.orders.hideResolved";
-
-function readHideResolvedPreference(): boolean {
-  try {
-    return window.localStorage.getItem(HIDE_RESOLVED_STORAGE_KEY) === "1";
-  } catch {
-    // localStorage nedostupné (napr. prehliadač so zakázaným úložiskom) —
-    // prepínač jednoducho nezačne predvyplnený, nič nespadne.
-    return false;
-  }
-}
-
 export function OrdersSection({
   role,
   onSessionExpired,
@@ -61,20 +54,24 @@ export function OrdersSection({
   const [busyLineId, setBusyLineId] = useState<string | null>(null);
   const canChangeState = CAN_CHANGE_STATE_ROLES.has(role);
 
-  // issue 61: vybraný dodávateľ (chip) — `null` = "Všetci". Prepínač "skryť
-  // vybavené" sa naopak číta raz pri mount-e priamo z localStorage (lazy
-  // init), aby appka po reloade neblikla najprv nefiltrovaný zoznam.
-  const [selectedSupplier, setSelectedSupplier] = useState<string | null>(null);
+  // issue 61/148: vybraný dodávateľ (chip) aj prepínač "skryť vybavené" sa
+  // OBA čítajú raz pri mount-e priamo z localStorage (lazy init), aby appka
+  // po reloade neblikla najprv nefiltrovaný/nezúžený zoznam.
+  const [selectedSupplier, setSelectedSupplierState] = useState<string | null>(readSelectedSupplierPreference);
   const [hideResolved, setHideResolved] = useState<boolean>(readHideResolvedPreference);
+
+  // issue 148: jediné miesto, ktoré mení `selectedSupplier` — VŽDY aj
+  // persistuje, takže žiadne volajúce miesto (manuálny klik na chip AJ
+  // automatický fallback nižšie) nemôže zabudnúť na jednu z dvoch strán.
+  const selectSupplier = useCallback((next: string | null) => {
+    setSelectedSupplierState(next);
+    persistSelectedSupplier(next);
+  }, []);
 
   const toggleHideResolved = useCallback(() => {
     setHideResolved((current) => {
       const next = !current;
-      try {
-        window.localStorage.setItem(HIDE_RESOLVED_STORAGE_KEY, next ? "1" : "0");
-      } catch {
-        // localStorage nedostupné — voľba ostáva platná len pre túto reláciu.
-      }
+      persistHideResolvedPreference(next);
       return next;
     });
   }, []);
@@ -125,6 +122,31 @@ export function OrdersSection({
   }, [onSessionExpired]);
 
   useEffect(load, [load]);
+
+  // issue 147: publikuje počet NEVYBAVENÝCH riadkov (naprieč VŠETKÝMI
+  // dodávateľmi) do ľavého menu cez `OrdersRemainingCountContext` — po KAŽDEJ
+  // zmene `suppliers`, takže odznak je vždy aktuálny. Pred prvým úspešným
+  // načítaním sa nevolá vôbec — Sidebar dovtedy odznak nevykreslí.
+  const { setCount: setOrdersRemainingCount } = useContext(OrdersRemainingCountContext);
+  useEffect(() => {
+    if (!loaded) return;
+    const allLines = suppliers.flatMap((group) => group.lines);
+    setOrdersRemainingCount(summarizeOrderLines(allLines).remaining);
+  }, [loaded, suppliers, setOrdersRemainingCount]);
+
+  // issue 148 — priamy náprotivok starej appky's fallback (`app.js:2677-2680`):
+  // keď je dodávateľ vybraný z PREDCHÁDZAJÚCEJ relácie/dňa (localStorage) a
+  // medzi PRÁVE načítanými skupinami už vôbec nefiguruje, výber spadne späť
+  // na "Všetci" — namiesto toho, aby zobrazil prázdny zoznam s aktívnym
+  // chipom, ktorý nikde nie je. `suppliers.length === 0` sa zámerne
+  // VYNECHÁVA (rovnako ako stará appka) — prechodné zlyhanie fetchu nesmie
+  // zahodiť platný výber.
+  useEffect(() => {
+    if (!loaded || selectedSupplier === null || suppliers.length === 0) return;
+    if (!suppliers.some((group) => group.supplier === selectedSupplier)) {
+      selectSupplier(null);
+    }
+  }, [loaded, suppliers, selectedSupplier, selectSupplier]);
 
   const changeState = useCallback(
     (lineId: string, newState: OrderLine["state"]) => {
@@ -366,6 +388,10 @@ export function OrdersSection({
     [onSessionExpired, suppliers],
   );
 
+  // issue 149: `useDirtyEditorLineIds.ts` — riadky s PRÁVE TERAZ otvorenou
+  // úpravou, výnimka z "skryť vybavené" filtra nižšie.
+  const { dirtyEditorLineIds, setActive: onEditorActivityChange } = useDirtyEditorLineIds();
+
   // `/api/orders/open` už zoraďuje riadky presne tak, ako majú byť zobrazené
   // (dodávateľ vzostupne, potom najnovšia objednávka prvá) — žiadne ďalšie
   // preskupovanie na klientovi.
@@ -379,7 +405,7 @@ export function OrdersSection({
     (group) => selectedSupplier === null || group.supplier === selectedSupplier,
   );
   const visibleLinesCount = filteredGroups.reduce(
-    (sum, group) => sum + (hideResolved ? group.lines.filter((line) => !isLineResolved(line)).length : group.lines.length),
+    (sum, group) => sum + group.lines.filter((line) => !isLineHiddenByFilter(line, hideResolved, dirtyEditorLineIds)).length,
     0,
   );
 
@@ -408,7 +434,7 @@ export function OrdersSection({
         <OrdersToolbar
           suppliers={suppliers}
           selectedSupplier={selectedSupplier}
-          onSelectSupplier={setSelectedSupplier}
+          onSelectSupplier={selectSupplier}
           hideResolved={hideResolved}
           onToggleHideResolved={toggleHideResolved}
         />
@@ -433,6 +459,8 @@ export function OrdersSection({
           key={group.supplier}
           group={group}
           hideResolved={hideResolved}
+          dirtyEditorLineIds={dirtyEditorLineIds}
+          onEditorActivityChange={onEditorActivityChange}
           canChangeState={canChangeState}
           busyLineId={busyLineId}
           busyOrderedLineId={busyOrderedLineId}

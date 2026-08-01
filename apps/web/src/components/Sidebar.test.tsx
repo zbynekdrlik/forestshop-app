@@ -36,3 +36,19 @@ it("klik na hlavičku priečinka ho zbalí (folder-chev sa otočí cez triedu 'c
   fireEvent.click(folderBtn);
   expect(folderBtn.getAttribute("aria-expanded")).toBe("false");
 });
+
+// issue 147: `badgeCounts` je generický (kľúčovaný `tab.id`), nielen pre
+// "Na objednanie" — test preto overuje aj že tab BEZ kľúča v `badgeCounts`
+// odznak nedostane vôbec (nie odznak s "0").
+it("vykreslí odznak len pre záložku s kľúčom v badgeCounts, ostatné bez odznaku", () => {
+  render(<Sidebar folders={FOLDERS} activeTabId="sync" onSelectTab={() => {}} badgeCounts={{ orders: 3 }} />);
+
+  expect(screen.getByTestId("nav-badge-orders").textContent).toBe("3");
+  expect(screen.queryByTestId("nav-badge-sync")).toBeNull();
+});
+
+it("bez badgeCounts (prop vôbec chýba) sa nevykreslí žiadny odznak", () => {
+  render(<Sidebar folders={FOLDERS} activeTabId="sync" onSelectTab={() => {}} />);
+
+  expect(screen.queryByTestId("nav-badge-orders")).toBeNull();
+});

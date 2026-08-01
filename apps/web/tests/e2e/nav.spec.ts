@@ -51,6 +51,18 @@ test("ľavé menu má presne dva priečinky s jednou záložkou každý, klik pr
   await expect(page.getByRole("heading", { name: "Na objednanie" })).toBeVisible();
   await expect(page.getByTestId("supplier-DODAVATEL-TEST-1")).toBeVisible();
 
+  // issue 147: odznak počtu nevybavených riadkov v ľavom menu — musí ostať
+  // viditeľný AJ po prepnutí SPÄŤ na inú záložku (odznak žije v `App.tsx`
+  // koreni cez `OrdersRemainingCountContext`, nie vnútri "Na objednanie",
+  // ktorá sa pri prepnutí odmountuje). Presné číslo sa zámerne neoveruje
+  // (zdieľaná globálna DB, iné súbežne bežiace e2e súbory menia stavy
+  // riadkov) — len že odznak existuje a nesie platné celé číslo.
+  await page.getByRole("button", { name: "Sync zo Shoptetu" }).click();
+  await expect(page.getByRole("heading", { name: "Sync zo Shoptetu" })).toBeVisible();
+  const odznak = page.getByTestId("nav-badge-orders");
+  await expect(odznak).toBeVisible();
+  await expect(odznak).toHaveText(/^\d+$/);
+
   expect(chyby).toEqual([]);
 });
 

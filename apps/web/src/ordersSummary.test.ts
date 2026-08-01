@@ -3,6 +3,7 @@ import {
   computeVariantTotals,
   formatOrderSummaryText,
   formatVariantTotalChip,
+  isLineHiddenByFilter,
   isLineResolved,
   isStaleOrderLine,
   orderLineAgeDays,
@@ -34,6 +35,29 @@ it("riadok posunutý za predvolený stav je vybavený, aj bez odškrtnutia", () 
   expect(isLineResolved(line("caka_sa", false))).toBe(true);
   expect(isLineResolved(line("skladom", false))).toBe(true);
   expect(isLineResolved(line("nedostupne", false))).toBe(true);
+});
+
+// issue 149 — priame testy jediného zdieľaného predikátu (`OrdersSection.tsx`'s
+// `visibleLinesCount` a `SupplierOrderGroup.tsx`'s `visibleLines` naň oba
+// spoliehajú), review nález (code review na PR 154): predtým bol overený len
+// nepriamo cez komponentové/e2e testy.
+it("isLineHiddenByFilter: hideResolved=false nikdy nič neskryje, bez ohľadu na stav/dirty", () => {
+  expect(isLineHiddenByFilter({ ...line("caka_sa", false), lineId: "x" }, false, new Set())).toBe(false);
+  expect(isLineHiddenByFilter({ ...line("objednane", false), lineId: "x" }, false, new Set())).toBe(false);
+});
+
+it("isLineHiddenByFilter: hideResolved=true skryje vybavený riadok BEZ otvorenej úpravy", () => {
+  expect(isLineHiddenByFilter({ ...line("caka_sa", false), lineId: "x" }, true, new Set())).toBe(true);
+});
+
+it("isLineHiddenByFilter: hideResolved=true NEVYBAVENÝ riadok nikdy neskryje", () => {
+  expect(isLineHiddenByFilter({ ...line("objednane", false), lineId: "x" }, true, new Set())).toBe(false);
+});
+
+it("isLineHiddenByFilter: vybavený riadok s otvorenou úpravou (dirtyEditorLineIds) ostáva viditeľný", () => {
+  expect(isLineHiddenByFilter({ ...line("caka_sa", false), lineId: "x" }, true, new Set(["x"]))).toBe(false);
+  // Iný riadok v tom istom sete zostáva skrytý — výnimka je per-lineId, nie globálna.
+  expect(isLineHiddenByFilter({ ...line("caka_sa", false), lineId: "y" }, true, new Set(["x"]))).toBe(true);
 });
 
 it("summarizeOrderLines spočíta total/remaining a rozpis podľa stavov/odškrtnutia", () => {

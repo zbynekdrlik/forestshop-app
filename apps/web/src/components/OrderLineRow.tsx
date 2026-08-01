@@ -32,6 +32,7 @@ export function OrderLineRow({
   onAssignSupplier,
   onSetSupplierLink,
   onChangeComment,
+  onEditorActivityChange,
 }: {
   readonly line: OrderLine;
   readonly canChangeState: boolean;
@@ -69,6 +70,11 @@ export function OrderLineRow({
   // katalógového dodávateľa).
   readonly onSetSupplierLink: (lineId: string, url: string) => void;
   readonly onChangeComment: (orderId: string, comment: string | null) => void;
+  // issue 149: hlási RODIČOVI (`OrdersSection.tsx`'s `dirtyEditorLineIds`),
+  // či tento riadok PRÁVE TERAZ drží otvorenú/rozpísanú úpravu — výnimka z
+  // "skryť vybavené" filtra, aby riadok nezmizol spod rúk. Nesie len boolean,
+  // nikdy samotný rozpísaný text (ten ostáva výlučne tu, v tomto komponente).
+  readonly onEditorActivityChange: (lineId: string, active: boolean) => void;
 }): JSX.Element {
   const qtyChip = variantTotal !== undefined ? formatVariantTotalChip(variantTotal) : null;
 
@@ -167,6 +173,32 @@ export function OrderLineRow({
     isCommentDirty.current = false;
     onChangeComment(line.orderId, trimmed === "" ? null : trimmed);
   };
+
+  // issue 149: "má tento riadok otvorenú/rozpísanú úpravu" — presne tie tri
+  // editory, ktoré ticket menuje. `linkEditing` počíta ako aktívny hneď pri
+  // OTVORENÍ (bez ohľadu na obsah, rovnaký zámer ako stará appka's "opened
+  // counts as his"); `supplierDraft`/komentár počítajú len keď sa SKUTOČNE
+  // líšia od uloženej hodnoty (nemajú vlastný toggle open/close).
+  const trimmedSupplierDraft = supplierDraft.trim();
+  const supplierDraftDirty =
+    line.supplierAssignable && trimmedSupplierDraft !== "" && trimmedSupplierDraft !== (line.manualSupplierOverride ?? "");
+  // Code review (PR 154): `isCommentDirty.current` je REF, nie state — jeho
+  // čítanie tu funguje len preto, že KAŽDÁ jeho mutácia (`onChange` nižšie →
+  // `true`, `saveComment` vyššie → `false`) je v TEJ ISTEJ tikni sprevádzaná
+  // state zmenou, ktorá tento komponent aj tak prekreslí (lokálny
+  // `setCommentDraft`, alebo rodičovský `setBusyCommentOrderId` cez props) —
+  // a nič v tomto strome dnes nie je `React.memo`. Ak by niekedy pribudol
+  // `React.memo` na `OrderLineRow`/`SupplierOrderGroup` (perf krok kvôli
+  // `dirtyEditorLineIds` nižšie), TENTO odvodený signál by mohol prestať
+  // reagovať na správnom tiku bez chyby/varovania — over najprv toto miesto.
+  const commentDirtyNow = isCommentDirty.current;
+  const hasOpenEditor = linkEditing || supplierDraftDirty || commentDirtyNow;
+  useEffect(() => {
+    onEditorActivityChange(line.lineId, hasOpenEditor);
+    return () => {
+      onEditorActivityChange(line.lineId, false);
+    };
+  }, [line.lineId, hasOpenEditor, onEditorActivityChange]);
 
   return (
     <tr
@@ -436,13 +468,20 @@ export function OrderLineRow({
         <div className="ord-comment-cell" data-testid={`comment-cell-${line.lineId}`}>
           {canChangeState ? (
             <>
-              <input
-                type="text"
+              {/* issue 150: `<textarea>` (nie `<input>`) — Enter vkladá nový
+                  riadok defaultne (žiadny `preventDefault`), uloží LEN
+                  Ctrl/⌘+Enter. Poznámka býva viacriadková (dohoda so
+                  zákazníkom/dodávateľom) a spätne sa zapisuje do Shoptetu,
+                  takže formátovanie má význam — `<input>` by nový riadok
+                  nikdy vizuálne nezobrazil, bez ohľadu na to, čo je v jeho
+                  hodnote uložené. */}
+              <textarea
                 className="ord-comment-input"
                 data-testid={`comment-input-${line.lineId}`}
                 aria-label={`Poznámka k objednávke ${line.externalOrderId} / ${line.variantCode}`}
                 placeholder="poznámka…"
                 maxLength={2000}
+                rows={1}
                 value={commentDraft}
                 disabled={commentBusyHere}
                 onChange={(e) => {
@@ -450,7 +489,7 @@ export function OrderLineRow({
                   setCommentDraft(e.target.value);
                 }}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter") {
+                  if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
                     e.preventDefault();
                     saveComment();
                   }
@@ -461,6 +500,7 @@ export function OrderLineRow({
                 className="btn sm good"
                 data-testid={`comment-save-${line.lineId}`}
                 aria-label={`Uložiť poznámku k objednávke ${line.externalOrderId} / ${line.variantCode}`}
+                title="Uložiť poznámku (Ctrl+Enter)"
                 disabled={commentBusyHere}
                 onClick={saveComment}
               >
@@ -468,7 +508,10 @@ export function OrderLineRow({
               </button>
             </>
           ) : (
-            (line.comment ?? "—")
+            // issue 150: `.ord-comment-display` (CSS `white-space: pre-wrap`)
+            // — už uložený viacriadkový komentár zobrazí svoje zalomenia aj
+            // na čítanie, nielen počas úpravy.
+            <span className="ord-comment-display">{line.comment ?? "—"}</span>
           )}
         </div>
       </td>

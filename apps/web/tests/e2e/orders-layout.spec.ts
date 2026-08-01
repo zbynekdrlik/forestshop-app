@@ -72,7 +72,9 @@ test("STAV je celý čitateľný a POZNÁMKY pole je dosť široké na všetkýc
     // issue 107 bod 2: pole na poznámku >= 160px pri 1280px, tlačidlo 💾 na
     // TOM ISTOM riadku (nesmie sa vrátiť k zalomeniu z issue 105).
     const poznamky = await page.evaluate(() => {
-      const input = document.querySelector<HTMLInputElement>('input[data-testid^="comment-input-"]');
+      // issue 150: pole je odteraz `<textarea>` (predtým `<input>`) —
+      // selektor bez tagu, aby fungoval po zmene elementu bez ďalšej úpravy.
+      const input = document.querySelector<HTMLTextAreaElement>('[data-testid^="comment-input-"]');
       if (!input) return { chyba: "no comment input found" };
       const button = input.closest(".ord-comment-cell")?.querySelector("button");
       const inputRect = input.getBoundingClientRect();

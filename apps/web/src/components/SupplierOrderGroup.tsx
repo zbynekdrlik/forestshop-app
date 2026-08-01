@@ -1,5 +1,5 @@
 import type { JSX } from "react";
-import { computeVariantTotals, isLineResolved } from "../ordersSummary.js";
+import { computeVariantTotals, isLineHiddenByFilter } from "../ordersSummary.js";
 import { OrderLineRow } from "./OrderLineRow.js";
 import { SupplierActionsPanel } from "./SupplierActionsPanel.js";
 import type { OrderLine, OrderMailPreview, SupplierOpenOrders } from "../ordersApi.js";
@@ -15,6 +15,8 @@ import type { OrderLine, OrderMailPreview, SupplierOpenOrders } from "../ordersA
 export function SupplierOrderGroup({
   group,
   hideResolved,
+  dirtyEditorLineIds,
+  onEditorActivityChange,
   canChangeState,
   busyLineId,
   busyOrderedLineId,
@@ -48,6 +50,11 @@ export function SupplierOrderGroup({
 }: {
   readonly group: SupplierOpenOrders;
   readonly hideResolved: boolean;
+  // issue 149: riadky s PRÁVE TERAZ otvorenou/rozpísanou úpravou — výnimka z
+  // `hideResolved` filtra nižšie, aby vybavený riadok nezmizol spod rúk
+  // manažérovi, ktorý doň ešte niečo píše (`OrdersSection.tsx`'s komentár).
+  readonly dirtyEditorLineIds: ReadonlySet<string>;
+  readonly onEditorActivityChange: (lineId: string, active: boolean) => void;
   readonly canChangeState: boolean;
   readonly busyLineId: string | null;
   readonly busyOrderedLineId: string | null;
@@ -82,7 +89,7 @@ export function SupplierOrderGroup({
   readonly onClosePreview: () => void;
   readonly onConfirmSend: (supplier: string) => void;
 }): JSX.Element | null {
-  const visibleLines = hideResolved ? group.lines.filter((line) => !isLineResolved(line)) : group.lines;
+  const visibleLines = group.lines.filter((line) => !isLineHiddenByFilter(line, hideResolved, dirtyEditorLineIds));
   if (visibleLines.length === 0) return null;
   // issue 62: súčty sa počítajú nad CELOU (nefiltrovanou) skupinou
   // dodávateľa, nikdy nad `visibleLines` — chip nesmie zmiznúť/zmeniť
@@ -188,6 +195,7 @@ export function SupplierOrderGroup({
                 onAssignSupplier={onAssignSupplier}
                 onSetSupplierLink={onSetSupplierLink}
                 onChangeComment={onChangeComment}
+                onEditorActivityChange={onEditorActivityChange}
               />
             ))}
           </tbody>
