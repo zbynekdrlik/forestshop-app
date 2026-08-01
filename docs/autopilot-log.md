@@ -3,6 +3,62 @@
 Terse per-ticket log of autopilot-worker cycles: issue(s), commit SHAs,
 RED→GREEN test names, key decisions, and the shared PR.
 
+## 2026-08-01 — #153 (immediate supplier-link validation + CSV formula-injection guard)
+
+- Solo ticket (security-boundary Scope-gate, deliberately not bundled).
+- Version bump `239c241` (0.3.0-dev.93→.94), first commit.
+- Design comment BEFORE first code commit:
+  https://github.com/zbynekdrlik/forestshop-app/issues/153#issuecomment-5151009096
+  — traced the CSV write-back path (`select-changes.ts`→`csv.ts`) and found
+  only `internalNote` (the manual supplier-link URL) is user-hand-entered
+  AND reaches the generated CSV; `code`/`pairCode` come from the catalog
+  import. Since the URL is already anchored `^https?:\/\//`, a formula-lead
+  value can never pass it anyway (matches the reference app's OWN design —
+  it never adds a separate formula-check on ITS url fields either, only on
+  its supplier-NAME field which has no other shape rule). Chose: (1)
+  `csvSafe` escaping at the CSV SINK (`csv.ts`'s `dataRowToLine`) protecting
+  EVERY column including `code`/`pairCode`, matching the sibling app's own
+  `_csv_safe`; (2) an explicit `.refine()` on the schema anyway — defense in
+  depth, independently testable (zod does NOT short-circuit chained string
+  checks — a later `.refine()` still adds its own issue even when an
+  earlier `.url()`/`.regex()` check on the same value already failed, see
+  `.claude/rules/http-routes.md`).
+- RED→GREEN, four pairs (security ticket, strict TDD):
+  `877020e`[red]→`2a314b1`[green] (CSV-sink formula escaping,
+  `formula-guard.test.ts`/`csv.test.ts`), `14ccd4b`[red]→`9113f9d`[green]
+  (schema-level explicit reject, `orders-supplier-link-assignment
+  .integration.test.ts`'s "vráti 400 so samostatnou hláškou o vzorci"),
+  `1910c6b`[red]→`5e8bf33`[green] (`validateSupplierLinkUrl`,
+  `ordersApi.supplierLink.test.ts`), `d265d83`[red]→`b698262`[green]
+  (wired into `OrdersSection`'s `setSupplierLink`,
+  `OrdersSection.supplierLinkValidation.test.tsx` — proves the API is
+  never called for an invalid link). Extracted `useSupplierLinkSave.ts`
+  (behaviour-preserving) to keep `OrdersSection.tsx` under eslint
+  `max-lines: 400` after adding the validation branch — same pattern as
+  the earlier `useSupplierEmailEditing.ts` extraction.
+- New e2e test in `orders-supplier-link.spec.ts`: an invalid link is
+  rejected with console staying CLEAN — proof the request never actually
+  reached the network (a real server 400 would have logged "Failed to
+  load resource" in Chromium, per `.claude/rules/testing.md`).
+- **Merge incident (PR #159):** `gh pr merge --merge` returned a GraphQL
+  error but had partially succeeded server-side — `main`'s ref moved to
+  the real merge commit (`d53e302`, content verified identical to `dev`
+  via `git diff`), but the PR object stayed open/unmerged AND the commit
+  got zero check-suites/check-runs (no CI, no Deploy ever ran). Closed
+  PR #159 manually with an explanatory comment; recovered by bumping the
+  version again (0.3.0-dev.94→.95) and pushing this very log entry as a
+  fresh commit (own PR) so a normal push event re-triggers CI+Deploy over
+  the full current `main` tree, including #153's already-landed content.
+  Full gotcha + recovery steps: `.claude/rules/ci.md`.
+- Playbook extended: `.claude/rules/ci.md` (the `gh pr merge`
+  partial-failure/no-CI-triggered gotcha + recovery), `.claude/rules/
+  http-routes.md` (zod `.refine()` after a failing check still runs —
+  useful for adding an independently-testable guard even when logically
+  redundant with an earlier check), `.claude/rules/shoptet-writeback.md`
+  (CSV-injection guard sits at the `csv.ts` sink, not upstream validation
+  — any future writeback column is automatically protected as long as it
+  goes through `buildWritebackCsv`).
+
 ## 2026-08-01 — #151 (supplier draft lost across group remount) + #152 (sort by newest order)
 
 - Version bump `9029b0a` (0.3.0-dev.90→.91), first commit on `dev`.

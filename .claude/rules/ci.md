@@ -36,3 +36,20 @@ paths:
 - Console-assert výnimka pre e2e testy (jediná povolená: neautentifikovaný
   `/api/me` 401) je popísaná v `.claude/rules/testing.md` — rozširovanie tejto
   výnimky je zakázané, nie len pri práci na CI configu.
+- **`gh pr merge <N> --merge` môže vrátiť GraphQL chybu ("Something went
+  wrong…"), a PRESTO na strane servera čiastočne uspieť** — `main`'s ref sa
+  posunie na skutočný merge commit (over: `gh api repos/…/git/ref/heads/main`
+  aj `git diff origin/main origin/dev`, mal by byť prázdny), ale PR objekt
+  ostane `state: open, merged: false` a — kriticky — **commit nedostane ani
+  jeden check-suite/check-run/status vôbec** (`gh api repos/…/commits/<sha>/
+  check-suites` prázdne). Keďže ani `ci.yml` ani `deploy.yml` nemajú
+  `workflow_dispatch`, takýto commit sa NIKDY nespustí spätne — opakovaný
+  `gh pr merge`/`--auto` už len hlási "not mergeable: dirty" (obsah je
+  identický, niet čo mergovať) a re-request check-suite nemá čo re-requestnúť
+  (žiadny neexistuje). **Recovery:** over najprv `git diff origin/main
+  origin/dev` (prázdny = obsah je v `main` v poriadku), zavri stary PR ručne s
+  komentárom vysvetľujúcim situáciu (`gh pr comment` + `gh pr close`, NIKDY
+  force-push/prepis `main`), a nechaj CI+Deploy dobehnúť cez ĎALŠÍ, úplne
+  bežný malý commit na `dev` (napr. plánovaný playbook/log zápis) — jeho push
+  na `main` spustí normálny beh nad CELÝM aktuálnym stromom, teda aj nad
+  obsahom, ktorý "zaskočil" bez CI.
