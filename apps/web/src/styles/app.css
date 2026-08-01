@@ -919,10 +919,18 @@ tr:last-child td {
    nižšie). Vnútri sú DVA pôvodné testid-ované bloky (`.ord-supplier-cell`/
    `.ord-supplier-assign`, nezmenené) len vedľa seba v JEDNEJ bunke namiesto
    dvoch samostatných stĺpcov. */
+/* issue 163: majiteľ, deliaca čiara riadku nelícuje pod touto bunkou —
+   príčina bola `display:flex` PRIAMO na `<td>` (odstránené), ktorý menil box
+   tejto bunky z `table-cell` na flex kontajner nerešpektujúci skutočnú výšku
+   riadku (naživo namerané: 53px vs. riadok 91.5px), takže jej border-bottom
+   sedel vyššie než rám ostatných buniek. `<td>` je teraz normálna tabuľková
+   bunka — jej výška sa riadi rovnakým mechanizmom ako pri VŠETKÝCH ostatných
+   stĺpcoch (max naprieč bunkami riadku), takže border-bottom vždy lícuje, na
+   KAŽDEJ výške obsahu (rôzny zoom/šírka, "skryť vybavené"). Zvislý gap medzi
+   `.ord-supplier-row`/`.ord-supplier-assign` (predtým rodičovský flex `gap`)
+   nesie teraz `.ord-supplier-assign`'s vlastný `margin-top` nižšie. */
 .ord-supplier-merged {
-  display: flex;
-  flex-direction: column;
-  gap: var(--fs-space-1);
+  max-width: 100%;
 }
 /* issue 67: odkaz/kód dodávateľa pri riadku objednávky. */
 .ord-supplier-cell {
@@ -991,6 +999,10 @@ tr:last-child td {
   gap: var(--fs-space-1);
   flex-wrap: wrap;
   max-width: 100%;
+  /* issue 163: nahrádza rodičovský `.ord-supplier-merged`'s bývalý flex
+     `gap` (odstránené — pozri jeho komentár) — tento blok sa vykresľuje VŽDY
+     AŽ za `.ord-supplier-row`, takže `margin-top` dáva identickú medzeru. */
+  margin-top: var(--fs-space-1);
 }
 .ord-supplier-assign-input {
   /* issue 105 bod 3: `width: 8rem` (fixed) + `max-width: 100%` still forced
