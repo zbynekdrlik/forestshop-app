@@ -243,6 +243,14 @@ export interface OrderLineCandidate {
   // Nepovinný stĺpec exportu — chýbajúci alebo prázdny (po orezaní) sa
   // mapuje na `null`, nikdy na prázdny reťazec.
   readonly remark: string | null;
+  // issue 164: INTERNÁ poznámka e-shopu (export's `shopRemark` stĺpec 28 —
+  // NIE `remark` vyššie, zákaznícky odkaz). Surová hodnota, tak ako prišla z
+  // exportu (môže niesť aj náš vlastný zapísaný blok, issue 123) — rozdelenie
+  // na "naše"/"cudzie" sa počíta AŽ na čítacej strane
+  // (`shoptet-writeback/note-block.ts`'s `extractForeignShopRemark`, volané z
+  // `queries.ts`), nikdy tu. Nepovinný stĺpec, rovnaký null-mapping ako
+  // `remark`.
+  readonly shopRemark: string | null;
   readonly placedAt: Date;
   readonly variantCode: string;
   readonly quantity: number;
@@ -320,6 +328,7 @@ export function mapOrderRow(row: Readonly<Record<string, string>>): {
   }
 
   const rawRemark = (row["remark"] ?? "").trim();
+  const rawShopRemark = (row["shopRemark"] ?? "").trim();
 
   return {
     record: {
@@ -327,6 +336,7 @@ export function mapOrderRow(row: Readonly<Record<string, string>>): {
       customerName: customerNameOf(row),
       statusName: normalizeStatusName(row["statusName"] ?? ""),
       remark: rawRemark === "" ? null : rawRemark,
+      shopRemark: rawShopRemark === "" ? null : rawShopRemark,
       placedAt,
       variantCode,
       quantity,
