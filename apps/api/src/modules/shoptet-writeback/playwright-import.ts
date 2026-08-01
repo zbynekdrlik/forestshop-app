@@ -179,7 +179,20 @@ export async function runShoptetImport(options: RunShoptetImportOptions): Promis
     if ((await fileInput.count()) === 0) {
       throw new Error(`Nenašiel som import formulár (file input) na ${page.url()}`);
     }
-    await fileInput.setInputFiles(csvPath);
+    // Priame `setInputFiles` na skrytý `<input>` NESTAČÍ — Shoptetov widget
+    // (React) drží "súbor vybraný" stav sám v sebe, naviazaný na natívny
+    // file-chooser dialóg spustený VIDITEĽNÝM tlačidlom "Vyberte súbor", nie
+    // na `change` event skrytého inputu (rovnaké zistenie ako sesterský
+    // `scripts/shoptet_import.py`'s `_do_import`: "Shoptet widget inak súbor
+    // nezaregistruje" — overené naživo pri návrhu #122: priamy
+    // `setInputFiles` nechal formulár tichoodmietnuť odoslanie, `buttonImport`
+    // klik nikdy nenavigoval na Log). Port toho istého postupu: počkaj na
+    // `filechooser` event VYVOLANÝ klikom na viditeľné tlačidlo, súbor nastav
+    // na ZACHYTENÝ chooser objekt.
+    const fileChooserPromise = page.waitForEvent("filechooser");
+    await page.locator('button:has-text("Vyberte súbor")').first().click();
+    const fileChooser = await fileChooserPromise;
+    await fileChooser.setFiles(csvPath);
     await ensureSafeSettings(page);
 
     await page.getByTestId("buttonImport").click();
