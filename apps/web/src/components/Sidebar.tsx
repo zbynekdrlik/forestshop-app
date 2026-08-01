@@ -13,10 +13,16 @@ export function Sidebar({
   folders,
   activeTabId,
   onSelectTab,
+  badgeCounts,
 }: {
   readonly folders: readonly NavFolder[];
   readonly activeTabId: string;
   readonly onSelectTab: (id: string) => void;
+  // issue 147: voliteľný odznak (počet) per záložka, kľúčovaný `tab.id` — dnes
+  // ho posiela len "Na objednanie" (`App.tsx`), ale Sidebar zostáva generický,
+  // aby AKÁKOĽVEK budúca záložka mohla dostať odznak bez zásahu sem. Chýbajúci
+  // kľúč = žiadny odznak (nie "0" — appka ešte nevie, nie "isté nula").
+  readonly badgeCounts?: Readonly<Record<string, number>>;
 }): JSX.Element {
   const [collapsed, setCollapsed] = useState<Readonly<Record<string, boolean>>>({});
 
@@ -51,19 +57,27 @@ export function Sidebar({
               </button>
               <div className="folder-body">
                 <div className="tabs">
-                  {folder.tabs.map((tab) => (
-                    <button
-                      key={tab.id}
-                      type="button"
-                      className={"tab" + (tab.id === activeTabId ? " active" : "")}
-                      aria-current={tab.id === activeTabId ? "page" : undefined}
-                      onClick={() => {
-                        onSelectTab(tab.id);
-                      }}
-                    >
-                      <span className="tlabel">{tab.label}</span>
-                    </button>
-                  ))}
+                  {folder.tabs.map((tab) => {
+                    const badgeCount = badgeCounts?.[tab.id];
+                    return (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        className={"tab" + (tab.id === activeTabId ? " active" : "")}
+                        aria-current={tab.id === activeTabId ? "page" : undefined}
+                        onClick={() => {
+                          onSelectTab(tab.id);
+                        }}
+                      >
+                        <span className="tlabel">{tab.label}</span>
+                        {badgeCount !== undefined && (
+                          <span className="tab-badge" data-testid={`nav-badge-${tab.id}`}>
+                            {badgeCount}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             </div>

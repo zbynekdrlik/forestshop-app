@@ -312,6 +312,29 @@ tr:last-child td {
   color: var(--fs-brand-strong);
   font-weight: var(--fs-weight-semibold);
 }
+.tlabel {
+  flex: 1;
+}
+/* issue 147: odznak počtu nevybavených riadkov (dnes len "Na objednanie",
+   ale generický pre AKÚKOĽVEK budúcu záložku — `Sidebar.tsx`'s `badgeCounts`
+   prop). Vlastný dizajn tejto appky (nikdy prevzatý zo starej appky, viď
+   `.claude/rules/frontend-design.md`) — malá guľatá pilulka v brand farbe,
+   `flex-shrink: 0` aby ju dlhší popisok záložky nikdy nestlačil. */
+.tab-badge {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  padding: 0 var(--fs-space-1);
+  border-radius: var(--fs-radius-lg);
+  background: var(--fs-brand);
+  color: #fff;
+  font-size: var(--fs-text-xs);
+  font-weight: var(--fs-weight-semibold);
+  line-height: 1.25rem;
+}
 
 .sidefoot {
   border-top: 1px solid var(--fs-border);

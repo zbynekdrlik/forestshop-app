@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type JSX } from "react";
+import { useCallback, useEffect, useMemo, useState, type JSX } from "react";
 import { fetchMe, postLogout, type Me } from "./api.js";
 import { ChangePasswordForm } from "./components/ChangePasswordForm.js";
 import { Footer } from "./components/Footer.js";
@@ -6,6 +6,7 @@ import { LoginForm } from "./components/LoginForm.js";
 import { Sidebar } from "./components/Sidebar.js";
 import { Topbar } from "./components/Topbar.js";
 import { DEFAULT_TAB_ID, NAV, findTab, isVisibleTabId } from "./nav.js";
+import { OrdersRemainingCountContext } from "./ordersRemainingCountContext.js";
 
 // Prvá záložka z URL-u (`?tab=<id>`), keď existuje a je platná — inak
 // predvolená ("Sync zo Shoptetu"). Umožňuje priamy odkaz aj na SKRYTÉ
@@ -25,6 +26,20 @@ export function App(): JSX.Element {
   const [logoutError, setLogoutError] = useState("");
   const [activeTabId, setActiveTabId] = useState<string>(initialTabId);
   const [passwordPanelOpen, setPasswordPanelOpen] = useState(false);
+  // issue 147: odznak počtu nevybavených riadkov "Na objednanie" v ľavom menu
+  // — `OrdersSection` (kdekoľvek je práve zmountnutá) ho publikuje cez
+  // `OrdersRemainingCountContext`, App.tsx (spoločný predok Sidebar-u aj
+  // aktívnej záložky) drží poslednú známú hodnotu a posiela ju do `Sidebar`
+  // generickým `badgeCounts` prop-om — žiadne "if tab === orders" tu.
+  const [ordersRemainingCount, setOrdersRemainingCount] = useState<number | null>(null);
+  const ordersRemainingCountContextValue = useMemo(
+    () => ({ count: ordersRemainingCount, setCount: setOrdersRemainingCount }),
+    [ordersRemainingCount],
+  );
+  const badgeCounts = useMemo<Readonly<Record<string, number>>>(
+    () => (ordersRemainingCount !== null ? { orders: ordersRemainingCount } : {}),
+    [ordersRemainingCount],
+  );
 
   const reload = useCallback(() => {
     setMeUnreachable(false);
@@ -94,25 +109,27 @@ export function App(): JSX.Element {
   }
 
   return (
-    <div className="app-shell">
-      <Sidebar folders={NAV} activeTabId={activeTabId} onSelectTab={selectTab} />
-      <div className="main">
-        <Topbar
-          title={isVisibleTabId(activeTabId) ? (tab?.label ?? null) : null}
-          greeting={`Prihlásený: ${me.displayName} (${me.role})`}
-          onLogout={logout}
-          passwordPanelOpen={passwordPanelOpen}
-          onTogglePasswordPanel={() => {
-            setPasswordPanelOpen((open) => !open);
-          }}
-        >
-          <ChangePasswordForm email={me.email} onSessionExpired={reload} />
-        </Topbar>
-        <main className={tab?.wide === true ? "main-wide" : undefined}>
-          {logoutError !== "" && <p role="alert">{logoutError}</p>}
-          {ActiveComponent !== null && <ActiveComponent role={me.role} onSessionExpired={reload} />}
-        </main>
+    <OrdersRemainingCountContext.Provider value={ordersRemainingCountContextValue}>
+      <div className="app-shell">
+        <Sidebar folders={NAV} activeTabId={activeTabId} onSelectTab={selectTab} badgeCounts={badgeCounts} />
+        <div className="main">
+          <Topbar
+            title={isVisibleTabId(activeTabId) ? (tab?.label ?? null) : null}
+            greeting={`Prihlásený: ${me.displayName} (${me.role})`}
+            onLogout={logout}
+            passwordPanelOpen={passwordPanelOpen}
+            onTogglePasswordPanel={() => {
+              setPasswordPanelOpen((open) => !open);
+            }}
+          >
+            <ChangePasswordForm email={me.email} onSessionExpired={reload} />
+          </Topbar>
+          <main className={tab?.wide === true ? "main-wide" : undefined}>
+            {logoutError !== "" && <p role="alert">{logoutError}</p>}
+            {ActiveComponent !== null && <ActiveComponent role={me.role} onSessionExpired={reload} />}
+          </main>
+        </div>
       </div>
-    </div>
+    </OrdersRemainingCountContext.Provider>
   );
 }
