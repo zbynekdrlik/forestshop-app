@@ -108,6 +108,25 @@ test("STAV je celý čitateľný a POZNÁMKY pole je dosť široké na všetkýc
     });
     expect(vysokeKompaktneRiadky, `príliš vysoké riadky pri ${String(width)}px`).toEqual([]);
 
+    // issue 163: majiteľ, deliaca čiara riadku nelícuje pod bunkou s
+    // odkazom na dodávateľa — `td.ord-supplier-merged` má vlastný
+    // `display:flex`, ktorý ju v tabuľkovom layoute zmenšuje na výšku
+    // VLASTNÉHO obsahu namiesto skutočnej výšky riadku (tú si vynucujú iné,
+    // vyššie bunky), takže jej border-bottom sedí vyššie než u susedných
+    // buniek. Kontrola: PRE KAŽDÝ viditeľný riadok musí spodný okraj tejto
+    // bunky lícovať so spodným okrajom riadku (±1px, subpixelové
+    // zaokrúhlenie pri neceločíselnom zoome/DPR).
+    const nezarovnaneDelice = await page.evaluate(() => {
+      return [...document.querySelectorAll<HTMLElement>("tr[data-testid^='order-line-']")]
+        .map((riadok) => {
+          const bunka = riadok.querySelector<HTMLElement>("td.ord-supplier-merged");
+          if (bunka === null) return null;
+          return Math.abs(bunka.getBoundingClientRect().bottom - riadok.getBoundingClientRect().bottom);
+        })
+        .filter((rozdiel): rozdiel is number => rozdiel !== null && rozdiel > 1);
+    });
+    expect(nezarovnaneDelice, `nezarovnané deliace čiary pod bunkou dodávateľa pri ${String(width)}px`).toEqual([]);
+
     // issue 111 body 1+2: číslo objednávky ANI kód produktu sa nesmú
     // zalomiť na viac riadkov, na ŽIADNEJ zo 4 šírok — kontroluje sa AJ
     // `white-space: nowrap` (mechanizmus, ktorý garantuje toto natrvalo, aj
@@ -170,6 +189,25 @@ test("STAV je celý čitateľný a POZNÁMKY pole je dosť široké na všetkýc
       expect(strankaSaPosuva, "stránka sa vodorovne posúva pri 1280px").toBe(false);
     }
   }
+
+  // issue 163: rovnaká deliaca-čiara kontrola aj pri ZAPNUTOM prepínači
+  // "skryť vybavené" — fix je štrukturálny (CSS na `<td>`), nie závislý od
+  // POČTU vykreslených riadkov, ale ticket to explicitne žiada overiť oboma
+  // stavmi prepínača.
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.getByTestId("orders-hide-resolved-toggle").click();
+  const nezarovnaneDeliceSkryte = await page.evaluate(() => {
+    return [...document.querySelectorAll<HTMLElement>("tr[data-testid^='order-line-']")]
+      .map((riadok) => {
+        const bunka = riadok.querySelector<HTMLElement>("td.ord-supplier-merged");
+        if (bunka === null) return null;
+        return Math.abs(bunka.getBoundingClientRect().bottom - riadok.getBoundingClientRect().bottom);
+      })
+      .filter((rozdiel): rozdiel is number => rozdiel !== null && rozdiel > 1);
+  });
+  expect(nezarovnaneDeliceSkryte, "nezarovnané deliace čiary pri zapnutom 'skryť vybavené'").toEqual([]);
+  // Vrátiť prepínač do pôvodného stavu.
+  await page.getByTestId("orders-hide-resolved-toggle").click();
 
   expect(chyby).toEqual([]);
 });
