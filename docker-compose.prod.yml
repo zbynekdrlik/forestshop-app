@@ -66,6 +66,21 @@ services:
       # v `/srv/forestshop/.env` — bare kľúč tu je len na to, aby sa dala
       # doména zmeniť BEZ nového deploy/buildu, keby to niekedy bolo treba.
       SHOPTET_ADMIN_BASE_URL:
+      # issue 122: spätný zápis odkazu na dodávateľa do Shoptetu cez hromadný
+      # CSV import (Playwright) — rovnaká úvaha ako SHOPTET_EXPORT_URL vyššie:
+      # `.optional()` v `env.ts`, bare kľúč preberá `/srv/forestshop/.env`,
+      # keď tam je; keď nie je, appka beží ďalej, len naplánovaná úloha
+      # zaznamená "nenakonfigurované" (nikdy sa netýka manuálneho HTTP
+      # requestu, na rozdiel od SHOPTET_EXPORT_URL). Skutočné prihlasovacie
+      # údaje — nikdy natvrdo, nikdy do repa.
+      SHOPTET_ADMIN_USER:
+      SHOPTET_ADMIN_PASSWORD:
+      # Alpine (base image) nemá Playwright's vlastný stiahnutý Chromium —
+      # `Dockerfile` inštaluje systémový `apk add chromium` a
+      # `playwright-import.ts`'s `resolveChromiumExecutablePath` ho nájde
+      # automaticky (pevné cesty `/usr/bin/chromium-browser`/`/usr/bin/chromium`),
+      # tento riadok je len núdzový override, keby sa cesta niekedy zmenila.
+      CHROMIUM_EXECUTABLE_PATH:
       # Odosielanie objednávky dodávateľovi mailom (#31) — rovnaká úvaha ako
       # SHOPTET_EXPORT_URL vyššie: `.optional()` v `env.ts`, bare kľúč
       # preberá `/srv/forestshop/.env`, keď tam je; keď nie je, appka beží

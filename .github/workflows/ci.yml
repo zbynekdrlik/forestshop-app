@@ -45,6 +45,10 @@ jobs:
         with: { node-version: 24, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @forestshop/api db:migrate
+      # issue 122: shoptet-writeback's integration tests drive a REAL
+      # Chromium (via `playwright`) against a local fixture server (never the
+      # real Shoptet) — same install step apps/web's e2e job already uses.
+      - run: pnpm --filter @forestshop/api exec playwright install --with-deps chromium
       - run: pnpm --filter @forestshop/api test:integration
 
   e2e:
