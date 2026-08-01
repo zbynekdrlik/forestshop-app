@@ -591,6 +591,29 @@ tr:last-child td {
   margin-bottom: var(--fs-space-6);
 }
 
+/* issue 66: kumulatívny banner "Nepodarilo sa uložiť N položiek" —
+   `[role="alert"]` (sekcia 2) už dáva farbu/padding/radius, tu len rozloženie
+   hlavičky (nadpis + zatváracie tlačidlo) a odstup zoznamu položiek. */
+.order-write-failures {
+  display: flex;
+  flex-direction: column;
+  gap: var(--fs-space-2);
+}
+.order-write-failures-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--fs-space-3);
+  font-weight: var(--fs-weight-semibold);
+}
+.order-write-failures ul {
+  margin: 0;
+  padding-left: var(--fs-space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--fs-space-1);
+}
+
 /* issue 61: filtrovacie štítky dodávateľov + súhrn "ostáva vybaviť" +
    prepínač "skryť vybavené" — vlastný jazyk tejto appky (issue výslovne
    žiada dizajn podľa NOVEJ appky, nie prevzaté farby starej). */

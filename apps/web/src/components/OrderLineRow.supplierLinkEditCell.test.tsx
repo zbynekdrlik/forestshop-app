@@ -126,8 +126,11 @@ it("zlyhanie uloženia zobrazí slovenskú hlášku", async () => {
   fireEvent.change(vstup, { target: { value: "https://zly-odkaz.example.com" } });
   fireEvent.click(within(riadok).getByTestId(`supplier-link-edit-save-${RIADOK_BEZ_ODKAZU.lineId}`));
 
+  // issue 66: kumulatívny banner nahrádza pôvodný jediný `<p role="alert">`.
   await waitFor(() => {
-    expect(screen.getByRole("alert").textContent).toBe("Uloženie odkazu na dodávateľa sa nepodarilo");
+    expect(screen.getByRole("alert").textContent).toBe(
+      "⚠️ Nepodarilo sa uložiť 1 položku×Odkaz na dodávateľa — obj. 20261400, kód E-1 (Uloženie odkazu na dodávateľa sa nepodarilo)",
+    );
   });
 });
 
