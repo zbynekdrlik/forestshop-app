@@ -93,7 +93,7 @@ describe("runOrderNoteWriteback (proti fixture, nikdy proti reálnemu Shoptetu)"
   );
 
   it(
-    "processes MULTIPLE orders in one login session, and a failure on one does not stop the rest",
+    "processes MULTIPLE orders in one login session, all succeeding",
     async () => {
       fixture = await startOrderDetailFixture({ user: "manager", password: "tajneheslo" });
 
@@ -110,6 +110,36 @@ describe("runOrderNoteWriteback (proti fixture, nikdy proti reálnemu Shoptetu)"
         { orderId: "order-2", externalOrderId: "20261272", ok: true, errorDetail: null },
       ]);
       expect(fixture.getShopRemark(59783)).toContain("Prvá poznámka");
+      expect(fixture.getShopRemark(59780)).toContain("Druhá poznámka");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    // review of PR 143: predchádzajúca verzia tohto testu mala obe
+    // objednávky vždy úspešné, takže NIKDY nezacvičila per-objednávkovú
+    // try/catch vetvu vo `writeOneOrderNote` — `breakOrder` teraz naozaj
+    // vráti stránku BEZ `textarea[name=shopRemark]` pre PRVÚ objednávku,
+    // aby test dokázal, že jej zlyhanie NEPRERUŠÍ zápis druhej.
+    "a GENUINE failure on one order (missing shopRemark field) does not stop the rest",
+    async () => {
+      fixture = await startOrderDetailFixture({ user: "manager", password: "tajneheslo" });
+      fixture.breakOrder(59783);
+
+      const results = await runOrderNoteWriteback({
+        config: { loginUrl: `${fixture.baseUrl}/admin/`, adminBaseUrl: fixture.baseUrl, user: "manager", password: "tajneheslo" },
+        orders: [
+          { orderId: "order-1", externalOrderId: "20261273", shoptetOrderId: 59783, comment: "Prvá poznámka" },
+          { orderId: "order-2", externalOrderId: "20261272", shoptetOrderId: 59780, comment: "Druhá poznámka" },
+        ],
+      });
+
+      expect(results).toHaveLength(2);
+      expect(results[0]?.ok).toBe(false);
+      expect(results[0]?.errorDetail).toMatch(/shopRemark/);
+      expect(results[1]).toEqual({ orderId: "order-2", externalOrderId: "20261272", ok: true, errorDetail: null });
+      // the broken order never got a value written; the healthy one did
+      expect(fixture.getShopRemark(59783)).toBeNull();
       expect(fixture.getShopRemark(59780)).toContain("Druhá poznámka");
     },
     TEST_TIMEOUT_MS,

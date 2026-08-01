@@ -26,6 +26,11 @@ export interface OrderDetailFixture {
    * ručne napísaný text predajne, ktorý appka nesmie prepísať). */
   seedShopRemark(id: number, text: string): void;
   getShopRemark(id: number): string | null;
+  /** Review of PR 143: `id` sa vráti bez `textarea[name=shopRemark]` (napr.
+   * zmazaná/nedostupná objednávka) — overuje, že `writeOneOrderNote`
+   * (`order-note-playwright.ts`) TÚTO objednávku nahlási ako `ok:false` s
+   * chybovým detailom, ale NEPRERUŠÍ zvyšok zoznamu. */
+  breakOrder(id: number): void;
   close(): Promise<void>;
 }
 
@@ -60,9 +65,17 @@ function orderDetailPage(id: number, shopRemark: string): string {
   </body></html>`;
 }
 
+// review of PR 143: simuluje objednávku, ktorá sa reálne stane nedostupnou
+// (zmazaná/inak zobrazená) — stránka BEZ `textarea[name=shopRemark]`, presne
+// tvar, na ktorý `writeOneOrderNote` reaguje vlastnou chybou.
+function brokenOrderDetailPage(id: number): string {
+  return `<!doctype html><html><body><h2>Objednávka ${String(id)} nenájdená</h2></body></html>`;
+}
+
 export async function startOrderDetailFixture(options: OrderDetailFixtureOptions): Promise<OrderDetailFixture> {
   const app = new Hono();
   const shopRemarks = new Map<number, string>();
+  const brokenIds = new Set<number>();
 
   app.get("/admin/", (c) => {
     const cookie = getCookie(c, COOKIE_NAME);
@@ -80,6 +93,7 @@ export async function startOrderDetailFixture(options: OrderDetailFixtureOptions
   app.get("/admin/objednavky-detail/", (c) => {
     if (getCookie(c, COOKIE_NAME) !== "ok") return c.redirect("/admin/", 303);
     const id = Number(c.req.query("id"));
+    if (brokenIds.has(id)) return c.html(brokenOrderDetailPage(id));
     return c.html(orderDetailPage(id, shopRemarks.get(id) ?? ""));
   });
 
@@ -115,6 +129,9 @@ export async function startOrderDetailFixture(options: OrderDetailFixtureOptions
       shopRemarks.set(id, text);
     },
     getShopRemark: (id) => shopRemarks.get(id) ?? null,
+    breakOrder: (id) => {
+      brokenIds.add(id);
+    },
     close: () =>
       new Promise<void>((resolve, reject) => {
         server.close((err) => {
