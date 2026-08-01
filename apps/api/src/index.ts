@@ -19,8 +19,11 @@ import {
   pruneRawExportsJob,
   pruneRawOrdersJob,
   sessionCleanupJob,
+  shoptetWritebackJob,
 } from "./modules/scheduler/jobs.js";
 import { startScheduler } from "./modules/scheduler/scheduler.js";
+import { shoptetImportConfigFromBaseUrl } from "./modules/shoptet-writeback/config.js";
+import { runShoptetWriteback } from "./modules/shoptet-writeback/run-writeback.js";
 import { createShutdownHandler } from "./shutdown.js";
 import { appVersion } from "./version.js";
 
@@ -103,6 +106,24 @@ const sendSupplierMail =
         from: env.MAIL_FROM,
       });
 
+// issue 122: spätný zápis odkazu na dodávateľa do Shoptetu — rovnaká úvaha
+// ako `runIngest`/`runOrdersIngest`/`sendSupplierMail` vyššie:
+// `SHOPTET_ADMIN_USER`/`PASSWORD` sú nepovinné (`env.ts`), appka beží ďalej
+// bez nich, len naplánovaná úloha zaznamená "nenakonfigurované"
+// (`scheduler/jobs.ts`'s `shoptetWritebackJob`). Žiadna HTTP cesta ich
+// nepotrebuje (na rozdiel od tamtých troch) — toto je LEN scheduler.
+const shoptetAdminUser = env.SHOPTET_ADMIN_USER;
+const shoptetAdminPassword = env.SHOPTET_ADMIN_PASSWORD;
+const runShoptetWritebackFn =
+  shoptetAdminUser === undefined || shoptetAdminPassword === undefined
+    ? undefined
+    : (db2: typeof db, now: Date) =>
+        runShoptetWriteback(
+          db2,
+          shoptetImportConfigFromBaseUrl(env.SHOPTET_ADMIN_BASE_URL, shoptetAdminUser, shoptetAdminPassword),
+          now,
+        );
+
 const app = createApp(db, {
   cookieSecure: env.SESSION_COOKIE_SECURE,
   ...(runIngest === undefined ? {} : { runIngest }),
@@ -124,6 +145,7 @@ const scheduler = startScheduler(db, [
   sessionCleanupJob(),
   ordersImportJob(runOrdersIngest),
   pruneRawOrdersJob(env.ORDERS_RAW_DIR),
+  shoptetWritebackJob(runShoptetWritebackFn),
 ]);
 
 // `@hono/node-server`'s `serveStatic` prints its OWN `console.error` on every

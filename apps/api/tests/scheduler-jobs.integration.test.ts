@@ -12,11 +12,14 @@ import {
   PRUNE_RAW_EXPORTS_JOB_NAME,
   PRUNE_RAW_ORDERS_JOB_NAME,
   SESSION_CLEANUP_JOB_NAME,
+  SHOPTET_WRITEBACK_JOB_NAME,
+  SHOPTET_WRITEBACK_NOT_CONFIGURED,
   catalogImportJob,
   ordersImportJob,
   pruneRawExportsJob,
   pruneRawOrdersJob,
   sessionCleanupJob,
+  shoptetWritebackJob,
 } from "../src/modules/scheduler/jobs.js";
 import { insertTestSnapshot } from "./helpers/catalog.js";
 import { withCleanDb } from "./helpers/db.js";
@@ -150,4 +153,23 @@ it("pruneRawOrdersJob deleguje na existujúci pruneRawOrders — starý surový 
   expect(job.name).toBe(PRUNE_RAW_ORDERS_JOB_NAME);
   const outcome = await job.run({} as never, NOW);
   expect(outcome).toEqual({ detail: { removed: 1 } });
+});
+
+it("shoptetWritebackJob bez nakonfigurovaného runWriteback VYHODÍ (zachytí ho scheduler.ts, zapíše ako failure)", async () => {
+  const job = shoptetWritebackJob(undefined);
+  expect(job.name).toBe(SHOPTET_WRITEBACK_JOB_NAME);
+  await expect(job.run({} as never, NOW)).rejects.toThrow(SHOPTET_WRITEBACK_NOT_CONFIGURED);
+});
+
+it("shoptetWritebackJob s nakonfigurovaným runWriteback naň deleguje a vráti jeho výsledok ako detail", async () => {
+  const fakeResult = { status: "nothing_changed" } as const;
+  let receivedNow: Date | undefined;
+  const job = shoptetWritebackJob((_db, now) => {
+    receivedNow = now;
+    return Promise.resolve(fakeResult);
+  });
+
+  const outcome = await job.run({} as never, NOW);
+  expect(outcome).toEqual({ detail: fakeResult });
+  expect(receivedNow).toBe(NOW);
 });

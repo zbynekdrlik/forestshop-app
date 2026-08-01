@@ -31,9 +31,11 @@ paths:
   (`daily`), 01:15 mazanie surových exportov katalógu (`daily`), 01:30
   mazanie relácií (`daily`), :45 KAŽDÚ hodinu import objednávok
   (`ordersImportJob`, `hourly` od #115, pôvodne `daily` #22), 02:00 mazanie
-  surových exportov objednávok (`pruneRawOrdersJob`, `daily`, #28). Pridanie
-  ďalšieho `kind` (napr. "weekly") by znamenalo rozšíriť `periodKey()`
-  (`scheduler.ts`) o ďalšiu vetvu — rovnaký vzor ako `hourly`.
+  surových exportov objednávok (`pruneRawOrdersJob`, `daily`, #28), :50
+  KAŽDÚ hodinu spätný zápis odkazov na dodávateľa do Shoptetu
+  (`shoptetWritebackJob`, `hourly`, issue 122 — mimo kolízie s `:45`).
+  Pridanie ďalšieho `kind` (napr. "weekly") by znamenalo rozšíriť
+  `periodKey()` (`scheduler.ts`) o ďalšiu vetvu — rovnaký vzor ako `hourly`.
 - **Job NEPOTREBUJE vlastný advisory zámok, keď buď (a) volaná business
   funkcia už berie svoj vlastný vnútri seba** (`catalogImportJob`/
   `ordersImportJob` → `ingestCatalog`/`ingestOrders`), **alebo (b) sa vôbec
@@ -48,7 +50,11 @@ paths:
   `787_878_003` (`INGEST_ORDERS_ADVISORY_LOCK_KEY`, `orders/ingest.ts`, #21),
   `787_878_100` (`TEST_DB_ISOLATION_LOCK_KEY`, `tests/helpers/db.ts`).
   `ordersImportJob`/`pruneRawOrdersJob` (#22/#28) nepridali žiadny nový kľúč
-  (pozri bod vyššie).
+  (pozri bod vyššie). `shoptetWritebackJob` (issue 122) tiež žiadny nepridal
+  — v tomto tickete niet manuálneho HTTP triggeru na tú istú prácu (na
+  rozdiel od `catalogImportJob`/`ordersImportJob`, ktoré preto majú svoj
+  vlastný zámok VNÚTRI `ingestCatalog`/`ingestOrders`), takže scheduler
+  tick()'s vlastný zámok (bod nižšie) stačí.
 - **`tick()`'s zámok chráni LEN kontrolu splatnosti + vloženie "running"
   riadku, NIE celý beh úlohy.** `job.run()` beží AŽ PO commite transakcie so
   zámkom, mimo neho — dlho bežiaci job (napr. 54 MB import katalógu) tak
