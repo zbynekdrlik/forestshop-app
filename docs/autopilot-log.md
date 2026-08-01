@@ -2111,3 +2111,43 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
   presun obsahu do NOVÉHO súrodeneckého `<tr>` rozbíja `within(riadok)`-
   scoped testy (fix: `screen.getByTestId`/Playwright `xpath=./following-
   sibling::tr[1]`); nový testid nesmie zdieľať existujúci `^='...'` prefix.
+
+## 2026-08-01 — #163 (notes-column divider, reopened) + #166 (link-editor silent close)
+
+- Bundled batch (2 issues, same files) — ~106 LoC, well under the gate.
+- Version bump `7f85933` (0.3.0-dev.96→.97), first commit.
+- STEP 0 validation comments (live Playwright against v0.3.0-dev.96 production):
+  issue-comment-5152731928 (#163), -5152733426 (#166).
+- Design comments BEFORE first code commit:
+  issue-comment-5152734877 (#163) — same `display:flex`-on-`<td>` bug as
+  `.ord-supplier-merged` (PR #165), now in `.ord-notes-merged`; fix mirrors
+  the established pattern exactly.
+  issue-comment-5152736764 (#166) — root cause: `saveLink()` closed the
+  editor unconditionally, ignoring the SYNCHRONOUS validation result
+  `setSupplierLink` already computed; fix threads a `boolean` return through
+  instead of duplicating `validateSupplierLinkUrl` a second time.
+- RED→GREEN commits: `9be7508`→`18e6502` (#163, e2e `orders-layout.spec.ts`
+  generalized to check ALL `<td>` in a row, not just one hardcoded class);
+  `431492b`→`c64d4e7` (#166, new vitest test in
+  `OrdersSection.supplierLinkValidation.test.tsx` proving the editor stays
+  open with the typed text preserved).
+- Local pre-push: lint/typecheck clean, web vitest 38/38 files (283 tests),
+  api unit 334 + integration 294, FULL e2e suite (all 9 spec files, 25
+  tests) — all green.
+- Review comments BEFORE merge: issue-comment-5152866330 (#163),
+  -5152867404 (#166) — `/review` + deep `requesting-code-review` subagent
+  (git range d127c201..c64d4e7): 0 🔴 0 🟡 0 🔵 both.
+- PR #167, CI (both `push` + `pull_request` triggers) all green, mergeable/
+  CLEAN. Merged `1715dc3`. Main CI + Deploy both `success`.
+- Live post-deploy verification (v0.3.0-dev.97): all 41 order rows have
+  every `<td>` bottom-aligned with the row (0px diff, was 19-20.5px on
+  notes); invalid link input keeps editor open with typed text + exact
+  message, 0 fetch calls. Zero console errors. DB baseline unchanged
+  (0|0|535|881|0).
+- Tickets closed by hand (`gh issue close`) AFTER live verification, per
+  this repo's CLAUDE.md auto-close-trap note — neither PR body nor any
+  commit message used `Closes #`/`Fixes #`.
+- Playbook: no new gotcha beyond what `.claude/rules/frontend-design.md`
+  already documents for the `display:flex`-on-`<td>` class of bug — this
+  ticket was a second, predicted instance of exactly that documented
+  pattern, confirming the existing entry rather than adding a new one.
