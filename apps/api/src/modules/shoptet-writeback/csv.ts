@@ -8,6 +8,8 @@
  * zmeniť" + párovacie stĺpce).
  */
 
+import { csvSafe } from "./formula-guard.js";
+
 export interface WritebackRow {
   readonly code: string;
   readonly pairCode: string;
@@ -30,6 +32,17 @@ function rowToLine(values: readonly string[]): string {
   return values.map(quoteField).join(";");
 }
 
+// issue 153: CSV-injection ochrana PRI ZÁPISE — `csvSafe` sa aplikuje na
+// KAŽDÚ bunku DÁTOVÉHO riadku (nie na hlavičku, tá je statická), bez ohľadu
+// na to, čo už overila validácia vyššie (`code`/`pairCode` prichádzajú z
+// katalógového importu, ktorý ŽIADNU takú kontrolu nerobí). Poradie MUSÍ byť
+// `csvSafe` PRED `quoteField` — pridaná úvodná `'` sama osebe nikdy
+// nevyžaduje CSV-uvodzovanie, ale pôvodná hodnota môže, takže `quoteField`
+// beží AŽ na výslednom (už neutralizovanom) reťazci.
+function dataRowToLine(values: readonly string[]): string {
+  return values.map(csvSafe).map(quoteField).join(";");
+}
+
 /**
  * Builds the write-back CSV as a Buffer ready to upload — UTF-8 BOM prefix,
  * one row per given variant (caller decides which variants: one per changed
@@ -41,7 +54,7 @@ export function buildWritebackCsv(rows: readonly WritebackRow[]): Buffer {
   if (rows.length === 0) {
     throw new Error("buildWritebackCsv: žiadne riadky na zápis — CSV sa nesmie nahrať prázdne");
   }
-  const lines = [rowToLine(HEADER), ...rows.map((r) => rowToLine([r.code, r.pairCode, r.internalNote]))];
+  const lines = [rowToLine(HEADER), ...rows.map((r) => dataRowToLine([r.code, r.pairCode, r.internalNote]))];
   const bom = "﻿";
   return Buffer.from(bom + lines.join("\r\n") + "\r\n", "utf8");
 }
