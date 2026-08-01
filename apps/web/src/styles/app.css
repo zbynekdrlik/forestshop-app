@@ -1263,6 +1263,23 @@ tr:last-child td {
   color: var(--fs-ink-muted);
 }
 
+/* issue 164: INTERNÁ poznámka e-shopu (LEN cudzí text, appkin vlastný blok
+   nikdy neobsahuje) — rovnaký orezávací vzor ako `.ord-remark-cell`/
+   `.ord-remark` vyššie, len na vlastnom riadku pod ňou (`margin-top`). */
+.ord-shop-remark-cell {
+  max-width: 100%;
+  margin-top: var(--fs-space-1);
+}
+.ord-shop-remark {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+  color: var(--fs-ink-muted);
+}
+
 /* issue 64: poznámka k CELEJ objednávke — rovnaký vizuálny jazyk ako
    `.ord-supplier-assign`/`-input` vyššie (`flex-wrap: wrap`, rovnaký dôvod:
    bez zalomenia by vstup + tlačidlo pri užšom stĺpci pretiekli do

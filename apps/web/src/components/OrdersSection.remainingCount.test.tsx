@@ -44,6 +44,7 @@ const LINE_NEVYBAVENY = {
   customerName: "Zákazník Nevybavený",
   comment: null,
   remark: null,
+  shopRemark: null,
   adminUrl: "https://www.forestshop.sk/admin/vyhladavanie/?string=3001&src=orders",
   placedAt: "2026-07-01T00:00:00.000Z",
   variantCode: "N-1",

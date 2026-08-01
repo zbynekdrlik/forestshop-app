@@ -15,6 +15,10 @@ const orderLineSchema = z.object({
   // stĺpec — NIE `shopRemark`, interná poznámka predajne, `.claude/rules/
   // orders.md`). Read-only, appka ho nikdy needituje.
   remark: z.string().nullable(),
+  // issue 164: INTERNÁ poznámka e-shopu — UŽ odvodená (cudzí text, appkin
+  // vlastný blok nikdy neobsahuje, `apps/api`'s `extractForeignShopRemark`).
+  // Read-only, appka ju nikdy needituje (nezávislé od appkinho `comment`).
+  shopRemark: z.string().nullable(),
   // issue 65: priamy odkaz do Shoptet administrácie na TÚTO objednávku.
   // `.regex` je druhá vrstva overenia (rovnaký zámer ako `supplierUrl`
   // vyššie, issue 70) — `href` bezpečnosť by nemala závisieť LEN od
