@@ -314,6 +314,35 @@ it("neplatná URL vráti 400 (validácia)", async () => {
   expect(res.status).toBe(400);
 });
 
+// issue 153: samostatná, POMENOVANÁ kontrola pred CSV-injection — nezávislá
+// od http(s)-tvarovej validácie vyššie (tá by KAŽDÚ hodnotu začínajúcu
+// znakom vzorca zamietla aj sama, keďže žiadna z nich nemôže zároveň začínať
+// na "http"). Test dokazuje, že sa v odpovedi objaví SAMOSTATNÁ hláška o
+// vzorci, nie len všeobecná "neplatná URL" — teda že formula-guard skutočne
+// BEŽÍ, nie je len teoreticky prekrytý iným pravidlom (design komentár na
+// tickete vysvetľuje, prečo je to napriek tomu potrebné: obrana do hĺbky
+// proti budúcemu uvoľneniu http(s) regexu).
+it("odkaz začínajúci znakom vzorca (napr. '=') vráti 400 so samostatnou hláškou o vzorci", async () => {
+  const { app, cookie, db } = await boot("manazer");
+  await insertTestVariant(db, "L-FORMULA", "Dodávateľ");
+  const [objednavka] = await db
+    .insert(orders)
+    .values({ externalOrderId: "7011", customerName: "Zákazník", placedAt: new Date("2026-07-11T00:00:00Z") })
+    .returning();
+  if (objednavka === undefined) throw new Error("insert zlyhal");
+  const [line] = await db.insert(orderLines).values({ orderId: objednavka.id, variantCode: "L-FORMULA", quantity: 1 }).returning();
+  if (line === undefined) throw new Error("insert zlyhal");
+
+  const res = await app.request(`/api/orders/lines/${line.id}/supplier-link`, {
+    method: "POST",
+    headers: { cookie, "content-type": "application/json" },
+    body: JSON.stringify({ url: "=cmd|'/c calc'!A1" }),
+  });
+  expect(res.status).toBe(400);
+  const telo = (await res.json()) as { error: { issues: { message: string }[] } };
+  expect(telo.error.issues.some((i) => /vzorc/i.test(i.message))).toBe(true);
+});
+
 // issue 121: `.url()` samo osebe by prijalo aj syntakticky platnú, ale
 // nebezpečnú schému (hodnota ide priamo do `<a href>`) — server-strana MUSÍ
 // navyše vynútiť http(s), nespoliehať sa len na frontendovú vrstvu.

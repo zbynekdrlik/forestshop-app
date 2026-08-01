@@ -10,6 +10,7 @@ import { listKnownStatusNames, listOpenStatusNames, replaceOpenStatusNames } fro
 import { getOrderDetail, listOpenOrderLinesBySupplier } from "../modules/orders/queries.js";
 import { assignOrderLineSupplier } from "../modules/orders/supplier-assignment.js";
 import { setProductSupplierLink } from "../modules/orders/supplier-link-assignment.js";
+import { startsWithFormulaChar } from "../modules/shoptet-writeback/formula-guard.js";
 import { setOrderComment, setOrderLineOrdered, setOrderLineState } from "../modules/orders/state.js";
 import { requireRole, requireUser, type AppBindings } from "./middleware.js";
 import { requireSameOrigin } from "./origin-check.js";
@@ -37,8 +38,24 @@ const orderLineSupplierBody = z.object({ supplier: z.string().trim().min(1).max(
 // (`OrderLineRow.tsx`), preto NAVYŠE `.regex` vynucuje http(s), rovnaký vzor
 // ako `adminUrl`/existujúci `supplierUrl` vo frontendovej `ordersApi.ts`
 // schéme (issue 70's "druhá vrstva overenia" zásada).
+// issue 153: `.refine` navyše — samostatná, POMENOVANÁ formula-injection
+// kontrola (`formula-guard.ts`, zdieľaná s CSV-sink ochranou v `csv.ts`).
+// Pre TOTO pole je dnes logicky prekrytá `.regex`om nižšie (hodnota
+// začínajúca `=`/`+`/`-`/`@` nikdy nemôže zároveň začínať `http`), ale ide o
+// obranu do hĺbky: chráni pred budúcim uvoľnením http(s) pravidla, ktoré by
+// inak potichu znovu otvorilo CSV-injection dieru (`internalNote` v
+// generovanom CSV, `select-changes.ts`) bez toho, aby si to niekto všimol —
+// viď ticketov design komentár.
 const orderLineSupplierLinkBody = z.object({
-  url: z.string().trim().url().max(2000).regex(/^https?:\/\//),
+  url: z
+    .string()
+    .trim()
+    .url()
+    .max(2000)
+    .regex(/^https?:\/\//)
+    .refine((v) => !startsWithFormulaChar(v), {
+      message: "odkaz nesmie začínať znakom vzorca (=, +, -, @) — možný pokus o CSV-injection",
+    }),
 });
 // issue 64: manažérova voľná poznámka k CELEJ objednávke — na rozdiel od
 // `orderLineSupplierBody` vyššie ZÁMERNE bez `.min(1)` (prázdny orezaný vstup

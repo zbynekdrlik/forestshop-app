@@ -13,6 +13,7 @@ import { useDirtyEditorLineIds } from "../useDirtyEditorLineIds.js";
 import { useSelectedSupplierFallback } from "../useSelectedSupplierFallback.js";
 import { useSupplierDrafts } from "../useSupplierDrafts.js";
 import { useSupplierEmailEditing } from "../useSupplierEmailEditing.js";
+import { useSupplierLinkSave } from "../useSupplierLinkSave.js";
 import { useSupplierMailActions } from "../useSupplierMailActions.js";
 import { OrderOpenStatusesPanel } from "./OrderOpenStatusesPanel.js";
 import { OrdersToolbar } from "./OrdersToolbar.js";
@@ -23,7 +24,6 @@ import {
   fetchOpenOrders,
   NEZNAMY_DODAVATEL,
   OrdersUnauthorizedError,
-  setProductSupplierLink,
   setSupplierLinesOrdered,
   updateOrderComment,
   updateOrderLineOrdered,
@@ -269,39 +269,11 @@ export function OrdersSection({
 
   // issue 121: manuálny odkaz na dodávateľa — PLNÝ refetch po úspechu (rovnaký
   // dôvod ako `assignSupplier` vyššie: zmena platí pre celý PRODUKT, teda aj
-  // pre súrodenecké veľkosti toho istého riadku).
-  const [busySupplierLinkLineId, setBusySupplierLinkLineId] = useState<string | null>(null);
-
-  const setSupplierLink = useCallback(
-    (lineId: string, url: string) => {
-      const failureId = `supplierLink:${lineId}`;
-      const where = lineWhere(suppliers, lineId);
-      setBusySupplierLinkLineId(lineId);
-      setProductSupplierLink(lineId, url)
-        .then(() => {
-          setWriteFailures((current) => clearWriteFailure(current, failureId));
-          load();
-        })
-        .catch((err: unknown) => {
-          if (err instanceof OrdersUnauthorizedError) {
-            onSessionExpired();
-            return;
-          }
-          setWriteFailures((current) =>
-            upsertWriteFailure(current, {
-              id: failureId,
-              what: "Odkaz na dodávateľa",
-              where,
-              detail: err instanceof Error ? err.message : "Uloženie odkazu na dodávateľa sa nepodarilo.",
-            }),
-          );
-        })
-        .finally(() => {
-          setBusySupplierLinkLineId(null);
-        });
-    },
-    [load, onSessionExpired, suppliers],
-  );
+  // pre súrodenecké veľkosti toho istého riadku). issue 153: vyňaté do
+  // `useSupplierLinkSave.ts` (pridalo okamžitú klientsku validáciu, čo
+  // poslalo tento súbor cez eslint `max-lines: 400` — rovnaký dôvod/vzor ako
+  // `useSupplierEmailEditing.ts`).
+  const { busySupplierLinkLineId, setSupplierLink } = useSupplierLinkSave(suppliers, setWriteFailures, load, onSessionExpired);
 
   // Hromadné označenie/zrušenie CELEJ skupiny dodávateľa naraz (stará appka's
   // `markGroupOrdered` — jedno tlačidlo, ktoré prepína smer podľa toho, či je

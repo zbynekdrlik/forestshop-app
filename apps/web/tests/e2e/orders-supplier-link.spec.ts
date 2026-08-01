@@ -94,3 +94,47 @@ test("riadok bez odkazu ponúka 'doplniť', po uložení ponúka 'upraviť' a no
 
   expect(chyby).toEqual([]);
 });
+
+// issue 153: neplatný odkaz sa odmietne HNEĎ v prehliadači — konzola musí
+// zostať čistá, čo je zároveň dôkaz, že sa NIKDY neodoslal skutočný
+// request na server (server 400 by sa v Chromiu zalogoval ako "Failed to
+// load resource", `.claude/rules/testing.md`). Riadok 9007/278 už má
+// uložený odkaz z PREDCHÁDZAJÚCEHO testu tohto súboru (spoločný účet,
+// sekvenčný beh v rámci jedného spec súboru) — toggle preto ponúka
+// "Upraviť", nie "Doplniť".
+test("neplatný odkaz na dodávateľa sa odmietne HNEĎ, bez zápisu na server (konzola čistá)", async ({ page }) => {
+  const chyby: string[] = [];
+  page.on("console", (m) => {
+    if ((m.type() === "error" || m.type() === "warning") && !jeOcakavane(m)) chyby.push(m.text());
+  });
+  page.on("pageerror", (e) => {
+    chyby.push(e.message);
+  });
+
+  await page.goto("/?tab=orders");
+  await page.getByLabel("E-mail").fill(E2E_ODKAZ_EMAIL);
+  await page.getByLabel("Heslo").fill(E2E_HESLO);
+  await page.getByRole("button", { name: "Prihlásiť sa" }).click();
+  await expect(page.getByRole("heading", { name: "Na objednanie" })).toBeVisible();
+
+  const riadok = page
+    .getByTestId("supplier-(bez dodávateľa)")
+    .locator("[data-testid^='order-line-']")
+    .filter({ hasText: "9007" });
+  await riadok.getByLabel(/Upraviť odkaz na dodávateľa/).click();
+  const vstup = riadok.getByLabel("Odkaz na dodávateľa riadku objednávky 9007 / 278", { exact: true });
+  await expect(vstup).toHaveValue("https://e2e-dodavatel.example.com/opravena-adresa");
+
+  await vstup.fill("nieje-url");
+  await riadok.getByLabel("Uložiť odkaz na dodávateľa riadku objednávky 9007 / 278").click();
+
+  await expect(page.getByTestId("order-write-failures")).toContainText(
+    "Odkaz musí byť platná adresa začínajúca http:// alebo https://.",
+  );
+
+  // Pôvodná hodnota ZOSTALA nezmenená — neplatný pokus sa neuložil.
+  const odkaz = riadok.getByRole("link", { name: "Odkaz na dodávateľa" });
+  await expect(odkaz).toHaveAttribute("href", "https://e2e-dodavatel.example.com/opravena-adresa");
+
+  expect(chyby).toEqual([]);
+});
