@@ -64,9 +64,15 @@ function importPage(omitSafeRadio: boolean): string {
   const radio = omitSafeRadio
     ? ""
     : `<label><input type="radio" name="mode" value="safe" />${SAFE_RADIO_LABEL}</label>`;
+  // Skrytý file input + viditeľné tlačidlo, ktoré ho programovo "kliká" —
+  // rovnaký tvar ako reálny Shoptet (overené naživo pri návrhu #122: input
+  // má `hidden`, viditeľné je len tlačidlo "Vyberte súbor"; `playwright-
+  // import.ts` preto musí ísť cez `filechooser` event, nikdy priamy
+  // `setInputFiles` na skrytý input).
   return `<!doctype html><html><body>
     <form method="post" action="/admin/import-produktov/do-import" enctype="multipart/form-data">
-      <input type="file" name="file" />
+      <input type="file" name="file" id="fileInput" hidden />
+      <button type="button" onclick="document.getElementById('fileInput').click()">Vyberte súbor</button>
       ${radio}
       <label><input type="checkbox" name="urlByName" />${URL_BY_NAME_LABEL}</label>
       <button type="submit" data-testid="buttonImport">Importovať</button>
