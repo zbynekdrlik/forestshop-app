@@ -58,7 +58,18 @@ function buildCsv(header: readonly string[], rows: readonly Record<string, strin
   return Buffer.from(lines.join("\r\n") + "\r\n", "utf-8");
 }
 
-const HEADER = ["code", "date", "statusName", "billFullName", "deliveryFullName", "itemName", "itemAmount", "itemCode", "remark"] as const;
+const HEADER = [
+  "code",
+  "date",
+  "statusName",
+  "billFullName",
+  "deliveryFullName",
+  "itemName",
+  "itemAmount",
+  "itemCode",
+  "remark",
+  "shopRemark",
+] as const;
 
 it("prijme fixtúru: reálne položky zapíše, duplicitný riadok sčíta, pseudo-položky aj neznámy variant preskočí", async () => {
   const { db, dir } = await boot();
@@ -98,11 +109,16 @@ it("prijme fixtúru: reálne položky zapíše, duplicitný riadok sčíta, pseu
   expect(order1[0]?.statusName).toBe("Vybavuje sa");
   // issue 65: fixtúra nesie order 20300001 so zákazníckym odkazom (`remark`).
   expect(order1[0]?.remark).toBe("Prosím doručiť len v piatok, ďakujem");
+  // issue 164: tá istá objednávka nesie AJ internú poznámku e-shopu
+  // (`shopRemark`, stĺpec 28) — nezávislé pole od `remark` vyššie.
+  expect(order1[0]?.shopRemark).toBe("Zakaznik je stavebna firma, vybavit prednostne");
   const order2 = await db.select().from(orders).where(eq(orders.externalOrderId, "20300002"));
   expect(order2[0]?.customerName).toBe("Eva Malá"); // fallback na deliveryFullName
   expect(order2[0]?.statusName).toBe("Vybavená");
   // issue 65: order 20300002 nemá vo fixtúre vyplnený `remark` → `null`.
   expect(order2[0]?.remark).toBeNull();
+  // issue 164: rovnako `shopRemark` — fixtúra ho pre túto objednávku nenesie.
+  expect(order2[0]?.shopRemark).toBeNull();
 });
 
 // issue 59: `status_name` je VŽDY Shoptetovo pole (na rozdiel od `comment`/
@@ -160,6 +176,60 @@ it("remark je Shoptetovo pole a re-import ho osvieži, keď sa v Shoptete zmení
   await ingestOrders(db, { fetchExport: fetcherOf(sOdkazom), now: NOW, rawDir: dir, windowStart: WINDOW_START, windowEnd: WINDOW_END });
   const [druhyRead] = await db.select().from(orders).where(eq(orders.externalOrderId, "9102"));
   expect(druhyRead?.remark).toBe("Zavolajte pred dorucenim");
+});
+
+// issue 164: `shopRemark` (interná poznámka e-shopu) je TIEŽ VŽDY Shoptetovo
+// pole (rovnaká rodina ako `remark`/`status_name` vyššie) — re-import ho
+// MUSÍ osviežiť. Uložená hodnota je SUROVÁ (bez straty/mutácie) — appka pri
+// IMPORTE nič nezapisuje späť, takže cudzí text v tomto poli sa nikdy
+// neprepíše (appka ho len ČÍTA).
+it("shopRemark je Shoptetovo pole, re-import ho osvieži a uloží SUROVO (bez straty dát)", async () => {
+  const { db, dir } = await boot();
+  await insertTestVariant(db, "40237/XL");
+
+  const bezPoznamky = buildCsv(HEADER, [
+    { code: "9103", date: "2026-07-01 10:00:00", statusName: "Vybavuje sa", billFullName: "X", itemName: "Y", itemAmount: "1", itemCode: "40237/XL" },
+  ]);
+  await ingestOrders(db, { fetchExport: fetcherOf(bezPoznamky), now: NOW, rawDir: dir, windowStart: WINDOW_START, windowEnd: WINDOW_END });
+  const [prvyRead] = await db.select().from(orders).where(eq(orders.externalOrderId, "9103"));
+  expect(prvyRead?.shopRemark).toBeNull();
+
+  // Text obsahuje ASCII náprotivok nášho oddeľovacieho bloku (`note-block.ts`)
+  // PLUS cudzí text okolo — dokazuje, že import ukladá SUROVÚ hodnotu
+  // BEZ straty ani jedného znaku, nikdy nič neodstraňuje/nezlučuje.
+  const sPoznamkou = buildCsv(HEADER, [
+    {
+      code: "9103",
+      date: "2026-07-01 10:00:00",
+      statusName: "Vybavuje sa",
+      billFullName: "X",
+      itemName: "Y",
+      itemAmount: "1",
+      itemCode: "40237/XL",
+      shopRemark: "Rucna poznamka predajne --- poznamka z appky --- x --- koniec ---",
+    },
+  ]);
+  await ingestOrders(db, { fetchExport: fetcherOf(sPoznamkou), now: NOW, rawDir: dir, windowStart: WINDOW_START, windowEnd: WINDOW_END });
+  const [druhyRead] = await db.select().from(orders).where(eq(orders.externalOrderId, "9103"));
+  expect(druhyRead?.shopRemark).toBe("Rucna poznamka predajne --- poznamka z appky --- x --- koniec ---");
+
+  // Ďalší re-import s inou hodnotou musí OSVIEŽIŤ (nikdy nezachovať starú) —
+  // rovnaký dôvod ako `remark`/`status_name`.
+  const inaPoznamka = buildCsv(HEADER, [
+    {
+      code: "9103",
+      date: "2026-07-01 10:00:00",
+      statusName: "Vybavuje sa",
+      billFullName: "X",
+      itemName: "Y",
+      itemAmount: "1",
+      itemCode: "40237/XL",
+      shopRemark: "Zmenene v Shoptete priamo",
+    },
+  ]);
+  await ingestOrders(db, { fetchExport: fetcherOf(inaPoznamka), now: NOW, rawDir: dir, windowStart: WINDOW_START, windowEnd: WINDOW_END });
+  const [tretiRead] = await db.select().from(orders).where(eq(orders.externalOrderId, "9103"));
+  expect(tretiRead?.shopRemark).toBe("Zmenene v Shoptete priamo");
 });
 
 // issue 120: `fetchOrderIds` je BEST-EFFORT obohatenie o interné Shoptet id
@@ -320,6 +390,13 @@ it("re-import NIKDY neprepíše ručne nastavený stav riadku ani komentár obje
   // ostáva len nezmenené, lebo fixtúra sa re-importuje bez zmeny; skutočnú
   // zmenu dokazuje samostatný test vyššie ("remark je Shoptetovo pole…").
   expect(reread?.remark).toBe("Prosím doručiť len v piatok, ďakujem");
+  // issue 164: presne TOTO je akceptačná podmienka "kruh sa uzavrie" —
+  // manažérov `comment` prežije re-import NEDOTKNUTÝ (overené vyššie), zatiaľ
+  // čo `shop_remark` (Shoptetovo pole) sa AJ TAK znovu prečíta z exportu.
+  // Keby appka niekedy writebackla `comment` do Shoptetu a fixtúra by pri
+  // ĎALŠOM importe niesla náš vlastný blok, presne tento stĺpec by ho
+  // priniesol späť — bez toho, aby sa čo i len raz dotkol `comment` samotného.
+  expect(reread?.shopRemark).toBe("Zakaznik je stavebna firma, vybavit prednostne");
   const [rereadLine] = await db.select().from(orderLines).where(eq(orderLines.orderId, order1.id));
   expect(rereadLine?.state).toBe("skladom");
   expect(rereadLine?.quantity).toBe(3); // množstvo sa AJ TAK osviežuje

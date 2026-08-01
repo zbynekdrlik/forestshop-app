@@ -79,11 +79,20 @@ test("STAV je celý čitateľný a POZNÁMKY pole je dosť široké na všetkýc
     // (`.claude/rules/frontend-design.md`), takže tento test overuje presne
     // to, čo je v scope tohto ticketu — POZNÁMKY stĺpec už nespôsobuje
     // zalomenie vstup+tlačidlo, nie univerzálny strop na VŠETKY možné riadky.
+    // AKTUALIZÁCIA (issue 164, 2026-08-01): strop 100px→115px — pribudol
+    // TRETÍ voliteľný riadok v bunke "Poznámky" (interná poznámka e-shopu,
+    // `.ord-shop-remark-cell`, nad zákazníckym `remark` a appkiným
+    // `comment`). Riadok, čo naozaj nesie VŠETKY TRI naraz (fixtúra 9001,
+    // `scripts/e2e-setup.ts`), teraz legitímne meria ~108.5px pri 1280px —
+    // to NIE JE regresia zalomenia vstup+tlačidlo (tá je overená vyššie,
+    // `naTomIstomRiadku`), len skutočný obsah navyše. 115px necháva malú
+    // rezervu nad nameraným 108.5px bez toho, aby maskoval skutočné
+    // zalomenie (to by prehodilo strop o desiatky px, nie jednotky).
     const vysokeKompaktneRiadky = await page.evaluate(() => {
       return [...document.querySelectorAll(".order-row")]
         .filter((r) => r.querySelector('[data-testid^="supplier-assign-cell-"]') === null)
         .map((r) => r.getBoundingClientRect().height)
-        .filter((h) => h > 100);
+        .filter((h) => h > 115);
     });
     expect(vysokeKompaktneRiadky, `príliš vysoké riadky pri ${String(width)}px`).toEqual([]);
 

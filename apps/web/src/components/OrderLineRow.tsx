@@ -417,6 +417,19 @@ export function OrderLineRow({
               </span>
             )}
           </div>
+          {/* issue 164: INTERNÁ poznámka e-shopu — LEN cudzí text (appkin
+              vlastný blok už odstránený na strane servera), read-only, nikdy
+              needitovateľná — appka na ňu nemá žiadnu zápisovú cestu vôbec.
+              Rovnaký vzor ako `.ord-remark-cell` vyššie (issue 111 bod 4):
+              obalový <div> sa vykresľuje VŽDY, vnútorný <span> len keď je
+              poznámka vyplnená — žiadna holá pomlčka. */}
+          <div className="ord-shop-remark-cell" data-testid={`shop-remark-cell-${line.lineId}`}>
+            {line.shopRemark != null && line.shopRemark !== "" && (
+              <span className="ord-shop-remark" title={line.shopRemark}>
+                🏪 {line.shopRemark}
+              </span>
+            )}
+          </div>
           <div className="ord-comment-cell" data-testid={`comment-cell-${line.lineId}`}>
             {canChangeState ? (
               <>

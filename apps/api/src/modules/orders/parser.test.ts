@@ -119,6 +119,52 @@ describe("mapOrderRow — reálna položka", () => {
     expect(mapped.record?.remark).toBe("volať pred doručením");
   });
 
+  // issue 164: interná poznámka e-shopu (`shopRemark`, stĺpec 28) — NEZÁVISLÉ
+  // pole od `remark` (zákaznícky odkaz) overeného vyššie. Fixtúra nesie order
+  // 20300001 s hodnotou v tomto poli.
+  it("shopRemark (interná poznámka e-shopu) sa načíta zo stĺpca 28", () => {
+    const csv = parseShoptetOrdersCsv(FIXTURE);
+    const rows = [...csv.rows()];
+    const real = rows.find((r) => r["itemCode"] === "40237/XL" && r["itemAmount"] === "2");
+    if (real === undefined) throw new Error("fixtúra nemá očakávaný riadok");
+    const mapped = mapOrderRow(real);
+    expect(mapped.record?.shopRemark).toBe("Zakaznik je stavebna firma, vybavit prednostne");
+  });
+
+  it("prázdny shopRemark sa mapuje na null, nikdy na prázdny reťazec", () => {
+    const csv = parseShoptetOrdersCsv(FIXTURE);
+    const rows = [...csv.rows()];
+    const real = rows.find((r) => r["itemCode"] === "40238/M");
+    if (real === undefined) throw new Error("fixtúra nemá očakávaný riadok");
+    const mapped = mapOrderRow(real);
+    expect(mapped.record?.shopRemark).toBeNull();
+  });
+
+  it("chýbajúci stĺpec shopRemark na riadku → null (nikdy nevyhodí)", () => {
+    const mapped = mapOrderRow({
+      code: "20300008",
+      date: "2026-06-16 08:00:00",
+      billFullName: "X",
+      itemName: "Y",
+      itemAmount: "1",
+      itemCode: "40238/M",
+    });
+    expect(mapped.record?.shopRemark).toBeNull();
+  });
+
+  it("shopRemark s okolitými medzerami sa orezáva", () => {
+    const mapped = mapOrderRow({
+      code: "20300009",
+      date: "2026-06-16 08:00:00",
+      billFullName: "X",
+      itemName: "Y",
+      itemAmount: "1",
+      itemCode: "40238/M",
+      shopRemark: "  vybaviť prednostne  ",
+    });
+    expect(mapped.record?.shopRemark).toBe("vybaviť prednostne");
+  });
+
   // issue 59: normalizácia (NFC + orez) musí bežať aj v `mapOrderRow`, nie
   // len v `normalizeStatusName` samostatne — inak by porovnanie s
   // `order_open_status` (nastavené presne cez rovnakú funkciu,

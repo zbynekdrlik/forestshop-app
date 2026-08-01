@@ -219,7 +219,7 @@ export async function ingestOrders(db: Database, options: OrdersIngestOptions): 
   // kolidovať s obsahom niektorého z oboch reťazcov.
   const orderInfo = new Map<
     string,
-    { customerName: string; placedAt: Date; statusName: string; remark: string | null }
+    { customerName: string; placedAt: Date; statusName: string; remark: string | null; shopRemark: string | null }
   >();
   const lineTotals = new Map<string, Map<string, { externalOrderId: string; variantCode: string; quantity: number }>>();
   for (const candidate of candidates) {
@@ -229,6 +229,7 @@ export async function ingestOrders(db: Database, options: OrdersIngestOptions): 
         placedAt: candidate.placedAt,
         statusName: candidate.statusName,
         remark: candidate.remark,
+        shopRemark: candidate.shopRemark,
       });
     }
     let byVariant = lineTotals.get(candidate.externalOrderId);
@@ -308,6 +309,7 @@ export async function ingestOrders(db: Database, options: OrdersIngestOptions): 
               customerName: info.customerName,
               statusName: info.statusName,
               remark: info.remark,
+              shopRemark: info.shopRemark,
               placedAt: info.placedAt,
               shoptetOrderId: orderIdsByCode.get(externalOrderId) ?? null,
             })),
@@ -321,9 +323,13 @@ export async function ingestOrders(db: Database, options: OrdersIngestOptions): 
             // osviežiť (objednávka prejde "Vybavuje sa" → "Vybavená" len tak,
             // že ju appka pri ďalšom importe znova uvidí). `remark` (issue 65,
             // zákaznícky odkaz) je rovnaká rodina ako `status_name` — VŽDY
-            // Shoptetovo pole, re-import ho preto tiež osvieži. `shoptet_
-            // order_id` (issue 120) je NAVYŠE COALESCE-ovaný, nie priamo
-            // prepísaný ako predošlé dve — na rozdiel od nich pochádza z
+            // Shoptetovo pole, re-import ho preto tiež osvieži. `shop_remark`
+            // (issue 164, interná poznámka e-shopu) je TIEŽ tá istá rodina —
+            // VŽDY Shoptetovo pole, ukladá sa SUROVO (rozdelenie na naše/cudzie
+            // sa robí až na čítacej strane, `queries.ts`) — appka pri IMPORTE
+            // do neho nikdy nezapisuje, takže tu niet čo stratiť/prepísať.
+            // `shoptet_order_id` (issue 120) je NAVYŠE COALESCE-ovaný, nie priamo
+            // prepísaný ako predošlé — na rozdiel od nich pochádza z
             // BEST-EFFORT XML fetchu, ktorý tento konkrétny beh môže
             // zlyhať/chýbať (premenná nenastavená), a re-import bez neho
             // nesmie vynulovať predtým zistené id (`"order"."shoptet_order_
@@ -333,6 +339,7 @@ export async function ingestOrders(db: Database, options: OrdersIngestOptions): 
               customerName: sql`excluded.customer_name`,
               statusName: sql`excluded.status_name`,
               remark: sql`excluded.remark`,
+              shopRemark: sql`excluded.shop_remark`,
               placedAt: sql`excluded.placed_at`,
               shoptetOrderId: sql`coalesce(excluded.shoptet_order_id, "order"."shoptet_order_id")`,
             },

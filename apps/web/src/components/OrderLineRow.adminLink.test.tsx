@@ -21,6 +21,7 @@ const LINE = {
   customerName: "Zákazník Gama",
   comment: null,
   remark: null,
+  shopRemark: null,
   adminUrl: "https://www.forestshop.sk/admin/vyhladavanie/?string=20261259&src=orders",
   placedAt: "2026-07-01T00:00:00.000Z",
   variantCode: "C-1",

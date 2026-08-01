@@ -33,6 +33,7 @@ const RIADOK_1 = {
   customerName: "Zákazník 4",
   comment: null,
   remark: null,
+  shopRemark: null,
   adminUrl: "https://www.forestshop.sk/admin/vyhladavanie/?string=1004&src=orders",
   placedAt: "2026-07-20T00:00:00.000Z",
   variantCode: "D-1",

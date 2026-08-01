@@ -2111,3 +2111,79 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
   presun obsahu do NOVÉHO súrodeneckého `<tr>` rozbíja `within(riadok)`-
   scoped testy (fix: `screen.getByTestId`/Playwright `xpath=./following-
   sibling::tr[1]`); nový testid nesmie zdieľať existujúci `^='...'` prefix.
+
+## 2026-08-01 — #163 (notes-column divider, reopened) + #166 (link-editor silent close)
+
+- Bundled batch (2 issues, same files) — ~106 LoC, well under the gate.
+- Version bump `7f85933` (0.3.0-dev.96→.97), first commit.
+- STEP 0 validation comments (live Playwright against v0.3.0-dev.96 production):
+  issue-comment-5152731928 (#163), -5152733426 (#166).
+- Design comments BEFORE first code commit:
+  issue-comment-5152734877 (#163) — same `display:flex`-on-`<td>` bug as
+  `.ord-supplier-merged` (PR #165), now in `.ord-notes-merged`; fix mirrors
+  the established pattern exactly.
+  issue-comment-5152736764 (#166) — root cause: `saveLink()` closed the
+  editor unconditionally, ignoring the SYNCHRONOUS validation result
+  `setSupplierLink` already computed; fix threads a `boolean` return through
+  instead of duplicating `validateSupplierLinkUrl` a second time.
+- RED→GREEN commits: `9be7508`→`18e6502` (#163, e2e `orders-layout.spec.ts`
+  generalized to check ALL `<td>` in a row, not just one hardcoded class);
+  `431492b`→`c64d4e7` (#166, new vitest test in
+  `OrdersSection.supplierLinkValidation.test.tsx` proving the editor stays
+  open with the typed text preserved).
+- Local pre-push: lint/typecheck clean, web vitest 38/38 files (283 tests),
+  api unit 334 + integration 294, FULL e2e suite (all 9 spec files, 25
+  tests) — all green.
+- Review comments BEFORE merge: issue-comment-5152866330 (#163),
+  -5152867404 (#166) — `/review` + deep `requesting-code-review` subagent
+  (git range d127c201..c64d4e7): 0 🔴 0 🟡 0 🔵 both.
+- PR #167, CI (both `push` + `pull_request` triggers) all green, mergeable/
+  CLEAN. Merged `1715dc3`. Main CI + Deploy both `success`.
+- Live post-deploy verification (v0.3.0-dev.97): all 41 order rows have
+  every `<td>` bottom-aligned with the row (0px diff, was 19-20.5px on
+  notes); invalid link input keeps editor open with typed text + exact
+  message, 0 fetch calls. Zero console errors. DB baseline unchanged
+  (0|0|535|881|0).
+- Tickets closed by hand (`gh issue close`) AFTER live verification, per
+  this repo's CLAUDE.md auto-close-trap note — neither PR body nor any
+  commit message used `Closes #`/`Fixes #`.
+- Playbook: no new gotcha beyond what `.claude/rules/frontend-design.md`
+  already documents for the `display:flex`-on-`<td>` class of bug — this
+  ticket was a second, predicted instance of exactly that documented
+  pattern, confirming the existing entry rather than adding a new one.
+
+## 2026-08-01 — #164 (import internej poznámky e-shopu, obojsmerné)
+
+- Solo ticket (Scope-gate: schema-migration), version bump `a8c327e`
+  (0.3.0-dev.97→.98), first commit.
+- Design comment BEFORE first code commit: issue-comment-5152963337 — root
+  cause (parser nikdy nečítal `shopRemark`), zvolený prístup (surová
+  hodnota v DB, odvodená pri dopyte cez `extractForeignShopRemark` — tenký
+  wrapper nad existujúcim `mergeShopRemark(raw, null)`), zamietnutá
+  alternatíva (ukladať odvodenú hodnotu priamo / prepisovať appkin
+  `comment` z importu).
+- STEP 0 validation comment: issue-comment-5152965388 (grep na main HEAD
+  1715dc3 potvrdil 0 skutočného kódu čítajúceho `shopRemark`).
+- RED→GREEN reťaz (7 párov): `extractForeignShopRemark` (note-block.ts) →
+  parser (`mapOrderRow`) → `ingest.ts` storage+refresh (integračný test
+  proti reálnemu Postgresu, RED overené `git stash` na `queries.ts`/
+  `ingest.ts`) → `queries.ts` HTTP expozícia → `OrderLineRow.tsx` UI
+  vykreslenie. Plus explicitný "kruh sa uzavrie" test (comment prežije
+  re-import nedotknutý, shop_remark sa AJ TAK osvieži, v tom istom teste).
+- 17 existujúcich fixtúrových `OrderLine` objektov (vitest test súbory)
+  dostalo explicitné `shopRemark: null` (zavedená konvencia repa — Python
+  regex insert za `remark: ...,`).
+- E2E: objednávka 9001 (`scripts/e2e-setup.ts`) dostala reálnu hodnotu
+  `shopRemark`, `orders.spec.ts` ju overuje. Row-height strop v
+  `orders-layout.spec.ts` zdvihnutý 100px→115px (naživo namerané 108.5px —
+  tretí stĺpcovaný riadok v zlúčenej bunke Poznámky, nie regresia
+  zalomenia vstup+tlačidlo, tá asercia sa nemenila).
+- Fixtúra `orders-sample.csv` (order 20300001) dostala reálnu `shopRemark`
+  hodnotu — presný postup z `.claude/rules/orders.md` (csv.reader + ručné
+  poskladanie riadku, žiadny `csv.writer` nad celým súborom).
+- PR #168, CI (push aj pull_request) — pozri completion report pre finálny
+  stav.
+- Playbook: nový bod v `.claude/rules/orders.md` — 3-krokový checklist pri
+  pridávaní ĎALŠIEHO poľa na `OpenOrderLine` (surové+odvodené polia,
+  17-súborová fixtúrová konvencia, row-height strop treba pri KAŽDOM
+  ďalšom stĺpcovanom riadku v "Poznámky" bunke naživo premerať).

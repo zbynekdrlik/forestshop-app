@@ -10,6 +10,7 @@ import {
   variants,
   type OrderLineState,
 } from "../../db/schema.js";
+import { extractForeignShopRemark } from "../shoptet-writeback/note-block.js";
 import { resolveEffectiveSupplierLink } from "./effective-supplier-link.js";
 import { listOpenStatusNames } from "./open-statuses.js";
 import { effectiveSupplierSql, normalizedSupplierKeySql, normalizeSupplierKeyJs, pickCanonicalSupplierSpelling } from "./supplier-key.js";
@@ -51,6 +52,13 @@ export interface OpenOrderLine {
   // stĺpec — NIE `shopRemark`, interná poznámka predajne, `.claude/rules/
   // orders.md`). Read-only na obrazovke, nikdy sa needituje z appky.
   readonly remark: string | null;
+  // issue 164: INTERNÁ poznámka e-shopu — na rozdiel od DB stĺpca
+  // (`order.shop_remark`, SUROVÁ, môže niesť aj náš vlastný blok) je toto UŽ
+  // ODVODENÁ hodnota (`extractForeignShopRemark` nižšie) — LEN cudzí (nie-
+  // appkin) text, nikdy náš vlastný zapísaný blok. Read-only, appka ju nikdy
+  // needituje (rovnaký zámer ako `remark` vyššie) — appkina VLASTNÁ poznámka
+  // je nezávislé pole `comment`.
+  readonly shopRemark: string | null;
   // issue 65: priamy odkaz do Shoptet administrácie na TÚTO objednávku
   // (`buildShoptetAdminOrderUrl` vyššie).
   readonly adminUrl: string;
@@ -132,6 +140,7 @@ export async function listOpenOrderLinesBySupplier(
       customerName: orders.customerName,
       comment: orders.comment,
       remark: orders.remark,
+      shopRemarkRaw: orders.shopRemark,
       shoptetOrderId: orders.shoptetOrderId,
       placedAt: orders.placedAt,
       variantCode: orderLines.variantCode,
@@ -184,6 +193,7 @@ export async function listOpenOrderLinesBySupplier(
       customerName: row.customerName,
       comment: row.comment,
       remark: row.remark,
+      shopRemark: extractForeignShopRemark(row.shopRemarkRaw),
       adminUrl: buildShoptetAdminOrderUrl(adminBaseUrl, row.externalOrderId, row.shoptetOrderId),
       placedAt: row.placedAt.toISOString(),
       variantCode: row.variantCode,

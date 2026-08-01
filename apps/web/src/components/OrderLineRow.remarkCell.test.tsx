@@ -39,6 +39,7 @@ const RIADOK_BEZ_POZNAMKY = {
   ...ZAKLAD,
   lineId: "22222222-1111-0000-0000-000000000001",
   remark: null,
+  shopRemark: null,
 };
 
 const RIADOK_S_POZNAMKOU = {
@@ -46,6 +47,7 @@ const RIADOK_S_POZNAMKOU = {
   lineId: "22222222-1111-0000-0000-000000000002",
   externalOrderId: "20261401",
   remark: "Zavolať pred doručením",
+  shopRemark: null,
 };
 
 afterEach(() => {

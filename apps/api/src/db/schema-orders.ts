@@ -66,6 +66,17 @@ export const orders = pgTable(
     // stĺpec exportu (veľa objednávok ho nemá vyplnený), read-only na
     // obrazovke "Na objednanie".
     remark: text("remark"),
+    // issue 164: SUROVÁ hodnota Shoptet-ovho "Poznámka e-shopu" poľa (export's
+    // `shopRemark` stĺpec — INTERNÁ poznámka predajne, koncepčne DUPLIKUJE
+    // appkine `comment` vyššie, ale je to Shoptetovo pole, `.claude/rules/
+    // orders.md`). Ukladá sa surová (môže niesť aj náš vlastný zapísaný blok,
+    // issue 123's `mergeShopRemark`) — rozdelenie na "naše"/"cudzie" sa robí
+    // AŽ na čítacej strane (`modules/orders/queries.ts` cez `shoptet-
+    // writeback/note-block.ts`'s `extractForeignShopRemark`), nikdy tu. VŽDY
+    // Shoptetovo pole (rovnaká rodina ako `statusName`/`remark` vyššie,
+    // NIKDY appkou/manažérom vlastnené) — `ingest.ts` ho pri re-importe
+    // OSVIEŽI, presne ako `remark`.
+    shopRemark: text("shop_remark"),
     // issue 120: Shoptet-ovo INTERNÉ (nie zákazníkovi viditeľné) číselné id
     // objednávky — JEDINÉ, ktoré Shoptet admin's `/admin/objednavky-detail/
     // ?id=<toto>` prijme (`?code=`/`?string=` na tejto trase ticho ignoruje,

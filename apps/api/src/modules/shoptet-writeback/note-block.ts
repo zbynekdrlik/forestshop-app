@@ -65,3 +65,19 @@ export function mergeShopRemark(existingShopRemark: string | null, ourNote: stri
   }
   return `${withoutOurBlock}\n\n${block}`;
 }
+
+/**
+ * issue 164: čítacia strana importu — z RAW hodnoty Shoptet-ovho "Poznámka
+ * e-shopu" poľa (`order.shop_remark`, tak ako prišla z CSV exportu, môže
+ * niesť AJ náš vlastný blok) vráti LEN cudziu (nie-appkinu) časť, na
+ * zobrazenie read-only. Tenký wrapper nad `mergeShopRemark(raw, null)`, ktoré
+ * náš blok už dnes odstraňuje (`ourNote=null` vetva vyššie) — tu sa len
+ * orezáva zvyšný text a prázdny reťazec sa mapuje na `null` (rovnaký zámer
+ * ako `parser.ts`'s `rawRemark === "" ? null : rawRemark`). Appkina VLASTNÁ
+ * poznámka (`order.comment`) je nezávislá od tejto funkcie — zobrazuje sa
+ * priamo z vlastného stĺpca, nikdy sa neodvodzuje z tohto bloku.
+ */
+export function extractForeignShopRemark(shopRemarkRaw: string | null): string | null {
+  const foreign = mergeShopRemark(shopRemarkRaw, null).trim();
+  return foreign === "" ? null : foreign;
+}
