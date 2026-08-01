@@ -136,3 +136,83 @@ it("zamietnuté priradenie (409) zobrazí slovenskú hlášku A ZÁROVEŇ sprav�
     "⚠️ Nepodarilo sa uložiť 1 položku×Priradenie dodávateľa — obj. 1003, kód C-1 (Produkt už má dodávateľa v katalógu — ručné priradenie nie je možné)",
   );
 });
+
+// issue 151: priradenie dodávateľa platí pre CELÝ PRODUKT
+// (`supplier-assignment.ts`'s `productSupplierOverrides` kľúčovaná
+// `productKey`), takže po uložení cez JEDEN riadok server vráti novú
+// `manualSupplierOverride` hodnotu aj pre KAŽDÝ SÚRODENECKÝ riadok toho
+// istého produktu (iná veľkosť/objednávka) — nielen pre riadok, čo reálne
+// uložil. `assignSupplier` robí PLNÝ refetch po úspechu, takže simulujeme to
+// isté: druhý `fetchOpenOrders` návrat nesie NOVÚ `manualSupplierOverride`
+// hodnotu na OBOCH riadkoch (presne to, čo by server vrátil pre dva riadky
+// toho istého produktu), zatiaľ čo riadok A má stále rozpísaný, ešte
+// NEULOŽENÝ koncept.
+const LINE_A_SUROD = {
+  ...LINE_BEZ_DODAVATELA,
+  lineId: "44444444-4444-4444-4444-444444444444",
+  orderId: "cccccccc-4444-4444-4444-444444444444",
+  externalOrderId: "1004",
+  variantCode: "C-2",
+};
+
+it("rozpísaný, ešte neuložený koncept priradenia dodávateľa na riadku A PREŽIJE uloženie dodávateľa cez SÚRODENECKÝ riadok B (rovnaký produkt)", async () => {
+  fetchOpenOrders.mockResolvedValueOnce([
+    {
+      supplier: "(bez dodávateľa)",
+      lines: [LINE_A_SUROD, LINE_BEZ_DODAVATELA],
+      email: null,
+    },
+  ]);
+  assignOrderLineSupplier.mockResolvedValue(undefined);
+
+  render(<OrdersSection role="manazer" onSessionExpired={() => {}} />);
+
+  // Manažér rozpíše koncept na riadku A, ale NEULOŽÍ ho.
+  const vstupA = await screen.findByLabelText<HTMLInputElement>(
+    `Priradiť dodávateľa riadku objednávky ${LINE_A_SUROD.externalOrderId} / ${LINE_A_SUROD.variantCode}`,
+  );
+  fireEvent.change(vstupA, { target: { value: "Rozpísaný, ešte neuložený dodávateľ" } });
+  expect(vstupA.value).toBe("Rozpísaný, ešte neuložený dodávateľ");
+
+  // Server (po úspešnom uložení cez riadok B) vráti OBIDVA riadky s NOVOU
+  // `manualSupplierOverride` hodnotou — presne tak, ako by to spravil
+  // skutočný per-produktový override.
+  fetchOpenOrders.mockResolvedValueOnce([
+    {
+      supplier: "Dodávateľ XYZ",
+      lines: [
+        { ...LINE_A_SUROD, manualSupplierOverride: "Dodávateľ XYZ" },
+        { ...LINE_BEZ_DODAVATELA, manualSupplierOverride: "Dodávateľ XYZ" },
+      ],
+      email: null,
+    },
+  ]);
+  await vyplnAUloz("Dodávateľ XYZ");
+
+  await waitFor(() => {
+    expect(assignOrderLineSupplier).toHaveBeenCalledWith(LINE_BEZ_DODAVATELA.lineId, "Dodávateľ XYZ");
+  });
+  await waitFor(() => {
+    expect(fetchOpenOrders).toHaveBeenCalledTimes(2);
+  });
+
+  // Riadok A NEBOL uložený — jeho rozpísaný koncept musí PREŽIŤ, nesmie sa
+  // ticho prepísať na hodnotu, ktorú práve dostal z refetchu (rovnaký
+  // produkt, teda rovnaká `manualSupplierOverride`, ako riadok B, čo reálne
+  // uložil).
+  //
+  // Priradenie dodávateľa MENÍ SKUPINU riadku (`effectiveSupplier` sa zmení
+  // z "(bez dodávateľa)" na "Dodávateľ XYZ") — `OrdersSection.tsx`'s
+  // `SupplierOrderGroup` má `key={group.supplier}`, takže pôvodná inštancia
+  // `OrderLineRow` pre riadok A sa ODMONTUJE a NAMONTUJE sa nová pod novou
+  // skupinou. Držať sa STAREJ (`vstupA`) referencie by test urobilo FALOŠNE
+  // ZELENÝM — stará, odpojená referencia si ticho drží svoju poslednú
+  // hodnotu bez ohľadu na to, čo je aktuálne v DOM-e. Preto sa hodnota číta
+  // ZNOVA, cez čerstvý dotaz PO refetchi.
+  await waitFor(() => {
+    const vstupAPoRefetchi = screen.getByLabelText<HTMLInputElement>(
+      `Priradiť dodávateľa riadku objednávky ${LINE_A_SUROD.externalOrderId} / ${LINE_A_SUROD.variantCode}`,
+    );
+    expect(vstupAPoRefetchi.value).toBe("Rozpísaný, ešte neuložený dodávateľ");
+  });
+});

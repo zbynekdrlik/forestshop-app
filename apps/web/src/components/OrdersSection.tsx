@@ -10,6 +10,8 @@ import { OrdersRemainingCountContext } from "../ordersRemainingCountContext.js";
 import { isLineHiddenByFilter, summarizeOrderLines } from "../ordersSummary.js";
 import { clearWriteFailure, lineWhere, orderWhere, upsertWriteFailure, type OrderWriteFailure } from "../ordersWriteFailures.js";
 import { useDirtyEditorLineIds } from "../useDirtyEditorLineIds.js";
+import { useSelectedSupplierFallback } from "../useSelectedSupplierFallback.js";
+import { useSupplierDrafts } from "../useSupplierDrafts.js";
 import { useSupplierEmailEditing } from "../useSupplierEmailEditing.js";
 import { useSupplierMailActions } from "../useSupplierMailActions.js";
 import { OrderOpenStatusesPanel } from "./OrderOpenStatusesPanel.js";
@@ -105,6 +107,11 @@ export function OrdersSection({
     copyOrderToClipboard,
   } = useSupplierMailActions(onSessionExpired);
 
+  // issue 151: rozpísaný koncept priradenia dodávateľa — musí žiť TU, nie
+  // lokálne v `OrderLineRow` (`useSupplierDrafts.ts` vysvetľuje prečo).
+  // Zosúlaďuje sa SAMO, vnútri hooku, po každej zmene `suppliers`.
+  const supplierDrafts = useSupplierDrafts(suppliers);
+
   const load = useCallback(() => {
     fetchOpenOrders()
       .then((items) => {
@@ -134,19 +141,9 @@ export function OrdersSection({
     setOrdersRemainingCount(summarizeOrderLines(allLines).remaining);
   }, [loaded, suppliers, setOrdersRemainingCount]);
 
-  // issue 148 — priamy náprotivok starej appky's fallback (`app.js:2677-2680`):
-  // keď je dodávateľ vybraný z PREDCHÁDZAJÚCEJ relácie/dňa (localStorage) a
-  // medzi PRÁVE načítanými skupinami už vôbec nefiguruje, výber spadne späť
-  // na "Všetci" — namiesto toho, aby zobrazil prázdny zoznam s aktívnym
-  // chipom, ktorý nikde nie je. `suppliers.length === 0` sa zámerne
-  // VYNECHÁVA (rovnako ako stará appka) — prechodné zlyhanie fetchu nesmie
-  // zahodiť platný výber.
-  useEffect(() => {
-    if (!loaded || selectedSupplier === null || suppliers.length === 0) return;
-    if (!suppliers.some((group) => group.supplier === selectedSupplier)) {
-      selectSupplier(null);
-    }
-  }, [loaded, suppliers, selectedSupplier, selectSupplier]);
+  // issue 148 (vyňaté do `useSelectedSupplierFallback.ts`, issue 151 —
+  // uvoľnenie miesta pod eslint `max-lines`, BEZ zmeny správania).
+  useSelectedSupplierFallback(loaded, suppliers, selectedSupplier, selectSupplier);
 
   const changeState = useCallback(
     (lineId: string, newState: OrderLine["state"]) => {
@@ -461,6 +458,7 @@ export function OrdersSection({
           hideResolved={hideResolved}
           dirtyEditorLineIds={dirtyEditorLineIds}
           onEditorActivityChange={onEditorActivityChange}
+          supplierDrafts={supplierDrafts}
           canChangeState={canChangeState}
           busyLineId={busyLineId}
           busyOrderedLineId={busyOrderedLineId}
