@@ -52,6 +52,10 @@ test("riadok bez odkazu ponúka 'doplniť', po uložení ponúka 'upraviť' a no
   const vstup = riadok.getByLabel("Odkaz na dodávateľa riadku objednávky 9007 / 278", { exact: true });
   await expect(vstup).toBeVisible();
   await expect(vstup).toHaveValue("");
+  // issue 162: majiteľ, políčko na úpravu odkazu je príliš malé na to, aby
+  // bolo vidno, čo sa edituje — naživo namerané 94px. Ticketov akceptačný
+  // test žiada aspoň 3× = ≥282px.
+  expect((await vstup.boundingBox())?.width ?? 0).toBeGreaterThanOrEqual(282);
 
   await vstup.fill("https://e2e-dodavatel.example.com/produkt-278");
   await riadok.getByLabel("Uložiť odkaz na dodávateľa riadku objednávky 9007 / 278").click();
