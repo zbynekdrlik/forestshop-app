@@ -324,6 +324,25 @@ it("rola manazer vidí 4 tlačidlá a zmena stavu sa prejaví lokálne bez nové
   expect(screen.queryByRole("alert")).toBeNull();
 });
 
+// issue 161 (code review finding): klik na UŽ aktívne tlačidlo nesmie poslať
+// zbytočný zápis na server — presne to, čo pôvodný `<select>` robil (výber
+// TEJ ISTEJ `<option>` nikdy nevyvolal `onChange`). Bez tohto testu by
+// budúca zmena `OrderLineStateButtons.tsx`'s `if (!active)` guardu mohla
+// ticho pridať zbytočné PATCH volania a nič by to nezachytilo.
+it("klik na už aktívne stavové tlačidlo nezavolá updateOrderLineState", async () => {
+  fetchOpenOrders.mockResolvedValue([{ supplier: "Dodávateľ Alfa", lines: [LINE_STARA], email: null }]);
+
+  render(<OrdersSection role="manazer" onSessionExpired={() => {}} />);
+
+  await screen.findByTestId(`state-select-${LINE_STARA.lineId}`);
+  const aktivne = screen.getByTestId(`state-btn-objednane-${LINE_STARA.lineId}`);
+  expect(aktivne.getAttribute("aria-checked")).toBe("true");
+
+  fireEvent.click(aktivne);
+
+  expect(updateOrderLineState).not.toHaveBeenCalled();
+});
+
 it("zlyhaná zmena stavu zobrazí slovenskú hlášku zo servera a stav sa nezmení", async () => {
   fetchOpenOrders.mockResolvedValue([{ supplier: "Dodávateľ Alfa", lines: [LINE_STARA], email: null }]);
   updateOrderLineState.mockRejectedValue(new Error("Riadok objednávky sa nenašiel"));

@@ -157,3 +157,26 @@ it("kliknutie na toggle znova (zrušiť) zavrie panel bez volania API", async ()
   expect(screen.queryByTestId(`supplier-link-edit-${RIADOK_BEZ_ODKAZU.lineId}`)).toBeNull();
   expect(setProductSupplierLink).not.toHaveBeenCalled();
 });
+
+// issue 162 (code review finding): `OrderLineRow.tsx`'s `ORDERS_TABLE_COLUMN_
+// COUNT` je RUČNE udržiavaná konštanta, ktorá musí sedieť s počtom <col> v
+// `SupplierOrderGroup.tsx`'s <colgroup> — žiadny automatický zdroj pravdy.
+// Bez tohto testu by budúca zmena počtu stĺpcov (pridanie/odstránenie <col>)
+// bez aktualizácie konštanty prešla ticho — rozbaľovací riadok by len bol o
+// stĺpec užší/širší než celá tabuľka, nič by nezlyhalo.
+it("colSpan rozbaľovacieho riadku sedí s reálnym počtom <col> v <colgroup>", async () => {
+  fetchOpenOrders.mockResolvedValue([{ supplier: "Dodávateľ Alfa", lines: [RIADOK_BEZ_ODKAZU], email: null }]);
+  render(<OrdersSection role="manazer" onSessionExpired={() => {}} />);
+
+  const riadok = await screen.findByTestId(`order-line-${RIADOK_BEZ_ODKAZU.lineId}`);
+  fireEvent.click(
+    within(riadok).getByLabelText(
+      `Doplniť odkaz na dodávateľa — ${RIADOK_BEZ_ODKAZU.variantName} (${RIADOK_BEZ_ODKAZU.variantCode})`,
+    ),
+  );
+
+  const skutocnyPocetStlpcov = document.querySelectorAll(".orders-table colgroup col").length;
+  const rozbalovaciRiadokTd = screen.getByTestId(`supplier-link-edit-${RIADOK_BEZ_ODKAZU.lineId}`).closest("td");
+  expect(rozbalovaciRiadokTd).not.toBeNull();
+  expect((rozbalovaciRiadokTd as HTMLTableCellElement).colSpan).toBe(skutocnyPocetStlpcov);
+});
