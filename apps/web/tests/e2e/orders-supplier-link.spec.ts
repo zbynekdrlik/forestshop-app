@@ -41,6 +41,11 @@ test("riadok bez odkazu ponúka 'doplniť', po uložení ponúka 'upraviť' a no
   await expect(skupina).toBeVisible();
   const riadok = skupina.locator("[data-testid^='order-line-']").filter({ hasText: "9007" });
   await expect(riadok).toContainText("ThermVisia");
+  // issue 162: vstup+uloženie žijú teraz vo VLASTNOM rozbaľovacom riadku POD
+  // `riadok`om (`colSpan` cez celú tabuľku), nie ako jeho potomok — nájde sa
+  // cez najbližšieho súrodenca za `riadok`om (toggle tlačidlo OSTÁVA v
+  // `riadok`u, nezmenené).
+  const editRiadok = riadok.locator("xpath=./following-sibling::tr[1]");
   const toggle = riadok.getByLabel(/Doplniť odkaz na dodávateľa/);
   await expect(toggle).toBeVisible();
 
@@ -49,7 +54,7 @@ test("riadok bez odkazu ponúka 'doplniť', po uložení ponúka 'upraviť' a no
   // tlačidlom "Uložiť odkaz na dodávateľa riadku objednávky ..." (obsahuje
   // ten istý text ako podreťazec, `.claude/rules/testing.md`'s Playwright
   // substring-kolízna poznámka).
-  const vstup = riadok.getByLabel("Odkaz na dodávateľa riadku objednávky 9007 / 278", { exact: true });
+  const vstup = editRiadok.getByLabel("Odkaz na dodávateľa riadku objednávky 9007 / 278", { exact: true });
   await expect(vstup).toBeVisible();
   await expect(vstup).toHaveValue("");
   // issue 162: majiteľ, políčko na úpravu odkazu je príliš malé na to, aby
@@ -58,7 +63,7 @@ test("riadok bez odkazu ponúka 'doplniť', po uložení ponúka 'upraviť' a no
   expect((await vstup.boundingBox())?.width ?? 0).toBeGreaterThanOrEqual(282);
 
   await vstup.fill("https://e2e-dodavatel.example.com/produkt-278");
-  await riadok.getByLabel("Uložiť odkaz na dodávateľa riadku objednávky 9007 / 278").click();
+  await editRiadok.getByLabel("Uložiť odkaz na dodávateľa riadku objednávky 9007 / 278").click();
 
   // Refetch po uložení (`OrdersSection.tsx`'s `setSupplierLink`) — panel sa
   // zavrie, ikonové tlačidlo odkazu sa objaví s NOVOU hodnotou, toggle teraz
@@ -77,6 +82,7 @@ test("riadok bez odkazu ponúka 'doplniť', po uložení ponúka 'upraviť' a no
     .getByTestId("supplier-(bez dodávateľa)")
     .locator("[data-testid^='order-line-']")
     .filter({ hasText: "9007" });
+  const editRiadokPoReloade = riadokPoReloade.locator("xpath=./following-sibling::tr[1]");
   await expect(riadokPoReloade.getByRole("link", { name: "Odkaz na dodávateľa" })).toHaveAttribute(
     "href",
     "https://e2e-dodavatel.example.com/produkt-278",
@@ -86,10 +92,12 @@ test("riadok bez odkazu ponúka 'doplniť', po uložení ponúka 'upraviť' a no
   // priradenia dodávateľa, žiadna "už má hodnotu" gate — ticket to žiada
   // explicitne).
   await riadokPoReloade.getByLabel(/Upraviť odkaz na dodávateľa/).click();
-  const vstupUprava = riadokPoReloade.getByLabel("Odkaz na dodávateľa riadku objednávky 9007 / 278", { exact: true });
+  const vstupUprava = editRiadokPoReloade.getByLabel("Odkaz na dodávateľa riadku objednávky 9007 / 278", {
+    exact: true,
+  });
   await expect(vstupUprava).toHaveValue("https://e2e-dodavatel.example.com/produkt-278");
   await vstupUprava.fill("https://e2e-dodavatel.example.com/opravena-adresa");
-  await riadokPoReloade.getByLabel("Uložiť odkaz na dodávateľa riadku objednávky 9007 / 278").click();
+  await editRiadokPoReloade.getByLabel("Uložiť odkaz na dodávateľa riadku objednávky 9007 / 278").click();
 
   await expect(riadokPoReloade.getByRole("link", { name: "Odkaz na dodávateľa" })).toHaveAttribute(
     "href",
@@ -125,12 +133,14 @@ test("neplatný odkaz na dodávateľa sa odmietne HNEĎ, bez zápisu na server (
     .getByTestId("supplier-(bez dodávateľa)")
     .locator("[data-testid^='order-line-']")
     .filter({ hasText: "9007" });
+  // issue 162: vstup+uloženie žijú teraz v samostatnom rozbaľovacom riadku.
+  const editRiadok = riadok.locator("xpath=./following-sibling::tr[1]");
   await riadok.getByLabel(/Upraviť odkaz na dodávateľa/).click();
-  const vstup = riadok.getByLabel("Odkaz na dodávateľa riadku objednávky 9007 / 278", { exact: true });
+  const vstup = editRiadok.getByLabel("Odkaz na dodávateľa riadku objednávky 9007 / 278", { exact: true });
   await expect(vstup).toHaveValue("https://e2e-dodavatel.example.com/opravena-adresa");
 
   await vstup.fill("nieje-url");
-  await riadok.getByLabel("Uložiť odkaz na dodávateľa riadku objednávky 9007 / 278").click();
+  await editRiadok.getByLabel("Uložiť odkaz na dodávateľa riadku objednávky 9007 / 278").click();
 
   await expect(page.getByTestId("order-write-failures")).toContainText(
     "Odkaz musí byť platná adresa začínajúca http:// alebo https://.",

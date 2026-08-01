@@ -57,11 +57,15 @@ it("riadok BEZ odkazu ponúka 'doplniť'; otvorenie zobrazí prázdny vstup", as
   const toggle = within(riadok).getByLabelText(
     `Doplniť odkaz na dodávateľa — ${RIADOK_BEZ_ODKAZU.variantName} (${RIADOK_BEZ_ODKAZU.variantCode})`,
   );
-  expect(within(riadok).queryByTestId(`supplier-link-edit-${RIADOK_BEZ_ODKAZU.lineId}`)).toBeNull();
+  // issue 162: vstup teraz žije vo VLASTNOM rozbaľovacom riadku POD týmto
+  // riadkom (`colSpan` cez celú tabuľku), nie ako potomok `riadok`u — nájde
+  // sa cez `screen` (testid je jedinečný na `lineId`, žiadna kolízia v tomto
+  // teste s jedným riadkom).
+  expect(screen.queryByTestId(`supplier-link-edit-${RIADOK_BEZ_ODKAZU.lineId}`)).toBeNull();
 
   fireEvent.click(toggle);
 
-  const vstup = within(riadok).getByTestId<HTMLInputElement>(`supplier-link-edit-input-${RIADOK_BEZ_ODKAZU.lineId}`);
+  const vstup = screen.getByTestId<HTMLInputElement>(`supplier-link-edit-input-${RIADOK_BEZ_ODKAZU.lineId}`);
   expect(vstup.value).toBe("");
 });
 
@@ -76,7 +80,7 @@ it("riadok S odkazom ponúka 'upraviť'; otvorenie predvyplní vstup AKTUÁLNYM 
 
   fireEvent.click(toggle);
 
-  const vstup = within(riadok).getByTestId<HTMLInputElement>(`supplier-link-edit-input-${RIADOK_S_ODKAZOM.lineId}`);
+  const vstup = screen.getByTestId<HTMLInputElement>(`supplier-link-edit-input-${RIADOK_S_ODKAZOM.lineId}`);
   expect(vstup.value).toBe(RIADOK_S_ODKAZOM.supplierUrl);
 });
 
@@ -91,10 +95,10 @@ it("uloženie zavolá setProductSupplierLink so správnym lineId a URL, a zavrie
       `Doplniť odkaz na dodávateľa — ${RIADOK_BEZ_ODKAZU.variantName} (${RIADOK_BEZ_ODKAZU.variantCode})`,
     ),
   );
-  const vstup = within(riadok).getByTestId<HTMLInputElement>(`supplier-link-edit-input-${RIADOK_BEZ_ODKAZU.lineId}`);
+  const vstup = screen.getByTestId<HTMLInputElement>(`supplier-link-edit-input-${RIADOK_BEZ_ODKAZU.lineId}`);
   fireEvent.change(vstup, { target: { value: "https://novy-dodavatel.example.com/x" } });
   expect(vstup.value).toBe("https://novy-dodavatel.example.com/x");
-  fireEvent.click(within(riadok).getByTestId(`supplier-link-edit-save-${RIADOK_BEZ_ODKAZU.lineId}`));
+  fireEvent.click(screen.getByTestId(`supplier-link-edit-save-${RIADOK_BEZ_ODKAZU.lineId}`));
 
   await waitFor(() => {
     expect(setProductSupplierLink).toHaveBeenCalledWith(
@@ -102,7 +106,7 @@ it("uloženie zavolá setProductSupplierLink so správnym lineId a URL, a zavrie
       "https://novy-dodavatel.example.com/x",
     );
   });
-  expect(within(riadok).queryByTestId(`supplier-link-edit-${RIADOK_BEZ_ODKAZU.lineId}`)).toBeNull();
+  expect(screen.queryByTestId(`supplier-link-edit-${RIADOK_BEZ_ODKAZU.lineId}`)).toBeNull();
   // issue 121: PLNÝ refetch po úspechu (rovnaký dôvod ako priradenie
   // dodávateľa — zmena môže zasiahnuť súrodenecké veľkosti toho istého
   // produktu).
@@ -122,9 +126,9 @@ it("zlyhanie uloženia zobrazí slovenskú hlášku", async () => {
       `Doplniť odkaz na dodávateľa — ${RIADOK_BEZ_ODKAZU.variantName} (${RIADOK_BEZ_ODKAZU.variantCode})`,
     ),
   );
-  const vstup = within(riadok).getByTestId<HTMLInputElement>(`supplier-link-edit-input-${RIADOK_BEZ_ODKAZU.lineId}`);
+  const vstup = screen.getByTestId<HTMLInputElement>(`supplier-link-edit-input-${RIADOK_BEZ_ODKAZU.lineId}`);
   fireEvent.change(vstup, { target: { value: "https://zly-odkaz.example.com" } });
-  fireEvent.click(within(riadok).getByTestId(`supplier-link-edit-save-${RIADOK_BEZ_ODKAZU.lineId}`));
+  fireEvent.click(screen.getByTestId(`supplier-link-edit-save-${RIADOK_BEZ_ODKAZU.lineId}`));
 
   // issue 66: kumulatívny banner nahrádza pôvodný jediný `<p role="alert">`.
   await waitFor(() => {
@@ -143,13 +147,13 @@ it("kliknutie na toggle znova (zrušiť) zavrie panel bez volania API", async ()
     `Doplniť odkaz na dodávateľa — ${RIADOK_BEZ_ODKAZU.variantName} (${RIADOK_BEZ_ODKAZU.variantCode})`,
   );
   fireEvent.click(toggle);
-  expect(within(riadok).queryByTestId(`supplier-link-edit-${RIADOK_BEZ_ODKAZU.lineId}`)).not.toBeNull();
+  expect(screen.queryByTestId(`supplier-link-edit-${RIADOK_BEZ_ODKAZU.lineId}`)).not.toBeNull();
 
   fireEvent.click(
     within(riadok).getByLabelText(
       `Zrušiť úpravu odkazu na dodávateľa — ${RIADOK_BEZ_ODKAZU.variantName} (${RIADOK_BEZ_ODKAZU.variantCode})`,
     ),
   );
-  expect(within(riadok).queryByTestId(`supplier-link-edit-${RIADOK_BEZ_ODKAZU.lineId}`)).toBeNull();
+  expect(screen.queryByTestId(`supplier-link-edit-${RIADOK_BEZ_ODKAZU.lineId}`)).toBeNull();
   expect(setProductSupplierLink).not.toHaveBeenCalled();
 });

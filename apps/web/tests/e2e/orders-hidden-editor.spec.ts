@@ -36,6 +36,10 @@ test("riadok s otvoreným editorom odkazu na dodávateľa ostáva viditeľný pr
   const skupina = page.getByTestId("supplier-DODAVATEL-TEST-1");
   const riadok = skupina.locator("[data-testid^='order-line-']");
   await expect(riadok).toBeVisible();
+  // issue 162: vstup na úpravu odkazu žije teraz vo VLASTNOM rozbaľovacom
+  // riadku POD `riadok`om (`colSpan` cez celú tabuľku), nie ako jeho
+  // potomok — nájde sa cez najbližšieho súrodenca za `riadok`om.
+  const editRiadok = riadok.locator("xpath=./following-sibling::tr[1]");
 
   // Bez otvoreného editora "skryť vybavené" skryje CELÚ skupinu (jediný
   // riadok je vybavený, "caka_sa") — presne existujúce správanie z issue 61.
@@ -47,14 +51,14 @@ test("riadok s otvoreným editorom odkazu na dodávateľa ostáva viditeľný pr
   await toggle.click();
   await expect(skupina).toBeVisible();
   await riadok.getByRole("button", { name: /odkaz na dodávateľa/i }).click();
-  await expect(riadok.locator("input[type='url']")).toBeVisible();
+  await expect(editRiadok.locator("input[type='url']")).toBeVisible();
 
   // Zapnúť "skryť vybavené" znova — riadok TERAZ ostáva viditeľný, lebo má
   // otvorený editor (issue 149's akceptačná podmienka).
   await toggle.click();
   await expect(skupina).toBeVisible();
   await expect(riadok).toBeVisible();
-  await expect(riadok.locator("input[type='url']")).toBeVisible();
+  await expect(editRiadok.locator("input[type='url']")).toBeVisible();
 
   // Zavretie editora (✖, bez uloženia) — riadok teraz zmizne.
   await riadok.getByRole("button", { name: /zrušiť úpravu odkazu na dodávateľa/i }).click();

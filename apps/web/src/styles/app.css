@@ -1086,20 +1086,21 @@ tr:last-child td {
   background: var(--fs-brand);
   color: var(--fs-surface);
 }
-/* Vstup + uložiť pri OTVORENEJ úprave — rovnaký "flex-basis: 0 + min-width"
-   vzor ako `.ord-supplier-assign-input` (issue 105 bod 3's komentár
-   vysvetľuje prečo: `flex-basis` rozhoduje o zalomení, nie post-shrink
-   veľkosť). Vykreslí sa LEN keď editing beží (`OrderLineRow.tsx`) — na
-   rozdiel od `.ord-supplier-row` vyššie NEPRIDÁVA výšku KAŽDÉMU riadku,
-   len tomu PRÁVE editovanému (issue 105/107/111/127's odmeraný strop 120px
-   by inak takmer isto prasklo na VŠETKÝCH 37 riadkoch naraz). */
+/* issue 162: majiteľ, políčko na úpravu odkazu bolo v úzkej bunke DODÁVATEĽ
+   (~94px) príliš malé na to, aby bolo vidno reálny odkaz. Tento blok teraz
+   žije vo VLASTNOM rozbaľovacom riadku pod daným riadkom (`colSpan` cez
+   celú tabuľku, `OrderLineRow.tsx`), nie v úzkej bunke ako predtým —
+   `flex-basis: 0` vzor (issue 105 bod 3's komentár vysvetľuje prečo) sa
+   nemení, len rodičovský priestor je teraz oveľa širší, takže vstup sa
+   roztiahne naozaj široko. `max-width` obmedzuje len HORNÚ hranicu na
+   extrémne širokých obrazovkách (ticketov akceptačný test žiada aspoň 3×
+   pôvodných 94px = ≥282px — 40rem = 640px má veľkú rezervu). */
 .ord-supplier-link-edit {
   display: flex;
   align-items: center;
-  gap: var(--fs-space-1);
+  gap: var(--fs-space-2);
   flex-wrap: wrap;
-  max-width: 100%;
-  margin-top: var(--fs-space-1);
+  max-width: 40rem;
 }
 .ord-supplier-link-edit-input {
   flex: 1 1 0%;
@@ -1114,6 +1115,14 @@ tr:last-child td {
 }
 .ord-supplier-link-edit > button {
   flex-shrink: 0;
+}
+/* issue 162: bunka rozbaľovacieho riadku — jemne odlíšené pozadie (signál
+   "toto je vysunutá úprava", nie ďalší bežný riadok dát), rovnaký vodorovný
+   padding ako ostatné bunky (`.orders-table td`'s `--fs-space-3`). */
+.ord-supplier-link-edit-row > td {
+  background: var(--fs-surface-alt);
+  padding-left: var(--fs-space-3);
+  padding-right: var(--fs-space-3);
 }
 
 /* issue 65: priamy odkaz do Shoptet administrácie. issue 99: nesie teraz
