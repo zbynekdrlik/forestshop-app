@@ -390,6 +390,13 @@ it("re-import NIKDY neprepíše ručne nastavený stav riadku ani komentár obje
   // ostáva len nezmenené, lebo fixtúra sa re-importuje bez zmeny; skutočnú
   // zmenu dokazuje samostatný test vyššie ("remark je Shoptetovo pole…").
   expect(reread?.remark).toBe("Prosím doručiť len v piatok, ďakujem");
+  // issue 164: presne TOTO je akceptačná podmienka "kruh sa uzavrie" —
+  // manažérov `comment` prežije re-import NEDOTKNUTÝ (overené vyššie), zatiaľ
+  // čo `shop_remark` (Shoptetovo pole) sa AJ TAK znovu prečíta z exportu.
+  // Keby appka niekedy writebackla `comment` do Shoptetu a fixtúra by pri
+  // ĎALŠOM importe niesla náš vlastný blok, presne tento stĺpec by ho
+  // priniesol späť — bez toho, aby sa čo i len raz dotkol `comment` samotného.
+  expect(reread?.shopRemark).toBe("Zakaznik je stavebna firma, vybavit prednostne");
   const [rereadLine] = await db.select().from(orderLines).where(eq(orderLines.orderId, order1.id));
   expect(rereadLine?.state).toBe("skladom");
   expect(rereadLine?.quantity).toBe(3); // množstvo sa AJ TAK osviežuje
