@@ -1,8 +1,9 @@
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "../src/db/client.js";
-import { productSupplierLinkOverrides } from "../src/db/schema.js";
+import { products, productSupplierLinkOverrides } from "../src/db/schema.js";
 import { selectChangedSupplierLinks } from "../src/modules/shoptet-writeback/select-changes.js";
+import { insertTestSnapshot } from "./helpers/catalog.js";
 import { withCleanDb } from "./helpers/db.js";
 import { insertTestVariantForProduct } from "./helpers/orders.js";
 
@@ -102,5 +103,26 @@ describe("selectChangedSupplierLinks", () => {
     // sanity: the fixture really has both rows in the table
     const all = await db.select().from(productSupplierLinkOverrides).where(eq(productSupplierLinkOverrides.productKey, "P5"));
     expect(all).toHaveLength(1);
+  });
+
+  it("skips (never crashes on) a changed override whose product has zero variants — a data anomaly, not a normal case", async () => {
+    const snapshotId = await insertTestSnapshot(db);
+    await db.insert(products).values({
+      key: "P7-NO-VARIANTS",
+      name: "Produkt bez variantu (anomália)",
+      supplier: null,
+      firstSeenAt: new Date("2026-01-01T00:00:00Z"),
+      lastSeenAt: new Date("2026-01-01T00:00:00Z"),
+      lastSeenSnapshotId: snapshotId,
+    });
+    await db.insert(productSupplierLinkOverrides).values({
+      productKey: "P7-NO-VARIANTS",
+      url: "https://dodavatel.example/p7",
+      updatedAt: new Date("2026-01-01T00:00:00Z"),
+    });
+
+    const result = await selectChangedSupplierLinks(db);
+    expect(result.productKeys).toEqual([]);
+    expect(result.rows).toEqual([]);
   });
 });

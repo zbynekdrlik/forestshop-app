@@ -1,6 +1,7 @@
 import { eq, isNull, lt, or } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
 import { productSupplierLinkOverrides, variants } from "../../db/schema.js";
+import { log } from "../../logger.js";
 import type { WritebackRow } from "./csv.js";
 
 export interface SelectedWriteback {
@@ -21,6 +22,11 @@ export interface SelectedWriteback {
  * (`parovanie_produktov`'s `link_rows`, viď design komentár na #122).
  */
 export async function selectChangedSupplierLinks(db: Database): Promise<SelectedWriteback> {
+  const changedCondition = or(
+    isNull(productSupplierLinkOverrides.syncedAt),
+    lt(productSupplierLinkOverrides.syncedAt, productSupplierLinkOverrides.updatedAt),
+  );
+
   const rows = await db
     .select({
       code: variants.code,
@@ -30,14 +36,28 @@ export async function selectChangedSupplierLinks(db: Database): Promise<Selected
     })
     .from(productSupplierLinkOverrides)
     .innerJoin(variants, eq(variants.productKey, productSupplierLinkOverrides.productKey))
-    .where(
-      or(
-        isNull(productSupplierLinkOverrides.syncedAt),
-        lt(productSupplierLinkOverrides.syncedAt, productSupplierLinkOverrides.updatedAt),
-      ),
-    );
+    .where(changedCondition);
 
   const productKeys = [...new Set(rows.map((r) => r.productKey))];
+
+  // review of PR 140: an override for a productKey with ZERO variant rows
+  // (a data anomaly — every real product has at least one variant) would
+  // otherwise silently drop out of the innerJoin above forever, never
+  // synced and never logged. Making the gap OBSERVABLE (rather than a
+  // permanently silent no-op) is cheap — one extra id-only query, only run
+  // when there is anything changed at all to compare against.
+  const changedOverrides = await db
+    .select({ productKey: productSupplierLinkOverrides.productKey })
+    .from(productSupplierLinkOverrides)
+    .where(changedCondition);
+  const skipped = changedOverrides.map((o) => o.productKey).filter((key) => !productKeys.includes(key));
+  if (skipped.length > 0) {
+    log.warn(
+      { skippedProductKeys: skipped },
+      "shoptet write-back: preskočené zmenené odkazy na dodávateľa bez žiadneho variantu (dátová anomália)",
+    );
+  }
+
   return {
     productKeys,
     rows: rows.map((r) => ({ code: r.code, pairCode: r.pairCode ?? "", internalNote: r.internalNote })),
