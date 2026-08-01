@@ -406,3 +406,28 @@ paths:
   ani obavu o kolíziu s inými spec súbormi bežiacimi súbežne — smie
   bezpečne použiť UŽ existujúce fixtúrové riadky (napr. `orders.spec.ts`'s
   DODAVATEL-TEST-1/"(bez dodávateľa)" riadky).
+- **Changing an existing form element's TAG (e.g. `<input>` → `<textarea>`,
+  issue 150's multi-line comment) silently breaks any e2e test that
+  queries it with a TAG-SCOPED selector, even though `data-testid`/
+  `aria-label` are unchanged.** `orders-layout.spec.ts`'s row-height check
+  used `document.querySelector<HTMLInputElement>('input[data-testid^=
+  "comment-input-"]')` — after the tag change this silently returned
+  `null` (not a type error, since `querySelector` always types-as-cast),
+  so a DOWNSTREAM property read on `undefined` failed with a confusing
+  "expected true, got undefined" instead of "element not found". Local
+  full e2e run caught it (CI would have too) — the fix is to drop the tag
+  from the selector (`'[data-testid^="comment-input-"]'`) so it survives
+  future tag changes on the same element. Any FUTURE element-tag change
+  (input↔textarea↔select) needs a `grep -rn '<oldtag>\[data-testid'
+  apps/web/tests/e2e/` across the WHOLE e2e directory, not just the spec
+  file that already covers the element's own behaviour.
+- **A `<textarea>`'s Enter-vs-Ctrl+Enter split needs REAL keystrokes in
+  both vitest (`fireEvent.keyDown(el, {key:"Enter", ctrlKey:true})`) and
+  Playwright (`locator.press("Control+Enter")`), never `.fill()`/
+  `fireEvent.change()` alone** — issue 150: `.fill()` only sets the DOM
+  `.value` and fires a synthetic `input`/`change` event, it never
+  dispatches a `keydown`, so a test using only `.fill()` would pass
+  whether the Enter-vs-Ctrl+Enter branching logic was implemented
+  correctly OR removed entirely. `pressSequentially`/`.press()`
+  (Playwright) and `fireEvent.keyDown` (vitest) are the only two APIs that
+  actually exercise the `onKeyDown` handler being tested.
