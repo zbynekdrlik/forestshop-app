@@ -10,6 +10,7 @@ import {
   fetchOpenOrders,
   NEZNAMY_DODAVATEL,
   OrdersUnauthorizedError,
+  setProductSupplierLink,
   setSupplierEmail,
   setSupplierLinesOrdered,
   updateOrderComment,
@@ -210,6 +211,33 @@ export function OrdersSection({
     [load, onSessionExpired],
   );
 
+  // issue 121: manuálny odkaz na dodávateľa — PLNÝ refetch po úspechu (rovnaký
+  // dôvod ako `assignSupplier` vyššie: zmena platí pre celý PRODUKT, teda aj
+  // pre súrodenecké veľkosti toho istého riadku).
+  const [busySupplierLinkLineId, setBusySupplierLinkLineId] = useState<string | null>(null);
+
+  const setSupplierLink = useCallback(
+    (lineId: string, url: string) => {
+      setStateError("");
+      setBusySupplierLinkLineId(lineId);
+      setProductSupplierLink(lineId, url)
+        .then(() => {
+          load();
+        })
+        .catch((err: unknown) => {
+          if (err instanceof OrdersUnauthorizedError) {
+            onSessionExpired();
+            return;
+          }
+          setStateError(err instanceof Error ? err.message : "Uloženie odkazu na dodávateľa sa nepodarilo.");
+        })
+        .finally(() => {
+          setBusySupplierLinkLineId(null);
+        });
+    },
+    [load, onSessionExpired],
+  );
+
   // Hromadné označenie/zrušenie CELEJ skupiny dodávateľa naraz (stará appka's
   // `markGroupOrdered` — jedno tlačidlo, ktoré prepína smer podľa toho, či je
   // skupina UŽ celá objednaná, `webreview/static/app.js`'s `allOrdered`).
@@ -381,10 +409,12 @@ export function OrdersSection({
           busyOrderedLineId={busyOrderedLineId}
           busyOrderedSupplier={busyOrderedSupplier}
           busySupplierLineId={busySupplierLineId}
+          busySupplierLinkLineId={busySupplierLinkLineId}
           busyCommentOrderId={busyCommentOrderId}
           onChangeState={changeState}
           onChangeOrdered={changeOrdered}
           onAssignSupplier={assignSupplier}
+          onSetSupplierLink={setSupplierLink}
           onChangeComment={changeComment}
           editingEmailSupplier={editingEmailSupplier}
           emailDraft={emailDraft}

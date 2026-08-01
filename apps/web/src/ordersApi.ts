@@ -202,6 +202,21 @@ export async function assignOrderLineSupplier(lineId: string, supplier: string):
   await readJson(response, "Priradenie dodávateľa sa nepodarilo");
 }
 
+// issue 121: manuálny odkaz na dodávateľa — NA ROZDIEL od priradenia
+// dodávateľa vyššie sa smie upraviť pri KAŽDOM produkte, aj keď už jeden
+// odkaz (zo Shoptetu) má. Rovnaký dôvod na PLNÝ refetch po úspechu ako
+// `assignOrderLineSupplier` — zmena platí pre celý PRODUKT (server-strana
+// `setProductSupplierLink`), teda aj pre súrodenecké veľkosti toho istého
+// riadku, nielen preň samotný.
+export async function setProductSupplierLink(lineId: string, url: string): Promise<void> {
+  const response = await fetch(`/api/orders/lines/${lineId}/supplier-link`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ url }),
+  });
+  await readJson(response, "Uloženie odkazu na dodávateľa sa nepodarilo");
+}
+
 // issue 64: manažérova voľná poznámka k CELEJ objednávke — `orderId` je
 // spoločný pre VŠETKY riadky tej istej objednávky (`OrderLine.orderId`),
 // server-strana `setOrderComment` (`modules/orders/state.ts`) mutuje

@@ -1,9 +1,17 @@
 import { and, asc, eq, isNull } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
-import { orderLines, orders, productSupplierOverrides, products, supplierContacts, variants } from "../../db/schema.js";
+import {
+  orderLines,
+  orders,
+  productSupplierLinkOverrides,
+  productSupplierOverrides,
+  products,
+  supplierContacts,
+  variants,
+} from "../../db/schema.js";
 import { log } from "../../logger.js";
-import { extractSupplierLink } from "../catalog/supplier-link.js";
 import type { MailTransport } from "../mail/transport.js";
+import { resolveEffectiveSupplierLink } from "./effective-supplier-link.js";
 import { NEZNAMY_DODAVATEL } from "./queries.js";
 import { itemsWord } from "./pluralize.js";
 import { effectiveSupplierSql, normalizedSupplierKeySql, normalizeSupplierKeyJs } from "./supplier-key.js";
@@ -85,12 +93,14 @@ async function loadOutstandingLines(db: Database, supplier: string): Promise<Sup
       quantity: orderLines.quantity,
       externalCode: variants.externalCode,
       internalNote: products.internalNote,
+      supplierLinkOverride: productSupplierLinkOverrides.url,
     })
     .from(orderLines)
     .innerJoin(orders, eq(orders.id, orderLines.orderId))
     .innerJoin(variants, eq(variants.code, orderLines.variantCode))
     .innerJoin(products, eq(products.key, variants.productKey))
     .leftJoin(productSupplierOverrides, eq(productSupplierOverrides.productKey, products.key))
+    .leftJoin(productSupplierLinkOverrides, eq(productSupplierLinkOverrides.productKey, products.key))
     .where(and(supplierCondition, eq(orderLines.state, "objednane")))
     .orderBy(asc(orderLines.variantCode));
 
@@ -103,7 +113,7 @@ async function loadOutstandingLines(db: Database, supplier: string): Promise<Sup
         sizeLabel: row.sizeLabel,
         quantity: row.quantity,
         externalCode: row.externalCode,
-        supplierUrl: extractSupplierLink(row.internalNote).url,
+        supplierUrl: resolveEffectiveSupplierLink(row.internalNote, row.supplierLinkOverride).url,
       });
     } else {
       byCode.set(row.variantCode, { ...existing, quantity: existing.quantity + row.quantity });

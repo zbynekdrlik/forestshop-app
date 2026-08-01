@@ -9,6 +9,7 @@ import { ORDERS_EXPORT_URL_NOT_CONFIGURED, type OrdersIngestResult, type RunOrde
 import { listKnownStatusNames, listOpenStatusNames, replaceOpenStatusNames } from "../modules/orders/open-statuses.js";
 import { getOrderDetail, listOpenOrderLinesBySupplier } from "../modules/orders/queries.js";
 import { assignOrderLineSupplier } from "../modules/orders/supplier-assignment.js";
+import { setProductSupplierLink } from "../modules/orders/supplier-link-assignment.js";
 import { setOrderComment, setOrderLineOrdered, setOrderLineState } from "../modules/orders/state.js";
 import { requireRole, requireUser, type AppBindings } from "./middleware.js";
 import { requireSameOrigin } from "./origin-check.js";
@@ -28,6 +29,17 @@ const orderLineOrderedBody = z.object({ ordered: z.boolean() });
 // v projekte (`catalog-routes.ts`, `pairing-routes.ts`) — hodnota sa neskôr
 // vkladá aj do mailu dodávateľovi, chýbajúci limit bol prehliadnutá medzera.
 const orderLineSupplierBody = z.object({ supplier: z.string().trim().min(1).max(200) });
+// issue 121: manuálny odkaz na dodávateľa — validovaný ako URL (ticketova
+// akceptačná podmienka), `.max(2000)` rovnaká horná hranica ako ostatné voľné
+// URL/textové vstupy v projekte (`orderCommentBody` nižšie). `.url()` samo o
+// sebe by prijalo aj syntakticky platnú, ale nebezpečnú schému (napr.
+// `javascript:...`) — hodnota sa vykresľuje priamo ako `<a href>`
+// (`OrderLineRow.tsx`), preto NAVYŠE `.regex` vynucuje http(s), rovnaký vzor
+// ako `adminUrl`/existujúci `supplierUrl` vo frontendovej `ordersApi.ts`
+// schéme (issue 70's "druhá vrstva overenia" zásada).
+const orderLineSupplierLinkBody = z.object({
+  url: z.string().trim().url().max(2000).regex(/^https?:\/\//),
+});
 // issue 64: manažérova voľná poznámka k CELEJ objednávke — na rozdiel od
 // `orderLineSupplierBody` vyššie ZÁMERNE bez `.min(1)` (prázdny orezaný vstup
 // je platný spôsob, ako poznámku vymazať, route ho mapuje na `null`). Cap
@@ -235,6 +247,33 @@ export function registerOrdersRoutes(
       }
       log.info({ actorUserId: user.userId, lineId, supplier }, "ručné priradenie dodávateľa riadku objednávky");
       return c.json({ ok: true as const, supplier });
+    },
+  );
+
+  // issue 121: manuálny odkaz na dodávateľa — na rozdiel od priradenia
+  // dodávateľa vyššie (#63) tu NIE je žiadna "už má hodnotu" gate: majiteľ
+  // smie odkaz upraviť aj keď Shoptet už jeden poskytuje (opravuje zlé/
+  // zastarané odkazy rovnako často ako dopĺňa chýbajúce). Rovnaké oprávnenie
+  // ako zvyšok zápisov v tomto súbore.
+  app.post(
+    "/api/orders/lines/:lineId/supplier-link",
+    requireSameOrigin(),
+    requireUser(db),
+    requireRole("admin", "manazer"),
+    zValidator("param", orderLineParam),
+    zValidator("json", orderLineSupplierLinkBody),
+    async (c) => {
+      const { lineId } = c.req.valid("param");
+      const { url } = c.req.valid("json");
+      const user = c.get("user");
+      const now = new Date();
+
+      const result = await setProductSupplierLink(db, { lineId, url, actorUserId: user.userId, now });
+      if (result === "not_found") {
+        return c.json({ error: "Riadok objednávky sa nenašiel" }, 404);
+      }
+      log.info({ actorUserId: user.userId, lineId, url }, "úprava odkazu na dodávateľa riadku objednávky");
+      return c.json({ ok: true as const, url });
     },
   );
 

@@ -25,10 +25,12 @@ export function OrderLineRow({
   supplierBusy,
   variantTotal,
   busySupplierLineId,
+  busySupplierLinkLineId,
   busyCommentOrderId,
   onChangeState,
   onChangeOrdered,
   onAssignSupplier,
+  onSetSupplierLink,
   onChangeComment,
 }: {
   readonly line: OrderLine;
@@ -53,12 +55,19 @@ export function OrderLineRow({
   // issue 63: riadok, ktorého ručné priradenie dodávateľa PRÁVE TERAZ ukladá
   // (needitovateľné, kým sa neskončí).
   readonly busySupplierLineId: string | null;
+  // issue 121: riadok, ktorého odkaz na dodávateľa PRÁVE TERAZ ukladá —
+  // nezávislé od `busySupplierLineId` vyššie (iný zápis, iná trasa).
+  readonly busySupplierLinkLineId: string | null;
   // issue 64: objednávka (nie riadok — poznámka patrí CELEJ objednávke),
   // ktorej poznámka PRÁVE TERAZ ukladá.
   readonly busyCommentOrderId: string | null;
   readonly onChangeState: (lineId: string, newState: OrderLine["state"]) => void;
   readonly onChangeOrdered: (lineId: string, ordered: boolean) => void;
   readonly onAssignSupplier: (lineId: string, supplier: string) => void;
+  // issue 121: manuálny odkaz na dodávateľa — smie sa upraviť pri KAŽDOM
+  // riadku (na rozdiel od `onAssignSupplier`, ktorý je len pre riadky bez
+  // katalógového dodávateľa).
+  readonly onSetSupplierLink: (lineId: string, url: string) => void;
   readonly onChangeComment: (orderId: string, comment: string | null) => void;
 }): JSX.Element {
   const qtyChip = variantTotal !== undefined ? formatVariantTotalChip(variantTotal) : null;
@@ -92,6 +101,32 @@ export function OrderLineRow({
     const trimmed = supplierDraft.trim();
     if (trimmed === "") return;
     onAssignSupplier(line.lineId, trimmed);
+  };
+
+  // issue 121: TOGGLE (nie trvalo viditeľný vstup ako `supplierDraft`
+  // vyššie) — draft sa prednaplní ČERSTVOU `line.supplierUrl` hodnotou pri
+  // KAŽDOM otvorení (nie udržiavaný cez `useEffect`), takže nehrozí rovnaký
+  // "reset pri prvom mounte"/pretek, aký `supplierDraft`/`commentDraft` museli
+  // riešiť guardom (`.claude/rules/frontend-design.md`). Zavretie panelu je
+  // OPTIMISTICKÉ (hneď pri kliku na Uložiť) — jednoduchšie než čakať na
+  // potvrdenie servera, a pri zlyhaní ostáva chyba viditeľná v `stateError`
+  // banneri, manažér otvorí úpravu znova.
+  const [linkEditing, setLinkEditing] = useState(false);
+  const [linkDraft, setLinkDraft] = useState("");
+  const linkBusyHere = busySupplierLinkLineId === line.lineId;
+  const toggleLinkEditing = (): void => {
+    if (linkEditing) {
+      setLinkEditing(false);
+      return;
+    }
+    setLinkDraft(line.supplierUrl ?? "");
+    setLinkEditing(true);
+  };
+  const saveLink = (): void => {
+    const trimmed = linkDraft.trim();
+    if (trimmed === "") return;
+    onSetSupplierLink(line.lineId, trimmed);
+    setLinkEditing(false);
   };
 
   // issue 64: rovnaký "controlled draft, resetovaný z props po uložení"
@@ -182,55 +217,112 @@ export function OrderLineRow({
           (rovnaké testid, rovnaká logika), len vedľa seba v jednej `<td>`
           namiesto dvoch samostatných stĺpcov. */}
       <td className="ord-supplier-merged">
-        <div className="ord-supplier-cell" data-testid={`supplier-link-${line.lineId}`}>
-          {line.supplierUrl !== null ? (
-            // issue 119: majiteľ, doslovne "zmen na nejake tlacitko z ikonou
-            // ktore otvori na novom okne ten link, lebo teraz to je tazke
-            // stlacit" — textový odkaz nahradený veľkým ikonovým tlačidlom
-            // (`.ord-supplier-link` v `app.css` teraz štylizuje `<a>` ako
-            // tlačidlo, min. 36×36px klikacej plochy). `aria-label`/`title`
-            // nesú ten istý popis ako predtým (issue 72: variantName sám
-            // nestačí — dva riadky toho istého produktu v rôznych veľkostiach
-            // majú zhodný variantName, líšia sa len variantCode), viditeľný
-            // text je teraz len ikonka (`aria-hidden`, prístupné meno nesie
-            // výlučne `aria-label`).
-            <a
-              href={line.supplierUrl}
-              target="_blank"
-              rel="noreferrer noopener"
-              className="ord-supplier-link"
-              aria-label={`Odkaz na dodávateľa — ${line.variantName} (${line.variantCode})`}
-              title={`Otvoriť odkaz na dodávateľa — ${line.variantName} (${line.variantCode})`}
-            >
-              <span aria-hidden="true">🔗</span>
-            </a>
-          ) : line.supplierNote !== null ? (
-            <span className="ord-supplier-note" title={line.supplierNote}>
-              {line.supplierNote}
-            </span>
-          ) : line.supplierAssignable ? (
-            // issue 107 bod 3: majiteľ, komentár #1: "neviem čo tam je
-            // Priradenie dodávateľa stĺpec" — namiesto holej pomlčky (predtým
-            // aj tu, aj v `.ord-supplier-assign` nižšie — DVE pomlčky nad
-            // sebou) je tu teraz VIDITEĽNÝ popis toho, čo vstup pod ním robí.
-            // Zámerne v TEJTO, už existujúcej bunke (nie nový riadok pod
-            // vstupom) — pridanie ĎALŠIEHO riadku by pri úzkom stĺpci
-            // (input+button už zapĺňajú takmer celú šírku) posunulo výšku
-            // riadku nad issue 105's ~95px invariant (živo zmerané: 85px →
-            // 103.5px s popisom na vlastnom riadku).
-            <span className="ord-supplier-assign-hint">Priradiť dodávateľa</span>
-          ) : (
-            // issue 117: `externalCode` (dodávateľský kód) sa už NIKDY
-            // nezobrazuje — majiteľ ho nepoužíva ("kody produktov vobec
-            // nepouzivame"), appka používa výlučne odkaz na dodávateľa.
-            // Predtým sa táto pomlčka potláčala, keď `externalCode` bol
-            // vyplnený (zobrazoval sa namiesto nej samostatný "kód …" riadok)
-            // — bez toho riadku je terajší terminálny stav VŽDY pomlčka,
-            // keď riadok nemá ani odkaz, ani poznámku, ani priradenie
-            // (legitímny, `OrderLineRow.supplierAssignCell.test.tsx`).
-            "—"
-          )}
+        <div className="ord-supplier-row">
+          <div className="ord-supplier-cell" data-testid={`supplier-link-${line.lineId}`}>
+            {line.supplierUrl !== null ? (
+              // issue 119: majiteľ, doslovne "zmen na nejake tlacitko z ikonou
+              // ktore otvori na novom okne ten link, lebo teraz to je tazke
+              // stlacit" — textový odkaz nahradený veľkým ikonovým tlačidlom
+              // (`.ord-supplier-link` v `app.css` teraz štylizuje `<a>` ako
+              // tlačidlo, min. 36×36px klikacej plochy). `aria-label`/`title`
+              // nesú ten istý popis ako predtým (issue 72: variantName sám
+              // nestačí — dva riadky toho istého produktu v rôznych veľkostiach
+              // majú zhodný variantName, líšia sa len variantCode), viditeľný
+              // text je teraz len ikonka (`aria-hidden`, prístupné meno nesie
+              // výlučne `aria-label`).
+              <a
+                href={line.supplierUrl}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="ord-supplier-link"
+                aria-label={`Odkaz na dodávateľa — ${line.variantName} (${line.variantCode})`}
+                title={`Otvoriť odkaz na dodávateľa — ${line.variantName} (${line.variantCode})`}
+              >
+                <span aria-hidden="true">🔗</span>
+              </a>
+            ) : line.supplierNote !== null ? (
+              <span className="ord-supplier-note" title={line.supplierNote}>
+                {line.supplierNote}
+              </span>
+            ) : line.supplierAssignable ? (
+              // issue 107 bod 3: majiteľ, komentár #1: "neviem čo tam je
+              // Priradenie dodávateľa stĺpec" — namiesto holej pomlčky (predtým
+              // aj tu, aj v `.ord-supplier-assign` nižšie — DVE pomlčky nad
+              // sebou) je tu teraz VIDITEĽNÝ popis toho, čo vstup pod ním robí.
+              // Zámerne v TEJTO, už existujúcej bunke (nie nový riadok pod
+              // vstupom) — pridanie ĎALŠIEHO riadku by pri úzkom stĺpci
+              // (input+button už zapĺňajú takmer celú šírku) posunulo výšku
+              // riadku nad issue 105's ~95px invariant (živo zmerané: 85px →
+              // 103.5px s popisom na vlastnom riadku).
+              <span className="ord-supplier-assign-hint">Priradiť dodávateľa</span>
+            ) : (
+              // issue 117: `externalCode` (dodávateľský kód) sa už NIKDY
+              // nezobrazuje — majiteľ ho nepoužíva ("kody produktov vobec
+              // nepouzivame"), appka používa výlučne odkaz na dodávateľa.
+              // Predtým sa táto pomlčka potláčala, keď `externalCode` bol
+              // vyplnený (zobrazoval sa namiesto nej samostatný "kód …" riadok)
+              // — bez toho riadku je terajší terminálny stav VŽDY pomlčka,
+              // keď riadok nemá ani odkaz, ani poznámku, ani priradenie
+              // (legitímny, `OrderLineRow.supplierAssignCell.test.tsx`).
+              "—"
+            )}
+          </div>
+          {/* issue 121: majiteľ, doslovne "ma byt moznost ho doplnit... pri
+              kazdom produkte ma byt moznost upravit link". TOGGLE (nie trvalo
+              viditeľný vstup) — pridáva JEDEN malý prvok VŽDY (`flex-shrink: 0`
+              v `.ord-supplier-row`, žiadna vlastná výška), vstup+uložiť sa
+              vykreslí LEN pri otvorenej úprave (nižšie), aby sa nezopakovala
+              issue 105/107/111/127's row-height regresia na VŠETKÝCH 37
+              riadkoch naraz. */}
+          <button
+            type="button"
+            className="ord-supplier-link-edit-toggle"
+            data-testid={`supplier-link-edit-toggle-${line.lineId}`}
+            aria-label={
+              linkEditing
+                ? `Zrušiť úpravu odkazu na dodávateľa — ${line.variantName} (${line.variantCode})`
+                : line.supplierUrl !== null
+                  ? `Upraviť odkaz na dodávateľa — ${line.variantName} (${line.variantCode})`
+                  : `Doplniť odkaz na dodávateľa — ${line.variantName} (${line.variantCode})`
+            }
+            title={linkEditing ? "Zrušiť úpravu" : line.supplierUrl !== null ? "Upraviť odkaz" : "Doplniť odkaz"}
+            onClick={toggleLinkEditing}
+          >
+            <span aria-hidden="true">{linkEditing ? "✖" : "✏️"}</span>
+          </button>
         </div>
+        {linkEditing && (
+          <div className="ord-supplier-link-edit" data-testid={`supplier-link-edit-${line.lineId}`}>
+            <input
+              type="url"
+              className="ord-supplier-link-edit-input"
+              data-testid={`supplier-link-edit-input-${line.lineId}`}
+              aria-label={`Odkaz na dodávateľa riadku objednávky ${line.externalOrderId} / ${line.variantCode}`}
+              placeholder="https://…"
+              value={linkDraft}
+              disabled={linkBusyHere}
+              onChange={(e) => {
+                setLinkDraft(e.target.value);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  saveLink();
+                }
+              }}
+            />
+            <button
+              type="button"
+              className="btn sm good"
+              data-testid={`supplier-link-edit-save-${line.lineId}`}
+              aria-label={`Uložiť odkaz na dodávateľa riadku objednávky ${line.externalOrderId} / ${line.variantCode}`}
+              disabled={linkBusyHere || linkDraft.trim() === ""}
+              onClick={saveLink}
+            >
+              💾
+            </button>
+          </div>
+        )}
         {/* pri neradiťeľnom riadku (100 % dnešných ostrých dát) sa TENTO blok
             predtým vykresľoval VŽDY, len s holou pomlčkou "—" bez
             akéhokoľvek významu. Teraz sa nevykreslí VÔBEC (žiadny prvok,

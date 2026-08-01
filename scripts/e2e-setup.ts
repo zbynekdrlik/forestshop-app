@@ -107,6 +107,12 @@ const E2E_KOMENTAR_EMAIL = "e2e-komentar@forestshop.sk"; // musí sa zhodovať s
 // zdieľaným `e2e@forestshop.sk`.
 const E2E_ROZLOZENIE_EMAIL = "e2e-rozlozenie@forestshop.sk"; // musí sa zhodovať s hodnotou v orders-layout.spec.ts
 
+// issue 121: rovnaký mechanizmus a dôvod ako `E2E_ROZLOZENIE_EMAIL` vyššie —
+// balík je UŽ na hranici `MAX_ATTEMPTS` (10), takže nový test (manuálny
+// odkaz na dodávateľa — doplniť/upraviť) dostáva VLASTNÝ izolovaný účet
+// namiesto ďalšieho prihlásenia pod zdieľaným `e2e@forestshop.sk`.
+const E2E_ODKAZ_EMAIL = "e2e-odkaz@forestshop.sk"; // musí sa zhodovať s hodnotou v orders.spec.ts
+
 const { db, pool } = createDb();
 // Konštantný literál bez interpolácie — obyčajný reťazec je tu rovnako bezpečný
 // ako `sql` tagovaná šablóna (tú používa ekvivalentný apps/api/tests/helpers/db.ts),
@@ -200,6 +206,12 @@ await db.insert(users).values({
 });
 await db.insert(users).values({
   email: E2E_ROZLOZENIE_EMAIL,
+  passwordHash: await hashPassword(E2E_HESLO),
+  displayName: "E2E Manažér",
+  role: "manazer",
+});
+await db.insert(users).values({
+  email: E2E_ODKAZ_EMAIL,
   passwordHash: await hashPassword(E2E_HESLO),
   displayName: "E2E Manažér",
   role: "manazer",
@@ -392,6 +404,28 @@ await db.insert(orderLines).values([
   { orderId: objednavkaPriradenie.id, variantCode: "60035/L", quantity: 1 },
   { orderId: objednavkaPriradenie.id, variantCode: "60035/M", quantity: 1 },
 ]);
+
+// issue 121: JEDEN riadok nad DOVTEDY NEPOUŽITÝM jednovariantným produktom
+// ("278" — CSV fixtúra ho nesie s prázdnym `supplier`/`internalNote`,
+// `.claude/rules/catalog.md`'s CSV-editačný vzor) — NIE "40287"/"60035/*"
+// (tie `orders.spec.ts` viacnásobne overuje presným počtom/obsahom skupiny,
+// a "4859/*" (jediný fixtúrový produkt so SKUTOČNÝM `internalNote` odkazom)
+// by prepísanie odkazu na JEDNEJ veľkosti prejavilo aj na "4859/46",
+// KTORÉHO presnú `href` hodnotu prvý test súboru hard-coduje — issue 67).
+// Pridáva GLOBÁLNE 1 riadok do "(bez dodávateľa)" — `orders.spec.ts`'s prvý
+// test (E2E_FILTRE_EMAIL) preto počíta so "Všetci (7)"/"(bez dodávateľa) (4)"
+// namiesto predošlých (6)/(3).
+const [objednavkaOdkaz] = await db
+  .insert(orders)
+  .values({
+    externalOrderId: "9007",
+    customerName: "E2E Zákazník Odkaz",
+    statusName: DEFAULT_ORDER_OPEN_STATUS,
+    placedAt: new Date("2026-07-26T09:00:00Z"),
+  })
+  .returning();
+if (objednavkaOdkaz === undefined) throw new Error("E2E objednávka (odkaz) sa nepodarila vložiť");
+await db.insert(orderLines).values({ orderId: objednavkaOdkaz.id, variantCode: "278", quantity: 1 });
 
 // F4 (#45): jeden UŽ NAVRHNUTÝ (nepotvrdený) pairing kandidát — simuluje to,
 // čo by inak vložilo #46 (automatické hľadanie kandidátov, ešte
