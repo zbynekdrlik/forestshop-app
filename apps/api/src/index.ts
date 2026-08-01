@@ -16,13 +16,15 @@ import { DEFAULT_ORDERS_IMPORT_WINDOW_DAYS, ingestOrders, type RunOrdersIngest }
 import {
   catalogImportJob,
   ordersImportJob,
+  orderNoteWritebackJob,
   pruneRawExportsJob,
   pruneRawOrdersJob,
   sessionCleanupJob,
   shoptetWritebackJob,
 } from "./modules/scheduler/jobs.js";
 import { startScheduler } from "./modules/scheduler/scheduler.js";
-import { shoptetImportConfigFromBaseUrl } from "./modules/shoptet-writeback/config.js";
+import { orderNoteWritebackConfigFromBaseUrl, shoptetImportConfigFromBaseUrl } from "./modules/shoptet-writeback/config.js";
+import { runOrderNoteWritebackJob } from "./modules/shoptet-writeback/run-order-note-writeback.js";
 import { runShoptetWriteback } from "./modules/shoptet-writeback/run-writeback.js";
 import { createShutdownHandler } from "./shutdown.js";
 import { appVersion } from "./version.js";
@@ -124,6 +126,19 @@ const runShoptetWritebackFn =
           now,
         );
 
+// issue 123: spätný zápis appkinej poznámky k objednávke — zdieľa TIE ISTÉ
+// nepovinné premenné ako #122 vyššie (žiadne nové), len iná Playwright
+// automatizácia (per-objednávka, nie hromadný CSV import).
+const runOrderNoteWritebackFn =
+  shoptetAdminUser === undefined || shoptetAdminPassword === undefined
+    ? undefined
+    : (db2: typeof db, now: Date) =>
+        runOrderNoteWritebackJob(
+          db2,
+          orderNoteWritebackConfigFromBaseUrl(env.SHOPTET_ADMIN_BASE_URL, shoptetAdminUser, shoptetAdminPassword),
+          now,
+        );
+
 const app = createApp(db, {
   cookieSecure: env.SESSION_COOKIE_SECURE,
   ...(runIngest === undefined ? {} : { runIngest }),
@@ -146,6 +161,7 @@ const scheduler = startScheduler(db, [
   ordersImportJob(runOrdersIngest),
   pruneRawOrdersJob(env.ORDERS_RAW_DIR),
   shoptetWritebackJob(runShoptetWritebackFn),
+  orderNoteWritebackJob(runOrderNoteWritebackFn),
 ]);
 
 // `@hono/node-server`'s `serveStatic` prints its OWN `console.error` on every

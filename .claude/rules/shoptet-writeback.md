@@ -2,7 +2,9 @@
 paths:
   - "apps/api/src/modules/shoptet-writeback/**"
   - "apps/api/tests/shoptet-writeback-*.integration.test.ts"
+  - "apps/api/tests/order-note-*.integration.test.ts"
   - "apps/api/tests/helpers/shoptet-fixture.ts"
+  - "apps/api/tests/helpers/shoptet-order-detail-fixture.ts"
   - "Dockerfile"
 ---
 

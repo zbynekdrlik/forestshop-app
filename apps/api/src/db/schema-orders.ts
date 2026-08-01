@@ -80,6 +80,24 @@ export const orders = pgTable(
     shoptetOrderId: integer("shoptet_order_id"),
     placedAt: timestamp("placed_at", { withTimezone: true }).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    // issue 123: KEDY bol `comment` (vyššie) naposledy ZMENENÝ manažérom —
+    // nastavuje VÝLUČNE `setOrderComment` (`modules/orders/state.ts`), pri
+    // KAŽDEJ zmene poľa vrátane vymazania na `null`. `null` = comment sa
+    // ešte nikdy nezmenil cez appku (nový import, žiadny manažérov zásah).
+    // Rovnaký pár ako `productSupplierLinkOverrides.updatedAt` z #122, len
+    // na úrovni objednávky (namiesto samostatnej `updatedAt` na celej
+    // `order`, ktorá by musela riešiť aj polia, čo appku vôbec nezaujímajú).
+    commentUpdatedAt: timestamp("comment_updated_at", { withTimezone: true }),
+    // issue 123: kedy bol `comment` naposledy ÚSPEŠNE zapísaný do Shoptetu
+    // (potvrdené čerstvou navigáciou na detail objednávky po uložení, nikdy
+    // len "odoslalo sa"). `null` = ešte nikdy. "Zmenené od posledného
+    // zápisu" = `commentSyncedAt IS NULL OR commentSyncedAt <
+    // commentUpdatedAt` (`order-note-select.ts`) — rovnaký vzor ako #122's
+    // `product_supplier_link_override.synced_at`, len značené PER
+    // OBJEDNÁVKA hneď po jej vlastnom úspechu (nie dávkovo na konci celého
+    // behu), lebo tento zápis je per-objednávka, nie jeden hromadný CSV
+    // import.
+    commentSyncedAt: timestamp("comment_synced_at", { withTimezone: true }),
   },
   (t) => [index("order_placed_at_idx").on(t.placedAt)],
 );

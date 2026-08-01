@@ -3,6 +3,7 @@ import type { RunIngest } from "../catalog/ingest.js";
 import { pruneRawSnapshots } from "../catalog/raw-store.js";
 import { ORDERS_EXPORT_URL_NOT_CONFIGURED, type RunOrdersIngest } from "../orders/ingest.js";
 import { pruneRawOrders } from "../orders/raw-prune.js";
+import type { OrderNoteWritebackRunResult } from "../shoptet-writeback/run-order-note-writeback.js";
 import type { WritebackRunResult } from "../shoptet-writeback/run-writeback.js";
 import type { ScheduledJob } from "./types.js";
 
@@ -141,6 +142,40 @@ export function shoptetWritebackJob(runWriteback: RunShoptetWriteback | undefine
     async run(db, now) {
       if (runWriteback === undefined) throw new Error(SHOPTET_WRITEBACK_NOT_CONFIGURED);
       const result = await runWriteback(db, now);
+      return { detail: result };
+    },
+  };
+}
+
+export const ORDER_NOTE_WRITEBACK_JOB_NAME = "order-note-writeback";
+
+// Rovnaká hláška ako `shoptetWritebackJob` vyššie — zdieľa tú istú dvojicu
+// premenných (`SHOPTET_ADMIN_USER`/`PASSWORD`), operátor vidí to isté
+// vysvetlenie na oboch miestach.
+export const ORDER_NOTE_WRITEBACK_NOT_CONFIGURED =
+  "Spätný zápis poznámky objednávky do Shoptetu nie je nakonfigurovaný (chýba SHOPTET_ADMIN_USER/SHOPTET_ADMIN_PASSWORD)";
+
+export type RunOrderNoteWriteback = (
+  db: Parameters<ScheduledJob["run"]>[0],
+  now: Date,
+) => Promise<OrderNoteWritebackRunResult>;
+
+/**
+ * Spätný zápis appkinej poznámky (issue 123) — hodinovo, na `:55` (mimo
+ * kolízie s `:45` import objednávok aj `:50` #122's spätný zápis odkazov na
+ * dodávateľa). Rovnaký injektovaný-closure vzor ako `shoptetWritebackJob`
+ * vyššie: `runOrderNoteWriteback` môže byť `undefined`, keď
+ * `SHOPTET_ADMIN_USER`/`PASSWORD` nie sú nakonfigurované (`index.ts`).
+ * Žiadny nový advisory lock (rovnaký dôvod ako #122 — v tomto tickete niet
+ * manuálneho triggeru, teda niet s čím pretekať).
+ */
+export function orderNoteWritebackJob(runOrderNoteWriteback: RunOrderNoteWriteback | undefined): ScheduledJob {
+  return {
+    name: ORDER_NOTE_WRITEBACK_JOB_NAME,
+    schedule: { kind: "hourly", minuteUtc: 55 },
+    async run(db, now) {
+      if (runOrderNoteWriteback === undefined) throw new Error(ORDER_NOTE_WRITEBACK_NOT_CONFIGURED);
+      const result = await runOrderNoteWriteback(db, now);
       return { detail: result };
     },
   };

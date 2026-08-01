@@ -134,7 +134,13 @@ export async function setOrderComment(
       .limit(1);
     if (order === undefined) return "not_found";
 
-    await tx.update(orders).set({ comment: input.comment }).where(eq(orders.id, input.orderId));
+    // issue 123: `commentUpdatedAt` je jediný zdroj pravdy pre "treba
+    // poznámku zapísať späť do Shoptetu" (`order-note-select.ts`) — nastaví
+    // sa pri KAŽDEJ zmene, vrátane vymazania na `null`.
+    await tx
+      .update(orders)
+      .set({ comment: input.comment, commentUpdatedAt: input.now })
+      .where(eq(orders.id, input.orderId));
 
     await record(tx, {
       at: input.now,

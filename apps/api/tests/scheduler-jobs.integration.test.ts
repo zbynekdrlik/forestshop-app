@@ -8,6 +8,8 @@ import type { CatalogIngestResult } from "../src/modules/catalog/ingest.js";
 import { ORDERS_EXPORT_URL_NOT_CONFIGURED, type OrdersIngestResult } from "../src/modules/orders/ingest.js";
 import {
   CATALOG_IMPORT_JOB_NAME,
+  ORDER_NOTE_WRITEBACK_JOB_NAME,
+  ORDER_NOTE_WRITEBACK_NOT_CONFIGURED,
   ORDERS_IMPORT_JOB_NAME,
   PRUNE_RAW_EXPORTS_JOB_NAME,
   PRUNE_RAW_ORDERS_JOB_NAME,
@@ -15,6 +17,7 @@ import {
   SHOPTET_WRITEBACK_JOB_NAME,
   SHOPTET_WRITEBACK_NOT_CONFIGURED,
   catalogImportJob,
+  orderNoteWritebackJob,
   ordersImportJob,
   pruneRawExportsJob,
   pruneRawOrdersJob,
@@ -165,6 +168,25 @@ it("shoptetWritebackJob s nakonfigurovaným runWriteback naň deleguje a vráti 
   const fakeResult = { status: "nothing_changed" } as const;
   let receivedNow: Date | undefined;
   const job = shoptetWritebackJob((_db, now) => {
+    receivedNow = now;
+    return Promise.resolve(fakeResult);
+  });
+
+  const outcome = await job.run({} as never, NOW);
+  expect(outcome).toEqual({ detail: fakeResult });
+  expect(receivedNow).toBe(NOW);
+});
+
+it("orderNoteWritebackJob bez nakonfigurovaného runOrderNoteWriteback VYHODÍ (zachytí ho scheduler.ts, zapíše ako failure)", async () => {
+  const job = orderNoteWritebackJob(undefined);
+  expect(job.name).toBe(ORDER_NOTE_WRITEBACK_JOB_NAME);
+  await expect(job.run({} as never, NOW)).rejects.toThrow(ORDER_NOTE_WRITEBACK_NOT_CONFIGURED);
+});
+
+it("orderNoteWritebackJob s nakonfigurovaným runOrderNoteWriteback naň deleguje a vráti jeho výsledok ako detail", async () => {
+  const fakeResult = { status: "nothing_changed", skippedCount: 0 } as const;
+  let receivedNow: Date | undefined;
+  const job = orderNoteWritebackJob((_db, now) => {
     receivedNow = now;
     return Promise.resolve(fakeResult);
   });

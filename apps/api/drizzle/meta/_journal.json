@@ -134,6 +134,13 @@
       "when": 1785547348333,
       "tag": "0018_foamy_doctor_octopus",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1785557152824,
+      "tag": "0019_silky_ghost_rider",
+      "breakpoints": true
     }
   ]
 }
