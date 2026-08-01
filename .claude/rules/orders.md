@@ -370,3 +370,19 @@ paths:
   riadky, uprav cieľové polia, potom RUČNE zlož každý riadok
   (`";".join(esc(v) for v in row[:-1]) + ";"`, `esc` obaľuje úvodzovkami +
   zdvojuje vnútorné), NIE `csv.writer` nad celým súborom.
+- **Kumulatívne hlásenie o neuložených zápisoch (issue 66) je
+  `apps/web/src/ordersWriteFailures.ts`** — nahradilo pôvodný jediný
+  `stateError` string v `OrdersSection.tsx` (každé ďalšie zlyhanie ho
+  prepísalo, staršie zlyhanie zmizlo z obrazovky). Zoznam kľúčovaný `id =
+  <akcia>:<cieľ>` (napr. `state:<lineId>`, `comment:<orderId>`,
+  `groupOrdered:<supplier>`) — zhodné `id` NAHRADÍ starú položku (aktualizuje
+  dôvod), cudzie `id` PRIDÁ nezávislú položku vedľa nej. KAŽDÁ ĎALŠIA nová
+  zápisová akcia na tomto tabe (7. write handler) musí rovnako
+  upsert/clear-núť VLASTNÝ `id` do `writeFailures`, nikdy nezaviesť nový
+  samostatný `useState` error string vedľa neho — to by obnovilo presne ten
+  istý "posledné zlyhanie prepíše predchádzajúce" bug pre tú JEDNU akciu.
+  Žiadna optimistická reconciliation (legacy `app.js:1093-1240`'s
+  commitSeq) tu nie je potrebná — `checked={line.ordered}`/`<select
+  value={line.state}>` (`OrderLineRow.tsx`) sú viazané PRIAMO na
+  server-potvrdenú hodnotu z props, takže zamietnutý zápis sa NIKDY netvári
+  ako uložený už len vďaka existujúcemu dizajnu.

@@ -384,3 +384,25 @@ paths:
   rizika medzi-testovej kolízie. Pri KAŽDOM ďalšom produktovo-kľúčovanom
   override teste: `grep` cieľový `productKey` (nie len `variantCode`) naprieč
   CELÝM `apps/web/tests/e2e/` predtým, než ho použiješ.
+- **E2E test, ktorý potrebuje simulovať ZLYHANÝ zápis na server (výpadok
+  siete, 5xx), MUSÍ prepichnúť `window.fetch` cez `addInitScript` — NIKDY
+  `page.route().abort()`/`.fulfill({status: 4xx/5xx})`.** Issue 66
+  (kumulatívny banner o neuložených zmenách): `page.route` ide cez
+  SKUTOČNÚ sieťovú vrstvu prehliadača, takže Chromium zaloguje reálne
+  "Failed to load resource" do konzoly — presne to, čo vyššie uvedený
+  zákaz rozširovania JEDINEJ povolenej konzolovej výnimky (401 na
+  `/api/me`) zakazuje. Naživo overené (Playwright MCP proti produkcii aj v
+  tomto e2e súbore): prepichnutý `window.fetch` (JS-level override, nikdy
+  sa nedotkne skutočnej siete pre zhodné URL) pri REJECTNUTÍ aj pri fake
+  200 `Response` vracia NULOVÉ console správy. Vzor (`orders-write-
+  failures.spec.ts`): `addInitScript` nahradí `window.fetch` funkciou, čo
+  pre NE-GET požiadavky na URL fragmenty v `Set`e buď rejectne
+  (`Promise.reject(new TypeError(...))` — simuluje výpadok siete) alebo
+  vráti fake `new Response(...)` (simuluje úspech BEZ reálneho zápisu),
+  inak zavolá originálny `fetch`. Musí bežať `addInitScript`om (pred
+  KAŽDÝM appkovým skriptom), nie neskorším `page.evaluate` — appka volá
+  zápisové funkcie hneď pri mounte/interakcii. Bonus: keďže reálny zápis
+  nikdy neodíde na server, test nepotrebuje VLASTNÚ fixtúrovú objednávku
+  ani obavu o kolíziu s inými spec súbormi bežiacimi súbežne — smie
+  bezpečne použiť UŽ existujúce fixtúrové riadky (napr. `orders.spec.ts`'s
+  DODAVATEL-TEST-1/"(bez dodávateľa)" riadky).
