@@ -28,11 +28,22 @@ GitHub ho zavrel presne v čase merge commitu, hoci ticket mal ešte
 neoverenú (na credential čakajúcu) akceptačnú podmienku ("naživo klikni a
 over"). Keď ticket má AKÚKOĽVEK acceptančnú podmienku, ktorú nejde overiť
 PRED mergom (živý klik vyžadujúci cudzie prihlásenie, manuálne potvrdenie
-treťou stranou a pod.), NEPÍŠ `Closes #N` do tela PR — nechaj ticket
+treťou stranou a pod. — vrátane BEŽNÉHO post-deploy naživo overenia, ktoré
+príde AŽ PO merge/deploy), NEPÍŠ `Closes #N` do tela PR — nechaj ticket
 zavrieť RUČNE (`gh issue close`) až PO skutočnom overení, alebo (ak sa
 merguje aj tak) rovno po merge over stav (`gh issue view --json state`) a
 znovu otvor (`gh issue reopen`) s vysvetľujúcim komentárom, presne ako sa
 to riešilo tu.
+
+**Rovnaké riziko platí aj pre COMMIT SPRÁVY, nielen telo PR** (issue 66,
+2026-08-01) — tento repo merguje dev→main VŽDY merge commitom (nikdy
+squash), takže jednotlivé commit správy z `dev` ostávajú NEDOTKNUTÉ v
+histórii `main` po merge; GitHub-ova detekcia zatváracích kľúčových slov
+sa spúšťa aj z commit správy, keď taký commit skončí na predvolenej vetve.
+`Closes #66`/`Fixes #66` v samotnej commit správe (nie len v tele PR) by
+teda tickét zavrelo AJ BEZ akéhokoľvek riadku v tele PR. Fix: pri tickete s
+odloženým overením napíš do commit správy PLAIN referenciu bez zatváracieho
+slovesa (`issue 66`, nie `Closes #66`/`Fixes #66`), presne ako v tele PR.
 
 **GitHub-ova detekcia zatváracích kľúčových slov chytá tvary slovies
 zavrieť/opraviť/vyriešiť (v angličtine) BEZPROSTREDNE pred `#N` KDEKOĽVEK

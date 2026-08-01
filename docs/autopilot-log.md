@@ -1872,3 +1872,42 @@ nové heslo sa nikde v pushnutom obsahu nenachádza.
   odkaz), CRLF→LF normalizácia real Shoptetu (fixture musí kopírovať),
   per-objednávkové mark-synced zdôvodnenie, docker-cp postup potvrdený aj
   pre tento druhý modul.
+
+## Issue 66 — kumulatívne hlásenie o neuložených zmenách ("Na objednanie")
+
+- Design comment PRED prvým kódovým commitom:
+  https://github.com/zbynekdrlik/forestshop-app/issues/66#issuecomment-5150002362
+  (root cause: jediný `stateError` string zdieľaný 6 zápisovými akciami,
+  každé ďalšie zlyhanie prepísalo predchádzajúce; zvolený prístup: keyed
+  zoznam zlyhaní `ordersWriteFailures.ts`; zamietnutá alternatíva: portovanie
+  legacy `app.js:1093-1240`'s commitSeq optimistickej reconciliation — tento
+  app nikdy nezobrazuje zápis ako uložený pred potvrdením servera, takže ten
+  pretek tu vôbec neexistuje).
+- Nové: `ordersWriteFailures.ts` (RED/GREEN nebolo relevantné — feature, nie
+  bug fix, testy pridané v tej istej práci), `OrderWriteFailuresBanner.tsx`,
+  `useSupplierEmailEditing.ts` (extrakcia kvôli eslint `max-lines: 400`,
+  rovnaký vzor ako `useSupplierMailActions.ts`).
+- Testy: `ordersWriteFailures.test.ts` (10), `OrderWriteFailuresBanner
+  .test.tsx` (5), `OrdersSection.writeFailures.test.tsx` (1 — dôkaz DVOCH
+  nezávislých zlyhaní naraz), 5 existujúcich testov upravených (nová tvar
+  bannera namiesto holého stringu), nový Playwright e2e `orders-write-
+  failures.spec.ts` (`window.fetch` override cez `addInitScript`, nikdy
+  `page.route`, kvôli konzolovej výnimke — zdokumentované v
+  `.claude/rules/testing.md`).
+- PR #145 (merge 8b17c5c, v0.3.0-dev.87). NEobsahovalo `Closes #66` v
+  commit správe ani v tele PR (post-deploy naživo overenie príde AŽ po
+  merge) — issue 66 zavreté ručne po overení.
+- Naživo overené na produkcii (`forestshop-novy.newlevel.media`) cez
+  prepichnutý `window.fetch` (nikdy sa nedotkol reálneho servera): DVE
+  nezávislé zlyhania (zmena stavu na dvoch rôznych riadkoch, obj. 20261249 +
+  obj. 20261203) sa zobrazili SÚČASNE v banneri ("2 položky"), zamietnuté
+  zmeny sa netvárili ako uložené, zatvorenie bannera zmazalo obe naraz,
+  konzola bez chýb. Baseline po teste nedotknutý (nič sa reálne neuložilo):
+  `product_supplier_link_override|product_supplier_override|order|order_line`
+  = `0|0|534|878`, presne pôvodná hodnota.
+- Playbook rozšírený: `.claude/rules/orders.md` (kumulatívny zoznam zlyhaní,
+  `id` konvencia pre budúce zápisové akcie), `.claude/rules/testing.md`
+  (fetch-override technika pre simuláciu zlyhaného zápisu v e2e testoch bez
+  porušenia jedinej povolenej konzolovej výnimky), `CLAUDE.md` (rozšírenie
+  existujúcej `Closes #N` poznámky — riziko platí aj pre COMMIT správy,
+  nielen telo PR, keďže tento repo merguje merge commitom).
