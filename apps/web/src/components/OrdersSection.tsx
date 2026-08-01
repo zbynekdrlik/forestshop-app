@@ -28,6 +28,7 @@ import {
   updateOrderComment,
   updateOrderLineOrdered,
   updateOrderLineState,
+  validateSupplierLinkUrl,
   type OrderLine,
   type SupplierOpenOrders,
 } from "../ordersApi.js";
@@ -276,6 +277,19 @@ export function OrdersSection({
     (lineId: string, url: string) => {
       const failureId = `supplierLink:${lineId}`;
       const where = lineWhere(suppliers, lineId);
+      // issue 153: OKAMŽITÁ kontrola V PREHLIADAČI, PRED akýmkoľvek zápisom
+      // na server — zrkadlí presne server-strany pravidlo
+      // (`validateSupplierLinkUrl`, `ordersApi.ts`). Neplatná hodnota sa
+      // ukáže v tom istom kumulatívnom `writeFailures` banneri (issue 66)
+      // ako každé iné zlyhanie zápisu na tejto obrazovke — žiadny nový,
+      // samostatný chybový vzor.
+      const validationError = validateSupplierLinkUrl(url);
+      if (validationError !== null) {
+        setWriteFailures((current) =>
+          upsertWriteFailure(current, { id: failureId, what: "Odkaz na dodávateľa", where, detail: validationError }),
+        );
+        return;
+      }
       setBusySupplierLinkLineId(lineId);
       setProductSupplierLink(lineId, url)
         .then(() => {
