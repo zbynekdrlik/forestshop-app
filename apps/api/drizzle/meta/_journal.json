@@ -155,6 +155,13 @@
       "when": 1785693949589,
       "tag": "0021_bouncy_shockwave",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1785701651575,
+      "tag": "0022_famous_sunspot",
+      "breakpoints": true
     }
   ]
 }

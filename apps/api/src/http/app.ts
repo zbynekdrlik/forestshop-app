@@ -13,6 +13,7 @@ import { registerCatalogRoutes, type RunIngest } from "./catalog-routes.js";
 import { checkLoginRateLimit, clientIp } from "./login-rate-limit.js";
 import { SESSION_COOKIE, requireUser, type AppBindings } from "./middleware.js";
 import { registerOrdersRoutes, type RunOrdersIngest } from "./orders-routes.js";
+import { registerOrderReminderRoutes, type OrderReminderRunDeps } from "./order-reminder-routes.js";
 import { requireSameOrigin } from "./origin-check.js";
 import { registerPairingRoutes } from "./pairing-routes.js";
 import { registerPostaUncollectedRoutes, type PostaUncollectedRunDeps } from "./posta-uncollected-routes.js";
@@ -47,6 +48,11 @@ export function createApp(
     // meniť svoje volanie `createApp`). `index.ts` ho v produkcii VŽDY
     // zostavuje s reálnym tracking klientom.
     readonly postaUncollected?: PostaUncollectedRunDeps;
+    // issue 173: "Pripomienky objednávok" — rovnaký dôvod ako
+    // `postaUncollected` vyššie: voliteľné, bezpečný default nižšie pre
+    // testy/lokálny vývoj, `index.ts` v produkcii VŽDY nahradí reálnymi
+    // dependencies.
+    readonly orderReminder?: OrderReminderRunDeps;
   },
 ): Hono<AppBindings> {
   const app = new Hono<AppBindings>();
@@ -153,6 +159,20 @@ export function createApp(
       // mail (`mailTransport` chýba). Produkcia (`index.ts`) toto VŽDY
       // nahradí reálnym tracking klientom.
       trackingClient: () => Promise.resolve(null),
+      mailTransport: undefined,
+      bccEmail: undefined,
+      adminBaseUrl: options.adminBaseUrl ?? "https://www.forestshop.sk",
+    },
+  );
+  registerOrderReminderRoutes(
+    app,
+    db,
+    options.orderReminder ?? {
+      // Bezpečný default pre testy/lokálny vývoj bez explicitne dodaných
+      // dependencies — NIKDY nekontaktuje skutočné OpenAI (`classifyClient`
+      // chýba), nikdy neposiela mail (`mailTransport` chýba). Produkcia
+      // (`index.ts`) toto VŽDY nahradí reálnymi dependencies.
+      classifyClient: undefined,
       mailTransport: undefined,
       bccEmail: undefined,
       adminBaseUrl: options.adminBaseUrl ?? "https://www.forestshop.sk",

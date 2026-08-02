@@ -1,9 +1,10 @@
 import { sql } from "drizzle-orm";
 import pg from "pg";
 import { createDb, type Database } from "../../src/db/client.js";
-import { orderOpenStatuses, postaUncollectedSettings } from "../../src/db/schema.js";
+import { orderOpenStatuses, orderReminderSettings, postaUncollectedSettings } from "../../src/db/schema.js";
 import { DEFAULT_ORDER_OPEN_STATUS } from "../../src/modules/orders/open-statuses.js";
 import { POSTA_UNCOLLECTED_SETTINGS_ID } from "../../src/modules/posta-uncollected/settings.js";
+import { ORDER_REMINDER_SETTINGS_ID } from "../../src/modules/order-reminder/settings.js";
 
 /**
  * Distinct advisory-lock key for serializing `withCleanDb()` across
@@ -48,9 +49,10 @@ export async function withCleanDb(): Promise<{ db: Database; close: () => Promis
     // either direction (keyed on a free-text status name) — CASCADE never
     // reaches it. "posta_uncollected_settings"/"posta_uncollected_state"
     // (issue 172) are the SAME situation too — no FK in either direction
-    // (singleton id / order-code keyed).
+    // (singleton id / order-code keyed). "order_reminder_settings"/
+    // "order_reminder_state" (issue 173) are the SAME situation again.
     await db.execute(
-      sql`TRUNCATE TABLE ingest_issue, variant, product, catalog_snapshot, job_run, audit_events, sessions, users, order_line, "order", supplier_contact, pairing, supplier, order_open_status, posta_uncollected_settings, posta_uncollected_state RESTART IDENTITY CASCADE`,
+      sql`TRUNCATE TABLE ingest_issue, variant, product, catalog_snapshot, job_run, audit_events, sessions, users, order_line, "order", supplier_contact, pairing, supplier, order_open_status, posta_uncollected_settings, posta_uncollected_state, order_reminder_settings, order_reminder_state RESTART IDENTITY CASCADE`,
     );
     // issue 59: `order_open_status` is a NEW table with real production
     // content (the migration seeds it) — TRUNCATE alone would leave every
@@ -64,6 +66,10 @@ export async function withCleanDb(): Promise<{ db: Database; close: () => Promis
     // (`enabled=false`), so every test must start from that same
     // just-migrated state, not an empty table.
     await db.insert(postaUncollectedSettings).values({ id: POSTA_UNCOLLECTED_SETTINGS_ID, enabled: false });
+    // issue 173: `order_reminder_settings` is the SAME situation as
+    // `posta_uncollected_settings` above — the migration seeds its
+    // singleton row (`enabled=false`).
+    await db.insert(orderReminderSettings).values({ id: ORDER_REMINDER_SETTINGS_ID, enabled: false });
   } catch (err) {
     try {
       await pool.end();
