@@ -1592,3 +1592,19 @@ tr:last-child td {
   border-radius: var(--fs-radius-sm);
   overflow-x: auto;
 }
+
+/* ---------------- 14. PRIPOMIENKY OBJEDNÁVOK (issue 173) ---------------- */
+.order-reminder-box {
+  margin-top: var(--fs-space-4);
+}
+.order-reminder-last-run {
+  font-size: var(--fs-text-sm);
+  color: var(--fs-ink-muted);
+  margin-top: var(--fs-space-2);
+}
+.order-reminder-preview-body {
+  background: var(--fs-surface);
+  padding: var(--fs-space-3);
+  border-radius: var(--fs-radius-sm);
+  overflow-x: auto;
+}

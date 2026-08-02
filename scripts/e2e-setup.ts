@@ -9,13 +9,14 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { createDb } from "../apps/api/src/db/client.js";
-import { jobRuns, orderLines, orderOpenStatuses, orders, pairings, postaUncollectedSettings, users } from "../apps/api/src/db/schema.js";
+import { jobRuns, orderLines, orderOpenStatuses, orderReminderSettings, orders, pairings, postaUncollectedSettings, users } from "../apps/api/src/db/schema.js";
 import { CATALOG_IMPORT_JOB_NAME } from "../apps/api/src/modules/scheduler/jobs.js";
 import { hashPassword } from "../apps/api/src/modules/auth/passwords.js";
 import { ingestCatalog } from "../apps/api/src/modules/catalog/ingest.js";
 import { DEFAULT_SNAPSHOT_LIMITS } from "../apps/api/src/modules/catalog/validation.js";
 import { DEFAULT_ORDER_OPEN_STATUS } from "../apps/api/src/modules/orders/open-statuses.js";
 import { POSTA_UNCOLLECTED_SETTINGS_ID } from "../apps/api/src/modules/posta-uncollected/settings.js";
+import { ORDER_REMINDER_SETTINGS_ID } from "../apps/api/src/modules/order-reminder/settings.js";
 
 const E2E_HESLO = "e2e-test-heslo"; // musí sa zhodovať s hodnotou v login.spec.ts/catalog.spec.ts/orders.spec.ts
 
@@ -134,6 +135,11 @@ const E2E_SKRYTY_EDITOR_EMAIL = "e2e-skryty-editor@forestshop.sk"; // musí sa z
 // dostáva VLASTNÝ izolovaný účet namiesto ďalšieho prihlásenia pod zdieľaným.
 const E2E_POSTA_EMAIL = "e2e-posta@forestshop.sk"; // musí sa zhodovať s hodnotou v posta-uncollected.spec.ts
 
+// issue 173: rovnaký mechanizmus a dôvod ako `E2E_POSTA_EMAIL` vyššie —
+// nový spec súbor (`order-reminder.spec.ts`) dostáva VLASTNÝ izolovaný účet
+// namiesto ďalšieho prihlásenia pod zdieľaným `e2e@forestshop.sk`.
+const E2E_PRIPOMIENKY_EMAIL = "e2e-pripomienky@forestshop.sk"; // musí sa zhodovať s hodnotou v order-reminder.spec.ts
+
 const { db, pool } = createDb();
 // Konštantný literál bez interpolácie — obyčajný reťazec je tu rovnako bezpečný
 // ako `sql` tagovaná šablóna (tú používa ekvivalentný apps/api/tests/helpers/db.ts),
@@ -156,9 +162,10 @@ const { db, pool } = createDb();
 // "supplier" vyššie v komentári tesne pod TRUNCATE — kľúčovaný voľným
 // textom stavu, žiadny FK, CASCADE ho nikdy nestrhne. "posta_uncollected_
 // settings"/"posta_uncollected_state" (issue 172) sú rovnaký prípad —
-// singleton id / kód objednávky, žiadny FK.
+// singleton id / kód objednávky, žiadny FK. "order_reminder_settings"/
+// "order_reminder_state" (issue 173) sú rovnaký prípad znova.
 await db.execute(
-  'TRUNCATE TABLE ingest_issue, variant, product, catalog_snapshot, job_run, audit_events, sessions, users, order_line, "order", supplier_contact, pairing, supplier, order_open_status, posta_uncollected_settings, posta_uncollected_state RESTART IDENTITY CASCADE',
+  'TRUNCATE TABLE ingest_issue, variant, product, catalog_snapshot, job_run, audit_events, sessions, users, order_line, "order", supplier_contact, pairing, supplier, order_open_status, posta_uncollected_settings, posta_uncollected_state, order_reminder_settings, order_reminder_state RESTART IDENTITY CASCADE',
 );
 // Rovnaký dôvod ako `tests/helpers/db.ts`: bez tohto by "Na objednanie" bolo
 // v CELOM e2e behu prázdne pre KAŽDÚ objednávku (žiadny nastavený otvorený
@@ -167,6 +174,9 @@ await db.insert(orderOpenStatuses).values({ statusName: DEFAULT_ORDER_OPEN_STATU
 // issue 172: rovnaký dôvod — migrácia seeduje `posta_uncollected_settings`'s
 // singleton riadok (`enabled=false`), reseedovať ho treba aj tu.
 await db.insert(postaUncollectedSettings).values({ id: POSTA_UNCOLLECTED_SETTINGS_ID, enabled: false });
+// issue 173: rovnaký dôvod — migrácia seeduje `order_reminder_settings`'s
+// singleton riadok (`enabled=false`), reseedovať ho treba aj tu.
+await db.insert(orderReminderSettings).values({ id: ORDER_REMINDER_SETTINGS_ID, enabled: false });
 await db.insert(users).values({
   email: "e2e@forestshop.sk",
   passwordHash: await hashPassword(E2E_HESLO),
@@ -256,6 +266,12 @@ await db.insert(users).values({
 });
 await db.insert(users).values({
   email: E2E_POSTA_EMAIL,
+  passwordHash: await hashPassword(E2E_HESLO),
+  displayName: "E2E Manažér",
+  role: "manazer",
+});
+await db.insert(users).values({
+  email: E2E_PRIPOMIENKY_EMAIL,
   passwordHash: await hashPassword(E2E_HESLO),
   displayName: "E2E Manažér",
   role: "manazer",

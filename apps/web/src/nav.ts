@@ -1,6 +1,7 @@
 import type { ComponentType } from "react";
 import type { Me } from "./api.js";
 import { CatalogPage } from "./components/CatalogPage.js";
+import { OrderReminderSection } from "./components/OrderReminderSection.js";
 import { OrdersSection } from "./components/OrdersSection.js";
 import { PairingSection } from "./components/PairingSection.js";
 import { PostaUncollectedSection } from "./components/PostaUncollectedSection.js";
@@ -64,6 +65,10 @@ export const HIDDEN_TABS: Readonly<Record<string, NavTab>> = {
   // ľavom menu len "Sync zo Shoptetu"/"Na objednanie" (issue 57), táto nová
   // obrazovka je preto dostupná len cez `?tab=posta-uncollected`.
   "posta-uncollected": { id: "posta-uncollected", label: "Nevyzdvihnuté zásielky", Component: PostaUncollectedSection },
+  // issue 173: rovnaký vzor ako "posta-uncollected" vyššie — majiteľ zatiaľ
+  // chce v ľavom menu len dve položky (#57), táto obrazovka je preto
+  // dostupná len cez `?tab=order-reminder`.
+  "order-reminder": { id: "order-reminder", label: "Pripomienky objednávok", Component: OrderReminderSection },
 };
 
 export const DEFAULT_TAB_ID: string = NAV[0]?.tabs[0]?.id ?? "sync";

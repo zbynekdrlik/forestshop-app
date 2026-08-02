@@ -24,6 +24,7 @@ it("findTab nájde viditeľnú aj skrytú záložku podľa id, neznáme id vrát
   expect(findTab("pairing")?.label).toBe("Kontrola párovania");
   expect(findTab("scheduler")?.label).toBe("Plánovač");
   expect(findTab("posta-uncollected")?.label).toBe("Nevyzdvihnuté zásielky");
+  expect(findTab("order-reminder")?.label).toBe("Pripomienky objednávok");
   expect(findTab("neexistuje")).toBeUndefined();
 });
 

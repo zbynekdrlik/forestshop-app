@@ -60,6 +60,17 @@ const envSchema = z.object({
   // closed, ticket's jediná bezpečnostná podmienka) — nikdy sa nedotýka
   // existujúceho odosielania objednávky dodávateľovi.
   POSTA_UNCOLLECTED_BCC_EMAIL: z.string().email().optional(),
+  // issue 173: "Pripomienky objednávok" — OpenAI klasifikátor internej
+  // poznámky predajne ("bol zákazník už kontaktovaný?"). Nepovinný: bez neho
+  // automatizácia beží ďalej, len objednávky s poznámkou zostanú "čaká" (AI
+  // nedostupné) namiesto klasifikácie — nikdy sa nehádaj/nepošle naslepo.
+  // Skutočný kľúč patrí LEN do .env na dev2 a GitHub Secrets, nikdy do repa.
+  OPENAI_API_KEY: z.string().min(1).optional(),
+  // issue 173: skrytá kópia (BCC) majiteľovi — NEZÁVISLÁ, vyhradená premenná
+  // (rovnaký dôvod ako #172's `POSTA_UNCOLLECTED_BCC_EMAIL`, nie zdieľané
+  // všeobecné `MAIL_BCC`). Chýbajúca = automatizácia NEPOŠLE ani jeden e-mail
+  // zákazníkovi (fail-closed, majiteľova jediná bezpečnostná podmienka).
+  ORDER_REMINDER_BCC_EMAIL: z.string().email().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

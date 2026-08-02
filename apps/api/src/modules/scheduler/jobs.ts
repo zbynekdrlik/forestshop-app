@@ -6,6 +6,8 @@ import { ORDERS_EXPORT_URL_NOT_CONFIGURED, type RunOrdersIngest } from "../order
 import { pruneRawOrders } from "../orders/raw-prune.js";
 import { isPostaUncollectedEnabled } from "../posta-uncollected/settings.js";
 import type { PostaUncollectedRunResult } from "../posta-uncollected/run.js";
+import { isOrderReminderEnabled } from "../order-reminder/settings.js";
+import type { OrderReminderRunResult } from "../order-reminder/run.js";
 import type { OrderNoteWritebackRunResult } from "../shoptet-writeback/run-order-note-writeback.js";
 import type { WritebackRunResult } from "../shoptet-writeback/run-writeback.js";
 import type { ScheduledJob } from "./types.js";
@@ -208,6 +210,38 @@ export function postaUncollectedJob(run: RunPostaUncollected): ScheduledJob {
     schedule: { kind: "daily", hourUtc: 7, minuteUtc: 0 },
     async run(db, now) {
       const enabled = await isPostaUncollectedEnabled(db);
+      if (!enabled) {
+        return { detail: { skipped: true, reason: "automatizácia je vypnutá (Štart/Stop)" } };
+      }
+      const result = await run(db, now);
+      return { detail: result };
+    },
+  };
+}
+
+export const ORDER_REMINDER_JOB_NAME = "order-reminder";
+
+export type RunOrderReminder = (db: Database, now: Date) => Promise<OrderReminderRunResult>;
+
+/**
+ * "Pripomienky objednávok" (issue 173) — denne o 08:00 Europe/Bratislava
+ * (06:00 UTC — CEST v lete/CET v zime posunie skutočný čas behu o hodinu,
+ * rovnaká DST-nevedomá disciplína ako `postaUncollectedJob`/ostatné `daily`
+ * joby vyššie; presnosť na hodinu nie je pre túto úlohu kritická). Rovnaký
+ * vzor ako `postaUncollectedJob`: `run` nie je nikdy `undefined` (číta priamo
+ * z už importovaných objednávok), chýbajúce OPENAI_API_KEY/MAIL_HOST/BCC rieši
+ * `runOrderReminder` SAMA (per-objednávka, viditeľne v `job_run.detail`),
+ * nikdy vyhodením. Tento wrapper kontroluje LEN `enabled` flag PRED behom —
+ * "Spustiť teraz" aj ručné per-riadkové akcie (`http/order-reminder-routes.ts`)
+ * volajú `run`/override PRIAMO, bez tejto kontroly (majiteľov komentár na
+ * tickete + návrhový komentár: manuálna akcia je explicitná ľudská akcia).
+ */
+export function orderReminderJob(run: RunOrderReminder): ScheduledJob {
+  return {
+    name: ORDER_REMINDER_JOB_NAME,
+    schedule: { kind: "daily", hourUtc: 6, minuteUtc: 0 },
+    async run(db, now) {
+      const enabled = await isOrderReminderEnabled(db);
       if (!enabled) {
         return { detail: { skipped: true, reason: "automatizácia je vypnutá (Štart/Stop)" } };
       }

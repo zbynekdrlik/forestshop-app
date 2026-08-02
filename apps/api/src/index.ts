@@ -15,10 +15,13 @@ import { computeImportWindow, createHttpOrderIdsFetcher, createHttpOrdersExportF
 import { DEFAULT_ORDERS_IMPORT_WINDOW_DAYS, ingestOrders, type RunOrdersIngest } from "./modules/orders/ingest.js";
 import { createHttpTrackingClient } from "./modules/posta-uncollected/tracking-client.js";
 import { runPostaUncollected } from "./modules/posta-uncollected/run.js";
+import { createOpenAiClassifyClient } from "./modules/order-reminder/classify-client.js";
+import { runOrderReminder } from "./modules/order-reminder/run.js";
 import {
   catalogImportJob,
   ordersImportJob,
   orderNoteWritebackJob,
+  orderReminderJob,
   postaUncollectedJob,
   pruneRawExportsJob,
   pruneRawOrdersJob,
@@ -154,6 +157,20 @@ const postaUncollectedDeps = {
   adminBaseUrl: env.SHOPTET_ADMIN_BASE_URL,
 };
 
+// issue 173: "Pripomienky objednávok" — rovnaká úvaha ako #172 vyššie: mail
+// transport (zdieľaný `sendSupplierMail`, rovnaká SMTP infraštruktúra) a BCC
+// adresa môžu chýbať, `runOrderReminder` to sama rieši fail-closed. AI
+// klasifikátor je NOVÝ, nezávislý nepovinný závislosť — `OPENAI_API_KEY`
+// chýbajúci = `classifyClient` je `undefined`, automatizácia to zobrazí ako
+// "čaká" (AI nedostupné), nikdy nehádaj/nepošle naslepo.
+const openAiApiKey = env.OPENAI_API_KEY;
+const orderReminderDeps = {
+  classifyClient: openAiApiKey === undefined ? undefined : createOpenAiClassifyClient({ apiKey: openAiApiKey }),
+  mailTransport: sendSupplierMail,
+  bccEmail: env.ORDER_REMINDER_BCC_EMAIL,
+  adminBaseUrl: env.SHOPTET_ADMIN_BASE_URL,
+};
+
 const app = createApp(db, {
   cookieSecure: env.SESSION_COOKIE_SECURE,
   ...(runIngest === undefined ? {} : { runIngest }),
@@ -161,6 +178,7 @@ const app = createApp(db, {
   ...(sendSupplierMail === undefined ? {} : { sendSupplierMail }),
   adminBaseUrl: env.SHOPTET_ADMIN_BASE_URL,
   postaUncollected: postaUncollectedDeps,
+  orderReminder: orderReminderDeps,
 });
 
 // F2 (#12/#3) + F3 (#22/#28): nočný import katalógu/objednávok, mazanie
@@ -179,6 +197,7 @@ const scheduler = startScheduler(db, [
   shoptetWritebackJob(runShoptetWritebackFn),
   orderNoteWritebackJob(runOrderNoteWritebackFn),
   postaUncollectedJob((db2, now) => runPostaUncollected({ db: db2, now, ...postaUncollectedDeps })),
+  orderReminderJob((db2, now) => runOrderReminder({ db: db2, now, ...orderReminderDeps })),
 ]);
 
 // `@hono/node-server`'s `serveStatic` prints its OWN `console.error` on every
