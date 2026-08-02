@@ -220,6 +220,65 @@ export function extractOrderIdsFromXml(xml: string): Map<string, number> {
   return map;
 }
 
+// issue 172: rovnaký prefix-test ako `PSEUDO_ITEM_CODE_RE` vyššie, ale
+// zúžený LEN na dopravu — `extractOrderLevelExtra` potrebuje presne
+// rozoznať TENTO jeden pseudo-riadok (jeho `itemName` je meno dopravcu),
+// nie celú rodinu (BILLING/DISCOUNT/…).
+const SHIPPING_ITEM_CODE_RE = /^SHIPPING/i;
+
+function trimOrNull(value: string | undefined): string | null {
+  const trimmed = (value ?? "").trim();
+  return trimmed === "" ? null : trimmed;
+}
+
+// issue 172: "Nevyzdvihnuté zásielky" potrebuje `email`/`phone`/
+// `packageNumber` (objednávkové polia, opakované na KAŽDOM riadku exportu
+// vrátane pseudo-položiek) a meno dopravcu (LEN na SHIPPING pseudo-riadku).
+// Zámerne SAMOSTATNÁ funkcia od `mapOrderRow` vyššie — tá zahadzuje CELÝ
+// pseudo-riadok (nemá zmysel ako POLOŽKA objednávky), ale tieto štyri polia
+// sú OBJEDNÁVKOVÉ, nie položkové, a existujú aj na riadkoch, ktoré
+// `mapOrderRow` zahodí. Nikdy nevyhadzuje/neoznamuje issue — chýbajúca
+// hodnota je legitímny, bežný stav (nie každá objednávka má vyplnené
+// telefónne číslo), mapuje sa jednoducho na `null`.
+export interface OrderLevelExtra {
+  readonly email: string | null;
+  readonly phone: string | null;
+  readonly packageNumber: string | null;
+  readonly shippingCarrierName: string | null;
+}
+
+export function extractOrderLevelExtra(row: Readonly<Record<string, string>>): OrderLevelExtra {
+  const itemCode = (row["itemCode"] ?? "").trim();
+  return {
+    email: trimOrNull(row["email"]),
+    phone: trimOrNull(row["phone"]),
+    packageNumber: trimOrNull(row["packageNumber"]),
+    shippingCarrierName: SHIPPING_ITEM_CODE_RE.test(itemCode) ? trimOrNull(row["itemName"]) : null,
+  };
+}
+
+// Skladá viac riadkov TEJ ISTEJ objednávky do jedného `OrderLevelExtra` —
+// PRVÁ nájdená neprázdna hodnota KAŽDÉHO POĽA vyhráva nezávisle (nie "prvý
+// riadok vyhráva celý objekt", ako `orderInfo` v `ingest.ts` robí pre
+// customerName/placedAt/…) — `shippingCarrierName` je totiž takmer vždy
+// PRÁZDNE na bežných produktových riadkoch a NEPRÁZDNE len na jednom
+// konkrétnom SHIPPING riadku, ktorý môže byť ktorýkoľvek v poradí.
+export function mergeOrderLevelExtra(existing: OrderLevelExtra, incoming: OrderLevelExtra): OrderLevelExtra {
+  return {
+    email: existing.email ?? incoming.email,
+    phone: existing.phone ?? incoming.phone,
+    packageNumber: existing.packageNumber ?? incoming.packageNumber,
+    shippingCarrierName: existing.shippingCarrierName ?? incoming.shippingCarrierName,
+  };
+}
+
+export const EMPTY_ORDER_LEVEL_EXTRA: OrderLevelExtra = Object.freeze({
+  email: null,
+  phone: null,
+  packageNumber: null,
+  shippingCarrierName: null,
+});
+
 export type OrderRowIssueKind =
   | "empty_order_code"
   | "empty_item_code"

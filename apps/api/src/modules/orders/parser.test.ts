@@ -3,8 +3,11 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   decodeCp1250,
+  EMPTY_ORDER_LEVEL_EXTRA,
   extractOrderIdsFromXml,
+  extractOrderLevelExtra,
   mapOrderRow,
+  mergeOrderLevelExtra,
   normalizeStatusName,
   parseDelimited,
   parseShopLocalDateTime,
@@ -336,5 +339,73 @@ describe("extractOrderIdsFromXml", () => {
 
   it("prázdny XML vráti prázdnu mapu", () => {
     expect(extractOrderIdsFromXml("<ORDERS></ORDERS>").size).toBe(0);
+  });
+});
+
+// issue 172: "Nevyzdvihnuté zásielky" potrebuje email/telefón/číslo zásielky
+// (objednávkové polia) a meno dopravcu (LEN zo SHIPPING pseudo-riadku).
+describe("extractOrderLevelExtra", () => {
+  it("vytiahne email/phone/packageNumber z bežného produktového riadku", () => {
+    const extra = extractOrderLevelExtra({
+      code: "20300001",
+      email: "jan@example.sk",
+      phone: "+421900123456",
+      packageNumber: "EF123456789SK",
+      itemCode: "40237/XL",
+      itemName: "Nohavice FOREST 1003",
+    });
+    expect(extra).toEqual({
+      email: "jan@example.sk",
+      phone: "+421900123456",
+      packageNumber: "EF123456789SK",
+      shippingCarrierName: null,
+    });
+  });
+
+  it("vytiahne meno dopravcu LEN keď itemCode začína SHIPPING (case-insensitive)", () => {
+    const extra = extractOrderLevelExtra({
+      code: "20300001",
+      itemCode: "shipping6",
+      itemName: "Kuriér",
+    });
+    expect(extra.shippingCarrierName).toBe("Kuriér");
+  });
+
+  it("nezoberie itemName ako dopravcu pri BILLING/DISCOUNT pseudo-riadku", () => {
+    expect(extractOrderLevelExtra({ itemCode: "BILLING2", itemName: "Dobierka" }).shippingCarrierName).toBeNull();
+    expect(extractOrderLevelExtra({ itemCode: "DISCOUNT", itemName: "Zľava" }).shippingCarrierName).toBeNull();
+  });
+
+  it("prázdne/chýbajúce polia sa mapujú na null, nikdy na prázdny reťazec", () => {
+    expect(extractOrderLevelExtra({})).toEqual(EMPTY_ORDER_LEVEL_EXTRA);
+    expect(extractOrderLevelExtra({ email: "  ", phone: "" })).toEqual(EMPTY_ORDER_LEVEL_EXTRA);
+  });
+});
+
+describe("mergeOrderLevelExtra", () => {
+  it("PRVÁ neprázdna hodnota KAŽDÉHO poľa vyhráva nezávisle od ostatných polí", () => {
+    const fromProductRow = extractOrderLevelExtra({
+      email: "jan@example.sk",
+      itemCode: "40237/XL",
+      itemName: "Nohavice",
+    });
+    const fromShippingRow = extractOrderLevelExtra({
+      packageNumber: "EF123456789SK",
+      itemCode: "SHIPPING6",
+      itemName: "Kuriér",
+    });
+    const merged = mergeOrderLevelExtra(mergeOrderLevelExtra(EMPTY_ORDER_LEVEL_EXTRA, fromProductRow), fromShippingRow);
+    expect(merged).toEqual({
+      email: "jan@example.sk",
+      phone: null,
+      packageNumber: "EF123456789SK",
+      shippingCarrierName: "Kuriér",
+    });
+  });
+
+  it("neskoršia hodnota NIKDY neprepíše už zistenú (prvá vyhráva, nie posledná)", () => {
+    const first = extractOrderLevelExtra({ email: "prvy@example.sk" });
+    const second = extractOrderLevelExtra({ email: "druhy@example.sk" });
+    expect(mergeOrderLevelExtra(first, second).email).toBe("prvy@example.sk");
   });
 });
