@@ -50,7 +50,10 @@ paths:
   `787_878_003` (`INGEST_ORDERS_ADVISORY_LOCK_KEY`, `orders/ingest.ts`, #21),
   `787_878_100` (`TEST_DB_ISOLATION_LOCK_KEY`, `tests/helpers/db.ts`),
   `787_878_004` (`POSTA_UNCOLLECTED_RUN_LOCK_KEY`, `posta-uncollected/run.ts`,
-  issue 172 — pozri nižšie).
+  issue 172 — pozri nižšie), `787_878_005` (`ORDER_REMINDER_RUN_LOCK_KEY`,
+  `order-reminder/constants.ts`, issue 173), `787_878_006`
+  (`NEDOSTUPNE_SEND_LOCK_KEY`, `nedostupne/constants.ts`, issue 176 —
+  serializuje jedno odoslanie, tento modul nemá naplánovaný beh).
   `ordersImportJob`/`pruneRawOrdersJob` (#22/#28) nepridali žiadny nový kľúč
   (pozri bod vyššie). `shoptetWritebackJob` (issue 122) tiež žiadny nepridal
   — v tomto tickete niet manuálneho HTTP triggeru na tú istú prácu (na

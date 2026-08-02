@@ -229,15 +229,11 @@ export async function ingestCatalog(
 
   // Beží bez ohľadu na úspech parsovania — pri zlyhaní je `records` prázdne pole,
   // takže je to no-op (nič sa neprepočítava druhýkrát).
-  const productValues = new Map<string, { name: string; supplier: string | null; internalNote: string | null }>();
+  const productValues = new Map<string, { name: string; supplier: string | null; internalNote: string | null; relatedCodes: readonly string[] }>();
   for (const record of records) {
     const known = productValues.get(record.productKey);
     if (known === undefined) {
-      productValues.set(record.productKey, {
-        name: record.name,
-        supplier: record.supplier,
-        internalNote: record.internalNote,
-      });
+      productValues.set(record.productKey, { name: record.name, supplier: record.supplier, internalNote: record.internalNote, relatedCodes: record.relatedCodes });
       continue;
     }
     if (known.name !== record.name) {
@@ -373,6 +369,8 @@ export async function ingestCatalog(
               name: value.name,
               supplier: value.supplier,
               internalNote: value.internalNote,
+              // issue 176: prázdne pole → `null` (rovnaký zámer ako `internalNote`).
+              relatedCodes: value.relatedCodes.length === 0 ? null : [...value.relatedCodes],
               firstSeenAt: options.now,
               lastSeenAt: options.now,
               lastSeenSnapshotId: snapshotId,
@@ -384,6 +382,7 @@ export async function ingestCatalog(
               name: sql`excluded.name`,
               supplier: sql`excluded.supplier`,
               internalNote: sql`excluded.internal_note`,
+              relatedCodes: sql`excluded.related_codes`,
               lastSeenAt: options.now,
               lastSeenSnapshotId: snapshotId,
             },

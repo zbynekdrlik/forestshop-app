@@ -14,6 +14,7 @@ import { checkLoginRateLimit, clientIp } from "./login-rate-limit.js";
 import { SESSION_COOKIE, requireUser, type AppBindings } from "./middleware.js";
 import { registerOrdersRoutes, type RunOrdersIngest } from "./orders-routes.js";
 import { registerOrderReminderRoutes, type OrderReminderRunDeps } from "./order-reminder-routes.js";
+import { registerNedostupneRoutes, type NedostupneRunDeps } from "./nedostupne-routes.js";
 import { requireSameOrigin } from "./origin-check.js";
 import { registerPairingRoutes } from "./pairing-routes.js";
 import { registerPostaUncollectedRoutes, type PostaUncollectedRunDeps } from "./posta-uncollected-routes.js";
@@ -53,6 +54,10 @@ export function createApp(
     // testy/lokálny vývoj, `index.ts` v produkcii VŽDY nahradí reálnymi
     // dependencies.
     readonly orderReminder?: OrderReminderRunDeps;
+    // issue 176: "Nedostupné tovary" — rovnaký dôvod ako `orderReminder`
+    // vyššie: voliteľné, bezpečný default nižšie pre testy/lokálny vývoj,
+    // `index.ts` v produkcii VŽDY nahradí reálnymi dependencies.
+    readonly nedostupne?: NedostupneRunDeps;
   },
 ): Hono<AppBindings> {
   const app = new Hono<AppBindings>();
@@ -173,6 +178,18 @@ export function createApp(
       // chýba), nikdy neposiela mail (`mailTransport` chýba). Produkcia
       // (`index.ts`) toto VŽDY nahradí reálnymi dependencies.
       classifyClient: undefined,
+      mailTransport: undefined,
+      bccEmail: undefined,
+      adminBaseUrl: options.adminBaseUrl ?? "https://www.forestshop.sk",
+    },
+  );
+  registerNedostupneRoutes(
+    app,
+    db,
+    options.nedostupne ?? {
+      // Bezpečný default pre testy/lokálny vývoj bez explicitne dodaných
+      // dependencies — NIKDY neposiela mail (`mailTransport` chýba).
+      // Produkcia (`index.ts`) toto VŽDY nahradí reálnymi dependencies.
       mailTransport: undefined,
       bccEmail: undefined,
       adminBaseUrl: options.adminBaseUrl ?? "https://www.forestshop.sk",

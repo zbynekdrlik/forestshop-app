@@ -140,6 +140,11 @@ const E2E_POSTA_EMAIL = "e2e-posta@forestshop.sk"; // musí sa zhodovať s hodno
 // namiesto ďalšieho prihlásenia pod zdieľaným `e2e@forestshop.sk`.
 const E2E_PRIPOMIENKY_EMAIL = "e2e-pripomienky@forestshop.sk"; // musí sa zhodovať s hodnotou v order-reminder.spec.ts
 
+// issue 176: rovnaký mechanizmus a dôvod ako `E2E_PRIPOMIENKY_EMAIL` vyššie —
+// nový spec súbor (`nedostupne.spec.ts`) dostáva VLASTNÝ izolovaný účet
+// namiesto ďalšieho prihlásenia pod zdieľaným `e2e@forestshop.sk`.
+const E2E_NEDOSTUPNE_EMAIL = "e2e-nedostupne@forestshop.sk"; // musí sa zhodovať s hodnotou v nedostupne.spec.ts
+
 const { db, pool } = createDb();
 // Konštantný literál bez interpolácie — obyčajný reťazec je tu rovnako bezpečný
 // ako `sql` tagovaná šablóna (tú používa ekvivalentný apps/api/tests/helpers/db.ts),
@@ -272,6 +277,12 @@ await db.insert(users).values({
 });
 await db.insert(users).values({
   email: E2E_PRIPOMIENKY_EMAIL,
+  passwordHash: await hashPassword(E2E_HESLO),
+  displayName: "E2E Manažér",
+  role: "manazer",
+});
+await db.insert(users).values({
+  email: E2E_NEDOSTUPNE_EMAIL,
   passwordHash: await hashPassword(E2E_HESLO),
   displayName: "E2E Manažér",
   role: "manazer",
@@ -490,6 +501,27 @@ const [objednavkaOdkaz] = await db
   .returning();
 if (objednavkaOdkaz === undefined) throw new Error("E2E objednávka (odkaz) sa nepodarila vložiť");
 await db.insert(orderLines).values({ orderId: objednavkaOdkaz.id, variantCode: "278", quantity: 1 });
+
+// issue 176: JEDNA objednávka s riadkom v stave 'nedostupne' — variant
+// "40287" (rovnaký variant ako 9002/9003, katalógová fixtúra ho reálne nesie
+// s `relatedProduct = "60297"` po `ingestCatalog` nižšie, `.claude/rules/
+// catalog.md`), takže "Nedostupné tovary" (`nedostupne.spec.ts`) má naživo
+// čo zobraziť VRÁTANE náhradného produktu, bez potreby ďalšej fixtúry.
+// Pridáva GLOBÁLNE 1 riadok do "Na objednanie" (`orders.spec.ts`'s prvý test
+// preto počíta so "Všetci (8)"/"(bez dodávateľa) (5)" a s "Nedostupné 1" v
+// súhrne — "40287" nemá dodávateľa, rovnaký zámer ako 9002/9003).
+const [objednavkaNedostupne] = await db
+  .insert(orders)
+  .values({
+    externalOrderId: "9008",
+    customerName: "E2E Zákazník Nedostupné",
+    statusName: DEFAULT_ORDER_OPEN_STATUS,
+    placedAt: new Date("2026-07-27T09:00:00Z"),
+    email: "e2e-nedostupne@forestshop.sk",
+  })
+  .returning();
+if (objednavkaNedostupne === undefined) throw new Error("E2E objednávka (nedostupné) sa nepodarila vložiť");
+await db.insert(orderLines).values({ orderId: objednavkaNedostupne.id, variantCode: "40287", quantity: 1, state: "nedostupne" });
 
 // F4 (#45): jeden UŽ NAVRHNUTÝ (nepotvrdený) pairing kandidát — simuluje to,
 // čo by inak vložilo #46 (automatické hľadanie kandidátov, ešte

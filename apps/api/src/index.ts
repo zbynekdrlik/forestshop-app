@@ -171,6 +171,17 @@ const orderReminderDeps = {
   adminBaseUrl: env.SHOPTET_ADMIN_BASE_URL,
 };
 
+// issue 176: "Nedostupné tovary" — rovnaká úvaha ako #172/#173 vyššie: mail
+// transport (zdieľaný `sendSupplierMail`) a BCC adresa môžu chýbať,
+// `sendNedostupneEmail` to sama rieši fail-closed. ŽIADNY `classifyClient`
+// (na rozdiel od #173) — táto automatizácia nemá AI klasifikáciu, e-mail
+// vždy posiela človek ručne po povinnom náhľade.
+const nedostupneDeps = {
+  mailTransport: sendSupplierMail,
+  bccEmail: env.NEDOSTUPNE_BCC_EMAIL,
+  adminBaseUrl: env.SHOPTET_ADMIN_BASE_URL,
+};
+
 const app = createApp(db, {
   cookieSecure: env.SESSION_COOKIE_SECURE,
   ...(runIngest === undefined ? {} : { runIngest }),
@@ -179,6 +190,7 @@ const app = createApp(db, {
   adminBaseUrl: env.SHOPTET_ADMIN_BASE_URL,
   postaUncollected: postaUncollectedDeps,
   orderReminder: orderReminderDeps,
+  nedostupne: nedostupneDeps,
 });
 
 // F2 (#12/#3) + F3 (#22/#28): nočný import katalógu/objednávok, mazanie
