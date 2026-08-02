@@ -2409,3 +2409,45 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
   order/order_line 535→536 / 881→882 normálnym importom).
 - Issue #171 zavretý s dôkazom (issue-comment-5158877599). Discord karta
   odoslaná (`notify --run-card`, `sent`).
+
+## Issue 176 — Nedostupné tovary (informovanie zákazníka e-mailom, s návrhom náhrady)
+
+- Design comment (issue-comment-5160403045) + validated comment
+  (issue-comment-5160403902) pred prvým kódovým commitom (verzia bump
+  `c4494e4` bol PRVÝ, feature commit `cdb5aa5` až po nich).
+- Zoskupenie podľa variantu nad existujúcim `order_line.state = 'nedostupne'`
+  (žiadny nový flag), spárovanie s otvorenými objednávkami cez
+  `listOpenStatusNames`. ŽIADNY scheduler/`enabled` — vždy živý DB dopyt.
+- Nová migrácia `0023_steep_smasher.sql`: `product.related_codes` (text[],
+  nullable), tabuľka `nedostupne_state` (dedup, plain-text kľúčovaná ako
+  `order_reminder_state`/`posta_uncollected_state`).
+- Deep code review pred mergom (PR #182, issue-comment-5160705285) našiel 1
+  Important (server-side vynútenie povinného náhľadu chýbalo) + 2 Minor
+  (chýbajúci `requireSameOrigin()` na `/preview`; scheduler.md registry bez
+  005/006) — všetky opravené commitom `a491963` PRED mergom (jednorazový
+  `previewToken`, 15 min TTL, in-memory rovnaký vzor ako
+  `login-rate-limit.ts`). Samostatný self-review nálezmi ešte skôr pridal
+  `NEDOSTUPNE_SEND_LOCK_KEY` (787_878_006, commit `77cbc38`) — bez neho by
+  dva súbežné klik-y na ten istý (objednávka, variant, typ) mohli poslať
+  e-mail dvakrát.
+- Testy: `logic.test.ts` (9), `preview-tokens.test.ts` (6), `map-row.test.ts`
+  relatedCodes rozšírenie, `nedostupne-run.integration.test.ts` (12,
+  vrátane deterministického `pg_try_advisory_lock` súbežnostného testu),
+  `nedostupne-http.integration.test.ts` (11), `NedostupneSection.test.tsx`
+  (9), `nedostupne.spec.ts` (e2e, fixtúra "9008"/variant "40287" s reálnou
+  `relatedProduct=60297` z katalógovej fixtúry). `orders.spec.ts` prvý test
+  aktualizovaný (nová 'nedostupne' fixtúra pridáva 1 riadok do "(bez
+  dodávateľa)" a novú "Nedostupné 1" vetvu do súhrnu).
+- CI (push 30770647458 aj PR-triggered 30770649121) `success` → PR #182
+  merged `2242449` (merge commit). Main CI (30770803484) + Deploy
+  (30770803482) `success`.
+- Live overené (Playwright MCP, `vychod@varos.sk`): `/api/version` =
+  `0.3.0-dev.107`/`2242449`. `?tab=nedostupne` sa načíta, 0 console chýb.
+  BCC upozornenie zobrazené správne (NEDOSTUPNE_BCC_EMAIL nie je na dev2
+  nastavené — fail-closed funguje naživo), "mail not configured" NEzobrazené
+  (MAIL_HOST JE nastavené). Prázdny zoznam (nikto zatiaľ nemá nedostupný
+  riadok) korektný. Zámerne som NEMUTOVAL žiadny reálny zákaznícky riadok
+  naživo — funkčná správnosť zoskupenia/dedup/tokenu je preukázaná plnou
+  integračnou + e2e sadou nad rovnakou schémou.
+- Nový playbook súbor `.claude/rules/nedostupne.md` + router riadok v
+  `CLAUDE.md`. Issue #176 zavretý s dôkazom. Discord karta odoslaná.
