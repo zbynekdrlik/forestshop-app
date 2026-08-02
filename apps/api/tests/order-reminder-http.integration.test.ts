@@ -207,6 +207,37 @@ it("rola citanie NESMIE poslať ručnú akciu (403)", async () => {
   expect(res.status).toBe(403);
 });
 
+it("ručná akcia 'kontaktované' PRESUNIE riadok z 'bez poznámky' do 'preskočené' v NASLEDUJÚCOM GET (bez čakania na ďalší beh)", async () => {
+  const { app, cookie, db } = await boot("manazer");
+  await db.insert(orders).values({
+    externalOrderId: "20600106",
+    customerName: "Test Presun",
+    statusName: "Vybavuje sa",
+    placedAt: OLD_ENOUGH,
+    email: null,
+    shopRemark: null,
+  });
+  await app.request("/api/order-reminder/run-now", { method: "POST", headers: { cookie } });
+  const before = await app.request("/api/order-reminder", { headers: { cookie } });
+  const beforeBody = (await before.json()) as { lastRun: { result: { noNote: { orderCode: string }[] } } | null };
+  expect(beforeBody.lastRun?.result.noNote.map((r) => r.orderCode)).toContain("20600106");
+
+  const override = await app.request("/api/order-reminder/override", {
+    method: "POST",
+    headers: { cookie, "content-type": "application/json" },
+    body: JSON.stringify({ orderCode: "20600106", action: "contact" }),
+  });
+  expect(override.status).toBe(200);
+
+  const after = await app.request("/api/order-reminder", { headers: { cookie } });
+  const afterBody = (await after.json()) as {
+    lastRun: { result: { noNote: { orderCode: string }[]; contacted: { orderCode: string; resolvedBy: string }[] } } | null;
+  };
+  expect(afterBody.lastRun?.result.noNote.map((r) => r.orderCode)).not.toContain("20600106");
+  const relocated = afterBody.lastRun?.result.contacted.find((r) => r.orderCode === "20600106");
+  expect(relocated?.resolvedBy).toBe("manual");
+});
+
 it("ručná akcia na neznámy kód objednávky vráti 200 {ok:false} (bežný doménový výsledok)", async () => {
   const { app, cookie } = await boot("manazer");
   const res = await app.request("/api/order-reminder/override", {

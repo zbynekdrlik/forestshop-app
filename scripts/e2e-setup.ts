@@ -135,6 +135,11 @@ const E2E_SKRYTY_EDITOR_EMAIL = "e2e-skryty-editor@forestshop.sk"; // musí sa z
 // dostáva VLASTNÝ izolovaný účet namiesto ďalšieho prihlásenia pod zdieľaným.
 const E2E_POSTA_EMAIL = "e2e-posta@forestshop.sk"; // musí sa zhodovať s hodnotou v posta-uncollected.spec.ts
 
+// issue 173: rovnaký mechanizmus a dôvod ako `E2E_POSTA_EMAIL` vyššie —
+// nový spec súbor (`order-reminder.spec.ts`) dostáva VLASTNÝ izolovaný účet
+// namiesto ďalšieho prihlásenia pod zdieľaným `e2e@forestshop.sk`.
+const E2E_PRIPOMIENKY_EMAIL = "e2e-pripomienky@forestshop.sk"; // musí sa zhodovať s hodnotou v order-reminder.spec.ts
+
 const { db, pool } = createDb();
 // Konštantný literál bez interpolácie — obyčajný reťazec je tu rovnako bezpečný
 // ako `sql` tagovaná šablóna (tú používa ekvivalentný apps/api/tests/helpers/db.ts),
@@ -261,6 +266,12 @@ await db.insert(users).values({
 });
 await db.insert(users).values({
   email: E2E_POSTA_EMAIL,
+  passwordHash: await hashPassword(E2E_HESLO),
+  displayName: "E2E Manažér",
+  role: "manazer",
+});
+await db.insert(users).values({
+  email: E2E_PRIPOMIENKY_EMAIL,
   passwordHash: await hashPassword(E2E_HESLO),
   displayName: "E2E Manažér",
   role: "manazer",

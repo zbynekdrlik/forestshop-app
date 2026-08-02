@@ -1,6 +1,6 @@
 import { zValidator } from "@hono/zod-validator";
 import type { Hono } from "hono";
-import { eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import type { Database } from "../db/client.js";
 import { jobRuns } from "../db/schema.js";
@@ -65,6 +65,56 @@ function findRow(result: OrderReminderRunResult | null, orderCode: string): Orde
     result.contacted.find((r) => r.orderCode === orderCode) ??
     result.pending.find((r) => r.orderCode === orderCode)
   );
+}
+
+/**
+ * Ručná akcia (override) mení LEN `order_reminder_state` — na rozdiel od
+ * "Spustiť teraz" nezapíše nový `job_run` riadok. Bez tohto by `GET
+ * /api/order-reminder` po úspešnej ručnej akcii ukázal STARÝ, nezmenený
+ * posledný beh (riadok by zostal v pôvodnej tabuľke, kým nepríde ĎALŠÍ
+ * naplánovaný/manuálny beh) — manažér by videl akciu "zaúčinkovať" v
+ * databáze, ale nie na obrazovke. Presúva riadok do správnej skupiny
+ * PRIAMO v poslednom uloženom `job_run.detail`, rovnaký zámer ako stará
+ * appka's `_relocate` (`webreview/app.py`).
+ */
+async function relocateAfterOverride(
+  db: Database,
+  orderCode: string,
+  resolution: "contacted" | "emailed",
+): Promise<void> {
+  const [latest] = await db
+    .select({ id: jobRuns.id, detail: jobRuns.detail })
+    .from(jobRuns)
+    .where(eq(jobRuns.jobName, ORDER_REMINDER_JOB_NAME))
+    .orderBy(desc(jobRuns.startedAt))
+    .limit(1);
+  if (latest === undefined || !isRunResult(latest.detail)) return;
+  const result = latest.detail;
+  const row = findRow(result, orderCode);
+  if (row === undefined) return;
+
+  const resolvedRow = {
+    orderCode: row.orderCode,
+    adminLink: row.adminLink,
+    name: row.name,
+    phone: row.phone,
+    email: row.email,
+    itemLabel: row.itemLabel,
+    days: row.days,
+    resolvedAt: new Date().toISOString(),
+    resolvedBy: "manual" as const,
+  };
+  const stripped: OrderReminderRunResult = {
+    ...result,
+    noNote: result.noNote.filter((r) => r.orderCode !== orderCode),
+    noEmail: result.noEmail.filter((r) => r.orderCode !== orderCode),
+    pending: result.pending.filter((r) => r.orderCode !== orderCode),
+    contacted: result.contacted.filter((r) => r.orderCode !== orderCode),
+    emailed: result.emailed.filter((r) => r.orderCode !== orderCode),
+  };
+  const updated: OrderReminderRunResult =
+    resolution === "emailed" ? { ...stripped, emailed: [...stripped.emailed, resolvedRow] } : { ...stripped, contacted: [...stripped.contacted, resolvedRow] };
+  await db.update(jobRuns).set({ detail: updated }).where(eq(jobRuns.id, latest.id));
 }
 
 export function registerOrderReminderRoutes(app: Hono<AppBindings>, db: Database, deps: OrderReminderRunDeps): void {
@@ -174,6 +224,7 @@ export function registerOrderReminderRoutes(app: Hono<AppBindings>, db: Database
                   : "Odoslanie e-mailu zlyhalo — skúste to znova.";
         return c.json({ ok: false as const, error: message });
       }
+      await relocateAfterOverride(db, orderCode, result.resolution);
       await record(db, {
         at: now,
         actorUserId: user.userId,
