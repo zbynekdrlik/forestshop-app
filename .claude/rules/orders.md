@@ -413,3 +413,12 @@ paths:
   OSOBITNE, že to nie je návrat "vstup+tlačidlo sa zalomí na dva riadky"
   regresie (samostatná asercia `naTomIstomRiadku`, tá sa NEMENÍ) — len
   legitímny rast obsahu smie posunúť tento strop, nikdy zalomenie.
+- **Issue 172 pridalo štyri nové objednávkové polia (`email`/`phone`/
+  `package_number`/`shipping_carrier_name`) extrahované NEZÁVISLE od
+  `mapOrderRow`'s item-validácie (`parser.ts`'s `extractOrderLevelExtra`/
+  `mergeOrderLevelExtra`) — sú na KAŽDOM riadku objednávky vrátane pseudo-
+  položiek, `shipping_carrier_name` je práve na SHIPPING pseudo-riadku,
+  ktorý `mapOrderRow` inak celý zahodí. Na rozdiel od `status_name`/
+  `remark`/`shop_remark` (priamo prepísané pri re-importe) sú tieto ŠTYRI
+  polia COALESCE-ované ako `shoptet_order_id` — plné odôvodnenie a
+  regresný test v `.claude/rules/posta-uncollected.md`.**
