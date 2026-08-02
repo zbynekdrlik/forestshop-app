@@ -147,6 +147,28 @@ paths:
   `docker exec -w /app/apps/api node script.mjs`. `createDb()` (`db/
   client.ts`) bez argumentu sám číta `DATABASE_URL` z kontajnerovho
   prostredia — netreba ho manuálne skladať v skripte.
+- **Číslo zásielky (tracking) v živej Shoptet administrácii (issue 181,
+  overené naživo) NIE JE na záložke "Zásielky" objednávkového detailu** —
+  tá záložka (`#t7` tab panel) ukazuje "Žiadne položky" AJ na objednávke,
+  ktorá má číslo balíka reálne vyplnené (je to iný Shoptetov submodul,
+  zrejme vlastná preprava/štítky, nie CSV/XML exportové pole
+  `packageNumber`). Skutočné pole je skryté v dropdown menu "VIAC FUNKCIÍ"
+  (položka "Číslo zásielky") priamo na hlavnej stránke objednávky, ako
+  `<input name="packageNumber" id="package-number">` — nájdi ho cez
+  `document.querySelector('#package-number').value`, netreba ani menu
+  otvárať. Test pri KAŽDOM ďalšom "existuje X v Shoptete aj keď ho
+  appka/export nevidí?" overovaní: over aj na KONTROLNEJ objednávke, o
+  ktorej vieme, že pole má vyplnené — inak ľahko omylom skončíš pri
+  nesprávnom/prázdnom UI prvku (presne sa to tu stalo s "Zásielky"
+  záložkou) a vyvodíš falošný záver "dáta neexistujú".
+- **Druhý nezávislý Shoptet export (`SHOPTET_ORDERS_XML_URL`, XML feed
+  objednávok) má TIEŽ pole `<PACKAGE_NUMBER>` per `<ORDER>`, ale keď
+  chýba v CSV, chýba aj tam** — nie je to nezávislý zdroj na obnovu tohto
+  konkrétneho poľa (issue 181: overené na 80 objednávkach, všade prázdne
+  v oboch exportoch aj v samotnej administrácii). Užitočný ako RÝCHLA
+  prvá kontrola pred Playwright vzorkou (stiahni raz cez `curl` na dev2 do
+  `/tmp`, over cez `python3`, potom zmaž), ale nečakaj od neho zázrak pri
+  tomto poli.
 - **CSV-injection ochrana (issue 153) sedí v `csv.ts`'s `dataRowToLine`, NIE
   vo validácii vyššie prúdu.** `formula-guard.ts`'s `csvSafe` sa aplikuje na
   KAŽDÚ bunku KAŽDÉHO dátového riadku PRIAMO pri zápise CSV — chráni aj

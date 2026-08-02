@@ -87,3 +87,4 @@ Per-area rules live in `.claude/rules/<area>.md` with `paths:` frontmatter.
 - spätný zápis do Shoptetu (F5 — Playwright import, reálne admin cesty, Alpine chromium) → `.claude/rules/shoptet-writeback.md`
 - Nevyzdvihnuté zásielky (Pošta SK — enabled vs. run-now, coalesce, advisory zámok) → `.claude/rules/posta-uncollected.md`
 - Pripomienky objednávok (AI klasifikácia poznámky, terminálna rezolúcia, override→job_run relocate) → `.claude/rules/order-reminder.md`
+- Nedostupné tovary (návrh náhrady, jednorazový preview token, žiadny scheduler) → `.claude/rules/nedostupne.md`
