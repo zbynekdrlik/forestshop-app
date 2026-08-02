@@ -13,10 +13,13 @@ import { createSmtpMailTransport } from "./modules/mail/transport.js";
 import { computeOrderIdsWindowStart } from "./modules/orders/backfill.js";
 import { computeImportWindow, createHttpOrderIdsFetcher, createHttpOrdersExportFetcher } from "./modules/orders/fetcher.js";
 import { DEFAULT_ORDERS_IMPORT_WINDOW_DAYS, ingestOrders, type RunOrdersIngest } from "./modules/orders/ingest.js";
+import { createHttpTrackingClient } from "./modules/posta-uncollected/tracking-client.js";
+import { runPostaUncollected } from "./modules/posta-uncollected/run.js";
 import {
   catalogImportJob,
   ordersImportJob,
   orderNoteWritebackJob,
+  postaUncollectedJob,
   pruneRawExportsJob,
   pruneRawOrdersJob,
   sessionCleanupJob,
@@ -139,12 +142,25 @@ const runOrderNoteWritebackFn =
           now,
         );
 
+// issue 172: "Nevyzdvihnuté zásielky" — tracking klient je VŽDY reálny
+// (žiadna URL na nakonfigurovanie, tretia strana má fixnú adresu,
+// `constants.ts`); mail transport a BCC adresa môžu chýbať (rovnaká úvaha
+// ako `sendSupplierMail` vyššie) — `runPostaUncollected` to sama rieši
+// fail-closed (nikdy nepošle bez oboch), nikdy nevyhadzuje.
+const postaUncollectedDeps = {
+  trackingClient: createHttpTrackingClient(),
+  mailTransport: sendSupplierMail,
+  bccEmail: env.POSTA_UNCOLLECTED_BCC_EMAIL,
+  adminBaseUrl: env.SHOPTET_ADMIN_BASE_URL,
+};
+
 const app = createApp(db, {
   cookieSecure: env.SESSION_COOKIE_SECURE,
   ...(runIngest === undefined ? {} : { runIngest }),
   ...(runOrdersIngest === undefined ? {} : { runOrdersIngest }),
   ...(sendSupplierMail === undefined ? {} : { sendSupplierMail }),
   adminBaseUrl: env.SHOPTET_ADMIN_BASE_URL,
+  postaUncollected: postaUncollectedDeps,
 });
 
 // F2 (#12/#3) + F3 (#22/#28): nočný import katalógu/objednávok, mazanie
@@ -162,6 +178,7 @@ const scheduler = startScheduler(db, [
   pruneRawOrdersJob(env.ORDERS_RAW_DIR),
   shoptetWritebackJob(runShoptetWritebackFn),
   orderNoteWritebackJob(runOrderNoteWritebackFn),
+  postaUncollectedJob((db2, now) => runPostaUncollected({ db: db2, now, ...postaUncollectedDeps })),
 ]);
 
 // `@hono/node-server`'s `serveStatic` prints its OWN `console.error` on every

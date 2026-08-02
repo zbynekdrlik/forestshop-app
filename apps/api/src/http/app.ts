@@ -15,6 +15,7 @@ import { SESSION_COOKIE, requireUser, type AppBindings } from "./middleware.js";
 import { registerOrdersRoutes, type RunOrdersIngest } from "./orders-routes.js";
 import { requireSameOrigin } from "./origin-check.js";
 import { registerPairingRoutes } from "./pairing-routes.js";
+import { registerPostaUncollectedRoutes, type PostaUncollectedRunDeps } from "./posta-uncollected-routes.js";
 import { registerSchedulerRoutes } from "./scheduler-routes.js";
 import { registerSupplierRoutes } from "./supplier-routes.js";
 
@@ -40,6 +41,12 @@ export function createApp(
     // `?:` ako `runIngest`/ostatné (tie chýbajú, keď zodpovedajúca URL nie
     // je nastavená; toto vždy JE nastavené, aspoň na predvolenú hodnotu).
     readonly adminBaseUrl?: string;
+    // issue 172: "Spustiť teraz" + náhľad — voliteľné (rovnaký dôvod ako
+    // `adminBaseUrl` vyššie: existujúce testy/lokálny vývoj bez explicitne
+    // odovzdanej hodnoty dostanú rozumný default nižšie, nikdy nemusia
+    // meniť svoje volanie `createApp`). `index.ts` ho v produkcii VŽDY
+    // zostavuje s reálnym tracking klientom.
+    readonly postaUncollected?: PostaUncollectedRunDeps;
   },
 ): Hono<AppBindings> {
   const app = new Hono<AppBindings>();
@@ -136,6 +143,21 @@ export function createApp(
   registerSchedulerRoutes(app, db);
   registerSupplierRoutes(app, db, options.sendSupplierMail);
   registerPairingRoutes(app, db);
+  registerPostaUncollectedRoutes(
+    app,
+    db,
+    options.postaUncollected ?? {
+      // Bezpečný default pre testy/lokálny vývoj bez explicitne dodaných
+      // dependencies — NIKDY nekontaktuje skutočné api.posta.sk (vracia
+      // `null`, "zlyhalo", presne ako sieťový výpadok), nikdy neposiela
+      // mail (`mailTransport` chýba). Produkcia (`index.ts`) toto VŽDY
+      // nahradí reálnym tracking klientom.
+      trackingClient: () => Promise.resolve(null),
+      mailTransport: undefined,
+      bccEmail: undefined,
+      adminBaseUrl: options.adminBaseUrl ?? "https://www.forestshop.sk",
+    },
+  );
 
   // Musí byť registrovaný AŽ PO všetkých skutočných /api/* trasách vyššie — Hono
   // vyberá presnejšiu zhodu, takže tie majú prednosť a sem sa dostane len to, čo
