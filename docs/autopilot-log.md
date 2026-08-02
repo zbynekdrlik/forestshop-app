@@ -2224,3 +2224,52 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
   tej istej "failed to extract layer" triedy chýb; diagnostický vzor
   (korelácia `journalctl -u docker` s `gh run list` časovými pečiatkami)
   pridaný pre budúci podobný nález.
+
+## Issue 171 — poznámku zákazníka pod text produktu (2026-08-02)
+
+- Design comment (issue-comment-5158732415) PRED prvým commitom: koreň
+  problému (`remark` v zlúčenej `td.ord-notes-merged`, ďaleko od produktu,
+  ktorého sa týka), zvolený prístup (presunúť LEN `remark-cell` div do
+  produktovej `<td>` ako sibling `<div>` pod obaleným menom, žiadny
+  `display:flex` na `<td>`, issue 163's poučenie), zamietnutá alternatíva
+  (len vizuálne prepojiť, nechať v POZNÁMKY — zamietnuté, ticket žiada
+  fyzické premiestnenie).
+- STILL-VALID komentár (issue-comment-5158733610): overené proti `dev`
+  (`df4e607`), remark stále v `ord-notes-merged`, žiadny neskorší PR to
+  nepresunul.
+- Implementácia: `OrderLineRow.tsx` (produktová `<td>` obalí meno do
+  `.ord-product-name` + rovnaký `remark-cell-<id>` div ako sibling; POZNÁMKY
+  `<td>` stráca svoj bývalý prvý blok), `app.css` (`.ord-remark` dostáva
+  `font-size: var(--fs-text-xs)`, `margin-top` presunutý z
+  `.ord-shop-remark-cell` na `.ord-remark-cell`).
+- Testy: `OrderLineRow.remarkCell.test.tsx` + `OrdersSection.test.tsx` —
+  nové assercie na DOM umiestnenie (remark v tej istej `<td>` ako meno
+  produktu, inej než POZNÁMKY). `orders-layout.spec.ts` živo prehodnotilo
+  strop výšky kompaktného riadku — throwaway debug meranie (`console.log`
+  vyskok, revertnuté) ukázalo 98.19px (predtým ~108.5px so všetkými tromi
+  poznámkami v jednej bunke) — strop znížený 115px→105px, plus nová
+  kontrola placement + font-size odlíšenia. Commit `991f7c1`.
+- Lokálne overené PRED pushom: web unit 39/39 súborov (287→289 testov po
+  pridaní), api unit 22/22 (345 testov, backend nedotknutý), web e2e
+  25/25 (vrátane `orders-layout.spec.ts`), `pnpm lint` + `pnpm typecheck`
+  čisté.
+- Review comment (issue-comment-5158838610): vlastný /review pass, 0🔴 0🟡,
+  1 drobný 🔵 self-note (empty `remark-cell` div nesie `margin-top` aj bez
+  obsahu — rovnaký ustálený vzor ako mala `.ord-shop-remark-cell` predtým,
+  živo zmeraná výška riadku ho nepreukazuje ako problém).
+- PR #174 — `Closes #171` ZÁMERNE nepoužité (ticket má live post-deploy
+  overenie ako akceptačnú podmienku, `.claude/rules/CLAUDE.md`'s auto-close
+  poučenie) — CI (push run 30753998616 aj PR-triggered run 30754149804)
+  všetko `success`, PR `MERGEABLE`+`CLEAN` → merged `d5ccd06` (merge
+  commit).
+- Main CI (run 30754277925) aj Deploy (run 30754277901) monitorované po
+  merge — obe `success`.
+- Live overené (Playwright MCP): `/api/version` = `0.3.0-dev.100`/
+  `d5ccd06`. Riadok "Nabíjačka NITECORE UM4" (objednávka 20261063) —
+  `remark-cell.closest('td') === productDiv.closest('td')` → `true`;
+  `.ord-notes-merged` (35 živých riadkov) neobsahuje žiadny `remark-cell`;
+  font-size 12px (poznámka) vs 13px (meno produktu); zmeraná výška riadku
+  85px. Konzola: 0 chýb/varovaní. DB baseline nezmenený (overrides 0|0,
+  order/order_line 535→536 / 881→882 normálnym importom).
+- Issue #171 zavretý s dôkazom (issue-comment-5158877599). Discord karta
+  odoslaná (`notify --run-card`, `sent`).
