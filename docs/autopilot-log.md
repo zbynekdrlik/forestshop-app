@@ -3,6 +3,65 @@
 Terse per-ticket log of autopilot-worker cycles: issue(s), commit SHAs,
 RED→GREEN test names, key decisions, and the shared PR.
 
+## 2026-08-02 — #172 (Nevyzdvihnuté zásielky — Slovak Post uncollected-parcel automation)
+
+- Solo ticket, owner-approved (comment on the issue removed `autopilot-skip`).
+- Version bump `7a736d8` (0.3.0-dev.101→.102), first commit.
+- Design comment BEFORE first code commit:
+  https://github.com/zbynekdrlik/forestshop-app/issues/172#issuecomment-5159652624
+  — root cause (new `order` columns needed: `email`/`phone`/`package_number`/
+  `shipping_carrier_name`, extracted independently of `mapOrderRow`'s
+  item-validation since the SHIPPING pseudo-row carries the carrier name and
+  is otherwise discarded), chosen approach (DB-native reimplementation of the
+  old app's `posta_uncollected.py`: `job_run.detail` reuse for display state,
+  a new `posta_uncollected_state` table for escalation counters, `enabled`
+  gates ONLY the scheduled job never the fail-closed send path — matching
+  the old app's `run_now` semantics), rejected alternatives (CSV re-parse,
+  state-in-job_run, generic `MAIL_BCC`, gating manual-run on `enabled`).
+- STILL-VALID comment: https://github.com/zbynekdrlik/forestshop-app/issues/172#issuecomment-5159654395
+- PR #177 (`feat: Nevyzdvihnute zasielky automation`) — schema (migration
+  `0021`), `orders/parser.ts` extraction (`extractOrderLevelExtra`/
+  `mergeOrderLevelExtra`), `modules/posta-uncollected/**` business logic
+  (verbatim-ported e-mail templates, cadence, coverage/blind-spot
+  safeguard), scheduler job, HTTP routes, web UI (hidden tab
+  `?tab=posta-uncollected`), `docker-compose.prod.yml` wiring for the new
+  `POSTA_UNCOLLECTED_BCC_EMAIL` var. Merged `42e496a`.
+  - Independent review (dispatched fork) found and fixed 2 real issues
+    BEFORE this could be called done, both with deterministic regression
+    tests: (1) `runPostaUncollected` had no advisory lock — two overlapping
+    runs (manual + scheduled, or two managers) could double-send the same
+    escalation e-mail; fixed with `POSTA_UNCOLLECTED_RUN_LOCK_KEY`
+    (`787_878_004`, session-scoped `pg_advisory_lock`). (2) the order
+    upsert directly overwrote `email`/`phone`/`package_number`/
+    `shipping_carrier_name` from `excluded` instead of `coalesce`-ing like
+    `shoptet_order_id` already does — a transient export glitch could have
+    silently nulled a known package number and made the automation stop
+    tracking that shipment with no warning. PR #178 carried both fixes +
+    the playbook entry (`.claude/rules/posta-uncollected.md`) + version
+    bump `898d05e` (0.3.0-dev.102→.103). Merged `ef64bd4`.
+  - Regression tests: `posta-uncollected-run.integration.test.ts`'s "dva
+    súbežné behy sa serializujú" (RED without the lock — proven
+    deterministically via `pg_try_advisory_lock` from a second connection,
+    same technique as `db-isolation-lock.integration.test.ts`), and
+    `orders-ingest-posta-fields.integration.test.ts`'s "re-import ...
+    NEVYNULUJE" (RED without the coalesce).
+- Post-deploy verification (live, `vychod@varos.sk`): version `v0.3.0-dev.103`
+  read from DOM, console zero errors/warnings. Confirmed via SSH DB query
+  that `posta_uncollected_settings.enabled = false` (ships disabled, per the
+  ticket's one absolute safety condition). Triggered a REAL "Spustiť teraz"
+  run against real production data (safe: no `POSTA_UNCOLLECTED_BCC_EMAIL`
+  configured yet on dev2, so the fail-closed BCC check blocks every send
+  regardless) — confirmed a real uncollected shipment (order 20261239,
+  package EF256985125SK) renders correctly in the table with a working
+  direct Shoptet admin link and Slovak-post tracking link, and that the
+  preview endpoint shows the exact e-mail that would go out. Restored
+  `enabled=false` afterward (was toggled on only for this verification).
+  Docs-only follow-up (autopilot-log entry, this commit) bumped version to
+  `0.3.0-dev.104` — deployed + verified separately (see PR / commit list).
+- `POSTA_UNCOLLECTED_BCC_EMAIL` and (once ready) Štart/Stop remain the
+  owner's own action — nothing will ever send a customer e-mail until both
+  are set, by design.
+
 ## 2026-08-01 — #153 (immediate supplier-link validation + CSV formula-injection guard)
 
 - Solo ticket (security-boundary Scope-gate, deliberately not bundled).
