@@ -104,12 +104,10 @@ export async function listNedostupneGroups(db: Database, adminBaseUrl: string): 
     });
   }
 
-  // Zoradenie: variant s najnovšou otvorenou objednávkou navrchu (zákazník,
-  // ktorý čaká najdlhšie... nie, presne opačne — najnovší je pridaný k
-  // dopytu ako PRVÝ vďaka `orderBy(desc(placedAt))`, takže skupina, ktorej
-  // PRVÝ (najnovší) riadok appka vidí najskôr, sa aj zoradí navrchu — rovnaký
-  // zámer ako stará appka's "MAX open-order date descending".
-  const maxDate = (g: { orders: NedostupneOrderRow[] }): string => g.orders.reduce((max, o) => (o.placedAt > max ? o.placedAt : max), "");
+  // Zoradenie: variant, ktorého NAJNOVŠIA otvorená objednávka je najčerstvejšia,
+  // navrchu — rovnaký zámer ako stará appka's "MAX open-order date descending"
+  // (zákazník s najčerstvejšou objednávkou hore, nie ten, čo čaká najdlhšie).
+  const maxPlacedAt = (orders: readonly NedostupneOrderRow[]): string => orders.reduce((max, o) => (o.placedAt > max ? o.placedAt : max), "");
 
   return [...groups.entries()]
     .map(([variantCode, g]) => ({
@@ -120,7 +118,7 @@ export async function listNedostupneGroups(db: Database, adminBaseUrl: string): 
       orders: g.orders,
     }))
     .sort((a, b) => {
-      const d = maxDate({ orders: [...b.orders] }).localeCompare(maxDate({ orders: [...a.orders] }));
+      const d = maxPlacedAt(b.orders).localeCompare(maxPlacedAt(a.orders));
       if (d !== 0) return d;
       return a.itemName.localeCompare(b.itemName) || a.variantCode.localeCompare(b.variantCode);
     });

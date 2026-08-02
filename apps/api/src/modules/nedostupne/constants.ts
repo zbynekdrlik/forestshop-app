@@ -20,3 +20,14 @@ export const ALTERNATIVE_SUBJECT = "Alternatívy k vášmu tovaru — Forestshop
 export function alternativeSearchUrl(code: string): string {
   return `https://www.forestshop.sk/vyhladavanie/?string=${encodeURIComponent(code)}`;
 }
+
+// Ďalší voľný kľúč v registri `.claude/rules/scheduler.md`
+// (787_878_001/002/003/004/005/100 sú obsadené) — serializuje KAŽDÉ
+// odoslanie tohto modulu (dedup-check + skutočné odoslanie + zápis stavu je
+// TOCTOU okno bez tohto zámku: dva súbežné klik-y na TEN ISTÝ (objednávka,
+// variant, typ) by mohli OBA prejsť `hasSentNedostupne` skôr, než ktorýkoľvek
+// zapíše, a poslať zákazníkovi e-mail DVAKRÁT — presne to, čomu má dedup
+// zabrániť). Rovnaký zámer ako #172/#173's RUN lock, len na úrovni
+// JEDNÉHO odoslania namiesto celého dávkového behu (tento modul žiadny beh
+// nemá).
+export const NEDOSTUPNE_SEND_LOCK_KEY = 787_878_006;

@@ -1,7 +1,9 @@
 import { eq } from "drizzle-orm";
+import pg from "pg";
 import { afterEach, expect, it } from "vitest";
 import { nedostupneState, orderLines, orders } from "../src/db/schema.js";
 import type { MailMessage } from "../src/modules/mail/transport.js";
+import { NEDOSTUPNE_SEND_LOCK_KEY } from "../src/modules/nedostupne/constants.js";
 import { listNedostupneGroups } from "../src/modules/nedostupne/queries.js";
 import { findNedostupneContext, sendNedostupneEmail } from "../src/modules/nedostupne/send.js";
 import { DEFAULT_ORDER_OPEN_STATUS } from "../src/modules/orders/open-statuses.js";
@@ -13,9 +15,12 @@ import { withCleanDb } from "./helpers/db.js";
 const ADMIN_BASE_URL = "https://www.forestshop.sk";
 
 let close: (() => Promise<void>) | undefined;
+let checker: pg.Client | undefined;
 afterEach(async () => {
   await close?.();
   close = undefined;
+  await checker?.end();
+  checker = undefined;
 });
 
 async function boot() {
@@ -250,4 +255,51 @@ it("riadok, ktorý medzitým už NIE JE 'nedostupne' (napr. sklad ho medzitým n
     bccEmail: undefined,
   });
   expect(result).toEqual({ ok: false, code: "not_found" });
+});
+
+// Nájdené code review pred mergom (PR #182) — bez `NEDOSTUPNE_SEND_LOCK_KEY`
+// by dva súbežné klik-y na TEN ISTÝ (objednávka, variant, typ) mohli OBA
+// prejsť dedup-check skôr, než ktorýkoľvek zapíše, a poslať e-mail DVAKRÁT.
+// Rovnaká deterministická technika ako `posta-uncollected-run.integration
+// .test.ts`/`order-reminder-run.integration.test.ts` (`pg_try_advisory_lock`
+// z DRUHÉHO pripojenia, nikdy časovanie).
+it("dve súbežné odoslania toho istého (objednávka, variant, typ) sa serializujú (advisory zámok), nikdy neprebehnú naraz", async () => {
+  const db = await boot();
+  await insertTestVariantForProduct(db, "P176L", "P176L", {});
+  const orderId = await insertOrder(db, "17600012");
+  await db.insert(orderLines).values({ orderId, variantCode: "P176L", quantity: 1, state: "nedostupne" });
+
+  let releaseSend: (() => void) | undefined;
+  const blockedUntilReleased = new Promise<void>((resolve) => {
+    releaseSend = resolve;
+  });
+  const transport = async (): Promise<void> => {
+    await blockedUntilReleased;
+  };
+
+  const sendPromise = sendNedostupneEmail({
+    db,
+    now: new Date("2026-08-02T10:00:00Z"),
+    orderCode: "17600012",
+    variantCode: "P176L",
+    emailType: "nedostupne",
+    mailTransport: transport,
+    bccEmail: "majitel@forestshop.sk",
+  });
+
+  await new Promise((resolve) => setTimeout(resolve, 100));
+
+  const databaseUrl = process.env["DATABASE_URL"];
+  if (databaseUrl === undefined || databaseUrl === "") throw new Error("DATABASE_URL chýba");
+  checker = new pg.Client({ connectionString: databaseUrl });
+  await checker.connect();
+  const midSend = await checker.query<{ pg_try_advisory_lock: boolean }>("select pg_try_advisory_lock($1)", [NEDOSTUPNE_SEND_LOCK_KEY]);
+  expect(midSend.rows[0]?.pg_try_advisory_lock).toBe(false);
+
+  releaseSend?.();
+  expect(await sendPromise).toEqual({ ok: true });
+
+  const afterSend = await checker.query<{ pg_try_advisory_lock: boolean }>("select pg_try_advisory_lock($1)", [NEDOSTUPNE_SEND_LOCK_KEY]);
+  expect(afterSend.rows[0]?.pg_try_advisory_lock).toBe(true);
+  await checker.query("select pg_advisory_unlock($1)", [NEDOSTUPNE_SEND_LOCK_KEY]);
 });

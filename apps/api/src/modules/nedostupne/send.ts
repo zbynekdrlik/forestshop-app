@@ -4,7 +4,7 @@ import { log } from "../../logger.js";
 import { orderLines, orders, products, variants } from "../../db/schema.js";
 import type { MailTransport } from "../mail/transport.js";
 import { listOpenStatusNames } from "../orders/open-statuses.js";
-import { TYPE_ALTERNATIVE, type NedostupneEmailType } from "./constants.js";
+import { NEDOSTUPNE_SEND_LOCK_KEY, TYPE_ALTERNATIVE, type NedostupneEmailType } from "./constants.js";
 import { buildAlternativeEmail, buildAlternatives, buildUnavailableEmail, type BuiltNedostupneEmail, type EmailAlternative } from "./logic.js";
 import { resolveAlternativeNames } from "./queries.js";
 import { hasSentNedostupne, markSentNedostupne } from "./state.js";
@@ -90,8 +90,26 @@ export interface SendNedostupneOptions {
  * kontrola nižšie, nie vynútený náhľad request-flow). Fail-closed: chýbajúca
  * BCC adresa ALEBO chýbajúci mail transport → NEPOŠLE NIČ (rovnaký zámer ako
  * `order-reminder/run.ts`/`posta-uncollected/run.ts`).
+ *
+ * Serializovaná `NEDOSTUPNE_SEND_LOCK_KEY`-om (review pred mergom, PR #182):
+ * dedup-check + odoslanie + zápis stavu je BEZ zámku TOCTOU okno — dva
+ * súbežné klik-y na TEN ISTÝ (objednávka, variant, typ) by mohli OBA prejsť
+ * `hasSentNedostupne` skôr, než ktorýkoľvek zapíše, a poslať zákazníkovi
+ * e-mail DVAKRÁT.
  */
 export async function sendNedostupneEmail(options: SendNedostupneOptions): Promise<SendNedostupneResult> {
+  const { db } = options;
+  const lockClient = await db.$client.connect();
+  try {
+    await lockClient.query("select pg_advisory_lock($1)", [NEDOSTUPNE_SEND_LOCK_KEY]);
+    return await sendNedostupneEmailLocked(options);
+  } finally {
+    await lockClient.query("select pg_advisory_unlock($1)", [NEDOSTUPNE_SEND_LOCK_KEY]);
+    lockClient.release();
+  }
+}
+
+async function sendNedostupneEmailLocked(options: SendNedostupneOptions): Promise<SendNedostupneResult> {
   const { db, now, orderCode, variantCode, emailType, mailTransport, bccEmail } = options;
 
   const ctx = await findNedostupneContext(db, orderCode, variantCode);
