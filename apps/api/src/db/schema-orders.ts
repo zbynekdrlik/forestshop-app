@@ -109,6 +109,21 @@ export const orders = pgTable(
     // behu), lebo tento zápis je per-objednávka, nie jeden hromadný CSV
     // import.
     commentSyncedAt: timestamp("comment_synced_at", { withTimezone: true }),
+    // issue 172: štyri nové Shoptet-ove polia pre automatizáciu "Nevyzdvihnuté
+    // zásielky" — rovnaká rodina ako `statusName`/`remark`/`shopRemark` vyššie
+    // (VŽDY Shoptetovo pole, `ingest.ts` ho pri re-importe OSVIEŽI), ale na
+    // rozdiel od nich sa extrahujú NEZÁVISLE od `mapOrderRow`'s
+    // item-validácie (`parser.ts`'s `extractOrderLevelExtra`) — `email`/
+    // `phone`/`packageNumber` sú na KAŽDOM riadku objednávky vrátane pseudo-
+    // položiek (doprava/platba/zľava), a `shippingCarrierName` je práve na
+    // SHIPPING pseudo-riadku, ktorý `mapOrderRow` inak celý zahodí
+    // (`.claude/rules/orders.md`'s "itemCode nie je vždy skutočný produkt").
+    // Nullable — nepovinné stĺpce exportu, chýbajúca hodnota sa mapuje na
+    // `null`, nikdy na prázdny reťazec (rovnaký vzor ako `remark`).
+    email: text("email"),
+    phone: text("phone"),
+    packageNumber: text("package_number"),
+    shippingCarrierName: text("shipping_carrier_name"),
   },
   (t) => [index("order_placed_at_idx").on(t.placedAt)],
 );
