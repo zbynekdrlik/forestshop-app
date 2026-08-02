@@ -63,6 +63,26 @@ async function seedNedostupneLine(db: Awaited<ReturnType<typeof boot>>["db"], or
   await db.insert(orderLines).values({ orderId: order.id, variantCode, quantity: 1, state: "nedostupne" });
 }
 
+// issue 176 (code review pred mergom, PR #182): `/send` vyžaduje token vydaný
+// `/preview` — tento helper zavolá náhľad a vráti jeho token, presne to, čo
+// skutočný frontend robí PRED odoslaním.
+async function previewToken(
+  app: Awaited<ReturnType<typeof boot>>["app"],
+  cookie: string,
+  orderCode: string,
+  variantCode: string,
+  emailType = "nedostupne",
+): Promise<string> {
+  const res = await app.request("/api/nedostupne/preview", {
+    method: "POST",
+    headers: { cookie, "content-type": "application/json" },
+    body: JSON.stringify({ orderCode, variantCode, emailType }),
+  });
+  const body = (await res.json()) as { ok: boolean; previewToken: string };
+  if (!body.ok) throw new Error("náhľad zlyhal v test helperi");
+  return body.previewToken;
+}
+
 it("GET bez prihlásenia vráti 401", async () => {
   const { app } = await boot("manazer");
   const res = await app.request("/api/nedostupne");
@@ -123,10 +143,11 @@ it("náhľad neexistujúceho riadku vráti 200 {ok:false} (nikdy 4xx, `.claude/r
 it("rola citanie NESMIE odoslať (403) — čítanie áno, odosielanie len admin/manazer", async () => {
   const { app, cookie, db } = await boot("citanie", { sent: [], bccEmail: "majitel@forestshop.sk" });
   await seedNedostupneLine(db, "17601003", "N176C");
+  const token = await previewToken(app, cookie, "17601003", "N176C");
   const res = await app.request("/api/nedostupne/send", {
     method: "POST",
     headers: { cookie, "content-type": "application/json" },
-    body: JSON.stringify({ orderCode: "17601003", variantCode: "N176C", emailType: "nedostupne" }),
+    body: JSON.stringify({ orderCode: "17601003", variantCode: "N176C", emailType: "nedostupne", previewToken: token }),
   });
   expect(res.status).toBe(403);
 });
@@ -135,11 +156,12 @@ it("manazer odošle e-mail, GET hneď odzrkadlí 'nedostupneSent: true'", async 
   const sent: MailMessage[] = [];
   const { app, cookie, db } = await boot("manazer", { sent, bccEmail: "majitel@forestshop.sk" });
   await seedNedostupneLine(db, "17601004", "N176D");
+  const token = await previewToken(app, cookie, "17601004", "N176D");
 
   const send = await app.request("/api/nedostupne/send", {
     method: "POST",
     headers: { cookie, "content-type": "application/json" },
-    body: JSON.stringify({ orderCode: "17601004", variantCode: "N176D", emailType: "nedostupne" }),
+    body: JSON.stringify({ orderCode: "17601004", variantCode: "N176D", emailType: "nedostupne", previewToken: token }),
   });
   expect(send.status).toBe(200);
   const sendBody = (await send.json()) as { ok: boolean };
@@ -156,15 +178,73 @@ it("druhé odoslanie ROVNAKÉHO e-mailu je odmietnuté 200 {ok:false} (dedup)", 
   const sent: MailMessage[] = [];
   const { app, cookie, db } = await boot("manazer", { sent, bccEmail: "majitel@forestshop.sk" });
   await seedNedostupneLine(db, "17601005", "N176E");
-  const body = { orderCode: "17601005", variantCode: "N176E", emailType: "nedostupne" };
+  const bodyBase = { orderCode: "17601005", variantCode: "N176E", emailType: "nedostupne" };
 
-  await app.request("/api/nedostupne/send", { method: "POST", headers: { cookie, "content-type": "application/json" }, body: JSON.stringify(body) });
+  const token1 = await previewToken(app, cookie, "17601005", "N176E");
+  await app.request("/api/nedostupne/send", { method: "POST", headers: { cookie, "content-type": "application/json" }, body: JSON.stringify({ ...bodyBase, previewToken: token1 }) });
   expect(sent).toHaveLength(1);
 
-  const second = await app.request("/api/nedostupne/send", { method: "POST", headers: { cookie, "content-type": "application/json" }, body: JSON.stringify(body) });
+  const token2 = await previewToken(app, cookie, "17601005", "N176E");
+  const second = await app.request("/api/nedostupne/send", { method: "POST", headers: { cookie, "content-type": "application/json" }, body: JSON.stringify({ ...bodyBase, previewToken: token2 }) });
   expect(second.status).toBe(200);
   const secondBody = (await second.json()) as { ok: boolean; error: string };
   expect(secondBody.ok).toBe(false);
   expect(secondBody.error).toContain("už bol");
+  expect(sent).toHaveLength(1);
+});
+
+// issue 176 (code review pred mergom, PR #182) — server-side vynútenie
+// povinného náhľadu: `/send` bez volania `/preview` PRE PRESNE tento
+// (objednávka, variant, typ) sa VŽDY odmietne, žiadny e-mail sa nepošle.
+it("odoslanie BEZ predchádzajúceho náhľadu je odmietnuté — žiadny token, žiadny e-mail", async () => {
+  const sent: MailMessage[] = [];
+  const { app, cookie, db } = await boot("manazer", { sent, bccEmail: "majitel@forestshop.sk" });
+  await seedNedostupneLine(db, "17601006", "N176F");
+
+  const res = await app.request("/api/nedostupne/send", {
+    method: "POST",
+    headers: { cookie, "content-type": "application/json" },
+    body: JSON.stringify({ orderCode: "17601006", variantCode: "N176F", emailType: "nedostupne", previewToken: "vymyslený-token" }),
+  });
+  expect(res.status).toBe(200);
+  const body = (await res.json()) as { ok: boolean; error: string };
+  expect(body.ok).toBe(false);
+  expect(body.error).toContain("náhľad");
+  expect(sent).toHaveLength(0);
+});
+
+it("token vydaný pre INÝ (objednávka/variant/typ) sa na tento send NEDÁ použiť", async () => {
+  const sent: MailMessage[] = [];
+  const { app, cookie, db } = await boot("manazer", { sent, bccEmail: "majitel@forestshop.sk" });
+  await seedNedostupneLine(db, "17601007", "N176G");
+  await seedNedostupneLine(db, "17601008", "N176H");
+
+  const tokenForOther = await previewToken(app, cookie, "17601008", "N176H");
+  const res = await app.request("/api/nedostupne/send", {
+    method: "POST",
+    headers: { cookie, "content-type": "application/json" },
+    body: JSON.stringify({ orderCode: "17601007", variantCode: "N176G", emailType: "nedostupne", previewToken: tokenForOther }),
+  });
+  const body = (await res.json()) as { ok: boolean };
+  expect(body.ok).toBe(false);
+  expect(sent).toHaveLength(0);
+});
+
+it("token je JEDNORAZOVÝ — druhé odoslanie s TÝM ISTÝM tokenom (iný typ) je odmietnuté, aj keby dedup inak dovolil", async () => {
+  const sent: MailMessage[] = [];
+  const { app, cookie, db } = await boot("manazer", { sent, bccEmail: "majitel@forestshop.sk" });
+  await seedNedostupneLine(db, "17601009", "N176I");
+  const token = await previewToken(app, cookie, "17601009", "N176I");
+  const body = { orderCode: "17601009", variantCode: "N176I", emailType: "nedostupne", previewToken: token };
+
+  const first = await app.request("/api/nedostupne/send", { method: "POST", headers: { cookie, "content-type": "application/json" }, body: JSON.stringify(body) });
+  expect((await first.json()) as { ok: boolean }).toMatchObject({ ok: true });
+
+  // Znovu POUŽITÝ token (žiadny nový náhľad) na iný typ e-mailu — token je
+  // už skonzumovaný, nesmie fungovať znova ani na iný (inak by prešiel) typ.
+  const secondBody = { ...body, emailType: "alternativa" };
+  const second = await app.request("/api/nedostupne/send", { method: "POST", headers: { cookie, "content-type": "application/json" }, body: JSON.stringify(secondBody) });
+  const secondJson = (await second.json()) as { ok: boolean };
+  expect(secondJson.ok).toBe(false);
   expect(sent).toHaveLength(1);
 });

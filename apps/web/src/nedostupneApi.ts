@@ -32,7 +32,7 @@ export type NedostupneList = z.infer<typeof listSchema>;
 export type NedostupneEmailType = "nedostupne" | "alternativa";
 
 const previewResultSchema = z.union([
-  z.object({ ok: z.literal(true), subject: z.string(), html: z.string(), recipient: z.string(), customerName: z.string() }),
+  z.object({ ok: z.literal(true), subject: z.string(), html: z.string(), recipient: z.string(), customerName: z.string(), previewToken: z.string() }),
   z.object({ ok: z.literal(false), error: z.string() }),
 ]);
 export type NedostupnePreview = Extract<z.infer<typeof previewResultSchema>, { readonly ok: true }>;
@@ -80,11 +80,21 @@ export async function fetchNedostupnePreview(orderCode: string, variantCode: str
   return parsed;
 }
 
-export async function sendNedostupneEmail(orderCode: string, variantCode: string, emailType: NedostupneEmailType): Promise<NedostupneSendResult> {
+// issue 176 (code review pred mergom, PR #182): server VYŽADUJE `previewToken`
+// vydaný `/preview` PRE PRESNE tento (orderCode, variantCode, emailType) —
+// server-side vynútenie povinného náhľadu (`preview-tokens.ts`). Volajúci
+// (`NedostupneSection.tsx`) preto musí odoslať TEN ISTÝ token, aký dostal z
+// `fetchNedostupnePreview`, nikdy vlastný/vymyslený reťazec.
+export async function sendNedostupneEmail(
+  orderCode: string,
+  variantCode: string,
+  emailType: NedostupneEmailType,
+  previewToken: string,
+): Promise<NedostupneSendResult> {
   const response = await fetch("/api/nedostupne/send", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ orderCode, variantCode, emailType }),
+    body: JSON.stringify({ orderCode, variantCode, emailType, previewToken }),
   });
   if (response.status === 401) throw new NedostupneUnauthorizedError();
   return sendResultSchema.parse(await response.json());

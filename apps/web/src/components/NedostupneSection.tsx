@@ -81,7 +81,7 @@ export function NedostupneSection({ role, onSessionExpired }: { readonly role: M
     if (pending === null) return;
     const key = `${pending.orderCode}|${pending.variantCode}|${pending.emailType}`;
     setBusyKey(key);
-    sendNedostupneEmail(pending.orderCode, pending.variantCode, pending.emailType)
+    sendNedostupneEmail(pending.orderCode, pending.variantCode, pending.emailType, pending.preview.previewToken)
       .then((result) => {
         if (!result.ok) {
           setActionError(result.error);
