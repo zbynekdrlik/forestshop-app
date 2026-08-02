@@ -48,13 +48,29 @@ paths:
   obsadené: `787_878_001` (`INGEST_ADVISORY_LOCK_KEY`, `catalog/ingest.ts`),
   `787_878_002` (`SCHEDULER_ADVISORY_LOCK_KEY`, `scheduler.ts`),
   `787_878_003` (`INGEST_ORDERS_ADVISORY_LOCK_KEY`, `orders/ingest.ts`, #21),
-  `787_878_100` (`TEST_DB_ISOLATION_LOCK_KEY`, `tests/helpers/db.ts`).
+  `787_878_100` (`TEST_DB_ISOLATION_LOCK_KEY`, `tests/helpers/db.ts`),
+  `787_878_004` (`POSTA_UNCOLLECTED_RUN_LOCK_KEY`, `posta-uncollected/run.ts`,
+  issue 172 — pozri nižšie).
   `ordersImportJob`/`pruneRawOrdersJob` (#22/#28) nepridali žiadny nový kľúč
   (pozri bod vyššie). `shoptetWritebackJob` (issue 122) tiež žiadny nepridal
   — v tomto tickete niet manuálneho HTTP triggeru na tú istú prácu (na
   rozdiel od `catalogImportJob`/`ordersImportJob`, ktoré preto majú svoj
   vlastný zámok VNÚTRI `ingestCatalog`/`ingestOrders`), takže scheduler
   tick()'s vlastný zámok (bod nižšie) stačí.
+- **`postaUncollectedJob` (issue 172) MÁ manuálny HTTP trigger ("Spustiť
+  teraz") na TÚ ISTÚ prácu ako naplánovaný denný beh — presne ako
+  `catalogImportJob`/`ordersImportJob`, dostáva preto VLASTNÝ zámok VNÚTRI
+  `runPostaUncollected` (`POSTA_UNCOLLECTED_RUN_LOCK_KEY`).** Na rozdiel od
+  tamtých dvoch je to `pg_advisory_lock` (session-scoped, na vlastnom
+  vyhradenom pripojení z poolu, `db.$client.connect()`) — nie
+  `pg_advisory_xact_lock` v transakcii: beh robí desiatky sekvenčných
+  sieťových volaní na posta.sk (per zásielka), a držať jednu DB transakciu
+  otvorenú počas nich by zbytočne zaťažovalo connection pool. Bez tohto
+  zámku by dva prekrývajúce sa behy (dvaja manažéri klikli "Spustiť teraz"
+  súčasne, alebo ručný klik sa prekryl s 07:00 UTC naplánovaným behom) mohli
+  OBA prečítať ten istý predošlý `notifyCount` pred zápisom a poslať
+  DUPLICITNÝ eskalačný e-mail zákazníkovi (review na PR 177 — nájdené pred
+  mergom, nie testom).
 - **`tick()`'s zámok chráni LEN kontrolu splatnosti + vloženie "running"
   riadku, NIE celý beh úlohy.** `job.run()` beží AŽ PO commite transakcie so
   zámkom, mimo neho — dlho bežiaci job (napr. 54 MB import katalógu) tak

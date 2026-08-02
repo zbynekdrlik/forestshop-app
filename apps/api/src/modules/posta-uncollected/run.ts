@@ -67,13 +67,46 @@ export interface RunPostaUncollectedOptions {
   readonly adminBaseUrl: string;
 }
 
+// Ďalší voľný kľúč v registri `.claude/rules/scheduler.md` (787_878_001/002/
+// 003/100 sú obsadené) — review na PR 177 upozornila, že manuálne "Spustiť
+// teraz" (HTTP) a naplánovaný denný beh majú PRESNE rovnaký tvar súbehu ako
+// `catalogImportJob`/`ordersImportJob` (ktoré preto majú svoj VLASTNÝ
+// advisory zámok vnútri `ingestCatalog`/`ingestOrders`), ale tento modul ho
+// pôvodne nemal vôbec: dva prekrývajúce sa behy (dvaja manažéri klikli
+// "Spustiť teraz" súčasne, alebo ručný klik sa prekryl s 07:00 UTC
+// naplánovaným behom) by mohli OBA prečítať ten istý predošlý `notifyCount`/
+// `lastSentAt` PRED tým, než ktorýkoľvek zapíše — a OBA by tak mohli poslať
+// ten istý eskalačný e-mail zákazníkovi duplicitne, presne to, čomu má
+// 4-emailová kadencia zabrániť. `pg_advisory_lock` (SESSION-scoped, nie
+// `pg_advisory_xact_lock` v transakcii) beží na VLASTNOM vyhradenom
+// pripojení z poolu (rovnaký vzor ako `tests/helpers/db.ts`'s
+// `withCleanDb()`) — nie transakcia okolo celého behu, lebo beh robí desiatky
+// sekvenčných sieťových volaní na posta.sk a držať jednu DB transakciu otvorenú
+// počas nich by zbytočne zaťažovalo connection pool.
+export const POSTA_UNCOLLECTED_RUN_LOCK_KEY = 787_878_004;
+
 /** Core beh (jedno vyhodnotenie): eligible objednávky → tracking na
  * poste.sk → eskalačné e-maily → nový stav → coverage poistka. Volá sa PRIAMO
  * z HTTP "Spustiť teraz" (vždy, bez ohľadu na `enabled`) aj z naplánovaného
  * jobu (`scheduler/jobs.ts`'s `postaUncollectedJob`, ktorý PRED volaním
  * kontroluje `enabled` — pozri návrhový komentár na issue 172, "Spustiť
- * teraz" je explicitná ľudská akcia presne ako stará appka's `run_now`). */
+ * teraz" je explicitná ľudská akcia presne ako stará appka's `run_now`).
+ * Serializovaný `POSTA_UNCOLLECTED_RUN_LOCK_KEY`-om — druhý súbežný beh
+ * (iný manažér, alebo prekryv s naplánovaným behom) počká, kým prvý celý
+ * doskončí, namiesto toho, aby mohol poslať duplicitný e-mail. */
 export async function runPostaUncollected(options: RunPostaUncollectedOptions): Promise<PostaUncollectedRunResult> {
+  const { db, now, trackingClient, mailTransport, bccEmail, adminBaseUrl } = options;
+  const lockClient = await db.$client.connect();
+  try {
+    await lockClient.query("select pg_advisory_lock($1)", [POSTA_UNCOLLECTED_RUN_LOCK_KEY]);
+    return await runPostaUncollectedLocked({ db, now, trackingClient, mailTransport, bccEmail, adminBaseUrl });
+  } finally {
+    await lockClient.query("select pg_advisory_unlock($1)", [POSTA_UNCOLLECTED_RUN_LOCK_KEY]);
+    lockClient.release();
+  }
+}
+
+async function runPostaUncollectedLocked(options: RunPostaUncollectedOptions): Promise<PostaUncollectedRunResult> {
   const { db, now, trackingClient, mailTransport, bccEmail, adminBaseUrl } = options;
   const adminOrderUrl = (order: { readonly externalOrderId: string; readonly shoptetOrderId: number | null }): string =>
     buildShoptetAdminOrderUrl(adminBaseUrl, order.externalOrderId, order.shoptetOrderId);

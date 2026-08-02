@@ -351,15 +351,19 @@ export async function ingestOrders(db: Database, options: OrdersIngestOptions): 
             // sa robí až na čítacej strane, `queries.ts`) — appka pri IMPORTE
             // do neho nikdy nezapisuje, takže tu niet čo stratiť/prepísať.
             // `email`/`phone`/`package_number`/`shipping_carrier_name` (issue
-            // 172) sú TIEŽ tá istá rodina — VŽDY Shoptetovo pole, re-import ich
-            // osvieži (zásielka môže dostať číslo AŽ po prvom importe
-            // objednávky). `shoptet_order_id` (issue 120) je NAVYŠE
-            // COALESCE-ovaný, nie priamo prepísaný ako predošlé — na rozdiel
-            // od nich pochádza z BEST-EFFORT XML fetchu, ktorý tento konkrétny
-            // beh môže zlyhať/chýbať (premenná nenastavená), a re-import bez
-            // neho nesmie vynulovať predtým zistené id (`"order"."shoptet_
-            // order_id"` = hodnota RIADKU PRED týmto UPDATE-om — presne to,
-            // čo `coalesce` potrebuje ako záchrannú sieť).
+            // 172) sú Shoptetove polia, ale na rozdiel od `status_name`/
+            // `remark`/`shop_remark` vyššie sú NAVYŠE COALESCE-ované — rovnaký
+            // dôvod ako `shoptet_order_id` (review, PR 177): extrahujú sa z
+            // KAŽDÉHO riadku objednávky (`extractOrderLevelExtra`), takže
+            // jeden pokazený/inak tvarovaný export cyklus, kde niektorý z
+            // týchto stĺpcov na VŠETKÝCH riadkoch danej objednávky vyjde
+            // prázdny, by priamym prepísaním TICHO vynuloval už zistenú
+            // hodnotu — a "Nevyzdvihnuté zásielky" (`posta-uncollected/
+            // orders-source.ts`) by tú objednávku odvtedy prestalo sledovať
+            // bez akéhokoľvek varovania. `coalesce` necháva predtým zistenú
+            // hodnotu prežiť presne taký výpadok, zatiaľ čo skutočná NOVÁ
+            // hodnota (bežný prípad — zásielka dostane číslo AŽ po prvom
+            // importe) sa aj tak zapíše normálne.
             set: {
               customerName: sql`excluded.customer_name`,
               statusName: sql`excluded.status_name`,
@@ -367,10 +371,10 @@ export async function ingestOrders(db: Database, options: OrdersIngestOptions): 
               shopRemark: sql`excluded.shop_remark`,
               placedAt: sql`excluded.placed_at`,
               shoptetOrderId: sql`coalesce(excluded.shoptet_order_id, "order"."shoptet_order_id")`,
-              email: sql`excluded.email`,
-              phone: sql`excluded.phone`,
-              packageNumber: sql`excluded.package_number`,
-              shippingCarrierName: sql`excluded.shipping_carrier_name`,
+              email: sql`coalesce(excluded.email, "order"."email")`,
+              phone: sql`coalesce(excluded.phone, "order"."phone")`,
+              packageNumber: sql`coalesce(excluded.package_number, "order"."package_number")`,
+              shippingCarrierName: sql`coalesce(excluded.shipping_carrier_name, "order"."shipping_carrier_name")`,
             },
           })
           .returning({ id: orders.id, externalOrderId: orders.externalOrderId });

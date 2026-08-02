@@ -185,3 +185,44 @@ it("re-import OSVIEŽI packageNumber (zásielka dostane číslo neskôr, po prvo
   const [afterRow] = await db.select().from(orders).where(eq(orders.externalOrderId, "20400003"));
   expect(afterRow?.packageNumber).toBe("EF999999999SK");
 });
+
+it("re-import, ktorý príde s prázdnym packageNumber, NEVYNULUJE už zistenú hodnotu (coalesce, review PR 177)", async () => {
+  const { db, dir } = await boot();
+  await insertTestVariant(db, "40237/XL");
+
+  const rowOf = (packageNumber: string): Record<string, string> => ({
+    code: "20400004",
+    date: "2026-06-15 10:30:00",
+    statusName: "Vybavuje sa",
+    billFullName: "Jan Novak",
+    email: "jan@example.sk",
+    phone: "",
+    packageNumber,
+    itemName: "Nohavice",
+    itemAmount: "1",
+    itemCode: "40237/XL",
+  });
+
+  await ingestOrders(db, {
+    fetchExport: fetcherOf(buildCsv(HEADER, [rowOf("EF888888888SK")])),
+    now: NOW,
+    rawDir: dir,
+    windowStart: WINDOW_START,
+    windowEnd: WINDOW_END,
+  });
+  const [beforeRow] = await db.select().from(orders).where(eq(orders.externalOrderId, "20400004"));
+  expect(beforeRow?.packageNumber).toBe("EF888888888SK");
+
+  // Druhý import PRÁZDNE toto pole na VŠETKÝCH riadkoch objednávky (napr.
+  // dočasný formátovací výpadok exportu) — predtým zistená hodnota MUSÍ
+  // prežiť, priame prepísanie by ju ticho vynulovalo.
+  await ingestOrders(db, {
+    fetchExport: fetcherOf(buildCsv(HEADER, [rowOf("")])),
+    now: NOW,
+    rawDir: dir,
+    windowStart: WINDOW_START,
+    windowEnd: WINDOW_END,
+  });
+  const [afterRow] = await db.select().from(orders).where(eq(orders.externalOrderId, "20400004"));
+  expect(afterRow?.packageNumber).toBe("EF888888888SK");
+});

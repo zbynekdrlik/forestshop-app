@@ -1,8 +1,9 @@
 import { eq } from "drizzle-orm";
+import pg from "pg";
 import { afterEach, expect, it } from "vitest";
 import { orders, postaUncollectedState } from "../src/db/schema.js";
 import type { MailMessage } from "../src/modules/mail/transport.js";
-import { runPostaUncollected } from "../src/modules/posta-uncollected/run.js";
+import { POSTA_UNCOLLECTED_RUN_LOCK_KEY, runPostaUncollected } from "../src/modules/posta-uncollected/run.js";
 import type { TrackingClient } from "../src/modules/posta-uncollected/tracking-client.js";
 import { withCleanDb } from "./helpers/db.js";
 
@@ -12,9 +13,12 @@ import { withCleanDb } from "./helpers/db.js";
 const TODAY = new Date("2026-08-02T10:00:00Z");
 
 let close: (() => Promise<void>) | undefined;
+let checker: pg.Client | undefined;
 afterEach(async () => {
   await close?.();
   close = undefined;
+  await checker?.end();
+  checker = undefined;
 });
 
 async function boot() {
@@ -208,4 +212,50 @@ it("objednávka doručená iným dopravcom (DPD) sa nikdy nesleduje", async () =
   });
 
   expect(result.stats.checked).toBe(0);
+});
+
+// Review na PR 177 (finding "no advisory lock") — DETERMINISTICKY (nie
+// časovaním): kým je beh vnútri `runPostaUncollected` "zaseknutý" na
+// falošnom tracking klientovi, pokus o ten istý zámok z DRUHÉHO,
+// nezávislého pripojenia MUSÍ zlyhať (`pg_try_advisory_lock` je
+// neblokujúci) — presne rovnaká technika ako `db-isolation-lock
+// .integration.test.ts`.
+it("dva súbežné behy sa serializujú (advisory zámok), nikdy neprebehnú naraz", async () => {
+  const db = await boot();
+  await insertOrder(db, { externalOrderId: "20500009" });
+
+  let releaseTrackingCall: (() => void) | undefined;
+  const blockedUntilReleased = new Promise<void>((resolve) => {
+    releaseTrackingCall = resolve;
+  });
+  const trackingClient: TrackingClient = async () => {
+    await blockedUntilReleased;
+    return { results: [{ status: "ok", events: [{ stateCode: "notified", detailCode: "ZNP1AN", localDate: "2026-07-30" }] }] };
+  };
+
+  const runPromise = runPostaUncollected({
+    db,
+    now: TODAY,
+    trackingClient,
+    mailTransport: undefined,
+    bccEmail: undefined,
+    adminBaseUrl: "https://www.forestshop.sk",
+  });
+
+  // Počká, kým beh naozaj VEZME zámok (nie len že sme volanie odpálili).
+  await new Promise((resolve) => setTimeout(resolve, 100));
+
+  const databaseUrl = process.env["DATABASE_URL"];
+  if (databaseUrl === undefined || databaseUrl === "") throw new Error("DATABASE_URL chýba");
+  checker = new pg.Client({ connectionString: databaseUrl });
+  await checker.connect();
+  const midRun = await checker.query<{ pg_try_advisory_lock: boolean }>("select pg_try_advisory_lock($1)", [POSTA_UNCOLLECTED_RUN_LOCK_KEY]);
+  expect(midRun.rows[0]?.pg_try_advisory_lock).toBe(false);
+
+  releaseTrackingCall?.();
+  await runPromise;
+
+  const afterRun = await checker.query<{ pg_try_advisory_lock: boolean }>("select pg_try_advisory_lock($1)", [POSTA_UNCOLLECTED_RUN_LOCK_KEY]);
+  expect(afterRun.rows[0]?.pg_try_advisory_lock).toBe(true);
+  await checker.query("select pg_advisory_unlock($1)", [POSTA_UNCOLLECTED_RUN_LOCK_KEY]);
 });
