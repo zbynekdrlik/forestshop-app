@@ -74,3 +74,17 @@ it("riadok S poznámkou e-shopu vykreslí jej text", async () => {
   const bunka = within(riadok).getByTestId(`remark-cell-${RIADOK_S_POZNAMKOU.lineId}`);
   expect(bunka.textContent).toContain(RIADOK_S_POZNAMKOU.remark);
 });
+
+// issue 171: majiteľ, "poznamka zakaznika daj pod text produktu" — bunka
+// poznámky zákazníka je teraz VNÚTRI toho istého `<td>` ako meno produktu
+// (druhý block-level div pod ním), nie v samostatnej bunke.
+it("bunka poznámky zákazníka je v tom istom stĺpci ako meno produktu", async () => {
+  fetchOpenOrders.mockResolvedValue([{ supplier: "Dodávateľ Epsilon", lines: [RIADOK_S_POZNAMKOU], email: null }]);
+
+  render(<OrdersSection role="citanie" onSessionExpired={() => {}} />);
+
+  const riadok = await screen.findByTestId(`order-line-${RIADOK_S_POZNAMKOU.lineId}`);
+  const bunka = within(riadok).getByTestId(`remark-cell-${RIADOK_S_POZNAMKOU.lineId}`);
+  const nazovProduktu = within(riadok).getByText(RIADOK_S_POZNAMKOU.variantName);
+  expect(bunka.closest("td")).toBe(nazovProduktu.closest("td"));
+});

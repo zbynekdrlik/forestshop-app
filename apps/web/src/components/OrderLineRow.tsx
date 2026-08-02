@@ -241,7 +241,27 @@ export function OrderLineRow({
           </a>
         </td>
         <td>{line.customerName}</td>
-        <td>{line.variantName}</td>
+        {/* issue 171: majiteľ, doslovne "poznamka zakaznika daj pod text
+            produktu" — zákaznícka poznámka (🛈, `remark`) sa vzťahuje na
+            TENTO produkt, nie na "poznámky" všeobecne, takže sa presunula
+            sem z bývalej zlúčenej `td.ord-notes-merged` (issue 95/164) do
+            VLASTNEJ bunky produktu, ako druhý block-level `<div>` pod menom.
+            Rovnaký `<div data-testid="remark-cell-<id>">` (beze zmeny
+            testid/logiky — obalový div VŽDY, vnútorný `<span>` len keď
+            `remark` nie je `null`, presne vzor issue 111 bod 4/issue 164) —
+            len iný rodič. Žiadny `display:flex` na `<td>` (issue 163's
+            poučenie, `.claude/rules/frontend-design.md`) — dva stackované
+            block divy sa prirodzene poukladajú pod seba bez toho. */}
+        <td>
+          <div className="ord-product-name">{line.variantName}</div>
+          <div className="ord-remark-cell" data-testid={`remark-cell-${line.lineId}`}>
+            {line.remark !== null && (
+              <span className="ord-remark" title={line.remark}>
+                🛈 {line.remark}
+              </span>
+            )}
+          </div>
+        </td>
         <td className="ord-qty">
           {line.quantity} ks
           {qtyChip !== null && (
@@ -397,32 +417,22 @@ export function OrderLineRow({
             </span>
           )}
         </td>
-        {/* issue 95: POZNÁMKA E-SHOPU (`remark`, read-only) + KOMENTÁR zlúčené
-            do jednej bunky "Poznámky" (majiteľ, komentár #10) — oba vnorené
-            bloky nižšie sú BEZ ZMENY (rovnaké testid, rovnaká logika), len pod
-            sebou v jednej `<td>` namiesto dvoch samostatných stĺpcov. */}
+        {/* issue 95: POZNÁMKA E-SHOPU (`shopRemark`, read-only) + KOMENTÁR
+            zlúčené do jednej bunky "Poznámky" (majiteľ, komentár #10) — oba
+            vnorené bloky nižšie sú BEZ ZMENY (rovnaké testid, rovnaká
+            logika), len pod sebou v jednej `<td>` namiesto dvoch
+            samostatných stĺpcov. issue 171: zákaznícka poznámka (`remark`)
+            sa TU už nevykresľuje — presunula sa do bunky produktu, viď
+            komentár tam. */}
         <td className="ord-notes-merged">
-          {/* issue 65: zákaznícky odkaz k objednávke — read-only, appka ho
-              nikdy needituje (na rozdiel od `comment` bloku nižšie). */}
-          {/* issue 111 bod 4: predtým sa tu VŽDY vykresľovala holá pomlčka "—",
-              keď objednávka nemá poznámku e-shopu (100 % dnešných ostrých dát)
-              — presne ten istý zbytočný riadok navyše, aký #107 bod 3 už
-              odstránilo z priradenia dodávateľa. Keď `remark` je `null`,
-              nevykreslí sa NIČ (žiadny prvok, žiadny prázdny <span>) —
-              `OrderLineRow.remarkCell.test.tsx` to overuje. */}
-          <div className="ord-remark-cell" data-testid={`remark-cell-${line.lineId}`}>
-            {line.remark !== null && (
-              <span className="ord-remark" title={line.remark}>
-                🛈 {line.remark}
-              </span>
-            )}
-          </div>
           {/* issue 164: INTERNÁ poznámka e-shopu — LEN cudzí text (appkin
               vlastný blok už odstránený na strane servera), read-only, nikdy
               needitovateľná — appka na ňu nemá žiadnu zápisovú cestu vôbec.
-              Rovnaký vzor ako `.ord-remark-cell` vyššie (issue 111 bod 4):
-              obalový <div> sa vykresľuje VŽDY, vnútorný <span> len keď je
-              poznámka vyplnená — žiadna holá pomlčka. */}
+              issue 111 bod 4's vzor (obalový <div> sa vykresľuje VŽDY,
+              vnútorný <span> len keď je poznámka vyplnená — žiadna holá
+              pomlčka). issue 171: teraz PRVÝ blok v tejto bunke (predtým
+              druhý, za zákazníckou poznámkou, ktorá sa odsťahovala) —
+              stráca svoj bývalý `margin-top` (`app.css`). */}
           <div className="ord-shop-remark-cell" data-testid={`shop-remark-cell-${line.lineId}`}>
             {line.shopRemark != null && line.shopRemark !== "" && (
               <span className="ord-shop-remark" title={line.shopRemark}>

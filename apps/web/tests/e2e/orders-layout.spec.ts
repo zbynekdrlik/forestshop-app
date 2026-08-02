@@ -79,20 +79,24 @@ test("STAV je celý čitateľný a POZNÁMKY pole je dosť široké na všetkýc
     // (`.claude/rules/frontend-design.md`), takže tento test overuje presne
     // to, čo je v scope tohto ticketu — POZNÁMKY stĺpec už nespôsobuje
     // zalomenie vstup+tlačidlo, nie univerzálny strop na VŠETKY možné riadky.
-    // AKTUALIZÁCIA (issue 164, 2026-08-01): strop 100px→115px — pribudol
-    // TRETÍ voliteľný riadok v bunke "Poznámky" (interná poznámka e-shopu,
-    // `.ord-shop-remark-cell`, nad zákazníckym `remark` a appkiným
-    // `comment`). Riadok, čo naozaj nesie VŠETKY TRI naraz (fixtúra 9001,
-    // `scripts/e2e-setup.ts`), teraz legitímne meria ~108.5px pri 1280px —
-    // to NIE JE regresia zalomenia vstup+tlačidlo (tá je overená vyššie,
-    // `naTomIstomRiadku`), len skutočný obsah navyše. 115px necháva malú
-    // rezervu nad nameraným 108.5px bez toho, aby maskoval skutočné
-    // zalomenie (to by prehodilo strop o desiatky px, nie jednotky).
+    // AKTUALIZÁCIA (issue 171, 2026-08-02): strop 115px→105px — zákaznícka
+    // poznámka (`remark`) sa presunula z bunky POZNÁMKY do bunky PRODUKTU
+    // (pod meno produktu), takže bunka POZNÁMKY teraz nesie len DVA
+    // stackované riadky (`.ord-shop-remark-cell`/`.ord-comment-cell`)
+    // namiesto pôvodných troch. Riadok, čo nesie VŠETKY TRI poznámky naraz
+    // (fixtúra 9001, `scripts/e2e-setup.ts`), teraz naživo meria ~98.19px
+    // pri 1280px (predtým ~108.5px, keď boli všetky tri v jednej bunke) —
+    // znovu zmerané throwaway skriptom (`page.evaluate` logujúci reálne
+    // `getBoundingClientRect().height` proti lokálnym dev serverom, rovnaká
+    // metodika ako issue 105/107/111/127/164), NIE len odhadnuté. 105px
+    // necháva malú rezervu nad nameraným 98.19px bez toho, aby maskoval
+    // skutočné zalomenie (to by strop prehodilo o desiatky px, nie
+    // jednotky).
     const vysokeKompaktneRiadky = await page.evaluate(() => {
       return [...document.querySelectorAll(".order-row")]
         .filter((r) => r.querySelector('[data-testid^="supplier-assign-cell-"]') === null)
         .map((r) => r.getBoundingClientRect().height)
-        .filter((h) => h > 115);
+        .filter((h) => h > 105);
     });
     expect(vysokeKompaktneRiadky, `príliš vysoké riadky pri ${String(width)}px`).toEqual([]);
 
@@ -182,6 +186,45 @@ test("STAV je celý čitateľný a POZNÁMKY pole je dosť široké na všetkýc
       expect(strankaSaPosuva, "stránka sa vodorovne posúva pri 1280px").toBe(false);
     }
   }
+
+  // issue 171: majiteľ, "poznamka zakaznika daj pod text produktu" —
+  // zákaznícka poznámka (🛈) objednávky 9001 (`scripts/e2e-setup.ts`, variant
+  // "4859/46" pod dodávateľom DODAVATEL-TEST-1) musí byť v TOM ISTOM `<td>`
+  // ako meno produktu, NIE v zlúčenej bunke POZNÁMKY (`shop-remark-cell`/
+  // `comment-cell`), a vizuálne odlíšená (menšie písmo než meno produktu).
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const umiestnenie = await page.evaluate(() => {
+    // `scripts/e2e-setup.ts`'s objednávka 9001 má JEDINÚ zákaznícku poznámku
+    // ("Prosím doručiť len v piatok") — hľadať podľa OBSAHU, nie podľa
+    // prvého `[data-testid^='remark-cell-']` v DOM poradí (ten obalový div sa
+    // vykresľuje na KAŽDOM riadku, aj bez poznámky, takže prvý v poradí by
+    // nemusel patriť riadku 9001).
+    const remarkBunka = [...document.querySelectorAll('[data-testid^="remark-cell-"]')].find((el) =>
+      el.textContent.includes("Prosím doručiť len v piatok"),
+    );
+    const produktBunka =
+      [...document.querySelectorAll("td")].find((td) => td.textContent.includes("Nohavice Hart Wild-T")) ?? null;
+    const poznamkyBunka = [...document.querySelectorAll('[data-testid^="shop-remark-cell-"]')].find((el) =>
+      el.textContent.includes("Sklad potvrdil, pripravené na vyzdvihnutie"),
+    );
+    const najdeneVsetky = remarkBunka !== undefined && produktBunka !== null && poznamkyBunka !== undefined;
+    const remarkTd = najdeneVsetky ? remarkBunka.closest("td") : null;
+    return {
+      najdeneVsetky,
+      vProduktovejBunke: najdeneVsetky && remarkTd === produktBunka,
+      vPoznamkovejBunke: najdeneVsetky && remarkTd === poznamkyBunka.closest("td"),
+      fontSizeRemark: najdeneVsetky
+        ? getComputedStyle(remarkBunka.querySelector(".ord-remark") ?? remarkBunka).fontSize
+        : null,
+      fontSizeProdukt: najdeneVsetky ? getComputedStyle(produktBunka).fontSize : null,
+    };
+  });
+  expect(umiestnenie.najdeneVsetky, "chýbajúci prvok pri kontrole umiestnenia poznámky zákazníka").toBe(true);
+  expect(umiestnenie.vProduktovejBunke, "poznámka zákazníka nie je v bunke produktu").toBe(true);
+  expect(umiestnenie.vPoznamkovejBunke, "poznámka zákazníka je stále v zlúčenej bunke POZNÁMKY").toBe(false);
+  expect(umiestnenie.fontSizeRemark, "poznámka zákazníka nie je vizuálne menšia než meno produktu").not.toBe(
+    umiestnenie.fontSizeProdukt,
+  );
 
   // issue 163: rovnaká (zovšeobecnená, VŠETKY `<td>`) deliace-čiary kontrola
   // aj pri ZAPNUTOM prepínači "skryť vybavené" — fix je štrukturálny (CSS na
