@@ -561,3 +561,36 @@ paths:
   clean under both `tsc -b` and eslint. Any FUTURE
   `getByTestId`/`getByLabelText`/etc. result that needs a narrower element
   type in THIS codebase: use the generic argument, not `as`.
+- **UN-merging one sibling OUT of an existing merged `<td>` (the inverse of
+  the "merge two columns" pattern above) uses the SAME technique in
+  reverse: move the existing testid'd `<div>` verbatim (no change to its
+  `data-testid`/conditional-render logic) into its new parent `<td>` as a
+  plain block-level sibling — never wrap the OLD OR NEW parent `<td>` in
+  `display:flex` (issue 163's lesson stays true in both directions).**
+  Issue 171 pulled `.ord-remark-cell` (customer note) out of
+  `td.ord-notes-merged` into the product-name `<td>`, which meant that
+  `<td>` needed its own text wrapped in a new `.ord-product-name` div
+  first (a bare `{line.variantName}` text node can't be a "sibling" of
+  anything) — any future un-merge into a `<td>` that currently holds only
+  bare text needs that same one-time wrap.
+- **A `<colgroup>`/row-height ceiling based on a `page.addStyleTag`
+  candidate measurement (issue 105/107/111/127's methodology, run against
+  a THROWAWAY Node script) can also be re-measured MUCH more cheaply by
+  temporarily instrumenting the EXISTING e2e spec with a `console.log` of
+  the real heights, running it once via `playwright test`, reading the
+  logged numbers from stdout, then reverting the instrumentation before
+  committing.** Issue 171 needed to know whether moving `remark` OUT of
+  the row's tallest cell lowered the measured max height enough to justify
+  tightening `orders-layout.spec.ts`'s ceiling — no throwaway script or
+  live-production access needed, since the existing spec already logs in
+  and asserts against the same seeded fixture (9001) that drives the
+  ceiling. Pattern: copy the spec file to scratch first (`cp` for an easy
+  revert), replace the `.filter((h) => h > N)` line with an unfiltered
+  `console.log(JSON.stringify(heights))`, run `playwright test <file>
+  --reporter=line 2>&1 | grep DEBUG`, restore the original file from the
+  scratch copy, then apply the real (measured, justified) ceiling change.
+  Cheaper than the full live-production methodology when the existing e2e
+  fixture already reproduces the row shape in question — reach for the
+  live-production `addStyleTag` script only when the e2e fixture's content
+  shape doesn't match real production data (as issue 107 found out the
+  hard way).
