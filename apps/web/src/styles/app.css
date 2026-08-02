@@ -492,6 +492,13 @@ tr:last-child td {
   padding: var(--fs-space-1) var(--fs-space-3);
   font-size: var(--fs-text-sm);
 }
+/* issue 176: VEĽKÉ tlačidlá pre obrazovky s opakovanou rýchlou akciou
+   zamestnanca (klik na riadok objednávky) — majiteľova požiadavka na
+   "veľké tlačidlá, aby zamestnanci mohli rýchlo a efektívne pracovať". */
+.btn.lg {
+  padding: var(--fs-space-3) var(--fs-space-5);
+  font-size: var(--fs-text-md);
+}
 .btn.good {
   background: var(--fs-brand);
   color: #fff;
@@ -1603,6 +1610,59 @@ tr:last-child td {
   margin-top: var(--fs-space-2);
 }
 .order-reminder-preview-body {
+  background: var(--fs-surface);
+  padding: var(--fs-space-3);
+  border-radius: var(--fs-radius-sm);
+  overflow-x: auto;
+}
+
+/* ---------------- 15. NEDOSTUPNÉ TOVARY (issue 176) ---------------- */
+/* Zoznam kariet (jedna karta = jeden variant) namiesto jednej veľkej
+   tabuľky — majiteľova požiadavka na prehľadné, vzdušné rozloženie
+   optimalizované na rýchlu prácu (veľké tlačidlá, jasné odsadenie). */
+.nedostupne-groups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--fs-space-5);
+  margin-top: var(--fs-space-4);
+}
+.nedostupne-group-header {
+  display: flex;
+  align-items: baseline;
+  gap: var(--fs-space-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--fs-space-3);
+}
+.nedostupne-group-name {
+  font-size: var(--fs-text-md);
+  font-weight: var(--fs-weight-bold);
+}
+.nedostupne-alternatives {
+  margin: 0 0 var(--fs-space-3);
+  padding-left: var(--fs-space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--fs-space-1);
+  font-size: var(--fs-text-sm);
+}
+.nedostupne-order-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--fs-space-3);
+  padding: var(--fs-space-3) 0;
+  border-top: 1px solid var(--fs-border-soft);
+}
+.nedostupne-order-row:first-of-type {
+  border-top: none;
+}
+.nedostupne-order-actions {
+  display: flex;
+  gap: var(--fs-space-2);
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+.nedostupne-preview-body {
   background: var(--fs-surface);
   padding: var(--fs-space-3);
   border-radius: var(--fs-radius-sm);

@@ -71,6 +71,12 @@ const envSchema = z.object({
   // všeobecné `MAIL_BCC`). Chýbajúca = automatizácia NEPOŠLE ani jeden e-mail
   // zákazníkovi (fail-closed, majiteľova jediná bezpečnostná podmienka).
   ORDER_REMINDER_BCC_EMAIL: z.string().email().optional(),
+  // issue 176: "Nedostupné tovary" — skrytá kópia (BCC) majiteľovi, rovnaká
+  // úvaha ako `POSTA_UNCOLLECTED_BCC_EMAIL`/`ORDER_REMINDER_BCC_EMAIL`
+  // vyššie (NEZÁVISLÁ, vyhradená premenná, nikdy zdieľané všeobecné
+  // `MAIL_BCC`). Chýbajúca = automatizácia NEPOŠLE ani jeden e-mail
+  // zákazníkovi (fail-closed).
+  NEDOSTUPNE_BCC_EMAIL: z.string().email().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

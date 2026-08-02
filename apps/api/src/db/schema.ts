@@ -5,3 +5,4 @@ export * from "./schema-orders.js";
 export * from "./schema-pairing.js";
 export * from "./schema-posta-uncollected.js";
 export * from "./schema-order-reminder.js";
+export * from "./schema-nedostupne.js";

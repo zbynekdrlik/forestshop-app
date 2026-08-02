@@ -1,0 +1,253 @@
+import { eq } from "drizzle-orm";
+import { afterEach, expect, it } from "vitest";
+import { nedostupneState, orderLines, orders } from "../src/db/schema.js";
+import type { MailMessage } from "../src/modules/mail/transport.js";
+import { listNedostupneGroups } from "../src/modules/nedostupne/queries.js";
+import { findNedostupneContext, sendNedostupneEmail } from "../src/modules/nedostupne/send.js";
+import { DEFAULT_ORDER_OPEN_STATUS } from "../src/modules/orders/open-statuses.js";
+import { insertTestVariantForProduct } from "./helpers/orders.js";
+import { withCleanDb } from "./helpers/db.js";
+
+// issue 176: koniec-koncov beh — falošný mail transport (NIKDY skutočný
+// SMTP), presne per majiteľovej bezpečnostnej podmienke pre testy.
+const ADMIN_BASE_URL = "https://www.forestshop.sk";
+
+let close: (() => Promise<void>) | undefined;
+afterEach(async () => {
+  await close?.();
+  close = undefined;
+});
+
+async function boot() {
+  const ctx = await withCleanDb();
+  close = ctx.close;
+  return ctx.db;
+}
+
+async function insertOrder(
+  db: Awaited<ReturnType<typeof boot>>,
+  externalOrderId: string,
+  overrides: Partial<typeof orders.$inferInsert> = {},
+): Promise<string> {
+  const [row] = await db
+    .insert(orders)
+    .values({
+      externalOrderId,
+      customerName: "Ján Novák",
+      statusName: DEFAULT_ORDER_OPEN_STATUS,
+      placedAt: new Date("2026-07-20T10:00:00Z"),
+      email: "jan@example.sk",
+      ...overrides,
+    })
+    .returning({ id: orders.id });
+  if (row === undefined) throw new Error("test objednávka sa nepodarilo vložiť");
+  return row.id;
+}
+
+function fakeMail(): { transport: (m: MailMessage) => Promise<void>; sent: MailMessage[] } {
+  const sent: MailMessage[] = [];
+  return {
+    transport: (m) => {
+      sent.push(m);
+      return Promise.resolve();
+    },
+    sent,
+  };
+}
+
+it("zoskupí NEDOSTUPNÝ riadok podľa variantu, spárovaný s otvorenou objednávkou", async () => {
+  const db = await boot();
+  await insertTestVariantForProduct(db, "P176A", "P176A/L", { productName: "Nohavice Test" });
+  const orderId = await insertOrder(db, "17600001");
+  await db.insert(orderLines).values({ orderId, variantCode: "P176A/L", quantity: 2, state: "nedostupne" });
+
+  const groups = await listNedostupneGroups(db, ADMIN_BASE_URL);
+  expect(groups).toHaveLength(1);
+  expect(groups[0]?.variantCode).toBe("P176A/L");
+  expect(groups[0]?.itemName).toBe("Nohavice Test");
+  expect(groups[0]?.orders).toHaveLength(1);
+  expect(groups[0]?.orders[0]).toMatchObject({ orderCode: "17600001", customerName: "Ján Novák", email: "jan@example.sk", quantity: 2, nedostupneSent: false, alternativaSent: false });
+});
+
+it("riadok v INOM stave (nie 'nedostupne') sa nezobrazí vôbec", async () => {
+  const db = await boot();
+  await insertTestVariantForProduct(db, "P176B", "P176B", {});
+  const orderId = await insertOrder(db, "17600002");
+  await db.insert(orderLines).values({ orderId, variantCode: "P176B", quantity: 1, state: "objednane" });
+
+  expect(await listNedostupneGroups(db, ADMIN_BASE_URL)).toEqual([]);
+});
+
+it("nedostupný riadok v UZAVRETEJ objednávke sa nezobrazí (nikdy neotravuj zákazníka, ktorý už dostal tovar)", async () => {
+  const db = await boot();
+  await insertTestVariantForProduct(db, "P176C", "P176C", {});
+  const orderId = await insertOrder(db, "17600003", { statusName: "Vybavená" });
+  await db.insert(orderLines).values({ orderId, variantCode: "P176C", quantity: 1, state: "nedostupne" });
+
+  expect(await listNedostupneGroups(db, ADMIN_BASE_URL)).toEqual([]);
+});
+
+it("náhradné produkty (relatedCodes) sa resolvujú na meno cez variant.code aj cez pairCode, neznámy kód padá na seba", async () => {
+  const db = await boot();
+  // "P176D2" má pairCode "PC-D2" — relatedCodes odkazuje na "PC-D2" (nie na code priamo).
+  await insertTestVariantForProduct(db, "P176D2-key", "P176D2", { productName: "Náhrada Podľa PairCode", pairCode: "PC-D2" });
+  await insertTestVariantForProduct(db, "P176D", "P176D/M", {
+    productName: "Nohavice s náhradou",
+    relatedCodes: ["PC-D2", "NEZNAMY-KOD"],
+  });
+  const orderId = await insertOrder(db, "17600004");
+  await db.insert(orderLines).values({ orderId, variantCode: "P176D/M", quantity: 1, state: "nedostupne" });
+
+  const groups = await listNedostupneGroups(db, ADMIN_BASE_URL);
+  const group = groups.find((g) => g.variantCode === "P176D/M");
+  expect(group?.alternatives).toEqual([
+    { code: "PC-D2", name: "Náhrada Podľa PairCode", url: "https://www.forestshop.sk/vyhladavanie/?string=PC-D2" },
+    { code: "NEZNAMY-KOD", name: "NEZNAMY-KOD", url: "https://www.forestshop.sk/vyhladavanie/?string=NEZNAMY-KOD" },
+  ]);
+});
+
+it("preview a odoslanie použijú ROVNAKÚ funkciu (`findNedostupneContext`/`buildEmailForType`) — obsah sa nikdy nerozíde", async () => {
+  const db = await boot();
+  await insertTestVariantForProduct(db, "P176E", "P176E", { productName: "Bunda Test" });
+  const orderId = await insertOrder(db, "17600005");
+  await db.insert(orderLines).values({ orderId, variantCode: "P176E", quantity: 1, state: "nedostupne" });
+  const { transport, sent } = fakeMail();
+
+  const result = await sendNedostupneEmail({
+    db,
+    now: new Date("2026-08-02T10:00:00Z"),
+    orderCode: "17600005",
+    variantCode: "P176E",
+    emailType: "nedostupne",
+    mailTransport: transport,
+    bccEmail: "majitel@forestshop.sk",
+  });
+
+  expect(result).toEqual({ ok: true });
+  expect(sent).toHaveLength(1);
+  expect(sent[0]?.to).toBe("jan@example.sk");
+  expect(sent[0]?.bcc).toBe("majitel@forestshop.sk");
+  expect(sent[0]?.subject).toBe("Informácia o dostupnosti vašej objednávky — Forestshop.sk");
+
+  const [state] = await db.select().from(nedostupneState).where(eq(nedostupneState.orderCode, "17600005"));
+  expect(state?.variantCode).toBe("P176E");
+  expect(state?.emailType).toBe("nedostupne");
+});
+
+it("chýbajúca BCC adresa → NEPOŠLE NIČ (fail-closed, rovnaká podmienka ako #172/#173)", async () => {
+  const db = await boot();
+  await insertTestVariantForProduct(db, "P176F", "P176F", {});
+  const orderId = await insertOrder(db, "17600006");
+  await db.insert(orderLines).values({ orderId, variantCode: "P176F", quantity: 1, state: "nedostupne" });
+  const { transport, sent } = fakeMail();
+
+  const result = await sendNedostupneEmail({
+    db,
+    now: new Date("2026-08-02T10:00:00Z"),
+    orderCode: "17600006",
+    variantCode: "P176F",
+    emailType: "nedostupne",
+    mailTransport: transport,
+    bccEmail: undefined,
+  });
+
+  expect(result.ok).toBe(false);
+  expect(!result.ok && result.code).toBe("not_configured");
+  expect(!result.ok && result.code === "not_configured" && result.reason).toContain("NEDOSTUPNE_BCC_EMAIL");
+  expect(sent).toHaveLength(0);
+});
+
+it("chýbajúci mailTransport → NEPOŠLE NIČ (fail-closed)", async () => {
+  const db = await boot();
+  await insertTestVariantForProduct(db, "P176G", "P176G", {});
+  const orderId = await insertOrder(db, "17600007");
+  await db.insert(orderLines).values({ orderId, variantCode: "P176G", quantity: 1, state: "nedostupne" });
+
+  const result = await sendNedostupneEmail({
+    db,
+    now: new Date("2026-08-02T10:00:00Z"),
+    orderCode: "17600007",
+    variantCode: "P176G",
+    emailType: "nedostupne",
+    mailTransport: undefined,
+    bccEmail: "majitel@forestshop.sk",
+  });
+
+  expect(result.ok).toBe(false);
+  expect(!result.ok && result.code).toBe("not_configured");
+  expect(!result.ok && result.code === "not_configured" && result.reason).toContain("MAIL_HOST");
+});
+
+it("objednávka bez e-mailu → 'no_email', nikdy sa nepokúsi poslať", async () => {
+  const db = await boot();
+  await insertTestVariantForProduct(db, "P176H", "P176H", {});
+  const orderId = await insertOrder(db, "17600008", { email: null });
+  await db.insert(orderLines).values({ orderId, variantCode: "P176H", quantity: 1, state: "nedostupne" });
+  const { transport, sent } = fakeMail();
+
+  const result = await sendNedostupneEmail({
+    db,
+    now: new Date("2026-08-02T10:00:00Z"),
+    orderCode: "17600008",
+    variantCode: "P176H",
+    emailType: "nedostupne",
+    mailTransport: transport,
+    bccEmail: "majitel@forestshop.sk",
+  });
+
+  expect(result).toEqual({ ok: false, code: "no_email" });
+  expect(sent).toHaveLength(0);
+});
+
+it("DEDUP — druhé odoslanie ROVNAKÉHO (objednávka, variant, typ) je odmietnuté, žiadny druhý e-mail", async () => {
+  const db = await boot();
+  await insertTestVariantForProduct(db, "P176I", "P176I", {});
+  const orderId = await insertOrder(db, "17600009");
+  await db.insert(orderLines).values({ orderId, variantCode: "P176I", quantity: 1, state: "nedostupne" });
+  const { transport, sent } = fakeMail();
+  const deps = { db, now: new Date("2026-08-02T10:00:00Z"), orderCode: "17600009", variantCode: "P176I", emailType: "nedostupne" as const, mailTransport: transport, bccEmail: "majitel@forestshop.sk" };
+
+  expect(await sendNedostupneEmail(deps)).toEqual({ ok: true });
+  expect(sent).toHaveLength(1);
+
+  const second = await sendNedostupneEmail(deps);
+  expect(second).toEqual({ ok: false, code: "already_sent" });
+  expect(sent).toHaveLength(1); // stále len jeden
+});
+
+it("DEDUP je NEZÁVISLÝ per typ — 'nedostupne' odoslané nebráni neskoršiemu 'alternativa'", async () => {
+  const db = await boot();
+  await insertTestVariantForProduct(db, "P176J", "P176J", {});
+  const orderId = await insertOrder(db, "17600010");
+  await db.insert(orderLines).values({ orderId, variantCode: "P176J", quantity: 1, state: "nedostupne" });
+  const { transport, sent } = fakeMail();
+  const base = { db, now: new Date("2026-08-02T10:00:00Z"), orderCode: "17600010", variantCode: "P176J", mailTransport: transport, bccEmail: "majitel@forestshop.sk" };
+
+  expect(await sendNedostupneEmail({ ...base, emailType: "nedostupne" })).toEqual({ ok: true });
+  expect(await sendNedostupneEmail({ ...base, emailType: "alternativa" })).toEqual({ ok: true });
+  expect(sent).toHaveLength(2);
+});
+
+it("riadok, ktorý medzitým už NIE JE 'nedostupne' (napr. sklad ho medzitým naskladnil), sa odmietne pri odoslaní — 'not_found'", async () => {
+  const db = await boot();
+  await insertTestVariantForProduct(db, "P176K", "P176K", {});
+  const orderId = await insertOrder(db, "17600011");
+  await db.insert(orderLines).values({ orderId, variantCode: "P176K", quantity: 1, state: "nedostupne" });
+
+  // Obsluha medzitým riadok prepla na "skladom" (napr. z inej karty) —
+  // odoslanie MUSÍ prekontrolovať stav ZNOVA, nikdy sa nespolieha na to, že
+  // zobrazený zoznam je ešte aktuálny.
+  await db.update(orderLines).set({ state: "skladom" }).where(eq(orderLines.variantCode, "P176K"));
+  expect(await findNedostupneContext(db, "17600011", "P176K")).toBeNull();
+
+  const result = await sendNedostupneEmail({
+    db,
+    now: new Date("2026-08-02T10:00:00Z"),
+    orderCode: "17600011",
+    variantCode: "P176K",
+    emailType: "nedostupne",
+    mailTransport: undefined,
+    bccEmail: undefined,
+  });
+  expect(result).toEqual({ ok: false, code: "not_found" });
+});
