@@ -1,4 +1,4 @@
-import { desc } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
 import { jobRuns } from "../../db/schema.js";
 
@@ -36,4 +36,34 @@ export async function listLatestJobRuns(db: Database): Promise<readonly JobRunSu
     detail: row.detail,
     errorMessage: row.errorMessage,
   }));
+}
+
+// issue 172: "Nevyzdvihnuté zásielky" potrebuje LEN svoj vlastný job — jeho
+// posledný beh nesie celý zobrazovací stav v `detail` (rovnaký vzor ako
+// každý iný job, žiadna nová tabuľka navyše, viď návrhový komentár na
+// tickete). `listLatestJobRuns` vyššie vracia VŠETKY joby naraz — táto
+// funkcia sa priamo pýta na JEDEN konkrétny.
+export async function getLatestJobRun(db: Database, jobName: string): Promise<JobRunSummary | null> {
+  const [row] = await db
+    .select({
+      jobName: jobRuns.jobName,
+      startedAt: jobRuns.startedAt,
+      finishedAt: jobRuns.finishedAt,
+      status: jobRuns.status,
+      detail: jobRuns.detail,
+      errorMessage: jobRuns.errorMessage,
+    })
+    .from(jobRuns)
+    .where(eq(jobRuns.jobName, jobName))
+    .orderBy(desc(jobRuns.startedAt))
+    .limit(1);
+  if (row === undefined) return null;
+  return {
+    jobName: row.jobName,
+    startedAt: row.startedAt.toISOString(),
+    finishedAt: row.finishedAt === null ? null : row.finishedAt.toISOString(),
+    status: row.status,
+    detail: row.detail,
+    errorMessage: row.errorMessage,
+  };
 }

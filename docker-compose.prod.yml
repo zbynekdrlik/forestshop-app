@@ -90,6 +90,12 @@ services:
       MAIL_USER:
       MAIL_PASS:
       MAIL_FROM:
+      # issue 172: "Nevyzdvihnuté zásielky" — skrytá kópia (BCC) majiteľovi,
+      # rovnaká úvaha ako MAIL_HOST vyššie (`.optional()` v env.ts, bare
+      # kľúč). Chýbajúca = automatizácia NEPOŠLE ani jeden e-mail zákazníkovi
+      # (fail-closed, ticket's jediná bezpečnostná podmienka) — appka beží
+      # ďalej, len viditeľne to nahlási na obrazovke.
+      POSTA_UNCOLLECTED_BCC_EMAIL:
     volumes:
       - catalog-raw:/data/catalog-raw
       - orders-raw:/data/orders-raw

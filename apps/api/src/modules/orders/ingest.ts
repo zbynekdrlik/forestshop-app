@@ -7,9 +7,13 @@ import { storeRawSnapshot } from "../catalog/raw-store.js";
 import { redactSourceLabel, type OrderIdsFetcher } from "./fetcher.js";
 import {
   decodeCp1250,
+  EMPTY_ORDER_LEVEL_EXTRA,
+  extractOrderLevelExtra,
   mapOrderRow,
+  mergeOrderLevelExtra,
   parseDelimited,
   REQUIRED_ORDER_COLUMNS,
+  type OrderLevelExtra,
   type OrderLineCandidate,
   type OrderRowIssue,
 } from "./parser.js";
@@ -171,6 +175,12 @@ export async function ingestOrders(db: Database, options: OrdersIngestOptions): 
   const issues: OrderRowIssue[] = [];
   let pseudoItemCount = 0;
   let parseErrorMessage: string | null = null;
+  // issue 172: `email`/`phone`/`packageNumber`/meno dopravcu sú OBJEDNÁVKOVÉ
+  // polia (opakované na KAŽDOM riadku vrátane pseudo-položiek), preto sa
+  // zbierajú z KAŽDÉHO riadku s neprázdnym `code` — nezávisle od toho, či
+  // `mapOrderRow` ten istý riadok prijme alebo zahodí (pozri `parser.ts`'s
+  // `extractOrderLevelExtra`/`mergeOrderLevelExtra`).
+  const orderExtraByCode = new Map<string, OrderLevelExtra>();
 
   try {
     let isHeaderRow = true;
@@ -189,6 +199,11 @@ export async function ingestOrders(db: Database, options: OrdersIngestOptions): 
         const name = columns[i] ?? "";
         if (name === "") continue;
         row[name] = values[i] ?? "";
+      }
+      const externalOrderIdOfRow = (row["code"] ?? "").trim();
+      if (externalOrderIdOfRow !== "") {
+        const previous = orderExtraByCode.get(externalOrderIdOfRow) ?? EMPTY_ORDER_LEVEL_EXTRA;
+        orderExtraByCode.set(externalOrderIdOfRow, mergeOrderLevelExtra(previous, extractOrderLevelExtra(row)));
       }
       const mapped = mapOrderRow(row);
       if (mapped.record !== null) {
@@ -304,15 +319,22 @@ export async function ingestOrders(db: Database, options: OrdersIngestOptions): 
         const inserted = await tx
           .insert(orders)
           .values(
-            batch.map(([externalOrderId, info]) => ({
-              externalOrderId,
-              customerName: info.customerName,
-              statusName: info.statusName,
-              remark: info.remark,
-              shopRemark: info.shopRemark,
-              placedAt: info.placedAt,
-              shoptetOrderId: orderIdsByCode.get(externalOrderId) ?? null,
-            })),
+            batch.map(([externalOrderId, info]) => {
+              const extra = orderExtraByCode.get(externalOrderId) ?? EMPTY_ORDER_LEVEL_EXTRA;
+              return {
+                externalOrderId,
+                customerName: info.customerName,
+                statusName: info.statusName,
+                remark: info.remark,
+                shopRemark: info.shopRemark,
+                placedAt: info.placedAt,
+                shoptetOrderId: orderIdsByCode.get(externalOrderId) ?? null,
+                email: extra.email,
+                phone: extra.phone,
+                packageNumber: extra.packageNumber,
+                shippingCarrierName: extra.shippingCarrierName,
+              };
+            }),
           )
           .onConflictDoUpdate({
             target: orders.externalOrderId,
@@ -328,13 +350,20 @@ export async function ingestOrders(db: Database, options: OrdersIngestOptions): 
             // VŽDY Shoptetovo pole, ukladá sa SUROVO (rozdelenie na naše/cudzie
             // sa robí až na čítacej strane, `queries.ts`) — appka pri IMPORTE
             // do neho nikdy nezapisuje, takže tu niet čo stratiť/prepísať.
-            // `shoptet_order_id` (issue 120) je NAVYŠE COALESCE-ovaný, nie priamo
-            // prepísaný ako predošlé — na rozdiel od nich pochádza z
-            // BEST-EFFORT XML fetchu, ktorý tento konkrétny beh môže
-            // zlyhať/chýbať (premenná nenastavená), a re-import bez neho
-            // nesmie vynulovať predtým zistené id (`"order"."shoptet_order_
-            // id"` = hodnota RIADKU PRED týmto UPDATE-om — presne to, čo
-            // `coalesce` potrebuje ako záchrannú sieť).
+            // `email`/`phone`/`package_number`/`shipping_carrier_name` (issue
+            // 172) sú Shoptetove polia, ale na rozdiel od `status_name`/
+            // `remark`/`shop_remark` vyššie sú NAVYŠE COALESCE-ované — rovnaký
+            // dôvod ako `shoptet_order_id` (review, PR 177): extrahujú sa z
+            // KAŽDÉHO riadku objednávky (`extractOrderLevelExtra`), takže
+            // jeden pokazený/inak tvarovaný export cyklus, kde niektorý z
+            // týchto stĺpcov na VŠETKÝCH riadkoch danej objednávky vyjde
+            // prázdny, by priamym prepísaním TICHO vynuloval už zistenú
+            // hodnotu — a "Nevyzdvihnuté zásielky" (`posta-uncollected/
+            // orders-source.ts`) by tú objednávku odvtedy prestalo sledovať
+            // bez akéhokoľvek varovania. `coalesce` necháva predtým zistenú
+            // hodnotu prežiť presne taký výpadok, zatiaľ čo skutočná NOVÁ
+            // hodnota (bežný prípad — zásielka dostane číslo AŽ po prvom
+            // importe) sa aj tak zapíše normálne.
             set: {
               customerName: sql`excluded.customer_name`,
               statusName: sql`excluded.status_name`,
@@ -342,6 +371,10 @@ export async function ingestOrders(db: Database, options: OrdersIngestOptions): 
               shopRemark: sql`excluded.shop_remark`,
               placedAt: sql`excluded.placed_at`,
               shoptetOrderId: sql`coalesce(excluded.shoptet_order_id, "order"."shoptet_order_id")`,
+              email: sql`coalesce(excluded.email, "order"."email")`,
+              phone: sql`coalesce(excluded.phone, "order"."phone")`,
+              packageNumber: sql`coalesce(excluded.package_number, "order"."package_number")`,
+              shippingCarrierName: sql`coalesce(excluded.shipping_carrier_name, "order"."shipping_carrier_name")`,
             },
           })
           .returning({ id: orders.id, externalOrderId: orders.externalOrderId });

@@ -1554,3 +1554,41 @@ tr:last-child td {
   color: var(--fs-ink-faint);
   margin: var(--fs-space-2) 0;
 }
+
+/* ---------------- 8. NEVYZDVIHNUTÉ ZÁSIELKY (issue 172) ---------------- */
+.posta-phone {
+  font-size: var(--fs-text-xs);
+  color: var(--fs-ink-muted);
+}
+.posta-call-needed {
+  display: inline-flex;
+  align-items: center;
+  font-size: var(--fs-text-xs);
+  font-weight: var(--fs-weight-bold);
+  padding: var(--fs-space-1) var(--fs-space-2);
+  border-radius: var(--fs-radius-sm);
+  background: var(--fs-danger-bg);
+  color: var(--fs-danger);
+  margin-left: var(--fs-space-2);
+}
+.posta-box {
+  margin-top: var(--fs-space-4);
+}
+.posta-box ul {
+  margin: 0;
+  padding-left: var(--fs-space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--fs-space-1);
+}
+.posta-last-run {
+  font-size: var(--fs-text-sm);
+  color: var(--fs-ink-muted);
+  margin-top: var(--fs-space-2);
+}
+.posta-preview-body {
+  background: var(--fs-surface);
+  padding: var(--fs-space-3);
+  border-radius: var(--fs-radius-sm);
+  overflow-x: auto;
+}

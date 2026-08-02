@@ -3,6 +3,7 @@ import type { Me } from "./api.js";
 import { CatalogPage } from "./components/CatalogPage.js";
 import { OrdersSection } from "./components/OrdersSection.js";
 import { PairingSection } from "./components/PairingSection.js";
+import { PostaUncollectedSection } from "./components/PostaUncollectedSection.js";
 import { SchedulerSection } from "./components/SchedulerSection.js";
 import { SyncSection } from "./components/SyncSection.js";
 
@@ -59,6 +60,10 @@ export const HIDDEN_TABS: Readonly<Record<string, NavTab>> = {
   catalog: { id: "catalog", label: "Katalóg", Component: CatalogPage },
   pairing: { id: "pairing", label: "Kontrola párovania", Component: PairingSection },
   scheduler: { id: "scheduler", label: "Plánovač", Component: SchedulerSection },
+  // issue 172: rovnaký vzor ako ostatné tri vyššie — majiteľ zatiaľ chce v
+  // ľavom menu len "Sync zo Shoptetu"/"Na objednanie" (issue 57), táto nová
+  // obrazovka je preto dostupná len cez `?tab=posta-uncollected`.
+  "posta-uncollected": { id: "posta-uncollected", label: "Nevyzdvihnuté zásielky", Component: PostaUncollectedSection },
 };
 
 export const DEFAULT_TAB_ID: string = NAV[0]?.tabs[0]?.id ?? "sync";
