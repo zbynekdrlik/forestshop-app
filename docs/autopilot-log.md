@@ -3,6 +3,83 @@
 Terse per-ticket log of autopilot-worker cycles: issue(s), commit SHAs,
 RED→GREEN test names, key decisions, and the shared PR.
 
+## 2026-08-02 — #173 (Pripomienky objednávok — order-reminder automation)
+
+- Solo ticket, owner-approved (comment on the issue removed `autopilot-skip`,
+  same batch as #172/#176: "vsetky tri veci").
+- Version bump `e3ec8fb` (0.3.0-dev.104→.105), first commit.
+- Design comment BEFORE first code commit:
+  https://github.com/zbynekdrlik/forestshop-app/issues/173#issuecomment-5160112598
+  — root cause/approach: same architecture as #172 (settings singleton +
+  per-order state + `job_run.detail` as display source of truth), but a NEW
+  injected `ClassifyClient` (OpenAI chat completions, ported prompt from
+  `orders_reminder.py`), single permanent email (never a cadence like #172's
+  4-step escalation), and Postgres `pg_advisory_lock` serialization for BOTH
+  the whole run AND every manual per-row override — REJECTED alternative:
+  copying the old app's file-based `sending`-claim+TTL mechanism (unnecessary
+  once Postgres gives transactional serialization for free).
+- Two design bugs found and fixed DURING test-writing (before any push):
+  1. The fast-path gate originally required `fingerprint === fp` to treat a
+     resolved order as terminal — verified against the old app's actual code
+     (`app.py:9013`) that `resolution` must be permanent REGARDLESS of
+     fingerprint change, or a note edited after the email went out would
+     trigger a second send. Fixed; regression test "ZMENA poznámky po
+     odoslaní e-mailu sa AJ TAK nespracuje druhýkrát".
+  2. The manual override endpoint mutated only `order_reminder_state`, never
+     the last `job_run.detail` — `GET` right after a successful override
+     still showed the OLD list (row invisible on screen until the next run).
+     Fixed with `relocateAfterOverride` in `order-reminder-routes.ts`; caught
+     by the project's OWN e2e test before the push, not by later review.
+- Backend commit `c45d922`: schema (`order_reminder_settings`/
+  `order_reminder_state`, migration `0022_famous_sunspot`), `modules/
+  order-reminder/{constants,logic,orders-source,settings,state,classify-
+  client,run}.ts`, `http/order-reminder-routes.ts`, `env.ts`
+  (`OPENAI_API_KEY`/`ORDER_REMINDER_BCC_EMAIL`, both optional), scheduler job
+  (daily 06:00 UTC ≈ 08:00 Europe/Bratislava CEST), `index.ts`/`app.ts`
+  wiring, TRUNCATE+reseed in both `tests/helpers/db.ts` and
+  `scripts/e2e-setup.ts`. 16 logic unit tests, 13 run + 11 http integration
+  tests (incl. deterministic advisory-lock serialization proof via
+  `pg_try_advisory_lock` from a second connection).
+- Frontend commit `4f15ba9`: `orderReminderApi.ts`, `OrderReminderSection
+  .tsx`/`OrderReminderRow.tsx` (🔴 bez poznámky + ✉️ bez e-mailu + 🟠 odoslané
+  + preskočené/⚪⚪✋⚠️ merged group), new HIDDEN tab `?tab=order-reminder`
+  (owner still wants only two visible nav items, #57) — own visual design
+  per `.claude/rules/frontend-design.md`, not the legacy app's look. 11 web
+  unit tests.
+- e2e commit `ead1271`: `order-reminder.spec.ts` — new isolated e2e account
+  (`e2e-pripomienky@forestshop.sk`), uses the STABLE fixture order "9002"
+  (no note, no email, never mutated by any other spec) to exercise both
+  manual-action buttons deterministically; also carries the
+  `relocateAfterOverride` fix + its own new HTTP regression test.
+- Deploy config commit `27f4a08`: wired `OPENAI_API_KEY`/
+  `ORDER_REMINDER_BCC_EMAIL` through `docker-compose.prod.yml` as bare
+  (optional) keys, same pattern as `POSTA_UNCOLLECTED_BCC_EMAIL`.
+- Locally verified before push: api unit clean, api integration 341/341
+  (incl. both new files, 24 new tests), web unit 307/307 (incl. new 11), web
+  e2e 27/27 (incl. new spec), `pnpm lint`/`pnpm typecheck` clean throughout.
+- Review comment (issue-comment-5160259957): self `/review` pass, 0🔴 0🟡
+  0🔵 remaining (both design bugs above were fixed pre-push, not left open).
+- PR #180 — `Closes #173` deliberately NOT used (ticket has a live
+  post-deploy acceptance condition: verify deployed disabled + zero customer
+  emails, `.claude/rules/CLAUDE.md`'s auto-close lesson) — CI (push run
+  30766346745 and PR-triggered run 30766366532) both `success`, PR
+  `MERGEABLE`+`CLEAN` → merged `058397c` (merge commit).
+- Main CI (run 30766513085) and Deploy (run 30766513075) monitored after
+  merge — both `success`.
+- Live verified (Playwright MCP, owner admin account): `/api/version` =
+  `0.3.0-dev.105`/`058397c`. DB on dev2: `order_reminder_settings.enabled =
+  f` (deployed disabled, as promised). Clicked "Spustiť teraz" against REAL
+  production data (16 real candidate orders, neither `OPENAI_API_KEY` nor
+  `ORDER_REMINDER_BCC_EMAIL` provisioned on dev2 yet) — both banners showed
+  correctly, 1 real no-note order rendered in 🔴 with both action buttons, 15
+  real noted orders correctly blocked in "Preskočené" with the AI-unavailable
+  reason, **0 e-mails sent** (confirmed both in the UI stats AND directly in
+  the DB: `select count(*) from order_reminder_state` → 0 rows — live data
+  left exactly as found). Preview button tested on a real row (showed real
+  recipient/subject, no send). Console: 0 errors/warnings.
+- Issue #173 closed with evidence (issue-comment-5160303071). Discord card
+  fired (`notify --run-card`).
+
 ## 2026-08-02 — #172 (Nevyzdvihnuté zásielky — Slovak Post uncollected-parcel automation)
 
 - Solo ticket, owner-approved (comment on the issue removed `autopilot-skip`).
