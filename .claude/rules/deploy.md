@@ -173,6 +173,21 @@ paths:
   --failed` — čerstvý pull znova stiahne vrstvu od nuly. Ak sa to isté zopakuje
   DRUHÝKRÁT za sebou, už to nie je transientný jav — over `docker system df`
   (miesto na disku) a zváž reštart `containerd`/`docker` služby na dev2.
+  **Ďalší pozorovaný spúšťač TEJ ISTEJ triedy (issue 169, 2026-08-01): SÚBEŽNÝ
+  CI job na tom istom self-hosted dev2 runneri, ktorý si sám ťahá/spúšťa
+  Docker image (integration/e2e job's efemérne `postgres` service kontajnery)
+  presne v okamihu, keď `deploy` job extrahuje appkin image.** Potvrdené
+  koreláciou časových pečiatok — `ssh newlevel@dev2 "journalctl -u docker
+  --since '10 min ago'"` ukázal `image pulled ... postgres:16` tesne PRED aj
+  PO zlyhanom `deploy`'s `failed to Lchown ...` v tej istej sekunde, a
+  `gh run list --json databaseId,name,event,createdAt` potvrdil, že `CI`
+  (push na `main`) a `Deploy` (push na `main`) z toho istého merge commitu
+  bežali SÚČASNE. Rovnaká liečba (jeden `gh run rerun <run-id> --failed`) —
+  pri rerune over `gh run list --json databaseId,name,status -q '.[] |
+  select(.status!="completed")'` a `docker ps`, že žiadny INÝ CI job práve
+  nebeží, aby sa race nezopakoval. Diagnostický vzor pre budúci podobný
+  nález: koreluj `journalctl -u docker --since "<čas zlyhania>"` s `gh run
+  list` časovými pečiatkami PRED tým, než sa dôvod hľadá v obsahu image.
 - **OPRAVA k nižšie zdokumentovanému nálezu z #25 — NEBOL to transientný
   containerd jav, bol to skutočný, DETERMINISTICKÝ bug appky (issue 78,
   vyriešené).** Pôvodný záznam (nižšie, ponechaný pre históriu) priradil

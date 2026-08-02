@@ -152,9 +152,25 @@ it("zlúčená bunka POZNÁMKY drží poznámku e-shopu AJ komentár v tom istom
 
   render(<OrdersSection role="manazer" onSessionExpired={() => {}} />);
 
-  const remarkBunka = await screen.findByTestId(`remark-cell-${LINE_STARA.lineId}`);
+  const shopRemarkBunka = await screen.findByTestId(`shop-remark-cell-${LINE_STARA.lineId}`);
   const commentBunka = await screen.findByTestId(`comment-cell-${LINE_STARA.lineId}`);
-  expect(remarkBunka.closest("td")).toBe(commentBunka.closest("td"));
+  expect(shopRemarkBunka.closest("td")).toBe(commentBunka.closest("td"));
+});
+
+// issue 171: zákaznícka poznámka (🛈, `remark`) sa presunula do bunky
+// PRODUKTU — táto bunka NIE JE tá istá ako zlúčená bunka POZNÁMKY (`shop-
+// remark-cell`/`comment-cell` vyššie), na rozdiel od pôvodného stavu, kde
+// bola treťou v tom istom `td.ord-notes-merged`.
+it("poznámka zákazníka je v bunke produktu, NIE v zlúčenej bunke POZNÁMKY", async () => {
+  fetchOpenOrders.mockResolvedValue([{ supplier: "Dodávateľ Alfa", lines: [LINE_STARA], email: null }]);
+
+  render(<OrdersSection role="manazer" onSessionExpired={() => {}} />);
+
+  const remarkBunka = await screen.findByTestId(`remark-cell-${LINE_STARA.lineId}`);
+  const nazovProduktu = await screen.findByText(LINE_STARA.variantName);
+  const commentBunka = await screen.findByTestId(`comment-cell-${LINE_STARA.lineId}`);
+  expect(remarkBunka.closest("td")).toBe(nazovProduktu.closest("td"));
+  expect(remarkBunka.closest("td")).not.toBe(commentBunka.closest("td"));
 });
 
 it("chýbajúci dodávateľ zobrazí ako pomlčku", async () => {

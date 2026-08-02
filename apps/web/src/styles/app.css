@@ -1231,27 +1231,44 @@ tr:last-child td {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* issue 95: POZNÁMKA E-SHOPU (`remark`, read-only) + KOMENTÁR zlúčené do
+/* issue 95: POZNÁMKA E-SHOPU (`shopRemark`, read-only) + KOMENTÁR zlúčené do
    jednej bunky "Poznámky" (majiteľ, komentár #10) — vnútri sú DVA pôvodné
-   testid-ované bloky (`.ord-remark-cell`/`.ord-comment-cell`, nezmenené),
-   pod sebou namiesto dvoch samostatných stĺpcov. */
+   testid-ované bloky (`.ord-shop-remark-cell`/`.ord-comment-cell`,
+   nezmenené), pod sebou namiesto dvoch samostatných stĺpcov. issue 171:
+   zákaznícka poznámka (`.ord-remark-cell`) sa PRESŤAHOVALA do bunky
+   produktu (nižšie) — už tu nie je. */
 /* issue 163 (znovu otvorené — chyba sa presunula do POSLEDNÉHO stĺpca po
    oprave dodávateľského): rovnaká príčina ako `.ord-supplier-merged` mala
    pred PR #165 — `display:flex` PRIAMO na `<td>` mení jej box z
    `table-cell` na flex kontajner nerešpektujúci skutočnú výšku riadku
    (naživo namerané: rozdiel 19-20.5px naprieč 6 riadkami). `<td>` je teraz
-   normálna tabuľková bunka — jej dvaja potomkovia (`.ord-remark-cell`,
+   normálna tabuľková bunka — jej dvaja potomkovia (`.ord-shop-remark-cell`,
    `.ord-comment-cell`) sú OBAJA VŽDY vykreslené block-level `<div>`y, takže
    sa aj bez rodičovského `flex-direction:column` prirodzene poukladajú pod
-   seba; pôvodný `gap` medzi nimi nesie teraz `.ord-comment-cell`'s vlastný
-   `margin-top` nižšie. */
+   seba; medzeru medzi nimi nesie `.ord-comment-cell`'s vlastný `margin-top`
+   nižšie. */
 .ord-notes-merged {
   max-width: 100%;
 }
+
+/* issue 171: majiteľ, "poznamka zakaznika daj pod text produktu" — meno
+   produktu je teraz obalené v tomto bloku (predtým holý text priamo v
+   `<td>`), aby zákaznícka poznámka (`.ord-remark-cell` nižšie) mohla byť
+   jeho SIBLING block-level div a prirodzene sa poukladať pod neho (rovnaký
+   "žiadny display:flex na td" princíp ako notes-merged vyššie, issue 163).
+   Žiadny vlastný orezávací štýl netreba — `.orders-table td { overflow-wrap:
+   break-word }` (vyššie) sa dedí aj sem beze zmeny správania. */
+.ord-product-name {
+  max-width: 100%;
+}
 /* issue 65: zákaznícky odkaz k objednávke — read-only, rovnaký orezávací
-   vzor ako `.ord-supplier-note` (issue 70) — voľný text neobmedzenej dĺžky. */
+   vzor ako `.ord-supplier-note` (issue 70) — voľný text neobmedzenej dĺžky.
+   issue 171: presunuté z bývalej zlúčenej bunky POZNÁMKY sem, pod meno
+   produktu — testid/logika bez zmeny, len `margin-top` navyše (predtým
+   prvý blok bez potreby medzery, teraz druhý pod `.ord-product-name`). */
 .ord-remark-cell {
   max-width: 100%;
+  margin-top: var(--fs-space-1);
 }
 .ord-remark {
   display: inline-block;
@@ -1261,14 +1278,19 @@ tr:last-child td {
   white-space: nowrap;
   vertical-align: bottom;
   color: var(--fs-ink-muted);
+  /* issue 171: akceptačná podmienka — vizuálne odlíšená od názvu produktu
+     (menšie/tlmenejšie písmo). Tlmená farba už bola, veľkosť je nová. */
+  font-size: var(--fs-text-xs);
 }
 
 /* issue 164: INTERNÁ poznámka e-shopu (LEN cudzí text, appkin vlastný blok
    nikdy neobsahuje) — rovnaký orezávací vzor ako `.ord-remark-cell`/
-   `.ord-remark` vyššie, len na vlastnom riadku pod ňou (`margin-top`). */
+   `.ord-remark` vyššie. issue 171: teraz PRVÝ blok v `td.ord-notes-merged`
+   (predtým druhý, za zákazníckou poznámkou, ktorá sa odsťahovala) — stráca
+   svoj bývalý `margin-top` (medzeru pod ňou dnes dáva `.ord-comment-cell`'s
+   vlastný `margin-top` nižšie). */
 .ord-shop-remark-cell {
   max-width: 100%;
-  margin-top: var(--fs-space-1);
 }
 .ord-shop-remark {
   display: inline-block;

@@ -2187,3 +2187,40 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
   pridávaní ĎALŠIEHO poľa na `OpenOrderLine` (surové+odvodené polia,
   17-súborová fixtúrová konvencia, row-height strop treba pri KAŽDOM
   ďalšom stĺpcovanom riadku v "Poznámky" bunke naživo premerať).
+
+## 2026-08-01 — #169 (OUR_BLOCK_RE — druhý výskyt bloku + CRLF separátor)
+
+- Solo ticket (Scope-gate: cross-cutting), version bump `4113e34`
+  (0.3.0-dev.98→.99), first commit.
+- Design comment BEFORE first code commit: issue-comment-5153199372 — root
+  cause (`OUR_BLOCK_RE` bez `/g`, `.replace()` odstráni len prvý výskyt;
+  prefix `\n{1,2}` nesedí na `\r\n`), zvolený prístup (samostatný
+  `OUR_BLOCK_RE_GLOBAL` len pre `.replace()`, pôvodný `OUR_BLOCK_RE` bez
+  `/g` ostáva pre `hasOurBlock`'s `.test()`), zamietnutá alternatíva
+  (pridať `/g` na zdieľaný objekt použitý aj v `.test()` — zamietnuté pre
+  stavový `lastIndex` globálnych regexov, ktorý by ticho zaviedol nový bug
+  do opakovaných `hasOurBlock` volaní).
+- STEP 0 validation comment: issue-comment-5153200250 (obe slabiny
+  reprodukované priamo v Node REPL proti kódu na `dev` `4113e34`).
+- RED→GREEN: 3 nové testy v `note-block.test.ts` (dva bloky odstránené
+  OBIDVA cez `mergeShopRemark`, CRLF separátor odstránený spolu s blokom,
+  `extractForeignShopRemark` s dvomi blokmi nikdy nezobrazí druhý ako
+  cudzí text) — RED overené proti pôvodnému kódu (`b8c0cc1`), GREEN po
+  fixe (`a47582b`). Review comment: issue-comment-5153237481 (0🔴 0🟡 0🔵).
+- PR #170, CI (push aj pull_request) zelené, mergeable+clean → merged
+  `21a5a3d`.
+- Main CI aj Deploy monitorované po merge — Deploy prvýkrát zlyhal
+  (`failed to Lchown ... no such file or directory` počas extrakcie
+  vrstvy), diagnostikované ako TRANSIENTNÝ race so súbežným CI jobom na
+  tom istom self-hosted dev2 runneri (potvrdené koreláciou
+  `journalctl -u docker` časových pečiatok s `gh run list`) — nie
+  obsahová chyba image. `gh run rerun --failed` prešiel na prvý pokus,
+  žiadny iný job vtedy nebežal. Detail pridaný do `.claude/rules/deploy.md`.
+- Live overené: `/api/version` = `0.3.0-dev.99`/`21a5a3d`, dashboard DOM
+  `v0.3.0-dev.99`, objednávky (`?tab=orders`) vykreslené 41 riadkov, 0
+  console errors/warnings. DB baseline nezmenený (`0|0|535|881`).
+- Playbook: nový bod v `.claude/rules/deploy.md` — súbežný CI job na tom
+  istom self-hosted runneri ako `deploy` job je ĎALŠÍ pozorovaný spúšťač
+  tej istej "failed to extract layer" triedy chýb; diagnostický vzor
+  (korelácia `journalctl -u docker` s `gh run list` časovými pečiatkami)
+  pridaný pre budúci podobný nález.
