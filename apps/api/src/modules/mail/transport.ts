@@ -9,6 +9,15 @@ export interface MailMessage {
   readonly to: string;
   readonly subject: string;
   readonly text: string;
+  // issue 172: voliteľné HTML telo — "Nevyzdvihnuté zásielky" posiela
+  // formátovaný e-mail zákazníkovi (`text` zostáva jednoduchý fallback,
+  // rovnaký ako predtým). Existujúci `sendSupplierOrderMail` ho nikdy
+  // nepošle (zostáva čistý text), spätne kompatibilné.
+  readonly html?: string;
+  // issue 172: skrytá kópia — automatizácia ju posiela VŽDY majiteľovi
+  // (fail-closed kontrola žije v `run.ts`, nie tu). Voliteľné, aby existujúce
+  // volania (dodávateľská mail) ostali nezmenené.
+  readonly bcc?: string;
 }
 
 export type MailTransport = (message: MailMessage) => Promise<void>;
@@ -44,6 +53,8 @@ export function createSmtpMailTransport(config: SmtpMailConfig): MailTransport {
       to: message.to,
       subject: message.subject,
       text: message.text,
+      ...(message.html === undefined ? {} : { html: message.html }),
+      ...(message.bcc === undefined ? {} : { bcc: message.bcc }),
     });
   };
 }

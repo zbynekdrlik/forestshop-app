@@ -1,8 +1,11 @@
+import type { Database } from "../../db/client.js";
 import { cleanupExpiredSessions } from "../auth/sessions.js";
 import type { RunIngest } from "../catalog/ingest.js";
 import { pruneRawSnapshots } from "../catalog/raw-store.js";
 import { ORDERS_EXPORT_URL_NOT_CONFIGURED, type RunOrdersIngest } from "../orders/ingest.js";
 import { pruneRawOrders } from "../orders/raw-prune.js";
+import { isPostaUncollectedEnabled } from "../posta-uncollected/settings.js";
+import type { PostaUncollectedRunResult } from "../posta-uncollected/run.js";
 import type { OrderNoteWritebackRunResult } from "../shoptet-writeback/run-order-note-writeback.js";
 import type { WritebackRunResult } from "../shoptet-writeback/run-writeback.js";
 import type { ScheduledJob } from "./types.js";
@@ -176,6 +179,39 @@ export function orderNoteWritebackJob(runOrderNoteWriteback: RunOrderNoteWriteba
     async run(db, now) {
       if (runOrderNoteWriteback === undefined) throw new Error(ORDER_NOTE_WRITEBACK_NOT_CONFIGURED);
       const result = await runOrderNoteWriteback(db, now);
+      return { detail: result };
+    },
+  };
+}
+
+export const POSTA_UNCOLLECTED_JOB_NAME = "posta-uncollected";
+
+export type RunPostaUncollected = (db: Database, now: Date) => Promise<PostaUncollectedRunResult>;
+
+/**
+ * "Nevyzdvihnuté zásielky" (issue 172) — denne o 09:00 Europe/Bratislava
+ * (07:00 UTC — CEST v lete/CET v zime posunie skutočný čas behu o hodinu,
+ * rovnaká DST-nevedomá disciplína ako ostatné `daily` joby v tomto súbore;
+ * presnosť na hodinu nie je pre túto úlohu kritická). Na rozdiel od
+ * `catalogImportJob`/`ordersImportJob` NIE JE `run` nikdy `undefined` — táto
+ * automatizácia číta priamo z už importovaných objednávok (žiadna
+ * samostatná URL na nakonfigurovanie), a chýbajúce SMTP/BCC rieši
+ * `runPostaUncollected` SAMA (per-zásielka, viditeľne v `job_run.detail`),
+ * nikdy vyhodením. Tento wrapper kontroluje LEN `enabled` flag PRED behom —
+ * "Spustiť teraz" (`http/posta-uncollected-routes.ts`) volá `run` PRIAMO,
+ * bez tejto kontroly (návrhový komentár na issue 172: manuálny beh je
+ * explicitná ľudská akcia, funguje bez ohľadu na Štart/Stop).
+ */
+export function postaUncollectedJob(run: RunPostaUncollected): ScheduledJob {
+  return {
+    name: POSTA_UNCOLLECTED_JOB_NAME,
+    schedule: { kind: "daily", hourUtc: 7, minuteUtc: 0 },
+    async run(db, now) {
+      const enabled = await isPostaUncollectedEnabled(db);
+      if (!enabled) {
+        return { detail: { skipped: true, reason: "automatizácia je vypnutá (Štart/Stop)" } };
+      }
+      const result = await run(db, now);
       return { detail: result };
     },
   };

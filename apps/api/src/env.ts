@@ -53,6 +53,13 @@ const envSchema = z.object({
   // namiesto neho použije apk-nainštalovaný systémový chromium. Nepovinné aj
   // tu — mimo produkčného image ho netreba, Playwright použije svoj vlastný.
   CHROMIUM_EXECUTABLE_PATH: z.string().min(1).optional(),
+  // issue 172: skrytá kópia (BCC) majiteľovi pre "Nevyzdvihnuté zásielky" —
+  // NEZÁVISLÁ, vyhradená premenná (nie všeobecné `MAIL_BCC`, `.claude/rules/
+  // orders.md`'s poznámka o tom, prečo appka doteraz BCC vôbec nepodporuje).
+  // Chýbajúca = automatizácia NEPOŠLE ani jeden e-mail zákazníkovi (fail-
+  // closed, ticket's jediná bezpečnostná podmienka) — nikdy sa nedotýka
+  // existujúceho odosielania objednávky dodávateľovi.
+  POSTA_UNCOLLECTED_BCC_EMAIL: z.string().email().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

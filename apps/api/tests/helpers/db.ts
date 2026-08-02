@@ -1,8 +1,9 @@
 import { sql } from "drizzle-orm";
 import pg from "pg";
 import { createDb, type Database } from "../../src/db/client.js";
-import { orderOpenStatuses } from "../../src/db/schema.js";
+import { orderOpenStatuses, postaUncollectedSettings } from "../../src/db/schema.js";
 import { DEFAULT_ORDER_OPEN_STATUS } from "../../src/modules/orders/open-statuses.js";
+import { POSTA_UNCOLLECTED_SETTINGS_ID } from "../../src/modules/posta-uncollected/settings.js";
 
 /**
  * Distinct advisory-lock key for serializing `withCleanDb()` across
@@ -45,9 +46,11 @@ export async function withCleanDb(): Promise<{ db: Database; close: () => Promis
     // explicitly anyway for the same self-documenting reason "order_line" is.
     // "order_open_status" (issue 59) is the SAME situation again — no FK in
     // either direction (keyed on a free-text status name) — CASCADE never
-    // reaches it.
+    // reaches it. "posta_uncollected_settings"/"posta_uncollected_state"
+    // (issue 172) are the SAME situation too — no FK in either direction
+    // (singleton id / order-code keyed).
     await db.execute(
-      sql`TRUNCATE TABLE ingest_issue, variant, product, catalog_snapshot, job_run, audit_events, sessions, users, order_line, "order", supplier_contact, pairing, supplier, order_open_status RESTART IDENTITY CASCADE`,
+      sql`TRUNCATE TABLE ingest_issue, variant, product, catalog_snapshot, job_run, audit_events, sessions, users, order_line, "order", supplier_contact, pairing, supplier, order_open_status, posta_uncollected_settings, posta_uncollected_state RESTART IDENTITY CASCADE`,
     );
     // issue 59: `order_open_status` is a NEW table with real production
     // content (the migration seeds it) — TRUNCATE alone would leave every
@@ -56,6 +59,11 @@ export async function withCleanDb(): Promise<{ db: Database; close: () => Promis
     // them). Re-seed the same default the migration writes on a fresh
     // install, so each test starts from the identical "just migrated" state.
     await db.insert(orderOpenStatuses).values({ statusName: DEFAULT_ORDER_OPEN_STATUS });
+    // issue 172: `posta_uncollected_settings` is the SAME situation as
+    // `order_open_status` above — the migration seeds its singleton row
+    // (`enabled=false`), so every test must start from that same
+    // just-migrated state, not an empty table.
+    await db.insert(postaUncollectedSettings).values({ id: POSTA_UNCOLLECTED_SETTINGS_ID, enabled: false });
   } catch (err) {
     try {
       await pool.end();
