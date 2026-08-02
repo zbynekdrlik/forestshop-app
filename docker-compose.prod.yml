@@ -96,6 +96,16 @@ services:
       # (fail-closed, ticket's jediná bezpečnostná podmienka) — appka beží
       # ďalej, len viditeľne to nahlási na obrazovke.
       POSTA_UNCOLLECTED_BCC_EMAIL:
+      # issue 173: "Pripomienky objednávok" — OpenAI klasifikátor internej
+      # poznámky predajne. Rovnaká úvaha ako MAIL_HOST vyššie (`.optional()`
+      # v env.ts, bare kľúč). Chýbajúci = objednávky s poznámkou zostanú
+      # "čaká" (AI nedostupné), appka beží ďalej, nikdy nehádaj/nepošli naslepo.
+      OPENAI_API_KEY:
+      # issue 173: skrytá kópia (BCC) majiteľovi — NEZÁVISLÁ, vyhradená
+      # premenná (rovnaký dôvod ako POSTA_UNCOLLECTED_BCC_EMAIL vyššie).
+      # Chýbajúca = automatizácia NEPOŠLE ani jeden e-mail zákazníkovi
+      # (fail-closed, majiteľova jediná bezpečnostná podmienka).
+      ORDER_REMINDER_BCC_EMAIL:
     volumes:
       - catalog-raw:/data/catalog-raw
       - orders-raw:/data/orders-raw
