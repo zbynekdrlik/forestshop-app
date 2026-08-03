@@ -1,4 +1,4 @@
-import { expect, test, type ConsoleMessage } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
 const E2E_HESLO = "e2e-test-heslo"; // účet existuje len v testovacej databáze
 // Vlastný, IZOLOVANÝ účet len pre tento súbor (rovnaký dôvod aj mechanizmus
@@ -11,10 +11,6 @@ const E2E_HESLO = "e2e-test-heslo"; // účet existuje len v testovacej databáz
 // `scripts/e2e-setup.ts`.
 const E2E_NAV_EMAIL = "e2e-nav@forestshop.sk";
 
-// Rovnaká a JEDINÁ povolená výnimka ako v ostatných e2e súboroch.
-const jeOcakavane = (m: ConsoleMessage): boolean =>
-  m.location().url.includes("/api/me") && m.text().includes("401");
-
 // #57 pôvodne chcel naľavo PRESNE dve položky. Issue 185 (2026-08-03) pridáva
 // tretí priečinok "Automatizácie" s tromi hotovými obrazovkami, dovtedy len v
 // `HIDDEN_TABS` bez odkazu v menu — tento test teraz overuje VŠETKÝCH PÄŤ
@@ -24,7 +20,7 @@ test("ľavé menu má tri priečinky (Systém/Eshop/Automatizácie) s piatimi z�
 }) => {
   const chyby: string[] = [];
   page.on("console", (m) => {
-    if ((m.type() === "error" || m.type() === "warning") && !jeOcakavane(m)) chyby.push(m.text());
+    if (m.type() === "error" || m.type() === "warning") chyby.push(m.text());
   });
   page.on("pageerror", (e) => {
     chyby.push(e.message);
@@ -112,7 +108,7 @@ test("ľavé menu má tri priečinky (Systém/Eshop/Automatizácie) s piatimi z�
 test("Sync zo Shoptetu ukazuje stav katalógu aj objednávok a tlačidlo 'Stiahnuť teraz', konzola je čistá", async ({ page }) => {
   const chyby: string[] = [];
   page.on("console", (m) => {
-    if ((m.type() === "error" || m.type() === "warning") && !jeOcakavane(m)) chyby.push(m.text());
+    if (m.type() === "error" || m.type() === "warning") chyby.push(m.text());
   });
   page.on("pageerror", (e) => {
     chyby.push(e.message);

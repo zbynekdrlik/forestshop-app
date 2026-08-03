@@ -1,4 +1,4 @@
-import { expect, test, type ConsoleMessage } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
 const E2E_HESLO = "e2e-test-heslo"; // účet existuje len v testovacej databáze
 
@@ -10,15 +10,12 @@ const E2E_HESLO = "e2e-test-heslo"; // účet existuje len v testovacej databáz
 // (`scripts/e2e-setup.ts`'s komentár k `E2E_ROZLOZENIE_EMAIL`).
 const E2E_ROZLOZENIE_EMAIL = "e2e-rozlozenie@forestshop.sk";
 
-const jeOcakavane = (m: ConsoleMessage): boolean =>
-  m.location().url.includes("/api/me") && m.text().includes("401");
-
 test("STAV je celý čitateľný a POZNÁMKY pole je dosť široké na všetkých 4 šírkach, riadky bez priradenia dodávateľa ostávajú kompaktné, konzola je čistá", async ({
   page,
 }) => {
   const chyby: string[] = [];
   page.on("console", (m) => {
-    if ((m.type() === "error" || m.type() === "warning") && !jeOcakavane(m)) chyby.push(m.text());
+    if (m.type() === "error" || m.type() === "warning") chyby.push(m.text());
   });
   page.on("pageerror", (e) => {
     chyby.push(e.message);

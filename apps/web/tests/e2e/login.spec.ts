@@ -1,4 +1,4 @@
-import { expect, test, type ConsoleMessage } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
 const E2E_HESLO = "e2e-test-heslo"; // účet existuje len v testovacej databáze
 const ZLE_HESLO = "nespravne";
@@ -14,15 +14,12 @@ const E2E_HESLO_ZMENA_EMAIL = "e2e-heslo@forestshop.sk";
 
 test("manažér sa prihlási, vidí svoje meno a verziu, konzola je čistá", async ({ page }) => {
   const chyby: string[] = [];
-  // Jediná povolená výnimka: hneď po otvorení stránky (a po odhlásení) sa appka pýta
   // `/api/me`, kým používateľ ešte nie je prihlásený, a dostane 401. To je očakávané
   // správanie, nie chyba — prehliadač ho zapíše ako „Failed to load resource" console
   // error. Text správy neobsahuje URL (Chromium ju necháva len v `location()`), takže
   // rozpoznávame podľa nej, nie podľa textu. Všetko ostatné v konzole je chyba a test padá.
-  const jeOcakavane = (m: ConsoleMessage): boolean =>
-    m.location().url.includes("/api/me") && m.text().includes("401");
   page.on("console", (m) => {
-    if ((m.type() === "error" || m.type() === "warning") && !jeOcakavane(m)) chyby.push(m.text());
+    if (m.type() === "error" || m.type() === "warning") chyby.push(m.text());
   });
   page.on("pageerror", (e) => chyby.push(e.message));
 
@@ -71,12 +68,10 @@ test("zmena hesla: zlé staré heslo/nezhoda odmietnuté, úspešná zmena zruš
   browser,
 }) => {
   const NOVE_HESLO = "e2e-nove-heslo-xyz";
-  const jeOcakavane = (m: ConsoleMessage): boolean =>
-    m.location().url.includes("/api/me") && m.text().includes("401");
   const chyby: string[] = [];
   const sledujKonzolu = (p: typeof page): void => {
     p.on("console", (m) => {
-      if ((m.type() === "error" || m.type() === "warning") && !jeOcakavane(m)) chyby.push(m.text());
+      if (m.type() === "error" || m.type() === "warning") chyby.push(m.text());
     });
     p.on("pageerror", (e) => { chyby.push(e.message); });
   };

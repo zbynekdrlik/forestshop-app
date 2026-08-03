@@ -35,9 +35,14 @@ it("GET /api/version vráti verziu aj bez prihlásenia", async () => {
   expect(((await res.json()) as { version: string }).version).toMatch(/^\d+\.\d+\.\d+/);
 });
 
-it("GET /api/me bez prihlásenia vráti 401", async () => {
+// issue 188: ZÁMERNE 200 s telom `null`, nie 401 — Chromium loguje každú 4xx
+// odpoveď do konzoly ako chybu, takže 401 tu robilo červenú chybu na
+// prihlasovacej obrazovke úplne v poriadku fungujúcej appky.
+it("GET /api/me bez prihlásenia vráti 200 a telo null", async () => {
   const app = await boot();
-  expect((await app.request("/api/me")).status).toBe(401);
+  const res = await app.request("/api/me");
+  expect(res.status).toBe(200);
+  expect(await res.json()).toBeNull();
 });
 
 it("prihlásenie nastaví cookie a /api/me potom vráti používateľa", async () => {

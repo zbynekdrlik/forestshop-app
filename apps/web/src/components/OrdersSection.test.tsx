@@ -461,3 +461,22 @@ it("issue 118: aj manažér (canChangeState) nevidí tlačidlá kopírovania/odo
   // Hromadné tlačidlo (mimo issue 118's scope) ostáva viditeľné.
   expect(screen.getByRole("button", { name: "✔ Označiť skupinu ako objednané" })).toBeTruthy();
 });
+
+// issue 187: objednaná veľkosť pri mene produktu — obsluha podľa nej
+// objednáva u dodávateľa. Kedysi bola vo vlastnom stĺpci VEĽKOSŤ, ten sa
+// zlúčil do KÓD (issue 95) a KÓD sa celý odstránil (issue 117), čím veľkosť
+// nechcene zmizla z obrazovky.
+it("zobrazí objednanú veľkosť pri mene produktu, a nič pri variante bez veľkosti", async () => {
+  fetchOpenOrders.mockResolvedValue([
+    { supplier: "Dodávateľ Alfa", lines: [LINE_STARA, LINE_NOVA], email: null },
+  ]);
+
+  render(<OrdersSection role="citanie" onSessionExpired={() => {}} />);
+
+  const soVelkostou = await screen.findByTestId(`size-${LINE_STARA.lineId}`);
+  expect(soVelkostou.textContent).toBe(LINE_STARA.sizeLabel);
+
+  // Riadok bez veľkosti nesmie vykresliť ANI prázdny štítok, ANI pomlčku.
+  expect(LINE_NOVA.sizeLabel).toBeNull();
+  expect(screen.queryByTestId(`size-${LINE_NOVA.lineId}`)).toBeNull();
+});

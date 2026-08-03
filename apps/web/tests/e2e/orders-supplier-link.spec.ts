@@ -1,4 +1,4 @@
-import { expect, test, type ConsoleMessage } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
 // issue 121: majiteľ, doslovne "ak na produkt nie je odkaz na dodavatela, tak
 // tam ma byt moznost ho doplnit, a vlastne pri kazdom produkte ma byt moznost
@@ -7,10 +7,6 @@ import { expect, test, type ConsoleMessage } from "@playwright/test";
 // `.claude/rules/testing.md`).
 
 const E2E_HESLO = "e2e-test-heslo"; // účet existuje len v testovacej databáze
-
-// Rovnaká a JEDINÁ povolená výnimka ako v ostatných e2e spec súboroch.
-const jeOcakavane = (m: ConsoleMessage): boolean =>
-  m.location().url.includes("/api/me") && m.text().includes("401");
 
 // VLASTNÝ izolovaný účet — balík je už na hranici `MAX_ATTEMPTS=10`
 // (`scripts/e2e-setup.ts`'s komentár k `E2E_ODKAZ_EMAIL`).
@@ -21,7 +17,7 @@ test("riadok bez odkazu ponúka 'doplniť', po uložení ponúka 'upraviť' a no
 }) => {
   const chyby: string[] = [];
   page.on("console", (m) => {
-    if ((m.type() === "error" || m.type() === "warning") && !jeOcakavane(m)) chyby.push(m.text());
+    if (m.type() === "error" || m.type() === "warning") chyby.push(m.text());
   });
   page.on("pageerror", (e) => {
     chyby.push(e.message);
@@ -117,7 +113,7 @@ test("riadok bez odkazu ponúka 'doplniť', po uložení ponúka 'upraviť' a no
 test("neplatný odkaz na dodávateľa sa odmietne HNEĎ, bez zápisu na server (konzola čistá)", async ({ page }) => {
   const chyby: string[] = [];
   page.on("console", (m) => {
-    if ((m.type() === "error" || m.type() === "warning") && !jeOcakavane(m)) chyby.push(m.text());
+    if (m.type() === "error" || m.type() === "warning") chyby.push(m.text());
   });
   page.on("pageerror", (e) => {
     chyby.push(e.message);

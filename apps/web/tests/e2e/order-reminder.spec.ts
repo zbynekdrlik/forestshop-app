@@ -1,10 +1,7 @@
-import { expect, test, type ConsoleMessage } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
 const E2E_HESLO = "e2e-test-heslo"; // účet existuje len v testovacej databáze
 const E2E_PRIPOMIENKY_EMAIL = "e2e-pripomienky@forestshop.sk"; // musí sa zhodovať s hodnotou v scripts/e2e-setup.ts
-
-// Rovnaká a JEDINÁ povolená výnimka ako v login.spec.ts/catalog.spec.ts/orders.spec.ts/posta-uncollected.spec.ts.
-const jeOcakavane = (m: ConsoleMessage): boolean => m.location().url.includes("/api/me") && m.text().includes("401");
 
 // issue 173: "Pripomienky objednávok" je SKRYTÁ obrazovka (rovnaký vzor ako
 // katalóg/párovanie/plánovač/#172 — majiteľ chce v ľavom menu zatiaľ len
@@ -21,7 +18,7 @@ const jeOcakavane = (m: ConsoleMessage): boolean => m.location().url.includes("/
 test("Štart/Stop + Spustiť teraz fungujú, red-riadok má obe ručné akcie, konzola je čistá", async ({ page }) => {
   const chyby: string[] = [];
   page.on("console", (m) => {
-    if ((m.type() === "error" || m.type() === "warning") && !jeOcakavane(m)) chyby.push(m.text());
+    if (m.type() === "error" || m.type() === "warning") chyby.push(m.text());
   });
   page.on("pageerror", (e) => {
     chyby.push(e.message);

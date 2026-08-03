@@ -253,7 +253,22 @@ export function OrderLineRow({
             poučenie, `.claude/rules/frontend-design.md`) — dva stackované
             block divy sa prirodzene poukladajú pod seba bez toho. */}
         <td>
-          <div className="ord-product-name">{line.variantName}</div>
+          <div className="ord-product-name">
+            {line.variantName}
+            {/* issue 187: veľkosť, ktorú zákazník naozaj objednal — obsluha
+                podľa nej objednáva u dodávateľa. Kedysi bola vo VLASTNOM
+                stĺpci VEĽKOSŤ, issue 95 ju zlúčilo do stĺpca KÓD a issue 117
+                celý ten stĺpec odstránilo (kódy sa nepoužívajú), čím veľkosť
+                nechcene zmizla. Vracia sa PRI MENE, nie ako stĺpec — tabuľka
+                je na šírku napnutá (issue 105/107/111/127). Jednovariantný
+                produkt `sizeLabel` nemá: vtedy sa nevykreslí NIČ, žiadna
+                pomlčka ani prázdne miesto (zadanie majiteľa). */}
+            {line.sizeLabel !== null && (
+              <span className="ord-size" data-testid={`size-${line.lineId}`}>
+                {line.sizeLabel}
+              </span>
+            )}
+          </div>
           <div className="ord-remark-cell" data-testid={`remark-cell-${line.lineId}`}>
             {line.remark !== null && (
               <span className="ord-remark" title={line.remark}>
