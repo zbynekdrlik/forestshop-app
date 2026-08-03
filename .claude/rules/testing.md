@@ -450,3 +450,13 @@ paths:
   assertion added to one spec file that reads a value another spec file
   mutates: does the OTHER file toggle/mutate this same row mid-test? If
   yes, assert "a valid value", never the specific one.
+- **Konzolová výnimka na `/api/me` 401 UŽ NEEXISTUJE a nesmie sa vrátiť
+  (issue 188).** Endpoint od `0.3.0-dev.112` vracia neprihlásenému **200 s
+  telom `null`**, nie 401 — práve preto, že Chromium loguje KAŽDÚ 4xx
+  odpoveď do konzoly ako chybu, takže úplne zdravá appka vypisovala červenú
+  chybu na prihlasovacej obrazovke. Všetkých 13 e2e spec súborov teraz
+  overuje PRÁZDNU konzolu bez jedinej výnimky (filter `jeOcakavane` je
+  odstránený). Nová konzolová chyba sa preto rieši VÝHRADNE v appke, nikdy
+  pridaním filtra do testu — a nový endpoint, ktorého bežný očakávaný
+  doménový výsledok je „nič"/neúspech, vracia 200 s telom (vzor `/api/me` a
+  `POST /api/me/password`), nie 4xx.
