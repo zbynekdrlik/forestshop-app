@@ -116,7 +116,11 @@ export function computeVariantTotals(
 export function formatVariantTotalChip(vt: VariantTotal): { readonly text: string; readonly title: string } | null {
   if (vt.lineCount < 2 || vt.remaining === 0) return null;
   return {
-    text: `Σ spolu ${String(vt.remaining)} ks`,
+    // issue 204: text skrátený zo "Σ spolu N ks" na "Σ N ks" — dlhší tvar sa
+    // do 54px stĺpca s množstvom nezmestil ani po zalomení pod množstvo
+    // (nameraných 82px obsahu), takže pretekal do susedného stĺpca. Celé
+    // vysvetlenie nesie `title` nižšie, ktorý sa nemení.
+    text: `Σ ${String(vt.remaining)} ks`,
     title: `Spolu vo všetkých objednávkach: ${String(vt.total)} ks · nevybavené: ${String(vt.remaining)} ks`,
   };
 }

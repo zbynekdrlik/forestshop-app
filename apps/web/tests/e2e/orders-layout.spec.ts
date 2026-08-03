@@ -167,6 +167,30 @@ test("STAV je celý čitateľný a POZNÁMKY pole je dosť široké na všetkýc
       expect(scrollOverflow, `bunka odznaku posúva obsah pri ${String(width)}px`).toBe(false);
     }
 
+    // issue 204: majiteľ, "link dodavatel a spolu sa prekrivaju je to nepekne
+    // 1 ksΣ spolu 1 ks 🔗" — pilulka so súčtom kusov sa vykresľovala INLINE za
+    // množstvom a s `white-space: nowrap` pretiekla o ~49px za pravý okraj
+    // svojej 54px bunky (naživo namerané na produkcii) presne nad ikonku
+    // odkazu na dodávateľa v susednom stĺpci. Rovnaká kontrola ako pri
+    // odznaku veku objednávky (issue 127) — pilulka sa musí CELÁ zmestiť do
+    // svojej bunky na KAŽDEJ zo 4 šírok.
+    const pretekajuceSucty = await page.evaluate(() => {
+      return [...document.querySelectorAll<HTMLElement>("[data-testid^='qty-total-']")].map((pilulka) => {
+        const td = pilulka.closest("td");
+        if (td === null) return { spill: null, scrollOverflow: null };
+        return {
+          spill: pilulka.getBoundingClientRect().right - td.getBoundingClientRect().right,
+          scrollOverflow: td.scrollWidth > td.clientWidth,
+        };
+      });
+    });
+    expect(pretekajuceSucty.length, `žiadna pilulka súčtu nenájdená pri ${String(width)}px`).toBeGreaterThan(0);
+    for (const { spill, scrollOverflow } of pretekajuceSucty) {
+      expect(spill, `pilulka súčtu pretŕča svoju bunku pri ${String(width)}px`).not.toBeNull();
+      expect(spill as number, `pilulka súčtu pretŕča svoju bunku pri ${String(width)}px`).toBeLessThanOrEqual(0);
+      expect(scrollOverflow, `bunka s množstvom posúva obsah pri ${String(width)}px`).toBe(false);
+    }
+
     // issue 111 bod 5: pri 1280px sa žiadna `.orders-table-wrap` skupina
     // nesmie posúvať vodorovne (predtým 💾 tlačidlo bolo za viditeľným
     // okrajom, kým manažér nescrolloval).

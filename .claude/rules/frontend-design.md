@@ -641,3 +641,25 @@ paths:
   proti pokazenému kódu, čiže by bol tautológia (`test-strictness.md`). Také
   overenie patrí do `tests/e2e/*.spec.ts` (`await expect(locator)
   .toBeFocused()`) a v unit súbore ostane len komentár, PREČO tam test nie je.
+- **Pilulka/odznak s `white-space: nowrap` vykreslený INLINE v úzkej bunke
+  pretečie do susedného stĺpca — a `text-align: right` to ešte skryje pred
+  okom, lebo obsah "vyzerá zarovnaný".** Issue 204 (majiteľ: "link dodavatel
+  a spolu sa prekrivaju … 1 ksΣ spolu 1 ks 🔗"): `.qty-total-chip` mala 82px
+  obsahu v 54px bunke, takže sedela presne nad ikonkou 🔗 vedľajšieho
+  stĺpca (naživo namerané: `chip.right 845` vs `td.right 796`,
+  `td.scrollWidth 103` vs `clientWidth 54`). Toto je TRETÍ tvar tej istej
+  triedy chýb po `.ord-stale-badge` (issue 127) a `.ord-supplier-assign`
+  (issue 63) — **každý nový neinteraktívny odznak/pilulka v tejto tabuľke
+  dostáva rovnaké tri veci naraz:** vlastný riadok v stack `<div>`e (nikdy
+  `display:flex` priamo na `<td>` — issue 163), `max-width: 100%` +
+  `overflow:hidden; text-overflow:ellipsis` (garancia pre BUDÚCI dlhší
+  obsah, nielen dnešný), a čo najkratší text s celým vysvetlením v `title`.
+  Regresná kontrola patrí do `orders-layout.spec.ts` rovnakým vzorom ako
+  `staleOdznaky` (`element.right <= td.right` + `td.scrollWidth <=
+  clientWidth` na všetkých 4 šírkach).
+- **Skrátenie textu v bunke je lacnejšie než presúvanie `<colgroup>`
+  percent.** Pri issue 204 stačilo "Σ spolu N ks" → "Σ N ks" (potreba klesla
+  na 41px, zmestí sa do dnešných 54px) a **výška riadkov sa nezmenila ani o
+  pixel** (paired meranie na 40 reálnych riadkoch, priemer aj maximum 0px) —
+  darcovský stĺpec (postup issue 107/111/127) by naopak zhoršil iný stĺpec.
+  Než začneš hľadať darcu, over, či sa obsah nedá skrátiť.

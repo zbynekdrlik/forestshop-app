@@ -961,10 +961,26 @@ tr:last-child td {
 /* issue 62: súčet kusov toho istého produktu naprieč objednávkami dodávateľa
    — neklikateľná pilulka, zámerne odlišná od interaktívneho `.chip`
    (dodávateľský filter), aby sa nedali zameniť za ovládací prvok. */
+/* issue 204: množstvo a pilulka pod sebou, zarovnané doprava (bunka má
+   `text-align: right`). Flex je zámerne TU, na vnútornom `<div>`, nikdy na
+   `<td>` samotnej — `display:flex` na bunke ju odpojí od výšky riadku a jej
+   deliaca čiara prestane lícovať (issue 163). */
+.ord-qty-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--fs-space-1);
+  min-width: 0;
+}
 .qty-total-chip {
   display: inline-flex;
   align-items: center;
-  margin-left: var(--fs-space-2);
+  /* issue 204: pilulka je vlastný riadok stacku, vodorovný odstup od
+     množstva už nedáva zmysel; `max-width` + orezanie garantujú, že sa už
+     NIKDY nedostane mimo svoju bunku, ani pri trojcifernom počte kusov. */
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
   padding: 0 var(--fs-space-2);
   font-size: var(--fs-text-xs);
   font-weight: var(--fs-weight-medium);

@@ -277,13 +277,21 @@ export function OrderLineRow({
             )}
           </div>
         </td>
+        {/* issue 204: majiteľ, "link dodavatel a spolu sa prekrivaju je to
+            nepekne 1 ksΣ spolu 1 ks 🔗" — pilulka bola INLINE za množstvom a
+            pretekala z 54px bunky nad ikonku odkazu v susednom stĺpci.
+            Stackujú sa teraz pod seba vo VNÚTORNOM `<div>`, nikdy cez `flex`
+            priamo na `<td>` (to bola príčina issue 163's nelícujúcej deliacej
+            čiary). */}
         <td className="ord-qty">
-          {line.quantity} ks
-          {qtyChip !== null && (
-            <span className="qty-total-chip" data-testid={`qty-total-${line.lineId}`} title={qtyChip.title}>
-              {qtyChip.text}
-            </span>
-          )}
+          <div className="ord-qty-stack">
+            <span>{line.quantity} ks</span>
+            {qtyChip !== null && (
+              <span className="qty-total-chip" data-testid={`qty-total-${line.lineId}`} title={qtyChip.title}>
+                {qtyChip.text}
+              </span>
+            )}
+          </div>
         </td>
         {/* issue 95: DODÁVATEĽ + PRIRADENIE DODÁVATEĽA zlúčené do jednej bunky
             (majiteľ, komentár #1) — oba vnorené bloky nižšie sú BEZ ZMENY
