@@ -47,11 +47,32 @@ test("zoznam zobrazí nedostupný variant s náhradou, povinný náhľad predch�
   await expect(preview).toBeVisible();
   await expect(preview).toContainText("e2e-nedostupne@forestshop.sk");
 
+  // issue 191: náhľad je dialóg cez obrazovku, nie blok na spodku stránky —
+  // musí byť v zornom poli bez skrolovania (jeho vrch je nad spodkom okna) a
+  // musí sa dať zavrieť klávesom Esc bez toho, aby čokoľvek odišlo.
+  const vyska = page.viewportSize()?.height ?? 0;
+  const ramec = await preview.boundingBox();
+  expect(ramec).not.toBeNull();
+  expect(ramec?.y ?? Number.MAX_SAFE_INTEGER).toBeLessThan(vyska);
+
+  await page.keyboard.press("Escape");
+  await expect(preview).toBeHidden();
+
+  // Znovu otvoriť a pokračovať v pôvodnom overení odoslania.
+  await page.getByTestId("nedostupne-send-9008-40287").click();
+  await expect(preview).toBeVisible();
+
   // Potvrdenie odoslania bez nakonfigurovaného mailu vráti graceful chybu
   // (fail-closed, žiadny skutočný pokus o SMTP spojenie) — BCC kontrola beží
   // PRED mail-transport kontrolou (`send.ts`), takže táto hláška sa zobrazí.
-  await page.getByTestId("nedostupne-confirm-send").click();
+  await page.getByTestId("nedostupne-preview-confirm").click();
   await expect(page.getByText("chýba adresa pre skrytú kópiu majiteľovi (NEDOSTUPNE_BCC_EMAIL)", { exact: true })).toBeVisible();
+
+  // Neúspešné odoslanie náhľad ZÁMERNE nezatvára (obsluha vidí dôvod) —
+  // zavrie ho až tlačidlo "Zrušiť".
+  await expect(preview).toBeVisible();
+  await page.getByTestId("nedostupne-preview-cancel").click();
+  await expect(preview).toBeHidden();
 
   expect(chyby).toEqual([]);
 });

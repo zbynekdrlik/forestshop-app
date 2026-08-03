@@ -10,6 +10,7 @@ import {
   type NedostupneList,
   type NedostupnePreview,
 } from "../nedostupneApi.js";
+import { MailPreviewDialog } from "./MailPreviewDialog.js";
 
 // Rovnaké dve role, ktoré server vyžaduje na odoslanie (`requireRole("admin",
 // "manazer")`, `nedostupne-routes.ts`) — čítanie (zoznam) smie vidieť KAŽDÝ
@@ -190,37 +191,25 @@ export function NedostupneSection({ role, onSessionExpired }: { readonly role: M
         </div>
       )}
 
+      {/* issue 191: náhľad je dialóg cez obrazovku, nie rozbalený blok na
+          spodku stránky. Jednorazový `previewToken` z `/preview` ide ďalej
+          nezmenený do `/send` (`.claude/rules/nedostupne.md`) — dialóg mení
+          len to, KDE sa náhľad ukáže, nikdy nie to, že bez potvrdenia
+          človekom e-mail neodíde. */}
       {pending !== null && (
-        <div className="mail-preview" data-testid="nedostupne-preview">
-          <h3>Náhľad e-mailu — povinné pred odoslaním</h3>
-          <p>
-            Komu: {pending.preview.recipient} — Predmet: {pending.preview.subject}
-          </p>
-          {/* `pending.preview.html` je appkou generovaný e-mail (`buildEmailForType`,
-              `modules/nedostupne/logic.ts`) — meno zákazníka aj náhradné produkty sú
-              tam už HTML-escapované, nikdy surový užívateľský vstup priamo tu. */}
-          <div className="nedostupne-preview-body" dangerouslySetInnerHTML={{ __html: pending.preview.html }} />
-          <div className="nedostupne-order-actions">
-            <button
-              type="button"
-              className="btn lg good"
-              disabled={busyKey !== ""}
-              onClick={confirmSend}
-              data-testid="nedostupne-confirm-send"
-            >
-              📧 Odoslať zákazníkovi
-            </button>
-            <button
-              type="button"
-              className="btn lg ghost"
-              onClick={() => {
-                setPending(null);
-              }}
-            >
-              Zrušiť
-            </button>
-          </div>
-        </div>
+        <MailPreviewDialog
+          testId="nedostupne-preview"
+          title="Náhľad e-mailu — povinné pred odoslaním"
+          recipient={pending.preview.recipient}
+          subject={pending.preview.subject}
+          html={pending.preview.html}
+          confirmLabel="📧 Odoslať zákazníkovi"
+          confirmDisabled={busyKey !== ""}
+          onConfirm={confirmSend}
+          onClose={() => {
+            setPending(null);
+          }}
+        />
       )}
     </section>
   );

@@ -594,3 +594,34 @@ paths:
   live-production `addStyleTag` script only when the e2e fixture's content
   shape doesn't match real production data (as issue 107 found out the
   hard way).
+- **Hiding a button's visible label (conditional render, `display:none`) also
+  DELETES its accessible name — an icon-only control needs `aria-label` +
+  `title` set explicitly, and any information carried by a sibling badge that
+  you also hide must be folded into that label.** Issue 190 (zbalený bočný
+  panel do 72px lišty): the tab buttons render `{!rail && <span
+  className="tlabel">}`, so in rail mode the only remaining child is an
+  `aria-hidden` emoji — without `aria-label` the button's accessible name
+  would be empty and every existing `getByRole("button", { name: "Na
+  objednanie" })` query (unit AND e2e) would stop matching. The status pill
+  ("Beží"/"Zastavené") is hidden in rail mode too, so the label becomes
+  `${tab.label} — ${status}` and the same string goes into `title` (the
+  hover tooltip the ticket asked for). Any FUTURE icon-only/compact variant
+  of an existing labelled control in this app needs both attributes set in
+  the SAME change, plus a unit test asserting `getByRole("button", { name })`
+  still resolves in the compact state.
+- **Two independent collapse mechanisms on the same tree must be composed
+  explicitly, or one silently swallows the other.** The sidebar already had
+  per-FOLDER collapsing (`.nav-folder.collapsed .folder-body {display:none}`);
+  issue 190 added whole-PANEL collapsing where folder headings are not
+  rendered at all. A folder collapsed before the panel collapsed would have
+  hidden its icons with no heading left to click — unreachable. Fix is one
+  line in the component, not CSS: `const isCollapsed = !rail &&
+  collapsed[folder.id] === true` (the folder state is kept, just not applied
+  while railed, so it returns on expand). Covered by its own unit test.
+- **A UI preference stored in `localStorage` needs `window.localStorage
+  .clear()` in the test file's `afterEach`** — jsdom keeps it between tests
+  in the same file, so one test toggling the preference silently changes the
+  starting state of every test after it (`Sidebar.test.tsx`, issue 190). Both
+  read and write go in `try/catch` with the safe default, since a browser
+  with storage disabled throws and must never take the app down over a
+  preference.
