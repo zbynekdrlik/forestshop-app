@@ -52,3 +52,31 @@ it("bez badgeCounts (prop vôbec chýba) sa nevykreslí žiadny odznak", () => {
 
   expect(screen.queryByTestId("nav-badge-orders")).toBeNull();
 });
+
+// issue 185: `badgeStatus` je rovnaký generický vzor ako `badgeCounts` — over
+// oba stavy ("on"/"off") aj že tab bez kľúča nedostane žiadny odznak.
+it("vykreslí stav 'Beží' pre 'on', 'Zastavené' pre 'off', nič pre záložku bez kľúča v badgeStatus", () => {
+  render(
+    <Sidebar
+      folders={FOLDERS}
+      activeTabId="sync"
+      onSelectTab={() => {}}
+      badgeStatus={{ orders: "on", sync: "off" }}
+    />,
+  );
+
+  const orders = screen.getByTestId("nav-status-orders");
+  expect(orders.textContent).toBe("Beží");
+  expect(orders.className).not.toContain("off");
+
+  const sync = screen.getByTestId("nav-status-sync");
+  expect(sync.textContent).toBe("Zastavené");
+  expect(sync.className).toContain("off");
+});
+
+it("bez badgeStatus (prop vôbec chýba) sa nevykreslí žiadny stavový odznak", () => {
+  render(<Sidebar folders={FOLDERS} activeTabId="sync" onSelectTab={() => {}} />);
+
+  expect(screen.queryByTestId("nav-status-orders")).toBeNull();
+  expect(screen.queryByTestId("nav-status-sync")).toBeNull();
+});

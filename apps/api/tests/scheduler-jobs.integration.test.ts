@@ -1,10 +1,12 @@
 import { mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { eq } from "drizzle-orm";
 import { afterEach, expect, it } from "vitest";
-import { sessions, users } from "../src/db/schema.js";
+import { catalogSnapshots, sessions, users } from "../src/db/schema.js";
 import { hashPassword } from "../src/modules/auth/passwords.js";
 import type { CatalogIngestResult } from "../src/modules/catalog/ingest.js";
+import { storeRawSnapshot } from "../src/modules/catalog/raw-store.js";
 import { ORDERS_EXPORT_URL_NOT_CONFIGURED, type OrdersIngestResult } from "../src/modules/orders/ingest.js";
 import {
   CATALOG_IMPORT_JOB_NAME,
@@ -60,6 +62,13 @@ it("catalogImportJob s nakonfigurovaným runIngest naň deleguje a vráti jeho v
   expect(receivedNow).toBe(NOW);
 });
 
+// Issue 184: katalógový import bol `daily` 01:00 UTC, majiteľ chce hodinovú
+// kadenciu (rovnaká požiadavka, aká #115 už uplatnilo na `ordersImportJob`).
+it("catalogImportJob je teraz hodinový (issue 184), posunutý mimo kolízie s ostatnými hodinovými jobmi (:45/:50/:55)", () => {
+  const job = catalogImportJob(undefined);
+  expect(job.schedule).toEqual({ kind: "hourly", minuteUtc: 20 });
+});
+
 it("pruneRawExportsJob deleguje na existujúci pruneRawSnapshots — starý prijatý surový súbor sa naozaj zmaže", async () => {
   const ctx = await withCleanDb();
   close = ctx.close;
@@ -85,6 +94,37 @@ it("pruneRawExportsJob deleguje na existujúci pruneRawSnapshots — starý prij
   // ho nenastavuje) — `pruneRawSnapshots` teda nemá čo reálne zmazať, no
   // volanie musí prejsť bez chyby a vrátiť detail so správnym tvarom.
   expect(outcome).toEqual({ detail: { removed: 0 } });
+});
+
+// Issue 184: predvolená retencia (žiadny argument, presne ako `index.ts`
+// volá `pruneRawExportsJob()`) sa skrátila z 30 na 14 dní — hodinový import
+// produkuje viac snapshotov, box je diskovo napnutý. Behaviorálny dôkaz (nie
+// len čítanie zdroja): 20-dňový starý PRIJATÝ súbor by pod PÔVODNOU 30-dňovou
+// retenciou PREŽIL, pod NOVOU 14-dňovou sa naozaj zmaže.
+it("pruneRawExportsJob's predvolená retencia (bez argumentu) je 14 dní (issue 184) — 20 dní stará prijatá snapshot sa zmaže", async () => {
+  const ctx = await withCleanDb();
+  close = ctx.close;
+  dir = await mkdtemp(join(tmpdir(), "forestshop-scheduler-retencia-"));
+
+  const dvadsatDni = new Date(NOW.getTime() - 20 * 24 * 60 * 60 * 1000);
+  const path = await storeRawSnapshot(dir, {
+    at: dvadsatDni,
+    sha256: "d".repeat(64),
+    body: Buffer.from("stary-20-dni"),
+  });
+  const id = await insertTestSnapshot(ctx.db, {
+    verdict: "accepted",
+    fetchedAt: dvadsatDni,
+    contentSha256: "d".repeat(64),
+  });
+  await ctx.db.update(catalogSnapshots).set({ rawPath: path }).where(eq(catalogSnapshots.id, id));
+  // Druhý (novší) prijatý snapshot, aby ten 20-dňový nebol "posledný prijatý"
+  // (ten sa nikdy nemaže, rovnaká výnimka ako inde).
+  await insertTestSnapshot(ctx.db, { verdict: "accepted", fetchedAt: NOW, contentSha256: "e".repeat(64) });
+
+  const job = pruneRawExportsJob();
+  const outcome = await job.run(ctx.db, NOW);
+  expect(outcome).toEqual({ detail: { removed: 1 } });
 });
 
 it("sessionCleanupJob deleguje na cleanupExpiredSessions — zmaže expirovanú, platnú nechá", async () => {

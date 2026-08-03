@@ -125,8 +125,10 @@ paths:
 - **Surové bajty nie sú v Postgrese.** Ležia gzipnuté v `CATALOG_RAW_DIR` (na dev2
   docker zväzok `catalog-raw`), v databáze je len `raw_path` + `content_sha256`.
   `pg_dump` ich teda NEZAHŔŇA — a nemusí, odvodený katalóg je celý v databáze.
-  Retencia (`pnpm catalog:prune-raw`): prijaté staršie než 30 dní prídu o súbor,
-  odmietnuté si ho nechávajú navždy, posledný prijatý sa nemaže nikdy. `pruneRawSnapshots`
+  Retencia (`pnpm catalog:prune-raw`): prijaté staršie než 14 dní (skrátené z 30
+  v issue 184 súčasne s prechodom importu na hodinovú kadenciu — viac
+  snapshotov/deň, box na 98 % disku) prídu o súbor, odmietnuté si ho
+  nechávajú navždy, posledný prijatý sa nemaže nikdy. `pruneRawSnapshots`
   (`raw-store.ts`) pracuje LEN cez riadky databázy — nikdy neprechádza adresár na
   disku — takže osirotený súbor bez zodpovedajúceho riadku nikdy nezmaže ani naň
   nenarazí, a `rm(..., { force: true })` mlčky prežije aj súbor, ktorý na disku už
@@ -147,7 +149,8 @@ paths:
   apps/api/dist/cli/catalog-prune-raw.js` (bez `-f docker-compose.prod.yml` by
   compose na dev2 siahol po vývojovom `docker-compose.yml`). Overené naživo na
   dev2 2026-07-29 po nasadení v0.2.0: `Zmazaných surových súborov: 0 (staršie
-  než 30 dní).` + `{"removed":0}`. Dôvod: dev2 má `scripts/` len ako `rsync`-nutú kópiu BEZ
+  než 30 dní).` + `{"removed":0}` — historický záznam behu spred issue 184
+  (dobová hodnota `KEEP_DAYS = 30`, odvtedy 14, viď vyššie). Dôvod: dev2 má `scripts/` len ako `rsync`-nutú kópiu BEZ
   `node_modules` (final-wave-b, položka 2), takže `tsx scripts/catalog-prune-raw.ts`
   tam nemá ako bežať — bez skompilovanej verzie v obraze retencia v produkcii
   nemala žiadny spôsob spustenia a `catalog-raw` zväzok rástol donekonečna.

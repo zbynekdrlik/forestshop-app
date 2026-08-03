@@ -108,7 +108,6 @@ export function NedostupneSection({ role, onSessionExpired }: { readonly role: M
 
   return (
     <section>
-      <h2>Nedostupné tovary</h2>
       <p>Tovary, ktoré dodávateľ nemá, spárované s otvorenými objednávkami zákazníkov, ktorí na ne čakajú.</p>
 
       {list.bccMissing && (

@@ -143,7 +143,6 @@ export function OrderReminderSection({
 
   return (
     <section>
-      <h2>Pripomienky objednávok</h2>
       <div className="autohead">
         <span className={"pill" + (status.enabled ? "" : " off")} data-testid="order-reminder-status-pill">
           {status.enabled ? "Beží" : "Zastavené"}
