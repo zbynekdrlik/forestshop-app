@@ -2451,3 +2451,45 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
   integračnou + e2e sadou nad rovnakou schémou.
 - Nový playbook súbor `.claude/rules/nedostupne.md` + router riadok v
   `CLAUDE.md`. Issue #176 zavretý s dôkazom. Discord karta odoslaná.
+
+## Issue 185 + 184 (2026-08-03, PR #186)
+
+- Issue 185 — "Automatizácie" nav folder: moved posta-uncollected/
+  order-reminder/nedostupne from `HIDDEN_TABS` into a new visible `NAV`
+  folder (`apps/web/src/nav.ts`). Commits `aec5e3a` (main change),
+  `4419a77`/`cd73b45` (self-review fixes). Added `badgeStatus` prop to
+  `Sidebar.tsx` (Beží/Zastavené pill, same pattern as issue 147's
+  `badgeCounts`), fetched by `App.tsx` from the two existing status
+  endpoints. Filled 4 missing `JOB_LABELS` entries. Removed the now-
+  duplicate `<h2>` from the three screens (Topbar's `<h1>` now renders for
+  them). Tests: `nav.test.ts`, `Sidebar.test.tsx`, `schedulerLabels.test.ts`
+  (new), `nav.spec.ts` e2e (updated to 3 folders/5 tabs).
+- Issue 184 — hourly catalog-import: `catalogImportJob` schedule
+  `daily 01:00` → `hourly :20 UTC` (commit `6fb74cd`). Measured production
+  duration first (19.5-22.9s/run, 6 samples) before deciding — negligible
+  load. Disk check found dev2 root fs at 98% (~25GB free); shortened
+  `pruneRawExportsJob`'s default retention 30→14 days (+ CLI's `KEEP_DAYS`)
+  to bound the extra raw-snapshot growth from hourly imports. New tests:
+  `catalogImportJob` schedule-shape test + a behavioral test proving the
+  DEFAULT retention (not just an explicit override) changed to 14 days.
+- Self-review (subagent dispatch limit reached this session — reviewed
+  manually instead) found and fixed: a dead CSS class targeted via a nested
+  selector instead of directly; a genuine e2e flakiness risk (hardcoded
+  pill text raced against posta-uncollected.spec.ts/order-reminder.spec.ts
+  toggling the same shared singleton row across concurrent Playwright
+  workers — relaxed to accept either valid state, matching this file's
+  existing discipline for the badge-count assertion); two doc/comment
+  precision fixes (timing claim, stray markdown-bold in a .ts comment).
+- CI (push+PR runs, multiple cycles after review fixes) all green. PR #186
+  merged `195c831` (merge commit, dev→main). Main CI `30806516180` success.
+  Deploy `30806516186`: FIRST attempt failed on the documented transient
+  containerd `failed to extract layer ... Lchown` error (`.claude/rules/
+  deploy.md`) — confirmed no concurrent runner job, reran once, succeeded.
+- Live verified (Playwright MCP, `vychod@varos.sk`): `/api/version` =
+  `0.3.0-dev.109`/`195c831`. Automatizácie folder visible with all 3 items,
+  correct Zastavené pills, no pill on Nedostupné tovary. "História behov"
+  shows translated job names. **Hourly catalog-import fired live** at
+  10:51:55 UTC with NO manual trigger (24s duration) — visible in the Sync
+  screen and history table within the hour, as required. Zero console
+  errors. Production baseline unchanged (0|0|0).
+- Both issues closed with evidence, both Discord completion cards fired.
