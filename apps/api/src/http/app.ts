@@ -22,6 +22,8 @@ import { registerPairingRoutes } from "./pairing-routes.js";
 import { registerPostaUncollectedRoutes, type PostaUncollectedRunDeps } from "./posta-uncollected-routes.js";
 import type { PageFetcher, PageFetchResult } from "../modules/supplier-stock/page-fetcher.js";
 import { registerSupplierStockRoutes } from "./supplier-stock-routes.js";
+import { registerRestockRoutes, type RestockRunDeps } from "./restock-routes.js";
+import { shoptetImportConfigFromBaseUrl } from "../modules/shoptet-writeback/config.js";
 import { registerSchedulerRoutes } from "./scheduler-routes.js";
 import { registerSupplierRoutes } from "./supplier-routes.js";
 
@@ -66,6 +68,10 @@ export function createApp(
     // Voliteľné z rovnakého dôvodu ako `nedostupne` vyššie; testy dodajú
     // vlastnú implementáciu a NIKDY nechodia na skutočnú stránku dodávateľa.
     readonly fetchSupplierPage?: PageFetcher;
+    // issue 213: "Vypredané → Skladom" — prihlasovacie údaje do Shoptet
+    // administrácie. Voliteľné z rovnakého dôvodu ako ostatné; testy
+    // dodajú vlastný zápis a NIKDY sa nedotknú skutočného Shoptetu.
+    readonly restock?: RestockRunDeps;
   },
 ): Hono<AppBindings> {
   const app = new Hono<AppBindings>();
@@ -234,6 +240,17 @@ export function createApp(
           httpStatus: null,
           error: "Sťahovanie stránok dodávateľa nie je nakonfigurované.",
         })),
+  );
+  // issue 213: bez dodanej konfigurácie sa do Shoptetu NEZAPISUJE — beh
+  // skončí chybou prihlásenia, nikdy tichým "prepnuté".
+  registerRestockRoutes(
+    app,
+    db,
+    options.restock ?? {
+      // Prázdne prihlasovacie údaje = beh sa zastaví na prihlásení do
+      // Shoptetu a vráti chybu. Fail-closed: nikdy tiché "prepnuté".
+      config: shoptetImportConfigFromBaseUrl(options.adminBaseUrl ?? "https://www.forestshop.sk", "", ""),
+    },
   );
 
   // Musí byť registrovaný AŽ PO všetkých skutočných /api/* trasách vyššie — Hono

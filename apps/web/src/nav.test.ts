@@ -8,18 +8,20 @@ import { DEFAULT_TAB_ID, HIDDEN_TABS, NAV, findTab, isVisibleTabId } from "./nav
 // pridalo "Texty e-mailov" do Systému (nastavenie spoločné pre VŠETKY
 // automatizácie). Tento test je
 // najbližšie k tomu, čo strojovo overiť dá (registrácia, nie DOM).
-it("NAV má tri priečinky (Systém/Eshop/Automatizácie), s 3/2/3 záložkami v poradí podľa dôležitosti", () => {
+it("NAV má tri priečinky (Systém/Eshop/Automatizácie), s 3/2/4 záložkami v poradí podľa dôležitosti", () => {
   expect(NAV).toHaveLength(3);
   expect(NAV.map((f) => f.label)).toEqual(["Systém", "Eshop", "Automatizácie"]);
   expect(NAV[0]?.tabs).toHaveLength(3);
   expect(NAV[1]?.tabs).toHaveLength(2);
-  expect(NAV[2]?.tabs).toHaveLength(3);
+  expect(NAV[2]?.tabs).toHaveLength(4);
   // issue 212: "Dodávateľský sklad" — scraper dostupnosti u dodávateľa;
   // patrí do Systému (zadanie majiteľa), nie medzi Automatizácie.
   expect(NAV[0]?.tabs.map((t) => t.label)).toEqual(["Sync zo Shoptetu", "Texty e-mailov", "Dodávateľský sklad"]);
   expect(NAV[1]?.tabs.map((t) => t.label)).toEqual(["Na objednanie", "Nedostupné tovary"]);
   // issue 193: "Odoslané e-maily" — prehľad toho, čo automatizácie poslali.
   expect(NAV[2]?.tabs.map((t) => t.label)).toEqual([
+    // issue 213: prepínanie vypredaných produktov späť na skladom.
+    "Vypredané → Skladom",
     "Nevyzdvihnuté zásielky",
     "Pripomienky objednávok",
     "Odoslané e-maily",

@@ -8,6 +8,7 @@ import { OrderReminderSection } from "./components/OrderReminderSection.js";
 import { OrdersSection } from "./components/OrdersSection.js";
 import { PairingSection } from "./components/PairingSection.js";
 import { PostaUncollectedSection } from "./components/PostaUncollectedSection.js";
+import { RestockSection } from "./components/RestockSection.js";
 import { SchedulerSection } from "./components/SchedulerSection.js";
 import { SupplierStockSection } from "./components/SupplierStockSection.js";
 import { SyncSection } from "./components/SyncSection.js";
@@ -91,6 +92,10 @@ export const NAV: readonly NavFolder[] = [
     // potrebne statistiky komu sa poslal mail"). `wide: true` ako pri
     // ostatných hustých pracovných tabuľkách.
     tabs: [
+      // issue 213: automatické zapínanie vypredaných produktov, ktoré
+      // dodávateľ zase má skladom — beží na plán a má Štart/Stop, takže
+      // patrí sem, nie do Systému (tam je len scraper, ktorý nič neprepína).
+      { id: "restock", label: "Vypredané → Skladom", icon: "🔁", Component: RestockSection, wide: true },
       { id: "posta-uncollected", label: "Nevyzdvihnuté zásielky", icon: "📮", Component: PostaUncollectedSection },
       { id: "order-reminder", label: "Pripomienky objednávok", icon: "⏰", Component: OrderReminderSection },
       { id: "mail-log", label: "Odoslané e-maily", icon: "📨", Component: MailLogSection, wide: true },

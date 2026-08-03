@@ -58,3 +58,42 @@ export function buildWritebackCsv(rows: readonly WritebackRow[]): Buffer {
   const bom = "﻿";
   return Buffer.from(bom + lines.join("\r\n") + "\r\n", "utf8");
 }
+
+// issue 213: prepnutie vypredaného produktu späť na „Skladom". Vlastný tvar
+// riadku (iné stĺpce než odkaz na dodávateľa vyššie), ale ZÁMERNE v tomto
+// súbore a cez to isté `dataRowToLine` — ochrana proti CSV-injection
+// (`.claude/rules/shoptet-writeback.md`) platí pre KAŽDÚ cestu zápisu do
+// Shoptetu, nikdy sa stĺpce neskladajú mimo tohto modulu.
+export interface RestockCsvRow {
+  readonly code: string;
+  readonly pairCode: string;
+  readonly availabilityInStock: string;
+  readonly availabilityOutOfStock: string;
+  readonly stock: string;
+}
+
+// `visible` je konštanta, nie vstup — automatizácia zapína LEN produkty,
+// ktoré už `visible` sú (`restock/queries.ts`), takže stĺpec len potvrdzuje
+// existujúci stav a nemôže odkryť nič, čo majiteľ skryl.
+const RESTOCK_HEADER = [
+  "code",
+  "pairCode",
+  "productVisibility",
+  "availabilityInStock",
+  "availabilityOutOfStock",
+  "stock",
+] as const;
+
+export function buildRestockCsv(rows: readonly RestockCsvRow[]): Buffer {
+  if (rows.length === 0) {
+    throw new Error("buildRestockCsv: žiadne riadky na zápis — CSV sa nesmie nahrať prázdne");
+  }
+  const lines = [
+    rowToLine(RESTOCK_HEADER),
+    ...rows.map((r) =>
+      dataRowToLine([r.code, r.pairCode, "visible", r.availabilityInStock, r.availabilityOutOfStock, r.stock]),
+    ),
+  ];
+  const bom = "﻿";
+  return Buffer.from(bom + lines.join("\r\n") + "\r\n", "utf8");
+}
