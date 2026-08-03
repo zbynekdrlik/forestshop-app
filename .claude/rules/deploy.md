@@ -10,6 +10,22 @@ paths:
 
 # Deployment (dev2)
 
+- **Nová premenná v `env.ts` MUSÍ dostať svoj riadok v `environment:` bloku
+  `docker-compose.prod.yml` — inak sa do kontajnera NIKDY nedostane, aj keby
+  bola korektne nastavená v `/srv/forestshop/.env`.** Compose neprenáša `.env`
+  do kontajnera automaticky: `.env` slúži len na interpoláciu `${...}` v samotnom
+  compose súbore a na `env_file`; premenná bez riadku v `environment:` sa v
+  kontajneri jednoducho nenastaví, appka ju vidí ako chýbajúcu a `.optional()`
+  vetva sa tvári ako "operátor to ešte nenastavil". Presne toto sa stalo pri
+  issue 198: `MAIL_BCC` a `NEDOSTUPNE_BCC_EMAIL` boli v `.env` nastavené,
+  obrazovka „Nedostupné tovary" napriek tomu hlásila chýbajúcu adresu a
+  automatizácia zostávala fail-closed. **Kontrola, ktorá to odhalí za sekundu**
+  (rob ju pri KAŽDOM pridaní premennej do `env.ts`, ešte pred hľadaním chyby v
+  kóde):
+  ```bash
+  ssh newlevel@dev2 'docker exec forestshop-app-1 sh -c "env | grep -E \"<PREMENNA>\""'
+  ```
+  Prázdny výstup = chýbajúci riadok v compose, nie chyba v appke.
 - **Nepovinná premenná v `environment:` bloku patrí bez `:?`, ako holý kľúč
   (`SHOPTET_EXPORT_URL:`, žiadna hodnota) — NIE `${VAR:?chyba}`.** Bare kľúč
   preberá hodnotu z `/srv/forestshop/.env`, keď tam je, a keď nie je, premenná

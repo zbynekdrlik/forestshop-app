@@ -1,13 +1,28 @@
-import { useState, type JSX } from "react";
+import { useEffect, useState, type JSX } from "react";
 import type { NavFolder } from "../nav.js";
 import { Footer } from "./Footer.js";
+
+// issue 190: zapamätaný stav zbaleného panela. `localStorage` môže v niektorých
+// režimoch prehliadača hodiť výnimku (zakázané úložisko) — obe strany sú preto
+// v `try`, s "rozbalený" ako bezpečným východiskom. Kľúč je zámerne
+// prefixovaný názvom appky, na doméne bežia aj iné projekty.
+const RAIL_KEY = "forestshop:sidebar-rail";
+
+function readRail(): boolean {
+  try {
+    return window.localStorage.getItem(RAIL_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
 
 // Ľavé menu — vlastný dizajn appky (issue 57): značka hore, priečinky so
 // záložkami, päta len s verziou. Prihlásený používateľ/odhlásenie/zmena hesla
 // žijú v hlavičke (`Topbar.tsx`'s používateľské menu), nie tu — to je
 // dizajnové rozhodnutie zadania #57 ("user menu in the header"), nie
 // prevzatie zo starej appky (tá menu v hlavičke vôbec nemá). Skladanie
-// priečinkov (`collapsed`) je čisto prezentačné, preto žije tu — App.tsx si
+// priečinkov (`collapsed`) aj zbalenie CELÉHO panela do úzkej lišty
+// (`rail`, issue 190) sú čisto prezentačné, preto žijú tu — App.tsx si
 // drží len AKTÍVNU záložku.
 export function Sidebar({
   folders,
@@ -32,53 +47,105 @@ export function Sidebar({
   readonly badgeStatus?: Readonly<Record<string, "on" | "off">>;
 }): JSX.Element {
   const [collapsed, setCollapsed] = useState<Readonly<Record<string, boolean>>>({});
+  const [rail, setRail] = useState<boolean>(readRail);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(RAIL_KEY, rail ? "1" : "0");
+    } catch {
+      // Zakázané úložisko — voľba potom neprežije obnovenie stránky, ale
+      // panel musí fungovať ďalej; nikdy nezhadzuj appku kvôli preferencii.
+    }
+  }, [rail]);
+
+  const railToggleLabel = rail ? "Rozbaliť bočné menu" : "Zbaliť bočné menu";
 
   return (
-    <aside className="sidebar">
+    <aside className={"sidebar" + (rail ? " sidebar-rail" : "")}>
       <div className="brand">
         <span className="logo" aria-hidden="true">
           🌲
         </span>
-        <span className="brandtxt">
-          Forestshop
-          <small>Firemný systém</small>
-        </span>
+        {!rail && (
+          <span className="brandtxt">
+            Forestshop
+            <small>Firemný systém</small>
+          </span>
+        )}
       </div>
+      {/* issue 190: prepínač má VŽDY rovnaký prístupný názov (`aria-label`),
+          aj keď je jeho text v zbalenom stave skrytý — inak by sa tlačidlo v
+          lište stalo bezmenným. `title` dáva ten istý text ako bublinu myšou. */}
+      <button
+        type="button"
+        className="rail-toggle"
+        data-testid="sidebar-rail-toggle"
+        aria-expanded={!rail}
+        aria-label={railToggleLabel}
+        title={railToggleLabel}
+        onClick={() => {
+          setRail((r) => !r);
+        }}
+      >
+        <span className="rail-toggle-icon" aria-hidden="true">
+          {rail ? "»" : "«"}
+        </span>
+        {!rail && <span className="rail-toggle-label">Zbaliť menu</span>}
+      </button>
       <nav className="side-nav">
         {folders.map((folder) => {
-          const isCollapsed = collapsed[folder.id] === true;
+          // V zbalenej lište sa hlavičky priečinkov nevykresľujú vôbec (nemajú
+          // ikonu ani miesto na text), takže ani ich vlastné skladanie nesmie
+          // schovať záložky — preto sa trieda `collapsed` v tomto stave
+          // neaplikuje. Po rozbalení panela sa pôvodný stav priečinkov vráti.
+          const isCollapsed = !rail && collapsed[folder.id] === true;
           return (
             <div className={"nav-folder" + (isCollapsed ? " collapsed" : "")} key={folder.id}>
-              <button
-                type="button"
-                className="folder-head"
-                aria-expanded={!isCollapsed}
-                onClick={() => {
-                  setCollapsed((c) => ({ ...c, [folder.id]: !isCollapsed }));
-                }}
-              >
-                <span className="ftitle">{folder.label}</span>
-                <span className="folder-chev" aria-hidden="true">
-                  ⌄
-                </span>
-              </button>
+              {!rail && (
+                <button
+                  type="button"
+                  className="folder-head"
+                  aria-expanded={!isCollapsed}
+                  onClick={() => {
+                    setCollapsed((c) => ({ ...c, [folder.id]: !isCollapsed }));
+                  }}
+                >
+                  <span className="ftitle">{folder.label}</span>
+                  <span className="folder-chev" aria-hidden="true">
+                    ⌄
+                  </span>
+                </button>
+              )}
               <div className="folder-body">
                 <div className="tabs">
                   {folder.tabs.map((tab) => {
                     const badgeCount = badgeCounts?.[tab.id];
                     const status = badgeStatus?.[tab.id];
+                    // V zbalenej lište nesie bublina/prístupný názov aj stav
+                    // automatizácie — pilulka "Beží"/"Zastavené" sa tam pre
+                    // nedostatok miesta nevykresľuje, tá informácia by sa
+                    // inak stratila úplne.
+                    const railLabel =
+                      status === undefined
+                        ? tab.label
+                        : `${tab.label} — ${status === "on" ? "Beží" : "Zastavené"}`;
                     return (
                       <button
                         key={tab.id}
                         type="button"
                         className={"tab" + (tab.id === activeTabId ? " active" : "")}
                         aria-current={tab.id === activeTabId ? "page" : undefined}
+                        aria-label={rail ? railLabel : undefined}
+                        title={rail ? railLabel : undefined}
                         onClick={() => {
                           onSelectTab(tab.id);
                         }}
                       >
-                        <span className="tlabel">{tab.label}</span>
-                        {status !== undefined && (
+                        <span className="ticon" aria-hidden="true">
+                          {tab.icon}
+                        </span>
+                        {!rail && <span className="tlabel">{tab.label}</span>}
+                        {!rail && status !== undefined && (
                           // issue 185: rovnaký vizuál aj slovník ("Beží"/
                           // "Zastavené") ako `.pill` vnútri
                           // PostaUncollectedSection/OrderReminderSection —
@@ -116,7 +183,8 @@ export function Sidebar({
       </nav>
       <div className="sidefoot">
         <div className="ver">
-          verzia <Footer />
+          {rail ? null : "verzia "}
+          <Footer />
         </div>
       </div>
     </aside>

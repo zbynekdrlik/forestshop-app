@@ -3,12 +3,24 @@ import { afterEach, expect, it, vi } from "vitest";
 import { Sidebar } from "./Sidebar.js";
 
 const FOLDERS = [
-  { id: "system", label: "Systém", tabs: [{ id: "sync", label: "Sync zo Shoptetu", Component: () => null }] },
-  { id: "eshop", label: "Eshop", tabs: [{ id: "orders", label: "Na objednanie", Component: () => null }] },
+  {
+    id: "system",
+    label: "Systém",
+    tabs: [{ id: "sync", label: "Sync zo Shoptetu", icon: "🔄", Component: () => null }],
+  },
+  {
+    id: "eshop",
+    label: "Eshop",
+    tabs: [{ id: "orders", label: "Na objednanie", icon: "📦", Component: () => null }],
+  },
 ];
 
 afterEach(() => {
   cleanup();
+  // issue 190: zbalenie panela sa pamätá v `localStorage` — jsdom ho medzi
+  // testami NEVYNULUJE, takže bez tohto by jeden test prepol stav všetkým
+  // nasledujúcim.
+  window.localStorage.clear();
 });
 
 it("vykreslí presne dva priečinky s jednou záložkou každý a označí aktívnu", () => {
@@ -79,4 +91,72 @@ it("bez badgeStatus (prop vôbec chýba) sa nevykreslí žiadny stavový odznak"
 
   expect(screen.queryByTestId("nav-status-orders")).toBeNull();
   expect(screen.queryByTestId("nav-status-sync")).toBeNull();
+});
+
+// issue 190: zbalenie CELÉHO panela do úzkej lišty. Zámerne sa overuje DOM
+// dôsledok (názvy zmiznú, ikony ostanú, prístupný názov prežije), nie CSS
+// šírka — tú vitest/jsdom nevykresľuje vôbec (živú šírku overuje e2e).
+it("zbalenie panela skryje názvy záložiek aj hlavičky priečinkov, ikony ostanú", () => {
+  render(<Sidebar folders={FOLDERS} activeTabId="sync" onSelectTab={() => {}} />);
+
+  const prepinac = screen.getByTestId("sidebar-rail-toggle");
+  expect(prepinac.getAttribute("aria-expanded")).toBe("true");
+  expect(screen.getByRole("button", { name: "Systém" })).toBeTruthy();
+
+  fireEvent.click(prepinac);
+
+  expect(prepinac.getAttribute("aria-expanded")).toBe("false");
+  // Hlavičky priečinkov sa v lište nevykresľujú vôbec.
+  expect(screen.queryByRole("button", { name: "Systém" })).toBeNull();
+  // Záložka ostáva klikateľná a MÁ prístupný názov (z `aria-label`), hoci jej
+  // viditeľný text je preč — inak by tlačidlo v lište bolo bezmenné.
+  const zalozka = screen.getByRole("button", { name: "Na objednanie" });
+  expect(zalozka.textContent).toBe("📦");
+  expect(zalozka.getAttribute("title")).toBe("Na objednanie");
+});
+
+it("v zbalenom paneli nesie bublina aj stav automatizácie (pilulka sa tam nevykreslí)", () => {
+  render(
+    <Sidebar folders={FOLDERS} activeTabId="sync" onSelectTab={() => {}} badgeStatus={{ orders: "off" }} />,
+  );
+
+  fireEvent.click(screen.getByTestId("sidebar-rail-toggle"));
+
+  expect(screen.queryByTestId("nav-status-orders")).toBeNull();
+  expect(screen.getByRole("button", { name: "Na objednanie — Zastavené" }).getAttribute("title")).toBe(
+    "Na objednanie — Zastavené",
+  );
+});
+
+it("záložka sa dá prepnúť aj v zbalenom paneli", () => {
+  const onSelectTab = vi.fn();
+  render(<Sidebar folders={FOLDERS} activeTabId="sync" onSelectTab={onSelectTab} />);
+
+  fireEvent.click(screen.getByTestId("sidebar-rail-toggle"));
+  fireEvent.click(screen.getByRole("button", { name: "Na objednanie" }));
+
+  expect(onSelectTab).toHaveBeenCalledWith("orders");
+});
+
+it("voľba prežije obnovenie stránky (nové vykreslenie číta zapamätaný stav)", () => {
+  const prve = render(<Sidebar folders={FOLDERS} activeTabId="sync" onSelectTab={() => {}} />);
+  fireEvent.click(screen.getByTestId("sidebar-rail-toggle"));
+  prve.unmount();
+
+  render(<Sidebar folders={FOLDERS} activeTabId="sync" onSelectTab={() => {}} />);
+
+  expect(screen.getByTestId("sidebar-rail-toggle").getAttribute("aria-expanded")).toBe("false");
+  expect(screen.queryByRole("button", { name: "Systém" })).toBeNull();
+});
+
+// Priečinok zbalený PRED zbalením panela nesmie v lište schovať svoje ikony —
+// v tom stave sa hlavičky priečinkov nevykresľujú, takže by sa k záložkám už
+// nedalo dostať.
+it("priečinok zbalený pred zbalením panela nechá svoje ikony v lište viditeľné", () => {
+  render(<Sidebar folders={FOLDERS} activeTabId="sync" onSelectTab={() => {}} />);
+
+  fireEvent.click(screen.getByRole("button", { name: "Systém" }));
+  fireEvent.click(screen.getByTestId("sidebar-rail-toggle"));
+
+  expect(screen.getByRole("button", { name: "Sync zo Shoptetu" })).toBeTruthy();
 });

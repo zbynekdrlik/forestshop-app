@@ -15,7 +15,7 @@ const E2E_NAV_EMAIL = "e2e-nav@forestshop.sk";
 // tretí priečinok "Automatizácie" s tromi hotovými obrazovkami, dovtedy len v
 // `HIDDEN_TABS` bez odkazu v menu — tento test teraz overuje VŠETKÝCH PÄŤ
 // záložiek v troch priečinkoch.
-test("ľavé menu má tri priečinky (Systém/Eshop/Automatizácie) s piatimi záložkami, klik prepne obrazovku, konzola je čistá", async ({
+test("ľavé menu má tri priečinky (Systém/Eshop/Automatizácie) s piatimi záložkami, klik prepne obrazovku, panel sa zbalí do lišty a stav si pamätá, konzola je čistá", async ({
   page,
 }) => {
   const chyby: string[] = [];
@@ -92,6 +92,44 @@ test("ľavé menu má tri priečinky (Systém/Eshop/Automatizácie) s piatimi z�
   // "Nedostupné tovary" nemá koncept zapnuté/vypnuté vôbec (je len na
   // požiadanie) — žiadny stavový odznak v menu, ani "Zastavené".
   await expect(page.getByTestId("nav-status-nedostupne")).toHaveCount(0);
+
+  // issue 190: zbalenie panela do úzkej lišty. Zámerne je to SÚČASŤ tohto
+  // testu, nie samostatný test — každý ďalší test v tomto súbore by znamenal
+  // ďalšie prihlásenie na zdieľanom `MAX_ATTEMPTS=10` rozpočte
+  // (`login-rate-limit.ts`, viď komentár pri `E2E_NAV_EMAIL` vyššie);
+  // `page.reload()` nižšie relácia prežije, takže tu žiadne pribúda.
+  const panel = page.locator(".sidebar");
+  const obsah = page.locator(".main");
+  const prepinac = page.getByTestId("sidebar-rail-toggle");
+  const panelRozbaleny = (await panel.boundingBox())?.width ?? 0;
+  const obsahRozbaleny = (await obsah.boundingBox())?.width ?? 0;
+
+  await prepinac.click();
+  await expect(panel).toHaveClass(/sidebar-rail/);
+
+  // Panel je naozaj užší a obsah vpravo sa do uvoľneného miesta roztiahol.
+  const panelZbaleny = (await panel.boundingBox())?.width ?? 0;
+  const obsahZbaleny = (await obsah.boundingBox())?.width ?? 0;
+  expect(panelZbaleny).toBeLessThan(panelRozbaleny);
+  expect(obsahZbaleny).toBeGreaterThan(obsahRozbaleny);
+
+  // Hlavičky priečinkov zmiznú, ikony všetkých piatich modulov ostanú.
+  await expect(page.getByRole("button", { name: "Systém" })).toHaveCount(0);
+  await expect(page.locator(".side-nav .tab")).toHaveCount(5);
+  // Názov sa v lište ukáže bublinou pri prejdení myšou.
+  await expect(page.getByRole("button", { name: "Na objednanie" })).toHaveAttribute(
+    "title",
+    "Na objednanie",
+  );
+
+  // Voľba prežije obnovenie stránky.
+  await page.reload();
+  await expect(page.locator(".sidebar")).toHaveClass(/sidebar-rail/);
+
+  // Vrátiť do pôvodného stavu — panel sa rozbalí a názvy sa vrátia.
+  await page.getByTestId("sidebar-rail-toggle").click();
+  await expect(page.locator(".sidebar")).not.toHaveClass(/sidebar-rail/);
+  await expect(page.getByRole("button", { name: "Systém" })).toBeVisible();
 
   expect(chyby).toEqual([]);
 });
