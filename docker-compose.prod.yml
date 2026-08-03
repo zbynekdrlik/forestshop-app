@@ -17,6 +17,15 @@ services:
       # (rovnaký dôvod ako v docker-compose.yml pre lokálny vývoj).
       PGDATA: /var/lib/postgresql/data
     volumes:
+      # Rovnaký dôvod ako v `docker-compose.yml` (issue 209): obraz deklaruje
+      # `/var/lib/postgresql` ako VOLUME, `pgdata` nižšie pokrýva len jeho
+      # podpriečinok `data`, takže bez tohto riadku docker pri každom
+      # prestavaní kontajnera zanechá ďalšiu bezmennú priehradku. Zmerané na
+      # dev2: presne jedna taká 4 KB priehradka bola naša, zvyšok patril inému
+      # projektu. Skutočné dáta zostávajú v `pgdata` — `pgparent` je prázdny
+      # obal a jeho pridanie NEPRESÚVA existujúcu databázu (overené lokálne
+      # na odhodenom kontajneri: zápis pred zmenou prežil prestavanie).
+      - pgparent:/var/lib/postgresql
       - pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U forestshop"]
@@ -132,6 +141,7 @@ services:
     logging: *default-logging
 
 volumes:
+  pgparent:
   pgdata:
   catalog-raw:
   orders-raw:
