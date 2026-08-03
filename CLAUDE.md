@@ -84,6 +84,7 @@ Per-area rules live in `.claude/rules/<area>.md` with `paths:` frontmatter.
 - citlivé hodnoty (heslá/tokeny/hash= sa nikdy nepíšu do repa) → `.claude/rules/sensitive-values.md`
 - frontend dizajn (vizuálne tokeny, nav registry, user-menu, e2e login rate-limit) → `.claude/rules/frontend-design.md`
 - HTTP trasy (Hono, poradie registrácie literal-vs-`:param`) → `.claude/rules/http-routes.md`
+- prihlásenie a heslá (dva tvary odtlačku, prepis pri prihlásení) → `.claude/rules/auth.md`
 - spätný zápis do Shoptetu (F5 — Playwright import, reálne admin cesty, Alpine chromium) → `.claude/rules/shoptet-writeback.md`
 - Nevyzdvihnuté zásielky (Pošta SK — enabled vs. run-now, coalesce, advisory zámok) → `.claude/rules/posta-uncollected.md`
 - Pripomienky objednávok (AI klasifikácia poznámky, terminálna rezolúcia, override→job_run relocate) → `.claude/rules/order-reminder.md`
