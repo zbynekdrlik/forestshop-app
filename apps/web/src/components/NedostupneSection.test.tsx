@@ -191,6 +191,12 @@ it("klik vnútri dialógu ho nezavrie", async () => {
   expect(screen.getByTestId("nedostupne-preview")).not.toBeNull();
 });
 
+// issue 191, návrat fokusu po zavretí sa overuje LEN e2e testom
+// (`tests/e2e/nedostupne.spec.ts`): scenár stojí na tom, že prehliadač zhodí
+// fokus zo spúšťacieho tlačidla vo chvíli, keď sa počas načítania náhľadu stane
+// `disabled` — jsdom to nerobí (ani `blur()`, ani fokus na iný prvok to tu
+// nenapodobní), takže unit test by prešiel aj s pokazeným kódom.
+
 it("dialóg je označený ako modálny a nesie svoj vlastný nadpis", async () => {
   await otvorNahlad();
 

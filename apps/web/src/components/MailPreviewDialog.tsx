@@ -1,4 +1,4 @@
-import { useEffect, useRef, type JSX, type ReactNode } from "react";
+import { useEffect, useRef, type JSX, type ReactNode, type RefObject } from "react";
 
 // issue 191: náhľad e-mailu pred odoslaním sa už nerozbaľuje na spodku
 // stránky (majiteľ: "rozbaluje sa na spodku to je zle") — otvorí sa ako
@@ -20,6 +20,7 @@ export function MailPreviewDialog({
   confirmDisabled,
   onConfirm,
   onClose,
+  returnFocusRef,
   children,
 }: {
   readonly testId: string;
@@ -31,6 +32,7 @@ export function MailPreviewDialog({
   readonly confirmDisabled: boolean;
   readonly onConfirm: () => void;
   readonly onClose: () => void;
+  readonly returnFocusRef?: RefObject<HTMLElement | null>;
   readonly children?: ReactNode;
 }): JSX.Element {
   const panelRef = useRef<HTMLDivElement | null>(null);
@@ -49,13 +51,20 @@ export function MailPreviewDialog({
 
   // Fokus do dialógu pri otvorení a späť na pôvodný prvok pri zavretí — bez
   // toho by čítačka obrazovky aj klávesnica ostali v zozname za prekryvom.
+  //
+  // `document.activeElement` v momente OTVORENIA na to nestačí: náhľad sa
+  // načítava zo servera a spúšťacie tlačidlo je počas načítania `disabled` —
+  // prehliadač z neho fokus zhodí na `<body>`, takže dialóg by mal čo vracať
+  // až príliš neskoro (overené naživo na produkcii, issue 191). Volajúci preto
+  // môže odovzdať `returnFocusRef` so spúšťacím prvkom zapamätaným pri kliknutí.
   useEffect(() => {
     const previous = document.activeElement;
     panelRef.current?.focus();
     return () => {
-      if (previous instanceof HTMLElement) previous.focus();
+      const target = returnFocusRef?.current ?? previous;
+      if (target instanceof HTMLElement && target.isConnected) target.focus();
     };
-  }, []);
+  }, [returnFocusRef]);
 
   // Pozadie sa pod otvoreným dialógom neposúva — inak by koliesko myši
   // skrolovalo zoznam za ním namiesto obsahu náhľadu.
