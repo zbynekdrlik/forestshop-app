@@ -23,6 +23,7 @@ import {
   orderNoteWritebackJob,
   orderReminderJob,
   supplierStockJob,
+  restockJob,
   postaUncollectedJob,
   pruneRawExportsJob,
   pruneRawOrdersJob,
@@ -31,6 +32,7 @@ import {
 } from "./modules/scheduler/jobs.js";
 import { fetchSupplierPage } from "./modules/supplier-stock/page-fetcher.js";
 import { runSupplierStock } from "./modules/supplier-stock/run.js";
+import { runRestock } from "./modules/restock/run.js";
 import { startScheduler } from "./modules/scheduler/scheduler.js";
 import { orderNoteWritebackConfigFromBaseUrl, shoptetImportConfigFromBaseUrl } from "./modules/shoptet-writeback/config.js";
 import { runOrderNoteWritebackJob } from "./modules/shoptet-writeback/run-order-note-writeback.js";
@@ -135,6 +137,19 @@ const runShoptetWritebackFn =
           now,
         );
 
+// issue 213: prepínanie vypredaných produktov späť na "Skladom" — zdieľa TIE
+// ISTÉ prihlasovacie údaje ako #122/#123. Bez nich sa job vôbec nezostaví a
+// `restockJob` zapíše zlyhanie namiesto tichého preskočenia.
+const runRestockFn =
+  shoptetAdminUser === undefined || shoptetAdminPassword === undefined
+    ? undefined
+    : (db2: typeof db, now: Date) =>
+        runRestock({
+          db: db2,
+          now,
+          config: shoptetImportConfigFromBaseUrl(env.SHOPTET_ADMIN_BASE_URL, shoptetAdminUser, shoptetAdminPassword),
+        });
+
 // issue 123: spätný zápis appkinej poznámky k objednávke — zdieľa TIE ISTÉ
 // nepovinné premenné ako #122 vyššie (žiadne nové), len iná Playwright
 // automatizácia (per-objednávka, nie hromadný CSV import).
@@ -215,6 +230,7 @@ const scheduler = startScheduler(db, [
   postaUncollectedJob((db2, now) => runPostaUncollected({ db: db2, now, ...postaUncollectedDeps })),
   orderReminderJob((db2, now) => runOrderReminder({ db: db2, now, ...orderReminderDeps })),
   supplierStockJob((db2, now) => runSupplierStock({ db: db2, now, fetchPage: fetchSupplierPage })),
+  restockJob(runRestockFn),
 ]);
 
 // `@hono/node-server`'s `serveStatic` prints its OWN `console.error` on every

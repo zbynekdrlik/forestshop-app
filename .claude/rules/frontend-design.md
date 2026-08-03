@@ -663,3 +663,31 @@ paths:
   pixel** (paired meranie na 40 reálnych riadkoch, priemer aj maximum 0px) —
   darcovský stĺpec (postup issue 107/111/127) by naopak zhoršil iný stĺpec.
   Než začneš hľadať darcu, over, či sa obsah nedá skrátiť.
+- **`display: inline-flex` na malej pilulke/odznaku spraví z jej TEXTU flex
+  položku, ktorá sa zmrští na NULOVÚ šírku obsahu — zostane viditeľné len
+  odsadenie a `text-overflow: ellipsis` dorobí zvyšok.** Issue 214 (majiteľ:
+  *"teraz vobec nie je citatelne to spolu produkty"*): `.qty-total-chip` mala
+  naživo `clientWidth 16 px` pri `scrollWidth 49 px` — teda presne svoje
+  odsadenie a nič viac — a to na KAŽDEJ šírke okna, aj 1920 px. Fix:
+  `inline-block` + `width: max-content` (+ `max-width: 100%` a orezanie
+  ponechané ako poistka pre budúci dlhší obsah). Toto je ŠTVRTÝ tvar tej istej
+  triedy chýb po issue 63/127/204 — a jediný, ktorý sa NEDAL nájsť kontrolou
+  „pretŕča prvok svoju bunku?", lebo **orezaný prvok svoju bunku nikdy
+  nepretečie**. Regresná kontrola preto meria `element.scrollWidth >
+  element.clientWidth` na SAMOTNOM prvku, nie len jeho polohu voči bunke
+  (`orders-layout.spec.ts`, kontrola vedľa `staleOdznaky`).
+- **V najužšom stĺpci tabuľky je odsadenie bunky väčšie než jej obsah — rátaj s
+  ním PRED hľadaním darcu percent.** Issue 214: `.col-qty` má 4 %, čo je pri
+  1280 px okna 41 px, z toho bežné `--fs-space-3` odsadenie zožralo 26 px a na
+  obsah zostalo 15 px. Zúženie odsadenia LEN pre tento stĺpec vyriešilo problém
+  bez siahnutia na akýkoľvek iný stĺpec — lacnejšie než presúvanie percent
+  (rovnaká úvaha ako „skrátenie textu" pri issue 204).
+- **Zmerané naživo (issue 214, 42 reálnych riadkov): stĺpec s odkazom dodávateľa
+  ani stĺpec s číslom objednávky NEMAJÚ rezervu, hoci opticky vyzerajú prázdne.**
+  `col-supplier` −1,2 p. b. zdvihlo najvyšší riadok pri 1280 px zo 119 px na
+  162 px (potvrdzuje zistenie issue 127, ktoré medzitým mohlo zastarať);
+  `col-order` −1,2 p. b. orezalo `.ord-admin-link` na VŠETKÝCH 42 riadkoch pri
+  1280 px (`white-space: nowrap` + ellipsis, takže žiadna bunka nepretiekla a
+  kontrola cez `td.scrollWidth` to nezachytila — treba merať orezanie na
+  samotnom odkaze). Pri ďalšom hľadaní darcu preto meraj OREZANIE obsahu darcu,
+  nielen výšku riadkov.

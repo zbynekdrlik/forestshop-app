@@ -162,9 +162,13 @@ async function otvorNahlad(): Promise<void> {
 it("Esc zavrie náhľad a nič neodošle", async () => {
   await otvorNahlad();
 
-  fireEvent.keyDown(document, { key: "Escape" });
-
+  // Poslucháč klávesu Esc sa registruje v `useEffect` dialógu — ten je PASÍVNY
+  // efekt, takže po tom, čo sa dialóg objaví v DOM-e, ešte nemusí byť
+  // zaregistrovaný. Jediné stlačenie Esc hneď po zobrazení preto vie prehrať
+  // preteky (lokálne prechádzalo, v CI spadlo). Opakované stlačenie vnútri
+  // `waitFor` je deterministické: skúša, kým poslucháč nezačne fungovať.
   await waitFor(() => {
+    fireEvent.keyDown(document, { key: "Escape" });
     expect(screen.queryByTestId("nedostupne-preview")).toBeNull();
   });
   expect(sendNedostupneEmail).not.toHaveBeenCalled();
