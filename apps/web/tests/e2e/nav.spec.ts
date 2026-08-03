@@ -15,7 +15,7 @@ const E2E_NAV_EMAIL = "e2e-nav@forestshop.sk";
 // tretí priečinok "Automatizácie" s tromi hotovými obrazovkami, dovtedy len v
 // `HIDDEN_TABS` bez odkazu v menu — tento test teraz overuje VŠETKÝCH PÄŤ
 // záložiek v troch priečinkoch.
-test("ľavé menu má tri priečinky (Systém/Eshop/Automatizácie) so šiestimi záložkami, klik prepne obrazovku, panel sa zbalí do lišty a stav si pamätá, konzola je čistá", async ({
+test("ľavé menu má tri priečinky (Systém/Eshop/Automatizácie) s deviatimi záložkami, klik prepne obrazovku, panel sa zbalí do lišty a stav si pamätá, konzola je čistá", async ({
   page,
 }) => {
   const chyby: string[] = [];
@@ -37,7 +37,7 @@ test("ľavé menu má tri priečinky (Systém/Eshop/Automatizácie) so šiestimi
   await expect(page.getByRole("button", { name: "Automatizácie" })).toBeVisible();
 
   // Presne šesť záložiek v CELOM menu.
-  await expect(page.locator(".side-nav .tab")).toHaveCount(7);
+  await expect(page.locator(".side-nav .tab")).toHaveCount(9);
   await expect(page.getByRole("button", { name: "Sync zo Shoptetu" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Texty e-mailov" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Na objednanie" })).toBeVisible();
@@ -116,7 +116,7 @@ test("ľavé menu má tri priečinky (Systém/Eshop/Automatizácie) so šiestimi
 
   // Hlavičky priečinkov zmiznú, ikony všetkých šiestich modulov ostanú.
   await expect(page.getByRole("button", { name: "Systém" })).toHaveCount(0);
-  await expect(page.locator(".side-nav .tab")).toHaveCount(7);
+  await expect(page.locator(".side-nav .tab")).toHaveCount(9);
   // Názov sa v lište ukáže bublinou pri prejdení myšou.
   await expect(page.getByRole("button", { name: "Na objednanie" })).toHaveAttribute(
     "title",
