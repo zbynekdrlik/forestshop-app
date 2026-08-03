@@ -1,6 +1,7 @@
 import type { ComponentType } from "react";
 import type { Me } from "./api.js";
 import { CatalogPage } from "./components/CatalogPage.js";
+import { MailLogSection } from "./components/MailLogSection.js";
 import { MailTemplatesSection } from "./components/MailTemplatesSection.js";
 import { NedostupneSection } from "./components/NedostupneSection.js";
 import { OrderReminderSection } from "./components/OrderReminderSection.js";
@@ -80,9 +81,14 @@ export const NAV: readonly NavFolder[] = [
     label: "Automatizácie",
     // Len tie dve veci, ktoré SKUTOČNE bežia na plán a dajú sa zapnúť/vypnúť
     // (issue 195). Poradie podľa dôležitosti (issue 185, zadanie majiteľa).
+    // issue 193: "Odoslané e-maily" patrí SEM — je to prehľad toho, čo
+    // automatizácie poslali (majiteľ: "v automatizaciach dufam su vsetky
+    // potrebne statistiky komu sa poslal mail"). `wide: true` ako pri
+    // ostatných hustých pracovných tabuľkách.
     tabs: [
       { id: "posta-uncollected", label: "Nevyzdvihnuté zásielky", icon: "📮", Component: PostaUncollectedSection },
       { id: "order-reminder", label: "Pripomienky objednávok", icon: "⏰", Component: OrderReminderSection },
+      { id: "mail-log", label: "Odoslané e-maily", icon: "📨", Component: MailLogSection, wide: true },
     ],
   },
 ];

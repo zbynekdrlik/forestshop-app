@@ -3,6 +3,8 @@ import type { Database } from "../../db/client.js";
 import { log } from "../../logger.js";
 import { orderLines, orders, products, variants } from "../../db/schema.js";
 import type { MailTransport } from "../mail/transport.js";
+import { DUPLICATE_REASON } from "../mail-log/queries.js";
+import { recordSkippedMail, sendLoggedMail, type MailLogContext } from "../mail-log/service.js";
 import { resolveTemplate } from "../mail-templates/store.js";
 import { listOpenStatusNames } from "../orders/open-statuses.js";
 import { NEDOSTUPNE_SEND_LOCK_KEY, TYPE_ALTERNATIVE, type NedostupneEmailType } from "./constants.js";
@@ -87,6 +89,10 @@ export interface SendNedostupneOptions {
   readonly emailType: NedostupneEmailType;
   readonly mailTransport: MailTransport | undefined;
   readonly bccEmail: string | undefined;
+  // issue 193: kto tlačidlo stlačil — táto cesta je VŽDY ručná akcia
+  // zamestnanca (žiadny naplánovaný beh), takže sa zapisuje do knihy
+  // odoslaných e-mailov ako `manual` s jeho menom.
+  readonly actorUserId?: string;
 }
 
 /**
@@ -117,27 +123,58 @@ export async function sendNedostupneEmail(options: SendNedostupneOptions): Promi
 }
 
 async function sendNedostupneEmailLocked(options: SendNedostupneOptions): Promise<SendNedostupneResult> {
-  const { db, now, orderCode, variantCode, emailType, mailTransport, bccEmail } = options;
+  const { db, now, orderCode, variantCode, emailType, mailTransport, bccEmail, actorUserId } = options;
+
+  // issue 193: každý pokus (aj neúspešný) sa zapisuje do spoločnej knihy
+  // odoslaných e-mailov — `mail-log/service.ts`.
+  const logCtx: MailLogContext = {
+    source: "nedostupne",
+    trigger: "manual",
+    templateKey: emailType === TYPE_ALTERNATIVE ? "nedostupne_alternativa" : "nedostupne",
+    orderCode,
+    variantCode,
+    ...(actorUserId === undefined ? {} : { actorUserId }),
+  };
 
   const ctx = await findNedostupneContext(db, orderCode, variantCode);
   if (ctx === null) return { ok: false, code: "not_found" };
 
   const already = await hasSentNedostupne(db, orderCode, variantCode, emailType);
-  if (already) return { ok: false, code: "already_sent" };
+  if (already) {
+    // Zablokovaná duplicita je to, čo ticket 193 žiada mať VIDNO v prehľade —
+    // spoločný `DUPLICATE_REASON`, aby súhrn "zabránené duplicity" sedel.
+    await recordSkippedMail(db, now, logCtx, ctx.email.trim(), DUPLICATE_REASON);
+    return { ok: false, code: "already_sent" };
+  }
 
   const email = ctx.email.trim();
-  if (email === "") return { ok: false, code: "no_email" };
+  if (email === "") {
+    await recordSkippedMail(db, now, logCtx, "", "objednávka nemá e-mailovú adresu zákazníka");
+    return { ok: false, code: "no_email" };
+  }
 
   const bccMissing = bccEmail === undefined || bccEmail.trim() === "";
-  if (bccMissing) return { ok: false, code: "not_configured", reason: "chýba adresa pre skrytú kópiu majiteľovi (NEDOSTUPNE_BCC_EMAIL)" };
-  if (mailTransport === undefined) return { ok: false, code: "not_configured", reason: "odosielanie e-mailov nie je nakonfigurované (chýba MAIL_HOST)" };
+  if (bccMissing) {
+    const reason = "chýba adresa pre skrytú kópiu majiteľovi (NEDOSTUPNE_BCC_EMAIL)";
+    await recordSkippedMail(db, now, logCtx, email, reason);
+    return { ok: false, code: "not_configured", reason };
+  }
+  if (mailTransport === undefined) {
+    const reason = "odosielanie e-mailov nie je nakonfigurované (chýba MAIL_HOST)";
+    await recordSkippedMail(db, now, logCtx, email, reason);
+    return { ok: false, code: "not_configured", reason };
+  }
 
   const built = await buildEmailForType(db, ctx, emailType);
-  try {
-    await mailTransport({ to: email, subject: built.subject, text: built.text, html: built.html, bcc: bccEmail });
-  } catch (error) {
-    const rawErrorMessage = error instanceof Error ? error.message : String(error);
-    log.error({ orderCode, variantCode, emailType, rawErrorMessage }, "Nedostupné tovary: odoslanie e-mailu zlyhalo");
+  const sendResult = await sendLoggedMail(
+    db,
+    mailTransport,
+    { to: email, subject: built.subject, text: built.text, html: built.html, bcc: bccEmail },
+    now,
+    logCtx,
+  );
+  if (!sendResult.ok) {
+    log.error({ orderCode, variantCode, emailType, rawErrorMessage: sendResult.rawErrorMessage }, "Nedostupné tovary: odoslanie e-mailu zlyhalo");
     return { ok: false, code: "send_failed" };
   }
   // Zápis IHNEĎ po odoslaní (rovnaká disciplína ako #172/#173).

@@ -37,7 +37,7 @@ test("ľavé menu má tri priečinky (Systém/Eshop/Automatizácie) so šiestimi
   await expect(page.getByRole("button", { name: "Automatizácie" })).toBeVisible();
 
   // Presne šesť záložiek v CELOM menu.
-  await expect(page.locator(".side-nav .tab")).toHaveCount(6);
+  await expect(page.locator(".side-nav .tab")).toHaveCount(7);
   await expect(page.getByRole("button", { name: "Sync zo Shoptetu" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Texty e-mailov" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Na objednanie" })).toBeVisible();
@@ -116,7 +116,7 @@ test("ľavé menu má tri priečinky (Systém/Eshop/Automatizácie) so šiestimi
 
   // Hlavičky priečinkov zmiznú, ikony všetkých šiestich modulov ostanú.
   await expect(page.getByRole("button", { name: "Systém" })).toHaveCount(0);
-  await expect(page.locator(".side-nav .tab")).toHaveCount(6);
+  await expect(page.locator(".side-nav .tab")).toHaveCount(7);
   // Názov sa v lište ukáže bublinou pri prejdení myšou.
   await expect(page.getByRole("button", { name: "Na objednanie" })).toHaveAttribute(
     "title",

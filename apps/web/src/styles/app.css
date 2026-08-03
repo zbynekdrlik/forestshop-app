@@ -2016,3 +2016,90 @@ tr:last-child td {
 .mt-history h4 {
   margin: 0 0 var(--fs-space-2);
 }
+
+/* issue 193: "Odoslané e-maily" — prehľad všetkého, čo appka poslala v mene
+   obchodu. Iba `--fs-*` tokeny (`.claude/rules/frontend-design.md`). */
+.ml-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--fs-space-2);
+  margin: var(--fs-space-4) 0;
+}
+.ml-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--fs-space-1) var(--fs-space-3);
+  font-size: var(--fs-text-sm);
+  font-weight: var(--fs-weight-medium);
+  color: var(--fs-ink);
+  background: var(--fs-surface-alt);
+  border: 1px solid var(--fs-border);
+  border-radius: 999px;
+}
+.ml-chip-sent {
+  color: var(--fs-brand);
+}
+.ml-chip-failed {
+  color: var(--fs-danger);
+}
+.ml-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--fs-space-4);
+  align-items: end;
+  margin-bottom: var(--fs-space-4);
+}
+.ml-filters label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--fs-space-1);
+  font-size: var(--fs-text-sm);
+  color: var(--fs-ink-muted);
+}
+/* Vlastný vodorovný posuv tabuľky, nikdy posuv celej stránky — rovnaký vzor
+   ako `.orders-table-wrap`. */
+.ml-table-wrap {
+  overflow-x: auto;
+}
+.ml-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.ml-table th,
+.ml-table td {
+  padding: var(--fs-space-2) var(--fs-space-3);
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--fs-border);
+}
+.ml-table td {
+  overflow-wrap: break-word;
+}
+.ml-when,
+.ml-recipient {
+  white-space: nowrap;
+}
+/* Doplnkové údaje (kto spustil, poradie upozornenia, dôvod) idú POD hlavný
+   údaj na vlastný riadok — nikdy inline za ním, aby sa nezopakovalo
+   pretečenie do susedného stĺpca z issue 204. */
+.ml-trigger,
+.ml-seq,
+.ml-reason {
+  display: block;
+  margin-top: var(--fs-space-1);
+  font-size: var(--fs-text-xs);
+  color: var(--fs-ink-faint);
+}
+.ml-status {
+  font-weight: var(--fs-weight-medium);
+  white-space: nowrap;
+}
+.ml-status-sent {
+  color: var(--fs-brand);
+}
+.ml-status-failed {
+  color: var(--fs-danger);
+}
+.ml-status-skipped {
+  color: var(--fs-ink-muted);
+}

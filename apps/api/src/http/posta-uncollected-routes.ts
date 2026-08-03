@@ -37,14 +37,16 @@ function isRunResult(detail: unknown): detail is PostaUncollectedRunResult {
  * rovnaký tvar riadku priamo, aby `GET /api/posta-uncollected` videl
  * manuálny beh HNEĎ, nielen po ďalšom pravidelnom ticku.
  */
-async function runAndRecord(db: Database, deps: PostaUncollectedRunDeps, now: Date): Promise<PostaUncollectedRunResult> {
+async function runAndRecord(db: Database, deps: PostaUncollectedRunDeps, now: Date, actorUserId: string): Promise<PostaUncollectedRunResult> {
   const [inserted] = await db
     .insert(jobRuns)
     .values({ jobName: POSTA_UNCOLLECTED_JOB_NAME, startedAt: now, status: "running" })
     .returning({ id: jobRuns.id });
   const runId = inserted?.id;
   try {
-    const result = await runPostaUncollected({ db, now, ...deps });
+    // issue 193: "Spustiť teraz" je RUČNÁ akcia — kniha odoslaných e-mailov
+    // to musí odlíšiť od nočného behu (`trigger`), aj s menom zamestnanca.
+    const result = await runPostaUncollected({ db, now, ...deps, trigger: "manual", actorUserId });
     if (runId !== undefined) {
       await db.update(jobRuns).set({ status: "success", finishedAt: new Date(), detail: result }).where(eq(jobRuns.id, runId));
     }
@@ -125,7 +127,7 @@ export function registerPostaUncollectedRoutes(app: Hono<AppBindings>, db: Datab
       const now = new Date();
       let result: PostaUncollectedRunResult;
       try {
-        result = await runAndRecord(db, deps, now);
+        result = await runAndRecord(db, deps, now, user.userId);
       } catch {
         return c.json({ error: "Beh zlyhal — skúste to znova o chvíľu." }, 502);
       }

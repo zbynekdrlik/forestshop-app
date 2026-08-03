@@ -1,6 +1,7 @@
 import type { Database } from "../../db/client.js";
 import { log } from "../../logger.js";
 import type { MailTransport } from "../mail/transport.js";
+import { recordSkippedMail, sendLoggedMail, type MailLogContext } from "../mail-log/service.js";
 import { buildShoptetAdminOrderUrl } from "../orders/queries.js";
 import type { ClassifyClient } from "./classify-client.js";
 import { ORDER_REMINDER_RUN_LOCK_KEY } from "./constants.js";
@@ -67,6 +68,10 @@ export interface RunOrderReminderOptions {
   readonly mailTransport: MailTransport | undefined;
   readonly bccEmail: string | undefined;
   readonly adminBaseUrl: string;
+  // issue 193: kto beh vyvolal (plánovač vs. "Spustiť teraz"/ručná akcia) —
+  // zapisuje sa do knihy odoslaných e-mailov. Predvolene `scheduled`.
+  readonly trigger?: "scheduled" | "manual";
+  readonly actorUserId?: string;
 }
 
 function toRow(order: ReminderEligibleOrder, itemLabels: ReadonlyMap<string, string>, adminBaseUrl: string, now: Date): OrderReminderRow {
@@ -125,6 +130,17 @@ async function runOrderReminderLocked(options: RunOrderReminderOptions): Promise
   // Šablóna sa načíta RAZ pred cyklom (issue 192) — jeden beh smie poslať
   // desiatky e-mailov a znenie sa počas neho meniť nemá.
   const reminderTemplate = await resolveTemplate(db, "order_reminder");
+
+  // issue 193: kontext pre spoločnú knihu odoslaných e-mailov.
+  const trigger = options.trigger ?? "scheduled";
+  const actorUserId = options.actorUserId;
+  const logCtxFor = (orderCode: string): MailLogContext => ({
+    source: "order_reminder",
+    trigger,
+    templateKey: "order_reminder",
+    orderCode,
+    ...(actorUserId === undefined ? {} : { actorUserId }),
+  });
 
   for (const order of candidates) {
     const fp = fingerprint(order);
@@ -186,6 +202,10 @@ async function runOrderReminderLocked(options: RunOrderReminderOptions): Promise
     } catch (error) {
       const rawErrorMessage = error instanceof Error ? error.message : String(error);
       log.error({ orderCode: order.externalOrderId, rawErrorMessage }, "Pripomienky objednávok: AI klasifikácia zlyhala");
+      // issue 193: zlyhaná klasifikácia je per-objednávkový, zriedkavý jav —
+      // zapisuje sa do knihy (na rozdiel od chýbajúceho nastavenia nižšie,
+      // ktoré je pre celý beh spoločné a zapíše sa raz).
+      await recordSkippedMail(db, now, logCtxFor(order.externalOrderId), email, "AI klasifikácia poznámky zlyhala — skúsi sa znova nabudúce");
       pending.push({ ...toRow(order, itemLabels, adminBaseUrl, now), reason: "AI klasifikácia zlyhala — skúsi sa znova nabudúce" });
       continue;
     }
@@ -198,18 +218,39 @@ async function runOrderReminderLocked(options: RunOrderReminderOptions): Promise
     }
 
     const built = buildReminderEmail(reminderTemplate, order.customerName, order.externalOrderId);
-    try {
-      await mailTransport({ to: email, subject: built.subject, text: built.text, html: built.html, bcc: bccEmail });
+    // issue 193: `sendLoggedMail` si sám zapíše výsledok do knihy odoslaných
+    // e-mailov a zlyhanie vráti ako `ok: false` namiesto výnimky — správanie
+    // oboch vetiev ostáva presne také, aké bolo v pôvodnom `try/catch`.
+    const sendResult = await sendLoggedMail(
+      db,
+      mailTransport,
+      { to: email, subject: built.subject, text: built.text, html: built.html, bcc: bccEmail },
+      now,
+      logCtxFor(order.externalOrderId),
+    );
+    if (sendResult.ok) {
       // Zápis IHNEĎ po odoslaní — pád appky neskôr v behu nesmie stratiť
       // dôkaz o už odoslanom e-maile (rovnaká disciplína ako #172).
       await upsertOrderReminderState(db, { orderCode: order.externalOrderId, fingerprint: fp, resolution: "emailed", resolvedBy: "ai", resolvedAt: now }, now);
       emailedNow += 1;
       emailed.push(resolvedRow(order, "emailed", "ai", now));
-    } catch (error) {
-      const rawErrorMessage = error instanceof Error ? error.message : String(error);
-      log.error({ orderCode: order.externalOrderId, rawErrorMessage }, "Pripomienky objednávok: odoslanie e-mailu zlyhalo");
+    } else {
+      log.error({ orderCode: order.externalOrderId, rawErrorMessage: sendResult.rawErrorMessage }, "Pripomienky objednávok: odoslanie e-mailu zlyhalo");
       pending.push({ ...toRow(order, itemLabels, adminBaseUrl, now), reason: "odoslanie e-mailu zlyhalo — skúsi sa znova nabudúce" });
     }
+  }
+
+  // issue 193: chýbajúce nastavenie (AI/BCC/SMTP) blokuje CELÝ beh naraz —
+  // zapíše sa preto JEDEN súhrnný riadok s počtom dotknutých objednávok, nie
+  // riadok na každú z nich (inak by jedna chýbajúca premenná prostredia
+  // zaplavila knihu desiatkami zhodných riadkov).
+  const configBlocked = pending.filter((p) => p.reason !== "odoslanie e-mailu zlyhalo — skúsi sa znova nabudúce" && p.reason !== "AI klasifikácia zlyhala — skúsi sa znova nabudúce");
+  if (configBlocked.length > 0) {
+    // Dôvod je ZÁMERNE bez počtu objednávok — dedup okno v `recordSkippedMail`
+    // porovnáva presný text, takže meniace sa číslo by ho obišlo a riadok by
+    // pribudol pri každom behu.
+    const reason = configBlocked[0]?.reason ?? "chýbajúce nastavenie";
+    await recordSkippedMail(db, now, { source: "order_reminder", trigger, templateKey: "order_reminder" }, "", reason);
   }
 
   const prunedCount = await pruneOrderReminderState(db, eligible.map((o) => o.externalOrderId));
@@ -302,11 +343,23 @@ async function runOrderReminderOverrideLocked(options: RunOrderReminderOverrideO
   if (mailTransport === undefined) return { ok: false, code: "not_configured", reason: "odosielanie e-mailov nie je nakonfigurované (chýba MAIL_HOST)" };
 
   const built = buildReminderEmail(await resolveTemplate(db, "order_reminder"), order.customerName, orderCode);
-  try {
-    await mailTransport({ to: email, subject: built.subject, text: built.text, html: built.html, bcc: bccEmail });
-  } catch (error) {
-    const rawErrorMessage = error instanceof Error ? error.message : String(error);
-    log.error({ orderCode, rawErrorMessage }, "Pripomienky objednávok: ručné odoslanie zlyhalo");
+  // issue 193: ručné odoslanie sa zapisuje s menom zamestnanca, ktorý ho
+  // stlačil (`trigger: "manual"`), nie ako naplánovaný beh.
+  const sendResult = await sendLoggedMail(
+    db,
+    mailTransport,
+    { to: email, subject: built.subject, text: built.text, html: built.html, bcc: bccEmail },
+    now,
+    {
+      source: "order_reminder",
+      trigger: "manual",
+      templateKey: "order_reminder",
+      orderCode,
+      ...(options.actorUserId === undefined ? {} : { actorUserId: options.actorUserId }),
+    },
+  );
+  if (!sendResult.ok) {
+    log.error({ orderCode, rawErrorMessage: sendResult.rawErrorMessage }, "Pripomienky objednávok: ručné odoslanie zlyhalo");
     return { ok: false, code: "send_failed" };
   }
   await upsertOrderReminderState(db, { orderCode, fingerprint: fp, resolution: "emailed", resolvedBy: "manual", resolvedAt: now }, now);

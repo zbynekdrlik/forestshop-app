@@ -35,14 +35,15 @@ function isRunResult(detail: unknown): detail is OrderReminderRunResult {
  * vzorom, aký #172's `runAndRecord` používa — `GET /api/order-reminder` tak
  * vidí manuálny beh HNEĎ, nielen po ďalšom pravidelnom ticku.
  */
-async function runAndRecord(db: Database, deps: OrderReminderRunDeps, now: Date): Promise<OrderReminderRunResult> {
+async function runAndRecord(db: Database, deps: OrderReminderRunDeps, now: Date, actorUserId: string): Promise<OrderReminderRunResult> {
   const [inserted] = await db
     .insert(jobRuns)
     .values({ jobName: ORDER_REMINDER_JOB_NAME, startedAt: now, status: "running" })
     .returning({ id: jobRuns.id });
   const runId = inserted?.id;
   try {
-    const result = await runOrderReminder({ db, now, ...deps });
+    // issue 193: "Spustiť teraz" je RUČNÁ akcia (kniha odoslaných e-mailov).
+    const result = await runOrderReminder({ db, now, ...deps, trigger: "manual", actorUserId });
     if (runId !== undefined) {
       await db.update(jobRuns).set({ status: "success", finishedAt: new Date(), detail: result }).where(eq(jobRuns.id, runId));
     }
@@ -180,7 +181,7 @@ export function registerOrderReminderRoutes(app: Hono<AppBindings>, db: Database
       const now = new Date();
       let result: OrderReminderRunResult;
       try {
-        result = await runAndRecord(db, deps, now);
+        result = await runAndRecord(db, deps, now, user.userId);
       } catch {
         return c.json({ error: "Beh zlyhal — skúste to znova o chvíľu." }, 502);
       }
@@ -209,7 +210,9 @@ export function registerOrderReminderRoutes(app: Hono<AppBindings>, db: Database
       const { orderCode, action } = c.req.valid("json");
       const user = c.get("user");
       const now = new Date();
-      const result = await runOrderReminderOverride({ db, now, orderCode, action, ...deps });
+      // issue 193: ručná per-riadková akcia sa v knihe odoslaných e-mailov
+      // pripíše zamestnancovi, ktorý ju stlačil.
+      const result = await runOrderReminderOverride({ db, now, orderCode, action, ...deps, trigger: "manual", actorUserId: user.userId });
       if (!result.ok) {
         const message =
           result.code === "not_found"
