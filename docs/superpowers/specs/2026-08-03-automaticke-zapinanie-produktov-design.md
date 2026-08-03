@@ -42,17 +42,19 @@ Zmerané na produkčnom Shoptet exporte (14 014 riadkov, read-only):
 Posledný riadok je dôvod, prečo časť B začína opravou katalógu — bez nej by
 automatizácia zapla produkty, ktoré majiteľ vedome vypol.
 
-## Predpoklad — viditeľnosť produktu sa musí ukladať
+## Viditeľnosť produktu — už uložená, netreba migráciu
 
-`productVisibility` sa dnes zo Shoptet exportu prečíta, použije v
-`deriveVariantState` a **zahodí** — v databáze nie je. `detailOnly` pritom nie
-je v `HIDDEN_VISIBILITIES`, takže vypredaný `detailOnly` produkt je dnes v
-databáze nerozoznateľný od bežného vypredaného.
+`detailOnly` **nie je** v `HIDDEN_VISIBILITIES`, takže vypredaný `detailOnly`
+produkt má v databáze rovnaký `state` (`out_of_stock`) ako bežný vypredaný —
+526 riadkov (38 s linkou). Podľa `state` sa teda vylúčiť nedá.
 
-Oprava: nový stĺpec `product.visibility` (text, plnený pri katalógovom importe
-rovnakou first-wins cestou ako `supplier`/`internal_note`). Derivácia stavu sa
-**nemení** — `detailOnly` naďalej nie je „discontinued", lebo produkt sa dá
-kúpiť cez priamy odkaz. Mení sa len to, že automatizácia má podľa čoho vylúčiť.
+Vylúčiť sa dá podľa `variant.product_visibility` — ten sa **už ukladá** (stĺpec
+`product_visibility`, `notNull`, migrácia 0001) a plní sa pri každom katalógovom
+importe z exportu. Žiadny nový stĺpec ani migrácia netreba; automatizácia si len
+pridá podmienku `product_visibility = 'visible'`.
+
+Derivácia stavu sa **nemení** — `detailOnly` naďalej nie je „discontinued", lebo
+taký produkt sa dá kúpiť cez priamy odkaz.
 
 ## Časť A — Scraper dostupnosti u dodávateľa
 
