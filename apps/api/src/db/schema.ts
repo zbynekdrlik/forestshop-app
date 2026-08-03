@@ -8,3 +8,4 @@ export * from "./schema-order-reminder.js";
 export * from "./schema-nedostupne.js";
 export * from "./schema-mail-templates.js";
 export * from "./schema-mail-log.js";
+export * from "./schema-supplier-stock.js";
