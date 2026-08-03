@@ -1,16 +1,22 @@
 import { expect, it } from "vitest";
 import { DEFAULT_TAB_ID, HIDDEN_TABS, NAV, findTab, isVisibleTabId } from "./nav.js";
 
-// #57: majiteľ chce naľavo PRESNE dve viditeľné položky — tento test je
+// #57 pôvodne chcel naľavo PRESNE dve viditeľné položky — issue 185 pridalo
+// tretí priečinok "Automatizácie" s tromi hotovými obrazovkami. Tento test je
 // najbližšie k tomu, čo strojovo overiť dá (registrácia, nie DOM).
-it("NAV má presne dva priečinky, každý s presne jednou záložkou", () => {
-  expect(NAV).toHaveLength(2);
-  expect(NAV.map((f) => f.label)).toEqual(["Systém", "Eshop"]);
-  for (const folder of NAV) {
-    expect(folder.tabs).toHaveLength(1);
-  }
+it("NAV má tri priečinky (Systém/Eshop/Automatizácie), s 1/1/3 záložkami v poradí podľa dôležitosti", () => {
+  expect(NAV).toHaveLength(3);
+  expect(NAV.map((f) => f.label)).toEqual(["Systém", "Eshop", "Automatizácie"]);
+  expect(NAV[0]?.tabs).toHaveLength(1);
+  expect(NAV[1]?.tabs).toHaveLength(1);
+  expect(NAV[2]?.tabs).toHaveLength(3);
   expect(NAV[0]?.tabs[0]?.label).toBe("Sync zo Shoptetu");
   expect(NAV[1]?.tabs[0]?.label).toBe("Na objednanie");
+  expect(NAV[2]?.tabs.map((t) => t.label)).toEqual([
+    "Nevyzdvihnuté zásielky",
+    "Pripomienky objednávok",
+    "Nedostupné tovary",
+  ]);
 });
 
 it("DEFAULT_TAB_ID je prvá viditeľná záložka ('sync')", () => {
@@ -31,8 +37,15 @@ it("findTab nájde viditeľnú aj skrytú záložku podľa id, neznáme id vrát
 it("isVisibleTabId rozlíši viditeľné (NAV) od skrytých (HIDDEN_TABS)", () => {
   expect(isVisibleTabId("sync")).toBe(true);
   expect(isVisibleTabId("orders")).toBe(true);
+  // issue 185: presunuté z HIDDEN_TABS do NAV — teraz viditeľné.
+  expect(isVisibleTabId("posta-uncollected")).toBe(true);
+  expect(isVisibleTabId("order-reminder")).toBe(true);
+  expect(isVisibleTabId("nedostupne")).toBe(true);
   for (const hiddenId of Object.keys(HIDDEN_TABS)) {
     expect(isVisibleTabId(hiddenId)).toBe(false);
   }
+  expect(HIDDEN_TABS).not.toHaveProperty("posta-uncollected");
+  expect(HIDDEN_TABS).not.toHaveProperty("order-reminder");
+  expect(HIDDEN_TABS).not.toHaveProperty("nedostupne");
   expect(isVisibleTabId("neexistuje")).toBe(false);
 });

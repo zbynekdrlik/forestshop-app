@@ -6,7 +6,9 @@ import { LoginForm } from "./components/LoginForm.js";
 import { Sidebar } from "./components/Sidebar.js";
 import { Topbar } from "./components/Topbar.js";
 import { DEFAULT_TAB_ID, NAV, findTab, isVisibleTabId } from "./nav.js";
+import { fetchOrderReminderStatus } from "./orderReminderApi.js";
 import { OrdersRemainingCountContext } from "./ordersRemainingCountContext.js";
+import { fetchPostaUncollectedStatus } from "./postaUncollectedApi.js";
 
 // Prvá záložka z URL-u (`?tab=<id>`), keď existuje a je platná — inak
 // predvolená ("Sync zo Shoptetu"). Umožňuje priamy odkaz aj na SKRYTÉ
@@ -40,6 +42,37 @@ export function App(): JSX.Element {
     () => (ordersRemainingCount !== null ? { orders: ordersRemainingCount } : {}),
     [ordersRemainingCount],
   );
+
+  // issue 185: stav zapnuté/vypnuté pre "Automatizácie" priečinok v menu.
+  // Na rozdiel od `ordersRemainingCount` vyššie (publikované OBRAZOVKOU
+  // samotnou cez context) tu App.tsx volá PRIAMO tie isté existujúce
+  // `fetch*Status` funkcie, čo už používajú `PostaUncollectedSection`/
+  // `OrderReminderSection` — jednoduchšie než pridávať ďalší zdieľaný context
+  // len pre dve políčka, ktoré sa menia zriedka (Štart/Stop klik). Refetch pri
+  // KAŽDEJ zmene aktívnej záložky zachytí prípadný toggle spravený na tej
+  // obrazovke hneď po návrate na inú záložku. `nedostupne` do tejto mapy
+  // úmyselne nepatrí — nemá `enabled` koncept vôbec (Sidebar chýbajúci kľúč =
+  // žiadny odznak).
+  const [automationStatus, setAutomationStatus] = useState<Readonly<Record<string, "on" | "off">>>({});
+  useEffect(() => {
+    if (me === null) return;
+    let cancelled = false;
+    Promise.all([fetchPostaUncollectedStatus(), fetchOrderReminderStatus()])
+      .then(([posta, reminder]) => {
+        if (cancelled) return;
+        setAutomationStatus({
+          "posta-uncollected": posta.enabled ? "on" : "off",
+          "order-reminder": reminder.enabled ? "on" : "off",
+        });
+      })
+      .catch(() => {
+        // Sieťový výpadok — odznak v menu nie je kritický, ticho ponechá
+        // predošlý (alebo žiadny) stav namiesto nespracovanej výnimky.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [me, activeTabId]);
 
   const reload = useCallback(() => {
     setMeUnreachable(false);
@@ -111,7 +144,13 @@ export function App(): JSX.Element {
   return (
     <OrdersRemainingCountContext.Provider value={ordersRemainingCountContextValue}>
       <div className="app-shell">
-        <Sidebar folders={NAV} activeTabId={activeTabId} onSelectTab={selectTab} badgeCounts={badgeCounts} />
+        <Sidebar
+          folders={NAV}
+          activeTabId={activeTabId}
+          onSelectTab={selectTab}
+          badgeCounts={badgeCounts}
+          badgeStatus={automationStatus}
+        />
         <div className="main">
           <Topbar
             title={isVisibleTabId(activeTabId) ? (tab?.label ?? null) : null}

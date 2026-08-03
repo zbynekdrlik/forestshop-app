@@ -116,7 +116,6 @@ export function PostaUncollectedSection({
 
   return (
     <section>
-      <h2>Nevyzdvihnuté zásielky</h2>
       <div className="autohead">
         <span className={"pill" + (status.enabled ? "" : " off")} data-testid="posta-status-pill">
           {status.enabled ? "Beží" : "Zastavené"}

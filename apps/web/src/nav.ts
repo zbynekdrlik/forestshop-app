@@ -35,10 +35,14 @@ export interface NavFolder {
   readonly tabs: readonly NavTab[];
 }
 
-// Ľavé menu — VIDITEĽNÉ položky. Majiteľ (issue 57, 2026-07-30): "naľavo chcem
-// zatiaľ mať iba dve veci — záložku Sync zo Shoptetu v priečinku Systém a
-// záložku Na objednanie v priečinku Eshop." Pridanie ĎALŠEJ položky do menu =
-// jeden riadok v tomto poli, žiadna úprava App.tsx/Sidebar.tsx.
+// Ľavé menu — VIDITEĽNÉ položky. Pôvodne (issue 57, 2026-07-30) majiteľ chcel
+// naľavo zatiaľ len "Sync zo Shoptetu"/"Na objednanie" — platilo, kým tri
+// automatizácie nižšie neboli hotové. Issue 185 (2026-08-03, majiteľ:
+// "nevidim tam zalozku automatizacie a tie automatizacie spravene") pridáva
+// tretí priečinok "Automatizácie" s tromi hotovými obrazovkami, ktoré dovtedy
+// sedeli len v `HIDDEN_TABS` bez odkazu v menu. Pridanie ĎALŠEJ položky do
+// menu = jeden riadok v niektorom z polí nižšie, žiadna úprava
+// App.tsx/Sidebar.tsx.
 export const NAV: readonly NavFolder[] = [
   {
     id: "system",
@@ -49,6 +53,18 @@ export const NAV: readonly NavFolder[] = [
     id: "eshop",
     label: "Eshop",
     tabs: [{ id: "orders", label: "Na objednanie", Component: OrdersSection, wide: true }],
+  },
+  {
+    id: "automations",
+    label: "Automatizácie",
+    // Poradie podľa dôležitosti (issue 185, zadanie majiteľa). `wide: true`
+    // len pri "Nedostupné tovary" (rovnaký dôvod ako "Na objednanie" nižšie —
+    // karty so zoznamom objednávok profitujú z celej šírky okna).
+    tabs: [
+      { id: "posta-uncollected", label: "Nevyzdvihnuté zásielky", Component: PostaUncollectedSection },
+      { id: "order-reminder", label: "Pripomienky objednávok", Component: OrderReminderSection },
+      { id: "nedostupne", label: "Nedostupné tovary", Component: NedostupneSection, wide: true },
+    ],
   },
 ];
 
@@ -62,19 +78,6 @@ export const HIDDEN_TABS: Readonly<Record<string, NavTab>> = {
   catalog: { id: "catalog", label: "Katalóg", Component: CatalogPage },
   pairing: { id: "pairing", label: "Kontrola párovania", Component: PairingSection },
   scheduler: { id: "scheduler", label: "Plánovač", Component: SchedulerSection },
-  // issue 172: rovnaký vzor ako ostatné tri vyššie — majiteľ zatiaľ chce v
-  // ľavom menu len "Sync zo Shoptetu"/"Na objednanie" (issue 57), táto nová
-  // obrazovka je preto dostupná len cez `?tab=posta-uncollected`.
-  "posta-uncollected": { id: "posta-uncollected", label: "Nevyzdvihnuté zásielky", Component: PostaUncollectedSection },
-  // issue 173: rovnaký vzor ako "posta-uncollected" vyššie — majiteľ zatiaľ
-  // chce v ľavom menu len dve položky (#57), táto obrazovka je preto
-  // dostupná len cez `?tab=order-reminder`.
-  "order-reminder": { id: "order-reminder", label: "Pripomienky objednávok", Component: OrderReminderSection },
-  // issue 176: rovnaký vzor ako "posta-uncollected"/"order-reminder" vyššie —
-  // majiteľ zatiaľ chce v ľavom menu len dve položky (#57). `wide: true`
-  // (rovnaký dôvod ako "Na objednanie") — karty so zoznamom objednávok
-  // profitujú z celej šírky okna, nie len z čitateľnej šírky.
-  nedostupne: { id: "nedostupne", label: "Nedostupné tovary", Component: NedostupneSection, wide: true },
 };
 
 export const DEFAULT_TAB_ID: string = NAV[0]?.tabs[0]?.id ?? "sync";
@@ -89,11 +92,15 @@ export function findTab(id: string): NavTab | undefined {
 }
 
 /**
- * `true` len pre záložky VIDITEĽNÉ v ľavom menu (Sync zo Shoptetu/Na
- * objednanie). Skryté obrazovky (katalóg/párovanie/plánovač) si držia svoj
- * PÔVODNÝ vlastný `<h2>` nadpis nezmenený (existujúce e2e naň spoliehajú) —
- * `App.tsx` preto pre ne Topbar-ov `<h1>` titulok VYNECHÁVA, aby nevznikol
- * duplicitný nadpis s rovnakým textom.
+ * `true` len pre záložky VIDITEĽNÉ v ľavom menu (`NAV` vyššie — dnes Sync zo
+ * Shoptetu/Na objednanie/tri automatizácie z issue 185). Skryté obrazovky
+ * (katalóg/párovanie/plánovač) si držia svoj PÔVODNÝ vlastný `<h2>` nadpis
+ * nezmenený (existujúce e2e naň spoliehajú) — `App.tsx` preto pre ne
+ * Topbar-ov `<h1>` titulok VYNECHÁVA, aby nevznikol duplicitný nadpis s
+ * rovnakým textom. Issue 185: keď sa obrazovka presunie z `HIDDEN_TABS` do
+ * `NAV`, jej vlastný `<h2>` sa musí odstrániť (viď
+ * PostaUncollectedSection/OrderReminderSection/NedostupneSection) — inak by
+ * teraz Topbar-ov `<h1>` VYKRESLIL a vznikol by duplicitný nadpis.
  */
 export function isVisibleTabId(id: string): boolean {
   return NAV.some((folder) => folder.tabs.some((t) => t.id === id));

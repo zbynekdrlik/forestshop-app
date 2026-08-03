@@ -15,9 +15,13 @@ const E2E_NAV_EMAIL = "e2e-nav@forestshop.sk";
 const jeOcakavane = (m: ConsoleMessage): boolean =>
   m.location().url.includes("/api/me") && m.text().includes("401");
 
-// #57: majiteľ chce naľavo PRESNE dve položky — záložku "Sync zo Shoptetu"
-// v priečinku "Systém" a záložku "Na objednanie" v priečinku "Eshop", nič iné.
-test("ľavé menu má presne dva priečinky s jednou záložkou každý, klik prepne obrazovku, konzola je čistá", async ({ page }) => {
+// #57 pôvodne chcel naľavo PRESNE dve položky. Issue 185 (2026-08-03) pridáva
+// tretí priečinok "Automatizácie" s tromi hotovými obrazovkami, dovtedy len v
+// `HIDDEN_TABS` bez odkazu v menu — tento test teraz overuje VŠETKÝCH PÄŤ
+// záložiek v troch priečinkoch.
+test("ľavé menu má tri priečinky (Systém/Eshop/Automatizácie) s piatimi záložkami, klik prepne obrazovku, konzola je čistá", async ({
+  page,
+}) => {
   const chyby: string[] = [];
   page.on("console", (m) => {
     if ((m.type() === "error" || m.type() === "warning") && !jeOcakavane(m)) chyby.push(m.text());
@@ -31,14 +35,18 @@ test("ľavé menu má presne dva priečinky s jednou záložkou každý, klik pr
   await page.getByLabel("Heslo").fill(E2E_HESLO);
   await page.getByRole("button", { name: "Prihlásiť sa" }).click();
 
-  // Presne dva priečinky.
+  // Presne tri priečinky.
   await expect(page.getByRole("button", { name: "Systém" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Eshop" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Automatizácie" })).toBeVisible();
 
-  // Presne dve záložky v CELOM menu — jedna na priečinok.
-  await expect(page.locator(".side-nav .tab")).toHaveCount(2);
+  // Presne päť záložiek v CELOM menu.
+  await expect(page.locator(".side-nav .tab")).toHaveCount(5);
   await expect(page.getByRole("button", { name: "Sync zo Shoptetu" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Na objednanie" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Nevyzdvihnuté zásielky" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Pripomienky objednávok" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Nedostupné tovary" })).toBeVisible();
 
   // Predvolená obrazovka (bez kliknutia) je "Sync zo Shoptetu".
   await expect(page.getByRole("heading", { name: "Sync zo Shoptetu" })).toBeVisible();
@@ -62,6 +70,27 @@ test("ľavé menu má presne dva priečinky s jednou záložkou každý, klik pr
   const odznak = page.getByTestId("nav-badge-orders");
   await expect(odznak).toBeVisible();
   await expect(odznak).toHaveText(/^\d+$/);
+
+  // issue 185: tri nové položky v priečinku "Automatizácie" — klik na každú
+  // otvorí svoju obrazovku (samostatný `<h1>` titulok v Topbar-e, žiadny
+  // duplicitný `<h2>` — obrazovky si ho pri presune z HIDDEN_TABS odstránili).
+  await page.getByRole("button", { name: "Nevyzdvihnuté zásielky" }).click();
+  await expect(page.getByRole("heading", { name: "Nevyzdvihnuté zásielky" })).toBeVisible();
+  // `scripts/e2e-setup.ts` seeduje obe automatizácie ako vypnuté (`enabled: false`)
+  // — pill v menu musí ukázať "Zastavené", nikdy "Beží", presne ako je
+  // požadovaný stav (hard constraint tohto ticketu: automatizácie ostávajú
+  // vypnuté).
+  await expect(page.getByTestId("nav-status-posta-uncollected")).toHaveText("Zastavené");
+
+  await page.getByRole("button", { name: "Pripomienky objednávok" }).click();
+  await expect(page.getByRole("heading", { name: "Pripomienky objednávok" })).toBeVisible();
+  await expect(page.getByTestId("nav-status-order-reminder")).toHaveText("Zastavené");
+
+  await page.getByRole("button", { name: "Nedostupné tovary" }).click();
+  await expect(page.getByRole("heading", { name: "Nedostupné tovary" })).toBeVisible();
+  // "Nedostupné tovary" nemá koncept zapnuté/vypnuté vôbec (je len na
+  // požiadanie) — žiadny stavový odznak v menu, ani "Zastavené".
+  await expect(page.getByTestId("nav-status-nedostupne")).toHaveCount(0);
 
   expect(chyby).toEqual([]);
 });

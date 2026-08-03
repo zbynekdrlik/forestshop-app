@@ -335,6 +335,13 @@ tr:last-child td {
   font-weight: var(--fs-weight-semibold);
   line-height: 1.25rem;
 }
+/* issue 185: stav zapnuté/vypnuté per záložka ("Automatizácie" priečinok) —
+   znovupoužíva `.pill`/`.pill.off` (rovnaký vizuál ako vnútri
+   PostaUncollectedSection/OrderReminderSection), len s `flex-shrink: 0` v
+   tomto úzkom nav riadku, rovnaký dôvod ako `.tab-badge` vyššie. */
+.tabs .tab .pill {
+  flex-shrink: 0;
+}
 
 .sidefoot {
   border-top: 1px solid var(--fs-border);
