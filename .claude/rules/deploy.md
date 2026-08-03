@@ -274,3 +274,17 @@ paths:
   výstup je priamo porovnateľné číslo. Použité pri issue 99's post-deploy
   overení, že zmena UI odkazu nezmenila žiadny riadok v `order`/`order_line`/
   `product_supplier_override`.
+
+- **Nasadenie si po sebe maže vlastné staršie obrazy (issue 206).** dev2 je
+  ZDIEĽANÝ stroj s inými projektmi a bol na 100 % disku — jedno nasadenie
+  zlyhalo na `failed commit on ref "layer-sha256:…"`, čo je docker tvár
+  chyby "disk plný", nie chyba obrazu. Jeden náš obraz má ~1,4 GB a
+  `docker compose pull` staré tagy nikdy nemaže, takže každé nasadenie
+  dovtedy nechalo po sebe ďalší. Krok `Upratať staršie obrazy TEJTO appky`
+  (`.github/workflows/deploy.yml`) preto maže VÝHRADNE
+  `ghcr.io/<repo>:<tag>` okrem práve nasadeného — nikdy `docker image
+  prune`/`system prune`, ktoré by siahli na obrazy cudzích projektov na tom
+  istom stroji. `|| true` je tam zámerne: obraz môže ešte držať dobiehajúci
+  starý kontajner a nasadenie je v tej chvíli už hotové — neuprataný obraz
+  nesmie zhodiť úspešný deploy. Krok beží PRED overením verzie, aby miesto
+  uvoľnil ešte v tom istom behu.
