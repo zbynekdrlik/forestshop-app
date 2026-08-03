@@ -22,12 +22,15 @@ import {
   ordersImportJob,
   orderNoteWritebackJob,
   orderReminderJob,
+  supplierStockJob,
   postaUncollectedJob,
   pruneRawExportsJob,
   pruneRawOrdersJob,
   sessionCleanupJob,
   shoptetWritebackJob,
 } from "./modules/scheduler/jobs.js";
+import { fetchSupplierPage } from "./modules/supplier-stock/page-fetcher.js";
+import { runSupplierStock } from "./modules/supplier-stock/run.js";
 import { startScheduler } from "./modules/scheduler/scheduler.js";
 import { orderNoteWritebackConfigFromBaseUrl, shoptetImportConfigFromBaseUrl } from "./modules/shoptet-writeback/config.js";
 import { runOrderNoteWritebackJob } from "./modules/shoptet-writeback/run-order-note-writeback.js";
@@ -191,6 +194,7 @@ const app = createApp(db, {
   postaUncollected: postaUncollectedDeps,
   orderReminder: orderReminderDeps,
   nedostupne: nedostupneDeps,
+  fetchSupplierPage,
 });
 
 // F2 (#12/#3) + F3 (#22/#28): nočný import katalógu/objednávok, mazanie
@@ -210,6 +214,7 @@ const scheduler = startScheduler(db, [
   orderNoteWritebackJob(runOrderNoteWritebackFn),
   postaUncollectedJob((db2, now) => runPostaUncollected({ db: db2, now, ...postaUncollectedDeps })),
   orderReminderJob((db2, now) => runOrderReminder({ db: db2, now, ...orderReminderDeps })),
+  supplierStockJob((db2, now) => runSupplierStock({ db: db2, now, fetchPage: fetchSupplierPage })),
 ]);
 
 // `@hono/node-server`'s `serveStatic` prints its OWN `console.error` on every

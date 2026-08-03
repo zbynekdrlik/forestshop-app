@@ -10,6 +10,8 @@ import { isOrderReminderEnabled } from "../order-reminder/settings.js";
 import type { OrderReminderRunResult } from "../order-reminder/run.js";
 import type { OrderNoteWritebackRunResult } from "../shoptet-writeback/run-order-note-writeback.js";
 import type { WritebackRunResult } from "../shoptet-writeback/run-writeback.js";
+import { SUPPLIER_STOCK_JOB_NAME } from "../supplier-stock/constants.js";
+import type { SupplierStockRunResult } from "../supplier-stock/run.js";
 import type { ScheduledJob } from "./types.js";
 
 export const CATALOG_IMPORT_JOB_NAME = "catalog-import";
@@ -271,6 +273,28 @@ export function orderReminderJob(run: RunOrderReminder): ScheduledJob {
       }
       const result = await run(db, now);
       return { detail: result };
+    },
+  };
+}
+
+export type RunSupplierStock = (db: Database, now: Date) => Promise<SupplierStockRunResult>;
+
+/**
+ * "Dodávateľský sklad" (issue 212) — denne o 04:20 UTC, teda dostatočne PRED
+ * automatizáciou prepínania (issue 213), aby tá pracovala s čerstvými dátami
+ * z tejto noci, a zároveň mimo `pruneRawExportsJob` (01:15) /
+ * `sessionCleanupJob` (01:30) / `pruneRawOrdersJob` (02:00).
+ *
+ * Žiadny `enabled` prepínač (na rozdiel od `postaUncollectedJob`/
+ * `orderReminderJob`): scraper nikam nezapisuje, len číta stránky
+ * dodávateľov — chrániť treba až zápis do Shoptetu, ktorý robí issue 213.
+ */
+export function supplierStockJob(run: RunSupplierStock): ScheduledJob {
+  return {
+    name: SUPPLIER_STOCK_JOB_NAME,
+    schedule: { kind: "daily", hourUtc: 4, minuteUtc: 20 },
+    async run(db, now) {
+      return { detail: await run(db, now) };
     },
   };
 }

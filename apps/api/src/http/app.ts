@@ -20,6 +20,8 @@ import { registerNedostupneRoutes, type NedostupneRunDeps } from "./nedostupne-r
 import { requireSameOrigin } from "./origin-check.js";
 import { registerPairingRoutes } from "./pairing-routes.js";
 import { registerPostaUncollectedRoutes, type PostaUncollectedRunDeps } from "./posta-uncollected-routes.js";
+import type { PageFetcher, PageFetchResult } from "../modules/supplier-stock/page-fetcher.js";
+import { registerSupplierStockRoutes } from "./supplier-stock-routes.js";
 import { registerSchedulerRoutes } from "./scheduler-routes.js";
 import { registerSupplierRoutes } from "./supplier-routes.js";
 
@@ -60,6 +62,10 @@ export function createApp(
     // vyššie: voliteľné, bezpečný default nižšie pre testy/lokálny vývoj,
     // `index.ts` v produkcii VŽDY nahradí reálnymi dependencies.
     readonly nedostupne?: NedostupneRunDeps;
+    // issue 212: "Dodávateľský sklad" — sťahovanie stránky dodávateľa.
+    // Voliteľné z rovnakého dôvodu ako `nedostupne` vyššie; testy dodajú
+    // vlastnú implementáciu a NIKDY nechodia na skutočnú stránku dodávateľa.
+    readonly fetchSupplierPage?: PageFetcher;
   },
 ): Hono<AppBindings> {
   const app = new Hono<AppBindings>();
@@ -214,6 +220,21 @@ export function createApp(
   // issue 193: kniha odoslaných e-mailov (len čítanie) — zapisujú do nej samy
   // odosielacie cesty cez `mail-log/service.ts`.
   registerMailLogRoutes(app, db, options.adminBaseUrl ?? "https://www.forestshop.sk");
+  // issue 212: "Dodávateľský sklad" — bez dodanej implementácie sa stránky
+  // NEsťahujú vôbec (bezpečný default pre testy aj lokálny vývoj: hlási
+  // zlyhanie kontroly, nikdy nepredstiera dostupnosť).
+  registerSupplierStockRoutes(
+    app,
+    db,
+    options.fetchSupplierPage ??
+      ((): Promise<PageFetchResult> =>
+        Promise.resolve({
+          ok: false,
+          html: "",
+          httpStatus: null,
+          error: "Sťahovanie stránok dodávateľa nie je nakonfigurované.",
+        })),
+  );
 
   // Musí byť registrovaný AŽ PO všetkých skutočných /api/* trasách vyššie — Hono
   // vyberá presnejšiu zhodu, takže tie majú prednosť a sem sa dostane len to, čo
