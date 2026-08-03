@@ -8,8 +8,9 @@ import type { JobRun } from "./schedulerApi.js";
 // slovenského popisu. Issue 185 (majiteľ si všimol holé technické názvy v
 // tabuľke "História behov"): doplnené "posta-uncollected"/"order-reminder"
 // (rovnaké slovenské názvy ako ich `NavTab.label` v `nav.ts`) a
-// "shoptet-writeback"/"order-note-writeback" (rovnaké znenie ako ich
-// "*_NOT_CONFIGURED" hlášky v `modules/scheduler/jobs.ts`).
+// "shoptet-writeback"/"order-note-writeback" (skrátené znenie ich
+// "*_NOT_CONFIGURED" hlášok v `modules/scheduler/jobs.ts` — sem sa zmestí
+// len krátky popis stĺpca "Úloha", nie celá veta).
 export const JOB_LABELS: Readonly<Record<string, string>> = {
   "catalog-import": "Import katalógu",
   "prune-raw-exports": "Mazanie starých surových exportov (katalóg)",
