@@ -150,9 +150,25 @@ it("formatVariantTotalChip s ≥2 riadkami vráti text so ZOSTÁVAJÚCIM množst
   if (vt === undefined) throw new Error("4859/46 musí byť v mape");
   const chip = formatVariantTotalChip(vt);
   expect(chip).toEqual({
-    text: "Σ 3 ks",
+    // issue 214: bez jednotky — tá je už na riadku nad pilulkou ("3 ks").
+    text: "Σ 3",
     title: "Spolu vo všetkých objednávkach: 5 ks · nevybavené: 3 ks",
   });
+});
+
+// issue 214: pilulka sa musí zmestiť do najužšej reálnej šírky stĺpca s
+// množstvom (nameraných 33 px voľného miesta pri 1280 px okna), inak ju
+// `text-overflow: ellipsis` oreže na "Σ…" a majiteľ z nej nič neprečíta.
+// Trojciferný súčet je najhorší reálny prípad, aký katalóg dnes vie vyrobiť.
+it("formatVariantTotalChip drží text krátky aj pri trojcifernom súčte", () => {
+  const totals = computeVariantTotals([
+    variantLine("4859/46", 500, "objednane", false),
+    variantLine("4859/46", 128, "caka_sa", false),
+  ]);
+  const vt = totals.get("4859/46");
+  if (vt === undefined) throw new Error("4859/46 musí byť v mape");
+  const chip = formatVariantTotalChip(vt);
+  expect(chip?.text.length).toBeLessThanOrEqual(6);
 });
 
 // issue 65 — vek nevybaveného riadku + hranica upozornenia (⚠️).

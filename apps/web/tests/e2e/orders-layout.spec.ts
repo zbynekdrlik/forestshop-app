@@ -191,6 +191,22 @@ test("STAV je celý čitateľný a POZNÁMKY pole je dosť široké na všetkýc
       expect(scrollOverflow, `bunka s množstvom posúva obsah pri ${String(width)}px`).toBe(false);
     }
 
+    // issue 214: pilulka sa síce do bunky ZMESTÍ (kontrola vyššie), ale
+    // predtým sa jej vykreslilo len 16 px zo 49 px obsahu — `text-overflow:
+    // ellipsis` ju orezal na "Σ…" a majiteľ z nej neprečítal nič ("teraz
+    // vobec nie je citatelne to spolu produkty"). Kontrola vyššie to
+    // nezachytí, lebo orezaný prvok svoju bunku nikdy nepretečie — treba
+    // merať vlastné orezanie pilulky, na KAŽDEJ zo 4 šírok.
+    const orezaneSucty = await page.evaluate(() => {
+      return [...document.querySelectorAll<HTMLElement>("[data-testid^='qty-total-']")].map((pilulka) => ({
+        text: pilulka.textContent.trim(),
+        orezane: pilulka.scrollWidth > pilulka.clientWidth + 1,
+      }));
+    });
+    for (const { text, orezane } of orezaneSucty) {
+      expect(orezane, `pilulka súčtu "${text}" je orezaná pri ${String(width)}px`).toBe(false);
+    }
+
     // issue 111 bod 5: pri 1280px sa žiadna `.orders-table-wrap` skupina
     // nesmie posúvať vodorovne (predtým 💾 tlačidlo bolo za viditeľným
     // okrajom, kým manažér nescrolloval).

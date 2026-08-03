@@ -183,6 +183,13 @@
       "when": 1785782579784,
       "tag": "0025_funny_sally_floyd",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1785789658908,
+      "tag": "0026_supplier_stock",
+      "breakpoints": true
     }
   ]
 }

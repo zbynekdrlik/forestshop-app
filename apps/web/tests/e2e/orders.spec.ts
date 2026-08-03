@@ -197,9 +197,9 @@ test("súčet kusov toho istého produktu naprieč objednávkami dodávateľa sa
 
   // Pred akoukoľvek zmenou: obe objednávky nevybavené → chip na OBOCH
   // riadkoch ukazuje celé dopytované množstvo (3 + 2 = 5) ako zostávajúce.
-  await expect(chipPrva).toHaveText("Σ 5 ks");
+  await expect(chipPrva).toHaveText("Σ 5");
   await expect(chipPrva).toHaveAttribute("title", "Spolu vo všetkých objednávkach: 5 ks · nevybavené: 5 ks");
-  await expect(chipDruha).toHaveText("Σ 5 ks");
+  await expect(chipDruha).toHaveText("Σ 5");
 
   // Odškrtnutie PRVÉHO riadku (3 ks) ako objednané — `.click()`, nie
   // `.check()` (`.claude/rules/testing.md`: zápis je async, `.check()` by na
@@ -211,8 +211,8 @@ test("súčet kusov toho istého produktu naprieč objednávkami dodávateľa sa
   // Prepočet je OKAMŽITÝ (bez `page.reload()`) a týka sa OBOCH riadkov
   // naraz — presne požiadavka ticketu ("súčet sa musí prepočítať hneď po
   // zmene stavu riadku, bez obnovenia stránky").
-  await expect(chipPrva).toHaveText("Σ 2 ks");
-  await expect(chipDruha).toHaveText("Σ 2 ks");
+  await expect(chipPrva).toHaveText("Σ 2");
+  await expect(chipDruha).toHaveText("Σ 2");
   await expect(chipDruha).toHaveAttribute("title", "Spolu vo všetkých objednávkach: 5 ks · nevybavené: 2 ks");
   await expect(page.getByRole("alert")).toHaveCount(0);
 
