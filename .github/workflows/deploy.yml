@@ -73,6 +73,21 @@ jobs:
           rsync -a --delete "$GITHUB_WORKSPACE/scripts/" scripts/
           docker compose -f docker-compose.prod.yml pull app
           docker compose -f docker-compose.prod.yml up -d
+      - name: Upratať staršie obrazy TEJTO appky
+        # issue 206: dev2 je zdieľaný stroj a bol na 100 % disku — jeden náš
+        # obraz má ~1,4 GB, takže každé nasadenie doteraz nechalo po sebe
+        # ďalší. Maže sa VÝHRADNE `ghcr.io/<repo>` (naše vlastné obrazy) a
+        # nikdy ten práve nasadený — cudzie projekty na tom istom stroji sa
+        # tým nikdy nedotkneme. `|| true` je tu zámerne: obraz môže držať
+        # ešte dobiehajúci starý kontajner a nasadenie je v tej chvíli už
+        # hotové a overené — neuprataný obraz nesmie zhodiť úspešný deploy.
+        run: |
+          keep="ghcr.io/${GITHUB_REPOSITORY,,}:${IMAGE_TAG}"
+          docker images --format '{{.Repository}}:{{.Tag}}' \
+            | grep "^ghcr.io/${GITHUB_REPOSITORY,,}:" \
+            | grep -v "^${keep}$" \
+            | xargs -r -n1 docker rmi || true
+          df -h / | tail -1
       - name: Overiť verziu na živej stránke
         run: |
           sleep 5
