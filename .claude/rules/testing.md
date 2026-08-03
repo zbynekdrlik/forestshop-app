@@ -431,3 +431,22 @@ paths:
   correctly OR removed entirely. `pressSequentially`/`.press()`
   (Playwright) and `fireEvent.keyDown` (vitest) are the only two APIs that
   actually exercise the `onKeyDown` handler being tested.
+- **A NEW e2e assertion that reads a value from a shared SINGLETON DB row
+  (e.g. `posta_uncollected_settings`/`order_reminder_settings`'s `enabled`
+  flag) must NOT hardcode the value if a DIFFERENT spec file toggles that
+  same row.** Issue 185 (`nav.spec.ts`): a new assertion asserted the nav
+  status pill shows exactly `"Zastavené"`, matching the seeded default —
+  but `posta-uncollected.spec.ts`/`order-reminder.spec.ts` toggle that
+  SAME global singleton row on then off again mid-test (self-cleaning at
+  the end, but genuinely `enabled: true` for a window in the middle), and
+  Playwright runs spec FILES across 2 concurrent workers (`Running N tests
+  using 2 workers` in the local run). A hardcoded exact-value assertion on
+  such a row is a latent flake — found and fixed by self-review, not by an
+  observed failure (the one local run happened to pass). Fix: assert a
+  REGEX of valid states (`toHaveText(/^(Zastavené|Beží)$/)`) instead of the
+  exact expected value — the SAME discipline `nav.spec.ts` already applies
+  to `nav-badge-orders`'s count (`toHaveText(/^\d+$/)`) for the identical
+  reason (shared, concurrently-mutable state). Test on any FUTURE
+  assertion added to one spec file that reads a value another spec file
+  mutates: does the OTHER file toggle/mutate this same row mid-test? If
+  yes, assert "a valid value", never the specific one.
