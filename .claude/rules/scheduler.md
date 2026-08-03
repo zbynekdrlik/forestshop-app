@@ -39,8 +39,8 @@ paths:
   (`shoptetWritebackJob`, `hourly`, issue 122 — mimo kolízie s `:45`), :55
   KAŽDÚ hodinu spätný zápis poznámky objednávky do Shoptetu
   (`orderNoteWritebackJob`, `hourly`, issue 123 — mimo kolízie s `:45`/`:50`).
-  `:20` (katalóg) je zámerne 20-25 min od každého suseda (`:45`/`:50`/`:55`
-  predošlej aj nasledujúcej hodiny). Pridanie ďalšieho `kind` (napr.
+  `:20` (katalóg) je zámerne aspoň 25 min od každého suseda (25 min k
+  `:45`/`:55` predošlej hodiny, 30 min k `:50`). Pridanie ďalšieho `kind` (napr.
   "weekly") by znamenalo rozšíriť `periodKey()` (`scheduler.ts`) o ďalšiu
   vetvu — rovnaký vzor ako `hourly`.
 - **Job NEPOTREBUJE vlastný advisory zámok, keď buď (a) volaná business

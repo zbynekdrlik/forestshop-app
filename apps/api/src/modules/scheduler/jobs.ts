@@ -36,7 +36,8 @@ const EXPORT_URL_NOT_CONFIGURED = "Import katalógu nie je nakonfigurovaný (ch�
  * Zmerané na produkcii (posledných 6 denných behov): trvanie 19.5-22.9 s —
  * zanedbateľné aj pri 24 behoch/deň. `:20` je mimo kolízie s ostatnými
  * hodinovými jobmi (`ordersImportJob` :45, `shoptetWritebackJob` :50,
- * `orderNoteWritebackJob` :55) — 20-25 min odstup od každého suseda. Volá
+ * `orderNoteWritebackJob` :55) — aspoň 25 min odstup od každého suseda
+ * (25 min k `:45`/`:55` predošlej hodiny, 30 min k `:50`). Volá
  * EXISTUJÚCI `runIngest` (index.ts), nič sa nereimplementuje. Bohatý
  * výsledok (accepted/rejected/duplicate) sa aj tak zapíše do
  * `catalog_snapshot` samotným `ingestCatalog` — tento job_run záznam je len
@@ -60,7 +61,7 @@ export function catalogImportJob(runIngest: RunIngest | undefined): ScheduledJob
 
 /**
  * Mazanie surových exportov katalógu — volá existujúci `pruneRawSnapshots`.
- * Retencia skrátená z 30 na **14 dní** (issue 184, súčasne so zavedením
+ * Retencia skrátená z 30 na 14 dní (issue 184, súčasne so zavedením
  * hodinového `catalogImportJob` vyššie) — `storeRawSnapshot` sa volá LEN keď
  * sa obsah exportu LÍŠI od posledného prijatého (dedup na `contentSha256`,
  * `ingest.ts`), takže hodinová kadencia produkuje WORST CASE 24 nových
