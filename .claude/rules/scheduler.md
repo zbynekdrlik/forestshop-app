@@ -27,15 +27,22 @@ paths:
   existujúcich `daily` úloh, aby sa neprekrývali zbytočne (nie je to tvrdá
   závislosť, len aby operátor v logoch/`job_run` vedel odlíšiť poradie). Nová
   `hourly` úloha dostáva `{ kind: "hourly", minuteUtc }` — nemá `hourUtc`,
-  beží v KAŽDEJ UTC hodine. Dnes zaregistrované: 01:00 import katalógu
-  (`daily`), 01:15 mazanie surových exportov katalógu (`daily`), 01:30
-  mazanie relácií (`daily`), :45 KAŽDÚ hodinu import objednávok
-  (`ordersImportJob`, `hourly` od #115, pôvodne `daily` #22), 02:00 mazanie
-  surových exportov objednávok (`pruneRawOrdersJob`, `daily`, #28), :50
-  KAŽDÚ hodinu spätný zápis odkazov na dodávateľa do Shoptetu
-  (`shoptetWritebackJob`, `hourly`, issue 122 — mimo kolízie s `:45`).
-  Pridanie ďalšieho `kind` (napr. "weekly") by znamenalo rozšíriť
-  `periodKey()` (`scheduler.ts`) o ďalšiu vetvu — rovnaký vzor ako `hourly`.
+  beží v KAŽDEJ UTC hodine. Dnes zaregistrované: **:20 KAŽDÚ hodinu import
+  katalógu** (`catalogImportJob`, `hourly` od issue 184, pôvodne `daily`
+  01:00 — zmerané trvanie behu 19.5-22.9 s, zanedbateľné), 01:15 mazanie
+  surových exportov katalógu (`daily`, retencia skrátená z 30 na 14 dní v
+  issue 184 — hodinový import produkuje viac snapshotov, box je na 98 %
+  disku), 01:30 mazanie relácií (`daily`), :45 KAŽDÚ hodinu import
+  objednávok (`ordersImportJob`, `hourly` od #115, pôvodne `daily` #22),
+  02:00 mazanie surových exportov objednávok (`pruneRawOrdersJob`, `daily`,
+  #28), :50 KAŽDÚ hodinu spätný zápis odkazov na dodávateľa do Shoptetu
+  (`shoptetWritebackJob`, `hourly`, issue 122 — mimo kolízie s `:45`), :55
+  KAŽDÚ hodinu spätný zápis poznámky objednávky do Shoptetu
+  (`orderNoteWritebackJob`, `hourly`, issue 123 — mimo kolízie s `:45`/`:50`).
+  `:20` (katalóg) je zámerne 20-25 min od každého suseda (`:45`/`:50`/`:55`
+  predošlej aj nasledujúcej hodiny). Pridanie ďalšieho `kind` (napr.
+  "weekly") by znamenalo rozšíriť `periodKey()` (`scheduler.ts`) o ďalšiu
+  vetvu — rovnaký vzor ako `hourly`.
 - **Job NEPOTREBUJE vlastný advisory zámok, keď buď (a) volaná business
   funkcia už berie svoj vlastný vnútri seba** (`catalogImportJob`/
   `ordersImportJob` → `ingestCatalog`/`ingestOrders`), **alebo (b) sa vôbec

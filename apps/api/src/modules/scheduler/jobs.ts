@@ -30,11 +30,18 @@ export const SHOPTET_WRITEBACK_NOT_CONFIGURED =
 const EXPORT_URL_NOT_CONFIGURED = "Import katalógu nie je nakonfigurovaný (chýba SHOPTET_EXPORT_URL)";
 
 /**
- * Nočný import katalógu — volá EXISTUJÚCI `runIngest` (index.ts), nič sa
- * nereimplementuje. Bohatý výsledok (accepted/rejected/duplicate) sa aj tak
- * zapíše do `catalog_snapshot` samotným `ingestCatalog` — tento job_run
- * záznam je len scheduler-úrovňová viditeľnosť navyše ("bežal naozaj dnes v
- * noci?"), nie náhrada. Keď `runIngest` nie je nakonfigurované (chýba
+ * Import katalógu (issue 184: hodinová kadencia, predtým `daily` 01:00 UTC —
+ * majiteľov pôvodný pokyn "sync zo shoptetu ma bezat kazdu hodinu" #115 sa
+ * pri zavedení uplatnil len na `ordersImportJob`, katalóg zostal denný).
+ * Zmerané na produkcii (posledných 6 denných behov): trvanie 19.5-22.9 s —
+ * zanedbateľné aj pri 24 behoch/deň. `:20` je mimo kolízie s ostatnými
+ * hodinovými jobmi (`ordersImportJob` :45, `shoptetWritebackJob` :50,
+ * `orderNoteWritebackJob` :55) — 20-25 min odstup od každého suseda. Volá
+ * EXISTUJÚCI `runIngest` (index.ts), nič sa nereimplementuje. Bohatý
+ * výsledok (accepted/rejected/duplicate) sa aj tak zapíše do
+ * `catalog_snapshot` samotným `ingestCatalog` — tento job_run záznam je len
+ * scheduler-úrovňová viditeľnosť navyše ("bežal naozaj túto hodinu?"), nie
+ * náhrada. Keď `runIngest` nie je nakonfigurované (chýba
  * SHOPTET_EXPORT_URL), job VYHODÍ — scheduler.ts to odchytí a zapíše ako
  * "failure" s touto správou, namiesto toho, aby beh ticho preskočil bez
  * záznamu.
@@ -42,7 +49,7 @@ const EXPORT_URL_NOT_CONFIGURED = "Import katalógu nie je nakonfigurovaný (ch�
 export function catalogImportJob(runIngest: RunIngest | undefined): ScheduledJob {
   return {
     name: CATALOG_IMPORT_JOB_NAME,
-    schedule: { kind: "daily", hourUtc: 1, minuteUtc: 0 },
+    schedule: { kind: "hourly", minuteUtc: 20 },
     async run(_db, now) {
       if (runIngest === undefined) throw new Error(EXPORT_URL_NOT_CONFIGURED);
       const result = await runIngest(now);
@@ -51,8 +58,24 @@ export function catalogImportJob(runIngest: RunIngest | undefined): ScheduledJob
   };
 }
 
-/** Mazanie surových exportov starších než 30 dní — volá existujúci `pruneRawSnapshots`. */
-export function pruneRawExportsJob(keepDays = 30): ScheduledJob {
+/**
+ * Mazanie surových exportov katalógu — volá existujúci `pruneRawSnapshots`.
+ * Retencia skrátená z 30 na **14 dní** (issue 184, súčasne so zavedením
+ * hodinového `catalogImportJob` vyššie) — `storeRawSnapshot` sa volá LEN keď
+ * sa obsah exportu LÍŠI od posledného prijatého (dedup na `contentSha256`,
+ * `ingest.ts`), takže hodinová kadencia produkuje WORST CASE 24 nových
+ * gzip súborov/deň (~3.7 MB každý na produkcii) namiesto 1 — a `/` na dev2
+ * je na 98 % (len ~25 GB voľných, iné projekty na tom istom hostiteľovi).
+ * Odvodený katalóg je celý v Postgrese (`pg_dump`-nutý) — surové súbory sú
+ * len dôkazový materiál, takže skrátenie retencie nestojí nič a znižuje
+ * worst-case peak z ~2.7 GB na ~1.24 GB. `apps/api/src/cli/
+ * catalog-prune-raw.ts`'s `KEEP_DAYS` (manuálny/ops vstupný bod, mimo
+ * scheduleru) dostal ROVNAKÚ hodnotu, aby oba vstupné body do retencie
+ * zostali konzistentné. Schedule (denne 01:15) ostáva NEZMENENÁ — dátumový
+ * cutoff odstráni nahromadené staršie súbory bez ohľadu na to, koľko
+ * snapshotov medzitým pribudlo, netreba ju spúšťať častejšie.
+ */
+export function pruneRawExportsJob(keepDays = 14): ScheduledJob {
   return {
     name: PRUNE_RAW_EXPORTS_JOB_NAME,
     schedule: { kind: "daily", hourUtc: 1, minuteUtc: 15 },

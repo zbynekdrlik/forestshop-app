@@ -140,8 +140,9 @@ paths:
   ```
 
   Vypíše jednu ľudskú vetu aj JSON riadok (`{"removed": N}`) — bezpečné spustiť
-  kedykoľvek (nemaže nič mladšie než 30 dní ani posledný prijatý súbor, pozri
-  `pruneRawSnapshots` v `raw-store.ts`). Import (`catalog-ingest`) toto NEPOTREBUJE —
+  kedykoľvek (nemaže nič mladšie než 14 dní — skrátené z 30 v issue 184 —
+  ani posledný prijatý súbor, pozri `pruneRawSnapshots` v `raw-store.ts`).
+  Import (`catalog-ingest`) toto NEPOTREBUJE —
   beží aj cez tlačidlo na webe (`POST /api/catalog/ingest`, priamo v bežiacom
   procese appky), takže `scripts/catalog-ingest.ts` zostáva len pohodlný LOKÁLNY/CI
   vstupný bod, nie produkčná nutnosť.
