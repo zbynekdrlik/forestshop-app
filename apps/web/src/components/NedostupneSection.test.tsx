@@ -99,7 +99,7 @@ it("potvrdenie náhľadu odošle presne s parametrami náhľadu a znovu načíta
 
   fireEvent.click(screen.getByTestId("nedostupne-send-17600001-40237/L"));
   await screen.findByTestId("nedostupne-preview");
-  fireEvent.click(screen.getByTestId("nedostupne-confirm-send"));
+  fireEvent.click(screen.getByTestId("nedostupne-preview-confirm"));
 
   await waitFor(() => {
     expect(sendNedostupneEmail).toHaveBeenCalledWith("17600001", "40237/L", "nedostupne", "tok-1");
@@ -133,7 +133,7 @@ it("zlyhané odoslanie (ok:false) zobrazí server hlášku a nezavrie náhľad",
 
   fireEvent.click(screen.getByTestId("nedostupne-send-17600001-40237/L"));
   await screen.findByTestId("nedostupne-preview");
-  fireEvent.click(screen.getByTestId("nedostupne-confirm-send"));
+  fireEvent.click(screen.getByTestId("nedostupne-preview-confirm"));
 
   await screen.findByText("Tento e-mail už bol tejto objednávke odoslaný.");
   expect(screen.getByTestId("nedostupne-preview")).not.toBeNull();
@@ -146,4 +146,55 @@ it("401 pri načítaní zavolá onSessionExpired", async () => {
   await waitFor(() => {
     expect(onSessionExpired).toHaveBeenCalled();
   });
+});
+
+// issue 191: náhľad je dialóg cez obrazovku — musí sa dať zavrieť klávesom Esc
+// aj klikom mimo neho, a ani jedna z týchto ciest NESMIE nič odoslať.
+async function otvorNahlad(): Promise<void> {
+  fetchNedostupneList.mockResolvedValue(LIST_WITH_GROUP);
+  fetchNedostupnePreview.mockResolvedValue({ ok: true, subject: "Predmet", html: "<p>Ahoj</p>", recipient: "jan@example.sk", customerName: "Ján Novák", previewToken: "tok-1" });
+  render(<NedostupneSection role="manazer" onSessionExpired={vi.fn()} />);
+  await screen.findByTestId("nedostupne-group-40237/L");
+  fireEvent.click(screen.getByTestId("nedostupne-send-17600001-40237/L"));
+  await screen.findByTestId("nedostupne-preview");
+}
+
+it("Esc zavrie náhľad a nič neodošle", async () => {
+  await otvorNahlad();
+
+  fireEvent.keyDown(document, { key: "Escape" });
+
+  await waitFor(() => {
+    expect(screen.queryByTestId("nedostupne-preview")).toBeNull();
+  });
+  expect(sendNedostupneEmail).not.toHaveBeenCalled();
+});
+
+it("klik mimo dialógu ho zavrie a nič neodošle", async () => {
+  await otvorNahlad();
+
+  fireEvent.click(screen.getByTestId("nedostupne-preview-backdrop"));
+
+  await waitFor(() => {
+    expect(screen.queryByTestId("nedostupne-preview")).toBeNull();
+  });
+  expect(sendNedostupneEmail).not.toHaveBeenCalled();
+});
+
+// Klik VNÚTRI dialógu vybubláva na ten istý prekryv — bez kontroly cieľa by
+// sa náhľad zatváral pri každom kliknutí do jeho vlastného obsahu.
+it("klik vnútri dialógu ho nezavrie", async () => {
+  await otvorNahlad();
+
+  fireEvent.click(screen.getByTestId("nedostupne-preview"));
+
+  expect(screen.getByTestId("nedostupne-preview")).not.toBeNull();
+});
+
+it("dialóg je označený ako modálny a nesie svoj vlastný nadpis", async () => {
+  await otvorNahlad();
+
+  const dialog = screen.getByRole("dialog");
+  expect(dialog.getAttribute("aria-modal")).toBe("true");
+  expect(screen.getByRole("heading", { name: "Náhľad e-mailu — povinné pred odoslaním" })).not.toBeNull();
 });

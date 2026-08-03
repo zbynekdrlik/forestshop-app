@@ -1765,3 +1765,59 @@ tr:last-child td {
   border-radius: var(--fs-radius-sm);
   overflow-x: auto;
 }
+
+/* ---------------- MODÁLNY DIALÓG (issue 191) ----------------
+   Náhľad e-mailu pred odoslaním sa už nerozbaľuje na spodku stránky —
+   otvorí sa cez obrazovku, takže je okamžite v zornom poli. `z-index`
+   musí byť nad lepivou hlavičkou (`.topbar` má 10), inak by dialóg
+   ostal pod ňou. */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: var(--fs-space-6) var(--fs-space-4);
+  background: rgba(20, 30, 22, 0.45);
+  overflow-y: auto;
+}
+.modal {
+  width: 100%;
+  max-width: 46rem;
+  background: var(--fs-surface);
+  border: 1px solid var(--fs-border);
+  border-radius: var(--fs-radius-lg);
+  box-shadow: var(--fs-shadow-md);
+  padding: var(--fs-space-5);
+}
+/* Panel dostáva fokus pri otvorení (`tabIndex={-1}`) — bez tohto by prehliadač
+   okolo neho nakreslil obrys, hoci to nie je ovládací prvok. Fokus tlačidiel
+   vnútri ostáva nedotknutý. */
+.modal:focus {
+  outline: none;
+}
+.modal-title {
+  margin: 0 0 var(--fs-space-2);
+}
+.modal-meta {
+  margin: 0 0 var(--fs-space-3);
+  color: var(--fs-ink-muted);
+  font-size: var(--fs-text-sm);
+}
+/* Dlhý e-mail sa posúva VNÚTRI dialógu, nie celou stránkou — tlačidlá
+   "Odoslať"/"Zrušiť" pod ním tak ostávajú na dosah bez skrolovania. */
+.modal-body {
+  max-height: 50vh;
+  overflow-y: auto;
+  background: var(--fs-surface-alt);
+  border: 1px solid var(--fs-border);
+  border-radius: var(--fs-radius-md);
+  padding: var(--fs-space-3) var(--fs-space-4);
+}
+.modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--fs-space-3);
+  margin-top: var(--fs-space-4);
+}
