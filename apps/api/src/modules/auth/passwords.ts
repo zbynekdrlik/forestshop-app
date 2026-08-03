@@ -16,6 +16,12 @@ export function hashPassword(plain: string): Promise<string> {
 // Účty prenesené zo starej appky (#189) majú odtlačok ešte vo werkzeug
 // scrypt tvare. Overíme ho starou cestou, aby zamestnanci nemuseli meniť
 // heslá; `login` ho po prvom úspešnom prihlásení prepíše na argon2id.
+//
+// Vedľajší účinok, ktorý si treba uvedomiť: scrypt a argon2id trvajú rôzne
+// dlho, takže dovtedy, kým sa účet neprihlási prvý raz, sa dá z času odozvy
+// odvodiť, že práve TENTO e-mail je prenesený účet. Neprezrádza to heslo ani
+// existenciu iných účtov a zmizne to samo po prvom prihlásení každého z tých
+// troch účtov, preto to neriešime zložitejšie.
 export function needsRehash(passwordHash: string): boolean {
   return isLegacyScryptHash(passwordHash);
 }

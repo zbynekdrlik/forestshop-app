@@ -32,8 +32,10 @@ const KEY_LENGTH_BYTES = 64;
 // Werkzeug používa N=32768, r=8, p=1. Parametre síce čítame z odtlačku, ale
 // obmedzíme ich zhora, aby poškodený alebo podvrhnutý riadok v databáze
 // nedokázal vyžiadať scrypt s absurdnou pamäťovou náročnosťou.
-const MAX_COST = 1 << 20;
-const MAX_BLOCK_SIZE = 64;
+// Limity sú zámerne tesné: scrypt si vyžiada 128 * N * r bajtov, takže pri
+// týchto stropoch je najhorší prípad ~268 MB namiesto niekoľkých gigabajtov.
+const MAX_COST = 1 << 17;
+const MAX_BLOCK_SIZE = 16;
 const MAX_PARALLELIZATION = 16;
 
 export interface LegacyScryptHash {
