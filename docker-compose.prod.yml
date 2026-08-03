@@ -90,6 +90,17 @@ services:
       MAIL_USER:
       MAIL_PASS:
       MAIL_FROM:
+      # Skrytá kópia (BCC) na KAŽDOM maile dodávateľovi z obrazovky "Na
+      # objednanie". Majiteľ 3. 8. 2026: "vsade zatial ma byt ked nieco
+      # posiela mail dokial sa to neosvedci ze to funguje dobre" — chýbal
+      # tu, hoci `env.ts` ho číta, takže sa do kontajnera vôbec nedostal.
+      MAIL_BCC:
+      # issue 176: "Nedostupné tovary" — skrytá kópia (BCC) majiteľovi.
+      # Rovnaká úvaha aj rovnaký fail-closed kontrakt ako pri dvoch
+      # premenných nižšie; chýbal v tomto zozname, takže hodnota z
+      # `/srv/forestshop/.env` sa do kontajnera nikdy nedostala a obrazovka
+      # hlásila "Chýba adresa pre skrytú kópiu majiteľovi".
+      NEDOSTUPNE_BCC_EMAIL:
       # issue 172: "Nevyzdvihnuté zásielky" — skrytá kópia (BCC) majiteľovi,
       # rovnaká úvaha ako MAIL_HOST vyššie (`.optional()` v env.ts, bare
       # kľúč). Chýbajúca = automatizácia NEPOŠLE ani jeden e-mail zákazníkovi
