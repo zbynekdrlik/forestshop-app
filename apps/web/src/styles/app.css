@@ -1821,3 +1821,182 @@ tr:last-child td {
   gap: var(--fs-space-3);
   margin-top: var(--fs-space-4);
 }
+
+/* ── Texty e-mailov (issue 192) ─────────────────────────────────────────
+   Dva stĺpce: vľavo zoznam druhov e-mailov, vpravo úprava + živý náhľad.
+   Na úzkej obrazovke sa poskladajú pod seba (`auto-fit`/`minmax` namiesto
+   pevných šírok), aby sa obrazovka dala použiť aj pri priblížení. */
+.mt-layout {
+  display: grid;
+  grid-template-columns: minmax(14rem, 20rem) minmax(0, 1fr);
+  gap: var(--fs-space-5);
+  align-items: start;
+  margin-top: var(--fs-space-4);
+}
+
+@media (max-width: 60rem) {
+  .mt-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.mt-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--fs-space-2);
+}
+
+.mt-list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--fs-space-2);
+  /* Veľký klikací cieľ — obsluha sa má vedieť rýchlo preklikávať
+     (zadanie majiteľa k celej appke). */
+  min-height: 3rem;
+  padding: var(--fs-space-3) var(--fs-space-4);
+  text-align: left;
+  background: var(--fs-surface);
+  border: 1px solid var(--fs-border);
+  border-radius: var(--fs-radius-md);
+  color: var(--fs-ink);
+  font-size: var(--fs-text-base);
+  cursor: pointer;
+}
+
+.mt-list-item:hover {
+  border-color: var(--fs-brand);
+}
+
+.mt-list-item.active {
+  background: var(--fs-brand-soft);
+  border-color: var(--fs-brand);
+  font-weight: var(--fs-weight-semibold);
+}
+
+.mt-list-label {
+  /* Dlhý slovenský názov sa zalomí v položke, nikdy neroztiahne stĺpec. */
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+
+.mt-editor {
+  background: var(--fs-surface);
+  border: 1px solid var(--fs-border);
+  border-radius: var(--fs-radius-lg);
+  box-shadow: var(--fs-shadow-sm);
+  padding: var(--fs-space-5);
+}
+
+.mt-editor-head h3 {
+  margin: 0;
+}
+
+.mt-editor-desc {
+  margin: var(--fs-space-1) 0 var(--fs-space-2);
+  color: var(--fs-ink-muted);
+}
+
+.mt-editor-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--fs-space-5);
+  margin-top: var(--fs-space-4);
+}
+
+@media (max-width: 75rem) {
+  .mt-editor-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.mt-fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--fs-space-4);
+  min-width: 0;
+}
+
+.mt-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--fs-space-2);
+  font-weight: var(--fs-weight-medium);
+}
+
+.mt-field input,
+.mt-field textarea {
+  width: 100%;
+  font-size: var(--fs-text-base);
+  font-weight: 400;
+}
+
+.mt-field textarea {
+  /* Znenie e-mailu sa píše po riadkoch — monospace by bolo zbytočne
+     technické, ale zalomenie a výška musia dať vidieť celý text naraz. */
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.mt-placeholders-title {
+  margin: 0 0 var(--fs-space-2);
+  color: var(--fs-ink-muted);
+  font-size: var(--fs-text-sm);
+}
+
+.mt-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--fs-space-2);
+}
+
+.mt-hint {
+  margin: var(--fs-space-2) 0 0;
+  color: var(--fs-ink-muted);
+  font-size: var(--fs-text-sm);
+}
+
+.mt-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--fs-space-3);
+}
+
+.mt-preview {
+  min-width: 0;
+  background: var(--fs-surface-alt);
+  border: 1px solid var(--fs-border-soft);
+  border-radius: var(--fs-radius-md);
+  padding: var(--fs-space-4);
+}
+
+.mt-preview-title {
+  margin: 0 0 var(--fs-space-2);
+  font-weight: var(--fs-weight-semibold);
+}
+
+.mt-preview-subject {
+  margin: 0 0 var(--fs-space-3);
+  color: var(--fs-ink-muted);
+  font-size: var(--fs-text-sm);
+}
+
+.mt-preview-body {
+  background: var(--fs-surface);
+  border: 1px solid var(--fs-border);
+  border-radius: var(--fs-radius-sm);
+  padding: var(--fs-space-4);
+  /* Vygenerovaný e-mail smie byť širší než náhľad — nikdy nesmie roztiahnuť
+     celú stránku do vodorovného posúvania. */
+  overflow-x: auto;
+}
+
+.mt-history {
+  margin-top: var(--fs-space-5);
+  border-top: 1px solid var(--fs-border-soft);
+  padding-top: var(--fs-space-4);
+}
+
+.mt-history h4 {
+  margin: 0 0 var(--fs-space-2);
+}

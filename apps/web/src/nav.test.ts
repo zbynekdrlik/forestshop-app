@@ -4,15 +4,17 @@ import { DEFAULT_TAB_ID, HIDDEN_TABS, NAV, findTab, isVisibleTabId } from "./nav
 // #57 pôvodne chcel naľavo PRESNE dve viditeľné položky — issue 185 pridalo
 // tretí priečinok "Automatizácie" s tromi hotovými obrazovkami, issue 195
 // presunulo "Nedostupné tovary" z Automatizácií pod "Eshop" (nemá naplánovanú
-// úlohu ani prepínač zapnuté/vypnuté, je to pracovná obrazovka). Tento test je
+// úlohu ani prepínač zapnuté/vypnuté, je to pracovná obrazovka), issue 192
+// pridalo "Texty e-mailov" do Systému (nastavenie spoločné pre VŠETKY
+// automatizácie). Tento test je
 // najbližšie k tomu, čo strojovo overiť dá (registrácia, nie DOM).
-it("NAV má tri priečinky (Systém/Eshop/Automatizácie), s 1/2/2 záložkami v poradí podľa dôležitosti", () => {
+it("NAV má tri priečinky (Systém/Eshop/Automatizácie), s 2/2/2 záložkami v poradí podľa dôležitosti", () => {
   expect(NAV).toHaveLength(3);
   expect(NAV.map((f) => f.label)).toEqual(["Systém", "Eshop", "Automatizácie"]);
-  expect(NAV[0]?.tabs).toHaveLength(1);
+  expect(NAV[0]?.tabs).toHaveLength(2);
   expect(NAV[1]?.tabs).toHaveLength(2);
   expect(NAV[2]?.tabs).toHaveLength(2);
-  expect(NAV[0]?.tabs[0]?.label).toBe("Sync zo Shoptetu");
+  expect(NAV[0]?.tabs.map((t) => t.label)).toEqual(["Sync zo Shoptetu", "Texty e-mailov"]);
   expect(NAV[1]?.tabs.map((t) => t.label)).toEqual(["Na objednanie", "Nedostupné tovary"]);
   expect(NAV[2]?.tabs.map((t) => t.label)).toEqual([
     "Nevyzdvihnuté zásielky",

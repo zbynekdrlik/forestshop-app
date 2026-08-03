@@ -145,6 +145,11 @@ const E2E_PRIPOMIENKY_EMAIL = "e2e-pripomienky@forestshop.sk"; // musí sa zhodo
 // namiesto ďalšieho prihlásenia pod zdieľaným `e2e@forestshop.sk`.
 const E2E_NEDOSTUPNE_EMAIL = "e2e-nedostupne@forestshop.sk"; // musí sa zhodovať s hodnotou v nedostupne.spec.ts
 
+// issue 192: rovnaký mechanizmus a dôvod ako `E2E_NEDOSTUPNE_EMAIL` vyššie —
+// nový spec súbor (`mail-templates.spec.ts`) dostáva VLASTNÝ izolovaný účet
+// namiesto ďalšieho prihlásenia pod zdieľaným `e2e@forestshop.sk`.
+const E2E_MAILY_EMAIL = "e2e-maily@forestshop.sk"; // musí sa zhodovať s hodnotou v mail-templates.spec.ts
+
 const { db, pool } = createDb();
 // Konštantný literál bez interpolácie — obyčajný reťazec je tu rovnako bezpečný
 // ako `sql` tagovaná šablóna (tú používa ekvivalentný apps/api/tests/helpers/db.ts),
@@ -283,6 +288,12 @@ await db.insert(users).values({
 });
 await db.insert(users).values({
   email: E2E_NEDOSTUPNE_EMAIL,
+  passwordHash: await hashPassword(E2E_HESLO),
+  displayName: "E2E Manažér",
+  role: "manazer",
+});
+await db.insert(users).values({
+  email: E2E_MAILY_EMAIL,
   passwordHash: await hashPassword(E2E_HESLO),
   displayName: "E2E Manažér",
   role: "manazer",

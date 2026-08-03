@@ -7,7 +7,6 @@ export const MIN_DAYS = 4;
 
 // Stará appky's typo "Foresthop" opravený (rovnaký fix ako
 // `orders_reminder.py`'s vlastný komentár k tomu).
-export const EMAIL_SUBJECT = "📦 Stav vašej objednávky z Forestshop.sk";
 
 // Klasifikátorove dve kategórie (verbatim z n8n "Kontaktovany?" node) —
 // použité AJ v prompte, AJ ako jediné povolené výstupné hodnoty.
