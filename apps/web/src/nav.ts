@@ -52,18 +52,24 @@ export const NAV: readonly NavFolder[] = [
   {
     id: "eshop",
     label: "Eshop",
-    tabs: [{ id: "orders", label: "Na objednanie", Component: OrdersSection, wide: true }],
+    // issue 195: "Nedostupné tovary" patrí SEM, nie medzi Automatizácie —
+    // nemá naplánovanú úlohu ani prepínač zapnuté/vypnuté, je to obrazovka,
+    // na ktorej obsluha pracuje, presne ako "Na objednanie". `wide: true` pri
+    // oboch z rovnakého dôvodu (hustý pracovný obsah profituje z celej šírky
+    // okna, viď `NavTab.wide` vyššie).
+    tabs: [
+      { id: "orders", label: "Na objednanie", Component: OrdersSection, wide: true },
+      { id: "nedostupne", label: "Nedostupné tovary", Component: NedostupneSection, wide: true },
+    ],
   },
   {
     id: "automations",
     label: "Automatizácie",
-    // Poradie podľa dôležitosti (issue 185, zadanie majiteľa). `wide: true`
-    // len pri "Nedostupné tovary" (rovnaký dôvod ako "Na objednanie" nižšie —
-    // karty so zoznamom objednávok profitujú z celej šírky okna).
+    // Len tie dve veci, ktoré SKUTOČNE bežia na plán a dajú sa zapnúť/vypnúť
+    // (issue 195). Poradie podľa dôležitosti (issue 185, zadanie majiteľa).
     tabs: [
       { id: "posta-uncollected", label: "Nevyzdvihnuté zásielky", Component: PostaUncollectedSection },
       { id: "order-reminder", label: "Pripomienky objednávok", Component: OrderReminderSection },
-      { id: "nedostupne", label: "Nedostupné tovary", Component: NedostupneSection, wide: true },
     ],
   },
 ];

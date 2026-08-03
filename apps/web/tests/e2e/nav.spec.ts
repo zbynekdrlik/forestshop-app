@@ -71,9 +71,11 @@ test("ľavé menu má tri priečinky (Systém/Eshop/Automatizácie) s piatimi z�
   await expect(odznak).toBeVisible();
   await expect(odznak).toHaveText(/^\d+$/);
 
-  // issue 185: tri nové položky v priečinku "Automatizácie" — klik na každú
-  // otvorí svoju obrazovku (samostatný `<h1>` titulok v Topbar-e, žiadny
-  // duplicitný `<h2>` — obrazovky si ho pri presune z HIDDEN_TABS odstránili).
+  // issue 185: tri obrazovky, ktoré dovtedy sedeli len v `HIDDEN_TABS` — klik
+  // na každú otvorí svoju obrazovku (samostatný `<h1>` titulok v Topbar-e,
+  // žiadny duplicitný `<h2>` — obrazovky si ho pri presune odstránili). Dve z
+  // nich sú v priečinku "Automatizácie", "Nedostupné tovary" je od issue 195
+  // pod "Eshop" (nemá naplánovanú úlohu ani prepínač zapnuté/vypnuté).
   await page.getByRole("button", { name: "Nevyzdvihnuté zásielky" }).click();
   await expect(page.getByRole("heading", { name: "Nevyzdvihnuté zásielky" })).toBeVisible();
   // `scripts/e2e-setup.ts` seeduje obe automatizácie ako vypnuté, ale
