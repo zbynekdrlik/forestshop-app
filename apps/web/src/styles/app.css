@@ -337,9 +337,10 @@ tr:last-child td {
 }
 /* issue 185: stav zapnuté/vypnuté per záložka ("Automatizácie" priečinok) —
    znovupoužíva `.pill`/`.pill.off` (rovnaký vizuál ako vnútri
-   PostaUncollectedSection/OrderReminderSection), len s `flex-shrink: 0` v
-   tomto úzkom nav riadku, rovnaký dôvod ako `.tab-badge` vyššie. */
-.tabs .tab .pill {
+   PostaUncollectedSection/OrderReminderSection, samotná trieda `.pill` dáva
+   farby/padding), len `flex-shrink: 0` navyše v tomto úzkom nav riadku,
+   rovnaký dôvod ako `.tab-badge` vyššie. */
+.tab-status {
   flex-shrink: 0;
 }
 
