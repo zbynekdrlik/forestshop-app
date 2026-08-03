@@ -58,6 +58,14 @@ test("zoznam zobrazí nedostupný variant s náhradou, povinný náhľad predch�
   await page.keyboard.press("Escape");
   await expect(preview).toBeHidden();
 
+  // Po zavretí sa fokus vracia na tlačidlo, ktoré náhľad otvorilo — obsluha
+  // ovládajúca appku klávesnicou ostáva na svojom mieste v zozname. Tlačidlo je
+  // počas načítania náhľadu `disabled`, takže prehliadač z neho fokus zhodí:
+  // dialóg si spúšťač musí pamätať už z kliknutia, nie až z chvíle otvorenia
+  // (nájdené pri živom overení na produkcii, issue 191). jsdom tento stav
+  // nevie napodobniť, preto sa to overuje len tu, v skutočnom prehliadači.
+  await expect(page.getByTestId("nedostupne-send-9008-40287")).toBeFocused();
+
   // Znovu otvoriť a pokračovať v pôvodnom overení odoslania.
   await page.getByTestId("nedostupne-send-9008-40287").click();
   await expect(preview).toBeVisible();

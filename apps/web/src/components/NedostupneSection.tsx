@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type JSX } from "react";
+import { useCallback, useEffect, useRef, useState, type JSX } from "react";
 import type { Me } from "../api.js";
 import {
   fetchNedostupneList,
@@ -35,6 +35,10 @@ export function NedostupneSection({ role, onSessionExpired }: { readonly role: M
   const [busyKey, setBusyKey] = useState("");
   const [actionError, setActionError] = useState("");
   const [pending, setPending] = useState<PendingSend | null>(null);
+  // issue 191: spúšťacie tlačidlo si pamätáme už pri kliknutí — kým sa náhľad
+  // načítava, je `disabled` a prehliadač z neho fokus zhodí, takže po zavretí
+  // dialógu by sa nemal kam vrátiť (naživo overené na produkcii).
+  const triggerRef = useRef<HTMLElement | null>(null);
   const canControl = CONTROL_ROLES.has(role);
 
   const load = useCallback(() => {
@@ -58,6 +62,7 @@ export function NedostupneSection({ role, onSessionExpired }: { readonly role: M
   const openPreview = useCallback(
     (orderCode: string, variantCode: string, emailType: NedostupneEmailType) => {
       const key = `${orderCode}|${variantCode}|${emailType}`;
+      triggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
       setActionError("");
       setBusyKey(key);
       fetchNedostupnePreview(orderCode, variantCode, emailType)
@@ -206,6 +211,7 @@ export function NedostupneSection({ role, onSessionExpired }: { readonly role: M
           confirmLabel="📧 Odoslať zákazníkovi"
           confirmDisabled={busyKey !== ""}
           onConfirm={confirmSend}
+          returnFocusRef={triggerRef}
           onClose={() => {
             setPending(null);
           }}
