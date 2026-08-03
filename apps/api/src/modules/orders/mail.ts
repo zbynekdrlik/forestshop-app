@@ -10,6 +10,7 @@ import {
   variants,
 } from "../../db/schema.js";
 import { log } from "../../logger.js";
+import { sendLoggedMail } from "../mail-log/service.js";
 import { globalContext, textValue } from "../mail-templates/context.js";
 import { renderTemplate, type MailTemplateText } from "../mail-templates/render.js";
 import { resolveTemplate } from "../mail-templates/store.js";
@@ -161,16 +162,28 @@ export async function sendSupplierOrderMail(
   db: Database,
   transport: MailTransport,
   supplier: string,
+  // issue 193: ktorý zamestnanec odoslanie stlačil — táto cesta je vždy ručná.
+  actorUserId?: string,
 ): Promise<SendSupplierOrderMailResult> {
   const content = await buildSupplierOrderMailContent(db, supplier);
   if (content.to === null) return { status: "no_email" };
   if (content.itemCount === 0) return { status: "no_items" };
 
-  try {
-    await transport({ to: content.to, subject: content.subject, text: content.body });
-  } catch (error) {
-    const rawErrorMessage = error instanceof Error ? error.message : String(error);
-    log.error({ supplier, rawErrorMessage }, "odoslanie objednávky dodávateľovi zlyhalo (SMTP)");
+  const now = new Date();
+  const sendResult = await sendLoggedMail(
+    db,
+    transport,
+    { to: content.to, subject: content.subject, text: content.body },
+    now,
+    {
+      source: "supplier_order",
+      trigger: "manual",
+      templateKey: "supplier_order",
+      ...(actorUserId === undefined ? {} : { actorUserId }),
+    },
+  );
+  if (!sendResult.ok) {
+    log.error({ supplier, rawErrorMessage: sendResult.rawErrorMessage }, "odoslanie objednávky dodávateľovi zlyhalo (SMTP)");
     return { status: "send_failed" };
   }
   return { status: "sent", to: content.to, itemCount: content.itemCount };

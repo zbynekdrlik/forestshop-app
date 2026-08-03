@@ -9,7 +9,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { createDb } from "../apps/api/src/db/client.js";
-import { jobRuns, orderLines, orderOpenStatuses, orderReminderSettings, orders, pairings, postaUncollectedSettings, users } from "../apps/api/src/db/schema.js";
+import { jobRuns, mailLog, orderLines, orderOpenStatuses, orderReminderSettings, orders, pairings, postaUncollectedSettings, users } from "../apps/api/src/db/schema.js";
 import { CATALOG_IMPORT_JOB_NAME } from "../apps/api/src/modules/scheduler/jobs.js";
 import { hashPassword } from "../apps/api/src/modules/auth/passwords.js";
 import { ingestCatalog } from "../apps/api/src/modules/catalog/ingest.js";
@@ -149,6 +149,10 @@ const E2E_NEDOSTUPNE_EMAIL = "e2e-nedostupne@forestshop.sk"; // musí sa zhodova
 // nový spec súbor (`mail-templates.spec.ts`) dostáva VLASTNÝ izolovaný účet
 // namiesto ďalšieho prihlásenia pod zdieľaným `e2e@forestshop.sk`.
 const E2E_MAILY_EMAIL = "e2e-maily@forestshop.sk"; // musí sa zhodovať s hodnotou v mail-templates.spec.ts
+
+// issue 193: rovnaký mechanizmus a dôvod ako `E2E_MAILY_EMAIL` vyššie — nový
+// spec súbor (`mail-log.spec.ts`) dostáva VLASTNÝ izolovaný účet.
+const E2E_KNIHA_EMAIL = "e2e-kniha@forestshop.sk"; // musí sa zhodovať s hodnotou v mail-log.spec.ts
 
 const { db, pool } = createDb();
 // Konštantný literál bez interpolácie — obyčajný reťazec je tu rovnako bezpečný
@@ -294,6 +298,12 @@ await db.insert(users).values({
 });
 await db.insert(users).values({
   email: E2E_MAILY_EMAIL,
+  passwordHash: await hashPassword(E2E_HESLO),
+  displayName: "E2E Manažér",
+  role: "manazer",
+});
+await db.insert(users).values({
+  email: E2E_KNIHA_EMAIL,
   passwordHash: await hashPassword(E2E_HESLO),
   displayName: "E2E Manažér",
   role: "manazer",
@@ -562,6 +572,39 @@ await db.insert(jobRuns).values({
   finishedAt: new Date("2020-01-01T09:00:05Z"),
   status: "success",
   detail: { variantCount: 1 },
+});
+
+// issue 193: dva riadky knihy odoslaných e-mailov, aby `mail-log.spec.ts`
+// overoval SKUTOČNÝ obsah obrazovky, nie prázdny stav. `created_at` je "teraz"
+// (nie zostarnutý ako `job_run` vyššie) — obrazovka predvolene zobrazuje
+// posledných 30 dní, takže starý dátum by riadky skryl. Žiadny e-mail sa tým
+// neodosiela: sú to LEN záznamy o tom, čo appka kedysi urobila.
+const teraz = new Date();
+await db.insert(mailLog).values({
+  createdAt: teraz,
+  source: "posta_uncollected",
+  status: "sent",
+  trigger: "scheduled",
+  templateKey: "posta_1",
+  recipient: "e2e-zakaznik@example.com",
+  bcc: "e2e-majitel@example.com",
+  subject: "Zásielka čaká na pošte",
+  orderCode: "9001",
+  packageNumber: "RR000000001SK",
+  sequence: 1,
+});
+await db.insert(mailLog).values({
+  createdAt: teraz,
+  source: "nedostupne",
+  status: "skipped",
+  trigger: "manual",
+  templateKey: "nedostupne",
+  recipient: "e2e-zakaznik@example.com",
+  orderCode: "9002",
+  variantCode: "4859/46",
+  // Musí sa presne zhodovať s `DUPLICATE_REASON` (`modules/mail-log/
+  // queries.ts`) — inak by súhrn "zabránené duplicity" ukázal nulu.
+  reason: "už bolo odoslané skôr — druhý e-mail sa neposiela",
 });
 
 await pool.end();

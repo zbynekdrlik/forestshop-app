@@ -110,7 +110,9 @@ export function registerSupplierRoutes(app: Hono<AppBindings>, db: Database, sen
       const user = c.get("user");
       const now = new Date();
 
-      const result = await sendSupplierOrderMail(db, sendMail, supplier);
+      // issue 193: posledný parameter = kto odoslanie spustil (kniha
+      // odoslaných e-mailov).
+      const result = await sendSupplierOrderMail(db, sendMail, supplier, user.userId);
       await record(db, {
         at: now,
         actorUserId: user.userId,

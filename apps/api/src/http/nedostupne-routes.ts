@@ -110,6 +110,8 @@ export function registerNedostupneRoutes(app: Hono<AppBindings>, db: Database, d
         emailType,
         mailTransport: deps.mailTransport,
         bccEmail: deps.bccEmail,
+        // issue 193: kniha odoslaných e-mailov ukáže, KTO odoslanie spustil.
+        actorUserId: user.userId,
       });
       if (!result.ok) {
         return c.json({ ok: false as const, error: sendErrorMessage(result) });

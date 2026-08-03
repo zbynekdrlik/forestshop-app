@@ -1,6 +1,7 @@
 import type { Database } from "../../db/client.js";
 import { log } from "../../logger.js";
 import type { MailTransport } from "../mail/transport.js";
+import { recordSkippedMail, sendLoggedMail, type MailLogContext } from "../mail-log/service.js";
 import { buildShoptetAdminOrderUrl } from "../orders/queries.js";
 import { resolveTemplate } from "../mail-templates/store.js";
 import { buildEmail, classifyTracking, postaTemplateKey, shouldSend, sourceCoverage, terminalState, type SourceCoverage } from "./logic.js";
@@ -66,6 +67,12 @@ export interface RunPostaUncollectedOptions {
   readonly mailTransport: MailTransport | undefined;
   readonly bccEmail: string | undefined;
   readonly adminBaseUrl: string;
+  // issue 193: kto beh vyvolal — plánovač, alebo zamestnanec cez "Spustiť
+  // teraz". Zapisuje sa do knihy odoslaných e-mailov, nikdy sa neodvodzuje z
+  // toho, či je `actorUserId` vyplnené. Predvolene `scheduled`, aby existujúci
+  // volajúci (job) nemusel nič meniť.
+  readonly trigger?: "scheduled" | "manual";
+  readonly actorUserId?: string;
 }
 
 // Ďalší voľný kľúč v registri `.claude/rules/scheduler.md` (787_878_001/002/
@@ -96,11 +103,11 @@ export const POSTA_UNCOLLECTED_RUN_LOCK_KEY = 787_878_004;
  * (iný manažér, alebo prekryv s naplánovaným behom) počká, kým prvý celý
  * doskončí, namiesto toho, aby mohol poslať duplicitný e-mail. */
 export async function runPostaUncollected(options: RunPostaUncollectedOptions): Promise<PostaUncollectedRunResult> {
-  const { db, now, trackingClient, mailTransport, bccEmail, adminBaseUrl } = options;
+  const { db } = options;
   const lockClient = await db.$client.connect();
   try {
     await lockClient.query("select pg_advisory_lock($1)", [POSTA_UNCOLLECTED_RUN_LOCK_KEY]);
-    return await runPostaUncollectedLocked({ db, now, trackingClient, mailTransport, bccEmail, adminBaseUrl });
+    return await runPostaUncollectedLocked(options);
   } finally {
     await lockClient.query("select pg_advisory_unlock($1)", [POSTA_UNCOLLECTED_RUN_LOCK_KEY]);
     lockClient.release();
@@ -108,7 +115,8 @@ export async function runPostaUncollected(options: RunPostaUncollectedOptions): 
 }
 
 async function runPostaUncollectedLocked(options: RunPostaUncollectedOptions): Promise<PostaUncollectedRunResult> {
-  const { db, now, trackingClient, mailTransport, bccEmail, adminBaseUrl } = options;
+  const { db, now, trackingClient, mailTransport, bccEmail, adminBaseUrl, actorUserId } = options;
+  const trigger = options.trigger ?? "scheduled";
   const adminOrderUrl = (order: { readonly externalOrderId: string; readonly shoptetOrderId: number | null }): string =>
     buildShoptetAdminOrderUrl(adminBaseUrl, order.externalOrderId, order.shoptetOrderId);
 
@@ -190,8 +198,27 @@ async function runPostaUncollectedLocked(options: RunPostaUncollectedOptions): P
     if (wantsSend) {
       const nextCount = priorCount + 1;
       const recipient = (shipment.email ?? "").trim();
+      // issue 193: kontext pre spoločnú knihu odoslaných e-mailov — `sequence`
+      // nesie poradie upozornenia (1–4), takže z prehľadu vidno eskaláciu,
+      // nie zdanlivé opakovanie toho istého e-mailu.
+      const logCtx: MailLogContext = {
+        source: "posta_uncollected",
+        trigger,
+        templateKey: postaTemplateKey(nextCount),
+        orderCode: shipment.externalOrderId,
+        packageNumber,
+        sequence: nextCount,
+        ...(actorUserId === undefined ? {} : { actorUserId }),
+      };
       if (bccMissing || mailNotConfigured || recipient === "") {
         emailsBlocked += 1;
+        const reason =
+          recipient === ""
+            ? "objednávka nemá e-mailovú adresu zákazníka"
+            : bccMissing
+              ? "chýba adresa pre skrytú kópiu majiteľovi (POSTA_UNCOLLECTED_BCC_EMAIL)"
+              : "odosielanie e-mailov nie je nakonfigurované (chýba MAIL_HOST)";
+        await recordSkippedMail(db, now, logCtx, recipient, reason);
         if (recipient === "" && !bccMissing && !mailNotConfigured) {
           log.error(
             { orderCode: shipment.externalOrderId, packageNumber },
@@ -208,17 +235,21 @@ async function runPostaUncollectedLocked(options: RunPostaUncollectedOptions): P
           cls.retainedTill,
           now,
         );
-        try {
-          // BCC je pre TENTO mail ZÁVÄZNÁ (ticket's jediná bezpečnostná
-          // podmienka) — `bccMissing` vyššie to už vylúčilo, `bccEmail` je
-          // tu vždy definovaný neprázdny reťazec.
-          await mailTransport({
-            to: recipient,
-            subject: built.subject,
-            text: built.text,
-            html: built.html,
-            bcc: bccEmail,
-          });
+        // BCC je pre TENTO mail ZÁVÄZNÁ (ticket's jediná bezpečnostná
+        // podmienka) — `bccMissing` vyššie to už vylúčilo, `bccEmail` je tu
+        // vždy definovaný neprázdny reťazec. issue 193: odoslanie ide cez
+        // `sendLoggedMail`, ktorý si sám zapíše výsledok (odoslané/zlyhalo)
+        // do knihy odoslaných e-mailov; zlyhanie sa NEVYHADZUJE, vracia sa
+        // ako `ok: false` — zásielka preto ostáva v zozname nevyzdvihnutých
+        // s PÔVODNÝM počítadlom, presne ako pred touto zmenou.
+        const sendResult = await sendLoggedMail(
+          db,
+          mailTransport,
+          { to: recipient, subject: built.subject, text: built.text, html: built.html, bcc: bccEmail },
+          now,
+          logCtx,
+        );
+        if (sendResult.ok) {
           effectiveCount = nextCount;
           effectiveLastSent = now;
           emailsSent += 1;
@@ -236,10 +267,9 @@ async function runPostaUncollectedLocked(options: RunPostaUncollectedOptions): P
             },
             now,
           );
-        } catch (error) {
-          const rawErrorMessage = error instanceof Error ? error.message : String(error);
+        } else {
           log.error(
-            { orderCode: shipment.externalOrderId, packageNumber, rawErrorMessage },
+            { orderCode: shipment.externalOrderId, packageNumber, rawErrorMessage: sendResult.rawErrorMessage },
             "odoslanie e-mailu (Nevyzdvihnuté zásielky) zlyhalo — skúsi sa znova nabudúce",
           );
         }

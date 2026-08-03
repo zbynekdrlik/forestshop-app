@@ -14,6 +14,7 @@ import { checkLoginRateLimit, clientIp } from "./login-rate-limit.js";
 import { SESSION_COOKIE, requireUser, type AppBindings } from "./middleware.js";
 import { registerOrdersRoutes, type RunOrdersIngest } from "./orders-routes.js";
 import { registerOrderReminderRoutes, type OrderReminderRunDeps } from "./order-reminder-routes.js";
+import { registerMailLogRoutes } from "./mail-log-routes.js";
 import { registerMailTemplateRoutes } from "./mail-template-routes.js";
 import { registerNedostupneRoutes, type NedostupneRunDeps } from "./nedostupne-routes.js";
 import { requireSameOrigin } from "./origin-check.js";
@@ -210,6 +211,9 @@ export function createApp(
 
   // issue 192: upraviteľné znenia e-mailov (obrazovka "Texty e-mailov").
   registerMailTemplateRoutes(app, db);
+  // issue 193: kniha odoslaných e-mailov (len čítanie) — zapisujú do nej samy
+  // odosielacie cesty cez `mail-log/service.ts`.
+  registerMailLogRoutes(app, db, options.adminBaseUrl ?? "https://www.forestshop.sk");
 
   // Musí byť registrovaný AŽ PO všetkých skutočných /api/* trasách vyššie — Hono
   // vyberá presnejšiu zhodu, takže tie majú prednosť a sem sa dostane len to, čo
