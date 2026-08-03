@@ -129,7 +129,7 @@ it("formatVariantTotalChip vráti null, keď produkt má v skupine LEN jeden ria
 
 // issue 63 (nález pri kontrole issue 62): chip sa doteraz rozhodoval LEN
 // podľa `lineCount < 2`, nie podľa zvyšku — opakovaný produkt, ktorý je UŽ
-// celý vybavený, by preto navždy visel s "Σ spolu 0 ks".
+// celý vybavený, by preto navždy visel s "Σ 0 ks".
 it("formatVariantTotalChip vráti null, keď je produkt s ≥2 riadkami UŽ CELÝ vybavený (remaining === 0)", () => {
   const totals = computeVariantTotals([
     variantLine("4859/46", 3, "objednane", true), // odškrtnutý → vybavený
@@ -150,7 +150,7 @@ it("formatVariantTotalChip s ≥2 riadkami vráti text so ZOSTÁVAJÚCIM množst
   if (vt === undefined) throw new Error("4859/46 musí byť v mape");
   const chip = formatVariantTotalChip(vt);
   expect(chip).toEqual({
-    text: "Σ spolu 3 ks",
+    text: "Σ 3 ks",
     title: "Spolu vo všetkých objednávkach: 5 ks · nevybavené: 3 ks",
   });
 });
