@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   checkLoginRateLimit,
   rateLimitEntryCountsForTest,
@@ -68,5 +68,31 @@ describe("checkLoginRateLimit — existujúce vlastnosti zostávajú", () => {
 
     const later = new Date(BASE.getTime() + WINDOW_MS + 1);
     expect(checkLoginRateLimit(ip, email, later)).toBe(true);
+  });
+});
+
+// issue 192: E2E balík sa prihlasuje ~30-krát z jednej adresy, takže si strop
+// na IP zdvíha premennou prostredia. Test dokazuje OBE strany dohody: bez
+// premennej platí produkčných 30, s premennou platí zadaná hodnota — a limit
+// na (IP, e-mail) pár sa pritom nemení.
+describe("strop na IP sa dá zdvihnúť premennou prostredia (len pre testovacie prostredie)", () => {
+  it("bez premennej platí produkčná hodnota 30", async () => {
+    vi.resetModules();
+    vi.stubEnv("LOGIN_IP_MAX_ATTEMPTS", undefined);
+    const modul = await import("./login-rate-limit.js");
+    const ip = "203.0.113.60";
+    for (let i = 0; i < 30; i++) expect(modul.checkLoginRateLimit(ip, `a-${String(i)}@x.sk`, BASE)).toBe(true);
+    expect(modul.checkLoginRateLimit(ip, "a-30@x.sk", BASE)).toBe(false);
+    vi.unstubAllEnvs();
+  });
+
+  it("s premennou platí zadaná, vyššia hodnota", async () => {
+    vi.resetModules();
+    vi.stubEnv("LOGIN_IP_MAX_ATTEMPTS", "40");
+    const modul = await import("./login-rate-limit.js");
+    const ip = "203.0.113.61";
+    for (let i = 0; i < 40; i++) expect(modul.checkLoginRateLimit(ip, `b-${String(i)}@x.sk`, BASE)).toBe(true);
+    expect(modul.checkLoginRateLimit(ip, "b-40@x.sk", BASE)).toBe(false);
+    vi.unstubAllEnvs();
   });
 });

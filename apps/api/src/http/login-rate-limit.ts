@@ -20,7 +20,21 @@ const MAX_ATTEMPTS = 10; // na (IP, e-mail) pár
 // NATom/kanceláriou, zopár preklepov v hesle) nesmie nikdy naraziť LEN na
 // tento druhý, širší limit.
 const IP_WINDOW_MS = 5 * 60 * 1000;
-const IP_MAX_ATTEMPTS = 30; // na samotnú IP, bez ohľadu na e-mail
+// Predvolená PRODUKČNÁ hodnota. Prepísať sa dá len premennou prostredia, ktorú
+// produkcia nenastavuje — slúži VÝHRADNE pre E2E balík (`playwright.config
+// .ts`), kde všetkých ~30 prihlásení celého behu prichádza z JEDNEJ adresy
+// (localhost), takže by tento limit narazil zo svojej podstaty, nie kvôli
+// útoku. Znižovať/rušiť ochranu v produkcii to nijako neumožňuje: bez
+// premennej platí 30, a limit na (IP, e-mail) pár (`MAX_ATTEMPTS`) — ten, čo
+// chráni konkrétny účet — sa nemení vôbec.
+const IP_MAX_ATTEMPTS = readPositiveIntEnv("LOGIN_IP_MAX_ATTEMPTS", 30); // na samotnú IP, bez ohľadu na e-mail
+
+function readPositiveIntEnv(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (raw === undefined) return fallback;
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
 
 const MAX_ENTRIES = 10_000; // strop na počet záznamov v KAŽDEJ z dvoch máp
 // Pri dosiahnutí stropu sa naraz uvoľní táto dávka miesta zmazaním najskôr

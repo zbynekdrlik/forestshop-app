@@ -79,7 +79,7 @@ export function registerNedostupneRoutes(app: Hono<AppBindings>, db: Database, d
         // (`.claude/rules/testing.md`'s Chromium console-error pravidlo).
         return c.json({ ok: false as const, error: "Riadok objednávky sa v aktuálnom zozname nenašiel." });
       }
-      const built = buildEmailForType(ctx, emailType);
+      const built = await buildEmailForType(db, ctx, emailType);
       const previewToken = issuePreviewToken(orderCode, variantCode, emailType, new Date());
       return c.json({ ok: true as const, subject: built.subject, html: built.html, recipient: ctx.email, customerName: ctx.customerName, previewToken });
     },

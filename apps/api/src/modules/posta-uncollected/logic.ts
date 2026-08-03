@@ -1,3 +1,6 @@
+import { globalContext, textValue } from "../mail-templates/context.js";
+import type { MailTemplateKey } from "../mail-templates/registry.js";
+import { renderTemplate, type MailTemplateText, type RenderedEmail } from "../mail-templates/render.js";
 import {
   CANCELLED_STATUSES,
   daysNeededForNextEmail,
@@ -228,27 +231,24 @@ export function shouldSend(count: number, lastSent: Date | null, today: Date): b
   return days >= needed;
 }
 
-function htmlEscape(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
+export type BuiltEmail = RenderedEmail;
+
+/** Ktorá zo štyroch zásielkových šablón patrí k tomuto poradiu e-mailu —
+ * eskalácia sa zachováva presne ako predtým (1./2./3. a posledná výzva pre
+ * štvrtý a každý ďalší). */
+export function postaTemplateKey(count: number): MailTemplateKey {
+  if (count <= 1) return "posta_1";
+  if (count === 2) return "posta_2";
+  if (count === 3) return "posta_3";
+  return "posta_4";
 }
 
-export interface BuiltEmail {
-  readonly subject: string;
-  readonly html: string;
-  readonly text: string;
-}
-
-/** (subject, html, text) pre e-mail #count — doslovné znenie zo starej
- * appky. Dátum, ktorý už PREŠIEL (alebo sa nedá prečítať), sa berie ako
- * žiadny — mail dostane dateless "čo najskôr" formuláciu (rovnaký zámer ako
- * stará appka's `build_email`). */
+/** Dosadí hodnoty do šablóny vybranej `postaTemplateKey`. Dátum, ktorý už
+ * PREŠIEL (alebo sa nedá prečítať), sa berie ako žiadny — šablóna má na ten
+ * prípad vlastnú vetvu `{{#ak termin_vyzdvihnutia}}…{{inak}}…{{/ak}}`,
+ * rovnaký zámer ako pôvodná dvojica viet v starej appke's `build_email`. */
 export function buildEmail(
-  count: number,
+  template: MailTemplateText,
   name: string,
   trackNum: string,
   officeName: string,
@@ -260,79 +260,13 @@ export function buildEmail(
   const retainedTillDisplay =
     d !== null && d >= today ? `${String(d.getUTCDate())}. ${String(d.getUTCMonth() + 1)}. ${String(d.getUTCFullYear())}` : "";
   const link = trackingLink(trackNum);
-  const nameH = htmlEscape(name);
-  const numH = `<strong>${htmlEscape(trackNum)}</strong>`;
-  const officeH = `<strong>${htmlEscape(officeName)}</strong>${officeAddr !== "" ? ` (${htmlEscape(officeAddr)})` : ""}`;
-  const tillH = `<strong>${htmlEscape(retainedTillDisplay)}</strong>`;
-
-  let subject: string;
-  let intro: string;
-  let urgency: string;
-  if (count === 1) {
-    subject = `Vaša zásielka čaká na vyzdvihnutie | ${trackNum}`;
-    intro = `vaša zásielka č. ${numH} je uložená na pošte ${officeH} a čaká na vyzdvihnutie.`;
-    urgency =
-      retainedTillDisplay !== ""
-        ? `Prosím vyzdvihnite si ju do ${tillH}, aby nebola vrátená späť odosielateľovi.`
-        : "Prosím vyzdvihnite si ju čo najskôr, aby nebola vrátená späť odosielateľovi.";
-  } else if (count === 2) {
-    subject = `Pripomienka: zásielka stále čaká | ${trackNum}`;
-    intro = `opätovne vás upozorňujeme, že vaša zásielka č. ${numH} je stále uložená na pošte ${officeH} a zatiaľ nebola vyzdvihnutá.`;
-    urgency =
-      retainedTillDisplay !== ""
-        ? `Termín na vyzdvihnutie sa blíži: ${tillH}. Po tomto dátume bude zásielka vrátená.`
-        : "Prosím vyzdvihnite si ju čo najskôr. Zásielka bude čoskoro vrátená odosielateľovi.";
-  } else if (count === 3) {
-    subject = `Posledné upozornenie: zásielka bude vrátená | ${trackNum}`;
-    intro = `toto je naše posledné upozornenie — vaša zásielka č. ${numH} je stále na pošte ${officeH}.`;
-    urgency =
-      retainedTillDisplay !== ""
-        ? `Ak si ju nevyzdvihnete do ${tillH}, bude vrátená späť odosielateľovi.`
-        : "Ak si ju čoskoro nevyzdvihnete, bude vrátená späť odosielateľovi.";
-  } else {
-    subject = `Posledná výzva: zásielka bude vrátená | ${trackNum}`;
-    intro = `napriek opakovaným upozorneniam vaša zásielka č. ${numH} je stále nevyzdvihnutá na pošte ${officeH}.`;
-    urgency =
-      "Zásielka bude v najbližších dňoch vrátená späť. Ak ju stále chcete, prosím kontaktujte nás čo najskôr na " +
-      '<a href="mailto:eshop@forestshop.sk">eshop@forestshop.sk</a> alebo telefonicky.';
-  }
-
-  const html = [
-    "<!DOCTYPE html>",
-    "<html>",
-    '  <body style="font-family: Arial, sans-serif; font-size: 16px; color: #333;">',
-    `    <p>Dobrý deň, <strong>${nameH}</strong>,</p>`,
-    "",
-    `    <p>${intro}</p>`,
-    "",
-    `    <p>${urgency}</p>`,
-    "",
-    `    <p>👉 Stav zásielky môžete sledovať tu: <a href="${link}">${link}</a></p>`,
-    "",
-    "    <p>",
-    "      Ak máte akékoľvek otázky, pokojne nás kontaktujte na",
-    '      <a href="mailto:eshop@forestshop.sk">eshop@forestshop.sk</a>.',
-    "    </p>",
-    "",
-    '    <p style="margin-top: 30px;">',
-    "      S pozdravom,<br>",
-    "      <strong>Tím Forestshop.sk</strong><br>",
-    '      <a href="https://www.forestshop.sk" target="_blank">www.forestshop.sk</a>',
-    "    </p>",
-    "  </body>",
-    "</html>",
-  ].join("\n");
-
-  const text = [
-    `Dobrý deň, ${name},`,
-    "",
-    intro.replaceAll(/<[^>]+>/g, ""),
-    urgency.replaceAll(/<[^>]+>/g, ""),
-    "",
-    `Stav zásielky môžete sledovať tu: ${link}`,
-    "",
-    "S pozdravom, Tím Forestshop.sk",
-  ].join("\n");
-
-  return { subject, html, text };
+  return renderTemplate(template, {
+    ...globalContext(),
+    meno_zakaznika: textValue(name),
+    cislo_zasielky: textValue(trackNum),
+    posta: textValue(officeName),
+    adresa_posty: textValue(officeAddr),
+    termin_vyzdvihnutia: textValue(retainedTillDisplay),
+    odkaz_sledovanie: { kind: "link", url: link, label: link },
+  });
 }

@@ -2,7 +2,8 @@ import type { Database } from "../../db/client.js";
 import { log } from "../../logger.js";
 import type { MailTransport } from "../mail/transport.js";
 import { buildShoptetAdminOrderUrl } from "../orders/queries.js";
-import { buildEmail, classifyTracking, shouldSend, sourceCoverage, terminalState, type SourceCoverage } from "./logic.js";
+import { resolveTemplate } from "../mail-templates/store.js";
+import { buildEmail, classifyTracking, postaTemplateKey, shouldSend, sourceCoverage, terminalState, type SourceCoverage } from "./logic.js";
 import { loadEligibleOrders } from "./orders-source.js";
 import { loadPostaUncollectedState, prunePostaUncollectedState, upsertPostaUncollectedState } from "./state.js";
 import { TERMINAL_CACHE_DAYS, trackingLink } from "./constants.js";
@@ -198,7 +199,15 @@ async function runPostaUncollectedLocked(options: RunPostaUncollectedOptions): P
           );
         }
       } else {
-        const built = buildEmail(nextCount, shipment.customerName, packageNumber, cls.officeName, cls.officeAddr, cls.retainedTill, now);
+        const built = buildEmail(
+          await resolveTemplate(db, postaTemplateKey(nextCount)),
+          shipment.customerName,
+          packageNumber,
+          cls.officeName,
+          cls.officeAddr,
+          cls.retainedTill,
+          now,
+        );
         try {
           // BCC je pre TENTO mail ZÁVÄZNÁ (ticket's jediná bezpečnostná
           // podmienka) — `bccMissing` vyššie to už vylúčilo, `bccEmail` je

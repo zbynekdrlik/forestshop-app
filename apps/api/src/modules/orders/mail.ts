@@ -10,6 +10,9 @@ import {
   variants,
 } from "../../db/schema.js";
 import { log } from "../../logger.js";
+import { globalContext, textValue } from "../mail-templates/context.js";
+import { renderTemplate, type MailTemplateText } from "../mail-templates/render.js";
+import { resolveTemplate } from "../mail-templates/store.js";
 import type { MailTransport } from "../mail/transport.js";
 import { resolveEffectiveSupplierLink } from "./effective-supplier-link.js";
 import { NEZNAMY_DODAVATEL } from "./queries.js";
@@ -60,14 +63,22 @@ function formatSupplierOrderMailLine(line: SupplierOrderMailLine): string {
 }
 
 // Čistá funkcia (žiadna DB) — ľahko testovateľná na hraniciach skloňovania
-// (0, 1, 2, 4, 5) bez behu integračných testov.
+// (0, 1, 2, 4, 5) bez behu integračných testov. Znenie prichádza z
+// upraviteľnej šablóny (issue 192); tento e-mail je jediný ČISTO TEXTOVÝ,
+// takže sa z výsledku berie len textová verzia.
 export function formatSupplierOrderMailText(
+  template: MailTemplateText,
   supplier: string,
   lines: readonly SupplierOrderMailLine[],
 ): { readonly subject: string; readonly body: string } {
-  const subject = `Objednávka — ${supplier} (${String(lines.length)} ${itemsWord(lines.length)})`;
-  const body = [subject, ...lines.map(formatSupplierOrderMailLine)].join("\n");
-  return { subject, body };
+  const rendered = renderTemplate(template, {
+    ...globalContext(),
+    dodavatel: textValue(supplier),
+    pocet_poloziek: textValue(String(lines.length)),
+    slovo_poloziek: textValue(itemsWord(lines.length)),
+    zoznam_poloziek: { kind: "list", items: lines.map((line) => ({ label: formatSupplierOrderMailLine(line) })) },
+  });
+  return { subject: rendered.subject, body: rendered.text };
 }
 
 // Len riadky v stave "objednane" (ešte neposlané/nevybavené dodávateľovi) —
@@ -132,7 +143,7 @@ export async function buildSupplierOrderMailContent(db: Database, supplier: stri
     .from(supplierContacts)
     .where(eq(supplierContacts.supplier, supplier))
     .limit(1);
-  const { subject, body } = formatSupplierOrderMailText(supplier, lines);
+  const { subject, body } = formatSupplierOrderMailText(await resolveTemplate(db, "supplier_order"), supplier, lines);
   return { supplier, to: contact?.email ?? null, subject, body, itemCount: lines.length };
 }
 

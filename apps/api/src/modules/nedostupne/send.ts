@@ -3,6 +3,7 @@ import type { Database } from "../../db/client.js";
 import { log } from "../../logger.js";
 import { orderLines, orders, products, variants } from "../../db/schema.js";
 import type { MailTransport } from "../mail/transport.js";
+import { resolveTemplate } from "../mail-templates/store.js";
 import { listOpenStatusNames } from "../orders/open-statuses.js";
 import { NEDOSTUPNE_SEND_LOCK_KEY, TYPE_ALTERNATIVE, type NedostupneEmailType } from "./constants.js";
 import { buildAlternativeEmail, buildAlternatives, buildUnavailableEmail, type BuiltNedostupneEmail, type EmailAlternative } from "./logic.js";
@@ -59,9 +60,15 @@ export async function findNedostupneContext(db: Database, orderCode: string, var
 }
 
 /** Rovnaká funkcia sa volá pre NÁHĽAD aj pre SKUTOČNÉ odoslanie — garantuje,
- * že sa zákazníkovi pošle PRESNE to, čo obsluha videla v náhľade. */
-export function buildEmailForType(ctx: NedostupneEmailContext, type: NedostupneEmailType): BuiltNedostupneEmail {
-  return type === TYPE_ALTERNATIVE ? buildAlternativeEmail(ctx.customerName, ctx.itemName, ctx.alternatives) : buildUnavailableEmail(ctx.customerName);
+ * že sa zákazníkovi pošle PRESNE to, čo obsluha videla v náhľade. Znenie sa
+ * načíta z upraviteľnej šablóny (issue 192); keď majiteľ nič neupravil, vráti
+ * `resolveTemplate` pôvodné znenie z kódu. */
+export async function buildEmailForType(db: Database, ctx: NedostupneEmailContext, type: NedostupneEmailType): Promise<BuiltNedostupneEmail> {
+  if (type === TYPE_ALTERNATIVE) {
+    const template = await resolveTemplate(db, "nedostupne_alternativa");
+    return buildAlternativeEmail(template, ctx.customerName, ctx.itemName, ctx.alternatives);
+  }
+  return buildUnavailableEmail(await resolveTemplate(db, "nedostupne"), ctx.customerName);
 }
 
 export type SendNedostupneResult =
@@ -125,7 +132,7 @@ async function sendNedostupneEmailLocked(options: SendNedostupneOptions): Promis
   if (bccMissing) return { ok: false, code: "not_configured", reason: "chýba adresa pre skrytú kópiu majiteľovi (NEDOSTUPNE_BCC_EMAIL)" };
   if (mailTransport === undefined) return { ok: false, code: "not_configured", reason: "odosielanie e-mailov nie je nakonfigurované (chýba MAIL_HOST)" };
 
-  const built = buildEmailForType(ctx, emailType);
+  const built = await buildEmailForType(db, ctx, emailType);
   try {
     await mailTransport({ to: email, subject: built.subject, text: built.text, html: built.html, bcc: bccEmail });
   } catch (error) {

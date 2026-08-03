@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
+import { MAIL_TEMPLATE_KINDS } from "../mail-templates/registry.js";
 import { formatSupplierOrderMailText, type SupplierOrderMailLine } from "./mail.js";
+
+// issue 192: pôvodné znenie objednávky dodávateľovi — presne to, čo appka
+// pošle, kým ho majiteľ nezmení. Tieto testy sú zároveň dôkazom, že prechod
+// na šablóny výsledný text NEZMENIL.
+const SUPPLIER = MAIL_TEMPLATE_KINDS["supplier_order"].defaultText;
 
 // Čisté funkcie (žiadna DB) — presné hranice slovenského skloňovania
 // (0, 1, 2, 4, 5) a zloženie riadku, ktoré `formatSupplierOrderMailText`
@@ -9,7 +15,7 @@ describe("formatSupplierOrderMailText", () => {
     const lines: SupplierOrderMailLine[] = [
       { variantCode: "40287", sizeLabel: null, quantity: 1, externalCode: null, supplierUrl: null },
     ];
-    const { subject, body } = formatSupplierOrderMailText("DODAVATEL-TEST-1", lines);
+    const { subject, body } = formatSupplierOrderMailText(SUPPLIER, "DODAVATEL-TEST-1", lines);
     expect(subject).toBe("Objednávka — DODAVATEL-TEST-1 (1 položka)");
     expect(body.split("\n")[0]).toBe(subject);
   });
@@ -29,7 +35,7 @@ describe("formatSupplierOrderMailText", () => {
       externalCode: null,
       supplierUrl: null,
     }));
-    const { subject } = formatSupplierOrderMailText("Dodávateľ", lines);
+    const { subject } = formatSupplierOrderMailText(SUPPLIER, "Dodávateľ", lines);
     expect(subject).toBe(`Objednávka — Dodávateľ (${String(count)} ${expectedWord})`);
   });
 
@@ -37,7 +43,7 @@ describe("formatSupplierOrderMailText", () => {
     const lines: SupplierOrderMailLine[] = [
       { variantCode: "4859/46", sizeLabel: "46", quantity: 3, externalCode: null, supplierUrl: null },
     ];
-    const { body } = formatSupplierOrderMailText("DODAVATEL-TEST-1", lines);
+    const { body } = formatSupplierOrderMailText(SUPPLIER, "DODAVATEL-TEST-1", lines);
     expect(body.split("\n")[1]).toBe("4859/46 | 46 | 3 ks");
   });
 
@@ -45,12 +51,12 @@ describe("formatSupplierOrderMailText", () => {
     const lines: SupplierOrderMailLine[] = [
       { variantCode: "40287", sizeLabel: null, quantity: 2, externalCode: null, supplierUrl: null },
     ];
-    const { body } = formatSupplierOrderMailText("Dodávateľ", lines);
+    const { body } = formatSupplierOrderMailText(SUPPLIER, "Dodávateľ", lines);
     expect(body.split("\n")[1]).toBe("40287 | 2 ks");
   });
 
   it("žiadne položky vyprodukuje predmet '0 položiek' a telo len s hlavičkou", () => {
-    const { subject, body } = formatSupplierOrderMailText("Prázdny dodávateľ", []);
+    const { subject, body } = formatSupplierOrderMailText(SUPPLIER, "Prázdny dodávateľ", []);
     expect(subject).toBe("Objednávka — Prázdny dodávateľ (0 položiek)");
     expect(body).toBe(subject);
   });
@@ -67,7 +73,7 @@ describe("formatSupplierOrderMailText", () => {
         supplierUrl: "https://www.huntingshop.eu/wild-t-green-nohavice",
       },
     ];
-    const { body } = formatSupplierOrderMailText("DODAVATEL-TEST-1", lines);
+    const { body } = formatSupplierOrderMailText(SUPPLIER, "DODAVATEL-TEST-1", lines);
     expect(body.split("\n")[1]).toBe(
       "4859/46 | kód OB832 | 46 | 3 ks | https://www.huntingshop.eu/wild-t-green-nohavice",
     );
@@ -77,7 +83,7 @@ describe("formatSupplierOrderMailText", () => {
     const lines: SupplierOrderMailLine[] = [
       { variantCode: "40287", sizeLabel: null, quantity: 1, externalCode: "X1", supplierUrl: null },
     ];
-    const { body } = formatSupplierOrderMailText("Dodávateľ", lines);
+    const { body } = formatSupplierOrderMailText(SUPPLIER, "Dodávateľ", lines);
     expect(body.split("\n")[1]).toBe("40287 | kód X1 | 1 ks");
   });
 });

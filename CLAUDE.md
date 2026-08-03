@@ -89,3 +89,4 @@ Per-area rules live in `.claude/rules/<area>.md` with `paths:` frontmatter.
 - Nevyzdvihnuté zásielky (Pošta SK — enabled vs. run-now, coalesce, advisory zámok) → `.claude/rules/posta-uncollected.md`
 - Pripomienky objednávok (AI klasifikácia poznámky, terminálna rezolúcia, override→job_run relocate) → `.claude/rules/order-reminder.md`
 - Nedostupné tovary (návrh náhrady, jednorazový preview token, žiadny scheduler) → `.claude/rules/nedostupne.md`
+- Texty e-mailov (F192 — upraviteľné šablóny, zástupné polia, strop prihlásení v e2e) → `.claude/rules/mail-templates.md`

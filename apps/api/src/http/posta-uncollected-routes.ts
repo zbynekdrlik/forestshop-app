@@ -7,7 +7,8 @@ import { jobRuns } from "../db/schema.js";
 import { log } from "../logger.js";
 import { record } from "../modules/audit/service.js";
 import { MAX_EMAILS } from "../modules/posta-uncollected/constants.js";
-import { buildEmail } from "../modules/posta-uncollected/logic.js";
+import { resolveTemplate } from "../modules/mail-templates/store.js";
+import { buildEmail, postaTemplateKey } from "../modules/posta-uncollected/logic.js";
 import { POSTA_UNCOLLECTED_JOB_NAME } from "../modules/scheduler/jobs.js";
 import { getLatestJobRun } from "../modules/scheduler/queries.js";
 import type { PostaUncollectedRunResult, RunPostaUncollectedOptions } from "../modules/posta-uncollected/run.js";
@@ -167,7 +168,8 @@ export function registerPostaUncollectedRoutes(app: Hono<AppBindings>, db: Datab
       const already = row.count;
       const maxReached = already >= MAX_EMAILS;
       const count = Math.min(already + 1, MAX_EMAILS);
-      const built = buildEmail(count, row.name, packageNumber, row.officeName, row.officeAddr, row.retainedTill, new Date());
+      const template = await resolveTemplate(db, postaTemplateKey(count));
+      const built = buildEmail(template, row.name, packageNumber, row.officeName, row.officeAddr, row.retainedTill, new Date());
       return c.json({
         ok: true as const,
         subject: built.subject,

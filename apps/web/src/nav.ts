@@ -1,6 +1,7 @@
 import type { ComponentType } from "react";
 import type { Me } from "./api.js";
 import { CatalogPage } from "./components/CatalogPage.js";
+import { MailTemplatesSection } from "./components/MailTemplatesSection.js";
 import { NedostupneSection } from "./components/NedostupneSection.js";
 import { OrderReminderSection } from "./components/OrderReminderSection.js";
 import { OrdersSection } from "./components/OrdersSection.js";
@@ -53,7 +54,13 @@ export const NAV: readonly NavFolder[] = [
   {
     id: "system",
     label: "Systém",
-    tabs: [{ id: "sync", label: "Sync zo Shoptetu", icon: "🔄", Component: SyncSection }],
+    // issue 192: "Texty e-mailov" patrí sem — je to nastavenie appky, ktoré sa
+    // dotýka VŠETKÝCH automatizácií naraz, nie práca s konkrétnymi
+    // objednávkami (tá je v Eshope) ani jedna konkrétna automatizácia.
+    tabs: [
+      { id: "sync", label: "Sync zo Shoptetu", icon: "🔄", Component: SyncSection },
+      { id: "mail-templates", label: "Texty e-mailov", icon: "✉️", Component: MailTemplatesSection, wide: true },
+    ],
   },
   {
     id: "eshop",

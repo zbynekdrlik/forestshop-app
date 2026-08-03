@@ -625,3 +625,19 @@ paths:
   read and write go in `try/catch` with the safe default, since a browser
   with storage disabled throws and must never take the app down over a
   preference.
+- **Dialóg, ktorý sa otvára AŽ po dobehnutí serverového volania, si spúšťací
+  prvok musí zapamätať už pri KLIKNUTÍ — `document.activeElement` v momente
+  jeho otvorenia je vtedy už `<body>`.** Spúšťacie tlačidlo je počas
+  načítania `disabled` (busy stav) a prehliadač z neho fokus zhodí, takže
+  `MailPreviewDialog` po zavretí vracal fokus na začiatok stránky a obsluha
+  ovládajúca appku klávesnicou stratila miesto v zozname (issue 191, nájdené
+  až pri živom overení na produkcii, nie testom). Vzor: volajúci si drží
+  `useRef` naplnený v `onClick` a odovzdá ho ako `returnFocusRef`; dialóg
+  obnoví `returnFocusRef?.current ?? previous` a overí `isConnected`.
+- **Návrat fokusu po zavretí prekryvu sa dá overiť LEN e2e testom —
+  jsdom nezhadzuje fokus z prvku, ktorý sa práve stal `disabled`.** Overené
+  troma spôsobmi (`blur()`, presun fokusu na iný prvok v tom istom riadku —
+  ten je vtedy tiež `disabled`, takže fokus neprevezme): unit test prešiel aj
+  proti pokazenému kódu, čiže by bol tautológia (`test-strictness.md`). Také
+  overenie patrí do `tests/e2e/*.spec.ts` (`await expect(locator)
+  .toBeFocused()`) a v unit súbore ostane len komentár, PREČO tam test nie je.

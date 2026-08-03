@@ -7,8 +7,6 @@ export const TYPE_ALTERNATIVE = "alternativa" as const;
 export const EMAIL_TYPES = [TYPE_UNAVAILABLE, TYPE_ALTERNATIVE] as const;
 export type NedostupneEmailType = (typeof EMAIL_TYPES)[number];
 
-export const UNAVAILABLE_SUBJECT = "Informácia o dostupnosti vašej objednávky — Forestshop.sk";
-export const ALTERNATIVE_SUBJECT = "Alternatívy k vášmu tovaru — Forestshop.sk";
 
 // Klikateľný fallback na vyhľadávanie podľa kódu — appka nemá žiadny zdroj
 // SKUTOČNEJ Shoptet produktovej URL (overené priamo na exporte: žiadny
