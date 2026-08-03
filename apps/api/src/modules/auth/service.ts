@@ -2,7 +2,7 @@ import { and, eq, gt } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
 import { sessions, users } from "../../db/schema.js";
 import { record } from "../audit/service.js";
-import { hashPassword, verifyPassword } from "./passwords.js";
+import { hashPassword, needsRehash, verifyPassword } from "./passwords.js";
 import { SESSION_TTL_MS, hashToken, newSessionToken } from "./sessions.js";
 
 // Dummy hash used to verify a password against when the e-mail is unknown, so that
@@ -47,6 +47,26 @@ export async function login(
     });
     return null;
   }
+  // Účet prenesený zo starej appky (#189) má odtlačok ešte vo werkzeug scrypt
+  // tvare. Až TERAZ, po overení hesla, poznáme heslo v čitateľnej podobe —
+  // takže je to jediné miesto, kde ho vieme prepísať na argon2id. Deje sa to
+  // len pri ÚSPECHU: nesprávne heslo sa sem nikdy nedostane, takže uložený
+  // odtlačok nemá ako pokaziť. Po prvom prihlásení každého zamestnanca už
+  // v databáze žiaden scrypt neostane.
+  if (needsRehash(user.passwordHash)) {
+    await db
+      .update(users)
+      .set({ passwordHash: await hashPassword(input.password) })
+      .where(eq(users.id, user.id));
+    await record(db, {
+      actorUserId: user.id,
+      action: "password.rehashed",
+      entity: "user",
+      entityId: user.id,
+      at: input.now,
+    });
+  }
+
   const { token, tokenHash } = newSessionToken();
   const expiresAt = new Date(input.now.getTime() + SESSION_TTL_MS);
   await db.insert(sessions).values({ tokenHash, userId: user.id, expiresAt });
