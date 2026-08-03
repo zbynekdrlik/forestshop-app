@@ -163,7 +163,7 @@ it("formatVariantTotalChip s ≥2 riadkami vráti text so ZOSTÁVAJÚCIM množst
 it("formatVariantTotalChip drží text krátky aj pri trojcifernom súčte", () => {
   const totals = computeVariantTotals([
     variantLine("4859/46", 500, "objednane", false),
-    variantLine("4859/46", 128, "nevybavene", false),
+    variantLine("4859/46", 128, "caka_sa", false),
   ]);
   const vt = totals.get("4859/46");
   if (vt === undefined) throw new Error("4859/46 musí byť v mape");

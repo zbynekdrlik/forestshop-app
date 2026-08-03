@@ -118,9 +118,14 @@ export function formatVariantTotalChip(vt: VariantTotal): { readonly text: strin
   return {
     // issue 204: text skrátený zo "Σ spolu N ks" na "Σ N ks" — dlhší tvar sa
     // do 54px stĺpca s množstvom nezmestil ani po zalomení pod množstvo
-    // (nameraných 82px obsahu), takže pretekal do susedného stĺpca. Celé
-    // vysvetlenie nesie `title` nižšie, ktorý sa nemení.
-    text: `Σ ${String(vt.remaining)} ks`,
+    // (nameraných 82px obsahu), takže pretekal do susedného stĺpca.
+    // issue 214: ani "Σ N ks" sa nezmestilo — na produkcii nameraných 49 px
+    // obsahu proti 16 px zobrazeným, takže `text-overflow: ellipsis` pilulku
+    // orezal na "Σ…" na KAŽDEJ šírke okna a majiteľ z nej nič neprečítal.
+    // Jednotka odpadá: riadok priamo NAD pilulkou už hovorí "N ks", takže
+    // "Σ 3" sa číta ako "spolu 3". Celé vysvetlenie nesie `title` nižšie,
+    // ktorý sa nemení.
+    text: `Σ ${String(vt.remaining)}`,
     title: `Spolu vo všetkých objednávkach: ${String(vt.total)} ks · nevybavené: ${String(vt.remaining)} ks`,
   };
 }

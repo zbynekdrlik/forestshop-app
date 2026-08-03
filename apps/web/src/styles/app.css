@@ -957,6 +957,11 @@ tr:last-child td {
   font-weight: var(--fs-weight-semibold);
   color: var(--fs-ink);
   text-align: right;
+  /* issue 214: najužší stĺpec tabuľky (4 %, pri 1280 px okna 41 px) — bežné
+     odsadenie buniek mu zobralo 26 px, teda takmer dve tretiny šírky, a na
+     obsah nezostalo. Zúžené LEN tu; ostatné bunky si držia pôvodné. */
+  padding-left: var(--fs-space-1);
+  padding-right: var(--fs-space-1);
 }
 /* issue 62: súčet kusov toho istého produktu naprieč objednávkami dodávateľa
    — neklikateľná pilulka, zámerne odlišná od interaktívneho `.chip`
@@ -973,15 +978,23 @@ tr:last-child td {
   min-width: 0;
 }
 .qty-total-chip {
-  display: inline-flex;
-  align-items: center;
+  /* issue 214: `inline-flex` robilo z textu pilulky flex položku, ktorá sa
+     zmrštila na NULOVÚ šírku obsahu (nameraných 16 px = presne samotné
+     odsadenie, pri 49 px obsahu) — `inline-block` + `width: max-content`
+     drží pilulku širokú presne na jej text. */
+  display: inline-block;
+  width: max-content;
   /* issue 204: pilulka je vlastný riadok stacku, vodorovný odstup od
      množstva už nedáva zmysel; `max-width` + orezanie garantujú, že sa už
-     NIKDY nedostane mimo svoju bunku, ani pri trojcifernom počte kusov. */
+     NIKDY nedostane mimo svoju bunku, ani pri trojcifernom počte kusov.
+     Orezanie zostáva ako POISTKA pre budúci dlhší obsah — dnes sa doň text
+     nedostane (issue 214, overené naživo na všetkých štyroch šírkach). */
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
-  padding: 0 var(--fs-space-2);
+  /* issue 214: v 41 px bunke (1280 px okno) zaberalo pôvodné odsadenie 16 px
+     zo šírky, ktorú potrebuje samotný text. */
+  padding: 0 var(--fs-space-1);
   font-size: var(--fs-text-xs);
   font-weight: var(--fs-weight-medium);
   color: var(--fs-brand);
