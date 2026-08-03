@@ -1,4 +1,6 @@
-import { CATEGORY_CONTACTED, CATEGORY_NOT_CONTACTED, EMAIL_SUBJECT, MIN_DAYS } from "./constants.js";
+import { globalContext, textValue } from "../mail-templates/context.js";
+import { renderTemplate, type MailTemplateText, type RenderedEmail } from "../mail-templates/render.js";
+import { CATEGORY_CONTACTED, CATEGORY_NOT_CONTACTED, MIN_DAYS } from "./constants.js";
 
 // Čistá logika (žiadna DB, žiadna sieť) — verný port `orders_reminder.py`,
 // prispôsobený tak, aby čítal priamo z `order` riadkov (nie z CSV export),
@@ -45,66 +47,18 @@ export function fingerprint(order: { readonly placedAt: Date; readonly shopRemar
   return `${order.placedAt.toISOString()}|${order.shopRemark ?? ""}`;
 }
 
-function htmlEscape(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
-}
+export type BuiltReminderEmail = RenderedEmail;
 
-export interface BuiltReminderEmail {
-  readonly subject: string;
-  readonly html: string;
-  readonly text: string;
-}
-
-/** (subject, html, text) — doslovný preklad `orders_reminder.py`'s
- * `build_reminder_email` (n8n "Edit Fields2" šablóna), voľný text (meno, kód)
- * HTML-escapovaný. JEDEN e-mail, žiadne stupňovanie podľa poradia (na rozdiel
- * od #172's `buildEmail(count, ...)`). */
-export function buildReminderEmail(customerName: string, orderCode: string): BuiltReminderEmail {
-  const nameH = htmlEscape(customerName);
-  const codeH = htmlEscape(orderCode);
-  const html = [
-    "<!DOCTYPE html>",
-    "<html>",
-    '  <body style="font-family: Arial, sans-serif; font-size: 16px; color: #333;">',
-    `    <p>Dobrý deň, <strong>${nameH}</strong>,</p>`,
-    "",
-    `    <p>Všimli sme si, že spracovanie vašej objednávky č. <strong>${codeH}</strong> trvá o niečo dlhšie než obvykle. Chceme vás ubezpečiť, že situáciu aktívne sledujeme a riešime.</p>`,
-    "",
-    "    <p>Mierne zdržanie môže byť spôsobené dostupnosťou tovaru, dopĺňaním zásob alebo prepravnými okolnosťami. Rozumieme, že sa na svoju výbavu tešíte, a robíme všetko pre to, aby ste ju mali čo najskôr pri sebe.</p>",
-    "",
-    '    <p>👉 V prípade potreby zmeny, alternatívy alebo potvrdenia z vašej strany vás budeme osobne kontaktovať v najbližšom čase.</p>',
-    "",
-    '    <p>Ďakujeme vám za trpezlivosť a dôveru. Ak máte akékoľvek otázky, pokojne nás kontaktujte na <a href="mailto:eshop@forestshop.sk">eshop@forestshop.sk</a> alebo na telefónnom čísle <a href="tel:+421903670766">+421 903 670 766</a>.</p>',
-    "",
-    '    <p style="margin-top: 30px;">',
-    "      S pozdravom,<br>",
-    "      <strong>Tím Forestshop.sk</strong><br>",
-    '      <a href="https://www.forestshop.sk" target="_blank">www.forestshop.sk</a>',
-    "    </p>",
-    "  </body>",
-    "</html>",
-  ].join("\n");
-
-  const text = [
-    `Dobrý deň, ${customerName},`,
-    "",
-    `Všimli sme si, že spracovanie vašej objednávky č. ${orderCode} trvá o niečo dlhšie než obvykle. Chceme vás ubezpečiť, že situáciu aktívne sledujeme a riešime.`,
-    "",
-    "Mierne zdržanie môže byť spôsobené dostupnosťou tovaru, dopĺňaním zásob alebo prepravnými okolnosťami.",
-    "",
-    "V prípade potreby zmeny, alternatívy alebo potvrdenia z vašej strany vás budeme osobne kontaktovať v najbližšom čase.",
-    "",
-    "Ďakujeme vám za trpezlivosť a dôveru. Kontakt: eshop@forestshop.sk, +421 903 670 766.",
-    "",
-    "S pozdravom, Tím Forestshop.sk",
-  ].join("\n");
-
-  return { subject: EMAIL_SUBJECT, html, text };
+/** Dosadí hodnoty do upraviteľnej šablóny (issue 192 — pôvodné znenie, verný
+ * preklad `orders_reminder.py`'s `build_reminder_email`, žije v
+ * `mail-templates/registry.ts`). JEDEN e-mail, žiadne stupňovanie podľa
+ * poradia (na rozdiel od #172's štyroch zásielkových znení). */
+export function buildReminderEmail(template: MailTemplateText, customerName: string, orderCode: string): BuiltReminderEmail {
+  return renderTemplate(template, {
+    ...globalContext(),
+    meno_zakaznika: textValue(customerName),
+    cislo_objednavky: textValue(orderCode),
+  });
 }
 
 export interface ClassifierMessage {

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { MAIL_TEMPLATE_KINDS } from "../mail-templates/registry.js";
 import {
   buildClassifierMessages,
   buildReminderEmail,
@@ -62,7 +63,7 @@ describe("fingerprint", () => {
 
 describe("buildReminderEmail", () => {
   it("obsahuje meno aj kód objednávky, HTML-escapované", () => {
-    const built = buildReminderEmail('Ján "Test" <Novák>', "20260001");
+    const built = buildReminderEmail(MAIL_TEMPLATE_KINDS["order_reminder"].defaultText, 'Ján "Test" <Novák>', "20260001");
     expect(built.subject).toBe("📦 Stav vašej objednávky z Forestshop.sk");
     expect(built.html).toContain("&lt;Novák&gt;");
     expect(built.html).toContain("&quot;Test&quot;");

@@ -6,6 +6,7 @@ import type { Database } from "../db/client.js";
 import { jobRuns } from "../db/schema.js";
 import { log } from "../logger.js";
 import { record } from "../modules/audit/service.js";
+import { resolveTemplate } from "../modules/mail-templates/store.js";
 import { buildReminderEmail } from "../modules/order-reminder/logic.js";
 import { ORDER_REMINDER_JOB_NAME } from "../modules/scheduler/jobs.js";
 import { getLatestJobRun } from "../modules/scheduler/queries.js";
@@ -254,7 +255,7 @@ export function registerOrderReminderRoutes(app: Hono<AppBindings>, db: Database
         // (`.claude/rules/testing.md`'s Chromium console-error pravidlo).
         return c.json({ ok: false as const, error: "Objednávka sa v aktuálnom zozname nenašla." });
       }
-      const built = buildReminderEmail(row.name, orderCode);
+      const built = buildReminderEmail(await resolveTemplate(db, "order_reminder"), row.name, orderCode);
       return c.json({
         ok: true as const,
         subject: built.subject,

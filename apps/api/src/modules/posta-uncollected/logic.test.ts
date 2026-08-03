@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { MAIL_TEMPLATE_KINDS } from "../mail-templates/registry.js";
 import {
   buildEmail,
+  postaTemplateKey,
   classifyTracking,
   isEligibleOrder,
   isNonPostaCarrier,
@@ -176,7 +178,7 @@ describe("shouldSend — kadencia 0 → +3 → +3 → +7", () => {
 
 describe("buildEmail", () => {
   it("prvý e-mail — predmet a HTML podľa starej appky doslovne", () => {
-    const built = buildEmail(1, "Ján Novák", "EF123456789SK", "Pošta 1", "Hlavná 1, Žilina", "2026-08-10", TODAY);
+    const built = buildEmail(MAIL_TEMPLATE_KINDS[postaTemplateKey(1)].defaultText, "Ján Novák", "EF123456789SK", "Pošta 1", "Hlavná 1, Žilina", "2026-08-10", TODAY);
     expect(built.subject).toBe("Vaša zásielka čaká na vyzdvihnutie | EF123456789SK");
     expect(built.html).toContain("Ján Novák");
     expect(built.html).toContain("10. 8. 2026"); // 2026-08-10 vs today 2026-08-02 → future, teda zobrazí sa
@@ -184,19 +186,19 @@ describe("buildEmail", () => {
   });
 
   it("4. e-mail žiada priamy kontakt na eshop@forestshop.sk", () => {
-    const built = buildEmail(4, "Ján Novák", "EF1SK", "Pošta 1", "", "", TODAY);
+    const built = buildEmail(MAIL_TEMPLATE_KINDS[postaTemplateKey(4)].defaultText, "Ján Novák", "EF1SK", "Pošta 1", "", "", TODAY);
     expect(built.subject).toBe("Posledná výzva: zásielka bude vrátená | EF1SK");
     expect(built.html).toContain("eshop@forestshop.sk");
   });
 
   it("dátum vyzdvihnutia, ktorý už PREŠIEL, sa nezobrazí (dateless 'čo najskôr')", () => {
-    const built = buildEmail(1, "Ján", "EF1SK", "Pošta 1", "", "2026-01-01", TODAY);
+    const built = buildEmail(MAIL_TEMPLATE_KINDS[postaTemplateKey(1)].defaultText, "Ján", "EF1SK", "Pošta 1", "", "2026-01-01", TODAY);
     expect(built.html).toContain("čo najskôr");
     expect(built.html).not.toContain("2026-01-01");
   });
 
   it("HTML escapuje meno zákazníka (žiadny injected tag)", () => {
-    const built = buildEmail(1, "<script>alert(1)</script>", "EF1SK", "Pošta 1", "", "", TODAY);
+    const built = buildEmail(MAIL_TEMPLATE_KINDS[postaTemplateKey(1)].defaultText, "<script>alert(1)</script>", "EF1SK", "Pošta 1", "", "", TODAY);
     expect(built.html).not.toContain("<script>alert(1)</script>");
     expect(built.html).toContain("&lt;script&gt;");
   });

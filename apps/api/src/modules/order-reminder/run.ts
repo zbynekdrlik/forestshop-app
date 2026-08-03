@@ -4,6 +4,7 @@ import type { MailTransport } from "../mail/transport.js";
 import { buildShoptetAdminOrderUrl } from "../orders/queries.js";
 import type { ClassifyClient } from "./classify-client.js";
 import { ORDER_REMINDER_RUN_LOCK_KEY } from "./constants.js";
+import { resolveTemplate } from "../mail-templates/store.js";
 import { buildReminderEmail, daysOpen, fingerprint, isOldEnough, type ReminderEligibleOrder } from "./logic.js";
 import { loadEligibleOrders, loadItemLabels } from "./orders-source.js";
 import {
@@ -121,6 +122,10 @@ async function runOrderReminderLocked(options: RunOrderReminderOptions): Promise
     resolvedBy,
   });
 
+  // Šablóna sa načíta RAZ pred cyklom (issue 192) — jeden beh smie poslať
+  // desiatky e-mailov a znenie sa počas neho meniť nemá.
+  const reminderTemplate = await resolveTemplate(db, "order_reminder");
+
   for (const order of candidates) {
     const fp = fingerprint(order);
     const existing = stateMap.get(order.externalOrderId);
@@ -192,7 +197,7 @@ async function runOrderReminderLocked(options: RunOrderReminderOptions): Promise
       continue;
     }
 
-    const built = buildReminderEmail(order.customerName, order.externalOrderId);
+    const built = buildReminderEmail(reminderTemplate, order.customerName, order.externalOrderId);
     try {
       await mailTransport({ to: email, subject: built.subject, text: built.text, html: built.html, bcc: bccEmail });
       // Zápis IHNEĎ po odoslaní — pád appky neskôr v behu nesmie stratiť
@@ -296,7 +301,7 @@ async function runOrderReminderOverrideLocked(options: RunOrderReminderOverrideO
   if (bccMissing) return { ok: false, code: "not_configured", reason: "chýba adresa pre skrytú kópiu majiteľovi (ORDER_REMINDER_BCC_EMAIL)" };
   if (mailTransport === undefined) return { ok: false, code: "not_configured", reason: "odosielanie e-mailov nie je nakonfigurované (chýba MAIL_HOST)" };
 
-  const built = buildReminderEmail(order.customerName, orderCode);
+  const built = buildReminderEmail(await resolveTemplate(db, "order_reminder"), order.customerName, orderCode);
   try {
     await mailTransport({ to: email, subject: built.subject, text: built.text, html: built.html, bcc: bccEmail });
   } catch (error) {

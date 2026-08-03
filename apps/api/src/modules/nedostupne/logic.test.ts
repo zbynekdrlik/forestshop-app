@@ -1,10 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { alternativeSearchUrl } from "./constants.js";
+import { MAIL_TEMPLATE_KINDS } from "../mail-templates/registry.js";
 import { buildAlternativeEmail, buildAlternatives, buildUnavailableEmail } from "./logic.js";
+
+// issue 192: znenie žije v upraviteľnej šablóne — tieto testy overujú PÔVODNÉ
+// znenie, teda presne to, čo appka použije, kým majiteľ nič nezmení.
+const NEDOSTUPNE = MAIL_TEMPLATE_KINDS["nedostupne"].defaultText;
+const ALTERNATIVA = MAIL_TEMPLATE_KINDS["nedostupne_alternativa"].defaultText;
 
 describe("buildUnavailableEmail", () => {
   it("obsahuje pozdrav a majiteľov schválený generický text, bez konkrétneho produktu", () => {
-    const built = buildUnavailableEmail("Ján Zákazník");
+    const built = buildUnavailableEmail(NEDOSTUPNE, "Ján Zákazník");
     expect(built.subject).toBe("Informácia o dostupnosti vašej objednávky — Forestshop.sk");
     expect(built.html).toContain("Ján Zákazník");
     expect(built.html).toContain("je momentálne");
@@ -13,13 +19,13 @@ describe("buildUnavailableEmail", () => {
   });
 
   it("HTML-escapuje voľné meno zákazníka", () => {
-    const built = buildUnavailableEmail('<script>alert("x")</script>');
+    const built = buildUnavailableEmail(NEDOSTUPNE, '<script>alert("x")</script>');
     expect(built.html).not.toContain("<script>");
     expect(built.html).toContain("&lt;script&gt;");
   });
 
   it("prázdne meno padá späť na 'zákazník'", () => {
-    const built = buildUnavailableEmail("");
+    const built = buildUnavailableEmail(NEDOSTUPNE, "");
     expect(built.html).toContain(">zákazník<");
   });
 });
@@ -43,7 +49,7 @@ describe("buildAlternatives", () => {
 describe("buildAlternativeEmail", () => {
   it("s alternatívami vypíše odkazy na KAŽDÚ z nich", () => {
     const alts = buildAlternatives(["60116/90"], new Map([["60116/90", "Podkolienky BOBR"]]));
-    const built = buildAlternativeEmail("Ján Zákazník", "Nohavice FOREST 1003", alts);
+    const built = buildAlternativeEmail(ALTERNATIVA, "Ján Zákazník", "Nohavice FOREST 1003", alts);
     expect(built.subject).toBe("Alternatívy k vášmu tovaru — Forestshop.sk");
     expect(built.html).toContain("Nohavice FOREST 1003");
     expect(built.html).toContain("Podkolienky BOBR");
@@ -52,14 +58,14 @@ describe("buildAlternativeEmail", () => {
   });
 
   it("bez alternatív ponúkne kontaktnú vetu namiesto zoznamu", () => {
-    const built = buildAlternativeEmail("Ján Zákazník", "Nohavice FOREST 1003", []);
+    const built = buildAlternativeEmail(ALTERNATIVA, "Ján Zákazník", "Nohavice FOREST 1003", []);
     expect(built.html).toContain("Radi vám pomôžeme nájsť vhodnú alternatívu");
     expect(built.html).not.toContain("<ul>");
   });
 
   it("HTML-escapuje meno alternatívy aj názov produktu", () => {
     const alts = buildAlternatives(["X"], new Map([["X", "<b>Zlý</b> názov"]]));
-    const built = buildAlternativeEmail("Ján", '<i>Prod</i>', alts);
+    const built = buildAlternativeEmail(ALTERNATIVA, "Ján", '<i>Prod</i>', alts);
     expect(built.html).not.toContain("<b>Zlý</b>");
     expect(built.html).toContain("&lt;b&gt;Zlý&lt;/b&gt;");
     expect(built.html).not.toContain("<i>Prod</i>");
