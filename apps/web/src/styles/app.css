@@ -71,6 +71,10 @@
 
   --fs-content-width: 1120px;
   --fs-sidebar-width: 250px;
+  /* issue 190: šírka ZBALENÉHO panela — 72px pohodlne unesie 44px klikací
+     cieľ záložky aj s odsadením, takže sa prepína rovnako ľahko ako v
+     rozbalenom stave (zadanie: veľké ciele na klik). */
+  --fs-sidebar-rail-width: 72px;
 }
 
 /* ---------------- 2. RESET + ZÁKLADNÉ ELEMENTY ---------------- */
@@ -206,6 +210,44 @@ tr:last-child td {
   top: 0;
   height: 100vh;
 }
+/* issue 190: zbalený panel = úzka lišta len s ikonami. Mení sa VÝHRADNE
+   šírka panela — `.main` je `flex: 1`, takže obsah vpravo sa do uvoľneného
+   miesta roztiahne sám, bez akéhokoľvek prepočtu inde. */
+.sidebar.sidebar-rail {
+  width: var(--fs-sidebar-rail-width);
+  flex: 0 0 var(--fs-sidebar-rail-width);
+}
+.sidebar-rail .brand {
+  justify-content: center;
+  padding: var(--fs-space-4) 0 var(--fs-space-2);
+}
+.rail-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--fs-space-2);
+  min-height: 40px;
+  margin: 0 var(--fs-space-3) var(--fs-space-2);
+  border: 1px solid var(--fs-border);
+  border-radius: var(--fs-radius-sm);
+  background: none;
+  cursor: pointer;
+  color: var(--fs-ink-muted);
+  font-size: var(--fs-text-sm);
+  font-weight: var(--fs-weight-medium);
+}
+.rail-toggle:hover {
+  background: var(--fs-surface-alt);
+  border-color: var(--fs-ink-faint);
+}
+.rail-toggle-icon {
+  font-size: var(--fs-text-md);
+  line-height: 1;
+}
+.sidebar-rail .rail-toggle {
+  margin: 0 var(--fs-space-2) var(--fs-space-2);
+}
+
 .brand {
   display: flex;
   align-items: center;
@@ -314,6 +356,35 @@ tr:last-child td {
 }
 .tlabel {
   flex: 1;
+}
+/* issue 190: ikona modulu — v rozbalenom paneli sedí vľavo pred názvom, v
+   zbalenom je JEDINÝM obsahom tlačidla. `flex-shrink: 0` z rovnakého dôvodu
+   ako pri odznakoch nižšie (dlhý názov ju nikdy nestlačí). */
+.ticon {
+  flex-shrink: 0;
+  font-size: var(--fs-text-md);
+  line-height: 1;
+}
+.sidebar-rail .side-nav {
+  padding: var(--fs-space-2);
+}
+/* Hlavičky priečinkov sa v lište nevykresľujú, takže hranicu medzi skupinami
+   nesie tenká čiara — inak by ikony splynuli do jedného stĺpca. */
+.sidebar-rail .nav-folder + .nav-folder {
+  border-top: 1px solid var(--fs-border);
+  padding-top: var(--fs-space-2);
+}
+.sidebar-rail .folder-body {
+  margin: 0;
+}
+.sidebar-rail .tabs .tab {
+  justify-content: center;
+  min-height: 44px;
+  padding: var(--fs-space-2) 0;
+}
+.sidebar-rail .ver {
+  text-align: center;
+  font-size: var(--fs-text-xs);
 }
 /* issue 147: odznak počtu nevybavených riadkov (dnes len "Na objednanie",
    ale generický pre AKÚKOĽVEK budúcu záložku — `Sidebar.tsx`'s `badgeCounts`

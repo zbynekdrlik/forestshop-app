@@ -19,6 +19,12 @@ export interface SectionProps {
 export interface NavTab {
   readonly id: string;
   readonly label: string;
+  // issue 190: ikona pre ZBALENÝ bočný panel — v tom stave je to JEDINÉ, čo z
+  // položky vidno, takže musí byť na prvý pohľad rozlíšiteľná od ostatných
+  // (názov sa ukáže až po prejdení myšou, `Sidebar.tsx`'s `title`/`aria-label`).
+  // Povinná, aby nová záložka nemohla vzniknúť bez ikony a v zbalenom paneli
+  // ostať neviditeľná.
+  readonly icon: string;
   readonly Component: ComponentType<SectionProps>;
   // issue 95: `true` pre obrazovky, ktoré potrebujú viac než pohodlnú čítaciu
   // šírku (`--fs-content-width`, 1120px) — hustá pracovná tabuľka ("Na
@@ -47,7 +53,7 @@ export const NAV: readonly NavFolder[] = [
   {
     id: "system",
     label: "Systém",
-    tabs: [{ id: "sync", label: "Sync zo Shoptetu", Component: SyncSection }],
+    tabs: [{ id: "sync", label: "Sync zo Shoptetu", icon: "🔄", Component: SyncSection }],
   },
   {
     id: "eshop",
@@ -58,8 +64,8 @@ export const NAV: readonly NavFolder[] = [
     // oboch z rovnakého dôvodu (hustý pracovný obsah profituje z celej šírky
     // okna, viď `NavTab.wide` vyššie).
     tabs: [
-      { id: "orders", label: "Na objednanie", Component: OrdersSection, wide: true },
-      { id: "nedostupne", label: "Nedostupné tovary", Component: NedostupneSection, wide: true },
+      { id: "orders", label: "Na objednanie", icon: "📦", Component: OrdersSection, wide: true },
+      { id: "nedostupne", label: "Nedostupné tovary", icon: "🚫", Component: NedostupneSection, wide: true },
     ],
   },
   {
@@ -68,8 +74,8 @@ export const NAV: readonly NavFolder[] = [
     // Len tie dve veci, ktoré SKUTOČNE bežia na plán a dajú sa zapnúť/vypnúť
     // (issue 195). Poradie podľa dôležitosti (issue 185, zadanie majiteľa).
     tabs: [
-      { id: "posta-uncollected", label: "Nevyzdvihnuté zásielky", Component: PostaUncollectedSection },
-      { id: "order-reminder", label: "Pripomienky objednávok", Component: OrderReminderSection },
+      { id: "posta-uncollected", label: "Nevyzdvihnuté zásielky", icon: "📮", Component: PostaUncollectedSection },
+      { id: "order-reminder", label: "Pripomienky objednávok", icon: "⏰", Component: OrderReminderSection },
     ],
   },
 ];
@@ -81,9 +87,11 @@ export const NAV: readonly NavFolder[] = [
 // ich ďalej overuje ich vlastné e2e pokrytie (catalog.spec.ts/pairing.spec.ts),
 // bez potreby vystaviť ich v ľavom menu.
 export const HIDDEN_TABS: Readonly<Record<string, NavTab>> = {
-  catalog: { id: "catalog", label: "Katalóg", Component: CatalogPage },
-  pairing: { id: "pairing", label: "Kontrola párovania", Component: PairingSection },
-  scheduler: { id: "scheduler", label: "Plánovač", Component: SchedulerSection },
+  // Ikony sú tu len kvôli spoločnému typu `NavTab` — skryté obrazovky sa v
+  // ľavom menu (ani v jeho zbalenom stave) nikdy nevykreslia.
+  catalog: { id: "catalog", label: "Katalóg", icon: "📚", Component: CatalogPage },
+  pairing: { id: "pairing", label: "Kontrola párovania", icon: "🔗", Component: PairingSection },
+  scheduler: { id: "scheduler", label: "Plánovač", icon: "🗓️", Component: SchedulerSection },
 };
 
 export const DEFAULT_TAB_ID: string = NAV[0]?.tabs[0]?.id ?? "sync";
