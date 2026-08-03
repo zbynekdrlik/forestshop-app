@@ -1276,6 +1276,24 @@ tr:last-child td {
 .ord-product-name {
   max-width: 100%;
 }
+/* issue 187: objednaná veľkosť pri mene produktu. Musí byť vidno na prvý
+   pohľad (obsluha podľa nej objednáva u dodávateľa), preto vlastný farebný
+   štítok, nie len text — ale zámerne kompaktný, aby nepribudol ďalší riadok
+   výšky (strop výšky riadku, issue 105/107/111/127). `white-space: nowrap`
+   z rovnakého dôvodu ako `.ord-admin-link` (issue 111): krátka hodnota ako
+   "3XL"/"46" sa nikdy nesmie zalomiť uprostred. */
+.ord-size {
+  display: inline-block;
+  margin-left: var(--fs-space-2);
+  padding: 0 var(--fs-space-2);
+  border-radius: var(--fs-radius-sm);
+  background: var(--fs-brand-soft);
+  color: var(--fs-brand-strong);
+  font-weight: 700;
+  font-size: var(--fs-text-sm);
+  white-space: nowrap;
+  vertical-align: baseline;
+}
 /* issue 65: zákaznícky odkaz k objednávke — read-only, rovnaký orezávací
    vzor ako `.ord-supplier-note` (issue 70) — voľný text neobmedzenej dĺžky.
    issue 171: presunuté z bývalej zlúčenej bunky POZNÁMKY sem, pod meno

@@ -6,7 +6,7 @@ import type { Database } from "../db/client.js";
 import { log } from "../logger.js";
 import { changePassword } from "../modules/auth/change-password.js";
 import { MIN_NEW_PASSWORD_LENGTH } from "../modules/auth/passwords.js";
-import { login, logout } from "../modules/auth/service.js";
+import { login, logout, resolveSession } from "../modules/auth/service.js";
 import type { MailTransport } from "../modules/mail/transport.js";
 import { appVersion } from "../version.js";
 import { registerCatalogRoutes, type RunIngest } from "./catalog-routes.js";
@@ -108,7 +108,18 @@ export function createApp(
     return c.json({ ok: true });
   });
 
-  app.get("/api/me", requireUser(db), (c) => c.json(c.get("user")));
+  // issue 188: ZÁMERNE bez `requireUser` — neprihlásený dostane 200 s telom
+  // `null`, nie 401. Chromium totiž loguje KAŽDÚ 4xx odpoveď do konzoly ako
+  // "Failed to load resource", takže úplne v poriadku fungujúca appka
+  // vypisovala na prihlasovacej obrazovke červenú chybu. Je to ten istý vzor,
+  // aký už má `POST /api/me/password` (očakávaný doménový výsledok = 200 s
+  // telom) — 4xx si nechávame pre SKUTOČNÉ HTTP chyby. Ostatné endpointy si
+  // svoju 401 ponechávajú: tie sa volajú až z prihlásenej appky, kde 401
+  // znamená vypršanú reláciu a klient na nej stavia.
+  app.get("/api/me", async (c) => {
+    const user = await resolveSession(db, getCookie(c, SESSION_COOKIE) ?? "", new Date());
+    return c.json(user);
+  });
 
   app.post(
     "/api/me/password",

@@ -1,10 +1,6 @@
-import { expect, test, type ConsoleMessage } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
 const E2E_HESLO = "e2e-test-heslo"; // účet existuje len v testovacej databáze
-
-// Rovnaká a JEDINÁ povolená výnimka ako v login.spec.ts/catalog.spec.ts/orders.spec.ts.
-const jeOcakavane = (m: ConsoleMessage): boolean =>
-  m.location().url.includes("/api/me") && m.text().includes("401");
 
 // #57: "Kontrola párovania" je od nového ľavého menu SKRYTÁ obrazovka
 // (viditeľné sú len "Sync zo Shoptetu"/"Na objednanie") — kód aj testy
@@ -31,7 +27,7 @@ test("manažér ručne napáruje variant bez existujúceho kandidáta, zmena pre
 }) => {
   const chyby: string[] = [];
   page.on("console", (m) => {
-    if ((m.type() === "error" || m.type() === "warning") && !jeOcakavane(m)) chyby.push(m.text());
+    if (m.type() === "error" || m.type() === "warning") chyby.push(m.text());
   });
   page.on("pageerror", (e) => {
     chyby.push(e.message);
@@ -81,7 +77,7 @@ test("manažér ručne napáruje variant bez existujúceho kandidáta, zmena pre
 test("manažér potvrdí navrhnutú adresu jedným klikom, filter podľa stavu funguje, konzola je čistá", async ({ page }) => {
   const chyby: string[] = [];
   page.on("console", (m) => {
-    if ((m.type() === "error" || m.type() === "warning") && !jeOcakavane(m)) chyby.push(m.text());
+    if (m.type() === "error" || m.type() === "warning") chyby.push(m.text());
   });
   page.on("pageerror", (e) => {
     chyby.push(e.message);
@@ -143,7 +139,7 @@ test("manažér nastaví JEDNU adresu pre všetkých 9 veľkostí naraz, potom r
 }) => {
   const chyby: string[] = [];
   page.on("console", (m) => {
-    if ((m.type() === "error" || m.type() === "warning") && !jeOcakavane(m)) chyby.push(m.text());
+    if (m.type() === "error" || m.type() === "warning") chyby.push(m.text());
   });
   page.on("pageerror", (e) => {
     chyby.push(e.message);

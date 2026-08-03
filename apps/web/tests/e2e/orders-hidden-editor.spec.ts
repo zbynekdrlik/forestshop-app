@@ -1,12 +1,9 @@
-import { expect, test, type ConsoleMessage } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
 const E2E_HESLO = "e2e-test-heslo"; // účet existuje len v testovacej databáze
 // Vlastný, IZOLOVANÝ účet (`scripts/e2e-setup.ts`'s komentár vysvetľuje dôvod
 // aj mechanizmus — balík je už na hranici `MAX_ATTEMPTS`).
 const E2E_SKRYTY_EDITOR_EMAIL = "e2e-skryty-editor@forestshop.sk";
-
-const jeOcakavane = (m: ConsoleMessage): boolean =>
-  m.location().url.includes("/api/me") && m.text().includes("401");
 
 // issue 149: riadok s otvorenou (neuloženou) úpravou odkazu na dodávateľa
 // nesmie zmiznúť pri zapnutom "skryť vybavené", aj keď je riadok už
@@ -21,7 +18,7 @@ test("riadok s otvoreným editorom odkazu na dodávateľa ostáva viditeľný pr
 }) => {
   const chyby: string[] = [];
   page.on("console", (m) => {
-    if ((m.type() === "error" || m.type() === "warning") && !jeOcakavane(m)) chyby.push(m.text());
+    if (m.type() === "error" || m.type() === "warning") chyby.push(m.text());
   });
   page.on("pageerror", (e) => {
     chyby.push(e.message);

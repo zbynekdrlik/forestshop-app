@@ -1,14 +1,10 @@
-import { expect, test, type ConsoleMessage } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
 const E2E_HESLO = "e2e-test-heslo"; // účet existuje len v testovacej databáze
 
 // #57: nové ľavé menu má "Na objednanie" ako záložku pod priečinkom Eshop,
 // nie ako predvolenú (tá je "Sync zo Shoptetu") — `?tab=orders` ju vyberie
 // priamo, bez potreby klikať cez sidebar v každom teste.
-
-// Rovnaká a JEDINÁ povolená výnimka ako v login.spec.ts/catalog.spec.ts.
-const jeOcakavane = (m: ConsoleMessage): boolean =>
-  m.location().url.includes("/api/me") && m.text().includes("401");
 
 // issue 61: VLASTNÝ izolovaný účet (`scripts/e2e-setup.ts`'s komentár k
 // `E2E_FILTRE_EMAIL` vysvetľuje dôvod aj poradie). Tento test je ZÁMERNE
@@ -24,7 +20,7 @@ test("manažér filtruje podľa dodávateľa, vidí súhrn ostáva vybaviť a sk
 }) => {
   const chyby: string[] = [];
   page.on("console", (m) => {
-    if ((m.type() === "error" || m.type() === "warning") && !jeOcakavane(m)) chyby.push(m.text());
+    if (m.type() === "error" || m.type() === "warning") chyby.push(m.text());
   });
   page.on("pageerror", (e) => {
     chyby.push(e.message);
@@ -63,6 +59,13 @@ test("manažér filtruje podľa dodávateľa, vidí súhrn ostáva vybaviť a sk
   await expect(page.getByTestId("supplier-DODAVATEL-TEST-1")).toBeVisible();
   await expect(page.getByTestId("supplier-(bez dodávateľa)")).not.toBeVisible();
   await expect(summary).toHaveText("DODAVATEL-TEST-1: ostáva vybaviť 0 z 1 · Čaká sa 1");
+
+  // issue 187: objednaná veľkosť musí byť na riadku VIDIEŤ — obsluha podľa
+  // nej objednáva u dodávateľa. Fixtúrový variant "4859/46" má veľkosť "46"
+  // (`sizeLabel` sa odvodzuje z časti kódu za lomkou, `map-row.ts`).
+  await expect(
+    page.getByTestId("supplier-DODAVATEL-TEST-1").locator(".ord-size"),
+  ).toHaveText("46");
 
   // Klik na "(bez dodávateľa)" prepne filter na druhého dodávateľa.
   await page.getByTestId("supplier-chip-(bez dodávateľa)").click();
@@ -172,7 +175,7 @@ test("súčet kusov toho istého produktu naprieč objednávkami dodávateľa sa
 }) => {
   const chyby: string[] = [];
   page.on("console", (m) => {
-    if ((m.type() === "error" || m.type() === "warning") && !jeOcakavane(m)) chyby.push(m.text());
+    if (m.type() === "error" || m.type() === "warning") chyby.push(m.text());
   });
   page.on("pageerror", (e) => {
     chyby.push(e.message);
@@ -219,7 +222,7 @@ test("súčet kusov toho istého produktu naprieč objednávkami dodávateľa sa
 test("manažér vidí otvorené objednávky zoskupené podľa dodávateľa, konzola je čistá", async ({ page }) => {
   const chyby: string[] = [];
   page.on("console", (m) => {
-    if ((m.type() === "error" || m.type() === "warning") && !jeOcakavane(m)) chyby.push(m.text());
+    if (m.type() === "error" || m.type() === "warning") chyby.push(m.text());
   });
   page.on("pageerror", (e) => {
     chyby.push(e.message);
@@ -347,7 +350,7 @@ test("manažér prepne stav riadku klikom na tlačidlo, zmena pretrvá po obnove
 }) => {
   const chyby: string[] = [];
   page.on("console", (m) => {
-    if ((m.type() === "error" || m.type() === "warning") && !jeOcakavane(m)) chyby.push(m.text());
+    if (m.type() === "error" || m.type() === "warning") chyby.push(m.text());
   });
   page.on("pageerror", (e) => {
     chyby.push(e.message);
@@ -400,7 +403,7 @@ test("manažér nastaví e-mail dodávateľa, zmena pretrvá po obnovení strán
 }) => {
   const chyby: string[] = [];
   page.on("console", (m) => {
-    if ((m.type() === "error" || m.type() === "warning") && !jeOcakavane(m)) chyby.push(m.text());
+    if (m.type() === "error" || m.type() === "warning") chyby.push(m.text());
   });
   page.on("pageerror", (e) => {
     chyby.push(e.message);
@@ -458,7 +461,7 @@ const E2E_OTVORENE_STAVY_EMAIL = "e2e-otvorene-stavy@forestshop.sk";
 test("uzavretá objednávka sa v 'Na objednanie' neukáže, kým sa jej stav nepridá do nastavenia, konzola je čistá", async ({ page }) => {
   const chyby: string[] = [];
   page.on("console", (m) => {
-    if ((m.type() === "error" || m.type() === "warning") && !jeOcakavane(m)) chyby.push(m.text());
+    if (m.type() === "error" || m.type() === "warning") chyby.push(m.text());
   });
   page.on("pageerror", (e) => {
     chyby.push(e.message);
@@ -508,7 +511,7 @@ const E2E_OBJEDNANE_EMAIL = "e2e-objednane@forestshop.sk";
 test("manažér odškrtne riadok ako objednaný a hromadne označí/zruší celú skupinu, konzola je čistá", async ({ page }) => {
   const chyby: string[] = [];
   page.on("console", (m) => {
-    if ((m.type() === "error" || m.type() === "warning") && !jeOcakavane(m)) chyby.push(m.text());
+    if (m.type() === "error" || m.type() === "warning") chyby.push(m.text());
   });
   page.on("pageerror", (e) => {
     chyby.push(e.message);
@@ -578,7 +581,7 @@ test("manažér napíše a upraví poznámku k objednávke, zmena pretrvá po ob
 }) => {
   const chyby: string[] = [];
   page.on("console", (m) => {
-    if ((m.type() === "error" || m.type() === "warning") && !jeOcakavane(m)) chyby.push(m.text());
+    if (m.type() === "error" || m.type() === "warning") chyby.push(m.text());
   });
   page.on("pageerror", (e) => {
     chyby.push(e.message);
@@ -648,7 +651,7 @@ test("manažér ručne priradí dodávateľa riadku bez dodávateľa s našepká
 }) => {
   const chyby: string[] = [];
   page.on("console", (m) => {
-    if ((m.type() === "error" || m.type() === "warning") && !jeOcakavane(m)) chyby.push(m.text());
+    if (m.type() === "error" || m.type() === "warning") chyby.push(m.text());
   });
   page.on("pageerror", (e) => {
     chyby.push(e.message);

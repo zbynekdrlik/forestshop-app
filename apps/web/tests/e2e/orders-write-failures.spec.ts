@@ -1,11 +1,7 @@
-import { expect, test, type ConsoleMessage } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
 const E2E_HESLO = "e2e-test-heslo"; // účet existuje len v testovacej databáze
 const E2E_ZAPISY_EMAIL = "e2e-zapisy@forestshop.sk";
-
-// Rovnaká a JEDINÁ povolená výnimka ako v login.spec.ts/orders.spec.ts.
-const jeOcakavane = (m: ConsoleMessage): boolean =>
-  m.location().url.includes("/api/me") && m.text().includes("401");
 
 // issue 66: predtým appka zobrazovala len JEDNU (poslednú) chybovú hlášku pri
 // zápise do "Na objednanie" — zlyhanie STARŠIEHO riadku úplne zmizlo z
@@ -23,7 +19,7 @@ test("kumulatívne hlásenie o neuložených zmenách drží VIAC zlyhaní naraz
 }) => {
   const chyby: string[] = [];
   page.on("console", (m) => {
-    if ((m.type() === "error" || m.type() === "warning") && !jeOcakavane(m)) chyby.push(m.text());
+    if (m.type() === "error" || m.type() === "warning") chyby.push(m.text());
   });
   page.on("pageerror", (e) => {
     chyby.push(e.message);

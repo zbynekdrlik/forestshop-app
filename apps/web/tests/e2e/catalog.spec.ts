@@ -1,13 +1,10 @@
-import { expect, test, type ConsoleMessage } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
 const E2E_HESLO = "e2e-test-heslo"; // účet existuje len v testovacej databáze
 
-// Rovnaká a JEDINÁ povolená výnimka ako v login.spec.ts: neautentifikovaný
 // `GET /api/me` s odpoveďou 401 hneď po otvorení stránky. Rozpoznáva sa podľa
 // `location().url`, nie podľa textu — Chromium URL do textu „Failed to load
 // resource" nedáva. Rozširovanie výnimky na ďalšie cesty je zakázané.
-const jeOcakavane = (m: ConsoleMessage): boolean =>
-  m.location().url.includes("/api/me") && m.text().includes("401");
 
 // #57: "Katalóg" je od nového ľavého menu SKRYTÁ obrazovka (viditeľné sú len
 // "Sync zo Shoptetu"/"Na objednanie") — kód aj testy ostávajú, dostupná ďalej
@@ -16,7 +13,7 @@ const jeOcakavane = (m: ConsoleMessage): boolean =>
 test("manažér vidí stav katalógu, vyhľadá variant a konzola je čistá", async ({ page }) => {
   const chyby: string[] = [];
   page.on("console", (m) => {
-    if ((m.type() === "error" || m.type() === "warning") && !jeOcakavane(m)) chyby.push(m.text());
+    if (m.type() === "error" || m.type() === "warning") chyby.push(m.text());
   });
   page.on("pageerror", (e) => {
     chyby.push(e.message);

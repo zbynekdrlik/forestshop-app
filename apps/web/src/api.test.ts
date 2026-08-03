@@ -13,7 +13,16 @@ it("vráti používateľa pri stave 200", async () => {
   await expect(fetchMe()).resolves.toMatchObject({ role: "admin" });
 });
 
-it("vráti null pri stave 401", async () => {
+// issue 188: neprihlásený dostane 200 s telom `null` — 401 by prehliadač
+// zalogoval do konzoly ako červenú chybu na prihlasovacej obrazovke.
+it("vráti null pri stave 200 s telom null (neprihlásený)", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("null", { status: 200 })));
+  await expect(fetchMe()).resolves.toBeNull();
+});
+
+// Starý server proti novému frontendu počas nasadenia — 401 stále znamená
+// "neprihlásený", nie pád.
+it("vráti null aj pri stave 401", async () => {
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("", { status: 401 })));
   await expect(fetchMe()).resolves.toBeNull();
 });
