@@ -19,6 +19,19 @@ paths:
   explicitne pinujú `PGDATA: /var/lib/postgresql/data` v `environment:` sekcii
   `postgres` služby. Ak niekedy vznikne ďalší compose súbor s Postgres 18+
   named volume, potrebuje ten istý pin, inak zopakuje presne tento pád.
+- **Ten istý PGDATA pin má DRUHÝ dôsledok: obraz deklaruje `VOLUME
+  /var/lib/postgresql`, ale my pripájame pomenovanú priehradku až na jeho
+  podpriečinok `data` — takže docker si pri KAŽDOM prestavaní kontajnera
+  vyrobí navyše bezmennú (anonymnú) priehradku pre ten nadradený priečinok.**
+  Zmerané na dev2 pri issue 206: z 245 osirelých bezmenných priehradiek bola
+  presne jedna 4 KB (naša), zvyšok po ~40 MB patril inému projektu. Fix (issue
+  209): pridať DRUHÚ pomenovanú priehradku `pgparent:/var/lib/postgresql` PRED
+  riadok s `pgdata` — vnorený mount ide dovnútra, dáta zostávajú v `pgdata` a
+  NEPRESÚVAJÚ sa. Overené lokálne na odhodenom kontajneri predtým, než sa to
+  pustilo na produkciu: kontajner nabehol (`pg_isready` do 6 s), zápis spravený
+  pred prestavaním sa po prestavaní načítal späť, a počet osirelých priehradiek
+  sa nezmenil. **Každý ďalší compose súbor s Postgres 18+ potrebuje OBA riadky,
+  nielen `PGDATA` pin** — inak zopakuje presne tento únik.
 - CI `integration`/`e2e` joby bežia Postgres bez volume mountu vôbec (services
   kontajner, efemérny) — tento problém sa tam nikdy neprejaví, len pri
   lokálnom/prod behu s perzistentným volume.

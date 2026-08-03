@@ -12,6 +12,12 @@ services:
     ports:
       - "127.0.0.1:5433:5432"
     volumes:
+      # `pgparent` drží NADRADENÝ priečinok, ktorý obraz deklaruje ako VOLUME
+      # (`/var/lib/postgresql`). Bez neho docker pri KAŽDOM prestavaní
+      # kontajnera vyrobí ďalšiu bezmennú priehradku navyše (issue 209) —
+      # `pgdata` nižšie pokrýva len podpriečinok `data`, kam ukazuje PGDATA.
+      # Skutočné dáta zostávajú v `pgdata`; `pgparent` je len prázdny obal.
+      - pgparent:/var/lib/postgresql
       - pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U forestshop"]
@@ -20,4 +26,5 @@ services:
       retries: 20
 
 volumes:
+  pgparent:
   pgdata:
