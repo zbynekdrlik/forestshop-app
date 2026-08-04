@@ -115,6 +115,30 @@ paths:
   existuje, `parsePage` (JSON-LD/meta/text) sa pre tento odkaz vôbec
   nepoužije — rovnaká disciplína ako issue 223/225's textové/viditeľné
   pravidlá, len na ÚROVNI veľkosti namiesto úrovne stránky.
+- **Na `shop.lasting.eu` (PrestaShop) TÁ ISTÁ trieda `class="clearfix
+  product-variants-item"` nesie AŽ TRI rôzne atribútové skupiny na jednej
+  stránke naraz — Odstín (shade), VELIKOST (size), Barva (color) — code
+  review issue 224 to odhalil naživo. Rozlišuje ich AŽ vlastný popisok
+  `<span class="control-label">VELIKOST…`, a kontrola popisku MUSÍ byť
+  ukotvená (`^`) HNEĎ za otváracou značkou danej skupiny — široké okno
+  "obsahuje niekde v okolí" zasiahne aj do popisku NASLEDUJÚCEJ skupiny,
+  keď je tá predchádzajúca krátka. Rovnaká trieda chyby ako issue 223's
+  huntingshop.eu karuselová kolízia — pri KAŽDOM ďalšom per-domain
+  extraktore over, či zdieľaná CSS trieda naozaj patrí LEN tomu, čo si
+  myslíš, alebo aj iným skupinám/blokom na tej istej stránke.
+- **`MAX_PAGE_BYTES` (2 MB pri zavedení issue 212, teraz 5 MB) sa dá
+  prekročiť aj na REÁLNE malom produkte — whitespace-bloat v dodávateľovej
+  šablóne, nie objem skutočného obsahu.** Odhalené AŽ post-deploy overením
+  proti nasadenej appke (issue 224): `shop.lasting.eu`'s BONY čiapka má
+  celú stránku 2 180 285 bajtov, takmer výhradne z opakovaného whitespace
+  v "Odstín" skupine (skutočný obsah po zošmiznutí medzier ~168 000
+  bajtov). Keďže JSON-LD sedí blízko začiatku `<head>` a per-veľkostný
+  zoznam AŽ ZA touto bloatovanou skupinou, orezaná fixtúra ANI orezaný
+  vzorkový test tento problém odhaliť NEMÔŽE — fixtúra je z definície
+  malá. **Test na KAŽDÝ ďalší per-domain extraktor, ktorý číta niečo
+  BLIŽŠIE KU KONCU stránky než JSON-LD:** over živo proti NASADENEJ appke
+  (nie proti vlastnému uncapped curl-u), že sa dáta cez `MAX_PAGE_BYTES`
+  strop skutočne dostanú — orezaná fixtúra to nezaručí.
 - **Nová tabuľka MUSÍ pribudnúť do `TRUNCATE` zoznamu v
   `tests/helpers/db.ts`, inak testy zlyhajú AŽ pri druhom behu.** Pri #212 to
   bolo obzvlášť zákerné: prvý beh prešiel (prázdna tabuľka), druhý beh našiel
