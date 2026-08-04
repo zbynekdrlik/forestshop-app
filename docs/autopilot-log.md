@@ -2545,3 +2545,19 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
   `unavailable` (spárované na dodávateľovo "L/XL"), `16710/XS` → `unknown`
   (dodávateľ tú veľkosť nemá). Issue zavreté ručne s dôkazom, Discord
   run-card odoslaná.
+
+- issue 230 (wetland.sk/trigona.sk textová dostupnosť po issue 223):
+  version bump `b135fd8` (0.3.0-dev.136). RED `8f406c5` (`parse.test.ts`:
+  trigona.sk StockCountText fixtúry, oba stavy). GREEN `8ec6c51`
+  (`trigonaStockRegion` — farba `#00b020`/`#024bbd` → "skladom"/"vypredané",
+  `whenRegionMissing: "unknown"`; wetland.sk zámerne BEZ pravidla — 67+
+  naživo overených stránok malo vždy len "success" štítok, žiadny overený
+  vypredaný príklad). PR #236, code review (`requesting-code-review`,
+  independent live fetch verify): 1 Important (extractRegion nedostáva url,
+  filed #241, cross-cutting, neopravené v tomto PR) + 2 Minor (regex
+  rigidita, chýbajúca negatívna host assercia — oba opravené `3d43e1b`).
+  Merge `f0b56e5`. Post-deploy overené proti nasadenej appke
+  (0.3.0-dev.136): živé URL → `source: json_ld` (JSON-LD dnes pokrýva
+  takmer všetko), trimmed fixtúry bez JSON-LD → `source: text`, obe
+  polarity aj chýbajúci štítok správne. Issue zavreté ručne s dôkazom,
+  Discord run-card odoslaná.

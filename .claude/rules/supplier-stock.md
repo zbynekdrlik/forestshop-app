@@ -145,3 +145,30 @@ paths:
   vlastné čerstvé zápisy z prvého behu, vyhodnotil ich ako platné potvrdenia
   a preskočil VŠETKY odkazy — testy padli na „skipped 2, checked 0" bez
   akejkoľvek zmeny kódu.
+- **`fetchSupplierPage` (`page-fetcher.ts`) dekóduje KAŽDÚ stránku ako
+  `TextDecoder("utf-8")`, bez ohľadu na skutočnú `Content-Type; charset=`
+  hlavičku.** `trigona.sk` (issue 230) posiela `windows-1250` — pri UTF-8
+  dekódovaní windows-1250 bajtov sa diakritika (á/é/š/ť/…) zmení na mojibake
+  (nesprávne, ale DETERMINISTICKY nesprávne znaky), zatiaľ čo ČISTO ASCII
+  úseky (hex farby, triedy, číselné ID) ostávajú nedotknuté — ASCII bajty sú
+  v UTF-8 aj vo windows-1250 identické. **Nový `extractRegion`/text-based
+  extraktor na doméne s neznámou/nie-UTF-8 charset hlavičkou preto NESMIE
+  hľadať/porovnávať diakritický text priamo z `html`** (napr. "Na sklade"
+  ako reťazec by na trigona.sk fungoval len náhodou) — over `Content-Type`
+  hlavičku (`curl -sI`) PRED písaním extraktora, a ak je iná než UTF-8,
+  postav rozlíšenie na ASCII-only signáli (farba, trieda, číselné ID), nikdy
+  na diakritickom texte. `trigonaStockRegion` preto číta farbu `#00b020`/
+  `#024bbd` z `style="color: …"` namiesto porovnávania slov "Na sklade"/
+  "1 - 4 týždne" priamo.
+- **Overený PROTIPÓL sa niekedy nedá nájsť aj napriek dôkladnému hľadaniu —
+  vtedy sa pravidlo NEPRIDÁVA, nie hádá.** Issue 230: pre `trigona.sk` sa
+  naživo overili OBE polarity (31 vzoriek, farba `#00b020`/`#024bbd`
+  krížovo overená proti JSON-LD na TOM ISTOM produkte) → pravidlo pridané.
+  Pre `wetland.sk` sa naživo overilo 67+ reálnych produktových stránok
+  naprieč 3 kategóriami a VŽDY mal produkt rovnaký ("success") štítok —
+  ani JEDEN overený vypredaný príklad sa nenašiel (6 `unknown` riadkov v
+  produkčnej DB boli všetky HTTP 404 mŕtve odkazy, nie živé vypredané
+  stránky). Záver: pravidlo pre `wetland.sk` sa NEPRIDALO, doména ostáva
+  `unknown` presne ako predtým — dokumentované v `constants.ts` aj na
+  ticket-e, nie tichá medzera. Vzor na ĎALŠIU doménu bez overeného
+  protipólu: rovnaký postup, nie dohad podľa analógie s inou doménou.
