@@ -92,4 +92,5 @@ Per-area rules live in `.claude/rules/<area>.md` with `paths:` frontmatter.
 - Texty e-mailov (F192 — upraviteľné šablóny, zástupné polia, strop prihlásení v e2e) → `.claude/rules/mail-templates.md`
 - dodávateľský sklad + prepínanie Vypredané → Skladom (#212/#213 — detailOnly, confirmed_at,
   žiadne AI dohady) → `.claude/rules/supplier-stock.md`
+- adresy našich produktov z feedu google.xml (#220) → `.claude/rules/shop-feed.md`
 - Kniha odoslaných e-mailov (F193 — jediná odosielacia cesta, dedup okno preskočení) → `.claude/rules/mail-log.md`

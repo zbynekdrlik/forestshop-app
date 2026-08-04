@@ -197,6 +197,13 @@
       "when": 1785793985367,
       "tag": "0027_restock",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1785835560612,
+      "tag": "0028_shop_product_url",
+      "breakpoints": true
     }
   ]
 }

@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:g="http://base.google.com/ns/1.0">
+	<title>Názov zdroja dát</title>
+	<link href="http://www.example.com" rel="alternate" type="text/html" />
+	<author>
+		<name>Google</name>
+	</author><entry>
+	<g:id>40237/M</g:id>
+	<title>Nohavice FOREST 1003 Veľkosť: M</title>
+	<link>https://www.forestshop.sk/polovnicke-nohavice-forest-1003/?variantId=106</link>
+	<g:availability>in stock</g:availability>
+	<g:price>64.9 EUR</g:price>
+</entry><entry>
+	<g:id>15314</g:id>
+	<title>Poľovnícky ruksak HART SPEAN 25</title>
+	<link>https://www.forestshop.sk/polovnicky-ruksak-hart-spean-25/</link>
+	<g:availability>out of stock</g:availability>
+</entry><entry>
+	<g:id>10125/41</g:id>
+	<title>Obuv s lomítkom v kóde</title>
+	<link>https://www.forestshop.sk/obuv/?variantId=9&amp;utm=feed</link>
+	<g:availability></g:availability>
+</entry><entry>
+	<g:id></g:id>
+	<title>Položka bez kódu — musí sa preskočiť</title>
+	<link>https://www.forestshop.sk/bez-kodu/</link>
+</entry><entry>
+	<g:id>99999</g:id>
+	<title>Položka bez adresy — musí sa preskočiť</title>
+	<g:availability>in stock</g:availability>
+</entry><entry>
+	<g:id>40237/M</g:id>
+	<title>Duplicitný kód — platí prvý výskyt</title>
+	<link>https://www.forestshop.sk/duplikat/</link>
+</entry>
+</feed>

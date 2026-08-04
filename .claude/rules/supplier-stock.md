@@ -53,18 +53,15 @@ paths:
   keď má úplne iné stĺpce** (`buildRestockCsv` vedľa `buildWritebackCsv`) —
   ochrana proti CSV injection (`dataRowToLine`) musí platiť pre KAŽDÚ cestu,
   nikdy sa stĺpce neskladajú mimo tohto modulu.
-- **Shoptet export NEMÁ stĺpec s adresou produktu a `guid` je UUID, nie číselné
-  ID — odkaz na náš vlastný produkt sa preto NEDÁ poskladať z uložených dát.**
-  Overené na hlavičke surového exportu (issue 217: v 260+ stĺpcoch nie je
-  `url`/`slug`/`link`, len `seoTitle` a kategórie porovnávačov). Jediná
-  spoľahlivá cesta je vyhľadávanie podľa kódu:
-  `https://www.forestshop.sk/vyhladavanie/?string=<code>` (`apps/web/src/
-  shopLinks.ts`) — **slovenská cesta; česká `/vyhledavani/` na tejto doméne
-  vracia 404.** Funguje aj pre variantový kód s lomítkom (`10125/41`
-  percent-encoded) — naživo overené, nájde ten istý produkt ako kód bez
-  veľkosti. Ak by niekedy pribudla potreba priameho odkazu na DETAIL, treba
-  najprv doplniť zdroj adresy (feed pre porovnávače alebo sitemapu), nie
-  hádať tvar URL z `guid`.
+- **Shoptet export NEMÁ stĺpec s adresou produktu a `guid` je UUID — ale adresa
+  sa NEODVODZUJE, BERIE sa z feedu pre porovnávače.** Pôvodné znenie tohto
+  pravidla končilo tým, že jedinou cestou je vyhľadávanie podľa kódu
+  (`https://www.forestshop.sk/vyhladavanie/?string=<code>`); to platilo len
+  dovtedy, kým sa nenašiel zdroj adresy. Od issue 220 ju dodáva
+  `https://www.forestshop.sk/google.xml` (podrobne v `.claude/rules/
+  shop-feed.md`) a vyhľadávanie ostáva len ako NÁHRADA pre 626 viditeľných
+  variantov, ktoré vo feede nie sú. Slovenská cesta `/vyhladavanie/` naďalej
+  platí — česká `/vyhledavani/` na tejto doméne vracia 404.
 - **Zoznam, podľa ktorého sa človek rozhoduje, MUSÍ stavať na tej istej funkcii
   výberu ako samotný beh.** `listRestockWaiting` aj `selectRestockCandidates`
   volajú spoločnú `allRestockCandidates` (`restock/queries.ts`) — druhá kópia

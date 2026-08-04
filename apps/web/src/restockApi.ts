@@ -99,6 +99,9 @@ const waitingSchema = z.object({
       supplierAvailabilityText: z.string(),
       supplierPrice: z.string().nullable(),
       confirmedAt: z.string(),
+      // Priama adresa detailu z feedu (issue 220). `null` = kód vo feede nie
+      // je; odkaz vtedy padne späť na vyhľadávanie podľa kódu.
+      ourUrl: z.string().nullable(),
     }),
   ),
   suppliers: z.array(z.object({ name: z.string(), count: z.number() })),

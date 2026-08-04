@@ -10,3 +10,4 @@ export * from "./schema-mail-templates.js";
 export * from "./schema-mail-log.js";
 export * from "./schema-supplier-stock.js";
 export * from "./schema-restock.js";
+export * from "./schema-shop-feed.js";

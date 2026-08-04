@@ -12,3 +12,15 @@ const SEARCH_URL = "https://www.forestshop.sk/vyhladavanie/?string=";
 export function ourProductUrl(code: string): string {
   return SEARCH_URL + encodeURIComponent(code);
 }
+
+/**
+ * Odkaz na detail nášho produktu (issue 220).
+ *
+ * Uprednostní PRIAMU adresu z feedu pre porovnávače (obsahuje aj `?variantId=`,
+ * takže otvorí rovno správnu veľkosť). Keď kód vo feede nie je — dnes 626
+ * viditeľných variantov — padne späť na vyhľadávanie podľa kódu, nikdy na
+ * odkaz, ktorý by viedol nikam.
+ */
+export function ourProductLink(code: string, feedUrl: string | null): string {
+  return feedUrl === null || feedUrl === "" ? ourProductUrl(code) : feedUrl;
+}

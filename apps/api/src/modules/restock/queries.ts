@@ -6,7 +6,7 @@
 
 import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
-import { products, supplierStock, variants } from "../../db/schema.js";
+import { products, shopProductUrl, supplierStock, variants } from "../../db/schema.js";
 import {
   CONFIRMATION_MAX_AGE_HOURS,
   MAX_PER_RUN,
@@ -22,6 +22,13 @@ export interface RestockCandidate {
   readonly supplierAvailabilityText: string;
   readonly supplierPrice: string | null;
   readonly confirmedAt: Date;
+  /**
+   * Priama adresa detailu NÁŠHO produktu z feedu pre porovnávače (issue 220),
+   * alebo `null`, keď kód vo feede nie je. `null` NIE JE chyba — 626
+   * viditeľných variantov vo feede nie je a tie na obrazovke padnú späť na
+   * vyhľadávanie podľa kódu.
+   */
+  readonly ourUrl: string | null;
 }
 
 export interface RestockCandidates {
@@ -84,10 +91,15 @@ async function allRestockCandidates(db: Database, now: Date): Promise<readonly R
       supplierAvailabilityText: supplierStock.availabilityText,
       supplierPrice: supplierStock.price,
       confirmedAt: supplierStock.confirmedAt,
+      ourUrl: shopProductUrl.url,
     })
     .from(variants)
     .innerJoin(products, eq(variants.productKey, products.key))
     .innerJoin(supplierStock, eq(supplierStock.link, link))
+    // LEFT zámerne: variant bez záznamu vo feede NESMIE zo zoznamu vypadnúť —
+    // majiteľ overuje presne tie riadky, ktoré by sa prepli, takže skrytý
+    // riadok by znamenal prepnutie bez kontroly (trieda chyby z issue 219).
+    .leftJoin(shopProductUrl, eq(shopProductUrl.code, variants.code))
     .where(
       and(
         eq(variants.state, "out_of_stock"),

@@ -9,7 +9,7 @@ import {
   type RestockStatus,
   type RestockWaitingPage,
 } from "../restockApi.js";
-import { ourProductUrl } from "../shopLinks.js";
+import { ourProductLink } from "../shopLinks.js";
 
 // Majiteľ si chce vzorku preklikať po stovkách („potváram si zo sto a overím"),
 // takže stránka je 100 riadkov, nie tradičných 20.
@@ -293,7 +293,7 @@ export function RestockSection({
                   <td>{row.productName}</td>
                   <td>{row.supplier ?? "—"}</td>
                   <td>
-                    <a href={ourProductUrl(row.variantCode)} target="_blank" rel="noreferrer noopener">
+                    <a href={ourProductLink(row.variantCode, row.ourUrl)} target="_blank" rel="noreferrer noopener">
                       náš ↗
                     </a>
                   </td>
