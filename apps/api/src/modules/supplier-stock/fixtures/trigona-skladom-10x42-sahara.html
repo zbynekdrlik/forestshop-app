@@ -1,0 +1,22 @@
+<!--
+  Orezaná vzorka https://www.trigona.sk/eshop/10x42-sahara/p-1217729.xhtml
+  (issue 230, overené 4. 8. 2026, živý fetch 4. 8. 2026). Zámerne BEZ JSON-LD
+  (v skutočnosti trigona.sk JSON-LD nesie a preto sa v produkcii takmer vždy
+  vyhodnotí skôr — táto fixtúra izoluje LEN textovú/vizuálnu úroveň, presne
+  ako existujúce huntingshop.eu fixtúry). `id="StockCountText<ID>"` nesie
+  ČÍSLO produktu (1217729 = z URL), takže žiadna kolízia s karuselom nehrozí
+  — na 31 naživo overených produktových stránkach sa tento prvok vyskytol
+  vždy práve raz. Zelená farba `#00b020` s textom "Na sklade" zodpovedá
+  JSON-LD `InStock` na TOM ISTOM produkte.
+-->
+<html lang="sk">
+<head><title>10x42 Sahara | Distribútor pre SR - TRIGONA.sk</title></head>
+<body>
+  <div class="product-detail">
+    <h1>10x42 Sahara</h1>
+    <div class="delivery-info">
+      <span id="StockCountText1217729">                        <span style="color: #00b020">Na sklade</span></span>
+    </div>
+  </div>
+</body>
+</html>
