@@ -20,7 +20,14 @@ nasadenie na dev2 cez GHCR a Cloudflare tunel.
 **`gh issue view <N>` (bez `--json`) na tomto repe padá** (`GraphQL: Projects
 (classic) is being deprecated…`) — použi `gh issue view <N> --json
 body,title,state,labels,comments` namiesto toho (žiadne Projects polia sa
-nepýtajú, takže to prejde).
+nepýtajú, takže to prejde). **Rovnaká pasca platí aj pre `gh pr edit`/`gh pr
+view` (bez `--json`)** (issue 223+225 batch, 4. 8. 2026): `gh pr edit <N>
+--body-file ...` skončí s tou istou GraphQL chybou a telo PR sa TICHO
+NEZMENÍ (exit 1, žiadna zmena) — ak práve opravuješ omylom napísané `Closes
+#N` v tele PR, over si `gh pr view <N> --json body` PO edite, nespoliehaj sa
+na to, že príkaz bez chyby = zmena prešla. Funkčná obchádzka: `gh api -X
+PATCH repos/<owner>/<repo>/pulls/<N> -f body="$(cat súbor.md)" --silent` —
+ide priamo cez REST, nie GraphQL, takže Projects-classic pole nevadí.
 
 **`Closes #N` v tele PR zavrie ticket AUTOMATICKY v momente mergu — nie až po
 nasadení/naživo overení.** Issue 120 (2026-07-31): PR malo `Closes #120`,
