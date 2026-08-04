@@ -20,6 +20,7 @@ import { registerNedostupneRoutes, type NedostupneRunDeps } from "./nedostupne-r
 import { requireSameOrigin } from "./origin-check.js";
 import { registerPairingRoutes } from "./pairing-routes.js";
 import { registerPostaUncollectedRoutes, type PostaUncollectedRunDeps } from "./posta-uncollected-routes.js";
+import { registerProductLinksRoutes } from "./product-links-routes.js";
 import type { PageFetcher, PageFetchResult } from "../modules/supplier-stock/page-fetcher.js";
 import { registerSupplierStockRoutes } from "./supplier-stock-routes.js";
 import { registerRestockRoutes, type RestockRunDeps } from "./restock-routes.js";
@@ -179,6 +180,11 @@ export function createApp(
   registerSchedulerRoutes(app, db);
   registerSupplierRoutes(app, db, options.sendSupplierMail);
   registerPairingRoutes(app, db);
+  // issue 239: "Eshop → Párovanie produktov" — zoznam produktov bez
+  // dodávateľskej linky + doplnenie/oprava (zapisuje do rovnakej
+  // `product_supplier_link_override` tabuľky ako #121, žiadna nová cesta do
+  // Shoptetu).
+  registerProductLinksRoutes(app, db);
   registerPostaUncollectedRoutes(
     app,
     db,

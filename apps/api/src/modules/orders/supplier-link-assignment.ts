@@ -1,7 +1,9 @@
 import { eq } from "drizzle-orm";
+import { z } from "zod";
 import type { Database } from "../../db/client.js";
-import { orderLines, productSupplierLinkOverrides, variants } from "../../db/schema.js";
+import { orderLines, productSupplierLinkOverrides, products, variants } from "../../db/schema.js";
 import { record } from "../audit/service.js";
+import { startsWithFormulaChar } from "../shoptet-writeback/formula-guard.js";
 
 export type SetProductSupplierLinkResult = "ok" | "not_found";
 
@@ -12,6 +14,80 @@ export interface SetProductSupplierLinkInput {
   readonly url: string;
   readonly actorUserId: string;
   readonly now: Date;
+}
+
+// issue 239: zdieľaná zod schéma pre TELO "ulož odkaz na dodávateľa" — dnes
+// dve trasy (`POST /api/orders/lines/:lineId/supplier-link` z #121 a
+// `POST /api/product-links/:productKey` z #239), obe overujú TÚ ISTÚ vec
+// (URL, http(s) schéma, žiadny formula-injection znak na začiatku, #153).
+// Predtým bola definovaná len lokálne v `orders-routes.ts` — presunuté sem,
+// aby ju nová trasa nemusela duplikovať/rozísť sa s ňou.
+export const supplierLinkUrlBody = z.object({
+  url: z
+    .string()
+    .trim()
+    .url()
+    .max(2000)
+    .regex(/^https?:\/\//)
+    .refine((v) => !startsWithFormulaChar(v), {
+      message: "odkaz nesmie začínať znakom vzorca (=, +, -, @) — možný pokus o CSV-injection",
+    }),
+});
+
+// Zúžený parameter (rovnaký vzor ako `audit/service.ts`'s `AuditExecutor`,
+// `.claude/rules/database.md`) — musí bežať aj s `tx` (`PgTransaction`),
+// ktorý zdieľa `.select()`/`.insert()` s `Database`, ale nemá jej `$client`.
+type UpsertExecutor = Pick<Database, "select" | "insert">;
+
+interface UpsertProductSupplierLinkInput {
+  readonly productKey: string;
+  readonly url: string;
+  readonly actorUserId: string;
+  readonly now: Date;
+  // `null` keď zápis nejde cez konkrétny riadok objednávky (issue 239's
+  // `setProductSupplierLinkForProduct` — produkt bez otvorenej objednávky).
+  readonly lineId: string | null;
+}
+
+// Zdieľané jadro OBOCH zápisových ciest nižšie (`setProductSupplierLink`
+// cez `lineId`, `setProductSupplierLinkForProduct` cez priamy `productKey`)
+// — rovnaký upsert + audit záznam, líšia sa len v tom, AKO sa `productKey`
+// zistí a či existuje `lineId` na zaznamenanie do auditu.
+async function upsertProductSupplierLink(
+  tx: UpsertExecutor,
+  input: UpsertProductSupplierLinkInput,
+): Promise<"ok"> {
+  const [previous] = await tx
+    .select({ url: productSupplierLinkOverrides.url })
+    .from(productSupplierLinkOverrides)
+    .where(eq(productSupplierLinkOverrides.productKey, input.productKey))
+    .limit(1);
+
+  await tx
+    .insert(productSupplierLinkOverrides)
+    .values({ productKey: input.productKey, url: input.url, updatedAt: input.now })
+    .onConflictDoUpdate({
+      target: productSupplierLinkOverrides.productKey,
+      set: { url: input.url, updatedAt: input.now },
+    });
+
+  // Audit nesie AJ pôvodnú hodnotu (kto/kedy/z čoho/na čo — ticketova
+  // akceptačná podmienka), `null` keď doteraz žiadna nebola nastavená.
+  await record(tx, {
+    at: input.now,
+    actorUserId: input.actorUserId,
+    action: "product_supplier_link_override.changed",
+    entity: "product_supplier_link_override",
+    entityId: input.productKey,
+    data: {
+      productKey: input.productKey,
+      lineId: input.lineId,
+      previousUrl: previous?.url ?? null,
+      newUrl: input.url,
+    },
+  });
+
+  return "ok";
 }
 
 // issue 121: majiteľ, doslovne "pri kazdom produkte ma byt moznost upravit
@@ -43,36 +119,46 @@ export async function setProductSupplierLink(
       .limit(1);
     if (line === undefined) return "not_found";
 
-    const [previous] = await tx
-      .select({ url: productSupplierLinkOverrides.url })
-      .from(productSupplierLinkOverrides)
-      .where(eq(productSupplierLinkOverrides.productKey, line.productKey))
-      .limit(1);
-
-    await tx
-      .insert(productSupplierLinkOverrides)
-      .values({ productKey: line.productKey, url: input.url, updatedAt: input.now })
-      .onConflictDoUpdate({
-        target: productSupplierLinkOverrides.productKey,
-        set: { url: input.url, updatedAt: input.now },
-      });
-
-    // Audit nesie AJ pôvodnú hodnotu (kto/kedy/z čoho/na čo — ticketova
-    // akceptačná podmienka), `null` keď doteraz žiadna nebola nastavená.
-    await record(tx, {
-      at: input.now,
+    return upsertProductSupplierLink(tx, {
+      productKey: line.productKey,
+      url: input.url,
       actorUserId: input.actorUserId,
-      action: "product_supplier_link_override.changed",
-      entity: "product_supplier_link_override",
-      entityId: line.productKey,
-      data: {
-        productKey: line.productKey,
-        lineId: input.lineId,
-        previousUrl: previous?.url ?? null,
-        newUrl: input.url,
-      },
+      now: input.now,
+      lineId: input.lineId,
     });
+  });
+}
 
-    return "ok";
+export type SetProductSupplierLinkForProductResult = "ok" | "not_found";
+
+export interface SetProductSupplierLinkForProductInput {
+  readonly productKey: string;
+  readonly url: string;
+  readonly actorUserId: string;
+  readonly now: Date;
+}
+
+// issue 239: priamy náprotivok `setProductSupplierLink` vyššie, PRE PRODUKT
+// bez sprostredkovania cez konkrétny riadok objednávky — obrazovka "Eshop →
+// Párovanie produktov" vypisuje produkty (aj tie BEZ otvorenej objednávky),
+// takže potrebuje zapisovať priamo podľa `productKey`, nie `lineId`. Zdieľa
+// rovnaké jadro (`upsertProductSupplierLink`) s `setProductSupplierLink` —
+// jediný rozdiel je, ako sa `productKey` overí (tu priamo cez `products`
+// tabuľku, nie cez JOIN na `orderLines`/`variants`).
+export async function setProductSupplierLinkForProduct(
+  db: Database,
+  input: SetProductSupplierLinkForProductInput,
+): Promise<SetProductSupplierLinkForProductResult> {
+  return db.transaction(async (tx) => {
+    const [product] = await tx.select({ key: products.key }).from(products).where(eq(products.key, input.productKey)).limit(1);
+    if (product === undefined) return "not_found";
+
+    return upsertProductSupplierLink(tx, {
+      productKey: input.productKey,
+      url: input.url,
+      actorUserId: input.actorUserId,
+      now: input.now,
+      lineId: null,
+    });
   });
 }

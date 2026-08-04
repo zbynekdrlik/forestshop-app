@@ -3,7 +3,7 @@ import { orders, users } from "../src/db/schema.js";
 import { createApp } from "../src/http/app.js";
 import { resetLoginRateLimit } from "../src/http/login-rate-limit.js";
 import { hashPassword } from "../src/modules/auth/passwords.js";
-import { getOrdersDashboardOverview } from "../src/modules/orders/overview.js";
+import { computeBratislavaPeriodBoundaries, getOrdersDashboardOverview } from "../src/modules/orders/overview.js";
 import { withCleanDb } from "./helpers/db.js";
 
 const HESLO = "test-heslo-abc"; // testovacie údaje, nie tajomstvo
@@ -133,9 +133,21 @@ it("GET /api/orders/overview bez prihlásenia vráti 401", async () => {
 
 // issue 237: rovnaké oprávnenie ako `/api/orders/open` — čítanie (rola
 // `citanie`) smie vidieť prehľad, nie je vyhradené manažérom/adminom.
+//
+// issue 239 (nájdené pri behu tohto balíka, nesúvisiaci s ním): NA ROZDIEL
+// od ostatných testov v tomto súbore (ktoré posielajú PEVNÉ `NOW`/
+// `TODAY_START` priamo do `getOrdersDashboardOverview`) táto trasa počíta
+// "dnes" zo SKUTOČNÉHO `new Date()` na serveri — pevný literál
+// `TODAY_START` (2026-08-03/04) preto po prekročení toho kalendárneho dňa
+// prestal byť "dnes" a test spoľahlivo zlyhal (pozorované naživo pri
+// prechode 2026-08-04 → 2026-08-05). Fix: rovnaká hranica, ale prepočítaná
+// zo SKUTOČNÉHO `new Date()` v momente behu testu (`computeBratislavaPeriodBoundaries`,
+// tá istá funkcia, akú používa aj samotná trasa) — test tak zostáva platný
+// v KTORÝKOĽVEK deň, nielen v deň napísania.
 it("GET /api/orders/overview vráti počty aj tržbu za dnes/týždeň/mesiac (rola 'citanie' smie čítať)", async () => {
   const { app, cookie, db } = await boot();
-  await insertOrder(db, "9230", new Date(TODAY_START.getTime() + 60 * 60 * 1000), "77.50");
+  const skutocneDnesStart = computeBratislavaPeriodBoundaries(new Date()).today;
+  await insertOrder(db, "9230", new Date(skutocneDnesStart.getTime() + 60 * 60 * 1000), "77.50");
 
   const res = await app.request("/api/orders/overview", { headers: { cookie } });
   expect(res.status).toBe(200);

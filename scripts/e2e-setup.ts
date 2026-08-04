@@ -17,6 +17,7 @@ import { DEFAULT_SNAPSHOT_LIMITS } from "../apps/api/src/modules/catalog/validat
 import { DEFAULT_ORDER_OPEN_STATUS } from "../apps/api/src/modules/orders/open-statuses.js";
 import { POSTA_UNCOLLECTED_SETTINGS_ID } from "../apps/api/src/modules/posta-uncollected/settings.js";
 import { ORDER_REMINDER_SETTINGS_ID } from "../apps/api/src/modules/order-reminder/settings.js";
+import { seedProductLinksFixtures } from "./e2e-fixtures-product-links.js";
 
 const E2E_HESLO = "e2e-test-heslo"; // musí sa zhodovať s hodnotou v login.spec.ts/catalog.spec.ts/orders.spec.ts
 
@@ -736,5 +737,9 @@ await db.insert(orders).values({
   placedAt: teraz,
   totalPriceWithVat: "77.50",
 });
+
+// issue 239: fixtúra (produkty + vlastný E2E účet) vyčlenená do vlastného
+// súboru (eslint max-lines).
+await seedProductLinksFixtures(db, teraz, snapshotPrepinanie, E2E_HESLO);
 
 await pool.end();
