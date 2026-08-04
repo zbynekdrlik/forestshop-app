@@ -10,6 +10,7 @@ import { PairingSection } from "./components/PairingSection.js";
 import { PostaUncollectedSection } from "./components/PostaUncollectedSection.js";
 import { RestockSection } from "./components/RestockSection.js";
 import { SchedulerSection } from "./components/SchedulerSection.js";
+import { SupplierLinksSection } from "./components/SupplierLinksSection.js";
 import { SupplierStockSection } from "./components/SupplierStockSection.js";
 import { SyncSection } from "./components/SyncSection.js";
 
@@ -80,6 +81,11 @@ export const NAV: readonly NavFolder[] = [
     tabs: [
       { id: "orders", label: "Na objednanie", icon: "📦", Component: OrdersSection, wide: true },
       { id: "nedostupne", label: "Nedostupné tovary", icon: "🚫", Component: NedostupneSection, wide: true },
+      // issue 239: majiteľ, "vypisovat produkty ktore nemaju dodavatelsku
+      // linku, dat moznost ju tam rovno vlozit, a poslat do Shoptetu" — patrí
+      // sem (nie do Automatizácie), je to obrazovka, na ktorej obsluha
+      // pracuje, presne ako "Na objednanie"/"Nedostupné tovary".
+      { id: "supplier-links", label: "Párovanie produktov", icon: "🔗", Component: SupplierLinksSection, wide: true },
     ],
   },
   {

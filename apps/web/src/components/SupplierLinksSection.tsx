@@ -1,0 +1,316 @@
+import { useCallback, useEffect, useRef, useState, type SyntheticEvent, type JSX } from "react";
+import type { Me } from "../api.js";
+import { validateSupplierLinkUrl } from "../ordersApi.js";
+import {
+  saveProductLink,
+  searchProductLinks,
+  SupplierLinksUnauthorizedError,
+  type ProductLinkItem,
+  type ProductLinkState,
+} from "../supplierLinksApi.js";
+
+// issue 239: "Eshop → Párovanie produktov" — priamy náprotivok
+// `PairingSection.tsx`, ale kľúčovaný PRODUKTOM (nie variantom): jeden riadok
+// na produkt, žiadny potvrdzovací stavový automat (majiteľ len vkladá/opravuje
+// adresu), zápis ide do `product_supplier_link_override` (rovnaká tabuľka ako
+// #121's riadkové priradenie), ktorú existujúci `shoptet-writeback` job (#122)
+// odošle do Shoptetu — táto obrazovka doň nezapisuje žiadnou NOVOU cestou.
+const CAN_EDIT_ROLES: ReadonlySet<Me["role"]> = new Set(["admin", "manazer"]);
+
+function formatDateTime(iso: string | null): string {
+  if (iso === null) return "—";
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString("sk-SK");
+}
+
+/**
+ * Stav "uložené vs. odoslané do Shoptetu" (ticketova akceptačná podmienka) sa
+ * dá vyvodiť LEN z `updatedAt`/`syncedAt` — `updatedAt === null` znamená
+ * žiadny NÁŠ override (odkaz, ak existuje, prišiel priamo zo Shoptet-ovho
+ * `internalNote`, appka ho nikdy neposielala, lebo tam už je). Rovnaké
+ * "čaká na odoslanie" kritérium ako `select-changes.ts`'s
+ * `synced_at IS NULL OR synced_at < updated_at`.
+ */
+function statusLabel(item: ProductLinkItem): string {
+  if (item.updatedAt === null) return item.url === null ? "—" : "zo Shoptetu";
+  const pending = item.syncedAt === null || item.syncedAt < item.updatedAt;
+  return pending ? "⏳ Uložené, čaká na odoslanie" : `✅ Odoslané do Shoptetu (${formatDateTime(item.syncedAt)})`;
+}
+
+export function SupplierLinksSection({
+  role,
+  onSessionExpired,
+}: {
+  readonly role: Me["role"];
+  readonly onSessionExpired: () => void;
+}): JSX.Element {
+  const [items, setItems] = useState<readonly ProductLinkItem[]>([]);
+  const [total, setTotal] = useState(0);
+  const [missingTotal, setMissingTotal] = useState(0);
+  const [searchLoaded, setSearchLoaded] = useState(false);
+  const [query, setQuery] = useState("");
+  const [state, setState] = useState<ProductLinkState>("missing");
+  const [searchError, setSearchError] = useState("");
+  const [actionError, setActionError] = useState("");
+  const canEdit = CAN_EDIT_ROLES.has(role);
+
+  const [editingKey, setEditingKey] = useState<string | null>(null);
+  const [urlDraft, setUrlDraft] = useState("");
+  const [busyKey, setBusyKey] = useState<string | null>(null);
+
+  // Len najnovšia požiadavka smie zapísať výsledok — rovnaký dôvod ako
+  // `PairingSection.tsx`'s `searchSeq` (neindexovaný filter nad celým
+  // katalógom môže staršiu, širšiu odpoveď doručiť neskôr než novšiu, užšiu).
+  const searchSeq = useRef(0);
+
+  const search = useCallback(
+    (q: string, s: ProductLinkState) => {
+      const seq = (searchSeq.current += 1);
+      setSearchError("");
+      searchProductLinks({ q, state: s, page: 1 })
+        .then((result) => {
+          if (seq !== searchSeq.current) return; // medzitým prišla novšia požiadavka
+          setItems(result.items);
+          setTotal(result.total);
+          setMissingTotal(result.missingTotal);
+          setSearchLoaded(true);
+        })
+        .catch((err: unknown) => {
+          if (seq !== searchSeq.current) return;
+          setSearchLoaded(true);
+          if (err instanceof SupplierLinksUnauthorizedError) {
+            onSessionExpired();
+            return;
+          }
+          setItems([]);
+          setTotal(0);
+          setSearchError("Zoznam produktov sa nepodarilo načítať.");
+        });
+    },
+    [onSessionExpired],
+  );
+
+  useEffect(() => {
+    search("", "missing");
+  }, [search]);
+
+  function submit(event: SyntheticEvent): void {
+    event.preventDefault();
+    search(query, state);
+  }
+
+  const refetch = useCallback(() => {
+    search(query, state);
+  }, [search, query, state]);
+
+  const startEdit = useCallback((item: ProductLinkItem) => {
+    setEditingKey(item.productKey);
+    setUrlDraft(item.url ?? "");
+    setActionError("");
+  }, []);
+
+  const cancelEdit = useCallback(() => {
+    setEditingKey(null);
+    setActionError("");
+  }, []);
+
+  const save = useCallback(
+    (productKey: string) => {
+      setActionError("");
+      // issue 153: OKAMŽITÁ kontrola V PREHLIADAČI, PRED zápisom na server —
+      // zdieľaná s `orders/supplier-link` obrazovkou (`ordersApi.ts`'s
+      // `validateSupplierLinkUrl`), rovnaké pravidlo na oboch miestach.
+      const validationError = validateSupplierLinkUrl(urlDraft);
+      if (validationError !== null) {
+        setActionError(validationError);
+        return;
+      }
+      setBusyKey(productKey);
+      saveProductLink(productKey, urlDraft.trim())
+        .then(() => {
+          setEditingKey(null);
+          refetch();
+        })
+        .catch((err: unknown) => {
+          if (err instanceof SupplierLinksUnauthorizedError) {
+            onSessionExpired();
+            return;
+          }
+          setActionError(err instanceof Error ? err.message : "Uloženie odkazu sa nepodarilo.");
+        })
+        .finally(() => {
+          setBusyKey(null);
+        });
+    },
+    [refetch, onSessionExpired, urlDraft],
+  );
+
+  const showingAll = total === 0 || items.length >= total;
+
+  return (
+    <section data-testid="product-links-section">
+      <h2>Párovanie produktov</h2>
+      <p>
+        Produkty, ktoré nemajú dodávateľskú linku, nevie automat sledovať dostupnosť u dodávateľa —
+        preto nefunguje ani „Vypredané → Skladom“, ani „Na objednanie“ pre ne. Vložte alebo opravte
+        adresu produktu u dodávateľa, uloženie ju pošle do Shoptetu.
+      </p>
+
+      <p className="chip-row">
+        <span className="chip" data-testid="product-links-missing-total">
+          Bez linky celkom: {missingTotal}
+        </span>
+      </p>
+
+      <form onSubmit={submit}>
+        <label htmlFor="product-links-q">Hľadať produkt (kód alebo názov)</label>
+        <input
+          id="product-links-q"
+          type="search"
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+          }}
+        />
+        <label htmlFor="product-links-state">Zobraziť produkty</label>
+        <select
+          id="product-links-state"
+          value={state}
+          onChange={(e) => {
+            setState(e.target.value as ProductLinkState);
+          }}
+        >
+          <option value="missing">Bez linky</option>
+          <option value="linked">S linkou</option>
+          <option value="all">Všetky</option>
+        </select>
+        <button type="submit">Zobraziť</button>
+      </form>
+
+      {searchError !== "" && <p role="alert">{searchError}</p>}
+      {actionError !== "" && <p role="alert">{actionError}</p>}
+      <p data-testid="product-links-total">
+        {showingAll
+          ? `Nájdených: ${String(total)}`
+          : `Nájdených: ${String(total)} (zobrazených prvých ${String(items.length)})`}
+      </p>
+
+      {searchLoaded && total === 0 ? (
+        <p data-testid="product-links-empty">Hľadaniu nezodpovedá žiadny produkt.</p>
+      ) : (
+        <table>
+          <thead>
+            <tr>
+              <th>Kód</th>
+              <th>Názov</th>
+              <th>Dodávateľ</th>
+              <th>Variantov</th>
+              <th>Odkaz na dodávateľa</th>
+              <th>Stav</th>
+              {canEdit && <th>Akcie</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((item) => {
+              const editing = editingKey === item.productKey;
+              const busyHere = busyKey === item.productKey;
+              return (
+                <tr key={item.productKey} data-testid={`product-link-row-${item.productKey}`}>
+                  <td>{item.productKey}</td>
+                  <td>{item.productName}</td>
+                  <td>{item.supplier ?? "(bez dodávateľa)"}</td>
+                  <td>{item.variantCount}</td>
+                  <td>
+                    {editing ? (
+                      <div className="ord-supplier-link-edit" data-testid={`product-link-edit-${item.productKey}`}>
+                        <input
+                          type="url"
+                          className="ord-supplier-link-edit-input"
+                          data-testid={`product-link-edit-input-${item.productKey}`}
+                          aria-label={`Odkaz na dodávateľa produktu ${item.productName} / ${item.productKey}`}
+                          placeholder="https://…"
+                          value={urlDraft}
+                          disabled={busyHere}
+                          autoFocus
+                          onChange={(e) => {
+                            setUrlDraft(e.target.value);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              save(item.productKey);
+                              return;
+                            }
+                            if (e.key === "Escape") {
+                              e.preventDefault();
+                              cancelEdit();
+                            }
+                          }}
+                        />
+                        <button
+                          type="button"
+                          className="btn sm good"
+                          data-testid={`product-link-save-${item.productKey}`}
+                          aria-label={`Uložiť odkaz na dodávateľa produktu ${item.productName} / ${item.productKey}`}
+                          disabled={busyHere || urlDraft.trim() === ""}
+                          onClick={() => {
+                            save(item.productKey);
+                          }}
+                        >
+                          💾
+                        </button>
+                        <button
+                          type="button"
+                          className="btn sm ghost"
+                          data-testid={`product-link-cancel-${item.productKey}`}
+                          aria-label="Zrušiť úpravu"
+                          disabled={busyHere}
+                          onClick={cancelEdit}
+                        >
+                          ✖
+                        </button>
+                      </div>
+                    ) : item.url !== null ? (
+                      <a
+                        href={item.url}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                        data-testid={`product-link-url-${item.productKey}`}
+                      >
+                        {item.url}
+                      </a>
+                    ) : (
+                      <span data-testid={`product-link-url-${item.productKey}`}>—</span>
+                    )}
+                  </td>
+                  <td data-testid={`product-link-status-${item.productKey}`}>{statusLabel(item)}</td>
+                  {canEdit && (
+                    <td>
+                      {!editing && (
+                        <button
+                          type="button"
+                          className="btn sm ghost"
+                          data-testid={`product-link-edit-toggle-${item.productKey}`}
+                          aria-label={
+                            item.url !== null
+                              ? `Upraviť odkaz na dodávateľa — ${item.productName} (${item.productKey})`
+                              : `Doplniť odkaz na dodávateľa — ${item.productName} (${item.productKey})`
+                          }
+                          onClick={() => {
+                            startEdit(item);
+                          }}
+                        >
+                          {item.url !== null ? "✏️ Upraviť" : "✏️ Doplniť"}
+                        </button>
+                      )}
+                    </td>
+                  )}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+    </section>
+  );
+}
