@@ -1,0 +1,51 @@
+<!--
+  Orezaná vzorka https://shop.lasting.eu/cs/cepice/19937-59938-lasting-merino-
+  cepice-bony-cerna-8595067820460.html (issue 224, živý fetch 4. 8. 2026).
+
+  Dva varianty veľkosti: S/M (sklademANO) a L/XL (sklademNE, "checked" =
+  predvolená veľkosť pri načítaní stránky). Náš vlastný Shoptet size_label
+  pre veľkosť L/XL je "L-X" (skrátený tvar, overené v produkčnej DB) — čítač
+  ho musí spárovať s "L/XL" tolerantne na skrátenie POSLEDNEJ časti.
+
+  JSON-LD tejto stránky hlási "https://schema.org/InStock" — hoci vlastný
+  `offers.url` v tom istom bloku ukazuje presne na fragment
+  "1130-velikost-l_xl" (tú istú veľkosť, ktorá je podľa zoznamu veľkostí
+  NEDOSTUPNÁ). Presne to je dôvod, prečo sa JSON-LD pri viacveľkostnom
+  produkte na tejto doméne nesmie brať ako dostupnosť KONKRÉTNEJ veľkosti.
+-->
+<html lang="cs">
+<head>
+<title>BONY merino čepice černá | Lasting</title>
+<script type="application/ld+json">
+{"@context":"https://schema.org/","@type":"Product","name":"BONY merino čepice",
+ "sku":"BONY-9090L/XL",
+ "offers":{"@type":"Offer","priceCurrency":"CZK","price":"399",
+   "url":"https://shop.lasting.eu/cs/cepice/19937-59938-lasting-merino-cepice-bony-cerna-8595067820460.html#/1054-barva-cerna/1130-velikost-l_xl",
+   "availability":"https://schema.org/InStock"}}
+</script>
+</head>
+<body>
+  <h1>BONY merino čepice černá</h1>
+  <ul class="product-variants-item clearfix" id="group_8">
+    <li  class="sklademANO input-container float-xs-left ">
+      <label>
+        <input class="input-radio" type="radio" data-product-attribute="8" name="group[8]"     value="1140"       title="S/M">
+        <span class="radio-label">
+                                S/M
+        </span>
+      </label>
+    </li>
+    <li idproductstributesOK="55307,55312" class="sklademNE input-container float-xs-left ">
+      <label>
+        <input class="input-radio" type="radio" data-product-attribute="8" name="group[8]"     value="1130"       title="L/XL" checked="checked">
+        <span class="radio-label">
+          <span class='skrtnuti1'></span>
+          <span class='skrtnuti2'></span>
+                            L/XL
+        </span>
+      </label>
+    </li>
+  </ul>
+  <div id='sklademNEExist'>asdfasdf</div>
+</body>
+</html>

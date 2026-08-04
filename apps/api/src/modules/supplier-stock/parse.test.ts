@@ -8,8 +8,10 @@ import {
   fromMetaTags,
   hostOf,
   isTrustedTextHost,
+  matchSizeLabel,
   parsePage,
   parsePrice,
+  parseSizeAvailability,
   visibleText,
 } from "./parse.js";
 
@@ -20,6 +22,8 @@ function fixture(name: string): string {
 const HUNTINGSHOP_VYPREDANY = fixture("huntingshop-vypredany-ruksak.html");
 const HUNTINGSHOP_SKLADOM = fixture("huntingshop-skladom-tricko.html");
 const ODIMON_NEDOSTUPNA = fixture("odimon-nedostupna-strelecka-palica.html");
+const LASTING_BONY = fixture("lasting-bony-cepica-l-xl.html");
+const LASTING_HILA = fixture("lasting-hila-tricko-bez-xs.html");
 
 describe("hostOf / isTrustedTextHost", () => {
   it("odreze www a zmensi pismena", () => {
@@ -258,5 +262,49 @@ describe("parsePage — issue 225: odimon.sk — viditelna dostupnost prebija kl
     const result = parsePage(html, "https://www.odimon.sk/p/ine");
     expect(result.availability).toBe("available");
     expect(result.availabilityText).toBe("Skladom 9 ks");
+  });
+});
+
+describe("parseSizeAvailability — issue 224: shop.lasting.eu zoznam veľkostí", () => {
+  it("precita KAZDU velkost so svojou vlastnou dostupnostou, nikdy stranku ako celok", () => {
+    const sizes = parseSizeAvailability(
+      LASTING_BONY,
+      "https://shop.lasting.eu/cs/cepice/19937-59938-lasting-merino-cepice-bony-cerna-8595067820460.html",
+    );
+    expect(sizes).toEqual([
+      { sizeLabel: "S/M", availability: "available" },
+      { sizeLabel: "L/XL", availability: "unavailable" },
+    ]);
+  });
+
+  it("stranka bez zoznamu velkosti (ina domena) vracia null, nikdy prazdne pole", () => {
+    expect(parseSizeAvailability(LASTING_BONY, "https://www.huntingshop.eu/p/1")).toBeNull();
+  });
+
+  it("poddomena patri pod to iste pravidlo ako holy host", () => {
+    const sizes = parseSizeAvailability(LASTING_HILA, "https://sub.shop.lasting.eu/cs/nieco.html");
+    expect(sizes).not.toBeNull();
+  });
+});
+
+describe("matchSizeLabel — issue 224: parovanie NASHO size_label na dodavatela", () => {
+  it("presna zhoda po odstraneni oddelovacov", () => {
+    expect(matchSizeLabel("S-M", ["S/M", "L/XL"])).toBe("S/M");
+  });
+
+  it("tolerantne na skratenie POSLEDNEJ casti — nas 'L-X' je dodavatelovo 'L/XL'", () => {
+    expect(matchSizeLabel("L-X", ["S/M", "L/XL"])).toBe("L/XL");
+  });
+
+  it("velkost, ktoru dodavatel vobec nema, sa nesparuje", () => {
+    expect(matchSizeLabel("XS", ["S", "M", "L", "XL"])).toBeNull();
+  });
+
+  it("rozny pocet casti sa nikdy nepovazuje za zhodu", () => {
+    expect(matchSizeLabel("L-X", ["XL"])).toBeNull();
+  });
+
+  it("viacnasobna zhoda je nejednoznacna — nikdy sa neuhadne", () => {
+    expect(matchSizeLabel("X", ["XS", "XL"])).toBeNull();
   });
 });
