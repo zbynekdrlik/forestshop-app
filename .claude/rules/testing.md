@@ -109,6 +109,23 @@ paths:
   SQL kľúčové slovo, v raw SQL literáli (`sql\`TRUNCATE TABLE ...\``) MUSÍ byť
   ručne uvodzovkované (`"order"`) — drizzle-ove query buildre to robia
   automaticky, priamy SQL string nie.
+- **`scripts/e2e-setup.ts` má VLASTNÝ, SAMOSTATNÝ `TRUNCATE` zoznam — nová
+  tabuľka pridaná do `tests/helpers/db.ts` sa doň NEPREPÍŠE sama.** Issue 217
+  našlo, že `supplier_stock`/`restock_settings`/`restock_event` (pridané pri
+  #212/#213 správne do `tests/helpers/db.ts`) v e2e zozname chýbali — potvrdenia
+  dodávateľa by teda prežívali z predošlého e2e behu do ďalšieho, presne tá
+  istá tichá pasca, akú `.claude/rules/supplier-stock.md` popisuje pre
+  integračné testy. Pri KAŽDEJ novej koreňovej tabuľke uprav OBA zoznamy naraz.
+- **Pridanie čo i len JEDNÉHO variantu do e2e seedu posunie pevné počty v
+  `catalog.spec.ts`** (`"Nájdených: N"` aj `"Variantov v katalógu (vrátane
+  chýbajúcich): N"`) — nie je to nič, čo by sa dalo obísť, len sa na to musí
+  myslieť: zvýš obe čísla presne o počet pridaných variantov a do testu napíš,
+  odkiaľ sa ten navyše vzal. Filtrované počty (`sellable`, `missing`) sa menia
+  LEN ak nový variant do toho stavu patrí — issue 217 pridalo variant v stave
+  `out_of_stock`, takže `6`/`1` zostali. Overené celým e2e balíkom, nie
+  odhadom; opačné poradie (najprv predpoklad, že fixtúrny variant stačí)
+  stálo jeden zbytočný beh — vo fixtúre NIE JE žiadny `out_of_stock` +
+  `visible` variant s odkazom dodávateľa (overené dopytom do e2e databázy).
 - **Nová "koreňová" tabuľka, ktorá NESIE reálny produkčný obsah (napr.
   seedovaný migráciou, nie len prázdna štruktúra) potrebuje po TRUNCATE aj
   RESEED, nielen pridanie do zoznamu.** `order_open_status` (issue 59) je

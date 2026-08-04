@@ -29,12 +29,8 @@ export const SELLABLE_VISIBILITY = "visible";
 
 // Text, ktorý Shoptet zobrazuje zákazníkovi. Musí sa zapísať do OBOCH polí
 // naraz — Shoptet ukazuje `availabilityOutOfStock` v momente, keď sklad
-// klesne na nulu, takže zápis len do `availabilityInStock` by po dopredaní
-// fiktívnych kusov vrátil staré „Vypredané" (overené v ostrej prevádzke
-// starej appky 14. 7. 2026).
+// klesne na nulu (overené v ostrej prevádzke starej appky 14. 7. 2026), a
+// zásoba tu ostáva nulová, lebo ju majiteľ v Shoptete neudržiava a
+// automatizácia ju zámerne nezapisuje (issue 219). Zápis len do
+// `availabilityInStock` by teda zákazníkovi nechal svietiť staré „Vypredané".
 export const AVAILABILITY_IN_STOCK_TEXT = "Skladom";
-
-// Fiktívny sklad, ktorý produkt vráti do predaja. Kladné číslo je nutné —
-// pri nule Shoptet zobrazí `availabilityOutOfStock` a prepnutie by nemalo
-// žiadny efekt.
-export const RESTOCK_STOCK = 10;

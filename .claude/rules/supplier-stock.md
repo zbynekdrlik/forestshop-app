@@ -40,15 +40,37 @@ paths:
   Slovo „Skladom" sa na cudzej stránke môže vyskytnúť v pätičke, v menu alebo
   pri inom produkte. Pridanie novej domény do zoznamu vyžaduje overenie na
   uloženej vzorke tej stránky, nikdy len domnienku.
-- **Obe polia dostupnosti sa do Shoptetu zapisujú NARAZ.** Shoptet zobrazuje
-  `availabilityOutOfStock` v momente, keď sklad klesne na nulu, takže zápis
-  len do `availabilityInStock` nechá po dopredaní fiktívnych kusov naskočiť
-  staré „Vypredané" (overené v ostrej prevádzke starej appky 14. 7. 2026).
-  Preto aj kladný `stock` — pri nule je prepnutie bez efektu.
+- **Obe polia dostupnosti sa do Shoptetu zapisujú NARAZ, ale `stock` sa
+  nezapisuje VÔBEC (issue 219).** Shoptet zobrazuje `availabilityOutOfStock`,
+  keď sklad klesne na nulu (overené v ostrej prevádzke starej appky
+  14. 7. 2026), a v tomto obchode je zásoba trvalo nulová — majiteľ skladovú
+  logistiku nepoužíva. Preto sa musia nastaviť OBA texty (inak zákazníkovi
+  svieti staré „Vypredané"), zatiaľ čo zápis fiktívnej zásoby by do obchodu
+  vpísal číslo, ktoré nikto neudržiava. Pôvodné pravidlo hovorilo opak
+  („preto aj kladný `stock`") — bolo postavené na predpoklade, že zásoba
+  niečo znamená.
 - **Nová cesta zápisu CSV do Shoptetu patrí do `shoptet-writeback/csv.ts`, aj
   keď má úplne iné stĺpce** (`buildRestockCsv` vedľa `buildWritebackCsv`) —
   ochrana proti CSV injection (`dataRowToLine`) musí platiť pre KAŽDÚ cestu,
   nikdy sa stĺpce neskladajú mimo tohto modulu.
+- **Shoptet export NEMÁ stĺpec s adresou produktu a `guid` je UUID, nie číselné
+  ID — odkaz na náš vlastný produkt sa preto NEDÁ poskladať z uložených dát.**
+  Overené na hlavičke surového exportu (issue 217: v 260+ stĺpcoch nie je
+  `url`/`slug`/`link`, len `seoTitle` a kategórie porovnávačov). Jediná
+  spoľahlivá cesta je vyhľadávanie podľa kódu:
+  `https://www.forestshop.sk/vyhladavanie/?string=<code>` (`apps/web/src/
+  shopLinks.ts`) — **slovenská cesta; česká `/vyhledavani/` na tejto doméne
+  vracia 404.** Funguje aj pre variantový kód s lomítkom (`10125/41`
+  percent-encoded) — naživo overené, nájde ten istý produkt ako kód bez
+  veľkosti. Ak by niekedy pribudla potreba priameho odkazu na DETAIL, treba
+  najprv doplniť zdroj adresy (feed pre porovnávače alebo sitemapu), nie
+  hádať tvar URL z `guid`.
+- **Zoznam, podľa ktorého sa človek rozhoduje, MUSÍ stavať na tej istej funkcii
+  výberu ako samotný beh.** `listRestockWaiting` aj `selectRestockCandidates`
+  volajú spoločnú `allRestockCandidates` (`restock/queries.ts`) — druhá kópia
+  podmienok by sa skôr či neskôr rozišla a majiteľ by overil iné produkty, než
+  by sa naozaj prepli. Integračný test to drží (`overovací zoznam vylučuje
+  detailOnly rovnako ako samotné prepínanie`).
 - **Nová tabuľka MUSÍ pribudnúť do `TRUNCATE` zoznamu v
   `tests/helpers/db.ts`, inak testy zlyhajú AŽ pri druhom behu.** Pri #212 to
   bolo obzvlášť zákerné: prvý beh prešiel (prázdna tabuľka), druhý beh našiel

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildWritebackCsv } from "./csv.js";
+import { buildRestockCsv, buildWritebackCsv } from "./csv.js";
 
 describe("buildWritebackCsv", () => {
   it("has the canonical Shoptet import header + BOM + CRLF + ';' delimiter", () => {
@@ -55,5 +55,24 @@ describe("buildWritebackCsv", () => {
     const csv = buildWritebackCsv([{ code: "A", pairCode: "", internalNote: "=cmd|'/c calc'!A1;X" }]);
     const rows = csv.toString("utf8").slice(1).split("\r\n").filter(Boolean);
     expect(rows[1]).toBe(`A;;"'=cmd|'/c calc'!A1;X"`);
+  });
+});
+
+// issue 219: majiteľ v Shoptete nepoužíva skladovú logistiku, takže zápis
+// fiktívnej zásoby by mu do obchodu vpísal číslo, ktoré nikto neudržiava.
+// Prepnutie na „Skladom" ho nepotrebuje — oba texty dostupnosti sa zapisujú
+// naraz, takže je jedno, ktorý z nich Shoptet podľa zásoby vyberie.
+describe("buildRestockCsv", () => {
+  it("zapisuje obidva texty dostupnosti a ŽIADNU zásobu", () => {
+    const csv = buildRestockCsv([
+      { code: "A1", pairCode: "77", availabilityInStock: "Skladom", availabilityOutOfStock: "Skladom" },
+    ]);
+    const lines = csv.toString("utf8").slice(1).split("\r\n").filter(Boolean);
+    expect(lines[0]).toBe("code;pairCode;productVisibility;availabilityInStock;availabilityOutOfStock");
+    expect(lines[1]).toBe("A1;77;visible;Skladom;Skladom");
+  });
+
+  it("odmietne prázdny zoznam — prázdny import do Shoptetu sa nikdy nenahráva", () => {
+    expect(() => buildRestockCsv([])).toThrow(/žiadne riadky/);
   });
 });

@@ -48,7 +48,10 @@ describe("deriveVariantState — skutočné reťazce z exportu", () => {
     ["malé není skladem", 0, "", "není skladem", "visible", "out_of_stock"],
     ["diakritika-free variant 'neni skladem'", 0, "", "neni skladem", "visible", "out_of_stock"],
     ["Momentálne nedostupné", 0, "", "Momentálne nedostupné", "visible", "out_of_stock"],
-    ["40237/L — obidva texty prázdne, záporný sklad", -15, "", "", "visible", "out_of_stock"],
+    // issue 219: prázdny text NIE JE vypredané. Majiteľ v Shoptete nepoužíva
+    // skladovú logistiku, takže `stock` nič nehovorí; prázdna dostupnosť
+    // znamená, že Shoptet zobrazí PREDVOLENÚ — na tomto e-shope "Skladom".
+    ["40237/L — obidva texty prázdne, záporný sklad", -15, "", "", "visible", "sellable"],
     ["prázdne texty, kladný sklad", 4, "", "", "visible", "sellable"],
     ["40237/3XL — Predaj výrobku skončil", -11, "Predaj výrobku skončil", "Predaj výrobku skončil", "visible", "discontinued"],
     ["text obsahuje oba markery naraz — vypredané aj skončilo", -1, "", "Vypredané, predaj výrobku skončil", "visible", "discontinued"],
@@ -64,6 +67,30 @@ describe("deriveVariantState — skutočné reťazce z exportu", () => {
     expect(
       deriveVariantState({ stock, inStockText, outOfStockText, productVisibility, variantVisibility: "1" }),
     ).toBe(expected);
+  });
+});
+
+// issue 219 — regresia z ostrej prevádzky. Automatizácia "Vypredané → Skladom"
+// ponúkla na zapnutie 2 953 produktov, ktoré sú v e-shope BEŽNE V PREDAJI.
+// Prvý, ktorý majiteľ otvoril (`10-12106-087`, Termoska STANLEY IceFlow 470 ml),
+// má v exporte `stock = 0` a OBA texty dostupnosti prázdne — appka ho označila
+// za vypredaný, ale stránka produktu vracia `schema.org/InStock` a zelený štítok
+// "Skladom". Príčina: prázdny text neznamená vypredané, ale "produkt nemá
+// priradenú dostupnosť", takže Shoptet zobrazí predvolenú. Zásoba do toho
+// nevstupuje vôbec — majiteľ skladovú logistiku v Shoptete nepoužíva a
+// `negativeAmount = 1` má na všetkých 14 071 riadkoch exportu, takže sa taký
+// produkt dá kúpiť aj pri nulovej zásobe.
+describe("deriveVariantState — prázdny text dostupnosti nie je vypredané (issue 219)", () => {
+  const emptyTexts = { inStockText: "", outOfStockText: "", productVisibility: "visible", variantVisibility: "" };
+
+  it.each([0, -1, -111, 5])("stock %i s prázdnymi textami je predajný", (stock) => {
+    expect(deriveVariantState({ stock, ...emptyTexts })).toBe("sellable");
+  });
+
+  it("explicitné 'Vypredané' zostáva vypredané aj pri nulovej zásobe", () => {
+    expect(
+      deriveVariantState({ stock: 0, inStockText: "", outOfStockText: "Vypredané", productVisibility: "visible", variantVisibility: "" }),
+    ).toBe("out_of_stock");
   });
 });
 
