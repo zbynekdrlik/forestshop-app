@@ -1,15 +1,16 @@
 import { cleanup, render, screen, within } from "@testing-library/react";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { OrdersSection } from "./OrdersSection.js";
 
 // issue 164: INTERNÁ poznámka e-shopu (`shopRemark`, UŽ odvodená — LEN cudzí
 // text, appkin vlastný blok nikdy neobsahuje) — vlastný súbor, rovnaký vzor
 // ako `OrderLineRow.remarkCell.test.tsx` (`.claude/rules/frontend-design.md`).
-const { fetchOpenOrders } = vi.hoisted(() => ({ fetchOpenOrders: vi.fn() }));
+const { fetchOpenOrders, fetchOrdersOverview } = vi.hoisted(() => ({ fetchOpenOrders: vi.fn(), fetchOrdersOverview: vi.fn() }));
 
 vi.mock("../ordersApi.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../ordersApi.js")>();
-  return { ...actual, fetchOpenOrders };
+  return { ...actual, fetchOpenOrders,
+    fetchOrdersOverview };
 });
 
 const ZAKLAD = {
@@ -45,6 +46,10 @@ const RIADOK_S_POZNAMKOU = {
   externalOrderId: "20261501",
   shopRemark: "Zákazník je stavebná firma, vybaviť prednostne",
 };
+
+beforeEach(() => {
+  fetchOrdersOverview.mockResolvedValue({ today: { orderCount: 0, revenue: "0.00" }, week: { orderCount: 0, revenue: "0.00" }, month: { orderCount: 0, revenue: "0.00" } });
+});
 
 afterEach(() => {
   cleanup();

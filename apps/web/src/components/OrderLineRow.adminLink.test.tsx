@@ -1,5 +1,5 @@
 import { cleanup, render, screen, within } from "@testing-library/react";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { OrdersSection } from "./OrdersSection.js";
 
 // issue 99: číslo objednávky sa stalo klikateľným odkazom do administrácie
@@ -7,11 +7,12 @@ import { OrdersSection } from "./OrdersSection.js";
 // `OrdersSection.test.tsx` je už na eslint `max-lines: 400` hranici
 // (`.claude/rules/frontend-design.md`'s zavedený vzor: nový tematický súbor
 // namiesto pridávania do veľkého existujúceho).
-const { fetchOpenOrders } = vi.hoisted(() => ({ fetchOpenOrders: vi.fn() }));
+const { fetchOpenOrders, fetchOrdersOverview } = vi.hoisted(() => ({ fetchOpenOrders: vi.fn(), fetchOrdersOverview: vi.fn() }));
 
 vi.mock("../ordersApi.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../ordersApi.js")>();
-  return { ...actual, fetchOpenOrders };
+  return { ...actual, fetchOpenOrders,
+    fetchOrdersOverview };
 });
 
 const LINE = {
@@ -36,6 +37,10 @@ const LINE = {
   supplierAssignable: false,
   manualSupplierOverride: null,
 };
+
+beforeEach(() => {
+  fetchOrdersOverview.mockResolvedValue({ today: { orderCount: 0, revenue: "0.00" }, week: { orderCount: 0, revenue: "0.00" }, month: { orderCount: 0, revenue: "0.00" } });
+});
 
 afterEach(() => {
   cleanup();

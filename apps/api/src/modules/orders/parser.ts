@@ -2,6 +2,11 @@
 // Shoptetu má zalomenia riadkov vnútri zacitovaných buniek (napr. `remark`), a
 // beží nad reťazcom stiahnutým celý naraz, takže potrebujeme generátor.
 
+// issue 237: zdieľaný Shoptet-čiarkový money parser (`totalPriceWithVat`
+// nižšie) — rovnaká logika, akú katalógový import už používa pre
+// `price`/`standardPrice`/…, žiadna nová duplicitná implementácia.
+import { parseDecimalComma } from "../catalog/money.js";
+
 export function decodeCp1250(body: Buffer): string {
   // Node 24 má plné ICU, takže windows-1250 je vstavané — žiadna závislosť navyše.
   return new TextDecoder("windows-1250").decode(body);
@@ -310,6 +315,11 @@ export interface OrderLineCandidate {
   // `queries.ts`), nikdy tu. Nepovinný stĺpec, rovnaký null-mapping ako
   // `remark`.
   readonly shopRemark: string | null;
+  // issue 237: celková suma objednávky S DPH (export's `totalPriceWithVat`
+  // stĺpec) — `numeric`-kompatibilný reťazec (`parseDecimalComma`) alebo
+  // `null`, keď je stĺpec prázdny/nečitateľný/mimo rozsahu. VŽDY Shoptetovo
+  // pole, rovnaká rodina ako `statusName`/`remark`/`shopRemark` vyššie.
+  readonly totalPriceWithVat: string | null;
   readonly placedAt: Date;
   readonly variantCode: string;
   readonly quantity: number;
@@ -388,6 +398,12 @@ export function mapOrderRow(row: Readonly<Record<string, string>>): {
 
   const rawRemark = (row["remark"] ?? "").trim();
   const rawShopRemark = (row["shopRemark"] ?? "").trim();
+  // issue 237: rovnaký `maxIntegerDigits` predvolený limit ako katalógov
+  // peňažné stĺpce (`money.ts`'s `MONEY_MAX_INTEGER_DIGITS = 10`) — presne
+  // zodpovedá `numeric(12, 2)` DB stĺpcu. Nečitateľná/mimo-rozsahu hodnota sa
+  // ticho zahodí na `null` (rovnaký zámer ako `remark`/`shopRemark` —
+  // nepovinné, informačné pole, nikdy dôvod zahodiť celý riadok).
+  const totalPriceWithVat = parseDecimalComma(row["totalPriceWithVat"] ?? "");
 
   return {
     record: {
@@ -396,6 +412,7 @@ export function mapOrderRow(row: Readonly<Record<string, string>>): {
       statusName: normalizeStatusName(row["statusName"] ?? ""),
       remark: rawRemark === "" ? null : rawRemark,
       shopRemark: rawShopRemark === "" ? null : rawShopRemark,
+      totalPriceWithVat,
       placedAt,
       variantCode,
       quantity,

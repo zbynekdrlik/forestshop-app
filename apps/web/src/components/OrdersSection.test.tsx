@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { OrdersSection } from "./OrdersSection.js";
 
 // `updateOrderLineOrdered`/`setSupplierLinesOrdered` mocks moved to
@@ -9,8 +9,8 @@ import { OrdersSection } from "./OrdersSection.js";
 // `OrdersSection.mailActions.test.tsx` the same way — this file no longer
 // has any test exercising the (now hidden-by-default) mail preview/send
 // flow.
-const { fetchOpenOrders, updateOrderLineState, setSupplierEmail } = vi.hoisted(() => ({
-  fetchOpenOrders: vi.fn(),
+const { fetchOpenOrders, fetchOrdersOverview, updateOrderLineState, setSupplierEmail } = vi.hoisted(() => ({
+  fetchOpenOrders: vi.fn(), fetchOrdersOverview: vi.fn(),
   updateOrderLineState: vi.fn(),
   setSupplierEmail: vi.fn(),
 }));
@@ -23,6 +23,7 @@ vi.mock("../ordersApi.js", async (importOriginal) => {
   return {
     ...actual,
     fetchOpenOrders,
+    fetchOrdersOverview,
     updateOrderLineState,
     setSupplierEmail,
   };
@@ -75,6 +76,10 @@ const LINE_NOVA = {
   supplierAssignable: false,
   manualSupplierOverride: null,
 };
+
+beforeEach(() => {
+  fetchOrdersOverview.mockResolvedValue({ today: { orderCount: 0, revenue: "0.00" }, week: { orderCount: 0, revenue: "0.00" }, month: { orderCount: 0, revenue: "0.00" } });
+});
 
 afterEach(() => {
   cleanup();

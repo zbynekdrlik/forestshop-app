@@ -158,3 +158,46 @@ export function isStaleOrderLine(
 // stĺpec (jej jediné volanie miesto v `OrderLineRow.tsx`), takže funkcia
 // ostala nepoužitá mŕtva produkčná logika (code review PR #124, MVP
 // philosophy: "remove unused code aggressively").
+
+// issue 237: "Súhrn o objednávaní" na obrazovke "Na objednanie" — počet
+// DOTKNUTÝCH objednávok (nie riadkov) a dátum najstaršej čakajúcej
+// objednávky. Obe funkcie počítajú NAD CELOU (nefiltrovanou) množinou
+// riadkov naprieč VŠETKÝMI dodávateľmi — volajúci (`OrdersOverviewTiles.tsx`)
+// posiela vždy VŠETKY riadky zo `suppliers`, nikdy pohľad zúžený prepínačom
+// "skryť vybavené" alebo vybraným dodávateľom (rovnaký zámer ako
+// `computeVariantTotals` vyššie). Obe používajú TEN ISTÝ kanonický predikát
+// `isLineResolved` — žiadna nová/duplicitná definícia "vybavené".
+
+/**
+ * Počet ROZLIŠNÝCH objednávok (`orderId`), ktoré majú aspoň jeden NEVYBAVENÝ
+ * riadok. Priamy náprotivok `summarizeOrderLines(...).remaining` (počet
+ * RIADKOV), len na úrovni OBJEDNÁVKY — jedna objednávka môže mať viacero
+ * nevybavených riadkov (rôzne varianty/dodávatelia), počíta sa len raz.
+ */
+export function countAffectedOrders(
+  lines: readonly Pick<OrderLine, "ordered" | "state" | "orderId">[],
+): number {
+  const orderIds = new Set<string>();
+  for (const line of lines) {
+    if (!isLineResolved(line)) orderIds.add(line.orderId);
+  }
+  return orderIds.size;
+}
+
+/**
+ * `placedAt` (ISO 8601 reťazec) najstaršieho NEVYBAVENÉHO riadku, alebo
+ * `null`, keď nie je žiadny nevybavený riadok. `placedAt` je vždy ISO 8601
+ * (`queries.ts`'s `.toISOString()`), takže reťazcové porovnanie zodpovedá
+ * chronologickému poradiu bez parsovania (rovnaký zámer ako `queries.ts`'s
+ * zoskupovacie triedenie).
+ */
+export function oldestWaitingPlacedAt(
+  lines: readonly Pick<OrderLine, "ordered" | "state" | "placedAt">[],
+): string | null {
+  let oldest: string | null = null;
+  for (const line of lines) {
+    if (isLineResolved(line)) continue;
+    if (oldest === null || line.placedAt < oldest) oldest = line.placedAt;
+  }
+  return oldest;
+}

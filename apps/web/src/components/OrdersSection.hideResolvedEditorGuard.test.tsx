@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { OrdersSection } from "./OrdersSection.js";
 
 // issue 149 — riadok s otvorenou/rozpísanou úpravou (komentár alebo ručné
@@ -10,15 +10,16 @@ import { OrdersSection } from "./OrdersSection.js";
 // editor.spec.ts`) pokrýva TRETÍ editor (odkaz na dodávateľa, toggle
 // open/close) end-to-end cez skutočný prehliadač.
 
-const { fetchOpenOrders, updateOrderComment, updateOrderLineOrdered } = vi.hoisted(() => ({
-  fetchOpenOrders: vi.fn(),
+const { fetchOpenOrders, fetchOrdersOverview, updateOrderComment, updateOrderLineOrdered } = vi.hoisted(() => ({
+  fetchOpenOrders: vi.fn(), fetchOrdersOverview: vi.fn(),
   updateOrderComment: vi.fn(),
   updateOrderLineOrdered: vi.fn(),
 }));
 
 vi.mock("../ordersApi.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../ordersApi.js")>();
-  return { ...actual, fetchOpenOrders, updateOrderComment, updateOrderLineOrdered };
+  return { ...actual, fetchOpenOrders,
+    fetchOrdersOverview, updateOrderComment, updateOrderLineOrdered };
 });
 
 const LINE = {
@@ -43,6 +44,10 @@ const LINE = {
   supplierAssignable: false,
   manualSupplierOverride: null,
 };
+
+beforeEach(() => {
+  fetchOrdersOverview.mockResolvedValue({ today: { orderCount: 0, revenue: "0.00" }, week: { orderCount: 0, revenue: "0.00" }, month: { orderCount: 0, revenue: "0.00" } });
+});
 
 afterEach(() => {
   cleanup();

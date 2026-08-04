@@ -1,5 +1,5 @@
 import { cleanup, render, screen, within } from "@testing-library/react";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { OrdersSection } from "./OrdersSection.js";
 
 // issue 111 bod 4: `.ord-remark-cell` predtým VŽDY vykresľovala holú
@@ -8,11 +8,12 @@ import { OrdersSection } from "./OrdersSection.js";
 // odstránilo zo susednej bunky priradenia dodávateľa. Vlastný súbor — rovnaký
 // vzor ako `OrderLineRow.supplierAssignCell.test.tsx`
 // (`.claude/rules/frontend-design.md`).
-const { fetchOpenOrders } = vi.hoisted(() => ({ fetchOpenOrders: vi.fn() }));
+const { fetchOpenOrders, fetchOrdersOverview } = vi.hoisted(() => ({ fetchOpenOrders: vi.fn(), fetchOrdersOverview: vi.fn() }));
 
 vi.mock("../ordersApi.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../ordersApi.js")>();
-  return { ...actual, fetchOpenOrders };
+  return { ...actual, fetchOpenOrders,
+    fetchOrdersOverview };
 });
 
 const ZAKLAD = {
@@ -49,6 +50,10 @@ const RIADOK_S_POZNAMKOU = {
   remark: "Zavolať pred doručením",
   shopRemark: null,
 };
+
+beforeEach(() => {
+  fetchOrdersOverview.mockResolvedValue({ today: { orderCount: 0, revenue: "0.00" }, week: { orderCount: 0, revenue: "0.00" }, month: { orderCount: 0, revenue: "0.00" } });
+});
 
 afterEach(() => {
   cleanup();

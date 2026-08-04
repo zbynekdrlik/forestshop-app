@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { OrdersSection } from "./OrdersSection.js";
 
 // issue 148 — vyňaté do vlastného súboru (rovnaký vzor ako existujúce
@@ -11,11 +11,12 @@ import { OrdersSection } from "./OrdersSection.js";
 // unit test v tomto súbore — zámerne priamo cez skutočnú jsdom
 // `window.localStorage`, nie mock, aby overil SKUTOČNÝ read/write cyklus.
 
-const { fetchOpenOrders } = vi.hoisted(() => ({ fetchOpenOrders: vi.fn() }));
+const { fetchOpenOrders, fetchOrdersOverview } = vi.hoisted(() => ({ fetchOpenOrders: vi.fn(), fetchOrdersOverview: vi.fn() }));
 
 vi.mock("../ordersApi.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../ordersApi.js")>();
-  return { ...actual, fetchOpenOrders };
+  return { ...actual, fetchOpenOrders,
+    fetchOrdersOverview };
 });
 
 const STORAGE_KEY = "forestshop.orders.selectedSupplier";
@@ -44,6 +45,10 @@ const LINE_ALFA = {
 };
 
 const LINE_BETA = { ...LINE_ALFA, lineId: "22222222-2222-2222-2222-222222222148", variantCode: "P-2" };
+
+beforeEach(() => {
+  fetchOrdersOverview.mockResolvedValue({ today: { orderCount: 0, revenue: "0.00" }, week: { orderCount: 0, revenue: "0.00" }, month: { orderCount: 0, revenue: "0.00" } });
+});
 
 afterEach(() => {
   cleanup();

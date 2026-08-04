@@ -1,0 +1,1 @@
+ALTER TABLE "order" ADD COLUMN "total_price_with_vat" numeric(12, 2);

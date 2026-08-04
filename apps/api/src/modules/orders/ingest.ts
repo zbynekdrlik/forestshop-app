@@ -234,7 +234,16 @@ export async function ingestOrders(db: Database, options: OrdersIngestOptions): 
   // kolidovať s obsahom niektorého z oboch reťazcov.
   const orderInfo = new Map<
     string,
-    { customerName: string; placedAt: Date; statusName: string; remark: string | null; shopRemark: string | null }
+    {
+      customerName: string;
+      placedAt: Date;
+      statusName: string;
+      remark: string | null;
+      shopRemark: string | null;
+      // issue 237: rovnaký "prvý riadok na objednávku vyhráva" vzor ako
+      // `customerName`/`statusName`/`remark`/`shopRemark` vyššie.
+      totalPriceWithVat: string | null;
+    }
   >();
   const lineTotals = new Map<string, Map<string, { externalOrderId: string; variantCode: string; quantity: number }>>();
   for (const candidate of candidates) {
@@ -245,6 +254,7 @@ export async function ingestOrders(db: Database, options: OrdersIngestOptions): 
         statusName: candidate.statusName,
         remark: candidate.remark,
         shopRemark: candidate.shopRemark,
+        totalPriceWithVat: candidate.totalPriceWithVat,
       });
     }
     let byVariant = lineTotals.get(candidate.externalOrderId);
@@ -327,6 +337,7 @@ export async function ingestOrders(db: Database, options: OrdersIngestOptions): 
                 statusName: info.statusName,
                 remark: info.remark,
                 shopRemark: info.shopRemark,
+                totalPriceWithVat: info.totalPriceWithVat,
                 placedAt: info.placedAt,
                 shoptetOrderId: orderIdsByCode.get(externalOrderId) ?? null,
                 email: extra.email,
@@ -369,6 +380,11 @@ export async function ingestOrders(db: Database, options: OrdersIngestOptions): 
               statusName: sql`excluded.status_name`,
               remark: sql`excluded.remark`,
               shopRemark: sql`excluded.shop_remark`,
+              // issue 237: rovnaká rodina ako `status_name`/`remark`/
+              // `shop_remark` vyššie — VŽDY Shoptetovo pole, priamo prepísané
+              // (nie COALESCE-ované), re-import ho musí osviežiť na aktuálnu
+              // sumu (napr. dodatočná zľava/storno položky v Shoptete).
+              totalPriceWithVat: sql`excluded.total_price_with_vat`,
               placedAt: sql`excluded.placed_at`,
               shoptetOrderId: sql`coalesce(excluded.shoptet_order_id, "order"."shoptet_order_id")`,
               email: sql`coalesce(excluded.email, "order"."email")`,

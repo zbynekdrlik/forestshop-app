@@ -1,19 +1,20 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { OrdersSection } from "./OrdersSection.js";
 
 // issue 121: majiteľ, doslovne "ak na produkt nie je odkaz na dodavatela, tak
 // tam ma byt moznost ho doplnit... pri kazdom produkte ma byt moznost upravit
 // link". Vlastný súbor — rovnaký vzor ako `OrderLineRow.supplierAssignCell
 // .test.tsx` (`.claude/rules/frontend-design.md`).
-const { fetchOpenOrders, setProductSupplierLink } = vi.hoisted(() => ({
-  fetchOpenOrders: vi.fn(),
+const { fetchOpenOrders, fetchOrdersOverview, setProductSupplierLink } = vi.hoisted(() => ({
+  fetchOpenOrders: vi.fn(), fetchOrdersOverview: vi.fn(),
   setProductSupplierLink: vi.fn(),
 }));
 
 vi.mock("../ordersApi.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../ordersApi.js")>();
-  return { ...actual, fetchOpenOrders, setProductSupplierLink };
+  return { ...actual, fetchOpenOrders,
+    fetchOrdersOverview, setProductSupplierLink };
 });
 
 const ZAKLAD = {
@@ -44,6 +45,10 @@ const RIADOK_S_ODKAZOM = {
   externalOrderId: "20261401",
   supplierUrl: "https://dodavatel.example.com/produkt",
 };
+
+beforeEach(() => {
+  fetchOrdersOverview.mockResolvedValue({ today: { orderCount: 0, revenue: "0.00" }, week: { orderCount: 0, revenue: "0.00" }, month: { orderCount: 0, revenue: "0.00" } });
+});
 
 afterEach(() => {
   cleanup();

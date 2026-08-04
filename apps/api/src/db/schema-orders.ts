@@ -4,6 +4,7 @@ import {
   check,
   index,
   integer,
+  numeric,
   pgEnum,
   pgTable,
   text,
@@ -33,9 +34,13 @@ export type OrderLineState = (typeof orderLineState.enumValues)[number];
 
 // Identita objednávky je Shoptet-ovo číslo objednávky (`externalOrderId`) —
 // budúci importer (#21) ho potrebuje na idempotentné párovanie, rovnaký vzor
-// ako `catalog_snapshot.content_sha256` unique. Cena/mena na riadku sa
-// ZÁMERNE nepridáva teraz (viď komentár k `orderLines` nižšie) — pozri
-// zamietnutú alternatívu #2 v návrhovom komentári na tickete.
+// ako `catalog_snapshot.content_sha256` unique.
+//
+// AKTUALIZÁCIA (issue 237, 2026-08-04): pôvodný komentár tu znel "Cena/mena
+// na riadku sa ZÁMERNE nepridáva teraz" — to rozhodnutie je TERAZ prekonané,
+// viď `totalPriceWithVat` nižšie. Dôvod zmeny: dashboard "Na objednanie"
+// potrebuje tržbu zodpovedajúcu Shoptet dashboardu, ktorá sa bez uloženej
+// sumy vôbec nedá dopočítať.
 export const orders = pgTable(
   "order",
   {
@@ -124,6 +129,18 @@ export const orders = pgTable(
     phone: text("phone"),
     packageNumber: text("package_number"),
     shippingCarrierName: text("shipping_carrier_name"),
+    // issue 237: celková suma objednávky S DPH (export's `totalPriceWithVat`
+    // stĺpec) — order-level pole, opakované na KAŽDOM riadku exportu tej istej
+    // objednávky (rovnaká rodina ako `customerName`/`statusName` vyššie,
+    // `ingest.ts`'s `orderInfo` mapa berie prvý výskyt). VŽDY Shoptetovo pole
+    // (rovnaký zámer ako `statusName`/`remark`/`shopRemark` — nikdy appkou/
+    // manažérom vlastnené), re-import ho preto vždy OSVIEŽÍ. Nullable —
+    // Shoptet ho gramaticky nijako neviaže a appka radšej zahodí nečitateľnú
+    // hodnotu (`parseDecimalComma` z `catalog/money.ts`, zdieľaný Shoptet-
+    // čiarkový money parser), než by transakcia spadla na jednom zlom riadku.
+    // Používa sa VÝHRADNE na dashboardovú tržbu (`orders/overview.ts`) —
+    // appka doteraz žiadnu peňažnú sumu neukladala vôbec.
+    totalPriceWithVat: numeric("total_price_with_vat", { precision: 12, scale: 2 }),
   },
   (t) => [index("order_placed_at_idx").on(t.placedAt)],
 );

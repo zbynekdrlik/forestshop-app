@@ -1,11 +1,13 @@
 import { expect, it } from "vitest";
 import {
   computeVariantTotals,
+  countAffectedOrders,
   formatOrderSummaryText,
   formatVariantTotalChip,
   isLineHiddenByFilter,
   isLineResolved,
   isStaleOrderLine,
+  oldestWaitingPlacedAt,
   orderLineAgeDays,
   STALE_ORDER_LINE_DAYS,
   summarizeOrderLines,
@@ -15,6 +17,13 @@ const line = (state: "objednane" | "caka_sa" | "skladom" | "nedostupne", ordered
   state,
   ordered,
 });
+
+const overviewLine = (
+  orderId: string,
+  state: "objednane" | "caka_sa" | "skladom" | "nedostupne",
+  ordered: boolean,
+  placedAt = "2026-01-01T00:00:00.000Z",
+) => ({ orderId, state, ordered, placedAt });
 
 const variantLine = (
   variantCode: string,
@@ -212,3 +221,52 @@ it("isStaleOrderLine — čerstvý nevybavený riadok nedostane badge", () => {
 // funkciou samotnou — issue 117 zrušilo jej jediné volanie miesto
 // (`OrderLineRow.tsx`'s KÓD stĺpec), takže ostala nepoužitá (code review
 // PR #124).
+
+// issue 237: "Súhrn o objednávaní" — počet DOTKNUTÝCH objednávok a dátum
+// najstaršej čakajúcej.
+
+it("countAffectedOrders — dve nevybavené riadky TEJ ISTEJ objednávky sa počítajú raz", () => {
+  const lines = [overviewLine("O1", "objednane", false), overviewLine("O1", "caka_sa", false)];
+  expect(countAffectedOrders(lines)).toBe(1);
+});
+
+it("countAffectedOrders — nevybavené riadky RÔZNYCH objednávok sa počítajú zvlášť", () => {
+  const lines = [overviewLine("O1", "objednane", false), overviewLine("O2", "objednane", false)];
+  expect(countAffectedOrders(lines)).toBe(2);
+});
+
+it("countAffectedOrders — vybavený riadok (odškrtnutý alebo posunutý stav) sa nepočíta", () => {
+  const lines = [overviewLine("O1", "objednane", true), overviewLine("O2", "skladom", false)];
+  expect(countAffectedOrders(lines)).toBe(0);
+});
+
+it("countAffectedOrders — objednávka s VYBAVENÝM aj NEVYBAVENÝM riadkom sa počíta raz (má aspoň jeden nevybavený)", () => {
+  const lines = [overviewLine("O1", "objednane", true), overviewLine("O1", "objednane", false)];
+  expect(countAffectedOrders(lines)).toBe(1);
+});
+
+it("countAffectedOrders — prázdny zoznam vráti 0", () => {
+  expect(countAffectedOrders([])).toBe(0);
+});
+
+it("oldestWaitingPlacedAt — vráti placedAt najstaršieho NEVYBAVENÉHO riadku", () => {
+  const lines = [
+    overviewLine("O1", "objednane", false, "2026-06-01T00:00:00.000Z"),
+    overviewLine("O2", "objednane", false, "2026-01-15T00:00:00.000Z"),
+    overviewLine("O3", "objednane", false, "2026-03-10T00:00:00.000Z"),
+  ];
+  expect(oldestWaitingPlacedAt(lines)).toBe("2026-01-15T00:00:00.000Z");
+});
+
+it("oldestWaitingPlacedAt — ignoruje VYBAVENÉ riadky, aj keby boli staršie", () => {
+  const lines = [
+    overviewLine("O1", "objednane", true, "2020-01-01T00:00:00.000Z"), // vybavené, staršie
+    overviewLine("O2", "objednane", false, "2026-01-15T00:00:00.000Z"),
+  ];
+  expect(oldestWaitingPlacedAt(lines)).toBe("2026-01-15T00:00:00.000Z");
+});
+
+it("oldestWaitingPlacedAt — žiadny nevybavený riadok vráti null", () => {
+  expect(oldestWaitingPlacedAt([overviewLine("O1", "objednane", true)])).toBeNull();
+  expect(oldestWaitingPlacedAt([])).toBeNull();
+});
