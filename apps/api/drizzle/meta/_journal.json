@@ -218,6 +218,13 @@
       "when": 1785861317276,
       "tag": "0030_cuddly_gravity",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1785866205378,
+      "tag": "0031_handy_talon",
+      "breakpoints": true
     }
   ]
 }

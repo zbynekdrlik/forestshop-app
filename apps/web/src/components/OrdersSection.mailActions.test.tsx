@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { OrdersSection } from "./OrdersSection.js";
 
 // issue 118: majiteľ, doslovne "📋 Kopírovať objednávku ✉️ Poslať objednávku
@@ -13,8 +13,8 @@ import { OrdersSection } from "./OrdersSection.js";
 // zapnutým.
 vi.mock("./orderScreenFlags.js", () => ({ SHOW_ORDER_MAIL_ACTIONS: true }));
 
-const { fetchOpenOrders, setSupplierEmail, fetchSupplierOrderMailPreview, sendSupplierOrderMail } = vi.hoisted(() => ({
-  fetchOpenOrders: vi.fn(),
+const { fetchOpenOrders, fetchOrdersOverview, setSupplierEmail, fetchSupplierOrderMailPreview, sendSupplierOrderMail } = vi.hoisted(() => ({
+  fetchOpenOrders: vi.fn(), fetchOrdersOverview: vi.fn(),
   setSupplierEmail: vi.fn(),
   fetchSupplierOrderMailPreview: vi.fn(),
   sendSupplierOrderMail: vi.fn(),
@@ -25,6 +25,7 @@ vi.mock("../ordersApi.js", async (importOriginal) => {
   return {
     ...actual,
     fetchOpenOrders,
+    fetchOrdersOverview,
     setSupplierEmail,
     fetchSupplierOrderMailPreview,
     sendSupplierOrderMail,
@@ -58,6 +59,10 @@ const LINE_STARA = {
 // `outstandingState` v `SupplierActionsPanel.tsx` je `"objednane"`, takže
 // skupina BEZ ani jedného takého riadku nemá čo poslať, aj keď má e-mail.
 const LINE_VYBAVENA = { ...LINE_STARA, lineId: "22222222-1111-1111-1111-111111111111", state: "caka_sa" as const };
+
+beforeEach(() => {
+  fetchOrdersOverview.mockResolvedValue({ today: { orderCount: 0, revenue: "0.00" }, week: { orderCount: 0, revenue: "0.00" }, month: { orderCount: 0, revenue: "0.00" } });
+});
 
 afterEach(() => {
   cleanup();

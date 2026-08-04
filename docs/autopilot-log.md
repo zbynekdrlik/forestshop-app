@@ -2561,3 +2561,32 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
   takmer všetko), trimmed fixtúry bez JSON-LD → `source: text`, obe
   polarity aj chýbajúci štítok správne. Issue zavreté ručne s dôkazom,
   Discord run-card odoslaná.
+
+- issue 226 (krížová kontrola nášho stavu proti Shoptetovej dostupnosti z
+  feedu google.xml): version bump `1d6c36a` (0.3.0-dev.138). RED `913b800`
+  (parse.test.ts g:availability extrakcia, nový feed-cross-check.test.ts,
+  nový catalog-feed-cross-check.integration.test.ts, restock-run.integration
+  .test.ts Z1/Z2/Z3, RestockSection.test.tsx karta, e2e PREP-2 + catalog.spec
+  .ts počty 36→37 — všetko zámerne padajúce, feature ešte neexistovala).
+  GREEN `3d8204e` (migrácia 0030 `shop_product_url.availability`,
+  `parseShopFeed`/`runShopFeed` ukladajú g:availability, nový
+  `modules/catalog/feed-cross-check.ts` — `compareStateToFeed` čistá funkcia
+  + `findFeedStateConflicts` naživo z DB, nikdy perzistovaná snímka +
+  `logFeedConflictsAfterImport` mimo hlavnej transakcie; `restock/queries.ts`
+  vylúči kandidáta keď feed hovorí "in stock"; `/api/restock` +
+  RestockSection.tsx nová karta s počtom aj zoznamom; scripts/e2e-setup.ts
+  doplnilo shop_product_url do TRUNCATE zoznamu — chýbalo tam od issue 220).
+  PR #243, code review (`superpowers:requesting-code-review`, nezávislý
+  subagent): 0 Critical, 2 Important (test-hygiene: `ourUrl: null` mock
+  proti nenulovej schéme, chýbajúci test na prepis dostupnosti na null pri
+  strate značky) — obe opravené `5ef9923`. Merge `e658a7b`. Deploy prvý
+  pokus zlyhal na známom transientnom containerd/overlayfs jave
+  (`.claude/rules/deploy.md`, "failed commit on ref ... no such file or
+  directory") — `gh run rerun --failed` prešiel na druhý pokus. Naživo
+  overené proti nasadenej appke (0.3.0-dev.138): dočasný zásah do
+  `shop_product_url.availability` na reálnych variantoch (60031/XXL,
+  61276/M) ukázal kartu rozporov aj vylúčenie z kandidátov presne podľa
+  očakávania, oba vrátené na pôvodné `null` po overení (Pripravených na
+  prepnutie späť na 2, Rozpory: Žiadne). Issue zavreté ručne s dôkazom,
+  Discord run-card odoslaná. Playbook doplnený v GREEN commite
+  (`.claude/rules/shop-feed.md`, `.claude/rules/supplier-stock.md`).

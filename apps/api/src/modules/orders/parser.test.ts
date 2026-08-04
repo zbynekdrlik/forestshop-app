@@ -168,6 +168,46 @@ describe("mapOrderRow — reálna položka", () => {
     expect(mapped.record?.shopRemark).toBe("vybaviť prednostne");
   });
 
+  // issue 237: celková suma objednávky s DPH — Shoptet-ova čiarková desatinná
+  // čiarka (`parseDecimalComma`, zdieľané s katalógovým importom).
+  it("totalPriceWithVat sa parsuje z čiarkového desatinného tvaru", () => {
+    const mapped = mapOrderRow({
+      code: "20300010",
+      date: "2026-06-16 08:00:00",
+      billFullName: "X",
+      itemName: "Y",
+      itemAmount: "1",
+      itemCode: "40238/M",
+      totalPriceWithVat: "238,20",
+    });
+    expect(mapped.record?.totalPriceWithVat).toBe("238.20");
+  });
+
+  it("prázdny/chýbajúci totalPriceWithVat sa mapuje na null (nikdy nevyhodí)", () => {
+    const mapped = mapOrderRow({
+      code: "20300011",
+      date: "2026-06-16 08:00:00",
+      billFullName: "X",
+      itemName: "Y",
+      itemAmount: "1",
+      itemCode: "40238/M",
+    });
+    expect(mapped.record?.totalPriceWithVat).toBeNull();
+  });
+
+  it("nečitateľný totalPriceWithVat (napr. text) sa mapuje na null, nikdy nevyhodí", () => {
+    const mapped = mapOrderRow({
+      code: "20300012",
+      date: "2026-06-16 08:00:00",
+      billFullName: "X",
+      itemName: "Y",
+      itemAmount: "1",
+      itemCode: "40238/M",
+      totalPriceWithVat: "neplatna hodnota",
+    });
+    expect(mapped.record?.totalPriceWithVat).toBeNull();
+  });
+
   // issue 59: normalizácia (NFC + orez) musí bežať aj v `mapOrderRow`, nie
   // len v `normalizeStatusName` samostatne — inak by porovnanie s
   // `order_open_status` (nastavené presne cez rovnakú funkciu,

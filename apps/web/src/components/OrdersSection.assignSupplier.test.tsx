@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { OrdersSection } from "./OrdersSection.js";
 
 // issue 63: ručné priradenie dodávateľa riadku bez dodávateľa. Vydelené z
@@ -11,8 +11,8 @@ import { OrdersSection } from "./OrdersSection.js";
 // meniť vo frontende, nebolo ničím kryté. Tento súbor dokazuje aj refetch po
 // zamietnutí (predtým sa `load()` volalo LEN v úspešnej vetve).
 
-const { fetchOpenOrders, assignOrderLineSupplier } = vi.hoisted(() => ({
-  fetchOpenOrders: vi.fn(),
+const { fetchOpenOrders, fetchOrdersOverview, assignOrderLineSupplier } = vi.hoisted(() => ({
+  fetchOpenOrders: vi.fn(), fetchOrdersOverview: vi.fn(),
   assignOrderLineSupplier: vi.fn(),
 }));
 
@@ -21,6 +21,7 @@ vi.mock("../ordersApi.js", async (importOriginal) => {
   return {
     ...actual,
     fetchOpenOrders,
+    fetchOrdersOverview,
     assignOrderLineSupplier,
   };
 });
@@ -47,6 +48,10 @@ const LINE_BEZ_DODAVATELA = {
   supplierAssignable: true,
   manualSupplierOverride: null,
 };
+
+beforeEach(() => {
+  fetchOrdersOverview.mockResolvedValue({ today: { orderCount: 0, revenue: "0.00" }, week: { orderCount: 0, revenue: "0.00" }, month: { orderCount: 0, revenue: "0.00" } });
+});
 
 afterEach(() => {
   cleanup();

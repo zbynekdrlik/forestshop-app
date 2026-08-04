@@ -422,3 +422,58 @@ paths:
   `remark`/`shop_remark` (priamo prepísané pri re-importe) sú tieto ŠTYRI
   polia COALESCE-ované ako `shoptet_order_id` — plné odôvodnenie a
   regresný test v `.claude/rules/posta-uncollected.md`.**
+- **Issue 237 pridalo `order.total_price_with_vat` (celková suma s DPH,
+  export's `totalPriceWithVat` stĺpec) — rovnaká rodina ako `status_name`/
+  `remark`/`shop_remark` (VŽDY Shoptetovo pole, `mapOrderRow` berie prvý
+  riadok na objednávku, `ingest.ts` ho pri re-importe PRIAMO prepisuje,
+  nikdy COALESCE-uje). Parsuje sa zdieľaným `catalog/money.ts`'s
+  `parseDecimalComma` (Shoptet-ova desatinná ČIARKA) — žiadna nová
+  duplicitná money-parsovacia logika.**
+- **Dashboard "Prehľad e-shopu" (issue 237, `orders/overview.ts`) je
+  ZÁMERNE samostatný od "Na objednanie"'s zoznamu — číta PRIAMO `order`
+  tabuľku (nie cez `order_line` JOIN) a počíta VŠETKY objednávky bez
+  ohľadu na `status_name`, na rozdiel od `listOpenOrderLinesBySupplier`'s
+  open-status filtra.** Dôvod: ide o celoobchodnú štatistiku (rovnakú, akú
+  ukazuje Shoptet-ov vlastný dashboard), nie o dodávateľský pracovný
+  zoznam — uzavretá ("Vybavená") objednávka sa preto MUSÍ zarátať rovnako
+  ako otvorená (`orders-overview.integration.test.ts`'s dedikovaný test).
+  **Otvorená otázka pre budúce naživo overenie:** appka dnes zaráta AJ
+  prípadné storno/zrušené objednávky do "dnes/týždeň/mesiac" — nie je
+  overené, či Shoptet-ov vlastný dashboard robí to isté; ak naživo
+  porovnanie ukáže rozdiel, treba doplniť filter do `overview.ts`'s
+  `getOrdersDashboardOverview`, nie predpokladať zhodu.
+- **Hranice "dnes"/"tento týždeň" (pondelok)/"tento mesiac" v Europe/
+  Bratislava (`overview.ts`'s `computeBratislavaPeriodBoundaries`) ZNOVA
+  POUŽÍVAJÚ `parser.ts`'s `parseShopLocalDateTime`** (zostaví kandidátny
+  `"YYYY-MM-DD 00:00:00"` reťazec a nechá ho previesť už existujúcou, DST-
+  otestovanou funkciou) — nikdy nereimplementuj tú istú UTC-konverznú
+  offset aritmetiku druhýkrát. Prvý pokus autora TOTO pravidlo porušil
+  (vlastná offset-počítacia funkcia LEN s dátumovými, nie časovými,
+  `Intl.DateTimeFormat` poľami) a dal ŠPATNÝ výsledok — polnoc formátovaná
+  cez date-only polia stratí celý hodinový posun zóny (viď dôkaz nižšie),
+  odhalené AŽ pri ručnom prepočte cez `TZ=Europe/Bratislava date`, nie
+  testom (test by len potvrdil vlastnú chybnú implementáciu). Súčet peňazí
+  (`sumMoneyCents`) beží cez BigInt centy, nikdy cez `number` — rovnaká
+  disciplína ako `catalog/money.ts`.
+- **Test na KAŽDÝ ĎALŠÍ "naivný lokálny čas → UTC" výpočet v tomto module:
+  over HODNOTU (nie len že kód "vyzerá správne") ručným prepočtom
+  `date -u -d @$(TZ=Europe/Bratislava date -d "<Y-M-D> 00:00:00" +%s)
+  +"%Y-%m-%dT%H:%M:%SZ"` PRED napísaním testu s očakávanou hodnotou** —
+  inak test len potvrdí to, čo kód práve robí, aj keby to bolo o hodinu
+  posunuté. Konkrétny nájdený omyl (opravený pred commitom): pre "dnes" =
+  2026-08-04 (utorok) autor najprv napísal test očakávajúci, že "týždeň"
+  (pondelok toho istého týždňa, 2026-08-03) dá TEN ISTÝ UTC okamih ako
+  "dnes" — nesprávne, sú to DVA rôzne kalendárne dni, teda dva rôzne
+  okamihy (`2026-08-02T22:00:00Z`, nie `2026-08-03T22:00:00Z`).
+- **Slovenské skloňovanie POČTU objednávok potrebuje TROJTVAROVÝ (paucal)
+  pomocník, nie holé "N objednávok".** Code review PR #244 (issue 237):
+  `OrdersOverviewTiles.tsx` pôvodne vypisovala vždy "N objednávok", čo je
+  gramaticky zle pre 1 ("objednávka") a 2-4 ("objednávky"). Fix:
+  `apps/web/src/ordersSummary.ts`'s `formatOrderCount` — priamy náprotivok
+  `apps/api/src/modules/orders/ingest.ts`'s (neexportovanej) `formatCount`
+  (1 → jednotné číslo, 2-4 → málopočetné, 0/5+ vrátane 22/23/24… → rodový
+  pád množného čísla, slovenčina neodvodzuje tvar z poslednej číslice na
+  rozdiel od ruštiny/poľštiny). KAŽDÝ ĎALŠÍ text, čo appka skloňuje priamo
+  v UI (nie len spolu s neutrálnou jednotkou ako `formatVariantTotalChip`'s
+  "N ks"), potrebuje rovnaký trojtvarový pomocník, nikdy šablónový
+  reťazec s jedným pevným tvarom podstatného mena.

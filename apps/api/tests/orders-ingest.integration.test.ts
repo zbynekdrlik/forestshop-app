@@ -232,6 +232,11 @@ it("shopRemark je Shoptetovo pole, re-import ho osvieži a uloží SUROVO (bez s
   expect(tretiRead?.shopRemark).toBe("Zmenene v Shoptete priamo");
 });
 
+// issue 237: `totalPriceWithVat` re-import refresh test presunutý do
+// `orders-ingest-total-price.integration.test.ts` — pridanie priamo sem by
+// poslalo tento súbor cez eslint `max-lines: 400` (rovnaký dôvod/vzor ako
+// `orders-ingest-posta-fields.integration.test.ts`'s split).
+
 // issue 120: `fetchOrderIds` je BEST-EFFORT obohatenie o interné Shoptet id
 // (XML export) — samostatná fáza od hlavného CSV importu vyššie.
 it("uloží interné Shoptet id z fetchOrderIds vedľa CSV importu", async () => {

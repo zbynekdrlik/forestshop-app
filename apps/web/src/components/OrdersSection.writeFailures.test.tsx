@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { OrdersSection } from "./OrdersSection.js";
 
 // issue 66: dôkaz jadra ticketu — DVE NEZÁVISLÉ zlyhania (rôzne riadky, rôzne
@@ -9,15 +9,16 @@ import { OrdersSection } from "./OrdersSection.js";
 // .tsx`/`OrdersSection.assignSupplier.test.tsx` splity (`.claude/rules/
 // testing.md`), aby žiadny súbor nenarástol cez eslint `max-lines: 400`.
 
-const { fetchOpenOrders, updateOrderLineState, updateOrderLineOrdered } = vi.hoisted(() => ({
-  fetchOpenOrders: vi.fn(),
+const { fetchOpenOrders, fetchOrdersOverview, updateOrderLineState, updateOrderLineOrdered } = vi.hoisted(() => ({
+  fetchOpenOrders: vi.fn(), fetchOrdersOverview: vi.fn(),
   updateOrderLineState: vi.fn(),
   updateOrderLineOrdered: vi.fn(),
 }));
 
 vi.mock("../ordersApi.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../ordersApi.js")>();
-  return { ...actual, fetchOpenOrders, updateOrderLineState, updateOrderLineOrdered };
+  return { ...actual, fetchOpenOrders,
+    fetchOrdersOverview, updateOrderLineState, updateOrderLineOrdered };
 });
 
 const LINE_ALFA = {
@@ -51,6 +52,10 @@ const LINE_BETA = {
   customerName: "Zákazník Beta",
   variantCode: "B-1",
 };
+
+beforeEach(() => {
+  fetchOrdersOverview.mockResolvedValue({ today: { orderCount: 0, revenue: "0.00" }, week: { orderCount: 0, revenue: "0.00" }, month: { orderCount: 0, revenue: "0.00" } });
+});
 
 afterEach(() => {
   cleanup();

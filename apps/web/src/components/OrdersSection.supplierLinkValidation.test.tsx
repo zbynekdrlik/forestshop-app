@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { OrdersSection } from "./OrdersSection.js";
 
 // issue 153: OKAMŽITÁ kontrola odkazu v prehliadači — PRED akýmkoľvek
@@ -7,14 +7,15 @@ import { OrdersSection } from "./OrdersSection.js";
 // `OrdersSection.writeFailures.test.tsx`/`OrdersSection.assignSupplier.test
 // .tsx` splity (`.claude/rules/testing.md`).
 
-const { fetchOpenOrders, setProductSupplierLink } = vi.hoisted(() => ({
-  fetchOpenOrders: vi.fn(),
+const { fetchOpenOrders, fetchOrdersOverview, setProductSupplierLink } = vi.hoisted(() => ({
+  fetchOpenOrders: vi.fn(), fetchOrdersOverview: vi.fn(),
   setProductSupplierLink: vi.fn(),
 }));
 
 vi.mock("../ordersApi.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../ordersApi.js")>();
-  return { ...actual, fetchOpenOrders, setProductSupplierLink };
+  return { ...actual, fetchOpenOrders,
+    fetchOrdersOverview, setProductSupplierLink };
 });
 
 const LINE_ALFA = {
@@ -39,6 +40,10 @@ const LINE_ALFA = {
   supplierAssignable: false,
   manualSupplierOverride: null,
 };
+
+beforeEach(() => {
+  fetchOrdersOverview.mockResolvedValue({ today: { orderCount: 0, revenue: "0.00" }, week: { orderCount: 0, revenue: "0.00" }, month: { orderCount: 0, revenue: "0.00" } });
+});
 
 afterEach(() => {
   cleanup();

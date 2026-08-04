@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { OrdersSection } from "./OrdersSection.js";
 
 // issue 64: manažérova voľná poznámka k CELEJ objednávke. Vydelené z
@@ -7,8 +7,8 @@ import { OrdersSection } from "./OrdersSection.js";
 // `OrdersSection.ordered.test.tsx`/`OrdersSection.assignSupplier.test.tsx`
 // splity, `.claude/rules/testing.md`).
 
-const { fetchOpenOrders, updateOrderComment } = vi.hoisted(() => ({
-  fetchOpenOrders: vi.fn(),
+const { fetchOpenOrders, fetchOrdersOverview, updateOrderComment } = vi.hoisted(() => ({
+  fetchOpenOrders: vi.fn(), fetchOrdersOverview: vi.fn(),
   updateOrderComment: vi.fn(),
 }));
 
@@ -17,6 +17,7 @@ vi.mock("../ordersApi.js", async (importOriginal) => {
   return {
     ...actual,
     fetchOpenOrders,
+    fetchOrdersOverview,
     updateOrderComment,
   };
 });
@@ -50,6 +51,10 @@ const RIADOK_1 = {
 };
 
 const RIADOK_2 = { ...RIADOK_1, lineId: "22222222-4444-4444-4444-444444444444", variantCode: "D-2" };
+
+beforeEach(() => {
+  fetchOrdersOverview.mockResolvedValue({ today: { orderCount: 0, revenue: "0.00" }, week: { orderCount: 0, revenue: "0.00" }, month: { orderCount: 0, revenue: "0.00" } });
+});
 
 afterEach(() => {
   cleanup();

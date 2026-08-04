@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { OrdersSection } from "./OrdersSection.js";
 
 // issue 60: odškrtávacie políčko "objednané u dodávateľa" — per riadok aj
@@ -9,8 +9,8 @@ import { OrdersSection } from "./OrdersSection.js";
 // `orders-http.integration.test.ts` / `orders-http-state.integration.test.ts`
 // split na strane API testov.
 
-const { fetchOpenOrders, updateOrderLineOrdered, setSupplierLinesOrdered } = vi.hoisted(() => ({
-  fetchOpenOrders: vi.fn(),
+const { fetchOpenOrders, fetchOrdersOverview, updateOrderLineOrdered, setSupplierLinesOrdered } = vi.hoisted(() => ({
+  fetchOpenOrders: vi.fn(), fetchOrdersOverview: vi.fn(),
   updateOrderLineOrdered: vi.fn(),
   setSupplierLinesOrdered: vi.fn(),
 }));
@@ -20,6 +20,7 @@ vi.mock("../ordersApi.js", async (importOriginal) => {
   return {
     ...actual,
     fetchOpenOrders,
+    fetchOrdersOverview,
     updateOrderLineOrdered,
     setSupplierLinesOrdered,
   };
@@ -70,6 +71,10 @@ const LINE_NOVA = {
   supplierAssignable: false,
   manualSupplierOverride: null,
 };
+
+beforeEach(() => {
+  fetchOrdersOverview.mockResolvedValue({ today: { orderCount: 0, revenue: "0.00" }, week: { orderCount: 0, revenue: "0.00" }, month: { orderCount: 0, revenue: "0.00" } });
+});
 
 afterEach(() => {
   cleanup();

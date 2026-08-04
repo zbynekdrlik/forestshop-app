@@ -16,6 +16,7 @@ import { useSupplierEmailEditing } from "../useSupplierEmailEditing.js";
 import { useSupplierLinkSave } from "../useSupplierLinkSave.js";
 import { useSupplierMailActions } from "../useSupplierMailActions.js";
 import { OrderOpenStatusesPanel } from "./OrderOpenStatusesPanel.js";
+import { OrdersOverviewTiles } from "./OrdersOverviewTiles.js";
 import { OrdersToolbar } from "./OrdersToolbar.js";
 import { OrderWriteFailuresBanner } from "./OrderWriteFailuresBanner.js";
 import { SupplierOrderGroup } from "./SupplierOrderGroup.js";
@@ -389,6 +390,11 @@ export function OrdersSection({
     <section className="orders-section">
       {!loaded && <p>Načítavam otvorené objednávky…</p>}
       {error !== "" && <p role="alert">{error}</p>}
+      {/* issue 237: blok dlaždíc NAD zoznamom — nezávislý od `loaded`/
+          `totalLines` (vlastný stav vnútri), lebo "Prehľad e-shopu" má
+          zmysel zobraziť aj keď "Na objednanie" nemá momentálne žiadny
+          otvorený riadok. */}
+      <OrdersOverviewTiles suppliers={suppliers} onSessionExpired={onSessionExpired} />
       <OrderWriteFailuresBanner
         failures={writeFailures}
         onDismiss={() => {

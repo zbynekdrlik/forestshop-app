@@ -1,11 +1,14 @@
 import { expect, it } from "vitest";
 import {
   computeVariantTotals,
+  countAffectedOrders,
+  formatOrderCount,
   formatOrderSummaryText,
   formatVariantTotalChip,
   isLineHiddenByFilter,
   isLineResolved,
   isStaleOrderLine,
+  oldestWaitingPlacedAt,
   orderLineAgeDays,
   STALE_ORDER_LINE_DAYS,
   summarizeOrderLines,
@@ -15,6 +18,13 @@ const line = (state: "objednane" | "caka_sa" | "skladom" | "nedostupne", ordered
   state,
   ordered,
 });
+
+const overviewLine = (
+  orderId: string,
+  state: "objednane" | "caka_sa" | "skladom" | "nedostupne",
+  ordered: boolean,
+  placedAt = "2026-01-01T00:00:00.000Z",
+) => ({ orderId, state, ordered, placedAt });
 
 const variantLine = (
   variantCode: string,
@@ -212,3 +222,73 @@ it("isStaleOrderLine — čerstvý nevybavený riadok nedostane badge", () => {
 // funkciou samotnou — issue 117 zrušilo jej jediné volanie miesto
 // (`OrderLineRow.tsx`'s KÓD stĺpec), takže ostala nepoužitá (code review
 // PR #124).
+
+// issue 237: "Súhrn o objednávaní" — počet DOTKNUTÝCH objednávok a dátum
+// najstaršej čakajúcej.
+
+it("countAffectedOrders — dve nevybavené riadky TEJ ISTEJ objednávky sa počítajú raz", () => {
+  const lines = [overviewLine("O1", "objednane", false), overviewLine("O1", "caka_sa", false)];
+  expect(countAffectedOrders(lines)).toBe(1);
+});
+
+it("countAffectedOrders — nevybavené riadky RÔZNYCH objednávok sa počítajú zvlášť", () => {
+  const lines = [overviewLine("O1", "objednane", false), overviewLine("O2", "objednane", false)];
+  expect(countAffectedOrders(lines)).toBe(2);
+});
+
+it("countAffectedOrders — vybavený riadok (odškrtnutý alebo posunutý stav) sa nepočíta", () => {
+  const lines = [overviewLine("O1", "objednane", true), overviewLine("O2", "skladom", false)];
+  expect(countAffectedOrders(lines)).toBe(0);
+});
+
+it("countAffectedOrders — objednávka s VYBAVENÝM aj NEVYBAVENÝM riadkom sa počíta raz (má aspoň jeden nevybavený)", () => {
+  const lines = [overviewLine("O1", "objednane", true), overviewLine("O1", "objednane", false)];
+  expect(countAffectedOrders(lines)).toBe(1);
+});
+
+it("countAffectedOrders — prázdny zoznam vráti 0", () => {
+  expect(countAffectedOrders([])).toBe(0);
+});
+
+it("oldestWaitingPlacedAt — vráti placedAt najstaršieho NEVYBAVENÉHO riadku", () => {
+  const lines = [
+    overviewLine("O1", "objednane", false, "2026-06-01T00:00:00.000Z"),
+    overviewLine("O2", "objednane", false, "2026-01-15T00:00:00.000Z"),
+    overviewLine("O3", "objednane", false, "2026-03-10T00:00:00.000Z"),
+  ];
+  expect(oldestWaitingPlacedAt(lines)).toBe("2026-01-15T00:00:00.000Z");
+});
+
+it("oldestWaitingPlacedAt — ignoruje VYBAVENÉ riadky, aj keby boli staršie", () => {
+  const lines = [
+    overviewLine("O1", "objednane", true, "2020-01-01T00:00:00.000Z"), // vybavené, staršie
+    overviewLine("O2", "objednane", false, "2026-01-15T00:00:00.000Z"),
+  ];
+  expect(oldestWaitingPlacedAt(lines)).toBe("2026-01-15T00:00:00.000Z");
+});
+
+it("oldestWaitingPlacedAt — žiadny nevybavený riadok vráti null", () => {
+  expect(oldestWaitingPlacedAt([overviewLine("O1", "objednane", true)])).toBeNull();
+  expect(oldestWaitingPlacedAt([])).toBeNull();
+});
+
+// issue 237 (code review, minor): slovenský počítateľný tvar — 1 → jednotné
+// číslo, 2-4 → málopočetné (paucal), 0/5+ (vrátane 22/23/24…) → rodový pád
+// množného čísla.
+it("formatOrderCount — 1 je jednotné číslo", () => {
+  expect(formatOrderCount(1)).toBe("1 objednávka");
+});
+
+it("formatOrderCount — 2, 3, 4 sú málopočetné (paucal)", () => {
+  expect(formatOrderCount(2)).toBe("2 objednávky");
+  expect(formatOrderCount(3)).toBe("3 objednávky");
+  expect(formatOrderCount(4)).toBe("4 objednávky");
+});
+
+it("formatOrderCount — 0, 5+ (vrátane 22/23/24) sú rodový pád množného čísla", () => {
+  expect(formatOrderCount(0)).toBe("0 objednávok");
+  expect(formatOrderCount(5)).toBe("5 objednávok");
+  expect(formatOrderCount(22)).toBe("22 objednávok");
+  expect(formatOrderCount(23)).toBe("23 objednávok");
+  expect(formatOrderCount(24)).toBe("24 objednávok");
+});

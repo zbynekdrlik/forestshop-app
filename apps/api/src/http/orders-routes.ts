@@ -7,6 +7,7 @@ import { log } from "../logger.js";
 import { record } from "../modules/audit/service.js";
 import { ORDERS_EXPORT_URL_NOT_CONFIGURED, type OrdersIngestResult, type RunOrdersIngest } from "../modules/orders/ingest.js";
 import { listKnownStatusNames, listOpenStatusNames, replaceOpenStatusNames } from "../modules/orders/open-statuses.js";
+import { getOrdersDashboardOverview } from "../modules/orders/overview.js";
 import { getOrderDetail, listOpenOrderLinesBySupplier } from "../modules/orders/queries.js";
 import { assignOrderLineSupplier } from "../modules/orders/supplier-assignment.js";
 import { setProductSupplierLink } from "../modules/orders/supplier-link-assignment.js";
@@ -89,6 +90,13 @@ export function registerOrdersRoutes(
   app.get("/api/orders/open", requireUser(db), async (c) =>
     c.json({ suppliers: await listOpenOrderLinesBySupplier(db, adminBaseUrl) }),
   );
+
+  // issue 237: "Prehľad e-shopu" (dnes/tento týždeň/tento mesiac) — literálna
+  // cesta, MUSÍ byť zaregistrovaná PRED `GET /api/orders/:id` nižšie
+  // (`.claude/rules/http-routes.md`'s past, rovnaký dôvod ako
+  // "open-statuses" pod týmto komentárom). Rovnaké oprávnenie ako zvyšok
+  // čítania na tejto obrazovke (`requireUser`, žiadne obmedzenie roly).
+  app.get("/api/orders/overview", requireUser(db), async (c) => c.json(await getOrdersDashboardOverview(db, new Date())));
 
   // issue 59: nastavenie, ktoré Shoptet stavy sa počítajú ako "objednávka sa
   // ešte vybavuje" (rozhoduje o obsahu `/api/orders/open` vyššie). MUSÍ byť

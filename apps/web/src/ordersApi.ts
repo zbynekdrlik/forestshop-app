@@ -167,6 +167,27 @@ export async function fetchOpenOrders(): Promise<readonly SupplierOpenOrders[]> 
   return parsed.suppliers;
 }
 
+// issue 237: "Prehľad e-shopu" (dnes/tento týždeň/tento mesiac) — zrkadlí
+// `apps/api/src/modules/orders/overview.ts`'s `OrdersDashboardOverview`.
+// `revenue` je `numeric`-reťazec (`"1234.56"`, presne dve desatinné miesta) —
+// zobrazuje sa priamo, rovnaký vzor ako `SupplierStockSection.tsx`'s
+// `${row.price} €`.
+const periodStatsSchema = z.object({ orderCount: z.number(), revenue: z.string() });
+
+const ordersOverviewSchema = z.object({
+  today: periodStatsSchema,
+  week: periodStatsSchema,
+  month: periodStatsSchema,
+});
+
+export type OrdersPeriodStats = z.infer<typeof periodStatsSchema>;
+export type OrdersOverview = z.infer<typeof ordersOverviewSchema>;
+
+export async function fetchOrdersOverview(): Promise<OrdersOverview> {
+  const response = await fetch("/api/orders/overview");
+  return ordersOverviewSchema.parse(await readJson(response, "Prehľad e-shopu sa nepodarilo načítať"));
+}
+
 // #25: zmena stavu riadku objednávky — `lineId` je globálne unikátne (UUID
 // primárny kľúč `order_line.id`), netreba aj `orderId`.
 export async function updateOrderLineState(

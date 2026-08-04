@@ -158,6 +158,11 @@ const E2E_KNIHA_EMAIL = "e2e-kniha@forestshop.sk"; // musí sa zhodovať s hodno
 // spec súbor (`restock-waiting.spec.ts`) dostáva VLASTNÝ izolovaný účet.
 const E2E_PREPINANIE_EMAIL = "e2e-prepinanie@forestshop.sk"; // musí sa zhodovať s hodnotou v restock-waiting.spec.ts
 
+// issue 237: rovnaký mechanizmus a dôvod ako `E2E_PREPINANIE_EMAIL` vyššie —
+// nový spec súbor (`orders-overview.spec.ts` — blok dlaždíc "Prehľad
+// e-shopu"/"Súhrn o objednávaní") dostáva VLASTNÝ izolovaný účet.
+const E2E_PREHLAD_EMAIL = "e2e-prehlad@forestshop.sk"; // musí sa zhodovať s hodnotou v orders-overview.spec.ts
+
 const { db, pool } = createDb();
 // Konštantný literál bez interpolácie — obyčajný reťazec je tu rovnako bezpečný
 // ako `sql` tagovaná šablóna (tú používa ekvivalentný apps/api/tests/helpers/db.ts),
@@ -319,6 +324,12 @@ await db.insert(users).values({
 });
 await db.insert(users).values({
   email: E2E_PREPINANIE_EMAIL,
+  passwordHash: await hashPassword(E2E_HESLO),
+  displayName: "E2E Manažér",
+  role: "manazer",
+});
+await db.insert(users).values({
+  email: E2E_PREHLAD_EMAIL,
   passwordHash: await hashPassword(E2E_HESLO),
   displayName: "E2E Manažér",
   role: "manazer",
@@ -684,6 +695,23 @@ await db.insert(shopProductUrl).values({
   url: "https://www.forestshop.sk/e2e-rozpor/",
   availability: "in stock",
   fetchedAt: teraz,
+});
+
+// issue 237: JEDNA objednávka pre "Prehľad e-shopu" (dnes/tento
+// týždeň/tento mesiac) — `placedAt: teraz` (rovnaké "teraz" ako mail_log
+// riadky vyššie), aby vždy spadla do "dnes" bez ohľadu na to, kedy e2e beh
+// skutočne prebehne. ZÁMERNE bez akéhokoľvek `order_line` — dashboard
+// "Prehľad e-shopu" číta priamo `order` tabuľku (`orders/overview.ts`), nie
+// cez `order_line` JOIN ako "Na objednanie" — objednávka bez riadku sa preto
+// v `listOpenOrderLinesBySupplier` (INNER JOIN) vôbec nezobrazí a NEMENÍ
+// žiadny existujúci "Všetci (N)"/"(bez dodávateľa) (N)" počet, ktorý ostatné
+// testy overujú presne.
+await db.insert(orders).values({
+  externalOrderId: "9009",
+  customerName: "E2E Zákazník Prehľad",
+  statusName: DEFAULT_ORDER_OPEN_STATUS,
+  placedAt: teraz,
+  totalPriceWithVat: "77.50",
 });
 
 await pool.end();
