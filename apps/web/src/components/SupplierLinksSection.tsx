@@ -149,7 +149,6 @@ export function SupplierLinksSection({
 
   return (
     <section data-testid="product-links-section">
-      <h2>Párovanie produktov</h2>
       <p>
         Produkty, ktoré nemajú dodávateľskú linku, nevie automat sledovať dostupnosť u dodávateľa —
         preto nefunguje ani „Vypredané → Skladom“, ani „Na objednanie“ pre ne. Vložte alebo opravte

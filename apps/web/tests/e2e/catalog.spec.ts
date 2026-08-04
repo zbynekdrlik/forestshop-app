@@ -24,13 +24,16 @@ test("manažér vidí stav katalógu, vyhľadá variant a konzola je čistá", a
   await page.getByLabel("Heslo").fill(E2E_HESLO);
   await page.getByRole("button", { name: "Prihlásiť sa" }).click();
 
-  // 37 = 35 riadkov fixtúry + 2 seedované kandidáty na prepnutie ("PREP-1",
-  // issue 217; "PREP-2", issue 226 — rozpor voči feedu, `scripts/e2e-setup.ts`).
-  // Oba sú v stave `out_of_stock`, takže filtre "sellable"(7 od issue 219) a
-  // "missing"(1) nižšie sa nimi nemenia.
+  // 39 = 35 riadkov fixtúry + 2 seedované kandidáty na prepnutie ("PREP-1",
+  // issue 217; "PREP-2", issue 226 — rozpor voči feedu, `scripts/e2e-setup.ts`)
+  // + 2 seedované produkty pre "Párovanie produktov" ("E2E-PL-CHYBA"/
+  // "E2E-PL-OPRAVA", issue 239, `scripts/e2e-fixtures-product-links.ts`).
+  // Prví dvaja sú `out_of_stock` (nemenia "sellable"/"missing" nižšie), tí
+  // druhí dvaja sú `sellable` (posúvajú filter "sellable" 7→9 nižšie),
+  // "missing"(1) sa nemení ani jedným párom.
   await expect(page.getByTestId("snapshot")).toContainText("Posledný import: prijatý");
-  await expect(page.getByTestId("counts")).toContainText("Variantov v katalógu (vrátane chýbajúcich): 37");
-  await expect(page.getByTestId("total")).toHaveText("Nájdených: 37");
+  await expect(page.getByTestId("counts")).toContainText("Variantov v katalógu (vrátane chýbajúcich): 39");
+  await expect(page.getByTestId("total")).toHaveText("Nájdených: 39");
 
   await page.getByLabel("Kód alebo názov").fill("40237/3XL");
   await page.getByRole("button", { name: "Hľadať" }).click();
@@ -50,14 +53,14 @@ test("filter podľa stavu zúži zoznam na predajné varianty", async ({ page })
   await page.getByLabel("Heslo").fill(E2E_HESLO);
   await page.getByRole("button", { name: "Prihlásiť sa" }).click();
 
-  await expect(page.getByTestId("total")).toHaveText("Nájdených: 37");
+  await expect(page.getByTestId("total")).toHaveText("Nájdených: 39");
   await page.getByLabel("Stav", { exact: true }).selectOption("sellable");
   await page.getByRole("button", { name: "Hľadať" }).click();
 
-  // 7 od issue 219: variant "40237/L" má oba texty dostupnosti prázdne, čo
-  // znamená predvolenú dostupnosť Shoptetu (na tomto e-shope "Skladom"), nie
-  // vypredané — preto sa počíta medzi predajné.
-  await expect(page.getByTestId("total")).toHaveText("Nájdených: 7");
+  // 9 = 7 od issue 219 (variant "40237/L" má oba texty dostupnosti prázdne,
+  // čo znamená predvolenú dostupnosť Shoptetu — "Skladom", nie vypredané) +
+  // 2 sellable produkty issue 239's fixtúry ("E2E-PL-CHYBA"/"E2E-PL-OPRAVA").
+  await expect(page.getByTestId("total")).toHaveText("Nájdených: 9");
   await expect(page.getByTestId("variant-40237/M")).toBeVisible();
 });
 
@@ -69,7 +72,7 @@ test("filter 'Chýbajúce' nájde presne označený variant a riadok ukazuje, od
   await page.getByLabel("Heslo").fill(E2E_HESLO);
   await page.getByRole("button", { name: "Prihlásiť sa" }).click();
 
-  await expect(page.getByTestId("total")).toHaveText("Nájdených: 37");
+  await expect(page.getByTestId("total")).toHaveText("Nájdených: 39");
   await page.getByLabel("Stav", { exact: true }).selectOption("missing");
   await page.getByRole("button", { name: "Hľadať" }).click();
 

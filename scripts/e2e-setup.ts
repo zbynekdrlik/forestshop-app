@@ -738,8 +738,8 @@ await db.insert(orders).values({
   totalPriceWithVat: "77.50",
 });
 
-// issue 239: "Eshop → Párovanie produktov" — vyčlenené do vlastného súboru
-// (eslint `max-lines: 400`), viď jeho komentár pre detaily fixtúry.
-await seedProductLinksFixtures(db, teraz, snapshotPrepinanie);
+// issue 239: fixtúra (produkty + vlastný E2E účet) vyčlenená do vlastného
+// súboru (eslint max-lines).
+await seedProductLinksFixtures(db, teraz, snapshotPrepinanie, E2E_HESLO);
 
 await pool.end();

@@ -11,9 +11,23 @@
 // `apps/api` TS projektu, takže si nepožičiava testové pomôcky z
 // `apps/api/tests/helpers`.
 import type { Database } from "../apps/api/src/db/client.js";
-import { productSupplierLinkOverrides, products, variants } from "../apps/api/src/db/schema.js";
+import { productSupplierLinkOverrides, products, users, variants } from "../apps/api/src/db/schema.js";
+import { hashPassword } from "../apps/api/src/modules/auth/passwords.js";
 
-export async function seedProductLinksFixtures(db: Database, teraz: Date, snapshotId: string): Promise<void> {
+// Musí sa zhodovať s hodnotou v `apps/web/tests/e2e/supplier-links.spec.ts`
+// — VLASTNÝ izolovaný účet (rovnaký mechanizmus ako `e2e-setup.ts`'s
+// `E2E_PREHLAD_EMAIL`/ostatné — zdieľaný `e2e@forestshop.sk` je už na
+// hranici `MAX_ATTEMPTS`).
+export const E2E_PAROVANIE_EMAIL = "e2e-parovanie@forestshop.sk";
+
+export async function seedProductLinksFixtures(db: Database, teraz: Date, snapshotId: string, heslo: string): Promise<void> {
+  await db.insert(users).values({
+    email: E2E_PAROVANIE_EMAIL,
+    passwordHash: await hashPassword(heslo),
+    displayName: "E2E Manažér",
+    role: "manazer",
+  });
+
   async function seedParovanieProduktu(key: string): Promise<void> {
     await db.insert(products).values({
       key,
