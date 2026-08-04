@@ -55,9 +55,9 @@ test("blok 'Prehľad e-shopu' + 'Súhrn o objednávaní' sa zobrazí a čísla z
   // reálnych dát `/api/orders/open` (rovnaká autentifikovaná session, čo
   // appka sama načítava) — nie hardcoded číslo, ktoré by závisel od poradia
   // spustenia ostatných spec súborov v tom istom e2e behu.
-  const { suppliers } = (await page.evaluate(() =>
+  const { suppliers } = await page.evaluate(() =>
     fetch("/api/orders/open").then((r) => r.json() as Promise<{ suppliers: readonly RawSupplierGroup[] }>),
-  )) as { suppliers: readonly RawSupplierGroup[] };
+  );
   const allLines = suppliers.flatMap((g) => g.lines);
   const isResolved = (l: RawOrderLine): boolean => l.ordered || l.state !== "objednane";
   const nevybavene = allLines.filter((l) => !isResolved(l));
