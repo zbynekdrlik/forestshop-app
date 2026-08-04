@@ -53,3 +53,9 @@ export const USER_AGENT =
 // zapol produkt (issue 223: `wetland.sk`/`trigona.sk` boli predtým v tomto
 // poli ako celostránkové domény bez overeného výrezu; kým sa pre ne nenájde
 // a neoverí vlastný výrez, ostávajú bez textovej úrovne).
+//
+// `trigona.sk` dostala vlastný výrez v issue 230 (farebný `StockCountText`
+// štítok pri produkte). `wetland.sk` zostáva bez pravidla ZÁMERNE — naživo
+// overených 67+ produktových stránok malo VŽDY rovnaký ("success") štítok,
+// takže sa nepodarilo nájsť overený "vypredaný" príklad a pridanie pravidla
+// by bol nepodložený dohad (viď issue 230 komentáre).

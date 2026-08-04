@@ -24,6 +24,8 @@ const HUNTINGSHOP_SKLADOM = fixture("huntingshop-skladom-tricko.html");
 const ODIMON_NEDOSTUPNA = fixture("odimon-nedostupna-strelecka-palica.html");
 const LASTING_BONY = fixture("lasting-bony-cepica-l-xl.html");
 const LASTING_HILA = fixture("lasting-hila-tricko-bez-xs.html");
+const TRIGONA_SKLADOM = fixture("trigona-skladom-10x42-sahara.html");
+const TRIGONA_VYPREDANE = fixture("trigona-vypredane-8x56-ed-savannah.html");
 
 describe("hostOf / isTrustedTextHost", () => {
   it("odreze www a zmensi pismena", () => {
@@ -262,6 +264,39 @@ describe("parsePage — issue 225: odimon.sk — viditelna dostupnost prebija kl
     const result = parsePage(html, "https://www.odimon.sk/p/ine");
     expect(result.availability).toBe("available");
     expect(result.availabilityText).toBe("Skladom 9 ks");
+  });
+});
+
+describe("parsePage — issue 230: trigona.sk cita farebny StockCountText stitok pri produkte", () => {
+  it("doverovana je trigona.sk aj jej poddomena, ale nie cudzia domena s rovnakym koncom", () => {
+    expect(isTrustedTextHost("https://www.trigona.sk/eshop/p-1/nieco.xhtml")).toBe(true);
+    expect(isTrustedTextHost("https://trigona.sk/eshop/p-1/nieco.xhtml")).toBe(true);
+    expect(isTrustedTextHost("https://nottrigona.sk/eshop/p-1/nieco.xhtml")).toBe(false);
+  });
+
+  it("zelena farba (#00b020, 'Na sklade') je available — zodpoveda JSON-LD InStock na tom istom produkte", () => {
+    const result = parsePage(TRIGONA_SKLADOM, "https://www.trigona.sk/eshop/10x42-sahara/p-1217729.xhtml");
+    expect(result.availability).toBe("available");
+    expect(result.source).toBe("text");
+  });
+
+  it("modra farba (#024bbd, '1 - 4 tyzdne') je unavailable — zodpoveda JSON-LD OutOfStock na tom istom produkte", () => {
+    const result = parsePage(TRIGONA_VYPREDANE, "https://www.trigona.sk/eshop/8x56-ed-savannah/p-1215478.xhtml");
+    expect(result.availability).toBe("unavailable");
+    expect(result.source).toBe("text");
+  });
+
+  it("chybajuci alebo neznamy stitok je unknown, nikdy dohad — na rozdiel od huntingshop.eu tu nie je overene ziadne 'chyba = vypredane'", () => {
+    const html = "<html><body><h1>Nejaky produkt</h1><p>Popis produktu.</p></body></html>";
+    const result = parsePage(html, "https://www.trigona.sk/eshop/nieco/p-999.xhtml");
+    expect(result.availability).toBe("unknown");
+  });
+
+  it("nerozpoznana farba stitku je tiez unknown, nikdy sa nehada podla textu delivery lehoty", () => {
+    const html =
+      '<span id="StockCountText42"><span style="color: #ff9900">Na dopyt</span></span>';
+    const result = parsePage(html, "https://www.trigona.sk/eshop/nieco/p-42.xhtml");
+    expect(result.availability).toBe("unknown");
   });
 });
 
