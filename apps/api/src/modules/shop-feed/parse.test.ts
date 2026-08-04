@@ -11,10 +11,40 @@ const sample = readFileSync(
 describe("parseShopFeed", () => {
   it("vráti dvojicu kód → adresa pre každú použiteľnú položku", () => {
     expect(parseShopFeed(sample)).toEqual([
-      { code: "40237/M", url: "https://www.forestshop.sk/polovnicke-nohavice-forest-1003/?variantId=106" },
-      { code: "15314", url: "https://www.forestshop.sk/polovnicky-ruksak-hart-spean-25/" },
-      { code: "10125/41", url: "https://www.forestshop.sk/obuv/?variantId=9&utm=feed" },
+      {
+        code: "40237/M",
+        url: "https://www.forestshop.sk/polovnicke-nohavice-forest-1003/?variantId=106",
+        availability: "in stock",
+      },
+      {
+        code: "15314",
+        url: "https://www.forestshop.sk/polovnicky-ruksak-hart-spean-25/",
+        availability: "out of stock",
+      },
+      {
+        code: "10125/41",
+        url: "https://www.forestshop.sk/obuv/?variantId=9&utm=feed",
+        // issue 226: prázdne <g:availability></g:availability> → null, nikdy
+        // prázdny reťazec — chýbajúci signál sa nesmie dať zameniť s
+        // hodnotou, ktorá by sa dala porovnávať proti "in stock"/"out of stock".
+        availability: null,
+      },
     ]);
+  });
+
+  // issue 226: krížová kontrola nášho stavu proti feedu potrebuje aj
+  // Shoptetovu VLASTNÚ dostupnosť, nie len kód/adresu.
+  it("vyparsuje <g:availability> ku každej položke", () => {
+    const rows = parseShopFeed(sample);
+    expect(rows.find((r) => r.code === "40237/M")?.availability).toBe("in stock");
+    expect(rows.find((r) => r.code === "15314")?.availability).toBe("out of stock");
+  });
+
+  it("položka bez <g:availability> vôbec (chýbajúca značka) dostane null", () => {
+    // "99999" v fixtúre má <g:availability>in stock</g:availability> ale bez
+    // <link> — preskočí sa celá. Preto pre tento prípad vlastný vstup.
+    const xml = "<feed><entry><g:id>ABC</g:id><link>https://x.sk/p/</link></entry></feed>";
+    expect(parseShopFeed(xml)).toEqual([{ code: "ABC", url: "https://x.sk/p/", availability: null }]);
   });
 
   it("nepoužije hlavičkový <link href=…> feedu ako adresu produktu", () => {

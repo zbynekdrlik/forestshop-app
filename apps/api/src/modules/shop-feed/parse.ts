@@ -13,6 +13,11 @@
 export interface ShopFeedEntry {
   readonly code: string;
   readonly url: string;
+  // Shoptetova VLASTNÁ dostupnosť (issue 226) — surový text ("in stock"/
+  // "out of stock"), `null` keď je `<g:availability>` prázdna ALEBO chýba
+  // celkom. Chýbajúci signál sa NIKDY nezamieňa s prázdnym reťazcom — obe
+  // musia byť rovnako "žiadny rozpor", nikdy porovnateľná hodnota.
+  readonly availability: string | null;
 }
 
 const ENTRY = /<entry>([\s\S]*?)<\/entry>/g;
@@ -20,6 +25,7 @@ const CODE = /<g:id>([\s\S]*?)<\/g:id>/;
 // Zámerne `<link>` s koncovou značkou — hlavička feedu má `<link href="…" />`
 // (samostatne uzavretý, adresa vzorového webu), ktorý sa takto nikdy nechytí.
 const URL_TAG = /<link>([\s\S]*?)<\/link>/;
+const AVAILABILITY_TAG = /<g:availability>([\s\S]*?)<\/g:availability>/;
 
 const ENTITIES: Readonly<Record<string, string>> = {
   "&amp;": "&",
@@ -52,7 +58,8 @@ export function parseShopFeed(xml: string): readonly ShopFeedEntry[] {
     if (code === "" || url === "") continue;
     if (seen.has(code)) continue;
     seen.add(code);
-    rows.push({ code, url });
+    const rawAvailability = decode(AVAILABILITY_TAG.exec(entry)?.[1] ?? "");
+    rows.push({ code, url, availability: rawAvailability === "" ? null : rawAvailability });
   }
 
   return rows;

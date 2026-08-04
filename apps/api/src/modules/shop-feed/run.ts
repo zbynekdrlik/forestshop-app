@@ -45,7 +45,15 @@ export async function runShopFeed(options: RunShopFeedOptions): Promise<ShopFeed
       .values(chunk)
       .onConflictDoUpdate({
         target: shopProductUrl.code,
-        set: { url: sql`excluded.url`, fetchedAt: sql`excluded.fetched_at` },
+        set: {
+          url: sql`excluded.url`,
+          // issue 226: dostupnosť sa PREPÍŠE na aktuálnu hodnotu z tohto behu
+          // (vrátane NULL, keď feed teraz nesie prázdnu značku) — inak by
+          // stará hodnota z predošlého behu tíško prežívala a krížová
+          // kontrola by porovnávala proti zastaranému signálu.
+          availability: sql`excluded.availability`,
+          fetchedAt: sql`excluded.fetched_at`,
+        },
       });
   }
 

@@ -13,6 +13,12 @@ import { pgTable, text, timestamp } from "drizzle-orm/pg-core";
 export const shopProductUrl = pgTable("shop_product_url", {
   code: text("code").primaryKey(),
   url: text("url").notNull(),
+  // Shoptetova VLASTNÁ dostupnosť z feedu (issue 226) — surový text
+  // `<g:availability>` ("in stock"/"out of stock"), `null` keď je značka
+  // prázdna. Nezávislý zdroj pravdy na krížovú kontrolu nášho odvodeného
+  // `variant.state` (`modules/catalog/feed-cross-check.ts`) — issue 219
+  // ukázalo, že naša vlastná dedukcia sa vie rozísť s realitou.
+  availability: text("availability"),
   // Čas behu, ktorý riadok naposledy potvrdil — keď feed na strane Shoptetu
   // zamrzne, na obrazovke je vidieť, že mapa starne.
   fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull(),
