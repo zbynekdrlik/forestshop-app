@@ -10,11 +10,15 @@ import { withCleanDb } from "./helpers/db.js";
 
 const NOW = new Date("2026-08-04T03:50:00Z");
 
-function feedWith(rows: readonly { code: string; availability: string }[]): string {
+function feedWith(rows: readonly { code: string; availability: string | null }[]): string {
   const entries = rows
     .map(
       (r) =>
-        `<entry><g:id>${r.code}</g:id><link>https://www.forestshop.sk/${r.code}/</link><g:availability>${r.availability}</g:availability></entry>`,
+        // `null` = <g:availability> značka CELKOM chýba (nie len prázdna) —
+        // presne ten tvar, ktorým Shoptet feed vie prestať dostupnosť niesť.
+        `<entry><g:id>${r.code}</g:id><link>https://www.forestshop.sk/${r.code}/</link>${
+          r.availability === null ? "" : `<g:availability>${r.availability}</g:availability>`
+        }</entry>`,
     )
     .join("");
   // MIN_ENTRIES je 1000 — vypĺň zvyšok bezvýznamnými, ale platnými položkami.
@@ -77,5 +81,27 @@ describe("runShopFeed — ukladanie dostupnosti (issue 226)", () => {
       .from(shopProductUrl)
       .where(eq(shopProductUrl.code, "Q1"));
     expect(row?.availability).toBe("in stock");
+  });
+
+  // Code review issue 226: `run.ts`'s komentár tvrdí, že explicitný
+  // `set: { availability: sql\`excluded.availability\` }` existuje PRÁVE
+  // preto, aby sa stará hodnota prepísala na `null`, keď feed značku
+  // stratí — dovtedy to netestoval žiadny test.
+  it("keď feed <g:availability> značku STRATÍ, uložená hodnota sa prepíše na null (nezostane stará)", async () => {
+    const runOnce = (availability: string | null) =>
+      runShopFeed({
+        db,
+        now: NOW,
+        fetchFeed: () => Promise.resolve(feedWith([{ code: "R1", availability }])),
+      });
+
+    await runOnce("in stock");
+    await runOnce(null);
+
+    const [row] = await db
+      .select({ availability: shopProductUrl.availability })
+      .from(shopProductUrl)
+      .where(eq(shopProductUrl.code, "R1"));
+    expect(row?.availability).toBeNull();
   });
 });

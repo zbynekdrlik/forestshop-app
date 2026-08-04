@@ -220,11 +220,16 @@ it("ukáže varovanie o rozpore nášho stavu s feedom, s počtom aj zoznamom", 
           ourUrl: "https://www.forestshop.sk/bunda-forest/",
         },
         {
+          // issue 226 review: `ourUrl` je v `feedConflictRowSchema` VŽDY
+          // nenulový reťazec — rozpor existuje len pre variant, ktorý MÁ
+          // riadok vo feede (INNER JOIN, `feed-cross-check.ts`), takže mock
+          // musí niesť skutočnú adresu, nikdy `null` (na rozdiel od
+          // `RestockWaitingRow.ourUrl`, ktoré nullable JE).
           variantCode: "C1",
           productName: "Nohavice X",
           ourState: "sellable" as const,
           feedAvailability: "out of stock",
-          ourUrl: null,
+          ourUrl: "https://www.forestshop.sk/nohavice-x/",
         },
       ],
     },
