@@ -477,3 +477,23 @@ paths:
   pridaním filtra do testu — a nový endpoint, ktorého bežný očakávaný
   doménový výsledok je „nič"/neúspech, vracia 200 s telom (vzor `/api/me` a
   `POST /api/me/password`), nie 4xx.
+- **Integračný test, ktorý ide cez skutočnú HTTP trasu (nie priamo cez
+  funkciu s explicitným `now` parametrom) a vkladá fixtúrové dáta s PEVNÝM
+  dátumovým LITERÁLOM ako "dnes"/"tento týždeň", je časovaná bomba — spadne
+  presne v deň, keď skutočný kalendárny dátum prekročí ten literál.**
+  Zistené issue 239 (`orders-overview.integration.test.ts`): jediný test v
+  súbore, ktorý NEPOSIELA `NOW` priamo do `getOrdersDashboardOverview` (na
+  rozdiel od ostatných testov v tom istom súbore), ale ide cez
+  `GET /api/orders/overview`, ktorá si "dnes" počíta zo SKUTOČNÉHO
+  `new Date()` na serveri — vkladal fixtúru s `TODAY_START` pevne
+  `2026-08-03/04`. Test prešiel mesiace, kým vývoj tohto ticketu (2026-08-04
+  → 2026-08-05) skutočne neprekročil polnoc a test spadol so zdanlivo
+  nesúvisiacou chybou (`orderCount: 0` namiesto `1`). Fix: hranica sa
+  prepočíta PRI BEHU testu cez existujúcu `computeBratislavaPeriodBoundaries
+  (new Date())` (tá istá funkcia, akú používa aj samotná trasa), nie
+  literál napísaný v deň písania testu. **Test na KAŽDÝ ďalší
+  "dnes/týždeň/mesiac" integračný test, čo ide cez HTTP trasu (nie priamo
+  cez funkciu s explicitným `now`):** vkladá fixtúru s PEVNÝM dátumovým
+  literálom? Ak áno, a testovaná trasa/funkcia si "teraz" berie sama zo
+  systémového hodín, prepočítaj hranicu pri behu testu namiesto písania
+  literálu — inak test raz, nevyhnutne, prestane platiť.
