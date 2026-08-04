@@ -23,6 +23,13 @@ const envSchema = z.object({
   // tejto premennej nikdy nezíska interné id na priamy odkaz na detail.
   SHOPTET_ORDERS_XML_URL: z.string().url().optional(),
   ORDERS_RAW_DIR: z.string().min(1).default("./data/orders-raw"),
+
+  // Feed pre porovnávače, z ktorého sa berie mapa „kód → adresa detailu"
+  // (issue 220). Na rozdiel od `SHOPTET_EXPORT_URL` je VEREJNÝ a nenesie
+  // prihlasovací údaj, takže má predvolenú hodnotu v kóde
+  // (`DEFAULT_SHOP_FEED_URL`) — premenná je len poistka pre prípad zmeny
+  // adresy na strane Shoptetu.
+  SHOP_FEED_URL: z.string().url().optional(),
   // issue 65: základ Shoptet-ovho ADMIN rozhrania (nie exportu) pre priamy
   // odkaz na objednávku z obrazovky "Na objednanie" — na rozdiel od
   // `SHOPTET_EXPORT_URL`/`SHOPTET_ORDERS_URL` vyššie NENESIE prihlasovací

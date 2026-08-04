@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Database } from "../src/db/client.js";
-import { products, restockEvents, supplierStock, variants } from "../src/db/schema.js";
+import { products, restockEvents, shopProductUrl, supplierStock, variants } from "../src/db/schema.js";
 import type { ShoptetImportConfig } from "../src/modules/shoptet-writeback/config.js";
 import { runRestock, setRestockEnabled } from "../src/modules/restock/run.js";
 import { listRestockWaiting, selectRestockCandidates } from "../src/modules/restock/queries.js";
@@ -215,6 +215,30 @@ describe("prepínanie Vypredané → Skladom", () => {
 
     const druha = await listRestockWaiting(db, NOW, { limit: 2, offset: 2 });
     expect(druha.rows.map((r) => r.variantCode)).not.toEqual(prva.rows.map((r) => r.variantCode));
+  });
+
+  // issue 220 — majiteľ o pôvodných odkazoch: „tie linky na nase produkty su
+  // uplne hrozne". Adresa detailu prichádza z feedu pre porovnávače; kód, ktorý
+  // vo feede nie je, NESMIE zo zoznamu vypadnúť (inak by sa prepol produkt,
+  // ktorý majiteľ nikdy nevidel — trieda chyby z issue 219).
+  it("overovací zoznam nesie priamu adresu z feedu a bez nej riadok nezahodí", async () => {
+    await seedSupplierStock();
+    await seedVariant("U1");
+    await seedVariant("U2");
+    await db.insert(shopProductUrl).values({
+      code: "U1",
+      url: "https://www.forestshop.sk/bunda/?variantId=4211",
+      fetchedAt: NOW,
+    });
+
+    const zoznam = await listRestockWaiting(db, NOW, { limit: 50, offset: 0 });
+    expect(zoznam.total).toBe(2);
+    expect(
+      Object.fromEntries(zoznam.rows.map((r) => [r.variantCode, r.ourUrl])),
+    ).toEqual({
+      U1: "https://www.forestshop.sk/bunda/?variantId=4211",
+      U2: null,
+    });
   });
 
   it("overovací zoznam filtruje podľa dodávateľa", async () => {

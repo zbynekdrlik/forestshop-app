@@ -61,7 +61,7 @@ export interface HttpExportFetcherOptions {
  * zruší čítanie (`reader.cancel()`) HNEĎ, ako súčet prekročí strop, a vyhodí
  * bežnú chybu — nikdy nenechá proces spadnúť na pamäť.
  */
-async function readBounded(response: Response, maxBytes: number): Promise<Buffer> {
+export async function readBounded(response: Response, maxBytes: number): Promise<Buffer> {
   // `Response.body` je (bez `dom` libu, len `@types/node`'s `undici-types`)
   // typovaný ako `ReadableStream` bez generika, teda efektívne
   // `ReadableStream<any>` — cast na `Uint8Array` je bezpečný, `fetch` telo

@@ -13,6 +13,8 @@ import type { WritebackRunResult } from "../shoptet-writeback/run-writeback.js";
 import { RESTOCK_JOB_NAME } from "../restock/constants.js";
 import type { RestockRunResult } from "../restock/run.js";
 import { isRestockEnabled } from "../restock/run.js";
+import { SHOP_FEED_JOB_NAME } from "../shop-feed/constants.js";
+import type { ShopFeedRunResult } from "../shop-feed/run.js";
 import { SUPPLIER_STOCK_JOB_NAME } from "../supplier-stock/constants.js";
 import type { SupplierStockRunResult } from "../supplier-stock/run.js";
 import type { ScheduledJob } from "./types.js";
@@ -325,6 +327,30 @@ export function restockJob(run: RunRestock | undefined): ScheduledJob {
       if (run === undefined) {
         throw new Error("Chýbajú prihlasovacie údaje do Shoptet administrácie — prepnutie sa nedá zapísať.");
       }
+      return { detail: await run(db, now) };
+    },
+  };
+}
+
+export type RunShopFeed = (db: Database, now: Date) => Promise<ShopFeedRunResult>;
+
+/**
+ * Obnovenie mapy „kód variantu → adresa detailu" z feedu pre porovnávače
+ * (issue 220) — denne o 03:50 UTC, teda PRED `supplierStockJob` (04:20) aj
+ * `restockJob` (04:50), aby overovací zoznam ráno ukazoval čerstvé adresy.
+ *
+ * Vlastný advisory zámok NEMÁ: na rozdiel od `postaUncollectedJob` či
+ * `supplierStockJob` nemá manuálny spúšťač, takže jediným zdrojom behov je
+ * scheduler, ktorý ich už serializuje.
+ *
+ * Žiadny `enabled` prepínač: job nikam nezapisuje do e-shopu, len číta
+ * verejný feed a plní pomocnú tabuľku adries.
+ */
+export function shopFeedJob(run: RunShopFeed): ScheduledJob {
+  return {
+    name: SHOP_FEED_JOB_NAME,
+    schedule: { kind: "daily", hourUtc: 3, minuteUtc: 50 },
+    async run(db, now) {
       return { detail: await run(db, now) };
     },
   };

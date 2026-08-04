@@ -22,6 +22,7 @@ import {
   ordersImportJob,
   orderNoteWritebackJob,
   orderReminderJob,
+  shopFeedJob,
   supplierStockJob,
   restockJob,
   postaUncollectedJob,
@@ -30,6 +31,9 @@ import {
   sessionCleanupJob,
   shoptetWritebackJob,
 } from "./modules/scheduler/jobs.js";
+import { DEFAULT_SHOP_FEED_URL } from "./modules/shop-feed/constants.js";
+import { createHttpShopFeedFetcher } from "./modules/shop-feed/fetcher.js";
+import { runShopFeed } from "./modules/shop-feed/run.js";
 import { fetchSupplierPage } from "./modules/supplier-stock/page-fetcher.js";
 import { runSupplierStock } from "./modules/supplier-stock/run.js";
 import { runRestock } from "./modules/restock/run.js";
@@ -219,6 +223,11 @@ const app = createApp(db, {
 // dostávajú svoj `run*Ingest` (môže byť `undefined`, keď zodpovedajúca URL
 // nie je nastavená — job to zaznamená ako "failure" s vysvetlením, nikdy sa
 // nepreskočí ticho).
+// Adresa feedu je verejná (nenesie prihlasovací údaj), takže má rozumnú
+// predvolenú hodnotu v kóde — premenná prostredia je len poistka pre prípad,
+// že by Shoptet adresu zmenil.
+const fetchShopFeed = createHttpShopFeedFetcher(env.SHOP_FEED_URL ?? DEFAULT_SHOP_FEED_URL);
+
 const scheduler = startScheduler(db, [
   catalogImportJob(runIngest),
   pruneRawExportsJob(),
@@ -229,6 +238,7 @@ const scheduler = startScheduler(db, [
   orderNoteWritebackJob(runOrderNoteWritebackFn),
   postaUncollectedJob((db2, now) => runPostaUncollected({ db: db2, now, ...postaUncollectedDeps })),
   orderReminderJob((db2, now) => runOrderReminder({ db: db2, now, ...orderReminderDeps })),
+  shopFeedJob((db2, now) => runShopFeed({ db: db2, now, fetchFeed: fetchShopFeed })),
   supplierStockJob((db2, now) => runSupplierStock({ db: db2, now, fetchPage: fetchSupplierPage })),
   restockJob(runRestockFn),
 ]);

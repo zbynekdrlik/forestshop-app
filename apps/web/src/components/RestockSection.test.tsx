@@ -28,6 +28,21 @@ const WAITING = {
       supplierAvailabilityText: "skladom",
       supplierPrice: "24.00",
       confirmedAt: "2026-08-04T04:20:00.000Z",
+      ourUrl: "https://www.forestshop.sk/ladvinka-swedteam-green/?variantId=4211",
+    },
+    {
+      // Kód, ktorý vo feede pre porovnávače NIE JE (issue 220) — dnes je
+      // takých 626 viditeľných variantov. Riadok musí zostať v zozname a
+      // odkaz padnúť späť na vyhľadávanie, nikdy nie na prázdny odkaz.
+      variantCode: "15314",
+      pairCode: null,
+      productName: "Poľovnícky ruksak HART SPEAN 25",
+      supplier: "BETALOV",
+      supplierLink: "https://huntingshop.example/spean",
+      supplierAvailabilityText: "skladom",
+      supplierPrice: "59.00",
+      confirmedAt: "2026-08-04T04:21:00.000Z",
+      ourUrl: null,
     },
   ],
   suppliers: [
@@ -141,9 +156,17 @@ it("pri každom čakajúcom produkte ponúkne odkaz na náš eshop aj k dodávat
 
   const riadok = await screen.findByTestId("restock-waiting-60542");
   const odkazy = [...riadok.querySelectorAll("a")].map((a) => a.getAttribute("href"));
+  // Priama adresa z feedu vrátane výberu veľkosti — nie vyhľadávanie.
   expect(odkazy).toEqual([
-    "https://www.forestshop.sk/vyhladavanie/?string=60542",
+    "https://www.forestshop.sk/ladvinka-swedteam-green/?variantId=4211",
     "https://tthunt.example/ladvinka",
+  ]);
+
+  // Variant, ktorý vo feede nie je, ostáva v zozname a má náhradný odkaz.
+  const bezFeedu = await screen.findByTestId("restock-waiting-15314");
+  expect([...bezFeedu.querySelectorAll("a")].map((a) => a.getAttribute("href"))).toEqual([
+    "https://www.forestshop.sk/vyhladavanie/?string=15314",
+    "https://huntingshop.example/spean",
   ]);
   // Nová karta — inak by preklikávanie zoznam pod rukami zavrelo.
   expect([...riadok.querySelectorAll("a")].every((a) => a.getAttribute("target") === "_blank")).toBe(
