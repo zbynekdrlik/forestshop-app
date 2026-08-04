@@ -1,18 +1,22 @@
 // Čítanie dostupnosti a ceny z HTML stránky dodávateľa — ČISTÉ funkcie, žiadna
 // sieť, žiadna databáza. Testuje sa nad uloženými vzorkami stránok.
 //
-// Tri úrovne v poradí od najspoľahlivejšej:
+// Úrovne v poradí od najspoľahlivejšej — ALE keď má doména vlastné pravidlo
+// na VIDITEĽNÚ dostupnosť pri produkte (`VISIBLE_AVAILABILITY_RULES`, issue
+// 225), táto sa krížovo overí proti JSON-LD a pri rozpore vyhrá „neviem":
 //   1. JSON-LD `Product` (`schema.org`) — strojový údaj, ktorý dávajú Shoptet,
-//      WooCommerce aj PrestaShop; jediný, ktorý hovorí o TOMTO produkte, nie o
-//      náhodnom texte na stránke.
+//      WooCommerce aj PrestaShop. Vie ale KLAMAŤ (issue 225: odimon.sk hlási
+//      InStock, hoci stránka pri produkte hovorí "Nedostupný") — preto sa
+//      na doménach s pravidlom na viditeľnú dostupnosť nikdy neberie ako
+//      posledné slovo bez overenia.
 //   2. `og:` / `product:` meta značky — ten istý údaj, keď JSON-LD chýba.
-//   3. Voľný text stránky — LEN pre domény v `TRUSTED_TEXT_HOSTS`, kde je to
-//      overené na vzorke. Inde je dohad horší než „neviem".
+//   3. Voľný text stránky — LEN pre domény v `TEXT_AVAILABILITY_RULES`, a LEN
+//      z VÝREZU, ktorý pravidlo označí za oblasť TOHTO produktu (issue 223:
+//      celostránkový voľný text chytal marketingovú vetu z pätičky). Inde je
+//      dohad horší než „neviem".
 //
 // Čokoľvek, čo neprejde ani jednou úrovňou, je `unknown` — a `unknown` nikdy
 // neprepne produkt (issue 213).
-
-import { TRUSTED_TEXT_HOSTS } from "./constants.js";
 
 export type SupplierAvailability = "available" | "unavailable" | "unknown";
 export type SupplierStockSource = "json_ld" | "meta" | "text" | "none";
@@ -35,11 +39,9 @@ export function hostOf(url: string): string {
   return host.startsWith("www.") ? host.slice(4) : host;
 }
 
-/** `true`, keď je doména (alebo jej poddoména) medzi overenými pre voľný text. */
+/** `true`, keď má doména (alebo jej poddoména) overené pravidlo na voľný text. */
 export function isTrustedTextHost(url: string): boolean {
-  const host = hostOf(url);
-  if (host === "") return false;
-  return TRUSTED_TEXT_HOSTS.some((trusted) => host === trusted || host.endsWith(`.${trusted}`));
+  return textAvailabilityRuleFor(url) !== null;
 }
 
 // `schema.org` tokeny. Zámerne sa NEBERIE `PreOrder`/`BackOrder` ako
@@ -232,13 +234,107 @@ export function fromMetaTags(html: string): SchemaHit | null {
   return null;
 }
 
+interface TextAvailabilityRule {
+  readonly host: string;
+  /** Vyberie z CELEJ stránky LEN oblasť s dostupnosťou TOHTO produktu. `null` = oblasť sa nenašla. */
+  readonly extractRegion: (html: string) => string | null;
+  /** Čo znamená CHÝBAJÚCA oblasť (žiadny štítok pri produkte). */
+  readonly whenRegionMissing: SupplierAvailability;
+}
+
 /**
- * Celé čítanie stránky — tri úrovne v poradí. `url` rozhoduje LEN o tom, či sa
- * smie použiť tretia (voľný text): mimo overených domén sa radšej vráti
+ * huntingshop.eu (issue 223): dostupnosť TOHTO produktu nesie `<span
+ * class="badge badge-outline-…">` hneď pri cene. Karuselové štítky
+ * súvisiacich produktov majú NAVYŠE triedu `badge-stock` — tie sa vylučujú,
+ * inak by sa dostupnosť iného produktu v karuseli počítala za tento. Keď sa
+ * nenájde ŽIADEN takýto štítok, produkt v skutočnosti nemá žiadnu značku
+ * dostupnosti — to znamená `unavailable` (overené na vzorke: vypredaný
+ * produkt štítok nemá vôbec), nikdy `available` z náhodného textu inde na
+ * stránke (napr. pätičková veta „…máme skladom ihneď k odberu").
+ */
+function huntingshopDetailBadges(html: string): string | null {
+  const spans = [...html.matchAll(/<span\b[^>]*class="([^"]*badge-outline-[^"]*)"[^>]*>([\s\S]*?)<\/span>/gi)];
+  const texts = spans
+    .filter(([, cls]) => cls !== undefined && !cls.includes("badge-stock"))
+    .map(([, , text]) => (text ?? "").replace(/\s+/g, " ").trim())
+    .filter((text) => text !== "");
+  return texts.length > 0 ? texts.join(" ") : null;
+}
+
+const TEXT_AVAILABILITY_RULES: readonly TextAvailabilityRule[] = Object.freeze([
+  { host: "huntingshop.eu", extractRegion: huntingshopDetailBadges, whenRegionMissing: "unavailable" },
+]);
+
+function textAvailabilityRuleFor(url: string): TextAvailabilityRule | null {
+  const host = hostOf(url);
+  if (host === "") return null;
+  return TEXT_AVAILABILITY_RULES.find((rule) => host === rule.host || host.endsWith(`.${rule.host}`)) ?? null;
+}
+
+interface VisibleAvailabilityHit {
+  readonly availability: SupplierAvailability;
+  readonly text: string;
+}
+
+interface VisibleAvailabilityRule {
+  readonly host: string;
+  readonly read: (html: string) => VisibleAvailabilityHit | null;
+}
+
+/**
+ * odimon.sk (issue 225): JSON-LD tejto domény vie klamať (hlási "InStock",
+ * hoci stránka pri produkte hovorí "Nedostupný"). `.product-availability__value`
+ * PRI produkte je to, čo skutočne vidí zákazník — PRVÝ výskyt v dokumente
+ * patrí hlavnému produktu (overené na vzorke: rovnaký prvok sa opakuje aj v
+ * bloku súvisiacich produktov nižšie na stránke, ale až za hlavným).
+ */
+function odimonVisibleAvailability(html: string): VisibleAvailabilityHit | null {
+  const match =
+    /<span\b[^>]*class="[^"]*product-availability__value--(available|unavailable)[^"]*"[^>]*>([\s\S]*?)<\/span>\s*<\/span>/i.exec(
+      html,
+    );
+  if (match === null) return null;
+  const token = match[1];
+  const text = (match[2] ?? "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  return { availability: token === "available" ? "available" : "unavailable", text };
+}
+
+const VISIBLE_AVAILABILITY_RULES: readonly VisibleAvailabilityRule[] = Object.freeze([
+  { host: "odimon.sk", read: odimonVisibleAvailability },
+]);
+
+function visibleAvailabilityFor(url: string, html: string): VisibleAvailabilityHit | null {
+  const host = hostOf(url);
+  if (host === "") return null;
+  const rule = VISIBLE_AVAILABILITY_RULES.find((r) => host === r.host || host.endsWith(`.${r.host}`));
+  return rule === undefined ? null : rule.read(html);
+}
+
+/**
+ * Celé čítanie stránky. `url` rozhoduje o dvoch veciach: (a) či sa smie
+ * použiť voľný text a z KTOREJ oblasti (issue 223), (b) či sa JSON-LD musí
+ * krížovo overiť proti viditeľnej dostupnosti PRI produkte skôr, než sa mu
+ * uverí (issue 225). Mimo overených domén/pravidiel sa radšej vráti
  * `unknown` než dohad.
  */
 export function parsePage(html: string, url: string): ParsedPage {
   const jsonLd = fromJsonLd(html);
+
+  const visible = visibleAvailabilityFor(url, html);
+  if (visible !== null) {
+    if (jsonLd !== null && jsonLd.availability !== visible.availability) {
+      // Stránka si protirečí (JSON-LD vs viditeľná dostupnosť) — človek
+      // rozhodne, nikdy sa nevyhlási `available` na takomto rozpore.
+      return { availability: "unknown", availabilityText: "", price: null, source: "none" };
+    }
+    return {
+      availability: visible.availability,
+      availabilityText: visible.text,
+      price: jsonLd?.price ?? null,
+      source: "text",
+    };
+  }
+
   if (jsonLd !== null) {
     return {
       availability: jsonLd.availability,
@@ -258,8 +354,13 @@ export function parsePage(html: string, url: string): ParsedPage {
     };
   }
 
-  if (isTrustedTextHost(url)) {
-    const text = availabilityFromText(visibleText(html));
+  const textRule = textAvailabilityRuleFor(url);
+  if (textRule !== null) {
+    const region = textRule.extractRegion(html);
+    if (region === null) {
+      return { availability: textRule.whenRegionMissing, availabilityText: "", price: null, source: "text" };
+    }
+    const text = availabilityFromText(region);
     if (text.availability !== "unknown") {
       return {
         availability: text.availability,
