@@ -55,6 +55,9 @@ const STATUS = {
   enabled: false,
   maxPerRun: 50,
   waiting: { now: 12, overLimit: 0 },
+  // issue 226: prázdny predvolený stav — testy, ktoré rozpor priamo
+  // nepotrebujú, ho takto nemusia riešiť.
+  feedConflicts: { total: 0, rows: [] },
   events: [
     {
       id: "e1",
@@ -199,6 +202,47 @@ it("ukáže, koľkátý úsek zo všetkých čakajúcich práve pozeráš", asyn
   render(<RestockSection role="admin" onSessionExpired={vi.fn()} />);
 
   expect((await screen.findByTestId("restock-waiting-range")).textContent).toContain("z 250");
+});
+
+// issue 226: krížová kontrola proti Shoptetovmu feedu — rozpor sa MUSÍ ukázať
+// na obrazovke ako varovanie s číslom a zoznamom, nikdy len v logu.
+it("ukáže varovanie o rozpore nášho stavu s feedom, s počtom aj zoznamom", async () => {
+  fetchRestockStatus.mockResolvedValue({
+    ...STATUS,
+    feedConflicts: {
+      total: 2,
+      rows: [
+        {
+          variantCode: "B1",
+          productName: "Bunda Forest",
+          ourState: "out_of_stock" as const,
+          feedAvailability: "in stock",
+          ourUrl: "https://www.forestshop.sk/bunda-forest/",
+        },
+        {
+          variantCode: "C1",
+          productName: "Nohavice X",
+          ourState: "sellable" as const,
+          feedAvailability: "out of stock",
+          ourUrl: null,
+        },
+      ],
+    },
+  });
+  render(<RestockSection role="admin" onSessionExpired={vi.fn()} />);
+
+  const karta = await screen.findByTestId("restock-feed-conflicts");
+  expect(karta.textContent).toContain("2");
+  expect(karta.textContent).toContain("Bunda Forest");
+  expect(karta.textContent).toContain("Nohavice X");
+});
+
+it("bez rozporov ukáže, že sa všetko zhoduje", async () => {
+  fetchRestockStatus.mockResolvedValue(STATUS);
+  render(<RestockSection role="admin" onSessionExpired={vi.fn()} />);
+
+  const karta = await screen.findByTestId("restock-feed-conflicts");
+  expect(karta.textContent).toMatch(/žiadne|zhod/i);
 });
 
 it("role „čítanie\" ovládacie tlačidlá neponúkne", async () => {

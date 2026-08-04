@@ -9,7 +9,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { createDb } from "../apps/api/src/db/client.js";
-import { jobRuns, mailLog, orderLines, orderOpenStatuses, orderReminderSettings, orders, pairings, postaUncollectedSettings, products, supplierStock, users, variants } from "../apps/api/src/db/schema.js";
+import { jobRuns, mailLog, orderLines, orderOpenStatuses, orderReminderSettings, orders, pairings, postaUncollectedSettings, products, shopProductUrl, supplierStock, users, variants } from "../apps/api/src/db/schema.js";
 import { CATALOG_IMPORT_JOB_NAME } from "../apps/api/src/modules/scheduler/jobs.js";
 import { hashPassword } from "../apps/api/src/modules/auth/passwords.js";
 import { ingestCatalog } from "../apps/api/src/modules/catalog/ingest.js";
@@ -188,7 +188,7 @@ await db.execute(
   // takže CASCADE ich nikdy nestrhne. Bez nich by potvrdenia dodávateľa z
   // PREDOŠLÉHO e2e behu prežili do ďalšieho (presne past popísaná v
   // `.claude/rules/supplier-stock.md`, tam pre `tests/helpers/db.ts`).
-  'TRUNCATE TABLE ingest_issue, variant, product, catalog_snapshot, job_run, audit_events, sessions, users, order_line, "order", supplier_contact, pairing, supplier, order_open_status, posta_uncollected_settings, posta_uncollected_state, order_reminder_settings, order_reminder_state, nedostupne_state, mail_template, mail_template_history, supplier_stock, restock_settings, restock_event RESTART IDENTITY CASCADE',
+  'TRUNCATE TABLE ingest_issue, variant, product, catalog_snapshot, job_run, audit_events, sessions, users, order_line, "order", supplier_contact, pairing, supplier, order_open_status, posta_uncollected_settings, posta_uncollected_state, order_reminder_settings, order_reminder_state, nedostupne_state, mail_template, mail_template_history, supplier_stock, restock_settings, restock_event, shop_product_url RESTART IDENTITY CASCADE',
 );
 // Rovnaký dôvod ako `tests/helpers/db.ts`: bez tohto by "Na objednanie" bolo
 // v CELOM e2e behu prázdne pre KAŽDÚ objednávku (žiadny nastavený otvorený
@@ -668,6 +668,55 @@ await db.insert(supplierStock).values({
   checkedAt: teraz,
   // Potvrdenie musí byť čerstvé (do 48 h), inak kandidát vypadne z výberu.
   confirmedAt: new Date(teraz.getTime() - 3_600_000),
+});
+
+// issue 226: DRUHÝ produkt (VLASTNÝ kód, aby sa nezrazil s vyššie seedovaným
+// "PREP-1") — máme ho ako vypredaný a dodávateľ ho potvrdene má, ALE feed pre
+// porovnávače hovorí "in stock" (Shoptet ho už zobrazuje ako skladom). Toto je
+// presne ten rozpor, ktorý MUSÍ vylúčiť z kandidátov aj z overovacieho
+// zoznamu a MUSÍ sa ukázať na obrazovke ako varovanie.
+const ROZPOR_ODKAZ = "https://huntingshop.eu/e2e-rozpor";
+await db.insert(products).values({
+  key: "e2e-rozpor",
+  name: "E2E Bunda s rozporom voči feedu",
+  supplier: "DODAVATEL-PREPINANIE",
+  internalNote: `Dodávateľ: ${ROZPOR_ODKAZ}`,
+  firstSeenAt: teraz,
+  lastSeenAt: teraz,
+  lastSeenSnapshotId: snapshotPrepinanie,
+});
+await db.insert(variants).values({
+  code: "PREP-2",
+  productKey: "e2e-rozpor",
+  guid: "e2e-rozpor",
+  name: "E2E Bunda s rozporom voči feedu",
+  stock: 0,
+  availabilityInStockText: "Skladom",
+  availabilityOutOfStockText: "Vypredané",
+  availabilityText: "Vypredané",
+  productVisibility: "visible",
+  state: "out_of_stock",
+  firstSeenAt: teraz,
+  lastSeenAt: teraz,
+  lastSeenSnapshotId: snapshotPrepinanie,
+});
+await db.insert(supplierStock).values({
+  link: ROZPOR_ODKAZ,
+  host: "huntingshop.eu",
+  availability: "available",
+  availabilityText: "skladom",
+  price: "39.90",
+  source: "json_ld",
+  ok: true,
+  httpStatus: 200,
+  checkedAt: teraz,
+  confirmedAt: new Date(teraz.getTime() - 3_600_000),
+});
+await db.insert(shopProductUrl).values({
+  code: "PREP-2",
+  url: "https://www.forestshop.sk/e2e-rozpor/",
+  availability: "in stock",
+  fetchedAt: teraz,
 });
 
 await pool.end();

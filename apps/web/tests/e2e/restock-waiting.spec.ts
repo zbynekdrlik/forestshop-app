@@ -48,3 +48,36 @@ test("zoznam pripravených na prepnutie ponúkne odkaz na náš produkt aj k dod
 
   expect(chyby).toEqual([]);
 });
+
+// issue 226: "PREP-2" (seedované v `scripts/e2e-setup.ts`) je vypredané u nás,
+// ALE feed pre porovnávače ho hlási ako "in stock" — presný rozpor, ktorý sa
+// nesmie stať kandidátom, a MUSÍ sa ukázať ako varovanie s číslom a zoznamom.
+test("rozpor nášho stavu s feedom sa ukáže ako varovanie a kandidáta vylúči; konzola je čistá", async ({
+  page,
+}) => {
+  const chyby: string[] = [];
+  page.on("console", (m) => {
+    if (m.type() === "error" || m.type() === "warning") chyby.push(m.text());
+  });
+  page.on("pageerror", (e) => {
+    chyby.push(e.message);
+  });
+
+  await page.goto("/");
+  await page.getByLabel("E-mail").fill(E2E_PREPINANIE_EMAIL);
+  await page.getByLabel("Heslo").fill(E2E_HESLO);
+  await page.getByRole("button", { name: "Prihlásiť sa" }).click();
+
+  await page.getByRole("button", { name: "Vypredané → Skladom" }).click();
+  await expect(page.getByTestId("restock-waiting-list")).toBeVisible();
+
+  const karta = page.getByTestId("restock-feed-conflicts");
+  await expect(karta).toBeVisible();
+  await expect(karta).toContainText("PREP-2");
+  await expect(karta).toContainText("E2E Bunda s rozporom voči feedu");
+
+  // Rozporový variant NESMIE byť medzi kandidátmi na prepnutie.
+  await expect(page.getByTestId("restock-waiting-PREP-2")).toHaveCount(0);
+
+  expect(chyby).toEqual([]);
+});

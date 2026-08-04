@@ -24,12 +24,13 @@ test("manažér vidí stav katalógu, vyhľadá variant a konzola je čistá", a
   await page.getByLabel("Heslo").fill(E2E_HESLO);
   await page.getByRole("button", { name: "Prihlásiť sa" }).click();
 
-  // 36 = 35 riadkov fixtúry + 1 seedovaný kandidát na prepnutie ("PREP-1",
-  // issue 217, `scripts/e2e-setup.ts`). Je v stave `out_of_stock`, takže
-  // filtre "sellable"(7 od issue 219) a "missing"(1) nižšie sa ním nemenia.
+  // 37 = 35 riadkov fixtúry + 2 seedované kandidáty na prepnutie ("PREP-1",
+  // issue 217; "PREP-2", issue 226 — rozpor voči feedu, `scripts/e2e-setup.ts`).
+  // Oba sú v stave `out_of_stock`, takže filtre "sellable"(7 od issue 219) a
+  // "missing"(1) nižšie sa nimi nemenia.
   await expect(page.getByTestId("snapshot")).toContainText("Posledný import: prijatý");
-  await expect(page.getByTestId("counts")).toContainText("Variantov v katalógu (vrátane chýbajúcich): 36");
-  await expect(page.getByTestId("total")).toHaveText("Nájdených: 36");
+  await expect(page.getByTestId("counts")).toContainText("Variantov v katalógu (vrátane chýbajúcich): 37");
+  await expect(page.getByTestId("total")).toHaveText("Nájdených: 37");
 
   await page.getByLabel("Kód alebo názov").fill("40237/3XL");
   await page.getByRole("button", { name: "Hľadať" }).click();
@@ -49,7 +50,7 @@ test("filter podľa stavu zúži zoznam na predajné varianty", async ({ page })
   await page.getByLabel("Heslo").fill(E2E_HESLO);
   await page.getByRole("button", { name: "Prihlásiť sa" }).click();
 
-  await expect(page.getByTestId("total")).toHaveText("Nájdených: 36");
+  await expect(page.getByTestId("total")).toHaveText("Nájdených: 37");
   await page.getByLabel("Stav", { exact: true }).selectOption("sellable");
   await page.getByRole("button", { name: "Hľadať" }).click();
 
@@ -68,7 +69,7 @@ test("filter 'Chýbajúce' nájde presne označený variant a riadok ukazuje, od
   await page.getByLabel("Heslo").fill(E2E_HESLO);
   await page.getByRole("button", { name: "Prihlásiť sa" }).click();
 
-  await expect(page.getByTestId("total")).toHaveText("Nájdených: 36");
+  await expect(page.getByTestId("total")).toHaveText("Nájdených: 37");
   await page.getByLabel("Stav", { exact: true }).selectOption("missing");
   await page.getByRole("button", { name: "Hľadať" }).click();
 

@@ -290,4 +290,41 @@ describe("prepínanie Vypredané → Skladom", () => {
     expect(result).toMatchObject({ status: "nothing_to_do" });
     expect(import_).not.toHaveBeenCalled();
   });
+
+  // issue 226: keď Shoptetov VLASTNÝ feed hovorí "skladom" pre variant, ktorý
+  // MY vedieme ako vypredané, naše odvodenie je podozrivé — kandidátom sa
+  // nesmie stať, kým sa rozpor nevysvetlí (rovnaký princíp ako "unknown"
+  // v issue 213 — radšej sa nedotknúť, než hádať).
+  it("nevyberie kandidáta, ktorého náš vypredaný stav odporuje feedu 'skladom'", async () => {
+    await seedSupplierStock();
+    await seedVariant("Z1");
+    await db.insert(shopProductUrl).values({
+      code: "Z1",
+      url: "https://www.forestshop.sk/z1/",
+      availability: "in stock",
+      fetchedAt: NOW,
+    });
+
+    expect((await selectRestockCandidates(db, NOW)).picked).toHaveLength(0);
+  });
+
+  it("VYBERIE kandidáta, ktorého feed potvrdzuje 'vypredané' (zhoda, nie rozpor)", async () => {
+    await seedSupplierStock();
+    await seedVariant("Z2");
+    await db.insert(shopProductUrl).values({
+      code: "Z2",
+      url: "https://www.forestshop.sk/z2/",
+      availability: "out of stock",
+      fetchedAt: NOW,
+    });
+
+    expect((await selectRestockCandidates(db, NOW)).picked.map((c) => c.variantCode)).toEqual(["Z2"]);
+  });
+
+  it("kandidát bez feed riadku (mimo feedu) sa vyberie ako predtým — chýbajúci signál nie je rozpor", async () => {
+    await seedSupplierStock();
+    await seedVariant("Z3");
+
+    expect((await selectRestockCandidates(db, NOW)).picked.map((c) => c.variantCode)).toEqual(["Z3"]);
+  });
 });
