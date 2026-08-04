@@ -2,7 +2,7 @@ import { desc, isNotNull } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
 import { orders, products, variants } from "../../db/schema.js";
 import { log } from "../../logger.js";
-import { alternativeSearchUrl } from "../nedostupne/constants.js";
+import { listReplacementLinksByVariant } from "../nedostupne/replacement-links.js";
 import { itemsWord } from "../orders/pluralize.js";
 import { trackingLink } from "../posta-uncollected/constants.js";
 import { textValue } from "./context.js";
@@ -35,11 +35,18 @@ async function latestOrderWithPackage(db: Database): Promise<{ customerName: str
   return row?.packageNumber == null ? null : { customerName: row.customerName, packageNumber: row.packageNumber };
 }
 
-async function productSample(db: Database): Promise<{ name: string; relatedCodes: readonly string[] } | null> {
-  const [row] = await db.select({ name: variants.name, productKey: variants.productKey }).from(variants).limit(1);
-  if (row === undefined) return null;
-  const [prod] = await db.select({ relatedCodes: products.relatedCodes }).from(products).limit(1);
-  return { name: row.name, relatedCodes: prod?.relatedCodes ?? [] };
+async function productSample(db: Database): Promise<{ name: string; code: string } | null> {
+  const [row] = await db.select({ name: variants.name, code: variants.code }).from(variants).limit(1);
+  return row ?? null;
+}
+
+// issue 238: vzorka pre "zoznam_nahrad" teraz vychádza z majiteľových
+// RUČNE vložených odkazov (`nedostupne_replacement_link`), nie z pôvodného
+// automatického `product.relatedCodes` návrhu — ten istý variant, ktorého
+// meno použije `nazov_tovaru` vyššie.
+async function replacementLinkSample(db: Database, variantCode: string): Promise<readonly string[]> {
+  const map = await listReplacementLinksByVariant(db, [variantCode]);
+  return (map.get(variantCode) ?? []).map((link) => link.url);
 }
 
 async function supplierSample(db: Database): Promise<string | null> {
@@ -66,11 +73,12 @@ export async function previewContext(db: Database, key: MailTemplateKey): Promis
         const product = await productSample(db);
         if (product !== null) {
           ctx["nazov_tovaru"] = textValue(product.name);
-          if (product.relatedCodes.length > 0) {
+          const links = await replacementLinkSample(db, product.code);
+          if (links.length > 0) {
             ctx["zoznam_nahrad"] = {
               kind: "list",
               textPrefix: "- ",
-              items: product.relatedCodes.map((code) => ({ label: code, url: alternativeSearchUrl(code) })),
+              items: links.map((url) => ({ label: url, url })),
             };
           }
         }

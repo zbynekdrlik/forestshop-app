@@ -1,9 +1,10 @@
 import { eq } from "drizzle-orm";
 import pg from "pg";
 import { afterEach, expect, it } from "vitest";
-import { nedostupneState, orderLines, orders } from "../src/db/schema.js";
+import { nedostupneState, orderLines, orders, productSupplierLinkOverrides, shopProductUrl } from "../src/db/schema.js";
 import type { MailMessage } from "../src/modules/mail/transport.js";
 import { NEDOSTUPNE_SEND_LOCK_KEY } from "../src/modules/nedostupne/constants.js";
+import { addReplacementLink } from "../src/modules/nedostupne/replacement-links.js";
 import { listNedostupneGroups } from "../src/modules/nedostupne/queries.js";
 import { findNedostupneContext, sendNedostupneEmail } from "../src/modules/nedostupne/send.js";
 import { DEFAULT_ORDER_OPEN_STATUS } from "../src/modules/orders/open-statuses.js";
@@ -92,23 +93,71 @@ it("nedostupný riadok v UZAVRETEJ objednávke sa nezobrazí (nikdy neotravuj z�
   expect(await listNedostupneGroups(db, ADMIN_BASE_URL)).toEqual([]);
 });
 
-it("náhradné produkty (relatedCodes) sa resolvujú na meno cez variant.code aj cez pairCode, neznámy kód padá na seba", async () => {
+// issue 238: automatický `relatedCodes` návrh je preč — `listNedostupneGroups`
+// vracia majiteľove RUČNE vložené odkazy (`nedostupne_replacement_link`),
+// zoradené podľa vloženia, žiadny automatický "meno cez pairCode" lookup viac.
+it("RUČNÉ odkazy náhrad (nedostupne_replacement_link) sa vrátia v poradí vloženia, zoskupené podľa variantu", async () => {
   const db = await boot();
-  // "P176D2" má pairCode "PC-D2" — relatedCodes odkazuje na "PC-D2" (nie na code priamo).
-  await insertTestVariantForProduct(db, "P176D2-key", "P176D2", { productName: "Náhrada Podľa PairCode", pairCode: "PC-D2" });
-  await insertTestVariantForProduct(db, "P176D", "P176D/M", {
-    productName: "Nohavice s náhradou",
-    relatedCodes: ["PC-D2", "NEZNAMY-KOD"],
-  });
+  await insertTestVariantForProduct(db, "P176D", "P176D/M", { productName: "Nohavice s náhradou" });
   const orderId = await insertOrder(db, "17600004");
   await db.insert(orderLines).values({ orderId, variantCode: "P176D/M", quantity: 1, state: "nedostupne" });
+  await addReplacementLink(db, "P176D/M", "https://www.forestshop.sk/prvy/", new Date("2026-08-04T10:00:00Z"));
+  await addReplacementLink(db, "P176D/M", "https://www.forestshop.sk/druhy/", new Date("2026-08-04T10:01:00Z"));
 
   const groups = await listNedostupneGroups(db, ADMIN_BASE_URL);
   const group = groups.find((g) => g.variantCode === "P176D/M");
-  expect(group?.alternatives).toEqual([
-    { code: "PC-D2", name: "Náhrada Podľa PairCode", url: "https://www.forestshop.sk/vyhladavanie/?string=PC-D2" },
-    { code: "NEZNAMY-KOD", name: "NEZNAMY-KOD", url: "https://www.forestshop.sk/vyhladavanie/?string=NEZNAMY-KOD" },
-  ]);
+  expect(group?.replacementLinks.map((l) => l.url)).toEqual(["https://www.forestshop.sk/prvy/", "https://www.forestshop.sk/druhy/"]);
+});
+
+it("variant bez ručných odkazov má prázdny zoznam náhrad (žiadny automatický fallback)", async () => {
+  const db = await boot();
+  await insertTestVariantForProduct(db, "P176D3", "P176D3", { productName: "Bez náhrad" });
+  const orderId = await insertOrder(db, "17600013");
+  await db.insert(orderLines).values({ orderId, variantCode: "P176D3", quantity: 1, state: "nedostupne" });
+
+  const groups = await listNedostupneGroups(db, ADMIN_BASE_URL);
+  const group = groups.find((g) => g.variantCode === "P176D3");
+  expect(group?.replacementLinks).toEqual([]);
+});
+
+// issue 238: preklik na náš e-shop (`shop_product_url`, feed pre porovnávače)
+// a preklik na dodávateľa (`internalNote`/`product_supplier_link_override`,
+// rovnaká funkcia ako "Na objednanie") — bez feedovej adresy zostáva `null`
+// (nikdy vyhľadávací fallback, `.claude/rules/nedostupne.md`).
+it("preklik na náš e-shop + na dodávateľa: null keď appka adresu nemá, vyplnené keď má", async () => {
+  const db = await boot();
+  await insertTestVariantForProduct(db, "P176M-key", "P176M", { productName: "Bez odkazov" });
+  const orderId1 = await insertOrder(db, "17600014");
+  await db.insert(orderLines).values({ orderId: orderId1, variantCode: "P176M", quantity: 1, state: "nedostupne" });
+
+  await insertTestVariantForProduct(db, "P176N-key", "P176N", { productName: "S odkazmi", internalNote: "https://dodavatel.example/produkt" });
+  await db.insert(shopProductUrl).values({ code: "P176N", url: "https://www.forestshop.sk/p176n/", fetchedAt: new Date("2026-08-04T09:00:00Z") });
+  const orderId2 = await insertOrder(db, "17600015");
+  await db.insert(orderLines).values({ orderId: orderId2, variantCode: "P176N", quantity: 1, state: "nedostupne" });
+
+  const groups = await listNedostupneGroups(db, ADMIN_BASE_URL);
+  const bezOdkazov = groups.find((g) => g.variantCode === "P176M");
+  expect(bezOdkazov?.ourProductUrl).toBeNull();
+  expect(bezOdkazov?.supplierUrl).toBeNull();
+
+  const sOdkazmi = groups.find((g) => g.variantCode === "P176N");
+  expect(sOdkazmi?.ourProductUrl).toBe("https://www.forestshop.sk/p176n/");
+  expect(sOdkazmi?.supplierUrl).toBe("https://dodavatel.example/produkt");
+});
+
+// issue 121: ručné prepísanie odkazu na dodávateľa (`product_supplier_link_override`)
+// má prednosť pred extrahovaným `internalNote` — rovnaká disciplína ako
+// "Na objednanie" (`resolveEffectiveSupplierLink`).
+it("preklik na dodávateľa uprednostní RUČNÝ override pred extrahovaným internalNote", async () => {
+  const db = await boot();
+  await insertTestVariantForProduct(db, "P176O-key", "P176O", { productName: "S override-om", internalNote: "https://stary-dodavatel.example/x" });
+  await db.insert(productSupplierLinkOverrides).values({ productKey: "P176O-key", url: "https://novy-dodavatel.example/y", updatedAt: new Date("2026-08-04T09:00:00Z") });
+  const orderId = await insertOrder(db, "17600016");
+  await db.insert(orderLines).values({ orderId, variantCode: "P176O", quantity: 1, state: "nedostupne" });
+
+  const groups = await listNedostupneGroups(db, ADMIN_BASE_URL);
+  const group = groups.find((g) => g.variantCode === "P176O");
+  expect(group?.supplierUrl).toBe("https://novy-dodavatel.example/y");
 });
 
 it("preview a odoslanie použijú ROVNAKÚ funkciu (`findNedostupneContext`/`buildEmailForType`) — obsah sa nikdy nerozíde", async () => {

@@ -1,15 +1,15 @@
 import { and, eq } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
 import { log } from "../../logger.js";
-import { orderLines, orders, products, variants } from "../../db/schema.js";
+import { orderLines, orders, variants } from "../../db/schema.js";
 import type { MailTransport } from "../mail/transport.js";
 import { DUPLICATE_REASON } from "../mail-log/queries.js";
 import { recordSkippedMail, sendLoggedMail, type MailLogContext } from "../mail-log/service.js";
 import { resolveTemplate } from "../mail-templates/store.js";
 import { listOpenStatusNames } from "../orders/open-statuses.js";
 import { NEDOSTUPNE_SEND_LOCK_KEY, TYPE_ALTERNATIVE, type NedostupneEmailType } from "./constants.js";
-import { buildAlternativeEmail, buildAlternatives, buildUnavailableEmail, type BuiltNedostupneEmail, type EmailAlternative } from "./logic.js";
-import { resolveAlternativeNames } from "./queries.js";
+import { buildAlternativeEmail, buildUnavailableEmail, type BuiltNedostupneEmail } from "./logic.js";
+import { listReplacementLinksForVariant } from "./replacement-links.js";
 import { hasSentNedostupne, markSentNedostupne } from "./state.js";
 
 export interface NedostupneEmailContext {
@@ -18,7 +18,9 @@ export interface NedostupneEmailContext {
   readonly customerName: string;
   readonly email: string;
   readonly itemName: string;
-  readonly alternatives: readonly EmailAlternative[];
+  // issue 238: majiteľove RUČNE vložené odkazy náhrad (nahrádza pôvodný
+  // automatický `product.relatedCodes` návrh).
+  readonly replacementUrls: readonly string[];
 }
 
 /**
@@ -36,7 +38,6 @@ export async function findNedostupneContext(db: Database, orderCode: string, var
   const [row] = await db
     .select({
       itemName: variants.name,
-      relatedCodes: products.relatedCodes,
       customerName: orders.customerName,
       email: orders.email,
       statusName: orders.statusName,
@@ -44,20 +45,19 @@ export async function findNedostupneContext(db: Database, orderCode: string, var
     .from(orderLines)
     .innerJoin(orders, eq(orderLines.orderId, orders.id))
     .innerJoin(variants, eq(orderLines.variantCode, variants.code))
-    .innerJoin(products, eq(variants.productKey, products.key))
     .where(and(eq(orders.externalOrderId, orderCode), eq(orderLines.variantCode, variantCode), eq(orderLines.state, "nedostupne")))
     .limit(1);
 
   if (row === undefined || !openStatuses.includes(row.statusName)) return null;
 
-  const names = await resolveAlternativeNames(db, row.relatedCodes ?? []);
+  const replacementLinks = await listReplacementLinksForVariant(db, variantCode);
   return {
     orderCode,
     variantCode,
     customerName: row.customerName,
     email: row.email ?? "",
     itemName: row.itemName,
-    alternatives: buildAlternatives(row.relatedCodes ?? [], names),
+    replacementUrls: replacementLinks.map((l) => l.url),
   };
 }
 
@@ -68,7 +68,7 @@ export async function findNedostupneContext(db: Database, orderCode: string, var
 export async function buildEmailForType(db: Database, ctx: NedostupneEmailContext, type: NedostupneEmailType): Promise<BuiltNedostupneEmail> {
   if (type === TYPE_ALTERNATIVE) {
     const template = await resolveTemplate(db, "nedostupne_alternativa");
-    return buildAlternativeEmail(template, ctx.customerName, ctx.itemName, ctx.alternatives);
+    return buildAlternativeEmail(template, ctx.customerName, ctx.itemName, ctx.replacementUrls);
   }
   return buildUnavailableEmail(await resolveTemplate(db, "nedostupne"), ctx.customerName);
 }

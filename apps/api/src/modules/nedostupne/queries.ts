@@ -1,9 +1,10 @@
-import { and, desc, eq, inArray, or } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
-import { orderLines, orders, products, variants } from "../../db/schema.js";
+import { orderLines, orders, products, productSupplierLinkOverrides, shopProductUrl, variants } from "../../db/schema.js";
+import { resolveEffectiveSupplierLink } from "../orders/effective-supplier-link.js";
 import { buildShoptetAdminOrderUrl } from "../orders/queries.js";
 import { listOpenStatusNames } from "../orders/open-statuses.js";
-import { buildAlternatives, type EmailAlternative } from "./logic.js";
+import { listReplacementLinksByVariant, type ReplacementLink } from "./replacement-links.js";
 import { loadSentNedostupne, sentKey } from "./state.js";
 
 export interface NedostupneOrderRow {
@@ -21,28 +22,18 @@ export interface NedostupneGroup {
   readonly variantCode: string;
   readonly itemName: string;
   readonly sizeLabel: string | null;
-  readonly alternatives: readonly EmailAlternative[];
+  // issue 238: preklik na náš e-shop — `null` = adresu vo feede pre
+  // porovnávače nemáme, meno ZOSTÁVA NEAKTÍVNE (žiadny vyhľadávací
+  // fallback, na rozdiel od `shopLinks.ts`'s `ourProductLink` — ticket to
+  // žiada explicitne: "nikdy nevyrábať adresu odhadom").
+  readonly ourProductUrl: string | null;
+  // issue 238: preklik na dodávateľa (rovnaká funkcia ako "Na objednanie",
+  // `resolveEffectiveSupplierLink`) — `null` = appka žiadny odkaz nemá.
+  readonly supplierUrl: string | null;
+  // issue 238: majiteľove RUČNE vložené odkazy náhrad — nahrádza pôvodný
+  // automatický zoznam z `product.relatedCodes`.
+  readonly replacementLinks: readonly ReplacementLink[];
   readonly orders: readonly NedostupneOrderRow[];
-}
-
-/** Meno pre KAŽDÝ RAW náhradný kód (`product.related_codes`) — hľadá sa
- * PODĽA `variant.code` AJ `variant.pairCode` (relatedProduct hodnota môže
- * byť jedno alebo druhé, rovnaký zámer ako stará appka's
- * `_ensure_nedostupne_catalog`). Neznáme kódy jednoducho chýbajú z mapy —
- * `buildAlternatives` (`logic.ts`) padá vtedy späť na kód samotný. */
-export async function resolveAlternativeNames(db: Pick<Database, "select">, codes: readonly string[]): Promise<ReadonlyMap<string, string>> {
-  if (codes.length === 0) return new Map();
-  const wanted = new Set(codes);
-  const rows = await db
-    .select({ code: variants.code, pairCode: variants.pairCode, name: variants.name })
-    .from(variants)
-    .where(or(inArray(variants.code, [...codes]), inArray(variants.pairCode, [...codes])));
-  const map = new Map<string, string>();
-  for (const row of rows) {
-    if (wanted.has(row.code)) map.set(row.code, row.name);
-    if (row.pairCode !== null && wanted.has(row.pairCode) && !map.has(row.pairCode)) map.set(row.pairCode, row.name);
-  }
-  return map;
 }
 
 /**
@@ -62,7 +53,9 @@ export async function listNedostupneGroups(db: Database, adminBaseUrl: string): 
       quantity: orderLines.quantity,
       itemName: variants.name,
       sizeLabel: variants.sizeLabel,
-      relatedCodes: products.relatedCodes,
+      internalNote: products.internalNote,
+      supplierLinkOverride: productSupplierLinkOverrides.url,
+      ourProductUrl: shopProductUrl.url,
       orderCode: orders.externalOrderId,
       customerName: orders.customerName,
       email: orders.email,
@@ -73,23 +66,30 @@ export async function listNedostupneGroups(db: Database, adminBaseUrl: string): 
     .innerJoin(orders, eq(orderLines.orderId, orders.id))
     .innerJoin(variants, eq(orderLines.variantCode, variants.code))
     .innerJoin(products, eq(variants.productKey, products.key))
+    .leftJoin(productSupplierLinkOverrides, eq(productSupplierLinkOverrides.productKey, products.key))
+    .leftJoin(shopProductUrl, eq(shopProductUrl.code, orderLines.variantCode))
     .where(and(eq(orderLines.state, "nedostupne"), inArray(orders.statusName, [...openStatuses])))
     .orderBy(desc(orders.placedAt));
 
   if (rows.length === 0) return [];
 
   const sent = await loadSentNedostupne(db);
-  const allCodes = [...new Set(rows.flatMap((r) => r.relatedCodes ?? []))];
-  const names = await resolveAlternativeNames(db, allCodes);
+  const replacementLinksByVariant = await listReplacementLinksByVariant(db, [...new Set(rows.map((r) => r.variantCode))]);
 
   const groups = new Map<
     string,
-    { itemName: string; sizeLabel: string | null; relatedCodes: readonly string[]; orders: NedostupneOrderRow[] }
+    { itemName: string; sizeLabel: string | null; ourProductUrl: string | null; supplierUrl: string | null; orders: NedostupneOrderRow[] }
   >();
   for (const row of rows) {
     let group = groups.get(row.variantCode);
     if (group === undefined) {
-      group = { itemName: row.itemName, sizeLabel: row.sizeLabel, relatedCodes: row.relatedCodes ?? [], orders: [] };
+      group = {
+        itemName: row.itemName,
+        sizeLabel: row.sizeLabel,
+        ourProductUrl: row.ourProductUrl,
+        supplierUrl: resolveEffectiveSupplierLink(row.internalNote, row.supplierLinkOverride).url,
+        orders: [],
+      };
       groups.set(row.variantCode, group);
     }
     group.orders.push({
@@ -114,7 +114,9 @@ export async function listNedostupneGroups(db: Database, adminBaseUrl: string): 
       variantCode,
       itemName: g.itemName,
       sizeLabel: g.sizeLabel,
-      alternatives: buildAlternatives(g.relatedCodes, names),
+      ourProductUrl: g.ourProductUrl,
+      supplierUrl: g.supplierUrl,
+      replacementLinks: replacementLinksByVariant.get(variantCode) ?? [],
       orders: g.orders,
     }))
     .sort((a, b) => {
