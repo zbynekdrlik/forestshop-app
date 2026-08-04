@@ -18,6 +18,7 @@ import { DEFAULT_ORDER_OPEN_STATUS } from "../apps/api/src/modules/orders/open-s
 import { POSTA_UNCOLLECTED_SETTINGS_ID } from "../apps/api/src/modules/posta-uncollected/settings.js";
 import { ORDER_REMINDER_SETTINGS_ID } from "../apps/api/src/modules/order-reminder/settings.js";
 import { seedProductLinksFixtures } from "./e2e-fixtures-product-links.js";
+import { seedSearchFixtures } from "./e2e-fixtures-search.js";
 
 const E2E_HESLO = "e2e-test-heslo"; // musí sa zhodovať s hodnotou v login.spec.ts/catalog.spec.ts/orders.spec.ts
 
@@ -206,12 +207,7 @@ await db.insert(postaUncollectedSettings).values({ id: POSTA_UNCOLLECTED_SETTING
 // issue 173: rovnaký dôvod — migrácia seeduje `order_reminder_settings`'s
 // singleton riadok (`enabled=false`), reseedovať ho treba aj tu.
 await db.insert(orderReminderSettings).values({ id: ORDER_REMINDER_SETTINGS_ID, enabled: false });
-await db.insert(users).values({
-  email: "e2e@forestshop.sk",
-  passwordHash: await hashPassword(E2E_HESLO),
-  displayName: "E2E Manažér",
-  role: "manazer",
-});
+await db.insert(users).values({ email: "e2e@forestshop.sk", passwordHash: await hashPassword(E2E_HESLO), displayName: "E2E Manažér", role: "manazer" });
 // Rovnaké počiatočné heslo a zobrazované meno ako vyššie (žiadny test naň
 // nespolieha ako na odlišujúci znak) — jediný rozdiel je e-mail, ktorý ho robí
 // SAMOSTATNÝM riadkom v `users`, izolovaným od zdieľaného účtu vyššie.
@@ -741,5 +737,8 @@ await db.insert(orders).values({
 // issue 239: fixtúra (produkty + vlastný E2E účet) vyčlenená do vlastného
 // súboru (eslint max-lines).
 await seedProductLinksFixtures(db, teraz, snapshotPrepinanie, E2E_HESLO);
+
+// issue 240: fixtúra vyčlenená do vlastného súboru, rovnaký dôvod ako vyššie.
+await seedSearchFixtures(db, teraz, snapshotPrepinanie, E2E_HESLO);
 
 await pool.end();
