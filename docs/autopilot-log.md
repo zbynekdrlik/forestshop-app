@@ -2527,3 +2527,21 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
 - Oba tickety zavreté ručne (223, 225) s dôkazom; issue 230 (wetland.sk/
   trigona.sk vlastný výrez) založené ako follow-up. Oba Discord run-card
   odoslané.
+
+- issue 224 (dostupnosť za veľkosť, nie za celý odkaz): version bump
+  `8be3032` (0.3.0-dev.132). RED `fdba969` (`parse.test.ts`:
+  `parseSizeAvailability`/`matchSizeLabel` fixtúry lasting.eu). GREEN
+  `120f10d` (per-veľkostný extraktor + tolerantné párovanie), `c11f438`
+  (schéma `(link,size_label)`, migrácia `0029_supplier_stock_size_label.sql`,
+  `run.ts`/`restock/queries.ts` prepojenie, web UI stĺpec Veľkosť).
+  PR #232, code review (2 Important fixed same PR, `a2f558b`: db.transaction
+  na zápis, výrez veľkostí ohraničený popiskom "VELIKOST" — zdieľaná trieda
+  na 3 skupinách). Merge `9ddf243`. Post-deploy overenie odhalilo, že
+  `MAX_PAGE_BYTES` (2 MB, issue 212) orezával reálnu BONY stránku (2,18 MB,
+  whitespace-bloat v dodávateľovej šablóne) skôr, než dočítal veľkostný
+  zoznam → PR #233 (RED `ed27f6a`/GREEN `042529a`, MAX_PAGE_BYTES 2MB→5MB),
+  merge `463a427`. Playbook doplnený PR #234 (`1ddfc76`), merge `ee6effc`.
+  Naživo overené proti nasadenej appke (0.3.0-dev.134): `16707/L-X` →
+  `unavailable` (spárované na dodávateľovo "L/XL"), `16710/XS` → `unknown`
+  (dodávateľ tú veľkosť nemá). Issue zavreté ručne s dôkazom, Discord
+  run-card odoslaná.
