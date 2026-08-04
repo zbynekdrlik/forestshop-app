@@ -257,12 +257,24 @@ async function runSupplierStockLocked(options: RunSupplierStockOptions): Promise
 
 type SupplierStockInsert = typeof supplierStock.$inferInsert;
 
+// `Pick<Database, "insert" | "delete">` (nie celý `Database`) — rovnaký vzor
+// ako `audit/service.ts`'s `AuditExecutor` (`.claude/rules/database.md`):
+// `tx` z `db.transaction(async (tx) => ...)` má `PgTransaction`, ktorý má
+// `.insert()`/`.delete()` rovnakého tvaru, ale chýba mu `Database`'s vlastné
+// `$client`, takže by ho `tsc` odmietol ako argument typu `Database`.
+type SupplierStockWriter = Pick<Database, "insert" | "delete">;
+
 /**
  * Zapíše VŠETKY riadky tejto linky pre tento beh a vymaže zvyšné (issue 224)
  * — inak by po zmene stratégie (napr. produkt medzičasom dostal viac
  * veľkostí, alebo naopak) ostal v tabuľke zavádzajúci riadok z predošlého
  * behu, ktorý by `restock/queries.ts`'s JOIN mohol nesprávne spárovať s
- * iným variantom (fallback na `size_label=''`).
+ * iným variantom (fallback na `size_label=''`). Mazanie + zápisy bežia v
+ * JEDNEJ transakcii (code review, issue 224) — inak by prerušený beh (pád
+ * procesu) mohol nechať linku len s ČASŤOU jej veľkostí zapísanou; taká
+ * čiastočná množina by `isLinkFresh` vyhodnotil ako "čerstvá" (všetky
+ * PRÍTOMNÉ riadky sú fresh) a chýbajúce veľkosti by sa neskúsili znova až do
+ * vypršania `MAX_AGE_HOURS`.
  */
 async function writeSupplierStockRows(
   db: Database,
@@ -278,30 +290,32 @@ async function writeSupplierStockRows(
 ): Promise<void> {
   const { link, host, now, ok, error, httpStatus, rows } = args;
   const wantedSizes = rows.map((r) => r.sizeLabel);
-  await db.delete(supplierStock).where(and(eq(supplierStock.link, link), notInArray(supplierStock.sizeLabel, wantedSizes)));
-  for (const row of rows) {
-    await upsert(db, {
-      link,
-      sizeLabel: row.sizeLabel,
-      host,
-      availability: row.availability,
-      availabilityText: row.availabilityText,
-      price: row.price === null ? null : row.price.toFixed(2),
-      source: row.source,
-      ok,
-      error,
-      httpStatus,
-      checkedAt: now,
-      // Iba SKUTOČNE určená dostupnosť je potvrdenie. `unknown` znamená
-      // „stránka sa načítala, ale nič sme sa nedozvedeli" — to nesmie
-      // predlžovať platnosť predošlého „skladom". Zlyhaná kontrola (ok=false)
-      // rovnako nikdy nepotvrdzuje.
-      confirmedAt: ok && row.availability !== "unknown" ? now : null,
-    });
-  }
+  await db.transaction(async (tx) => {
+    await tx.delete(supplierStock).where(and(eq(supplierStock.link, link), notInArray(supplierStock.sizeLabel, wantedSizes)));
+    for (const row of rows) {
+      await upsert(tx, {
+        link,
+        sizeLabel: row.sizeLabel,
+        host,
+        availability: row.availability,
+        availabilityText: row.availabilityText,
+        price: row.price === null ? null : row.price.toFixed(2),
+        source: row.source,
+        ok,
+        error,
+        httpStatus,
+        checkedAt: now,
+        // Iba SKUTOČNE určená dostupnosť je potvrdenie. `unknown` znamená
+        // „stránka sa načítala, ale nič sme sa nedozvedeli" — to nesmie
+        // predlžovať platnosť predošlého „skladom". Zlyhaná kontrola (ok=false)
+        // rovnako nikdy nepotvrdzuje.
+        confirmedAt: ok && row.availability !== "unknown" ? now : null,
+      });
+    }
+  });
 }
 
-async function upsert(db: Database, row: SupplierStockInsert): Promise<void> {
+async function upsert(db: SupplierStockWriter, row: SupplierStockInsert): Promise<void> {
   await db
     .insert(supplierStock)
     .values(row)

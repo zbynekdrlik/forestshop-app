@@ -8,6 +8,8 @@ import type { Database } from "../../db/client.js";
 import { supplierStock } from "../../db/schema.js";
 
 export interface SupplierStockOverview {
+  // issue 224: počíta ZÁZNAMY (dvojica odkaz+veľkosť), nie unikátne odkazy —
+  // odkaz s pravidlom na veľkosti prispieva viac než jedným záznamom.
   readonly total: number;
   readonly available: number;
   readonly unavailable: number;

@@ -329,6 +329,16 @@ interface SizeAvailabilityRule {
   readonly read: (html: string) => readonly SizeAvailability[];
 }
 
+// Živo overené (issue 224 code review): `class="clearfix product-variants-item"`
+// NIE JE unikátna pre veľkosť — TÁ ISTÁ trieda nesie aj "Odstín"/"Barva"
+// (odtieň/farba) skupinu na tej istej stránke (3 skupiny na overenej vzorke
+// shop.lasting.eu). Rozlišuje ich AŽ vlastný popisok
+// `<span class="control-label">VELIKOST…`. Bez tohto rozlíšenia by čítač
+// (presne ako issue 223's huntingshop.eu karuselová kolízia) mohol zobrať
+// veľkosti z INEJ skupiny — alebo, keby stránka niekde nižšie ukazovala
+// súvisiaci produkt s vlastným plným výberom veľkostí, aj z NEHO.
+const VELIKOST_GROUP_START_RE = /<div\b[^>]*class="[^"]*product-variants-item[^"]*"[^>]*>/gi;
+
 /**
  * shop.lasting.eu (issue 224): PrestaShop nesie dostupnosť KAŽDEJ veľkosti
  * v triede `<li>` veľkostného zoznamu — `sklademANO`/`sklademNE` — skutočná
@@ -338,10 +348,26 @@ interface SizeAvailabilityRule {
  * InStock pre veľkosť, ktorej vlastný zoznam hovorí `sklademNE`) — preto sa
  * JSON-LD pri viacveľkostnom produkte na tejto doméne NIKDY neberie ako
  * dostupnosť KONKRÉTNEJ veľkosti (`parsePage` sa pre tento odkaz vôbec
- * nepoužije, viď `run.ts`).
+ * nepoužije, viď `run.ts`). Čítanie je OHRANIČENÉ na výrez medzi popiskom
+ * "VELIKOST" a ZAČIATKOM ĎALŠEJ `product-variants-item` skupiny (alebo
+ * koncom stránky) — nikdy na celý dokument.
  */
 function lastingSizeList(html: string): readonly SizeAvailability[] {
-  const items = [...html.matchAll(/<li\b[^>]*class="[^"]*(sklademANO|sklademNE)[^"]*"[^>]*>([\s\S]*?)<\/li>/gi)];
+  const groups = [...html.matchAll(VELIKOST_GROUP_START_RE)];
+  // Kontrola popisku je ukotvená (`^`) HNEĎ za otváracou značkou TEJTO
+  // skupiny — nikdy len "obsahuje niekde v okolí", inak by krátka
+  // predchádzajúca skupina (napr. "Odstín") nechtiac zasiahla do popisku
+  // NASLEDUJÚCEJ skupiny cez široké okno.
+  const sizeGroupIndex = groups.findIndex((m) => {
+    const afterOpenTag = html.slice(m.index + m[0].length, m.index + m[0].length + 200);
+    return /^\s*<span\b[^>]*class="[^"]*control-label[^"]*"[^>]*>\s*VELIKOST/i.test(afterOpenTag);
+  });
+  if (sizeGroupIndex === -1) return [];
+  const sizeStart = groups[sizeGroupIndex]?.index ?? 0;
+  const sizeEnd = groups[sizeGroupIndex + 1]?.index ?? html.length;
+  const region = html.slice(sizeStart, sizeEnd);
+
+  const items = [...region.matchAll(/<li\b[^>]*class="[^"]*(sklademANO|sklademNE)[^"]*"[^>]*>([\s\S]*?)<\/li>/gi)];
   const result: SizeAvailability[] = [];
   for (const [, cls, inner] of items) {
     const title = /title="([^"]*)"/.exec(inner ?? "")?.[1]?.trim();

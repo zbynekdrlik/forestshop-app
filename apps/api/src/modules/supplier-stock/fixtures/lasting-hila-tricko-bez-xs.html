@@ -8,6 +8,14 @@
   medzi nimi VÔBEC NIE JE — dodávateľ ju nemá. Čítač preto pre "XS" nesmie
   nájsť žiadnu zhodu a výsledok musí ostať "unknown" (nikdy dohad na
   najbližšiu veľkosť).
+
+  Skupina veľkostí je (rovnako ako v `lasting-bony-cepica-l-xl.html`) obalená
+  vlastným `<div class="clearfix product-variants-item">` s popiskom
+  `<span class="control-label">VELIKOST…` — tá istá trieda nesie na reálnej
+  stránke aj "Barva" skupinu, preto sa výrez musí nájsť podľa popisku, nikdy
+  len podľa triedy. Karta "súvisiace produkty" za hlavným blokom má VLASTNÝ
+  plný veľkostný výber iného produktu — dôkaz, že výrez sa naň nikdy
+  nerozšíri.
 -->
 <html lang="cs">
 <head>
@@ -15,36 +23,75 @@
 </head>
 <body>
   <h1>HILA dámske merino tričko s potlačou</h1>
-  <ul class="product-variants-item clearfix" id="group_8">
-    <li  class="sklademANO input-container float-xs-left ">
-      <label>
-        <input class="input-radio" type="radio" data-product-attribute="8" name="group[8]"     value="930"       title="S">
-        <span class="radio-label">S</span>
-      </label>
-    </li>
-    <li idproductstributesOK="" class="sklademNE input-container float-xs-left ">
-      <label>
-        <input class="input-radio" type="radio" data-product-attribute="8" name="group[8]"     value="936"       title="M">
-        <span class="radio-label">
-          <span class='skrtnuti1'></span>
-          <span class='skrtnuti2'></span>
-                            M
-        </span>
-      </label>
-    </li>
-    <li  class="sklademANO input-container float-xs-left ">
-      <label>
-        <input class="input-radio" type="radio" data-product-attribute="8" name="group[8]"     value="942"       title="L" checked="checked">
-        <span class="radio-label">L</span>
-      </label>
-    </li>
-    <li  class="sklademANO input-container float-xs-left ">
-      <label>
-        <input class="input-radio" type="radio" data-product-attribute="8" name="group[8]"     value="948"       title="XL">
-        <span class="radio-label">XL</span>
-      </label>
-    </li>
-  </ul>
+
+  <div class="product-variants">
+    <div class="clearfix product-variants-item">
+      <span class="control-label">VELIKOST:
+        L
+      </span>
+      <ul id="group_8">
+        <li  class="sklademANO input-container float-xs-left ">
+          <label>
+            <input class="input-radio" type="radio" data-product-attribute="8" name="group[8]"     value="930"       title="S">
+            <span class="radio-label">S</span>
+          </label>
+        </li>
+        <li idproductstributesOK="" class="sklademNE input-container float-xs-left ">
+          <label>
+            <input class="input-radio" type="radio" data-product-attribute="8" name="group[8]"     value="936"       title="M">
+            <span class="radio-label">
+              <span class='skrtnuti1'></span>
+              <span class='skrtnuti2'></span>
+                                M
+            </span>
+          </label>
+        </li>
+        <li  class="sklademANO input-container float-xs-left ">
+          <label>
+            <input class="input-radio" type="radio" data-product-attribute="8" name="group[8]"     value="942"       title="L" checked="checked">
+            <span class="radio-label">L</span>
+          </label>
+        </li>
+        <li  class="sklademANO input-container float-xs-left ">
+          <label>
+            <input class="input-radio" type="radio" data-product-attribute="8" name="group[8]"     value="948"       title="XL">
+            <span class="radio-label">XL</span>
+          </label>
+        </li>
+      </ul>
+    </div>
+
+    <div class="clearfix product-variants-item">
+      <span class="control-label">Barva:
+        Zelená
+      </span>
+      <ul id="group_1">
+        <li class="input-container">
+          <span class="color" style="background-image:url(/z.jpg)"></span>
+        </li>
+      </ul>
+    </div>
+  </div>
+
   <div id='sklademNEExist'>asdfasdf</div>
+
+  <div class="products-selection">
+    <div class="product-miniature js-product-miniature">
+      <a href="/cs/trika/16927-iny-produkt.html">Iné tričko</a>
+      <div class="clearfix product-variants-item">
+        <span class="control-label">VELIKOST:
+          XS
+        </span>
+        <ul id="group_8">
+          <li class="sklademANO input-container float-xs-left ">
+            <label>
+              <input class="input-radio" type="radio" data-product-attribute="8" name="group[8]"     value="9998"       title="XS">
+              <span class="radio-label">XS</span>
+            </label>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
 </body>
 </html>
