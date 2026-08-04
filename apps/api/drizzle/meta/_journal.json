@@ -204,6 +204,13 @@
       "when": 1785835560612,
       "tag": "0028_shop_product_url",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1785846514944,
+      "tag": "0029_supplier_stock_size_label",
+      "breakpoints": true
     }
   ]
 }

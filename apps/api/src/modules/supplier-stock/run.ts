@@ -1,16 +1,23 @@
-// Beh scrapera dostupnosti u dodávateľa (issue 212).
+// Beh scrapera dostupnosti u dodávateľa (issue 212, per veľkosť issue 224).
 //
 // Sériový, zámerne: 969 z 1 210 riadkov reálneho exportu je JEDNA doména
 // (`huntingshop.eu`), takže paralelné sťahovanie by na ňu vyzeralo ako útok.
 // Medzi dvomi požiadavkami na tú istú doménu je pauza (`PER_HOST_DELAY_MS`).
 
-import { isNotNull } from "drizzle-orm";
+import { and, eq, isNotNull, notInArray } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
-import { products, supplierStock } from "../../db/schema.js";
+import { products, supplierStock, variants } from "../../db/schema.js";
 import { extractSupplierLink } from "../catalog/supplier-link.js";
 import { MAX_AGE_HOURS, PER_HOST_DELAY_MS, SUPPLIER_STOCK_RUN_LOCK_KEY } from "./constants.js";
 import type { PageFetcher } from "./page-fetcher.js";
-import { hostOf, parsePage } from "./parse.js";
+import {
+  hostOf,
+  matchSizeLabel,
+  parsePage,
+  parseSizeAvailability,
+  type SupplierAvailability,
+  type SupplierStockSource,
+} from "./parse.js";
 
 export interface SupplierStockRunResult {
   /** Koľko unikátnych liniek katalóg vôbec obsahuje. */
@@ -18,10 +25,14 @@ export interface SupplierStockRunResult {
   /** Preskočené, lebo majú čerstvú úspešnú kontrolu. */
   readonly skipped: number;
   readonly checked: number;
+  /** Počty sú za ZAPÍSANÉ riadky (link, veľkosť), nie za linky — rovnaká
+   * jednotka ako `getSupplierStockOverview` (`queries.ts`), takže si oba
+   * súhlasia. Jednoveľkostná/blanket linka prispieva presne 1, linka s
+   * pravidlom na veľkosti prispieva po jednej za KAŽDÚ našu veľkosť. */
   readonly available: number;
   readonly unavailable: number;
   readonly unknown: number;
-  /** Kontrola sama zlyhala (sieť, časový limit, HTTP chyba). */
+  /** Kontrola sama zlyhala (sieť, časový limit, HTTP chyba) — za LINKU. */
   readonly failed: number;
   readonly hosts: readonly string[];
 }
@@ -56,6 +67,32 @@ export async function collectSupplierLinks(db: Database): Promise<readonly strin
 }
 
 /**
+ * NAŠE `variant.size_label` hodnoty zoskupené podľa dodávateľskej linky
+ * (issue 224) — čo touto linkou treba spárovať, keď má doména pravidlo na
+ * čítanie zoznamu veľkostí (`parseSizeAvailability`). Variant bez veľkosti
+ * (`null`/prázdne) sa NEZAHRNIE — nedal by sa spárovať a písal by
+ * zavádzajúci blanket (`''`) riadok popri riadkoch ostatných veľkostí tej
+ * istej linky (viď `writeSupplierStockRows`).
+ */
+async function collectOurSizesByLink(db: Database): Promise<Map<string, readonly string[]>> {
+  const rows = await db
+    .select({ internalNote: products.internalNote, sizeLabel: variants.sizeLabel })
+    .from(variants)
+    .innerJoin(products, eq(variants.productKey, products.key));
+  const byLink = new Map<string, Set<string>>();
+  for (const row of rows) {
+    const url = extractSupplierLink(row.internalNote).url;
+    if (url === null || hostOf(url) === "") continue;
+    const label = (row.sizeLabel ?? "").trim();
+    if (label === "") continue;
+    const set = byLink.get(url) ?? new Set<string>();
+    set.add(label);
+    byLink.set(url, set);
+  }
+  return new Map([...byLink].map(([link, set]) => [link, [...set]]));
+}
+
+/**
  * `true`, keď má linka ÚSPEŠNÚ kontrolu mladšiu než `MAX_AGE_HOURS`.
  * Zlyhaná kontrola sa zámerne NEPOČÍTA — inak by stránka, ktorá stabilne
  * padá na časovom limite, ostala „čerstvá" a nikdy by sa neskúsila znova.
@@ -82,15 +119,38 @@ export async function runSupplierStock(options: RunSupplierStockOptions): Promis
   }
 }
 
+interface StockRowInput {
+  readonly sizeLabel: string;
+  readonly availability: SupplierAvailability;
+  readonly availabilityText: string;
+  readonly price: number | null;
+  readonly source: SupplierStockSource;
+}
+
 async function runSupplierStockLocked(options: RunSupplierStockOptions): Promise<SupplierStockRunResult> {
   const { db, now, fetchPage } = options;
   const sleep = options.sleep ?? defaultSleep;
 
   const links = await collectSupplierLinks(db);
+  const ourSizesByLink = await collectOurSizesByLink(db);
+  // Všetky riadky tej istej linky sa píšu/aktualizujú v TOM ISTOM behu
+  // (`writeSupplierStockRows`), takže "je táto linka čerstvá" musí platiť
+  // pre KAŽDÝ jej riadok naraz — keby čo i len jedna veľkosť ešte nemala
+  // čerstvé potvrdenie, celá linka sa musí skúsiť znova (jeden fetch aj tak
+  // vždy prepíše všetky veľkosti tej istej linky).
   const existing = await db
     .select({ link: supplierStock.link, ok: supplierStock.ok, confirmedAt: supplierStock.confirmedAt })
     .from(supplierStock);
-  const previousByLink = new Map(existing.map((row) => [row.link, row]));
+  const rowsByLink = new Map<string, { readonly ok: boolean; readonly confirmedAt: Date | null }[]>();
+  for (const row of existing) {
+    const rows = rowsByLink.get(row.link) ?? [];
+    rows.push(row);
+    rowsByLink.set(row.link, rows);
+  }
+  const isLinkFresh = (link: string): boolean => {
+    const rows = rowsByLink.get(link);
+    return rows !== undefined && rows.length > 0 && rows.every((row) => isFresh(row, now));
+  };
 
   const counts = { available: 0, unavailable: 0, unknown: 0, failed: 0 };
   const hosts = new Set<string>();
@@ -101,7 +161,7 @@ async function runSupplierStockLocked(options: RunSupplierStockOptions): Promise
   for (const link of links) {
     const host = hostOf(link);
     hosts.add(host);
-    if (isFresh(previousByLink.get(link), now)) {
+    if (isLinkFresh(link)) {
       skipped += 1;
       continue;
     }
@@ -123,41 +183,63 @@ async function runSupplierStockLocked(options: RunSupplierStockOptions): Promise
 
     if (!fetched.ok) {
       counts.failed += 1;
-      await upsert(db, {
+      // Zlyhaná kontrola vymaže PRÍPADNÉ predošlé per-veľkostné riadky tejto
+      // linky a nahradí ich jediným blanket "neviem" riadkom (rovnaká
+      // filozofia ako pôvodný jednoriadkový model — `ok=false` samo osebe
+      // vylučuje kandidatúru v `restock/queries.ts` bez ohľadu na
+      // dostupnosť, takže to nič neoslabuje). Nasledujúci ÚSPEŠNÝ beh riadky
+      // po veľkostiach znova odvodí.
+      await writeSupplierStockRows(db, {
         link,
         host,
-        availability: "unknown",
-        availabilityText: "",
-        price: null,
-        source: "none",
+        now,
         ok: false,
         error: fetched.error,
         httpStatus: fetched.httpStatus,
-        checkedAt: now,
-        // Zlyhaná kontrola NIKDY neposúva `confirmedAt` — staré potvrdenie
-        // musí zostarnúť a automatizácia ho prestane brať (issue 213).
-        confirmedAt: null,
+        rows: [{ sizeLabel: "", availability: "unknown", availabilityText: "", price: null, source: "none" }],
       });
       continue;
     }
 
-    const parsed = parsePage(fetched.html, link);
-    counts[parsed.availability] += 1;
-    await upsert(db, {
+    const ourSizes = ourSizesByLink.get(link) ?? [];
+    const sizeList = parseSizeAvailability(fetched.html, link);
+
+    let rows: readonly StockRowInput[];
+    if (sizeList !== null && ourSizes.length > 0) {
+      const pageParsed = parsePage(fetched.html, link);
+      rows = ourSizes.map((ourLabel) => {
+        const matched = matchSizeLabel(ourLabel, sizeList.map((s) => s.sizeLabel));
+        const hit = matched === null ? null : (sizeList.find((s) => s.sizeLabel === matched) ?? null);
+        return {
+          sizeLabel: ourLabel,
+          availability: hit?.availability ?? "unknown",
+          availabilityText: hit?.sizeLabel ?? "",
+          price: pageParsed.price,
+          source: hit !== null ? "size_list" : "none",
+        };
+      });
+    } else {
+      const pageParsed = parsePage(fetched.html, link);
+      rows = [
+        {
+          sizeLabel: "",
+          availability: pageParsed.availability,
+          availabilityText: pageParsed.availabilityText,
+          price: pageParsed.price,
+          source: pageParsed.source,
+        },
+      ];
+    }
+
+    for (const row of rows) counts[row.availability] += 1;
+    await writeSupplierStockRows(db, {
       link,
       host,
-      availability: parsed.availability,
-      availabilityText: parsed.availabilityText,
-      price: parsed.price === null ? null : parsed.price.toFixed(2),
-      source: parsed.source,
+      now,
       ok: true,
       error: null,
       httpStatus: fetched.httpStatus,
-      checkedAt: now,
-      // Iba SKUTOČNE určená dostupnosť je potvrdenie. `unknown` znamená
-      // „stránka sa načítala, ale nič sme sa nedozvedeli" — to nesmie
-      // predlžovať platnosť predošlého „skladom".
-      confirmedAt: parsed.availability === "unknown" ? null : now,
+      rows,
     });
   }
 
@@ -173,14 +255,58 @@ async function runSupplierStockLocked(options: RunSupplierStockOptions): Promise
   };
 }
 
-type SupplierStockRow = typeof supplierStock.$inferInsert;
+type SupplierStockInsert = typeof supplierStock.$inferInsert;
 
-async function upsert(db: Database, row: SupplierStockRow): Promise<void> {
+/**
+ * Zapíše VŠETKY riadky tejto linky pre tento beh a vymaže zvyšné (issue 224)
+ * — inak by po zmene stratégie (napr. produkt medzičasom dostal viac
+ * veľkostí, alebo naopak) ostal v tabuľke zavádzajúci riadok z predošlého
+ * behu, ktorý by `restock/queries.ts`'s JOIN mohol nesprávne spárovať s
+ * iným variantom (fallback na `size_label=''`).
+ */
+async function writeSupplierStockRows(
+  db: Database,
+  args: {
+    readonly link: string;
+    readonly host: string;
+    readonly now: Date;
+    readonly ok: boolean;
+    readonly error: string | null;
+    readonly httpStatus: number | null;
+    readonly rows: readonly StockRowInput[];
+  },
+): Promise<void> {
+  const { link, host, now, ok, error, httpStatus, rows } = args;
+  const wantedSizes = rows.map((r) => r.sizeLabel);
+  await db.delete(supplierStock).where(and(eq(supplierStock.link, link), notInArray(supplierStock.sizeLabel, wantedSizes)));
+  for (const row of rows) {
+    await upsert(db, {
+      link,
+      sizeLabel: row.sizeLabel,
+      host,
+      availability: row.availability,
+      availabilityText: row.availabilityText,
+      price: row.price === null ? null : row.price.toFixed(2),
+      source: row.source,
+      ok,
+      error,
+      httpStatus,
+      checkedAt: now,
+      // Iba SKUTOČNE určená dostupnosť je potvrdenie. `unknown` znamená
+      // „stránka sa načítala, ale nič sme sa nedozvedeli" — to nesmie
+      // predlžovať platnosť predošlého „skladom". Zlyhaná kontrola (ok=false)
+      // rovnako nikdy nepotvrdzuje.
+      confirmedAt: ok && row.availability !== "unknown" ? now : null,
+    });
+  }
+}
+
+async function upsert(db: Database, row: SupplierStockInsert): Promise<void> {
   await db
     .insert(supplierStock)
     .values(row)
     .onConflictDoUpdate({
-      target: supplierStock.link,
+      target: [supplierStock.link, supplierStock.sizeLabel],
       set: {
         host: row.host,
         availability: row.availability,

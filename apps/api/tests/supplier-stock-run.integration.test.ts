@@ -1,11 +1,27 @@
-import { eq } from "drizzle-orm";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { and, eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "../src/db/client.js";
 import { supplierStock } from "../src/db/schema.js";
 import type { PageFetchResult } from "../src/modules/supplier-stock/page-fetcher.js";
 import { runSupplierStock } from "../src/modules/supplier-stock/run.js";
 import { withCleanDb } from "./helpers/db.js";
-import { insertTestVariant } from "./helpers/orders.js";
+import { insertTestVariant, insertTestVariantForProduct } from "./helpers/orders.js";
+
+function fixture(name: string): string {
+  return readFileSync(
+    fileURLToPath(new URL(`../src/modules/supplier-stock/fixtures/${name}`, import.meta.url)),
+    "utf8",
+  );
+}
+
+const LASTING_BONY = fixture("lasting-bony-cepica-l-xl.html");
+const LASTING_HILA = fixture("lasting-hila-tricko-bez-xs.html");
+const LASTING_BONY_URL =
+  "https://shop.lasting.eu/cs/cepice/19937-59938-lasting-merino-cepice-bony-cerna-8595067820460.html";
+const LASTING_HILA_URL =
+  "https://shop.lasting.eu/cs/trika-kratky-rukav-mqc/16926-56344-hila-damske-merino-triko-s-tiskem-8995067844631.html";
 
 // Žiadny test nesmie siahnuť na skutočnú stránku dodávateľa — sťahovanie je
 // vždy vlastná implementácia, nikdy `fetchSupplierPage`.
@@ -168,5 +184,97 @@ describe("beh dodávateľského skladu", () => {
 
     expect(result.total).toBe(1);
     expect(volani).toBe(1);
+  });
+});
+
+// issue 224 — dostupnosť sa berie za KONKRÉTNU veľkosť, nie za celý odkaz.
+// Oba príklady priamo z ticketu, na uložených vzorkách reálnych stránok.
+describe("beh dodávateľského skladu — issue 224: dostupnosť po veľkosti", () => {
+  let db: Database;
+  let close: () => Promise<void>;
+
+  beforeEach(async () => {
+    ({ db, close } = await withCleanDb());
+  });
+  afterEach(async () => {
+    await close();
+  });
+
+  const rowFor = async (
+    link: string,
+    sizeLabel: string,
+  ): Promise<typeof supplierStock.$inferSelect | undefined> => {
+    const [found] = await db
+      .select()
+      .from(supplierStock)
+      .where(and(eq(supplierStock.link, link), eq(supplierStock.sizeLabel, sizeLabel)));
+    return found;
+  };
+
+  it("16707/L-X (nas 'L-X' = dodavatelovo 'L/XL', sklademNE) je unavailable, nie available z JSON-LD", async () => {
+    await insertTestVariantForProduct(db, "16707", "16707/L-X", {
+      sizeLabel: "L-X",
+      internalNote: LASTING_BONY_URL,
+    });
+    await insertTestVariantForProduct(db, "16707", "16707/S-M", { sizeLabel: "S-M" });
+
+    await runSupplierStock({
+      db,
+      now: NOW,
+      sleep: noSleep,
+      fetchPage: () => Promise.resolve(okPage(LASTING_BONY)),
+    });
+
+    const lx = await rowFor(LASTING_BONY_URL, "L-X");
+    expect(lx?.availability).toBe("unavailable");
+    expect(lx?.source).toBe("size_list");
+    expect(lx?.availabilityText).toBe("L/XL");
+
+    // Druhá veľkosť tej istej linky sa spáruje NEZÁVISLE — dodávateľ ju má
+    // skladom, hoci L/XL nie.
+    const sm = await rowFor(LASTING_BONY_URL, "S-M");
+    expect(sm?.availability).toBe("available");
+  });
+
+  it("16710/XS (dodavatel tuto velkost vobec nema) je unknown, nikdy dohad", async () => {
+    await insertTestVariantForProduct(db, "16710", "16710/XS", {
+      sizeLabel: "XS",
+      internalNote: LASTING_HILA_URL,
+    });
+    await insertTestVariantForProduct(db, "16710", "16710/L", { sizeLabel: "L" });
+
+    await runSupplierStock({
+      db,
+      now: NOW,
+      sleep: noSleep,
+      fetchPage: () => Promise.resolve(okPage(LASTING_HILA)),
+    });
+
+    const xs = await rowFor(LASTING_HILA_URL, "XS");
+    expect(xs?.availability).toBe("unknown");
+    expect(xs?.confirmedAt).toBeNull();
+
+    const l = await rowFor(LASTING_HILA_URL, "L");
+    expect(l?.availability).toBe("available");
+  });
+
+  it("jednoveľkostný odkaz na doméne s pravidlom stále funguje ako blanket riadok", async () => {
+    // Bez DRUHÉHO variantu na tej istej linke sa `ourSizes.length` rovná 1,
+    // nie 0 — čítač sa STÁLE pokúsi spárovať jedinú veľkosť, presne ako pri
+    // viacerých variantoch.
+    await insertTestVariantForProduct(db, "16707solo", "16707solo/L-X", {
+      sizeLabel: "L-X",
+      internalNote: LASTING_BONY_URL,
+    });
+
+    await runSupplierStock({
+      db,
+      now: NOW,
+      sleep: noSleep,
+      fetchPage: () => Promise.resolve(okPage(LASTING_BONY)),
+    });
+
+    const lx = await rowFor(LASTING_BONY_URL, "L-X");
+    expect(lx?.availability).toBe("unavailable");
   });
 });

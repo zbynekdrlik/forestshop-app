@@ -16,6 +16,8 @@ vi.mock("../supplierStockApi.js", async (importOriginal) => {
 
 const { SupplierStockUnauthorizedError } = await import("../supplierStockApi.js");
 
+const LASTING_LINK = "https://shop.lasting.eu/cepice/bony";
+
 const STATUS = {
   overview: {
     total: 238,
@@ -28,6 +30,7 @@ const STATUS = {
   rows: [
     {
       link: "https://huntingshop.eu/bunda",
+      sizeLabel: "",
       host: "huntingshop.eu",
       availability: "available" as const,
       availabilityText: "skladom",
@@ -39,8 +42,24 @@ const STATUS = {
       checkedAt: "2026-08-03T04:20:00.000Z",
       confirmedAt: "2026-08-03T04:20:00.000Z",
     },
+    {
+      link: LASTING_LINK,
+      sizeLabel: "L-X",
+      host: "shop.lasting.eu",
+      availability: "unavailable" as const,
+      availabilityText: "L/XL",
+      price: "15.90",
+      source: "size_list" as const,
+      ok: true,
+      error: null,
+      httpStatus: 200,
+      checkedAt: "2026-08-03T04:20:00.000Z",
+      confirmedAt: "2026-08-03T04:20:00.000Z",
+    },
   ],
-  unreadable: [{ host: "dogtrace.com", count: 2, samples: ["https://dogtrace.com/obojok"] }],
+  unreadable: [
+    { host: "dogtrace.com", count: 2, samples: [{ link: "https://dogtrace.com/obojok", sizeLabel: "" }] },
+  ],
   lastRun: {
     startedAt: "2026-08-03T04:20:00.000Z",
     finishedAt: "2026-08-03T04:41:00.000Z",
@@ -128,4 +147,38 @@ it("vypršaná relácia odhlási, nezobrazí chybu", async () => {
   await waitFor(() => {
     expect(onSessionExpired).toHaveBeenCalledTimes(1);
   });
+});
+
+// issue 224: jedna linka môže mať teraz VIAC riadkov (jeden na každú našu
+// veľkosť) — kľúč aj testid musia niesť aj veľkosť, inak by React zlúčil
+// dva rôzne riadky do jedného.
+it("odkaz s viacerými veľkosťami ukáže KAŽDÚ veľkosť ako vlastný riadok", async () => {
+  const spolocnyRiadok = {
+    link: LASTING_LINK,
+    host: "shop.lasting.eu",
+    availabilityText: "",
+    price: "15.90",
+    source: "size_list" as const,
+    ok: true,
+    error: null,
+    httpStatus: 200,
+    checkedAt: "2026-08-03T04:20:00.000Z",
+    confirmedAt: "2026-08-03T04:20:00.000Z",
+  };
+  const dveVelkosti = {
+    ...STATUS,
+    rows: [
+      { ...spolocnyRiadok, sizeLabel: "L-X", availability: "unavailable" as const },
+      { ...spolocnyRiadok, sizeLabel: "S-M", availability: "available" as const },
+    ],
+  };
+  fetchSupplierStockStatus.mockResolvedValue(dveVelkosti);
+  render(<SupplierStockSection role="admin" onSessionExpired={vi.fn()} />);
+
+  const lX = await screen.findByTestId(`ss-row-${LASTING_LINK}-L-X`);
+  const sM = await screen.findByTestId(`ss-row-${LASTING_LINK}-S-M`);
+  expect(lX.textContent).toContain("L-X");
+  expect(lX.textContent).toContain("Vypredané");
+  expect(sM.textContent).toContain("S-M");
+  expect(sM.textContent).toContain("Skladom");
 });

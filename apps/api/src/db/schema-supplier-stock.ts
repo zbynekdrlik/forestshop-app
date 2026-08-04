@@ -5,6 +5,7 @@ import {
   numeric,
   pgEnum,
   pgTable,
+  primaryKey,
   text,
   timestamp,
 } from "drizzle-orm/pg-core";
@@ -29,17 +30,25 @@ export const supplierStockSource = pgEnum("supplier_stock_source", [
   "json_ld",
   "meta",
   "text",
+  "size_list",
   "none",
 ]);
 
-// Jeden riadok na UNIKÁTNU dodávateľskú linku, nie na variant ani produkt —
-// tá istá linka je na reálnom exporte zdieľaná mnohými variantmi toho istého
-// produktu (nameraná 238 unikátnych liniek na 1 210 riadkov), takže kľúčovať
-// per variant by znamenalo sťahovať tú istú stránku aj 30× za beh.
+// Jeden riadok na dvojicu (UNIKÁTNA dodávateľská linka, NAŠA veľkosť) —
+// issue 224. Pôvodne bol riadok len na linku (jedna dostupnosť pre celý
+// odkaz), čo bolo nesprávne pre 965 z 2 179 liniek, ktoré pokrývajú VIAC
+// našich variantov (rôzne veľkosti) naraz: dostupnosť náhodne prečítanej
+// veľkosti sa aplikovala na všetky ostatné. `size_label = ''` znamená
+// "dostupnosť CELÉHO odkazu" — jednoveľkostný produkt, ALEBO doména bez
+// vlastného pravidla na čítanie zoznamu veľkostí (`SIZE_AVAILABILITY_RULES`,
+// `parse.ts`) — a je to jediný riadok, aký sa pre taký odkaz zapíše. Odkaz S
+// pravidlom dostáva PRESNE jeden riadok na KAŽDÚ našu veľkosť, ktorá sa naň
+// viaže (`run.ts`), nikdy oba tvary naraz pre ten istý odkaz.
 export const supplierStock = pgTable(
   "supplier_stock",
   {
-    link: text("link").primaryKey(),
+    link: text("link").notNull(),
+    sizeLabel: text("size_label").notNull().default(""),
     // Doména bez `www.` — nesie sa uložená (nie počítaná pri čítaní), aby sa
     // dala indexovať a zoskupovať v prehľade nečitateľných stránok.
     host: text("host").notNull(),
@@ -67,5 +76,9 @@ export const supplierStock = pgTable(
     // dávno neaktuálneho „skladom".
     confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
   },
-  (t) => [index("supplier_stock_host_idx").on(t.host), index("supplier_stock_avail_idx").on(t.availability)],
+  (t) => [
+    primaryKey({ columns: [t.link, t.sizeLabel] }),
+    index("supplier_stock_host_idx").on(t.host),
+    index("supplier_stock_avail_idx").on(t.availability),
+  ],
 );

@@ -59,22 +59,31 @@ describe("prepínanie Vypredané → Skladom", () => {
       readonly productVisibility?: string;
       readonly internalNote?: string | null;
       readonly missingSince?: Date | null;
+      // issue 224: viac variantov (veľkostí) toho istého produktu, keď
+      // zdieľajú tú istú linku, potrebuje SPOLOČNÝ productKey — inak by
+      // každý `code` dostal vlastný produkt s vlastným `internalNote`.
+      readonly productKey?: string;
+      readonly sizeLabel?: string | null;
     } = {},
   ): Promise<void> => {
-    const productKey = `prod-${code}`;
-    await db.insert(products).values({
-      key: productKey,
-      name: `Produkt ${code}`,
-      supplier: "Dodávateľ",
-      internalNote: over.internalNote === undefined ? LINK : over.internalNote,
-      firstSeenAt: NOW,
-      lastSeenAt: NOW,
-      lastSeenSnapshotId: snapshotId,
-    });
+    const productKey = over.productKey ?? `prod-${code}`;
+    await db
+      .insert(products)
+      .values({
+        key: productKey,
+        name: `Produkt ${code}`,
+        supplier: "Dodávateľ",
+        internalNote: over.internalNote === undefined ? LINK : over.internalNote,
+        firstSeenAt: NOW,
+        lastSeenAt: NOW,
+        lastSeenSnapshotId: snapshotId,
+      })
+      .onConflictDoNothing();
     await db.insert(variants).values({
       code,
       productKey,
       guid: productKey,
+      sizeLabel: over.sizeLabel ?? null,
       name: `Produkt ${code}`,
       stock: 0,
       availabilityInStockText: "Skladom",
@@ -103,6 +112,20 @@ describe("prepínanie Vypredané → Skladom", () => {
     const [event] = await db.select().from(restockEvents).where(eq(restockEvents.variantCode, "A1"));
     expect(event?.supplierLink).toBe(LINK);
     expect(event?.supplierAvailabilityText).toBe("skladom");
+  });
+
+  // issue 224: jedna linka môže niesť VIAC riadkov naraz (jeden na každú
+  // veľkosť) — variant sa smie prepnúť LEN keď je dostupný RIADOK jeho
+  // VLASTNEJ veľkosti, nikdy podľa dostupnosti inej veľkosti tej istej linky.
+  it("z linky s viacerými veľkosťami sa prepne LEN variant svojej vlastnej dostupnej veľkosti", async () => {
+    await seedSupplierStock({ sizeLabel: "L-X", availability: "available" });
+    await seedSupplierStock({ sizeLabel: "S-M", availability: "unavailable" });
+    await seedVariant("16707/L-X", { productKey: "prod-16707", sizeLabel: "L-X" });
+    await seedVariant("16707/S-M", { productKey: "prod-16707", sizeLabel: "S-M" });
+
+    const { picked } = await selectRestockCandidates(db, NOW);
+
+    expect(picked.map((c) => c.variantCode)).toEqual(["16707/L-X"]);
   });
 
   // TOTO je hlavná bezpečnostná podmienka celej úlohy: `detailOnly` je vedomé
