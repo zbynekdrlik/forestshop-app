@@ -49,6 +49,24 @@ paths:
   keď má úplne iné stĺpce** (`buildRestockCsv` vedľa `buildWritebackCsv`) —
   ochrana proti CSV injection (`dataRowToLine`) musí platiť pre KAŽDÚ cestu,
   nikdy sa stĺpce neskladajú mimo tohto modulu.
+- **Shoptet export NEMÁ stĺpec s adresou produktu a `guid` je UUID, nie číselné
+  ID — odkaz na náš vlastný produkt sa preto NEDÁ poskladať z uložených dát.**
+  Overené na hlavičke surového exportu (issue 217: v 260+ stĺpcoch nie je
+  `url`/`slug`/`link`, len `seoTitle` a kategórie porovnávačov). Jediná
+  spoľahlivá cesta je vyhľadávanie podľa kódu:
+  `https://www.forestshop.sk/vyhladavanie/?string=<code>` (`apps/web/src/
+  shopLinks.ts`) — **slovenská cesta; česká `/vyhledavani/` na tejto doméne
+  vracia 404.** Funguje aj pre variantový kód s lomítkom (`10125/41`
+  percent-encoded) — naživo overené, nájde ten istý produkt ako kód bez
+  veľkosti. Ak by niekedy pribudla potreba priameho odkazu na DETAIL, treba
+  najprv doplniť zdroj adresy (feed pre porovnávače alebo sitemapu), nie
+  hádať tvar URL z `guid`.
+- **Zoznam, podľa ktorého sa človek rozhoduje, MUSÍ stavať na tej istej funkcii
+  výberu ako samotný beh.** `listRestockWaiting` aj `selectRestockCandidates`
+  volajú spoločnú `allRestockCandidates` (`restock/queries.ts`) — druhá kópia
+  podmienok by sa skôr či neskôr rozišla a majiteľ by overil iné produkty, než
+  by sa naozaj prepli. Integračný test to drží (`overovací zoznam vylučuje
+  detailOnly rovnako ako samotné prepínanie`).
 - **Nová tabuľka MUSÍ pribudnúť do `TRUNCATE` zoznamu v
   `tests/helpers/db.ts`, inak testy zlyhajú AŽ pri druhom behu.** Pri #212 to
   bolo obzvlášť zákerné: prvý beh prešiel (prázdna tabuľka), druhý beh našiel
