@@ -8,11 +8,14 @@ export type SupplierAvailability = z.infer<typeof availabilitySchema>;
 
 const rowSchema = z.object({
   link: z.string(),
+  // '' = dostupnosť CELÉHO odkazu (issue 224) — jednoveľkostný produkt,
+  // alebo doména bez pravidla na čítanie zoznamu veľkostí.
+  sizeLabel: z.string(),
   host: z.string(),
   availability: availabilitySchema,
   availabilityText: z.string(),
   price: z.string().nullable(),
-  source: z.enum(["json_ld", "meta", "text", "none"]),
+  source: z.enum(["json_ld", "meta", "text", "size_list", "none"]),
   ok: z.boolean(),
   error: z.string().nullable(),
   httpStatus: z.number().nullable(),
@@ -21,10 +24,13 @@ const rowSchema = z.object({
 });
 export type SupplierStockRow = z.infer<typeof rowSchema>;
 
+const unreadableSampleSchema = z.object({ link: z.string(), sizeLabel: z.string() });
+export type UnreadableSample = z.infer<typeof unreadableSampleSchema>;
+
 const unreadableSchema = z.object({
   host: z.string(),
   count: z.number(),
-  samples: z.array(z.string()),
+  samples: z.array(unreadableSampleSchema),
 });
 export type UnreadableHost = z.infer<typeof unreadableSchema>;
 

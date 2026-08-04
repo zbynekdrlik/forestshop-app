@@ -1,0 +1,115 @@
+<!--
+  Orezaná vzorka https://shop.lasting.eu/cs/cepice/19937-59938-lasting-merino-
+  cepice-bony-cerna-8595067820460.html (issue 224, živý fetch 4. 8. 2026).
+
+  Dva varianty veľkosti: S/M (sklademANO) a L/XL (sklademNE, "checked" =
+  predvolená veľkosť pri načítaní stránky). Náš vlastný Shoptet size_label
+  pre veľkosť L/XL je "L-X" (skrátený tvar, overené v produkčnej DB) — čítač
+  ho musí spárovať s "L/XL" tolerantne na skrátenie POSLEDNEJ časti.
+
+  JSON-LD tejto stránky hlási "https://schema.org/InStock" — hoci vlastný
+  `offers.url` v tom istom bloku ukazuje presne na fragment
+  "1130-velikost-l_xl" (tú istú veľkosť, ktorá je podľa zoznamu veľkostí
+  NEDOSTUPNÁ). Presne to je dôvod, prečo sa JSON-LD pri viacveľkostnom
+  produkte na tejto doméne nesmie brať ako dostupnosť KONKRÉTNEJ veľkosti.
+
+  Reálna stránka nesie VIAC skupín so ZDIEĽANOU triedou
+  "clearfix product-variants-item" (Odstín, VELIKOST, Barva — overené živo,
+  code review issue 224) — rozlišuje ich AŽ popisok
+  `<span class="control-label">`. "Odstín"/"Barva" skupiny nižšie NENESÚ
+  sklademANO/NE triedu vôbec (skutočný tvar z produkcie), takže by staré
+  (neorezané) čítanie našlo LEN veľkosť aj tak — preto je za produktom
+  pridaná ešte samostatná "súvisiace produkty" karta s VLASTNÝM plným
+  veľkostným výberom iného produktu: dôkaz, že sa výrez naozaj ukončí PRED
+  ňou (na začiatku "Barva" skupiny), nie až na konci dokumentu.
+-->
+<html lang="cs">
+<head>
+<title>BONY merino čepice černá | Lasting</title>
+<script type="application/ld+json">
+{"@context":"https://schema.org/","@type":"Product","name":"BONY merino čepice",
+ "sku":"BONY-9090L/XL",
+ "offers":{"@type":"Offer","priceCurrency":"CZK","price":"399",
+   "url":"https://shop.lasting.eu/cs/cepice/19937-59938-lasting-merino-cepice-bony-cerna-8595067820460.html#/1054-barva-cerna/1130-velikost-l_xl",
+   "availability":"https://schema.org/InStock"}}
+</script>
+</head>
+<body>
+  <h1>BONY merino čepice černá</h1>
+
+  <div class="product-variants">
+    <div class="clearfix product-variants-item">
+      <span class="control-label">Odstín:
+        Černá 9090
+      </span>
+      <ul id="group_9">
+        <li class="input-container">
+          <span class="color texture" style="background-image:url(/x.jpg)"></span>
+        </li>
+      </ul>
+    </div>
+
+    <div class="clearfix product-variants-item">
+      <span class="control-label">VELIKOST:
+        L/XL
+      </span>
+      <ul id="group_8">
+        <li  class="sklademANO input-container float-xs-left ">
+          <label>
+            <input class="input-radio" type="radio" data-product-attribute="8" name="group[8]"     value="1140"       title="S/M">
+            <span class="radio-label">
+                                    S/M
+            </span>
+          </label>
+        </li>
+        <li idproductstributesOK="55307,55312" class="sklademNE input-container float-xs-left ">
+          <label>
+            <input class="input-radio" type="radio" data-product-attribute="8" name="group[8]"     value="1130"       title="L/XL" checked="checked">
+            <span class="radio-label">
+              <span class='skrtnuti1'></span>
+              <span class='skrtnuti2'></span>
+                                L/XL
+            </span>
+          </label>
+        </li>
+      </ul>
+    </div>
+
+    <div class="clearfix product-variants-item">
+      <span class="control-label">Barva:
+        Černá
+      </span>
+      <ul id="group_1">
+        <li class="input-container">
+          <span class="color" style="background-image:url(/y.jpg)"></span>
+        </li>
+      </ul>
+    </div>
+  </div>
+
+  <div id='sklademNEExist'>asdfasdf</div>
+
+  <!-- "Súvisiace produkty" karuselová sekcia — INÝ produkt s VLASTNÝM plným
+       veľkostným výberom, mimo hlavného "product-variants" bloku vyššie.
+       Neorezaný čítač (celý dokument, bez výrezu) by túto veľkosť omylom
+       pripočítal k produktu na tejto stránke. -->
+  <div class="products-selection">
+    <div class="product-miniature js-product-miniature">
+      <a href="/cs/cepice/19938-iny-produkt.html">Iná čiapka</a>
+      <div class="clearfix product-variants-item">
+        <span class="control-label">VELIKOST:
+          XXL
+        </span>
+        <ul id="group_8">
+          <li class="sklademANO input-container float-xs-left ">
+            <label>
+              <input class="input-radio" type="radio" data-product-attribute="8" name="group[8]"     value="9999"       title="XXL">
+              <span class="radio-label">XXL</span>
+            </label>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

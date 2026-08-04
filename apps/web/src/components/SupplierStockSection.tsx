@@ -63,8 +63,12 @@ export function SupplierStockSection({
     setRunNotice("");
     runSupplierStockNow()
       .then((result) => {
+        // issue 224: `checked` je počet ODKAZOV, ale skladom/vypredané/neviem
+        // sú počty ZÁZNAMOV (odkaz × veľkosť) — odkaz s viacerými veľkosťami
+        // prispieva do rozpisu viac než raz, takže sa nesmú tváriť ako súčet
+        // rovnakej jednotky.
         setRunNotice(
-          `Skontrolovaných ${String(result.checked)} odkazov · skladom ${String(result.available)} · vypredané ${String(result.unavailable)} · neviem ${String(result.unknown)} · zlyhalo ${String(result.failed)}.`,
+          `Skontrolovaných ${String(result.checked)} odkazov · zlyhalo ${String(result.failed)}. Záznamy: skladom ${String(result.available)} · vypredané ${String(result.unavailable)} · neviem ${String(result.unknown)}.`,
         );
         load();
       })
@@ -96,7 +100,10 @@ export function SupplierStockSection({
 
       <div className="autohead">
         <span className="chip" data-testid="ss-total">
-          Sledovaných odkazov: {overview.total}
+          {/* issue 224: `overview.total` počíta RIADKY (dvojica odkaz+veľkosť),
+              nie unikátne odkazy — odkaz s pravidlom na veľkosti prispieva
+              viac než jedným záznamom, takže "odkazov" by bolo zavádzajúce. */}
+          Sledovaných záznamov: {overview.total}
         </span>
         <span className="chip" data-testid="ss-available">
           Skladom: {overview.available}
@@ -155,11 +162,12 @@ export function SupplierStockSection({
                   <td>{host.host}</td>
                   <td>{host.count}</td>
                   <td>
-                    {host.samples.map((link) => (
-                      <div key={link}>
-                        <a href={link} target="_blank" rel="noreferrer noopener">
-                          {link}
+                    {host.samples.map((sample) => (
+                      <div key={`${sample.link}|${sample.sizeLabel}`}>
+                        <a href={sample.link} target="_blank" rel="noreferrer noopener">
+                          {sample.link}
                         </a>
+                        {sample.sizeLabel !== "" && ` [${sample.sizeLabel}]`}
                       </div>
                     ))}
                   </td>
@@ -180,6 +188,7 @@ export function SupplierStockSection({
               <tr>
                 <th scope="col">Dodávateľ</th>
                 <th scope="col">Odkaz</th>
+                <th scope="col">Veľkosť</th>
                 <th scope="col">Dostupnosť</th>
                 <th scope="col">Cena</th>
                 <th scope="col">Kontrolované</th>
@@ -187,13 +196,16 @@ export function SupplierStockSection({
             </thead>
             <tbody>
               {rows.map((row) => (
-                <tr key={row.link} data-testid={`ss-row-${row.link}`}>
+                // Kľúč MUSÍ niesť aj veľkosť — odkaz s pravidlom na veľkosti
+                // (issue 224) má pre TÚ ISTÚ linku viac riadkov naraz.
+                <tr key={`${row.link}|${row.sizeLabel}`} data-testid={`ss-row-${row.link}-${row.sizeLabel}`}>
                   <td>{row.host}</td>
                   <td>
                     <a href={row.link} target="_blank" rel="noreferrer noopener">
                       {row.link}
                     </a>
                   </td>
+                  <td>{row.sizeLabel === "" ? "—" : row.sizeLabel}</td>
                   <td>
                     {row.ok ? AVAILABILITY_LABEL[row.availability] : "Kontrola zlyhala"}
                     {row.availabilityText !== "" && ` (${row.availabilityText})`}

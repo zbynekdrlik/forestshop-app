@@ -87,6 +87,34 @@ paths:
   podmienok by sa skôr či neskôr rozišla a majiteľ by overil iné produkty, než
   by sa naozaj prepli. Integračný test to drží (`overovací zoznam vylučuje
   detailOnly rovnako ako samotné prepínanie`).
+- **`supplier_stock` je od issue 224 kľúčovaná na dvojicu `(link, size_label)`,
+  nie len na `link`** — 965 z 2179 odkazov pokrýva VIAC našich variantov
+  (rôzne veľkosti), a dodávateľ hlási dostupnosť PO veľkosti. `size_label=''`
+  = "dostupnosť CELÉHO odkazu" (jednoveľkostný produkt, alebo doména bez
+  `SIZE_AVAILABILITY_RULES` pravidla — nezmenené správanie). `run.ts`'s
+  `writeSupplierStockRows` VŽDY vymaže riadky linky mimo aktuálne zapisovanej
+  množiny — blanket (`''`) a per-veľkostné riadky sa pre TEN ISTÝ odkaz
+  NIKDY nesmú stretnúť naraz, inak by `restock/queries.ts`'s JOIN (`size_label
+  = coalesce(variant.size_label,'') OR size_label = ''`) mohol jeden variant
+  spárovať s DVOMA riadkami naraz (jeho vlastným aj cudzím blanket riadkom).
+- **NÁŠ `variant.size_label` sa NEMUSÍ zhodovať s dodávateľovým textom
+  znak-po-znaku — Shoptet ukladá skrátený tvar tej istej veľkosti.**
+  Zmerané v produkčnej DB (issue 224): náš `"L-X"` = dodávateľov `"L/XL"`
+  (shop.lasting.eu). `matchSizeLabel` (`parse.ts`) preto rozdelí OBE strany
+  na časti (oddeľovače preč) a porovná POZIČNE — zhoda platí pri PRESNEJ
+  zhode ALEBO keď je jedna časť PREFIXOM druhej na tej istej pozícii ("X" ~
+  "XL"), nikdy pri inom počte častí ani pri VIACNÁSOBNEJ (nejednoznačnej)
+  zhode. Toto NIE JE AI dohad — je to deterministický, testovaný algoritmus.
+- **JSON-LD sa na doméne s `SIZE_AVAILABILITY_RULES` pravidlom (issue 224:
+  `shop.lasting.eu`, PrestaShop) NIKDY neberie ako dostupnosť KONKRÉTNEJ
+  veľkosti — hlási len JEDNU (predvolenú/`checked`) veľkosť a vie byť s
+  vlastným per-veľkostným zoznamom v priamom rozpore** (živý dôkaz: JSON-LD
+  hlásil `InStock` pre veľkosť, ktorej vlastný `<li class="sklademNE">`
+  zoznam hovorí opak). `parseSizeAvailability` číta zoznam veľkostí PRIAMO
+  (trieda `sklademANO`/`sklademNE`, veľkosť v `title=""`) a keď taký zoznam
+  existuje, `parsePage` (JSON-LD/meta/text) sa pre tento odkaz vôbec
+  nepoužije — rovnaká disciplína ako issue 223/225's textové/viditeľné
+  pravidlá, len na ÚROVNI veľkosti namiesto úrovne stránky.
 - **Nová tabuľka MUSÍ pribudnúť do `TRUNCATE` zoznamu v
   `tests/helpers/db.ts`, inak testy zlyhajú AŽ pri druhom behu.** Pri #212 to
   bolo obzvlášť zákerné: prvý beh prešiel (prázdna tabuľka), druhý beh našiel

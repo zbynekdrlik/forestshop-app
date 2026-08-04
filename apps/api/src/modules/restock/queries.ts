@@ -4,7 +4,7 @@
 // e-shope produkt, ktorý majiteľ vedome vypol. Preto sa každá podmienka
 // kontroluje pozitívne (musí platiť), nikdy sa nič nepredpokladá.
 
-import { and, asc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, isNull, or, sql } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
 import { products, shopProductUrl, supplierStock, variants } from "../../db/schema.js";
 import {
@@ -95,7 +95,23 @@ async function allRestockCandidates(db: Database, now: Date): Promise<readonly R
     })
     .from(variants)
     .innerJoin(products, eq(variants.productKey, products.key))
-    .innerJoin(supplierStock, eq(supplierStock.link, link))
+    // issue 224: odkaz s pravidlom na veľkosti nesie VIAC riadkov naraz —
+    // jeden na KAŽDÚ našu veľkosť. Variant sa spáruje buď na SVOJU vlastnú
+    // veľkosť (`size_label = coalesce(variant.size_label,'')`), alebo na
+    // blanket riadok (`size_label = ''`) pre linky bez rozlíšenia veľkosti.
+    // Tieto dve vetvy sa pre TEN ISTÝ odkaz nikdy nestretnú naraz — `run.ts`
+    // pre každý odkaz zapíše VÝHRADNE jednu z týchto dvoch stratégií a
+    // zvyšné riadky vymaže.
+    .innerJoin(
+      supplierStock,
+      and(
+        eq(supplierStock.link, link),
+        or(
+          eq(supplierStock.sizeLabel, sql<string>`coalesce(${variants.sizeLabel}, '')`),
+          eq(supplierStock.sizeLabel, ""),
+        ),
+      ),
+    )
     // LEFT zámerne: variant bez záznamu vo feede NESMIE zo zoznamu vypadnúť —
     // majiteľ overuje presne tie riadky, ktoré by sa prepli, takže skrytý
     // riadok by znamenal prepnutie bez kontroly (trieda chyby z issue 219).

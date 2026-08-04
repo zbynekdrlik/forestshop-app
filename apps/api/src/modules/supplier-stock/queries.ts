@@ -8,6 +8,8 @@ import type { Database } from "../../db/client.js";
 import { supplierStock } from "../../db/schema.js";
 
 export interface SupplierStockOverview {
+  // issue 224: počíta ZÁZNAMY (dvojica odkaz+veľkosť), nie unikátne odkazy —
+  // odkaz s pravidlom na veľkosti prispieva viac než jedným záznamom.
   readonly total: number;
   readonly available: number;
   readonly unavailable: number;
@@ -18,11 +20,14 @@ export interface SupplierStockOverview {
 
 export interface SupplierStockRow {
   readonly link: string;
+  // '' = dostupnosť CELÉHO odkazu (issue 224) — jednoveľkostný produkt,
+  // alebo doména bez pravidla na čítanie zoznamu veľkostí.
+  readonly sizeLabel: string;
   readonly host: string;
   readonly availability: "available" | "unavailable" | "unknown";
   readonly availabilityText: string;
   readonly price: string | null;
-  readonly source: "json_ld" | "meta" | "text" | "none";
+  readonly source: "json_ld" | "meta" | "text" | "size_list" | "none";
   readonly ok: boolean;
   readonly error: string | null;
   readonly httpStatus: number | null;
@@ -30,12 +35,19 @@ export interface SupplierStockRow {
   readonly confirmedAt: Date | null;
 }
 
+/** Ukážkový odkaz + KTORÁ naša veľkosť sa naň nepodarilo spárovať (issue 224). */
+export interface UnreadableSample {
+  readonly link: string;
+  /** '' = celý odkaz (bez rozlíšenia veľkosti), nikdy nesúčasť `href`u. */
+  readonly sizeLabel: string;
+}
+
 /** Jeden riadok na doménu, ktorú sa nedarí čítať — karta pre majiteľa. */
 export interface UnreadableHost {
   readonly host: string;
   readonly count: number;
-  /** Ukážkové linky (max 5), aby sa dalo hneď kliknúť a pozrieť sa. */
-  readonly samples: readonly string[];
+  /** Ukážky (max 5), aby sa dalo hneď kliknúť a pozrieť sa. */
+  readonly samples: readonly UnreadableSample[];
 }
 
 export async function getSupplierStockOverview(db: Database): Promise<SupplierStockOverview> {
@@ -58,6 +70,7 @@ export async function listSupplierStock(db: Database, limit = 500): Promise<read
   return db
     .select({
       link: supplierStock.link,
+      sizeLabel: supplierStock.sizeLabel,
       host: supplierStock.host,
       availability: supplierStock.availability,
       availabilityText: supplierStock.availabilityText,
@@ -70,7 +83,7 @@ export async function listSupplierStock(db: Database, limit = 500): Promise<read
       confirmedAt: supplierStock.confirmedAt,
     })
     .from(supplierStock)
-    .orderBy(asc(supplierStock.host), asc(supplierStock.link))
+    .orderBy(asc(supplierStock.host), asc(supplierStock.link), asc(supplierStock.sizeLabel))
     .limit(limit);
 }
 
@@ -82,19 +95,22 @@ export async function listSupplierStock(db: Database, limit = 500): Promise<read
  */
 export async function listUnreadableHosts(db: Database): Promise<readonly UnreadableHost[]> {
   const rows = await db
-    .select({ host: supplierStock.host, link: supplierStock.link })
+    .select({ host: supplierStock.host, link: supplierStock.link, sizeLabel: supplierStock.sizeLabel })
     .from(supplierStock)
     .where(or(eq(supplierStock.ok, false), eq(supplierStock.availability, "unknown")))
-    .orderBy(asc(supplierStock.host), asc(supplierStock.link));
+    .orderBy(asc(supplierStock.host), asc(supplierStock.link), asc(supplierStock.sizeLabel));
 
-  const byHost = new Map<string, string[]>();
+  const byHost = new Map<string, UnreadableSample[]>();
   for (const row of rows) {
-    const links = byHost.get(row.host) ?? [];
-    links.push(row.link);
-    byHost.set(row.host, links);
+    const samples = byHost.get(row.host) ?? [];
+    // Pri odkaze s pravidlom na veľkosti (issue 224) môže na tú istú linku
+    // pripadnúť viac neprečítaných veľkostí naraz — každá je VLASTNÁ ukážka,
+    // aby bolo vidno KTORÁ veľkosť sa neprečítala, nie len odkaz.
+    samples.push({ link: row.link, sizeLabel: row.sizeLabel });
+    byHost.set(row.host, samples);
   }
   return [...byHost.entries()]
-    .map(([host, links]) => ({ host, count: links.length, samples: links.slice(0, 5) }))
+    .map(([host, samples]) => ({ host, count: samples.length, samples: samples.slice(0, 5) }))
     .sort((a, b) => b.count - a.count || a.host.localeCompare(b.host));
 }
 
@@ -103,6 +119,7 @@ export async function listRecentChecks(db: Database, limit = 10): Promise<readon
   return db
     .select({
       link: supplierStock.link,
+      sizeLabel: supplierStock.sizeLabel,
       host: supplierStock.host,
       availability: supplierStock.availability,
       availabilityText: supplierStock.availabilityText,
