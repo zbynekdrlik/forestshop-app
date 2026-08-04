@@ -2493,3 +2493,37 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
   screen and history table within the hour, as required. Zero console
   errors. Production baseline unchanged (0|0|0).
 - Both issues closed with evidence, both Discord completion cards fired.
+
+## Batch: issue 223 (huntingshop.eu pätičková veta) + issue 225 (odimon.sk klamlivé JSON-LD) — 4. 8. 2026
+
+- Version bump `42c87c0` (0.3.0-dev.129 → .130). RED `f1989aa` (fixtúry z
+  reálnych stránok + failing testy pre oba tickety). GREEN `9ad65e0`:
+  `TRUSTED_TEXT_HOSTS` nahradené `TEXT_AVAILABILITY_RULES` (per-host výrez +
+  čo znamená chýbajúci výrez), pridané `VISIBLE_AVAILABILITY_RULES` (odimon.sk
+  krížová kontrola JSON-LD vs viditeľná dostupnosť pri produkte).
+  `wetland.sk`/`trigona.sk` zámerne stratili textovú úroveň (žiadny overený
+  výrez) — sledované v novo založenom issue 230.
+- Code review (`superpowers:requesting-code-review`, nezávislý subagent)
+  našiel 1 Important nález (odimon.sk `availabilityText` sa odvodzovala z
+  náhodnej "druhej zatváracej `</span>`", krehké pri ďalšom vnorenom
+  prvku) — opravené `0f430f7`, pridaný regresný test s vnoreným počtom
+  kusov. Aj playbook (`.claude/rules/supplier-stock.md`) aktualizovaný v
+  tom istom commite (starý odkaz na odstránenú `TRUSTED_TEXT_HOSTS`).
+- PR #229 (bundle, closes issue 223 + issue 225 bez `Closes #N` v tele/
+  commitoch — tento repo má pascu s predčasným auto-close, pozri CLAUDE.md).
+  CI zelené (2 cykly — pred aj po review-fix commite), mergeable/clean,
+  merge `671c464a`. Main CI + Deploy zelené.
+- Live overené priamo na dev2 kontajneri (`docker exec forestshop-app-1`),
+  nasadený `parsePage` spustený proti REÁLNYM živým stránkam: huntingshop.eu
+  skladom produkt → `available` (nezmenené); pôvodná URL vypredaného
+  ruksaku (dnes redirect na homepage s tou istou pätičkovou vetou) →
+  `unavailable` (predtým by bolo `available` — bug potvrdene opravený);
+  odimon.sk konfliktná stránka → `unknown` (predtým `available` z JSON-LD).
+  `/api/version` = `0.3.0-dev.130`/`671c464a`. Produkčné počty
+  (`huntingshop.eu` 310/210, `odimon.sk` 182/63) sú zatiaľ NEZMENENÉ —
+  scraper prehodnocuje odkaz až po 20 h, skutočný rozpad uvidíme po
+  najbližšom nočnom behu; obe issue majú komentár s vysvetlením a čakajú
+  na doplnenie čísla.
+- Oba tickety zavreté ručne (223, 225) s dôkazom; issue 230 (wetland.sk/
+  trigona.sk vlastný výrez) založené ako follow-up. Oba Discord run-card
+  odoslané.
