@@ -48,14 +48,21 @@ export function deriveVariantState(
   },
 ): VariantState {
   if (HIDDEN_VISIBILITIES.includes(input.productVisibility)) return "discontinued";
+  // Jednotlivo vypnutý variant je `discontinued`, NIE `out_of_stock` (issue 219,
+  // druhá vlna). "0" znamená, že majiteľ TÚ KONKRÉTNU veľkosť v Shoptete vypol —
+  // je to vedomé „nepredávať", presne ako `detailOnly`, nie „došiel tovar".
+  // Rozdiel je nosný: `out_of_stock` je vstupom do automatizácie
+  // „Vypredané → Skladom", takže pri starom zaradení sa 233 vypnutých variantov
+  // stalo kandidátmi na zapnutie — a zápis textu dostupnosti by ich aj tak
+  // nezapol (vypnutie je iné pole), takže by to bolo prepínanie naprázdno na
+  // produktoch, ktoré majiteľ vedome vypol. Kontrola je PRED textom: vypnutý
+  // variant nesmie „prebiť" nič, ale text „Vypredané" ho nesmie stiahnuť späť
+  // medzi kandidátov.
+  if (input.variantVisibility === "0") return "discontinued";
 
   const text = effectiveAvailabilityText(input).toLowerCase();
   if (DISCONTINUED_MARKERS.some((marker) => text.includes(marker))) return "discontinued";
   if (OUT_OF_STOCK_MARKERS.some((marker) => text.includes(marker))) return "out_of_stock";
-  // Vypnutý jednotlivý variant sa NIKDY nezobrazí ako predajný — no nesmie
-  // prebiť silnejší signál vyššie (text/produktová viditeľnosť hovoriaca
-  // "discontinued"), preto je táto kontrola AŽ TU, pred predvoleným "sellable".
-  if (input.variantVisibility === "0") return "out_of_stock";
   // Prázdny text NIE JE vypredané a `stock` do stavu nevstupuje vôbec (issue 219).
   // Prázdna dostupnosť znamená, že produkt ju nemá priradenú, takže Shoptet
   // zobrazí PREDVOLENÚ — na tomto e-shope zelené „Skladom" (overené naživo na

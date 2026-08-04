@@ -57,10 +57,15 @@ paths:
   štrukturálny/povinný stĺpec bez efektu). Skutočné hodnoty v exporte: "0"
   (Shoptet vypol PRÁVE TENTO variant, napr. jednu veľkosť z radu), "1", alebo
   prázdny reťazec (~2 700 jednovariantných produktov ho často nevypĺňa —
-  prázdny sa berie ako viditeľný, nikdy ako vypnutý). `deriveVariantState`
-  (`availability.ts`) ho zohľadňuje AŽ PO silnejších signáloch (text/
-  `productVisibility` hovoriaci "discontinued") — "0" vynúti aspoň
-  `out_of_stock`, nikdy neprebíja `discontinued`. Nepretrváva vo `variant`
+  prázdny sa berie ako viditeľný, nikdy ako vypnutý). **"0" znamená
+  `discontinued`, NIE `out_of_stock` (issue 219, druhá vlna)** — vypnutá
+  veľkosť je vedomé „nepredávať" (rovnaká trieda ako `detailOnly`), nie
+  „došiel tovar". Rozdiel je nosný: `out_of_stock` je VSTUPOM do automatizácie
+  „Vypredané → Skladom", takže pri starom zaradení sa 233 vypnutých variantov
+  (z 682 riadkov s "0" v reálnom exporte) stalo kandidátmi na zapnutie — a
+  zápis textu dostupnosti by ich aj tak nezapol, lebo vypnutie je iné pole.
+  Kontrola beží PRED textovými značkami, takže text „Vypredané" vypnutý
+  variant nestiahne späť medzi kandidátov. Nepretrváva vo `variant`
   tabuľke — ovplyvňuje len odvodenie `state` pri importe, žiadny ďalší
   konzument ho po importe nepotrebuje.
 - **Brána prijatia (`validation.ts`) je to, čo drží #277, #281 a #286 mimo.** Kontroluje
