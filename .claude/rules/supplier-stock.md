@@ -40,11 +40,15 @@ paths:
   Slovo „Skladom" sa na cudzej stránke môže vyskytnúť v pätičke, v menu alebo
   pri inom produkte. Pridanie novej domény do zoznamu vyžaduje overenie na
   uloženej vzorke tej stránky, nikdy len domnienku.
-- **Obe polia dostupnosti sa do Shoptetu zapisujú NARAZ.** Shoptet zobrazuje
-  `availabilityOutOfStock` v momente, keď sklad klesne na nulu, takže zápis
-  len do `availabilityInStock` nechá po dopredaní fiktívnych kusov naskočiť
-  staré „Vypredané" (overené v ostrej prevádzke starej appky 14. 7. 2026).
-  Preto aj kladný `stock` — pri nule je prepnutie bez efektu.
+- **Obe polia dostupnosti sa do Shoptetu zapisujú NARAZ, ale `stock` sa
+  nezapisuje VÔBEC (issue 219).** Shoptet zobrazuje `availabilityOutOfStock`,
+  keď sklad klesne na nulu (overené v ostrej prevádzke starej appky
+  14. 7. 2026), a v tomto obchode je zásoba trvalo nulová — majiteľ skladovú
+  logistiku nepoužíva. Preto sa musia nastaviť OBA texty (inak zákazníkovi
+  svieti staré „Vypredané"), zatiaľ čo zápis fiktívnej zásoby by do obchodu
+  vpísal číslo, ktoré nikto neudržiava. Pôvodné pravidlo hovorilo opak
+  („preto aj kladný `stock`") — bolo postavené na predpoklade, že zásoba
+  niečo znamená.
 - **Nová cesta zápisu CSV do Shoptetu patrí do `shoptet-writeback/csv.ts`, aj
   keď má úplne iné stĺpce** (`buildRestockCsv` vedľa `buildWritebackCsv`) —
   ochrana proti CSV injection (`dataRowToLine`) musí platiť pre KAŽDÚ cestu,

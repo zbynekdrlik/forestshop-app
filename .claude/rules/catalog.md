@@ -26,6 +26,26 @@ paths:
   poradové číslo od Shoptetu a pri ~2 700 jednovariantných produktoch je prázdne.
   `code`-prefix pred prvou lomkou si ponecháva len odvodenie `sizeLabel`
   (`40237/3XL` → veľkosť `3XL`).
+- **`stock` NEVSTUPUJE do odvodenia stavu variantu a prázdny text dostupnosti
+  NIE JE vypredané (issue 219, zmerané na produkcii 4. 8. 2026).** Majiteľ v
+  Shoptete skladovú logistiku NEPOUŽÍVA a `negativeAmount = 1` je nastavené na
+  VŠETKÝCH 14 071 riadkoch exportu — zákazník teda produkt kúpi aj pri nulovej
+  či zápornej zásobe. Prázdna dostupnosť neznamená „vypredané", ale „produkt
+  nemá priradenú dostupnosť", takže Shoptet zobrazí PREDVOLENÚ — na tomto
+  e-shope zelené „Skladom" (naživo overené: `10-12106-087`, `10-11284-083`,
+  pončo Deerhunter Survivor → všetky `schema.org/InStock`; kontrolne
+  `60031/XXL` s textom „Vypredané" naozaj vracia `OutOfStock`). Pôvodné
+  pravidlo (prázdny text + `stock <= 0` → `out_of_stock`) označilo 6 793
+  variantov za vypredané a automatizácia „Vypredané → Skladom" ich ponúkla na
+  zapnutie, hoci sú bežne v predaji. **Test na KAŽDÉ ďalšie pravidlo
+  odvodzujúce niečo zo `stock`: over to na ŽIVEJ stránke produktu
+  (`schema.org/InStock`/`OutOfStock`), nie z hodnoty v exporte** — v tomto
+  obchode je zásoba dekoratívna.
+- **Rozdelenie textov dostupnosti na reálnom exporte** (viditeľné varianty,
+  4. 8. 2026 — užitočné pri každom ďalšom odhade „koľko toho je"): prázdny text
+  6 793, „Predaj výrobku skončil" 5 692, „Skladom" 512, „Vypredané" 145,
+  „Momentálne nedostupné" 18. Naozaj vypredaných viditeľných variantov je teda
+  153, nie tisíce.
 - **Dostupnosť je voľný text, nie číselník.** Reálne pozorované hodnoty: `Skladom`,
   `Skladem`, `Vypredané`, `Predaj výrobku skončil`, `Není skladem`,
   `Momentálne nedostupné`, `Dodanie 1-3 dni`, `Na dotaz`, `Predobjednávka`. Pôvodný
