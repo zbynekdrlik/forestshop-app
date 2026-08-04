@@ -8,17 +8,23 @@ import { DEFAULT_TAB_ID, HIDDEN_TABS, NAV, findTab, isVisibleTabId } from "./nav
 // pridalo "Texty e-mailov" do Systému (nastavenie spoločné pre VŠETKY
 // automatizácie). Issue 239 pridalo "Párovanie produktov" pod "Eshop"
 // (rovnaký dôvod ako "Nedostupné tovary" — pracovná obrazovka bez plánu).
+// Issue 240 pridalo "Vyhľadať" pod "Eshop" z rovnakého dôvodu.
 // Tento test je najbližšie k tomu, čo strojovo overiť dá (registrácia, nie DOM).
-it("NAV má tri priečinky (Systém/Eshop/Automatizácie), s 3/3/4 záložkami v poradí podľa dôležitosti", () => {
+it("NAV má tri priečinky (Systém/Eshop/Automatizácie), s 3/4/4 záložkami v poradí podľa dôležitosti", () => {
   expect(NAV).toHaveLength(3);
   expect(NAV.map((f) => f.label)).toEqual(["Systém", "Eshop", "Automatizácie"]);
   expect(NAV[0]?.tabs).toHaveLength(3);
-  expect(NAV[1]?.tabs).toHaveLength(3);
+  expect(NAV[1]?.tabs).toHaveLength(4);
   expect(NAV[2]?.tabs).toHaveLength(4);
   // issue 212: "Dodávateľský sklad" — scraper dostupnosti u dodávateľa;
   // patrí do Systému (zadanie majiteľa), nie medzi Automatizácie.
   expect(NAV[0]?.tabs.map((t) => t.label)).toEqual(["Sync zo Shoptetu", "Texty e-mailov", "Dodávateľský sklad"]);
-  expect(NAV[1]?.tabs.map((t) => t.label)).toEqual(["Na objednanie", "Nedostupné tovary", "Párovanie produktov"]);
+  expect(NAV[1]?.tabs.map((t) => t.label)).toEqual([
+    "Na objednanie",
+    "Nedostupné tovary",
+    "Párovanie produktov",
+    "Vyhľadať",
+  ]);
   // issue 193: "Odoslané e-maily" — prehľad toho, čo automatizácie poslali.
   expect(NAV[2]?.tabs.map((t) => t.label)).toEqual([
     // issue 213: prepínanie vypredaných produktov späť na skladom.
@@ -41,6 +47,7 @@ it("findTab nájde viditeľnú aj skrytú záložku podľa id, neznáme id vrát
   expect(findTab("scheduler")?.label).toBe("Plánovač");
   expect(findTab("posta-uncollected")?.label).toBe("Nevyzdvihnuté zásielky");
   expect(findTab("order-reminder")?.label).toBe("Pripomienky objednávok");
+  expect(findTab("search")?.label).toBe("Vyhľadať");
   expect(findTab("neexistuje")).toBeUndefined();
 });
 
@@ -51,6 +58,8 @@ it("isVisibleTabId rozlíši viditeľné (NAV) od skrytých (HIDDEN_TABS)", () =
   expect(isVisibleTabId("posta-uncollected")).toBe(true);
   expect(isVisibleTabId("order-reminder")).toBe(true);
   expect(isVisibleTabId("nedostupne")).toBe(true);
+  // issue 240: nová viditeľná záložka "Vyhľadať".
+  expect(isVisibleTabId("search")).toBe(true);
   for (const hiddenId of Object.keys(HIDDEN_TABS)) {
     expect(isVisibleTabId(hiddenId)).toBe(false);
   }

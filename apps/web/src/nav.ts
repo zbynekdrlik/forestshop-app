@@ -10,6 +10,7 @@ import { PairingSection } from "./components/PairingSection.js";
 import { PostaUncollectedSection } from "./components/PostaUncollectedSection.js";
 import { RestockSection } from "./components/RestockSection.js";
 import { SchedulerSection } from "./components/SchedulerSection.js";
+import { SearchSection } from "./components/SearchSection.js";
 import { SupplierLinksSection } from "./components/SupplierLinksSection.js";
 import { SupplierStockSection } from "./components/SupplierStockSection.js";
 import { SyncSection } from "./components/SyncSection.js";
@@ -86,6 +87,11 @@ export const NAV: readonly NavFolder[] = [
       // sem (nie do Automatizácie), je to obrazovka, na ktorej obsluha
       // pracuje, presne ako "Na objednanie"/"Nedostupné tovary".
       { id: "supplier-links", label: "Párovanie produktov", icon: "🔗", Component: SupplierLinksSection, wide: true },
+      // issue 240: "rýchla ruka" na JEDEN konkrétny kus tovaru/objednávku —
+      // nájsť + rovno opraviť dodávateľskú linku. Patrí sem z rovnakého
+      // dôvodu ako "Párovanie produktov" vyššie (obsluha na nej pracuje,
+      // žiadny plán/zapnuté-vypnuté koncept).
+      { id: "search", label: "Vyhľadať", icon: "🔍", Component: SearchSection, wide: true },
     ],
   },
   {
