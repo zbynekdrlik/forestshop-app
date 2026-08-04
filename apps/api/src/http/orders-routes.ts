@@ -10,8 +10,7 @@ import { listKnownStatusNames, listOpenStatusNames, replaceOpenStatusNames } fro
 import { getOrdersDashboardOverview } from "../modules/orders/overview.js";
 import { getOrderDetail, listOpenOrderLinesBySupplier } from "../modules/orders/queries.js";
 import { assignOrderLineSupplier } from "../modules/orders/supplier-assignment.js";
-import { setProductSupplierLink } from "../modules/orders/supplier-link-assignment.js";
-import { startsWithFormulaChar } from "../modules/shoptet-writeback/formula-guard.js";
+import { setProductSupplierLink, supplierLinkUrlBody } from "../modules/orders/supplier-link-assignment.js";
 import { setOrderComment, setOrderLineOrdered, setOrderLineState } from "../modules/orders/state.js";
 import { requireRole, requireUser, type AppBindings } from "./middleware.js";
 import { requireSameOrigin } from "./origin-check.js";
@@ -31,33 +30,11 @@ const orderLineOrderedBody = z.object({ ordered: z.boolean() });
 // v projekte (`catalog-routes.ts`, `pairing-routes.ts`) — hodnota sa neskôr
 // vkladá aj do mailu dodávateľovi, chýbajúci limit bol prehliadnutá medzera.
 const orderLineSupplierBody = z.object({ supplier: z.string().trim().min(1).max(200) });
-// issue 121: manuálny odkaz na dodávateľa — validovaný ako URL (ticketova
-// akceptačná podmienka), `.max(2000)` rovnaká horná hranica ako ostatné voľné
-// URL/textové vstupy v projekte (`orderCommentBody` nižšie). `.url()` samo o
-// sebe by prijalo aj syntakticky platnú, ale nebezpečnú schému (napr.
-// `javascript:...`) — hodnota sa vykresľuje priamo ako `<a href>`
-// (`OrderLineRow.tsx`), preto NAVYŠE `.regex` vynucuje http(s), rovnaký vzor
-// ako `adminUrl`/existujúci `supplierUrl` vo frontendovej `ordersApi.ts`
-// schéme (issue 70's "druhá vrstva overenia" zásada).
-// issue 153: `.refine` navyše — samostatná, POMENOVANÁ formula-injection
-// kontrola (`formula-guard.ts`, zdieľaná s CSV-sink ochranou v `csv.ts`).
-// Pre TOTO pole je dnes logicky prekrytá `.regex`om nižšie (hodnota
-// začínajúca `=`/`+`/`-`/`@` nikdy nemôže zároveň začínať `http`), ale ide o
-// obranu do hĺbky: chráni pred budúcim uvoľnením http(s) pravidla, ktoré by
-// inak potichu znovu otvorilo CSV-injection dieru (`internalNote` v
-// generovanom CSV, `select-changes.ts`) bez toho, aby si to niekto všimol —
-// viď ticketov design komentár.
-const orderLineSupplierLinkBody = z.object({
-  url: z
-    .string()
-    .trim()
-    .url()
-    .max(2000)
-    .regex(/^https?:\/\//)
-    .refine((v) => !startsWithFormulaChar(v), {
-      message: "odkaz nesmie začínať znakom vzorca (=, +, -, @) — možný pokus o CSV-injection",
-    }),
-});
+// issue 121/153: validácia tela presunutá do `supplier-link-assignment.ts`'s
+// zdieľaného `supplierLinkUrlBody` (issue 239 ju potrebuje ZNOVA pre
+// `POST /api/product-links/:productKey`, rovnaká URL+http(s)+formula-guard
+// kontrola) — pôvodný komentár k dôvodu jednotlivých pravidiel je tam.
+const orderLineSupplierLinkBody = supplierLinkUrlBody;
 // issue 64: manažérova voľná poznámka k CELEJ objednávke — na rozdiel od
 // `orderLineSupplierBody` vyššie ZÁMERNE bez `.min(1)` (prázdny orezaný vstup
 // je platný spôsob, ako poznámku vymazať, route ho mapuje na `null`). Cap
