@@ -2621,3 +2621,40 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
   (`/admin/statistiky-objednavek-a-obratu/`, filter "Dnes") — PRESNÁ ZHODA:
   8 objednávok, 446,90 € oboma stranami. Issue zavreté ručne s dôkazom,
   Discord run-card odoslaná. Playbook doplnený (`.claude/rules/orders.md`).
+
+- issue 238 (Nedostupné tovary prepracované podľa majiteľovho nákresu):
+  automatický "Náhrada:" návrh (`product.relatedCodes`, Shoptetovo
+  "súvisiace produkty") zrušený, majiteľ ho zamietol ako blbosť. Nová
+  tabuľka `nedostupne_replacement_link` (migrácia 0032, `variant_code`
+  PLAIN bez FK — rovnaká konvencia ako `nedostupne_state`, ŽIADNY unique
+  index — viac riadkov = viac ručných liniek na tovar, zoradené podľa
+  vloženia) + nový modul `modules/nedostupne/replacement-links.ts` +
+  `POST`/`DELETE /api/nedostupne/replacement-links[/:id]` (rovnaké
+  oprávnenie ako `/send`, URL validovaná http(s)-only + formula-guard
+  rovnako ako existujúci `orderLineSupplierLinkBody`). Prekliky: názov
+  produktu → náš e-shop (`shop_product_url`, `null` = neaktívny, ŽIADEN
+  vyhľadávací fallback na rozdiel od `restock` obrazovky — ticket to žiadal
+  explicitne), kód produktu → dodávateľ (zdieľaná
+  `resolveEffectiveSupplierLink`, rovnaká funkcia ako "Na objednanie").
+  E-mail (`buildAlternativeEmail`) teraz berie holé URL priamo (label = url,
+  appka nepozná názov ručne vloženého odkazu). `mail-templates/samples.ts`'s
+  live-data náhľad prepnutý na vzorku z novej tabuľky namiesto
+  `product.relatedCodes`. TDD: `[red]`/`[green]` pár na `logic.test.ts`
+  (`buildAlternativeEmail`), + integračné testy pre nový modul + HTTP
+  trasy + e2e (pridanie/zmazanie odkazu, prežitie reloadu, oba prekliky,
+  obsah preview e-mailu). `product.related_codes` stĺpec/import v katalógu
+  ostáva nedotknutý (cross-cutting, mimo scope) — teraz mŕtvy kód, follow-up
+  na odstránenie: issue 245. Code review (self-audit + nezávislý
+  `superpowers:requesting-code-review` subagent): 0 Critical, 0 Important,
+  2 Minor (zastaraný komentár v teste — opravený; chýbajúci dedikovaný test
+  pre "ten istý variant vo viacerých objednávkach" — vyhodnotené ako
+  nízkoriziková a neoprávnená samostatná práca). PR #246, merge `db2a6b0`.
+  Naživo overené na `forestshop-novy.newlevel.media` (v0.3.0-dev.140) proti
+  REÁLNYM produkčným dátam (8 skutočných nedostupných tovarov): žiadny
+  automatický návrh nikde, ručný odkaz pridaný/prežil reload/objavil sa v
+  preview/zmazaný (upratané), všetky tri prekliky fungujú na reálnych
+  produktoch, jeden reálny produkt bez známej e-shop adresy ("Ocieľka
+  Victorinox 7.8213 - 20cm") správne ostal neaktívny plain text namiesto
+  vymyslenej adresy. Konzola čistá. Issue zavreté ručne s dôkazom, Discord
+  run-card odoslaná. Playbook doplnený (`.claude/rules/nedostupne.md`,
+  `.claude/rules/mail-templates.md`).
