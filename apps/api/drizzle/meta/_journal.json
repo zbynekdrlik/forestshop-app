@@ -211,6 +211,13 @@
       "when": 1785846514944,
       "tag": "0029_supplier_stock_size_label",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1785861317276,
+      "tag": "0030_cuddly_gravity",
+      "breakpoints": true
     }
   ]
 }

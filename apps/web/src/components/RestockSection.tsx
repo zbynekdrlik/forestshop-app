@@ -19,6 +19,13 @@ const PAGE_SIZE = 100;
 // (`requireRole("admin", "manazer")`, `restock-routes.ts`).
 const CONTROL_ROLES: ReadonlySet<Me["role"]> = new Set(["admin", "manazer"]);
 
+// issue 226: ľudské popisky nášho `variant.state` pre kartu rozporov s feedom.
+const STATE_LABEL: Readonly<Record<"sellable" | "out_of_stock" | "discontinued", string>> = {
+  sellable: "predajné",
+  out_of_stock: "vypredané",
+  discontinued: "ukončený predaj",
+};
+
 function formatDateTime(iso: string): string {
   const date = new Date(iso);
   return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString("sk-SK");
@@ -130,7 +137,7 @@ export function RestockSection({
   if (!loaded) return <p role="status">Načítavam…</p>;
   if (status === null) return <p role="alert">{error === "" ? "Nepodarilo sa načítať." : error}</p>;
 
-  const { enabled, maxPerRun, waiting, events, lastRun } = status;
+  const { enabled, maxPerRun, waiting, feedConflicts, events, lastRun } = status;
 
   return (
     <div data-testid="restock-section">
@@ -180,6 +187,50 @@ export function RestockSection({
         </p>
       )}
       {runNotice !== "" && <p role="status">{runNotice}</p>}
+
+      {/* issue 226: Shoptetov VLASTNÝ feed pre porovnávače hovorí niečo iné,
+          než náš odvodený stav — nezávislý dôkaz, že sa odvodenie znova
+          rozišlo s realitou (presne trieda chyby z issue 219). Rozporný
+          variant sa NESTANE kandidátom na prepnutie, kým sa nevysvetlí. */}
+      <div className="card" data-testid="restock-feed-conflicts">
+        <h3>Rozpory nášho stavu s feedom Shoptetu{feedConflicts.total > 0 && ` (${String(feedConflicts.total)})`}</h3>
+        {feedConflicts.total === 0 ? (
+          <p className="empty">Žiadne — náš stav sa všade zhoduje s feedom.</p>
+        ) : (
+          <>
+            <p>
+              Feed pre porovnávače hovorí niečo iné než my — tieto varianty sa nestanú kandidátmi na
+              prepnutie, kým sa rozpor nevysvetlí.
+            </p>
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Kód</th>
+                  <th scope="col">Názov</th>
+                  <th scope="col">Náš stav</th>
+                  <th scope="col">Feed hovorí</th>
+                  <th scope="col">Náš produkt</th>
+                </tr>
+              </thead>
+              <tbody>
+                {feedConflicts.rows.map((row) => (
+                  <tr key={row.variantCode} data-testid={`restock-feed-conflict-${row.variantCode}`}>
+                    <td>{row.variantCode}</td>
+                    <td>{row.productName}</td>
+                    <td>{STATE_LABEL[row.ourState]}</td>
+                    <td>{row.feedAvailability}</td>
+                    <td>
+                      <a href={row.ourUrl} target="_blank" rel="noreferrer noopener">
+                        náš ↗
+                      </a>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
+        )}
+      </div>
 
       <div className="card">
         <h3>Prepnuté produkty</h3>

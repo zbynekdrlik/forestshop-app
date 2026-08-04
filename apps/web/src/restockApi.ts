@@ -34,10 +34,25 @@ const runResultSchema = z.union([
 ]);
 export type RestockRunResult = z.infer<typeof runResultSchema>;
 
+// issue 226: krížová kontrola nášho stavu proti Shoptetovmu feedu.
+const feedConflictRowSchema = z.object({
+  variantCode: z.string(),
+  productName: z.string(),
+  ourState: z.enum(["sellable", "out_of_stock", "discontinued"]),
+  feedAvailability: z.string(),
+  ourUrl: z.string(),
+});
+const feedConflictsSchema = z.object({
+  total: z.number(),
+  rows: z.array(feedConflictRowSchema),
+});
+export type FeedConflictRow = z.infer<typeof feedConflictRowSchema>;
+
 const statusSchema = z.object({
   enabled: z.boolean(),
   maxPerRun: z.number(),
   waiting: z.object({ now: z.number(), overLimit: z.number() }),
+  feedConflicts: feedConflictsSchema,
   events: z.array(eventSchema),
   lastRun: z
     .object({

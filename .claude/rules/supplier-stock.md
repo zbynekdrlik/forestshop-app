@@ -160,6 +160,23 @@ paths:
   na diakritickom texte. `trigonaStockRegion` preto číta farbu `#00b020`/
   `#024bbd` z `style="color: …"` namiesto porovnávania slov "Na sklade"/
   "1 - 4 týždne" priamo.
+- **Krížová kontrola nášho odvodeného stavu proti Shoptetovmu vlastnému feedu
+  (issue 226) sa počíta VŽDY NAŽIVO (`modules/catalog/feed-cross-check.ts`'s
+  `findFeedStateConflicts`), nikdy do vlastnej perzistovanej tabuľky.**
+  Dôvod: `shop_product_url` sa obnovuje DENNE (03:50), katalógový import
+  HODINOVO (:20, `.claude/rules/scheduler.md`) — perzistovaná snímka
+  rozporov spred hodiny by bola presne ten istý problém ("zastaraný
+  odvodený stav"), aký sa touto funkciou rieši. Rovnaký architektonický vzor
+  ako `allRestockCandidates`/`listRestockWaiting` nižšie — vždy odvoď zo
+  živého stavu DB. `restock/queries.ts`'s kandidát (vždy `out_of_stock`) sa
+  vylúči len keď feed hovorí `"in stock"` (`FEED_IN_STOCK`, exportované z
+  `feed-cross-check.ts`, nikdy vlastný literál v `restock/queries.ts` —
+  jeden zdroj pravdy pre string) — opačný smer rozporu (naše `sellable`
+  proti feedovému `"out of stock"`) je pre KANDIDÁTOV irelevantný (kandidát
+  je vždy `out_of_stock`), ale stále sa počíta do celkového čísla na
+  obrazovke. Chýbajúci feed riadok (626 variantov, issue 220) sa MUSÍ
+  vylúčiť explicitným `isNull(...) OR ne(...)` — samotné `!= 'in stock'`
+  proti NULL vyhodnotí SQL na NULL, čo WHERE ticho zahodí (nie `false`).
 - **Overený PROTIPÓL sa niekedy nedá nájsť aj napriek dôkladnému hľadaniu —
   vtedy sa pravidlo NEPRIDÁVA, nie hádá.** Issue 230: pre `trigona.sk` sa
   naživo overili OBE polarity (31 vzoriek, farba `#00b020`/`#024bbd`

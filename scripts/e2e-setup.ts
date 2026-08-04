@@ -622,96 +622,63 @@ await db.insert(mailLog).values({
   reason: "už bolo odoslané skôr — druhý e-mail sa neposiela",
 });
 
-// issue 217: JEDEN kandidát na prepnutie „Vypredané → Skladom", aby overovacia
-// obrazovka mala naživo čo ukázať. Zámerne VLASTNÝ produkt + variant s kódom,
-// ktorý sa v žiadnom inom spec súbore nevyskytuje, a BEZ objednávkového riadku —
-// nepridáva teda nič do „Na objednanie" ani do parovania, kde iné testy počítajú
-// presné počty. `supplier_stock` je nová tabuľka, ktorú nesleduje žiadny iný test.
-const PREPINANIE_ODKAZ = "https://huntingshop.eu/e2e-prepinanie";
+// issue 217: kandidáti na prepnutie „Vypredané → Skladom", aby overovacia
+// obrazovka mala naživo čo ukázať. Zámerne VLASTNÉ produkty + varianty s
+// kódmi, ktoré sa v žiadnom inom spec súbore nevyskytujú, a BEZ objednávkového
+// riadku — nepridávajú teda nič do „Na objednanie" ani do parovania, kde iné
+// testy počítajú presné počty. `supplier_stock` je tabuľka, ktorú nesleduje
+// žiadny iný test.
 // `vysledok.snapshotId` (import fixtúry vyššie) namiesto vlastného dopytu —
 // priamy import z "drizzle-orm" v `scripts/` hlási falošné `no-unsafe-*`
 // (`.claude/rules/testing.md`), takže sa mu tu vyhýbame úplne.
 const snapshotPrepinanie = vysledok.snapshotId;
-await db.insert(products).values({
-  key: "e2e-prepinanie",
-  name: "E2E Bunda na prepnutie",
-  supplier: "DODAVATEL-PREPINANIE",
-  internalNote: `Dodávateľ: ${PREPINANIE_ODKAZ}`,
-  firstSeenAt: teraz,
-  lastSeenAt: teraz,
-  lastSeenSnapshotId: snapshotPrepinanie,
-});
-await db.insert(variants).values({
-  code: "PREP-1",
-  productKey: "e2e-prepinanie",
-  guid: "e2e-prepinanie",
-  name: "E2E Bunda na prepnutie",
-  stock: 0,
-  availabilityInStockText: "Skladom",
-  availabilityOutOfStockText: "Vypredané",
-  availabilityText: "Vypredané",
-  productVisibility: "visible",
-  state: "out_of_stock",
-  firstSeenAt: teraz,
-  lastSeenAt: teraz,
-  lastSeenSnapshotId: snapshotPrepinanie,
-});
-await db.insert(supplierStock).values({
-  link: PREPINANIE_ODKAZ,
-  host: "huntingshop.eu",
-  availability: "available",
-  availabilityText: "skladom",
-  price: "49.90",
-  source: "json_ld",
-  ok: true,
-  httpStatus: 200,
-  checkedAt: teraz,
-  // Potvrdenie musí byť čerstvé (do 48 h), inak kandidát vypadne z výberu.
-  confirmedAt: new Date(teraz.getTime() - 3_600_000),
-});
+async function seedPrepinanieKandidata(key: string, code: string, name: string, odkaz: string, cena: string): Promise<void> {
+  await db.insert(products).values({
+    key,
+    name,
+    supplier: "DODAVATEL-PREPINANIE",
+    internalNote: `Dodávateľ: ${odkaz}`,
+    firstSeenAt: teraz,
+    lastSeenAt: teraz,
+    lastSeenSnapshotId: snapshotPrepinanie,
+  });
+  await db.insert(variants).values({
+    code,
+    productKey: key,
+    guid: key,
+    name,
+    stock: 0,
+    availabilityInStockText: "Skladom",
+    availabilityOutOfStockText: "Vypredané",
+    availabilityText: "Vypredané",
+    productVisibility: "visible",
+    state: "out_of_stock",
+    firstSeenAt: teraz,
+    lastSeenAt: teraz,
+    lastSeenSnapshotId: snapshotPrepinanie,
+  });
+  await db.insert(supplierStock).values({
+    link: odkaz,
+    host: "huntingshop.eu",
+    availability: "available",
+    availabilityText: "skladom",
+    price: cena,
+    source: "json_ld",
+    ok: true,
+    httpStatus: 200,
+    checkedAt: teraz,
+    // Potvrdenie musí byť čerstvé (do 48 h), inak kandidát vypadne z výberu.
+    confirmedAt: new Date(teraz.getTime() - 3_600_000),
+  });
+}
+await seedPrepinanieKandidata("e2e-prepinanie", "PREP-1", "E2E Bunda na prepnutie", "https://huntingshop.eu/e2e-prepinanie", "49.90");
 
-// issue 226: DRUHÝ produkt (VLASTNÝ kód, aby sa nezrazil s vyššie seedovaným
-// "PREP-1") — máme ho ako vypredaný a dodávateľ ho potvrdene má, ALE feed pre
-// porovnávače hovorí "in stock" (Shoptet ho už zobrazuje ako skladom). Toto je
-// presne ten rozpor, ktorý MUSÍ vylúčiť z kandidátov aj z overovacieho
-// zoznamu a MUSÍ sa ukázať na obrazovke ako varovanie.
-const ROZPOR_ODKAZ = "https://huntingshop.eu/e2e-rozpor";
-await db.insert(products).values({
-  key: "e2e-rozpor",
-  name: "E2E Bunda s rozporom voči feedu",
-  supplier: "DODAVATEL-PREPINANIE",
-  internalNote: `Dodávateľ: ${ROZPOR_ODKAZ}`,
-  firstSeenAt: teraz,
-  lastSeenAt: teraz,
-  lastSeenSnapshotId: snapshotPrepinanie,
-});
-await db.insert(variants).values({
-  code: "PREP-2",
-  productKey: "e2e-rozpor",
-  guid: "e2e-rozpor",
-  name: "E2E Bunda s rozporom voči feedu",
-  stock: 0,
-  availabilityInStockText: "Skladom",
-  availabilityOutOfStockText: "Vypredané",
-  availabilityText: "Vypredané",
-  productVisibility: "visible",
-  state: "out_of_stock",
-  firstSeenAt: teraz,
-  lastSeenAt: teraz,
-  lastSeenSnapshotId: snapshotPrepinanie,
-});
-await db.insert(supplierStock).values({
-  link: ROZPOR_ODKAZ,
-  host: "huntingshop.eu",
-  availability: "available",
-  availabilityText: "skladom",
-  price: "39.90",
-  source: "json_ld",
-  ok: true,
-  httpStatus: 200,
-  checkedAt: teraz,
-  confirmedAt: new Date(teraz.getTime() - 3_600_000),
-});
+// issue 226: DRUHÝ kandidát (vlastný kód, nezrazí sa s "PREP-1") — máme ho ako
+// vypredaný a dodávateľ ho potvrdene má, ALE feed pre porovnávače hovorí
+// "in stock" (Shoptet ho už zobrazuje ako skladom). Presne ten rozpor, ktorý
+// MUSÍ vylúčiť z kandidátov aj z overovacieho zoznamu a MUSÍ sa ukázať na
+// obrazovke ako varovanie.
+await seedPrepinanieKandidata("e2e-rozpor", "PREP-2", "E2E Bunda s rozporom voči feedu", "https://huntingshop.eu/e2e-rozpor", "39.90");
 await db.insert(shopProductUrl).values({
   code: "PREP-2",
   url: "https://www.forestshop.sk/e2e-rozpor/",

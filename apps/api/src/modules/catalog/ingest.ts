@@ -4,6 +4,7 @@ import type { Database } from "../../db/client.js";
 import { catalogSnapshots, ingestIssues, products, variants } from "../../db/schema.js";
 import { log } from "../../logger.js";
 import { decodeCp1250, parseDelimited } from "./csv.js";
+import { logFeedConflictsAfterImport } from "./feed-cross-check.js";
 import { redactSourceLabel } from "./fetcher.js";
 import { mapRow, type RowIssue, type VariantRecord } from "./map-row.js";
 import { storeRawSnapshot } from "./raw-store.js";
@@ -571,5 +572,13 @@ export async function ingestCatalog(
     }
     throw error;
   }
+
+  // issue 226: krížová kontrola nášho odvodeného stavu proti Shoptetovmu
+  // feedu — BEŽÍ PO commite, mimo transakcie vyššie, aby prípadná chyba tejto
+  // ČISTO DIAGNOSTICKEJ funkcie nikdy neohrozila samotný (už úspešne prijatý)
+  // import; sama nikdy nevyhodí. Obrazovka (`/api/restock`) ukazuje ten istý
+  // údaj vždy aktuálne, nezávisle od tohto logu.
+  if (result.status === "accepted") await logFeedConflictsAfterImport(db, result.snapshotId);
+
   return result;
 }

@@ -6,6 +6,7 @@ import type { Database } from "../db/client.js";
 import { jobRuns, restockEvents } from "../db/schema.js";
 import { log } from "../logger.js";
 import { record } from "../modules/audit/service.js";
+import { findFeedStateConflicts } from "../modules/catalog/feed-cross-check.js";
 import { MAX_PER_RUN, RESTOCK_JOB_NAME } from "../modules/restock/constants.js";
 import { listRestockWaiting, selectRestockCandidates } from "../modules/restock/queries.js";
 import type { RestockRunResult, RunRestockOptions } from "../modules/restock/run.js";
@@ -63,11 +64,15 @@ async function runAndRecord(db: Database, deps: RestockRunDeps, now: Date): Prom
 export function registerRestockRoutes(app: Hono<AppBindings>, db: Database, deps: RestockRunDeps): void {
   app.get("/api/restock", requireUser(db), async (c) => {
     const now = new Date();
-    const [enabled, lastRun, candidates, events] = await Promise.all([
+    const [enabled, lastRun, candidates, events, feedConflicts] = await Promise.all([
       isRestockEnabled(db),
       getLatestJobRun(db, RESTOCK_JOB_NAME),
       selectRestockCandidates(db, now),
       db.select().from(restockEvents).orderBy(desc(restockEvents.at)).limit(200),
+      // issue 226: krížová kontrola nášho stavu proti Shoptetovmu feedu —
+      // varovanie s číslom a zoznamom priamo na tejto obrazovke, nikdy len
+      // tichý zápis do logu.
+      findFeedStateConflicts(db),
     ]);
     return c.json({
       enabled,
@@ -75,6 +80,7 @@ export function registerRestockRoutes(app: Hono<AppBindings>, db: Database, deps
       // Koľko by sa prepol NAJBLIŽŠÍ beh — majiteľ tak vidí dopredu, čo ho
       // čaká, nielen čo sa už stalo.
       waiting: { now: candidates.picked.length, overLimit: candidates.overLimit },
+      feedConflicts,
       events,
       lastRun:
         lastRun === null

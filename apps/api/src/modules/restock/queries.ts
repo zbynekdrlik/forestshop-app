@@ -4,9 +4,10 @@
 // e-shope produkt, ktorý majiteľ vedome vypol. Preto sa každá podmienka
 // kontroluje pozitívne (musí platiť), nikdy sa nič nepredpokladá.
 
-import { and, asc, eq, isNull, or, sql } from "drizzle-orm";
+import { and, asc, eq, isNull, ne, or, sql } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
 import { products, shopProductUrl, supplierStock, variants } from "../../db/schema.js";
+import { FEED_IN_STOCK } from "../catalog/feed-cross-check.js";
 import {
   CONFIRMATION_MAX_AGE_HOURS,
   MAX_PER_RUN,
@@ -63,7 +64,13 @@ const NO_SUPPLIER_LABEL = "(bez dodávateľa)";
  *  - variant nechýba z exportu (`missing_since IS NULL`) — zapnúť niečo, čo
  *    Shoptet už nevidí, nedáva zmysel;
  *  - dodávateľská linka má ÚSPEŠNÚ kontrolu (`ok`), dostupnosť `available`
- *    a potvrdenie nie staršie než `CONFIRMATION_MAX_AGE_HOURS`.
+ *    a potvrdenie nie staršie než `CONFIRMATION_MAX_AGE_HOURS`;
+ *  - Shoptetov VLASTNÝ feed pre porovnávače (issue 226) NEHOVORÍ "in stock" —
+ *    keď feed hlási skladom pre variant, ktorý MY vedieme ako vypredaný, naše
+ *    odvodenie je podozrivé (presne trieda chyby z issue 219) a kandidátom sa
+ *    nesmie stať, kým sa rozpor nevysvetlí. Chýbajúci feed riadok (626
+ *    viditeľných variantov, issue 220) NIE JE rozpor — kandidát sa vyberie
+ *    ako predtým.
  *
  * `unknown` (stránka sa načítala, ale nič sa z nej nedalo vyčítať) ani
  * zlyhaná kontrola NIKDY neprepnú produkt — to je celý zmysel toho, že sme
@@ -126,6 +133,11 @@ async function allRestockCandidates(db: Database, now: Date): Promise<readonly R
         sql`${supplierStock.confirmedAt} is not null`,
         sql`${supplierStock.confirmedAt} >= ${oldestAcceptable}`,
         sql`${supplierStock.confirmedAt} <= ${now}`,
+        // issue 226: kandidát je vždy `out_of_stock` (podmienka vyššie), takže
+        // jediný relevantný smer rozporu je feed hlásiaci "in stock". `IS
+        // NULL` musí byť explicitné — `!= 'in stock'` samo o sebe vyhodnotí
+        // NULL (žiadny feed riadok) na NULL, čo by WHERE ticho zahodilo.
+        or(isNull(shopProductUrl.availability), ne(shopProductUrl.availability, FEED_IN_STOCK)),
       ),
     )
     // Stabilné poradie: najstaršie potvrdenie prvé, potom podľa kódu — pri

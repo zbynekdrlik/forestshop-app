@@ -22,6 +22,28 @@ paths:
   padne na vyhľadávanie podľa kódu). Zmena na `INNER JOIN` by zo zoznamu, podľa
   ktorého majiteľ rozhoduje, ticho vyhodila stovky riadkov — presne tá trieda
   chyby, ktorú riešilo issue 219.
+- **`shop_product_url` odteraz nesie aj `g:availability`
+  (`availability`, nullable text, issue 226) — Shoptetova VLASTNÁ dostupnosť,
+  nezávislý zdroj pravdy na krížovú kontrolu proti nášmu odvodenému
+  `variant.state`** (`modules/catalog/feed-cross-check.ts`). Živo overené
+  4. 8. 2026: len dve reálne hodnoty na tomto e-shope, `"in stock"`/
+  `"out of stock"` (7 449/139 z 7 679 položiek), zvyšných 91 má prázdnu
+  značku → `null`. `runShopFeed`'s UPSERT PREPISUJE `availability` na
+  KAŽDOM behu (vrátane `null`), inak by stará hodnota z predošlého behu
+  ticho prežívala a krížová kontrola by porovnávala proti zastaranému
+  signálu.
+- **Nová "koreňová" tabuľka pridaná do TRUNCATE zoznamu (`.claude/rules/
+  testing.md`) MUSÍ pribudnúť do OBOCH zoznamov, aj keď existuje už dávno —
+  `shop_product_url` (issue 220) chýbala v `scripts/e2e-setup.ts`'s vlastnom
+  TRUNCATE reťazci celé mesiace, lebo dovtedy do nej žiadny e2e seed
+  nezapisoval.** Odhalené AŽ issue 226, keď prvý e2e seed (`PREP-2`'s
+  rozporová `availability`) do tejty tabuľky skutočne zapísal — bez FK na
+  `variant` (tabuľka je zámerne PLOCHÁ) sa jej riadky NEVYPRÁZDNIA cez
+  `variant`'s CASCADE, takže by ticho prežívali medzi e2e behmi. Test pri
+  KAŽDEJ tabuľke bez FK, ktorú založí SKORŠÍ ticket: skús do nej niečo
+  zapísať v `scripts/e2e-setup.ts` a over `grep shop_product_url
+  scripts/e2e-setup.ts` (alebo cieľovú tabuľku) PRED spoliehaním sa na to,
+  že tam už je.
 - **Rozoberač je zámerne regulárny výraz bez novej závislosti na XML parseri.**
   Tvar feedu je plochý (`<entry>` s textovými deťmi). Hlavička feedu má
   `<link href="…" />` s adresou vzorového webu — preto vzor hľadá `<link>` s
