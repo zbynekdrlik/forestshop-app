@@ -36,10 +36,29 @@ paths:
   Majiteľ 3. 8. 2026 výslovne zamietol AI dohady (stará appka posielala
   nečitateľné stránky do OpenAI): čo sa nedá prečítať strojovo, sa ukáže v
   karte „Stránky, ktoré neviem prečítať" a čaká na ľudské rozhodnutie.
-- **Voľnému textu stránky sa dôveruje LEN na doménach v `TRUSTED_TEXT_HOSTS`.**
-  Slovo „Skladom" sa na cudzej stránke môže vyskytnúť v pätičke, v menu alebo
-  pri inom produkte. Pridanie novej domény do zoznamu vyžaduje overenie na
-  uloženej vzorke tej stránky, nikdy len domnienku.
+- **Voľnému textu stránky sa dôveruje LEN na doménach v `TEXT_AVAILABILITY_RULES`
+  (`parse.ts`) — a LEN na VÝREZE, ktorý pravidlo označí za oblasť TOHTO
+  produktu, nikdy na celej stránke (issue 223).** Pôvodný plochý zoznam
+  `TRUSTED_TEXT_HOSTS` (`constants.ts`) bol ODSTRÁNENÝ — dôveroval CELEJ
+  stránke, takže marketingová veta v pätičke huntingshop.eu ("…máme skladom
+  ihneď k odberu.", na KAŽDEJ stránke obchodu) robila z každého produktu bez
+  výslovného záporu `available`. Nové pravidlo nesie aj VÝREZ (regulárny
+  výraz, ktorý vyberie oblasť dostupnosti PRI produkte — pre huntingshop.eu
+  detailný `badge-outline-…` štítok BEZ `badge-stock`, ktorý patrí karuselu
+  súvisiacich produktov) aj to, čo znamená CHÝBAJÚCI výrez (pre
+  huntingshop.eu `unavailable` — produkt bez štítku dostupný nie je).
+  Domény predtým v `TRUSTED_TEXT_HOSTS` bez vlastného overeného výrezu
+  (`wetland.sk`, `trigona.sk`) touto zmenou STRATILI textovú úroveň úplne a
+  končia na `unknown`, kým sa pre ne nenájde a neoverí vlastný výrez —
+  zámerný, dokumentovaný ústup, nie chyba.
+- **JSON-LD vie KLAMAŤ — na doménach v `VISIBLE_AVAILABILITY_RULES` (`parse.ts`)
+  sa krížovo overuje proti viditeľnej dostupnosti PRI produkte (issue 225).**
+  odimon.sk hlási v JSON-LD `InStock`, hoci viditeľný prvok
+  `.product-availability__value` pri produkte hovorí "Nedostupný". Keď sa obe
+  dajú prečítať a NESÚHLASIA, výsledok je `unknown` (stránka si protirečí,
+  rozhoduje človek) — nikdy sa nevyhlási `available` na takomto rozpore. Prvý
+  výskyt takého prvku v dokumente patrí hlavnému produktu — rovnaká trieda sa
+  môže opakovať aj pri súvisiacich produktoch nižšie na stránke.
 - **Obe polia dostupnosti sa do Shoptetu zapisujú NARAZ, ale `stock` sa
   nezapisuje VÔBEC (issue 219).** Shoptet zobrazuje `availabilityOutOfStock`,
   keď sklad klesne na nulu (overené v ostrej prevádzke starej appky

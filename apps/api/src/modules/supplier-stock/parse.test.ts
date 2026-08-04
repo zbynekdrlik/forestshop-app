@@ -243,4 +243,20 @@ describe("parsePage — issue 225: odimon.sk — viditelna dostupnost prebija kl
     expect(result.availability).toBe("unavailable");
     expect(result.source).toBe("text");
   });
+
+  it("text sa cita EXPLICITNE z vnoreneho --text prvku, aj ked ten ma dalsi vnoreny prvok (pocet kusov)", () => {
+    // Presne markup suvisiaceho produktu z ODIMON_NEDOSTUPNA fixtury: --text
+    // prvok ma VNORENY <span class="...__count">, takze naivne "druha
+    // zatvaracia znacka" by odrezala/posunula text. Token (available/
+    // unavailable) sa berie z vonkajsej triedy nezavisle od tohto vnorenia.
+    const html = `<span class="product-availability__value product-availability__value--available">
+      <span class="product-availability__value--text">
+        <strong>Skladom</strong>
+        <span class="product-availability__count">9 ks</span>
+      </span>
+    </span>`;
+    const result = parsePage(html, "https://www.odimon.sk/p/ine");
+    expect(result.availability).toBe("available");
+    expect(result.availabilityText).toBe("Skladom 9 ks");
+  });
 });

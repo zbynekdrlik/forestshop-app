@@ -287,15 +287,23 @@ interface VisibleAvailabilityRule {
  * PRI produkte je to, čo skutočne vidí zákazník — PRVÝ výskyt v dokumente
  * patrí hlavnému produktu (overené na vzorke: rovnaký prvok sa opakuje aj v
  * bloku súvisiacich produktov nižšie na stránke, ale až za hlavným).
+ *
+ * Token (`available`/`unavailable`, čo ROZHODUJE dostupnosť) sa berie z
+ * TRIEDY vonkajšieho `<span>` — to je vždy spoľahlivé. Zobrazovaný text sa
+ * ČÍTA EXPLICITNE z vnoreného `.product-availability__value--text`, nikdy sa
+ * neodvodzuje z toho, kde náhodou skončí druhá zatváracia značka — tá by sa
+ * mohla posunúť, keby stránka pridala ďalší vnorený prvok (napr. počet kusov).
  */
 function odimonVisibleAvailability(html: string): VisibleAvailabilityHit | null {
-  const match =
-    /<span\b[^>]*class="[^"]*product-availability__value--(available|unavailable)[^"]*"[^>]*>([\s\S]*?)<\/span>\s*<\/span>/i.exec(
-      html,
-    );
-  if (match === null) return null;
-  const token = match[1];
-  const text = (match[2] ?? "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  const outer =
+    /<span\b[^>]*class="[^"]*product-availability__value--(available|unavailable)\b[^"]*"[^>]*>/i.exec(html);
+  if (outer === null) return null;
+  const token = outer[1];
+  const rest = html.slice(outer.index + outer[0].length);
+  const textMatch = /<span\b[^>]*class="[^"]*product-availability__value--text[^"]*"[^>]*>([\s\S]*?)<\/span>/i.exec(
+    rest,
+  );
+  const text = (textMatch?.[1] ?? "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
   return { availability: token === "available" ? "available" : "unavailable", text };
 }
 
