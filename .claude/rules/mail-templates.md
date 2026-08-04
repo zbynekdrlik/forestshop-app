@@ -74,3 +74,11 @@ paths:
   testoch, takže vlastný izolovaný účet pre nový spec súbor je stále povinný.
   **Nový e2e test aj tak nepridávaj s vlastným prihlásením zbytočne** — dva
   scenáre v jednom teste sú lacnejšie než dve prihlásenia.
+- **issue 238: `samples.ts`'s "náhľad na skutočných dátach" pre
+  `nedostupne_alternativa`'s `zoznam_nahrad` teraz vychádza z
+  `nedostupne_replacement_link` (majiteľove ručné odkazy), nie z pôvodného
+  `product.relatedCodes` návrhu.** `productSample` vracia aj `variant.code`
+  (predtým len `name`) — presne TEN variant, ktorého manuálne odkazy
+  `replacementLinkSample` vyhľadá. Rovnaký "vzorka nikdy nespadne, len
+  ukáže ukážkovú hodnotu z registra" kontrakt platí ďalej (nič nezmenené v
+  `try/catch` obale `previewContext`u).

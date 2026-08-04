@@ -6,8 +6,10 @@ import { record } from "../modules/audit/service.js";
 import { EMAIL_TYPES } from "../modules/nedostupne/constants.js";
 import { consumePreviewToken, issuePreviewToken } from "../modules/nedostupne/preview-tokens.js";
 import { listNedostupneGroups } from "../modules/nedostupne/queries.js";
+import { addReplacementLink, removeReplacementLink } from "../modules/nedostupne/replacement-links.js";
 import { buildEmailForType, findNedostupneContext, sendNedostupneEmail } from "../modules/nedostupne/send.js";
 import type { MailTransport } from "../modules/mail/transport.js";
+import { startsWithFormulaChar } from "../modules/shoptet-writeback/formula-guard.js";
 import { requireRole, requireUser, type AppBindings } from "./middleware.js";
 import { requireSameOrigin } from "./origin-check.js";
 
@@ -24,6 +26,25 @@ const previewBody = z.object({ orderCode: z.string().min(1), variantCode: z.stri
 // `preview-tokens.ts`. Bez tohto by priame volanie API (mimo React UI) mohlo
 // poslať e-mail bez toho, aby čokoľvek jeho obsah niekedy zobrazilo.
 const sendBody = previewBody.extend({ previewToken: z.string().min(1) });
+
+// issue 238: majiteľov RUČNE vložený odkaz náhrady — validovaný ako URL
+// (rovnaká disciplína ako `orders-routes.ts`'s `orderLineSupplierLinkBody`,
+// issue 121/153): odkaz sa vykresľuje priamo ako `<a href>` v e-maile
+// zákazníkovi, takže potrebuje TÚ ISTÚ obranu (http(s)-only regex + formula-
+// injection `.refine`), nielen holé `.url()`.
+const replacementLinkBody = z.object({
+  variantCode: z.string().trim().min(1).max(200),
+  url: z
+    .string()
+    .trim()
+    .url()
+    .max(2000)
+    .regex(/^https?:\/\//)
+    .refine((v) => !startsWithFormulaChar(v), {
+      message: "odkaz nesmie začínať znakom vzorca (=, +, -, @) — možný pokus o CSV-injection",
+    }),
+});
+const replacementLinkParam = z.object({ id: z.string().uuid() });
 
 function bccMissing(deps: NedostupneRunDeps): boolean {
   return deps.bccEmail === undefined || deps.bccEmail.trim() === "";
@@ -125,6 +146,61 @@ export function registerNedostupneRoutes(app: Hono<AppBindings>, db: Database, d
         data: { orderCode, variantCode, emailType },
       });
       return c.json({ ok: true as const });
+    },
+  );
+
+  // issue 238: majiteľ pridá ručný odkaz náhrady — rovnaké oprávnenie ako
+  // `/send` (admin/manazer, `.claude/rules/nedostupne.md`'s dizajnový
+  // komentár), rovnaký jednoduchý insert+audit vzor ako
+  // `orders/supplier-link-assignment.ts`'s `setProductSupplierLink`.
+  app.post(
+    "/api/nedostupne/replacement-links",
+    requireSameOrigin(),
+    requireUser(db),
+    requireRole("admin", "manazer"),
+    zValidator("json", replacementLinkBody),
+    async (c) => {
+      const { variantCode, url } = c.req.valid("json");
+      const user = c.get("user");
+      const now = new Date();
+      const link = await addReplacementLink(db, variantCode, url, now);
+      await record(db, {
+        at: now,
+        actorUserId: user.userId,
+        action: "nedostupne.replacement_link.added",
+        entity: "nedostupne_replacement_link",
+        entityId: link.id,
+        data: { variantCode, url },
+      });
+      return c.json({ ok: true as const, link });
+    },
+  );
+
+  // Zmazanie — rovnaké oprávnenie. `id` neznáme/už zmazané je NEŠKODNÉ
+  // (rovnaká disciplína ako `.claude/rules/testing.md`'s "bežné, OČAKÁVANÉ
+  // zlyhanie vracia 200 {ok:false}", nikdy 4xx) — dvojklik na "zmazať" je
+  // bežná používateľská udalosť, nie chyba.
+  app.delete(
+    "/api/nedostupne/replacement-links/:id",
+    requireSameOrigin(),
+    requireUser(db),
+    requireRole("admin", "manazer"),
+    zValidator("param", replacementLinkParam),
+    async (c) => {
+      const { id } = c.req.valid("param");
+      const user = c.get("user");
+      const removed = await removeReplacementLink(db, id);
+      if (removed) {
+        await record(db, {
+          at: new Date(),
+          actorUserId: user.userId,
+          action: "nedostupne.replacement_link.removed",
+          entity: "nedostupne_replacement_link",
+          entityId: id,
+          data: { id },
+        });
+      }
+      return c.json({ ok: true as const, removed });
     },
   );
 }

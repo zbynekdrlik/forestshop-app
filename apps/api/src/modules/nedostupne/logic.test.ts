@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { alternativeSearchUrl } from "./constants.js";
 import { MAIL_TEMPLATE_KINDS } from "../mail-templates/registry.js";
-import { buildAlternativeEmail, buildAlternatives, buildUnavailableEmail } from "./logic.js";
+import { buildAlternativeEmail, buildUnavailableEmail } from "./logic.js";
 
 // issue 192: znenie žije v upraviteľnej šablóne — tieto testy overujú PÔVODNÉ
 // znenie, teda presne to, čo appka použije, kým majiteľ nič nezmení.
@@ -30,44 +29,39 @@ describe("buildUnavailableEmail", () => {
   });
 });
 
-describe("buildAlternatives", () => {
-  it("neznámy kód padá späť na SEBA SAMÉHO ako meno (nikdy sa nezahodí)", () => {
-    const alts = buildAlternatives(["60297"], new Map());
-    expect(alts).toEqual([{ code: "60297", name: "60297", url: alternativeSearchUrl("60297") }]);
-  });
-
-  it("známy kód dostane rozlíšené meno z mapy", () => {
-    const alts = buildAlternatives(["60116/90"], new Map([["60116/90", "Podkolienky BOBR"]]));
-    expect(alts).toEqual([{ code: "60116/90", name: "Podkolienky BOBR", url: alternativeSearchUrl("60116/90") }]);
-  });
-
-  it("prázdny zoznam kódov → prázdny zoznam alternatív", () => {
-    expect(buildAlternatives([], new Map())).toEqual([]);
-  });
-});
-
+// issue 238: automatický návrh (`product.relatedCodes` → `buildAlternatives`)
+// je preč — `buildAlternativeEmail` teraz dostáva PRIAMO majiteľove ručne
+// vložené odkazy (holé URL, appka k nim nepozná žiadny názov/kód), preto sa
+// v e-maile zobrazí samotný odkaz ako klikateľný text (`label === url`).
 describe("buildAlternativeEmail", () => {
-  it("s alternatívami vypíše odkazy na KAŽDÚ z nich", () => {
-    const alts = buildAlternatives(["60116/90"], new Map([["60116/90", "Podkolienky BOBR"]]));
-    const built = buildAlternativeEmail(ALTERNATIVA, "Ján Zákazník", "Nohavice FOREST 1003", alts);
+  it("s ručnými odkazmi vypíše KAŽDÝ z nich (label je samotná URL, appka nepozná názov)", () => {
+    const built = buildAlternativeEmail(ALTERNATIVA, "Ján Zákazník", "Nohavice FOREST 1003", [
+      "https://www.forestshop.sk/nahradny-produkt/",
+    ]);
     expect(built.subject).toBe("Alternatívy k vášmu tovaru — Forestshop.sk");
     expect(built.html).toContain("Nohavice FOREST 1003");
-    expect(built.html).toContain("Podkolienky BOBR");
-    expect(built.html).toContain(alternativeSearchUrl("60116/90"));
-    expect(built.text).toContain("Podkolienky BOBR");
+    expect(built.html).toContain("https://www.forestshop.sk/nahradny-produkt/");
+    expect(built.text).toContain("https://www.forestshop.sk/nahradny-produkt/");
   });
 
-  it("bez alternatív ponúkne kontaktnú vetu namiesto zoznamu", () => {
+  it("viac odkazov naraz — každý dostane svoju položku v zozname", () => {
+    const built = buildAlternativeEmail(ALTERNATIVA, "Ján", "Bunda", [
+      "https://www.forestshop.sk/a/",
+      "https://www.forestshop.sk/b/",
+    ]);
+    expect(built.html).toContain("https://www.forestshop.sk/a/");
+    expect(built.html).toContain("https://www.forestshop.sk/b/");
+  });
+
+  it("bez odkazov ponúkne kontaktnú vetu namiesto zoznamu", () => {
     const built = buildAlternativeEmail(ALTERNATIVA, "Ján Zákazník", "Nohavice FOREST 1003", []);
     expect(built.html).toContain("Radi vám pomôžeme nájsť vhodnú alternatívu");
     expect(built.html).not.toContain("<ul>");
   });
 
-  it("HTML-escapuje meno alternatívy aj názov produktu", () => {
-    const alts = buildAlternatives(["X"], new Map([["X", "<b>Zlý</b> názov"]]));
-    const built = buildAlternativeEmail(ALTERNATIVA, "Ján", '<i>Prod</i>', alts);
-    expect(built.html).not.toContain("<b>Zlý</b>");
-    expect(built.html).toContain("&lt;b&gt;Zlý&lt;/b&gt;");
+  it("HTML-escapuje názov produktu (odkazy samotné sú validované ako http(s) URL na HTTP hranici, nie voľný text)", () => {
+    const built = buildAlternativeEmail(ALTERNATIVA, "Ján", "<i>Prod</i>", ["https://www.forestshop.sk/x/"]);
     expect(built.html).not.toContain("<i>Prod</i>");
+    expect(built.html).toContain("&lt;i&gt;Prod&lt;/i&gt;");
   });
 });

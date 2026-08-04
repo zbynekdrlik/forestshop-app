@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState, type JSX } from "react";
 import type { Me } from "../api.js";
 import {
+  addReplacementLink,
   fetchNedostupneList,
   fetchNedostupnePreview,
   NedostupneUnauthorizedError,
+  removeReplacementLink,
   sendNedostupneEmail,
   type NedostupneEmailType,
   type NedostupneGroup,
@@ -40,6 +42,12 @@ export function NedostupneSection({ role, onSessionExpired }: { readonly role: M
   // dialógu by sa nemal kam vrátiť (naživo overené na produkcii).
   const triggerRef = useRef<HTMLElement | null>(null);
   const canControl = CONTROL_ROLES.has(role);
+  // issue 238: majiteľove RUČNE vložené odkazy náhrad — draft rozpísaného
+  // odkazu je per-GROUP (variantCode), nie globálny; `busyKey` vyššie je
+  // vyhradený pre náhľad/odoslanie, preto má tento blok VLASTNÝ busy stav
+  // (rôzne akcie na tej istej karte sa nesmú vzájomne blokovať).
+  const [linkDrafts, setLinkDrafts] = useState<Record<string, string>>({});
+  const [linkBusy, setLinkBusy] = useState("");
 
   const load = useCallback(() => {
     fetchNedostupneList()
@@ -108,6 +116,54 @@ export function NedostupneSection({ role, onSessionExpired }: { readonly role: M
       });
   }, [pending, load, onSessionExpired]);
 
+  // issue 238: pridanie majiteľovho ručného odkazu náhrady — po úspechu sa
+  // draft vyprázdni a zoznam sa znova načíta (server je zdroj pravdy, žiadny
+  // optimistický lokálny insert).
+  const addLink = useCallback(
+    (variantCode: string) => {
+      const url = (linkDrafts[variantCode] ?? "").trim();
+      if (url === "") return;
+      setActionError("");
+      setLinkBusy(variantCode);
+      addReplacementLink(variantCode, url)
+        .then(() => {
+          setLinkDrafts((drafts) => ({ ...drafts, [variantCode]: "" }));
+          load();
+        })
+        .catch((err: unknown) => {
+          if (err instanceof NedostupneUnauthorizedError) {
+            onSessionExpired();
+            return;
+          }
+          setActionError(err instanceof Error ? err.message : "Odkaz sa nepodarilo pridať.");
+        })
+        .finally(() => {
+          setLinkBusy("");
+        });
+    },
+    [linkDrafts, load, onSessionExpired],
+  );
+
+  const removeLink = useCallback(
+    (id: string) => {
+      setActionError("");
+      setLinkBusy(id);
+      removeReplacementLink(id)
+        .then(load)
+        .catch((err: unknown) => {
+          if (err instanceof NedostupneUnauthorizedError) {
+            onSessionExpired();
+            return;
+          }
+          setActionError(err instanceof Error ? err.message : "Odkaz sa nepodarilo zmazať.");
+        })
+        .finally(() => {
+          setLinkBusy("");
+        });
+    },
+    [load, onSessionExpired],
+  );
+
   if (!loaded) return <p>Načítavam…</p>;
   if (error !== "") return <p role="alert">{error}</p>;
   if (list === null) return <p role="alert">Nedostupné tovary sa nepodarilo načítať.</p>;
@@ -135,21 +191,84 @@ export function NedostupneSection({ role, onSessionExpired }: { readonly role: M
           {list.groups.map((group) => (
             <div className="card" key={group.variantCode} data-testid={`nedostupne-group-${group.variantCode}`}>
               <div className="nedostupne-group-header">
-                <span className="nedostupne-group-name">{itemLabel(group)}</span>
-                <span className="pill off">{group.variantCode}</span>
+                {/* issue 238: preklik na náš e-shop — `null` = adresu vo
+                    feede nemáme, meno ostáva NEAKTÍVNY plain text (nikdy
+                    vyhľadávací fallback, majiteľova výslovná podmienka). */}
+                <span className="nedostupne-group-name">
+                  {group.ourProductUrl !== null ? (
+                    <a href={group.ourProductUrl} target="_blank" rel="noreferrer" data-testid={`nedostupne-shop-link-${group.variantCode}`}>
+                      {itemLabel(group)}
+                    </a>
+                  ) : (
+                    itemLabel(group)
+                  )}
+                </span>
+                {/* issue 238: preklik na dodávateľa — rovnaká funkcia ako
+                    "Na objednanie" (`resolveEffectiveSupplierLink`). */}
+                {group.supplierUrl !== null ? (
+                  <a className="pill off" href={group.supplierUrl} target="_blank" rel="noreferrer" data-testid={`nedostupne-supplier-link-${group.variantCode}`}>
+                    {group.variantCode}
+                  </a>
+                ) : (
+                  <span className="pill off">{group.variantCode}</span>
+                )}
               </div>
 
-              {group.alternatives.length > 0 && (
-                <ul className="nedostupne-alternatives" data-testid={`nedostupne-alternatives-${group.variantCode}`}>
-                  {group.alternatives.map((a) => (
-                    <li key={a.code}>
-                      Náhrada:{" "}
-                      <a href={a.url} target="_blank" rel="noreferrer">
-                        {a.name}
+              {/* issue 238: majiteľove RUČNE vložené odkazy náhrad — nahrádza
+                  pôvodný automatický "Náhrada:" zoznam z `product.relatedCodes`
+                  (majiteľ ho zamietol ako "súvisiace produkty, nie náhrady").
+                  Zoznam je viditeľný VŠETKÝM (rovnaká úroveň ako čítanie
+                  zvyšku karty); pridanie/zmazanie je gated na `canControl`. */}
+              {group.replacementLinks.length > 0 && (
+                <ul className="nedostupne-replacement-links" data-testid={`nedostupne-replacement-links-${group.variantCode}`}>
+                  {group.replacementLinks.map((link) => (
+                    <li key={link.id} data-testid={`nedostupne-replacement-link-${link.id}`}>
+                      <a href={link.url} target="_blank" rel="noreferrer">
+                        {link.url}
                       </a>
+                      {canControl && (
+                        <button
+                          type="button"
+                          className="btn sm ghost"
+                          disabled={linkBusy === link.id}
+                          onClick={() => {
+                            removeLink(link.id);
+                          }}
+                          data-testid={`nedostupne-replacement-link-remove-${link.id}`}
+                        >
+                          ✕ zmazať
+                        </button>
+                      )}
                     </li>
                   ))}
                 </ul>
+              )}
+
+              {canControl && (
+                <div className="nedostupne-replacement-link-add">
+                  <input
+                    type="url"
+                    placeholder="Odkaz na náhradný produkt (https://…)"
+                    value={linkDrafts[group.variantCode] ?? ""}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setLinkDrafts((drafts) => ({ ...drafts, [group.variantCode]: value }));
+                    }}
+                    aria-label={`Pridať odkaz náhrady pre ${itemLabel(group)}`}
+                    data-testid={`nedostupne-replacement-link-input-${group.variantCode}`}
+                  />
+                  <button
+                    type="button"
+                    className="btn sm ghost"
+                    disabled={linkBusy === group.variantCode || (linkDrafts[group.variantCode] ?? "").trim() === ""}
+                    onClick={() => {
+                      addLink(group.variantCode);
+                    }}
+                    data-testid={`nedostupne-replacement-link-add-${group.variantCode}`}
+                  >
+                    + Pridať odkaz
+                  </button>
+                </div>
               )}
 
               {group.orders.map((order) => {

@@ -1,6 +1,5 @@
 import { globalContext, textValue } from "../mail-templates/context.js";
 import { renderTemplate, type MailTemplateText, type RenderedEmail } from "../mail-templates/render.js";
-import { alternativeSearchUrl } from "./constants.js";
 
 // Čistá logika (žiadna DB, žiadna sieť). Znenie e-mailu už NIE je natvrdo tu —
 // issue 192 ho presunulo do upraviteľných šablón (`mail-templates/registry.ts`
@@ -21,31 +20,18 @@ export function buildUnavailableEmail(template: MailTemplateText, customerName: 
   });
 }
 
-export interface EmailAlternative {
-  readonly code: string;
-  readonly name: string;
-  readonly url: string;
-}
-
-/** Vytvorí zoznam náhradných produktov z RAW kódov (`product.related_codes`)
- * + rozlíšeného mena (`namesByCode` — vopred vyriešené DB dopytom,
- * `queries.ts`'s `resolveAlternativeNames`). Neznámy kód (nikdy nevidený
- * variant/pairCode) padá späť na SEBA SAMÉHO ako meno — rovnaký zámer ako
- * stará appka's `code2name.get(rc, rc)`, nikdy sa nezahadzuje. URL je vždy
- * klikateľný vyhľadávací fallback (`alternativeSearchUrl`, `constants.ts`).*/
-export function buildAlternatives(codes: readonly string[], namesByCode: ReadonlyMap<string, string>): readonly EmailAlternative[] {
-  return codes.map((code) => ({ code, name: namesByCode.get(code) ?? code, url: alternativeSearchUrl(code) }));
-}
-
-/** E-mail s návrhom náhrady — produkt je nedostupný + priamo priradené
- * alternatívy (relatedProduct*), rovnaký zámer ako stará appka's
- * `build_alternative_email`. Prázdny zoznam náhrad je v šablóne podmienka
+/** E-mail s návrhom náhrady — produkt je nedostupný + majiteľove RUČNE
+ * vložené odkazy na náhradné produkty (issue 238 — nahrádza pôvodný
+ * automatický návrh z `product.relatedCodes`, ktorý majiteľ zamietol ako
+ * "súvisiace produkty, nie náhrady"). Appka k ručne vloženému odkazu nepozná
+ * žiadny názov/kód, preto je `label` samotná URL (klikateľný text = presne
+ * to, čo majiteľ vložil). Prázdny zoznam náhrad je v šablóne podmienka
  * (`{{#ak zoznam_nahrad}}`), nie osobitná vetva v kóde. */
 export function buildAlternativeEmail(
   template: MailTemplateText,
   customerName: string,
   itemName: string,
-  alternatives: readonly EmailAlternative[],
+  replacementUrls: readonly string[],
 ): BuiltNedostupneEmail {
   return renderTemplate(template, {
     ...globalContext(),
@@ -54,7 +40,7 @@ export function buildAlternativeEmail(
     zoznam_nahrad: {
       kind: "list",
       textPrefix: "- ",
-      items: alternatives.map((a) => ({ label: a.name.trim() || a.code, url: a.url })),
+      items: replacementUrls.map((url) => ({ label: url, url })),
     },
   });
 }

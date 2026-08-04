@@ -225,6 +225,13 @@
       "when": 1785866205378,
       "tag": "0031_handy_talon",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1785874055555,
+      "tag": "0032_tiresome_matthew_murdock",
+      "breakpoints": true
     }
   ]
 }

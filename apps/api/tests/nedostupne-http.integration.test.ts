@@ -248,3 +248,70 @@ it("token je JEDNORAZOVÝ — druhé odoslanie s TÝM ISTÝM tokenom (iný typ) 
   expect(secondJson.ok).toBe(false);
   expect(sent).toHaveLength(1);
 });
+
+// issue 238: majiteľove RUČNE vložené odkazy náhrad — nahrádza pôvodný
+// automatický `product.relatedCodes` návrh.
+
+it("manazer pridá ručný odkaz náhrady — hneď vidno v GET zozname, viac odkazov na ten istý variant funguje", async () => {
+  const { app, cookie, db } = await boot("manazer");
+  await seedNedostupneLine(db, "17601010", "N176J");
+
+  const first = await app.request("/api/nedostupne/replacement-links", {
+    method: "POST",
+    headers: { cookie, "content-type": "application/json" },
+    body: JSON.stringify({ variantCode: "N176J", url: "https://www.forestshop.sk/prvy/" }),
+  });
+  expect(first.status).toBe(200);
+  const firstBody = (await first.json()) as { ok: boolean; link: { id: string; url: string } };
+  expect(firstBody.ok).toBe(true);
+  expect(firstBody.link.url).toBe("https://www.forestshop.sk/prvy/");
+
+  await app.request("/api/nedostupne/replacement-links", {
+    method: "POST",
+    headers: { cookie, "content-type": "application/json" },
+    body: JSON.stringify({ variantCode: "N176J", url: "https://www.forestshop.sk/druhy/" }),
+  });
+
+  const list = await app.request("/api/nedostupne", { headers: { cookie } });
+  const listBody = (await list.json()) as { groups: { variantCode: string; replacementLinks: { id: string; url: string }[] }[] };
+  const group = listBody.groups.find((g) => g.variantCode === "N176J");
+  expect(group?.replacementLinks.map((l) => l.url)).toEqual(["https://www.forestshop.sk/prvy/", "https://www.forestshop.sk/druhy/"]);
+});
+
+it("rola citanie NESMIE pridať odkaz náhrady (403)", async () => {
+  const { app, cookie, db } = await boot("citanie");
+  await seedNedostupneLine(db, "17601011", "N176K");
+  const res = await app.request("/api/nedostupne/replacement-links", {
+    method: "POST",
+    headers: { cookie, "content-type": "application/json" },
+    body: JSON.stringify({ variantCode: "N176K", url: "https://www.forestshop.sk/x/" }),
+  });
+  expect(res.status).toBe(403);
+});
+
+it("neplatná URL (nie http/https) je odmietnutá — 400", async () => {
+  const { app, cookie } = await boot("manazer");
+  const res = await app.request("/api/nedostupne/replacement-links", {
+    method: "POST",
+    headers: { cookie, "content-type": "application/json" },
+    body: JSON.stringify({ variantCode: "N176L", url: "javascript:alert(1)" }),
+  });
+  expect(res.status).toBe(400);
+});
+
+it("manazer zmaže odkaz náhrady — zmizne z GET zoznamu; zmazanie neznámeho id vráti ok:true, removed:false", async () => {
+  const { app, cookie } = await boot("manazer");
+  const add = await app.request("/api/nedostupne/replacement-links", {
+    method: "POST",
+    headers: { cookie, "content-type": "application/json" },
+    body: JSON.stringify({ variantCode: "N176M", url: "https://www.forestshop.sk/zmazat/" }),
+  });
+  const addBody = (await add.json()) as { link: { id: string } };
+
+  const del = await app.request(`/api/nedostupne/replacement-links/${addBody.link.id}`, { method: "DELETE", headers: { cookie } });
+  expect(del.status).toBe(200);
+  expect((await del.json()) as { ok: boolean; removed: boolean }).toEqual({ ok: true, removed: true });
+
+  const delAgain = await app.request(`/api/nedostupne/replacement-links/${addBody.link.id}`, { method: "DELETE", headers: { cookie } });
+  expect((await delAgain.json()) as { ok: boolean; removed: boolean }).toEqual({ ok: true, removed: false });
+});

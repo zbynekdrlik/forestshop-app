@@ -2590,3 +2590,34 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
   prepnutie späť na 2, Rozpory: Žiadne). Issue zavreté ručne s dôkazom,
   Discord run-card odoslaná. Playbook doplnený v GREEN commite
   (`.claude/rules/shop-feed.md`, `.claude/rules/supplier-stock.md`).
+
+- issue 237 (prehľad e-shopu + súhrn o objednávaní nad zoznamom "Na
+  objednanie"): nový `orders.total_price_with_vat numeric(12,2)` (migrácia
+  0031), extrahovaný v `parser.ts` cez zdieľaný `catalog/money.ts`'s
+  `parseDecimalComma`, vždy osviežený pri re-importe (rovnaká rodina ako
+  `status_name`/`remark`/`shop_remark`). Nový modul `orders/overview.ts`
+  (Europe/Bratislava deň/týždeň/mesiac hranice cez znovupoužité
+  `parseShopLocalDateTime`, BigInt-cent-presný súčet peňazí,
+  `getOrdersDashboardOverview` číta VŠETKY objednávky bez ohľadu na
+  `status_name`) + nová trasa `GET /api/orders/overview` (registrovaná
+  PRED `:id`). Frontend: `OrdersOverviewTiles.tsx` nad `OrdersToolbar` —
+  "Prehľad e-shopu" (vlastný fetch) + "Súhrn o objednávaní" (čisto zo
+  `suppliers`, nové `countAffectedOrders`/`oldestWaitingPlacedAt`/
+  `formatOrderCount` v `ordersSummary.ts`). 14 existujúcich
+  `OrdersSection*`/`OrderLineRow*.test.tsx` súborov doplnených o mock
+  `fetchOrdersOverview`. Testy: `overview.test.ts` (13),
+  `orders-overview.integration.test.ts` (7),
+  `orders-ingest-total-price.integration.test.ts` (2, vydelené aby
+  `orders-ingest.integration.test.ts` neprešlo cez eslint `max-lines:
+  400`), `ordersSummary.test.ts` (+21), `OrdersOverviewTiles.test.tsx` (5),
+  nový e2e `orders-overview.spec.ts` (porovnáva proti `/api/orders/open`
+  naživo, nie hardcoded čísla). PR #244, code review
+  (`superpowers:requesting-code-review`, nezávislý subagent, sám si
+  spustil celú lokálnu sadu vrátane 6 zdieľaných e2e specov): 0 Critical, 2
+  Important (storno-objednávky otázka pre naživo overenie — zdokumentované
+  v `.claude/rules/orders.md`; playbook zápis — doplnený), 1 Minor
+  (slovenské skloňovanie "1 objednávok" → oprava `formatOrderCount`, paucal
+  tvar). Merge `227f94d`. Naživo overené proti Shoptet administrácii
+  (`/admin/statistiky-objednavek-a-obratu/`, filter "Dnes") — PRESNÁ ZHODA:
+  8 objednávok, 446,90 € oboma stranami. Issue zavreté ručne s dôkazom,
+  Discord run-card odoslaná. Playbook doplnený (`.claude/rules/orders.md`).

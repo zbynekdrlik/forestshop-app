@@ -7,17 +7,10 @@ export const TYPE_ALTERNATIVE = "alternativa" as const;
 export const EMAIL_TYPES = [TYPE_UNAVAILABLE, TYPE_ALTERNATIVE] as const;
 export type NedostupneEmailType = (typeof EMAIL_TYPES)[number];
 
-
-// Klikateľný fallback na vyhľadávanie podľa kódu — appka nemá žiadny zdroj
-// SKUTOČNEJ Shoptet produktovej URL (overené priamo na exporte: žiadny
-// `url`/`seoUrl` stĺpec), takže sa používa VŽDY (rovnaký fallback ako stará
-// appka's `_resolve_alternatives`, keď jej marketingový XML-feed lookup
-// nenašiel zhodu — "always clickable"). Návrhový komentár na issue 176:
-// import starého marketingového feedu bol zámerne zamietnutý ako nová,
-// nepotrebná externá integrácia len kvôli jednému nepovinnému bodu ticketu.
-export function alternativeSearchUrl(code: string): string {
-  return `https://www.forestshop.sk/vyhladavanie/?string=${encodeURIComponent(code)}`;
-}
+// issue 238: pôvodný automatický vyhľadávací fallback (`alternativeSearchUrl`)
+// je preč spolu s celým `product.relatedCodes`-based návrhom — majiteľ teraz
+// vkladá skutočné odkazy sám (`nedostupne_replacement_link`), appka už
+// žiadny odkaz sama neskladá.
 
 // Ďalší voľný kľúč v registri `.claude/rules/scheduler.md`
 // (787_878_001/002/003/004/005/100 sú obsadené) — serializuje KAŽDÉ
