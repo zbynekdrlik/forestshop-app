@@ -100,7 +100,10 @@ describe("deriveVariantState — prázdny text dostupnosti nie je vypredané (is
 // alebo prázdny reťazec (jednovariantné produkty ho často vôbec nevypĺňajú) —
 // prázdny sa berie rovnako ako "1" (viditeľný), nikdy ako vypnutý.
 describe("deriveVariantState — variantVisibility vypína JEDNOTLIVÝ variant nezávisle od produktu", () => {
-  it("variantVisibility '0' zhodí inak predajný variant na vypredaný", () => {
+  // issue 219 (druhá vlna): vypnutý variant je `discontinued`, nie `out_of_stock` —
+  // je to vedomé „nepredávať" (ako `detailOnly`), takže sa NIKDY nesmie stať
+  // kandidátom automatizácie „Vypredané → Skladom".
+  it("variantVisibility '0' zhodí inak predajný variant na ukončený predaj", () => {
     expect(
       deriveVariantState({
         stock: 5,
@@ -109,7 +112,7 @@ describe("deriveVariantState — variantVisibility vypína JEDNOTLIVÝ variant n
         productVisibility: "visible",
         variantVisibility: "0",
       }),
-    ).toBe("out_of_stock");
+    ).toBe("discontinued");
   });
 
   it("variantVisibility '1' nechá stav nedotknutý (predajný zostáva predajný)", () => {
@@ -136,7 +139,7 @@ describe("deriveVariantState — variantVisibility vypína JEDNOTLIVÝ variant n
     ).toBe("sellable");
   });
 
-  it("variantVisibility '0' NEPREBÍJA silnejší signál 'discontinued' (text aj produktová viditeľnosť)", () => {
+  it("variantVisibility '0' vedľa iného 'discontinued' signálu (text aj produktová viditeľnosť) nič nemení", () => {
     expect(
       deriveVariantState({
         stock: 5,
@@ -157,7 +160,9 @@ describe("deriveVariantState — variantVisibility vypína JEDNOTLIVÝ variant n
     ).toBe("discontinued");
   });
 
-  it("variantVisibility '0' na variante, ktorý by aj tak bol vypredaný, nemení nič", () => {
+  // Text „Vypredané" NESMIE vypnutý variant stiahnuť späť medzi kandidátov na
+  // zapnutie — vypnutie je silnejší signál a zápis dostupnosti ho aj tak nezruší.
+  it("variantVisibility '0' prebíja aj text 'Vypredané'", () => {
     expect(
       deriveVariantState({
         stock: 0,
@@ -166,6 +171,6 @@ describe("deriveVariantState — variantVisibility vypína JEDNOTLIVÝ variant n
         productVisibility: "visible",
         variantVisibility: "0",
       }),
-    ).toBe("out_of_stock");
+    ).toBe("discontinued");
   });
 });

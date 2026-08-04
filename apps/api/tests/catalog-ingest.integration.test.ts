@@ -147,10 +147,12 @@ it("odvodí tri stavy dostupnosti presne podľa textov v exporte", async () => {
   const rows = await db.select({ code: variants.code, state: variants.state }).from(variants);
   const byState = { sellable: 0, out_of_stock: 0, discontinued: 0 };
   for (const row of rows) byState[row.state] += 1;
-  // issue 219: jeden variant fixtúry (40237/L) má oba texty dostupnosti prázdne
-  // a zápornú zásobu — predtým padal medzi vypredané, dnes je predajný, lebo
-  // prázdny text znamená „Shoptet zobrazí predvolenú dostupnosť", nie vypredané.
-  expect(byState).toEqual({ sellable: 7, out_of_stock: 3, discontinued: 25 });
+  // issue 219 posunulo obe hranice: prázdny text dostupnosti už neznamená
+  // vypredané (Shoptet vtedy zobrazí predvolenú dostupnosť), a jednotlivo
+  // vypnutý variant (`variantVisibility = "0"`, vo fixtúre 20 riadkov) je
+  // `discontinued` — vedomé „nepredávať", nie „došiel tovar". Preto zostáva
+  // jediný skutočne vypredaný variant: "278" s textom „Není skladem".
+  expect(byState).toEqual({ sellable: 7, out_of_stock: 1, discontinued: 27 });
 
   const state = (code: string): string | undefined => rows.find((r) => r.code === code)?.state;
   expect(state("40237/M")).toBe("sellable");

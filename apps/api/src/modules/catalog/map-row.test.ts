@@ -140,7 +140,10 @@ describe("mapRow nad reálnymi riadkami fixtúry", () => {
       availabilityInStockText: "Predaj výrobku skončil",
       availabilityOutOfStockText: "Vypredané",
       availabilityText: "Vypredané",
-      state: "out_of_stock",
+      // issue 219 (druhá vlna): 60055/8 má vo fixtúre `variantVisibility = "0"`,
+      // teda je v Shoptete vypnutý jednotlivo — to je „nepredávať", nie „došiel
+      // tovar", takže stav je `discontinued` bez ohľadu na text „Vypredané".
+      state: "discontinued",
     });
   });
 

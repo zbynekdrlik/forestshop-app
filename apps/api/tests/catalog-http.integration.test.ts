@@ -144,8 +144,8 @@ it("vráti prehľad katalógu", async () => {
     // issue 219: 40237/L má oba texty dostupnosti prázdne — prázdny text
     // znamená predvolenú dostupnosť Shoptetu, nie vypredané, takže je predajný.
     sellable: 7,
-    outOfStock: 3,
-    discontinued: 25,
+    outOfStock: 1,
+    discontinued: 27,
     missing: 0,
     lastSnapshot: { verdict: "accepted", rowCount: 35 },
   });
