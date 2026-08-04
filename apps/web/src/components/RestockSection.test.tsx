@@ -1,17 +1,40 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { RestockSection } from "./RestockSection.js";
 
-const { fetchRestockStatus, runRestockNow, setRestockEnabled } = vi.hoisted(() => ({
-  fetchRestockStatus: vi.fn(),
-  runRestockNow: vi.fn(),
-  setRestockEnabled: vi.fn(),
-}));
+const { fetchRestockStatus, fetchRestockWaiting, runRestockNow, setRestockEnabled } = vi.hoisted(
+  () => ({
+    fetchRestockStatus: vi.fn(),
+    fetchRestockWaiting: vi.fn(),
+    runRestockNow: vi.fn(),
+    setRestockEnabled: vi.fn(),
+  }),
+);
 
 vi.mock("../restockApi.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../restockApi.js")>();
-  return { ...actual, fetchRestockStatus, runRestockNow, setRestockEnabled };
+  return { ...actual, fetchRestockStatus, fetchRestockWaiting, runRestockNow, setRestockEnabled };
 });
+
+const WAITING = {
+  total: 250,
+  rows: [
+    {
+      variantCode: "60542",
+      pairCode: null,
+      productName: "Ľadvinka SWEDTEAM GREEN",
+      supplier: "TTHUNT",
+      supplierLink: "https://tthunt.example/ladvinka",
+      supplierAvailabilityText: "skladom",
+      supplierPrice: "24.00",
+      confirmedAt: "2026-08-04T04:20:00.000Z",
+    },
+  ],
+  suppliers: [
+    { name: "BETALOV", count: 200 },
+    { name: "TTHUNT", count: 50 },
+  ],
+};
 
 const STATUS = {
   enabled: false,
@@ -40,6 +63,10 @@ const STATUS = {
     skippedReason: null,
   },
 };
+
+beforeEach(() => {
+  fetchRestockWaiting.mockResolvedValue(WAITING);
+});
 
 afterEach(() => {
   cleanup();
@@ -104,6 +131,51 @@ it("po zlyhaní zápisu povie, že sa nič neprepínalo", async () => {
   fireEvent.click(await screen.findByTestId("restock-run-now"));
 
   expect((await screen.findByRole("status")).textContent).toContain("Nič sa nepreplo");
+});
+
+// issue 217 — majiteľ: "link na nas produkt a link na produkt dodavatela …
+// potvaram si zo sto a overim". Oba odkazy vedľa seba sú celý zmysel karty.
+it("pri každom čakajúcom produkte ponúkne odkaz na náš eshop aj k dodávateľovi", async () => {
+  fetchRestockStatus.mockResolvedValue(STATUS);
+  render(<RestockSection role="admin" onSessionExpired={vi.fn()} />);
+
+  const riadok = await screen.findByTestId("restock-waiting-60542");
+  const odkazy = [...riadok.querySelectorAll("a")].map((a) => a.getAttribute("href"));
+  expect(odkazy).toEqual([
+    "https://www.forestshop.sk/vyhladavanie/?string=60542",
+    "https://tthunt.example/ladvinka",
+  ]);
+  // Nová karta — inak by preklikávanie zoznam pod rukami zavrelo.
+  expect([...riadok.querySelectorAll("a")].every((a) => a.getAttribute("target") === "_blank")).toBe(
+    true,
+  );
+});
+
+it("filter podľa dodávateľa načíta zoznam odznova od prvej stránky", async () => {
+  fetchRestockStatus.mockResolvedValue(STATUS);
+  render(<RestockSection role="admin" onSessionExpired={vi.fn()} />);
+  await screen.findByTestId("restock-waiting-60542");
+
+  fireEvent.click(await screen.findByTestId("restock-waiting-next"));
+  await waitFor(() => {
+    expect(fetchRestockWaiting).toHaveBeenLastCalledWith({ limit: 100, offset: 100, supplier: "" });
+  });
+
+  fireEvent.change(screen.getByTestId("restock-waiting-supplier"), { target: { value: "TTHUNT" } });
+  await waitFor(() => {
+    expect(fetchRestockWaiting).toHaveBeenLastCalledWith({
+      limit: 100,
+      offset: 0,
+      supplier: "TTHUNT",
+    });
+  });
+});
+
+it("ukáže, koľkátý úsek zo všetkých čakajúcich práve pozeráš", async () => {
+  fetchRestockStatus.mockResolvedValue(STATUS);
+  render(<RestockSection role="admin" onSessionExpired={vi.fn()} />);
+
+  expect((await screen.findByTestId("restock-waiting-range")).textContent).toContain("z 250");
 });
 
 it("role „čítanie\" ovládacie tlačidlá neponúkne", async () => {

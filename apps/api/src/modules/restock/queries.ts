@@ -31,6 +31,21 @@ export interface RestockCandidates {
   readonly overLimit: number;
 }
 
+export interface RestockSupplierCount {
+  readonly name: string;
+  readonly count: number;
+}
+
+export interface RestockWaitingPage {
+  /** Koľko kandidátov zostáva po filtri (nie veľkosť stránky). */
+  readonly total: number;
+  readonly rows: readonly RestockCandidate[];
+  /** Dodávatelia s počtami cez CELÝ zoznam, nikdy len cez stránku. */
+  readonly suppliers: readonly RestockSupplierCount[];
+}
+
+const NO_SUPPLIER_LABEL = "(bez dodávateľa)";
+
 /**
  * Kandidát musí spĺňať VŠETKO naraz:
  *  - náš stav je `out_of_stock` (vypredané) — už predajný variant sa
@@ -50,11 +65,7 @@ export interface RestockCandidates {
  * Každý `code` sa vráti najviac raz — Shoptet zruší CELÝ import pri
  * duplicitnom kóde a katalóg obsahuje produkty zdieľajúce kódy variantov.
  */
-export async function selectRestockCandidates(
-  db: Database,
-  now: Date,
-  limit = MAX_PER_RUN,
-): Promise<RestockCandidates> {
+async function allRestockCandidates(db: Database, now: Date): Promise<readonly RestockCandidate[]> {
   const oldestAcceptable = new Date(now.getTime() - CONFIRMATION_MAX_AGE_HOURS * 3_600_000);
 
   // Linka sa z `internal_note` vyberá TÝM ISTÝM spôsobom ako v scraperi
@@ -101,9 +112,53 @@ export async function selectRestockCandidates(
     seen.add(row.variantCode);
     unique.push({ ...row, confirmedAt: row.confirmedAt });
   }
+  return unique;
+}
 
+export async function selectRestockCandidates(
+  db: Database,
+  now: Date,
+  limit = MAX_PER_RUN,
+): Promise<RestockCandidates> {
+  const unique = await allRestockCandidates(db, now);
   return {
     picked: unique.slice(0, limit),
     overLimit: Math.max(0, unique.length - limit),
+  };
+}
+
+/**
+ * Overovací zoznam pre majiteľa (issue 217) — presne tí istí kandidáti, ktorých
+ * by prepli nasledujúce behy, len bez stropu a po stránkach.
+ *
+ * Zámerne stavia na tej istej `allRestockCandidates`, nie na vlastnej kópii
+ * podmienok: zoznam, podľa ktorého sa človek rozhoduje, sa nesmie rozísť s tým,
+ * čo automatizácia naozaj urobí.
+ */
+export async function listRestockWaiting(
+  db: Database,
+  now: Date,
+  options: { readonly limit: number; readonly offset: number; readonly supplier?: string },
+): Promise<RestockWaitingPage> {
+  const unique = await allRestockCandidates(db, now);
+
+  const counts = new Map<string, number>();
+  for (const row of unique) {
+    const name = row.supplier ?? NO_SUPPLIER_LABEL;
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+  }
+  const suppliers = [...counts]
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "sk"));
+
+  const filtered =
+    options.supplier === undefined
+      ? unique
+      : unique.filter((row) => (row.supplier ?? NO_SUPPLIER_LABEL) === options.supplier);
+
+  return {
+    total: filtered.length,
+    rows: filtered.slice(options.offset, options.offset + options.limit),
+    suppliers,
   };
 }

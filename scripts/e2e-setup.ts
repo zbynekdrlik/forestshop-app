@@ -9,7 +9,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { createDb } from "../apps/api/src/db/client.js";
-import { jobRuns, mailLog, orderLines, orderOpenStatuses, orderReminderSettings, orders, pairings, postaUncollectedSettings, users } from "../apps/api/src/db/schema.js";
+import { jobRuns, mailLog, orderLines, orderOpenStatuses, orderReminderSettings, orders, pairings, postaUncollectedSettings, products, supplierStock, users, variants } from "../apps/api/src/db/schema.js";
 import { CATALOG_IMPORT_JOB_NAME } from "../apps/api/src/modules/scheduler/jobs.js";
 import { hashPassword } from "../apps/api/src/modules/auth/passwords.js";
 import { ingestCatalog } from "../apps/api/src/modules/catalog/ingest.js";
@@ -154,6 +154,10 @@ const E2E_MAILY_EMAIL = "e2e-maily@forestshop.sk"; // musí sa zhodovať s hodno
 // spec súbor (`mail-log.spec.ts`) dostáva VLASTNÝ izolovaný účet.
 const E2E_KNIHA_EMAIL = "e2e-kniha@forestshop.sk"; // musí sa zhodovať s hodnotou v mail-log.spec.ts
 
+// issue 217: rovnaký mechanizmus a dôvod ako `E2E_KNIHA_EMAIL` vyššie — nový
+// spec súbor (`restock-waiting.spec.ts`) dostáva VLASTNÝ izolovaný účet.
+const E2E_PREPINANIE_EMAIL = "e2e-prepinanie@forestshop.sk"; // musí sa zhodovať s hodnotou v restock-waiting.spec.ts
+
 const { db, pool } = createDb();
 // Konštantný literál bez interpolácie — obyčajný reťazec je tu rovnako bezpečný
 // ako `sql` tagovaná šablóna (tú používa ekvivalentný apps/api/tests/helpers/db.ts),
@@ -179,7 +183,12 @@ const { db, pool } = createDb();
 // singleton id / kód objednávky, žiadny FK. "order_reminder_settings"/
 // "order_reminder_state" (issue 173) sú rovnaký prípad znova.
 await db.execute(
-  'TRUNCATE TABLE ingest_issue, variant, product, catalog_snapshot, job_run, audit_events, sessions, users, order_line, "order", supplier_contact, pairing, supplier, order_open_status, posta_uncollected_settings, posta_uncollected_state, order_reminder_settings, order_reminder_state, nedostupne_state, mail_template, mail_template_history RESTART IDENTITY CASCADE',
+  // "supplier_stock"/"restock_settings"/"restock_event" (issue 217) sú znova ten
+  // istý prípad — kľúčované odkazom / singleton id, žiadny FK do `variant`,
+  // takže CASCADE ich nikdy nestrhne. Bez nich by potvrdenia dodávateľa z
+  // PREDOŠLÉHO e2e behu prežili do ďalšieho (presne past popísaná v
+  // `.claude/rules/supplier-stock.md`, tam pre `tests/helpers/db.ts`).
+  'TRUNCATE TABLE ingest_issue, variant, product, catalog_snapshot, job_run, audit_events, sessions, users, order_line, "order", supplier_contact, pairing, supplier, order_open_status, posta_uncollected_settings, posta_uncollected_state, order_reminder_settings, order_reminder_state, nedostupne_state, mail_template, mail_template_history, supplier_stock, restock_settings, restock_event RESTART IDENTITY CASCADE',
 );
 // Rovnaký dôvod ako `tests/helpers/db.ts`: bez tohto by "Na objednanie" bolo
 // v CELOM e2e behu prázdne pre KAŽDÚ objednávku (žiadny nastavený otvorený
@@ -304,6 +313,12 @@ await db.insert(users).values({
 });
 await db.insert(users).values({
   email: E2E_KNIHA_EMAIL,
+  passwordHash: await hashPassword(E2E_HESLO),
+  displayName: "E2E Manažér",
+  role: "manazer",
+});
+await db.insert(users).values({
+  email: E2E_PREPINANIE_EMAIL,
   passwordHash: await hashPassword(E2E_HESLO),
   displayName: "E2E Manažér",
   role: "manazer",
@@ -605,6 +620,54 @@ await db.insert(mailLog).values({
   // Musí sa presne zhodovať s `DUPLICATE_REASON` (`modules/mail-log/
   // queries.ts`) — inak by súhrn "zabránené duplicity" ukázal nulu.
   reason: "už bolo odoslané skôr — druhý e-mail sa neposiela",
+});
+
+// issue 217: JEDEN kandidát na prepnutie „Vypredané → Skladom", aby overovacia
+// obrazovka mala naživo čo ukázať. Zámerne VLASTNÝ produkt + variant s kódom,
+// ktorý sa v žiadnom inom spec súbore nevyskytuje, a BEZ objednávkového riadku —
+// nepridáva teda nič do „Na objednanie" ani do parovania, kde iné testy počítajú
+// presné počty. `supplier_stock` je nová tabuľka, ktorú nesleduje žiadny iný test.
+const PREPINANIE_ODKAZ = "https://huntingshop.eu/e2e-prepinanie";
+// `vysledok.snapshotId` (import fixtúry vyššie) namiesto vlastného dopytu —
+// priamy import z "drizzle-orm" v `scripts/` hlási falošné `no-unsafe-*`
+// (`.claude/rules/testing.md`), takže sa mu tu vyhýbame úplne.
+const snapshotPrepinanie = vysledok.snapshotId;
+await db.insert(products).values({
+  key: "e2e-prepinanie",
+  name: "E2E Bunda na prepnutie",
+  supplier: "DODAVATEL-PREPINANIE",
+  internalNote: `Dodávateľ: ${PREPINANIE_ODKAZ}`,
+  firstSeenAt: teraz,
+  lastSeenAt: teraz,
+  lastSeenSnapshotId: snapshotPrepinanie,
+});
+await db.insert(variants).values({
+  code: "PREP-1",
+  productKey: "e2e-prepinanie",
+  guid: "e2e-prepinanie",
+  name: "E2E Bunda na prepnutie",
+  stock: 0,
+  availabilityInStockText: "Skladom",
+  availabilityOutOfStockText: "Vypredané",
+  availabilityText: "Vypredané",
+  productVisibility: "visible",
+  state: "out_of_stock",
+  firstSeenAt: teraz,
+  lastSeenAt: teraz,
+  lastSeenSnapshotId: snapshotPrepinanie,
+});
+await db.insert(supplierStock).values({
+  link: PREPINANIE_ODKAZ,
+  host: "huntingshop.eu",
+  availability: "available",
+  availabilityText: "skladom",
+  price: "49.90",
+  source: "json_ld",
+  ok: true,
+  httpStatus: 200,
+  checkedAt: teraz,
+  // Potvrdenie musí byť čerstvé (do 48 h), inak kandidát vypadne z výberu.
+  confirmedAt: new Date(teraz.getTime() - 3_600_000),
 });
 
 await pool.end();
