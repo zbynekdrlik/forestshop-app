@@ -26,16 +26,40 @@ paths:
   `GET /api/nedostupne` je VŽDY živý DB dopyt, nikdy `job_run.detail` cache.
   Jednoduchšie, žiadna zbytočná zložitosť (MVP) — nová podobná automatizácia
   BEZ plánovaného behu by mala rovnako vynechať settings/`job_run` vrstvu.
-- **`product.related_codes` (text[]) — návrh náhrady zo Shoptetu, populovaný
-  pri katalogovom importe z CSV `relatedProduct`/`relatedProduct2..8`**
-  (`catalog/map-row.ts`'s `extractRelatedCodes`/`MAX_ALTERNATIVES=8`) — PRVÝ
-  stĺpec je bare `relatedProduct` (NIE `relatedProduct1`), overené priamo na
-  reálnej fixtúre. Vlastnosť PRODUKTU (rovnaký first-wins vzor ako
-  `internalNote`/`supplier` v `ingest.ts`), nie variantu. Appka NEMÁ zdroj
-  skutočnej Shoptet produktovej URL (overené na exporte — žiadny `url`/
-  `seoUrl` stĺpec) — alternatívy dostávajú VŽDY klikateľný vyhľadávací
-  fallback (`alternativeSearchUrl`), nikdy sa neintegroval starý marketingový
-  XML feed (zámerne zamietnuté ako zbytočná nová externá závislosť).
+- **PREKONANÉ issue 238-om (2026-08-04, ponechané pre históriu): `product.
+  related_codes` (text[]) — automatický návrh náhrady zo Shoptetu (CSV
+  `relatedProduct`/`relatedProduct2..8`, `catalog/map-row.ts`'s
+  `extractRelatedCodes`/`MAX_ALTERNATIVES=8`), s `alternativeSearchUrl`
+  vyhľadávacím fallbackom, keď appka nemala skutočnú produktovú URL.**
+  Majiteľ tento CELÝ mechanizmus zamietol: *"nechcem aby to uvádzalo tieto
+  náhrady - je to blbosť, to sú súvisiace produkty - nie podobné, nie
+  náhrady"*. Nahradené RUČNÝMI odkazmi (bod nižšie) — `product.related_codes`
+  stĺpec + jeho import (`map-row.ts`/`ingest.ts`) ostávajú v kóde (mimo scope
+  cross-cutting zásahu do katalógového importu), ale appka ich už NIKDE
+  nečíta — follow-up na úplné odstránenie: issue 245.
+- **issue 238: majiteľove RUČNE vložené odkazy náhrad —
+  `nedostupne_replacement_link` (`variant_code` PLAIN text bez FK, rovnaká
+  konvencia ako `nedostupne_state`; `url`; ŽIADNY unique index).** Kľúčované
+  VARIANTOM (nie `product.key` ako `product_supplier_link_override`) — screen
+  aj e-mail sú per-variant granularita (`NedostupneGroup`), majiteľov nákres
+  dáva pole PRI KAŽDOM TOVARE (skupina), nie pri každom čakajúcom
+  zákazníckom riadku. Viac riadkov s rovnakým `variant_code` = zoznam liniek
+  (`modules/nedostupne/replacement-links.ts`, zoradené `asc(createdAt)` —
+  poradie vloženia, prvý pridaný je zvyčajne najviac odporúčaný). Appka k
+  ručne vloženému odkazu nepozná žiadny názov/kód produktu, preto e-mailový
+  `zoznam_nahrad`'s `label` je SAMOTNÁ url (`logic.ts`'s
+  `buildAlternativeEmail`). Prežije nočný katalógový reimport bez ďalšej
+  práce — import sa tejto tabuľky vôbec nedotýka (rovnaký zámer ako
+  `nedostupne_state`/`mail_template`).
+- **issue 238: preklik na náš e-shop (názov produktu) NEPOUŽÍVA
+  `shopLinks.ts`'s `ourProductLink` vyhľadávací fallback, na rozdiel od
+  `restock` obrazovky** — ticket žiada explicitne "ak adresu nemáme, názov
+  ostane neaktívny, nikdy nevyrábať odhadom", takže `queries.ts` číta priamo
+  `shop_product_url.url` (LEFT JOIN podľa `variantCode`) a frontend
+  vykreslí `<a>` LEN keď nie je `null`, inak plain text. Preklik na kód
+  produktu (dodávateľ) naopak ZDIEĽA existujúcu `resolveEffectiveSupplierLink`
+  (`orders/effective-supplier-link.ts`) — rovnaká funkcia ako "Na
+  objednanie", žiadna duplicitná logika.
 - **Dedup (`nedostupne_state`) je serializovaný `NEDOSTUPNE_SEND_LOCK_KEY`
   (`787_878_006`) — bez zámku by dva súbežné klik-y na TEN ISTÝ (objednávka,
   variant, typ) mohli OBA prejsť dedup-check pred zápisom a poslať e-mail
