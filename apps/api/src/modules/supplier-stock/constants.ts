@@ -28,7 +28,18 @@ export const REQUEST_TIMEOUT_MS = 15_000;
 // Strop na veľkosť stiahnutej stránky — číta sa po častiach a nad týmto sa
 // spojenie prerušie (rovnaká úvaha ako `catalog/fetcher.ts`'s `readBounded`:
 // strop musí platiť POČAS čítania, nie až po zbufferovaní celého tela).
-export const MAX_PAGE_BYTES = 2_000_000;
+//
+// Zvýšené z pôvodných 2 000 000 (issue 224, naživo overené na produkcii po
+// nasadení): `shop.lasting.eu`'s BONY čiapka má CELÚ stránku 2 180 285 bajtov
+// — takmer výhradne z opakovaného whitespace v PrestaShop šablóne skupiny
+// "Odstín" (po zošmiznutí opakovaných medzier/tabov klesne skutočný obsah na
+// ~168 000 bajtov). Veľkostný zoznam (`parseSizeAvailability`, issue 224) je
+// na stránke AŽ ZA touto skupinou, takže pôvodný 2 MB strop ho odrezával —
+// L/XL veľkosť (presne tá, ktorú má ticket dokázať ako `unavailable`)
+// zmizla úplne, kým JSON-LD (blízko začiatku `<head>`) strop nikdy
+// nezasiahol. Nový strop necháva rezervu nad zmeranou veľkosťou tejto
+// konkrétnej stránky bez neobmedzeného rastu.
+export const MAX_PAGE_BYTES = 5_000_000;
 
 // Vlastný User-Agent s kontaktom — dodávateľ musí vedieť, kto mu chodí na
 // stránku a komu napísať, keby mu to prekážalo.
