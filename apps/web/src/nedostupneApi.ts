@@ -3,7 +3,10 @@ import { z } from "zod";
 // issue 176: "Nedostupné tovary" — zrkadlí `NedostupneGroup`/`NedostupneOrderRow`
 // (`apps/api/src/modules/nedostupne/queries.ts`).
 
-const alternativeSchema = z.object({ code: z.string(), name: z.string(), url: z.string() });
+// issue 238: majiteľove RUČNE vložené odkazy náhrad (nahrádza pôvodný
+// automatický `product.relatedCodes` návrh — appka k odkazu nepozná meno).
+const replacementLinkSchema = z.object({ id: z.string(), url: z.string() });
+export type ReplacementLink = z.infer<typeof replacementLinkSchema>;
 
 const orderRowSchema = z.object({
   orderCode: z.string(),
@@ -20,7 +23,11 @@ const groupSchema = z.object({
   variantCode: z.string(),
   itemName: z.string(),
   sizeLabel: z.string().nullable(),
-  alternatives: z.array(alternativeSchema),
+  // issue 238: `null` = adresu/odkaz appka nemá — meno/kód ZOSTÁVA
+  // NEAKTÍVNY (nikdy vyhľadávací fallback).
+  ourProductUrl: z.string().nullable(),
+  supplierUrl: z.string().nullable(),
+  replacementLinks: z.array(replacementLinkSchema),
   orders: z.array(orderRowSchema),
 });
 export type NedostupneGroup = z.infer<typeof groupSchema>;
@@ -98,4 +105,23 @@ export async function sendNedostupneEmail(
   });
   if (response.status === 401) throw new NedostupneUnauthorizedError();
   return sendResultSchema.parse(await response.json());
+}
+
+// issue 238: majiteľove RUČNE vložené odkazy náhrad — pridanie/zmazanie.
+const addReplacementLinkResultSchema = z.object({ ok: z.literal(true), link: replacementLinkSchema });
+
+export async function addReplacementLink(variantCode: string, url: string): Promise<ReplacementLink> {
+  const response = await fetch("/api/nedostupne/replacement-links", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ variantCode, url }),
+  });
+  if (response.status === 401) throw new NedostupneUnauthorizedError();
+  return addReplacementLinkResultSchema.parse(await readJson(response, "Odkaz sa nepodarilo pridať")).link;
+}
+
+export async function removeReplacementLink(id: string): Promise<void> {
+  const response = await fetch(`/api/nedostupne/replacement-links/${encodeURIComponent(id)}`, { method: "DELETE" });
+  if (response.status === 401) throw new NedostupneUnauthorizedError();
+  await readJson(response, "Odkaz sa nepodarilo zmazať");
 }

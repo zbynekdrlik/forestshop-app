@@ -2,26 +2,33 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, expect, it, vi } from "vitest";
 import { NedostupneSection } from "./NedostupneSection.js";
 
-const { fetchNedostupneList, fetchNedostupnePreview, sendNedostupneEmail } = vi.hoisted(() => ({
+const { fetchNedostupneList, fetchNedostupnePreview, sendNedostupneEmail, addReplacementLink, removeReplacementLink } = vi.hoisted(() => ({
   fetchNedostupneList: vi.fn(),
   fetchNedostupnePreview: vi.fn(),
   sendNedostupneEmail: vi.fn(),
+  addReplacementLink: vi.fn(),
+  removeReplacementLink: vi.fn(),
 }));
 
 // `NedostupneUnauthorizedError` ostáva SKUTOČNÁ trieda (rovnaký dôvod ako
 // `OrderReminderSection.test.tsx` — `instanceof` v komponente musí fungovať).
 vi.mock("../nedostupneApi.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../nedostupneApi.js")>();
-  return { ...actual, fetchNedostupneList, fetchNedostupnePreview, sendNedostupneEmail };
+  return { ...actual, fetchNedostupneList, fetchNedostupnePreview, sendNedostupneEmail, addReplacementLink, removeReplacementLink };
 });
 
 const { NedostupneUnauthorizedError } = await import("../nedostupneApi.js");
 
+// issue 238: automatický "Náhrada:" zoznam (`alternatives`) je preč —
+// nahradený majiteľovými RUČNE vloženými odkazmi (`replacementLinks`) +
+// preklikom na náš e-shop (`ourProductUrl`) a na dodávateľa (`supplierUrl`).
 const GROUP = {
   variantCode: "40237/L",
   itemName: "Nohavice FOREST 1003",
   sizeLabel: "L",
-  alternatives: [{ code: "60116/90", name: "Podkolienky BOBR", url: "https://www.forestshop.sk/vyhladavanie/?string=60116%2F90" }],
+  ourProductUrl: "https://www.forestshop.sk/nohavice-forest-1003/",
+  supplierUrl: "https://dodavatel.example/nohavice-1003",
+  replacementLinks: [{ id: "link-1", url: "https://www.forestshop.sk/nahradny-produkt/" }],
   orders: [
     {
       orderCode: "17600001",
@@ -56,14 +63,91 @@ it("chýbajúca BCC/mail konfigurácia zobrazí obe upozornenia", async () => {
   await screen.findByTestId("nedostupne-mail-not-configured");
 });
 
-it("zobrazí kartu variantu s náhradou aj objednávkou zákazníka", async () => {
+it("zobrazí kartu variantu s ručným odkazom náhrady aj objednávkou zákazníka", async () => {
   fetchNedostupneList.mockResolvedValue(LIST_WITH_GROUP);
   render(<NedostupneSection role="manazer" onSessionExpired={vi.fn()} />);
   await screen.findByTestId("nedostupne-group-40237/L");
   expect(screen.getByText(/Nohavice FOREST 1003/)).not.toBeNull();
   expect(screen.getByText(/veľkosť L/)).not.toBeNull();
-  expect(screen.getByText("Podkolienky BOBR")).not.toBeNull();
+  expect(screen.getByText("https://www.forestshop.sk/nahradny-produkt/")).not.toBeNull();
   expect(screen.getByText("Ján Novák")).not.toBeNull();
+});
+
+// issue 238: preklik na náš e-shop (názov produktu) a na dodávateľa (kód) —
+// `null` = ostáva NEAKTÍVNY plain text, nikdy vyhľadávací fallback.
+it("názov produktu a kód sú preklikateľné, keď appka odkazy pozná", async () => {
+  fetchNedostupneList.mockResolvedValue(LIST_WITH_GROUP);
+  render(<NedostupneSection role="manazer" onSessionExpired={vi.fn()} />);
+  await screen.findByTestId("nedostupne-group-40237/L");
+
+  const shopLink = screen.getByTestId("nedostupne-shop-link-40237/L");
+  expect(shopLink.getAttribute("href")).toBe("https://www.forestshop.sk/nohavice-forest-1003/");
+  const supplierLink = screen.getByTestId("nedostupne-supplier-link-40237/L");
+  expect(supplierLink.getAttribute("href")).toBe("https://dodavatel.example/nohavice-1003");
+});
+
+it("bez odkazu na e-shop/dodávateľa ostáva názov aj kód NEAKTÍVNY plain text", async () => {
+  fetchNedostupneList.mockResolvedValue({
+    groups: [{ ...GROUP, ourProductUrl: null, supplierUrl: null, replacementLinks: [] }],
+    bccMissing: false,
+    mailNotConfigured: false,
+  });
+  render(<NedostupneSection role="manazer" onSessionExpired={vi.fn()} />);
+  await screen.findByTestId("nedostupne-group-40237/L");
+  expect(screen.queryByTestId("nedostupne-shop-link-40237/L")).toBeNull();
+  expect(screen.queryByTestId("nedostupne-supplier-link-40237/L")).toBeNull();
+  expect(screen.getByText(/Nohavice FOREST 1003/)).not.toBeNull();
+  expect(screen.getByText("40237/L")).not.toBeNull();
+});
+
+it("rola citanie VIDÍ ručné odkazy náhrad, ale nesmie ich pridávať/mazať", async () => {
+  fetchNedostupneList.mockResolvedValue(LIST_WITH_GROUP);
+  render(<NedostupneSection role="citanie" onSessionExpired={vi.fn()} />);
+  await screen.findByTestId("nedostupne-group-40237/L");
+  expect(screen.getByText("https://www.forestshop.sk/nahradny-produkt/")).not.toBeNull();
+  expect(screen.queryByTestId("nedostupne-replacement-link-add-40237/L")).toBeNull();
+  expect(screen.queryByTestId("nedostupne-replacement-link-remove-link-1")).toBeNull();
+});
+
+it("manazer pridá ručný odkaz náhrady — vstup sa vyprázdni a zoznam sa znova načíta", async () => {
+  fetchNedostupneList.mockResolvedValueOnce(LIST_WITH_GROUP).mockResolvedValueOnce({
+    groups: [{ ...GROUP, replacementLinks: [...GROUP.replacementLinks, { id: "link-2", url: "https://www.forestshop.sk/druhy/" }] }],
+    bccMissing: false,
+    mailNotConfigured: false,
+  });
+  addReplacementLink.mockResolvedValue({ id: "link-2", url: "https://www.forestshop.sk/druhy/" });
+  render(<NedostupneSection role="manazer" onSessionExpired={vi.fn()} />);
+  await screen.findByTestId("nedostupne-group-40237/L");
+
+  const input = screen.getByTestId("nedostupne-replacement-link-input-40237/L");
+  fireEvent.change(input, { target: { value: "https://www.forestshop.sk/druhy/" } });
+  fireEvent.click(screen.getByTestId("nedostupne-replacement-link-add-40237/L"));
+
+  await waitFor(() => {
+    expect(addReplacementLink).toHaveBeenCalledWith("40237/L", "https://www.forestshop.sk/druhy/");
+  });
+  await screen.findByText("https://www.forestshop.sk/druhy/");
+  expect((input as HTMLInputElement).value).toBe("");
+});
+
+it("manazer zmaže ručný odkaz náhrady — zoznam sa znova načíta bez neho", async () => {
+  fetchNedostupneList.mockResolvedValueOnce(LIST_WITH_GROUP).mockResolvedValueOnce({
+    groups: [{ ...GROUP, replacementLinks: [] }],
+    bccMissing: false,
+    mailNotConfigured: false,
+  });
+  removeReplacementLink.mockResolvedValue(undefined);
+  render(<NedostupneSection role="manazer" onSessionExpired={vi.fn()} />);
+  await screen.findByTestId("nedostupne-group-40237/L");
+
+  fireEvent.click(screen.getByTestId("nedostupne-replacement-link-remove-link-1"));
+
+  await waitFor(() => {
+    expect(removeReplacementLink).toHaveBeenCalledWith("link-1");
+  });
+  await waitFor(() => {
+    expect(screen.queryByText("https://www.forestshop.sk/nahradny-produkt/")).toBeNull();
+  });
 });
 
 it("rola citanie NEVIDÍ žiadne akčné tlačidlá (len admin/manazer smie odosielať)", async () => {
