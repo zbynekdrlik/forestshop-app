@@ -268,9 +268,10 @@ describe("parsePage — issue 225: odimon.sk — viditelna dostupnost prebija kl
 });
 
 describe("parsePage — issue 230: trigona.sk cita farebny StockCountText stitok pri produkte", () => {
-  it("doverovana je trigona.sk aj jej poddomena", () => {
+  it("doverovana je trigona.sk aj jej poddomena, ale nie cudzia domena s rovnakym koncom", () => {
     expect(isTrustedTextHost("https://www.trigona.sk/eshop/p-1/nieco.xhtml")).toBe(true);
     expect(isTrustedTextHost("https://trigona.sk/eshop/p-1/nieco.xhtml")).toBe(true);
+    expect(isTrustedTextHost("https://nottrigona.sk/eshop/p-1/nieco.xhtml")).toBe(false);
   });
 
   it("zelena farba (#00b020, 'Na sklade') je available — zodpoveda JSON-LD InStock na tom istom produkte", () => {

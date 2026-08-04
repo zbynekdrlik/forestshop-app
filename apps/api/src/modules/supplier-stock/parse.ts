@@ -281,7 +281,13 @@ function huntingshopDetailBadges(html: string): string | null {
  * bez tohto prvku — preto tu niet dôkazu, čo by chýbajúci štítok znamenal.
  */
 function trigonaStockRegion(html: string): string | null {
-  const match = /<span\s+id="StockCountText\d+">\s*<span\s+style="color:\s*(#[0-9a-fA-F]{6})">/i.exec(html);
+  // `[^>]*` okolo id/style (rovnaký vzor ako huntingshopDetailBadges/
+  // odimonVisibleAvailability nižšie) toleruje ďalšie atribúty aj iné
+  // poradie — nie len presne ten tvar, aký mali naživo overené vzorky.
+  const match =
+    /<span\b[^>]*\bid="StockCountText\d+"[^>]*>\s*<span\b[^>]*\bstyle="[^"]*color:\s*(#[0-9a-fA-F]{6})[^"]*"[^>]*>/i.exec(
+      html,
+    );
   if (match === null) return null;
   const color = (match[1] ?? "").toLowerCase();
   if (color === "#00b020") return "skladom";
