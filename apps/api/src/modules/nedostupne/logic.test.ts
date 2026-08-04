@@ -59,7 +59,7 @@ describe("buildAlternativeEmail", () => {
     expect(built.html).not.toContain("<ul>");
   });
 
-  it("HTML-escapuje názov produktu (odkazy samotné sú vždy appkou vygenerované URL, nie voľný text)", () => {
+  it("HTML-escapuje názov produktu (odkazy samotné sú validované ako http(s) URL na HTTP hranici, nie voľný text)", () => {
     const built = buildAlternativeEmail(ALTERNATIVA, "Ján", "<i>Prod</i>", ["https://www.forestshop.sk/x/"]);
     expect(built.html).not.toContain("<i>Prod</i>");
     expect(built.html).toContain("&lt;i&gt;Prod&lt;/i&gt;");
