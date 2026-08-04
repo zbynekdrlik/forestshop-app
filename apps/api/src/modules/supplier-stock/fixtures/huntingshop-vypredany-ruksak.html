@@ -1,0 +1,42 @@
+<!--
+  Rekonštrukcia https://www.huntingshop.eu/hart-spean-25-ruksak-8060 (issue 223)
+  z HTML doslovne citovanej v komentári ticketu (overené majiteľom 4. 8. 2026)
+  — NIE čerstvý fetch. K dátumu písania tejto fixtúry sa live URL presmerúva
+  na homepage (produkt zrejme odstránený z ponuky), takže sa nedala znova
+  živo stiahnuť; obe sesterské fixtúry (skladom-tricko, odimon) SÚ z čerstvého
+  živého fetchu. Produkt v detaile NEMÁ žiadny štítok dostupnosti — všetky
+  nájdené `.badge` na stránke patria karuselu súvisiacich produktov (trieda
+  `badge-stock`). Jediný výskyt slova „skladom" je marketingová veta v pätičke,
+  ktorá je na KAŽDEJ stránke tohto obchodu, nie pri tomto produkte.
+-->
+<html lang="sk">
+<head><title>HART SPEAN 25 - ruksak | Huntingshop</title></head>
+<body>
+  <div class="product-price-wrapp-lg mb-4 d-block mt-4" id="snippet--product-price-details">
+    <div class="row">
+      <div class="col-sm-8 col-12 pe-0">
+        <span class="product-price-on-sale price-vat">89,90 €</span>
+      </div>
+      <!-- detail nemá ziadny badge-outline- bez badge-stock -->
+    </div>
+  </div>
+
+  <div class="related-products-carousel">
+    <div class="product-card">
+      <span class="badge badge-outline-success text-uppercase badge-stock ">
+        Na sklade
+      </span>
+    </div>
+    <div class="product-card">
+      <span class="badge badge-outline-danger text-uppercase badge-stock opacity-1">
+        Nie je skladom
+      </span>
+    </div>
+  </div>
+
+  <footer>
+    <h2 class="title h6 mb-3">Skladová dostupnosť</h2>
+    <p class="fs-6 mb-0">Viac ako 90% ponúkaných produktov máme skladom ihneď k odberu.</p>
+  </footer>
+</body>
+</html>

@@ -35,12 +35,10 @@ export const MAX_PAGE_BYTES = 2_000_000;
 export const USER_AGENT =
   "ForestshopBot/1.0 (kontrola dostupnosti; +https://forestshop.sk)";
 
-// Domény, kde je čítanie dostupnosti z VOĽNÉHO TEXTU stránky overené na
-// uloženej vzorke. Mimo tohto zoznamu sa voľnému textu NEDÔVERUJE (stránka
-// môže mať slovo „Skladom" v pätičke, v inom produkte alebo v menu) a
-// výsledok je `unknown` — radšej nič než dohad, ktorý by zapol produkt.
-export const TRUSTED_TEXT_HOSTS: readonly string[] = Object.freeze([
-  "huntingshop.eu",
-  "wetland.sk",
-  "trigona.sk",
-]);
+// Domény s pravidlom pre voľný text sú definované priamo v `parse.ts`
+// (`TEXT_AVAILABILITY_RULES`) — každá nesie VÝREZ (ktorá oblasť stránky patrí
+// TOMUTO produktu), nie len meno domény. Mimo tohto zoznamu sa voľnému textu
+// NEDÔVERUJE vôbec a výsledok je `unknown` — radšej nič než dohad, ktorý by
+// zapol produkt (issue 223: `wetland.sk`/`trigona.sk` boli predtým v tomto
+// poli ako celostránkové domény bez overeného výrezu; kým sa pre ne nenájde
+// a neoverí vlastný výrez, ostávajú bez textovej úrovne).
