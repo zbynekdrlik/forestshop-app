@@ -96,7 +96,10 @@ export function SupplierStockSection({
 
       <div className="autohead">
         <span className="chip" data-testid="ss-total">
-          Sledovaných odkazov: {overview.total}
+          {/* issue 224: `overview.total` počíta RIADKY (dvojica odkaz+veľkosť),
+              nie unikátne odkazy — odkaz s pravidlom na veľkosti prispieva
+              viac než jedným záznamom, takže "odkazov" by bolo zavádzajúce. */}
+          Sledovaných záznamov: {overview.total}
         </span>
         <span className="chip" data-testid="ss-available">
           Skladom: {overview.available}
