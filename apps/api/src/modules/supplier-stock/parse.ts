@@ -19,7 +19,7 @@
 // neprepne produkt (issue 213).
 
 export type SupplierAvailability = "available" | "unavailable" | "unknown";
-export type SupplierStockSource = "json_ld" | "meta" | "text" | "none";
+export type SupplierStockSource = "json_ld" | "meta" | "text" | "size_list" | "none";
 
 export interface ParsedPage {
   readonly availability: SupplierAvailability;
@@ -316,6 +316,99 @@ function visibleAvailabilityFor(url: string, html: string): VisibleAvailabilityH
   if (host === "") return null;
   const rule = VISIBLE_AVAILABILITY_RULES.find((r) => host === r.host || host.endsWith(`.${r.host}`));
   return rule === undefined ? null : rule.read(html);
+}
+
+export interface SizeAvailability {
+  /** Presný text veľkosti u DODÁVATEĽA (napr. "L/XL"), nie náš vlastný size_label. */
+  readonly sizeLabel: string;
+  readonly availability: "available" | "unavailable";
+}
+
+interface SizeAvailabilityRule {
+  readonly host: string;
+  readonly read: (html: string) => readonly SizeAvailability[];
+}
+
+/**
+ * shop.lasting.eu (issue 224): PrestaShop nesie dostupnosť KAŽDEJ veľkosti
+ * v triede `<li>` veľkostného zoznamu — `sklademANO`/`sklademNE` — skutočná
+ * veľkosť je v `title=""` atribúte vnoreného `<input>`. Stránkové JSON-LD
+ * hlási dostupnosť len JEDNEJ (predvolenej/`checked`) veľkosti a vie byť
+ * priamo v rozpore s týmto zoznamom (živý dôkaz, issue 224: JSON-LD hlási
+ * InStock pre veľkosť, ktorej vlastný zoznam hovorí `sklademNE`) — preto sa
+ * JSON-LD pri viacveľkostnom produkte na tejto doméne NIKDY neberie ako
+ * dostupnosť KONKRÉTNEJ veľkosti (`parsePage` sa pre tento odkaz vôbec
+ * nepoužije, viď `run.ts`).
+ */
+function lastingSizeList(html: string): readonly SizeAvailability[] {
+  const items = [...html.matchAll(/<li\b[^>]*class="[^"]*(sklademANO|sklademNE)[^"]*"[^>]*>([\s\S]*?)<\/li>/gi)];
+  const result: SizeAvailability[] = [];
+  for (const [, cls, inner] of items) {
+    const title = /title="([^"]*)"/.exec(inner ?? "")?.[1]?.trim();
+    if (title === undefined || title === "") continue;
+    result.push({ sizeLabel: title, availability: cls === "sklademANO" ? "available" : "unavailable" });
+  }
+  return result;
+}
+
+const SIZE_AVAILABILITY_RULES: readonly SizeAvailabilityRule[] = Object.freeze([
+  { host: "shop.lasting.eu", read: lastingSizeList },
+]);
+
+function sizeAvailabilityRuleFor(url: string): SizeAvailabilityRule | null {
+  const host = hostOf(url);
+  if (host === "") return null;
+  return SIZE_AVAILABILITY_RULES.find((rule) => host === rule.host || host.endsWith(`.${rule.host}`)) ?? null;
+}
+
+/**
+ * Zoznam veľkostí a ich dostupnosti PRIAMO zo stránky (issue 224), alebo
+ * `null`, keď doména nemá overené pravidlo ALEBO stránka žiadny takýto
+ * zoznam neobsahuje (napr. jednoveľkostný produkt). `null` je zámerne INÝ
+ * výsledok než prázdne pole — prázdne pole by znamenalo "zoznam sa hľadal a
+ * je prázdny" (nemalo by nastať), `null` znamená "túto úroveň čítania nemá
+ * na tejto stránke zmysel skúšať".
+ */
+export function parseSizeAvailability(html: string, url: string): readonly SizeAvailability[] | null {
+  const rule = sizeAvailabilityRuleFor(url);
+  if (rule === null) return null;
+  const sizes = rule.read(html);
+  return sizes.length > 0 ? sizes : null;
+}
+
+/** Rozdelí veľkostné označenie na porovnateľné časti — oddeľovače (`/`, `-`,
+ * medzera, ...) preč, každá časť veľkými písmenami. Prázdne označenie nemá
+ * žiadnu časť (nikdy sa nespáruje so žiadnou veľkosťou). */
+function sizeTokens(label: string): readonly string[] {
+  return label
+    .toUpperCase()
+    .split(/[^A-Z0-9]+/)
+    .filter((part) => part !== "");
+}
+
+/**
+ * Spáruje NÁŠ `variant.size_label` (napr. "L-X") s presne JEDNOU veľkosťou
+ * zo zoznamu dodávateľa (napr. "L/XL") — issue 224. Zámerne TOLERANTNÉ na
+ * skrátenie: náš Shoptet-ov `size_label` niekedy nesie skrátený tvar tej
+ * istej veľkosti (overené naživo v produkčnej DB: "L-X" u nás = "L/XL" u
+ * dodávateľa) — zhoda platí, keď majú OBE strany rovnaký POČET častí a na
+ * KAŽDEJ pozícii sú časti buď PRESNE zhodné, alebo je jedna PREFIXOM
+ * druhej. Nikdy iný počet častí, nikdy iný prvý znak — to by už bol dohad.
+ * Viac než JEDNA zhoda je nejednoznačná a počíta sa ako ŽIADNA — nikdy sa
+ * neuhádne, ktorá je správna (rovnaká disciplína ako `unknown` v `parsePage`).
+ */
+export function matchSizeLabel(ourSizeLabel: string, supplierSizeLabels: readonly string[]): string | null {
+  const ours = sizeTokens(ourSizeLabel);
+  if (ours.length === 0) return null;
+  const matches = supplierSizeLabels.filter((candidate) => {
+    const theirs = sizeTokens(candidate);
+    if (theirs.length !== ours.length) return false;
+    return ours.every((part, i) => {
+      const other = theirs[i] ?? "";
+      return part === other || part.startsWith(other) || other.startsWith(part);
+    });
+  });
+  return matches.length === 1 ? (matches[0] ?? null) : null;
 }
 
 /**
