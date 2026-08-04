@@ -141,8 +141,10 @@ it("vráti prehľad katalógu", async () => {
   expect(await res.json()).toMatchObject({
     variantCount: 35,
     productCount: 8,
-    sellable: 6,
-    outOfStock: 4,
+    // issue 219: 40237/L má oba texty dostupnosti prázdne — prázdny text
+    // znamená predvolenú dostupnosť Shoptetu, nie vypredané, takže je predajný.
+    sellable: 7,
+    outOfStock: 3,
     discontinued: 25,
     missing: 0,
     lastSnapshot: { verdict: "accepted", rowCount: 35 },
@@ -186,7 +188,7 @@ it("filtruje podľa stavu a stránkuje bez duplicít a preskočení", async () =
   const { app, cookie } = await boot({ role: "manazer", seed: true });
 
   const skladom = await app.request("/api/catalog/variants?state=sellable", { headers: { cookie } });
-  expect((await skladom.json()) as { total: number }).toMatchObject({ total: 6 });
+  expect((await skladom.json()) as { total: number }).toMatchObject({ total: 7 });
 
   // Referenčný, neostránkovaný zoznam (35 variantov sa zmestí do jednej strany
   // s pageSize=200) — voči nemu sa overuje, že strana 2 začína PRESNE tam, kde
@@ -252,7 +254,7 @@ it("filter 'missing' vráti len variant so zaznamenaným missingSince, nezávisl
   // stĺpca `state`, takže `state=sellable` naďalej vidí ten istý počet ako
   // predtým (variant "40287" je "sellable", stále sa počíta tam AJ v "missing").
   const skladom = await app.request("/api/catalog/variants?state=sellable", { headers: { cookie } });
-  expect((await skladom.json()) as { total: number }).toMatchObject({ total: 6 });
+  expect((await skladom.json()) as { total: number }).toMatchObject({ total: 7 });
 });
 
 it("vráti detail variantu a 404 pre neznámy kód", async () => {

@@ -69,19 +69,22 @@ export interface RestockCsvRow {
   readonly pairCode: string;
   readonly availabilityInStock: string;
   readonly availabilityOutOfStock: string;
-  readonly stock: string;
 }
 
 // `visible` je konštanta, nie vstup — automatizácia zapína LEN produkty,
 // ktoré už `visible` sú (`restock/queries.ts`), takže stĺpec len potvrdzuje
 // existujúci stav a nemôže odkryť nič, čo majiteľ skryl.
+// `stock` sa ZÁMERNE nezapisuje (issue 219). Majiteľ skladovú logistiku v
+// Shoptete nepoužíva — fiktívna zásoba by mu do obchodu vpísala číslo, ktoré
+// nikto neudržiava. Na zobrazenie „Skladom" nie je potrebná: oba texty
+// dostupnosti sa nastavujú naraz, takže je jedno, ktorý z nich Shoptet podľa
+// zásoby vyberie.
 const RESTOCK_HEADER = [
   "code",
   "pairCode",
   "productVisibility",
   "availabilityInStock",
   "availabilityOutOfStock",
-  "stock",
 ] as const;
 
 export function buildRestockCsv(rows: readonly RestockCsvRow[]): Buffer {
@@ -91,7 +94,7 @@ export function buildRestockCsv(rows: readonly RestockCsvRow[]): Buffer {
   const lines = [
     rowToLine(RESTOCK_HEADER),
     ...rows.map((r) =>
-      dataRowToLine([r.code, r.pairCode, "visible", r.availabilityInStock, r.availabilityOutOfStock, r.stock]),
+      dataRowToLine([r.code, r.pairCode, "visible", r.availabilityInStock, r.availabilityOutOfStock]),
     ),
   ];
   const bom = "﻿";

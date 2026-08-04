@@ -147,7 +147,10 @@ it("odvodí tri stavy dostupnosti presne podľa textov v exporte", async () => {
   const rows = await db.select({ code: variants.code, state: variants.state }).from(variants);
   const byState = { sellable: 0, out_of_stock: 0, discontinued: 0 };
   for (const row of rows) byState[row.state] += 1;
-  expect(byState).toEqual({ sellable: 6, out_of_stock: 4, discontinued: 25 });
+  // issue 219: jeden variant fixtúry (40237/L) má oba texty dostupnosti prázdne
+  // a zápornú zásobu — predtým padal medzi vypredané, dnes je predajný, lebo
+  // prázdny text znamená „Shoptet zobrazí predvolenú dostupnosť", nie vypredané.
+  expect(byState).toEqual({ sellable: 7, out_of_stock: 3, discontinued: 25 });
 
   const state = (code: string): string | undefined => rows.find((r) => r.code === code)?.state;
   expect(state("40237/M")).toBe("sellable");

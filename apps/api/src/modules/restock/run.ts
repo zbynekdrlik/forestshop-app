@@ -15,7 +15,6 @@ import {
   MAX_PER_RUN,
   RESTOCK_RUN_LOCK_KEY,
   RESTOCK_SETTINGS_ID,
-  RESTOCK_STOCK,
 } from "./constants.js";
 import { selectRestockCandidates, type RestockCandidate } from "./queries.js";
 
@@ -63,16 +62,16 @@ async function runRestockLocked(options: RunRestockOptions): Promise<RestockRunR
   const { picked, overLimit } = await selectRestockCandidates(db, now, limit);
   if (picked.length === 0) return { status: "nothing_to_do", overLimit: 0 };
 
-  // OBIDVE polia dostupnosti naraz — zápis len do `availabilityInStock` by po
-  // dopredaní fiktívnych kusov vrátil staré „Vypredané" (overené v ostrej
-  // prevádzke starej appky 14. 7. 2026).
+  // OBIDVE polia dostupnosti naraz — Shoptet vyberá jedno z nich podľa zásoby,
+  // takže zápis len do jedného by nechal zákazníkovi svietiť to druhé (overené
+  // v ostrej prevádzke starej appky 14. 7. 2026). Zásoba sa zámerne nezapisuje
+  // vôbec (issue 219) — majiteľ ju v Shoptete neudržiava.
   const csv = buildRestockCsv(
     picked.map((candidate) => ({
       code: candidate.variantCode,
       pairCode: candidate.pairCode ?? "",
       availabilityInStock: AVAILABILITY_IN_STOCK_TEXT,
       availabilityOutOfStock: AVAILABILITY_IN_STOCK_TEXT,
-      stock: String(RESTOCK_STOCK),
     })),
   );
 

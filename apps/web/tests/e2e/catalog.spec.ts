@@ -26,7 +26,7 @@ test("manažér vidí stav katalógu, vyhľadá variant a konzola je čistá", a
 
   // 36 = 35 riadkov fixtúry + 1 seedovaný kandidát na prepnutie ("PREP-1",
   // issue 217, `scripts/e2e-setup.ts`). Je v stave `out_of_stock`, takže
-  // filtre "sellable"(6) a "missing"(1) nižšie zostávajú nezmenené.
+  // filtre "sellable"(7 od issue 219) a "missing"(1) nižšie sa ním nemenia.
   await expect(page.getByTestId("snapshot")).toContainText("Posledný import: prijatý");
   await expect(page.getByTestId("counts")).toContainText("Variantov v katalógu (vrátane chýbajúcich): 36");
   await expect(page.getByTestId("total")).toHaveText("Nájdených: 36");
@@ -53,12 +53,15 @@ test("filter podľa stavu zúži zoznam na predajné varianty", async ({ page })
   await page.getByLabel("Stav", { exact: true }).selectOption("sellable");
   await page.getByRole("button", { name: "Hľadať" }).click();
 
-  await expect(page.getByTestId("total")).toHaveText("Nájdených: 6");
+  // 7 od issue 219: variant "40237/L" má oba texty dostupnosti prázdne, čo
+  // znamená predvolenú dostupnosť Shoptetu (na tomto e-shope "Skladom"), nie
+  // vypredané — preto sa počíta medzi predajné.
+  await expect(page.getByTestId("total")).toHaveText("Nájdených: 7");
   await expect(page.getByTestId("variant-40237/M")).toBeVisible();
 });
 
 // Review final-wave-a, položka 6: `scripts/e2e-setup.ts` označí variant
-// "40287" priamo v databáze ako chýbajúci (presne jeden zo 6 "sellable").
+// "40287" priamo v databáze ako chýbajúci (presne jeden zo 7 "sellable").
 test("filter 'Chýbajúce' nájde presne označený variant a riadok ukazuje, odkedy chýba", async ({ page }) => {
   await page.goto("/?tab=catalog");
   await page.getByLabel("E-mail").fill("e2e@forestshop.sk");

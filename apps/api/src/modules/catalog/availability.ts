@@ -56,8 +56,14 @@ export function deriveVariantState(
   // prebiť silnejší signál vyššie (text/produktová viditeľnosť hovoriaca
   // "discontinued"), preto je táto kontrola AŽ TU, pred predvoleným "sellable".
   if (input.variantVisibility === "0") return "out_of_stock";
-  // Prázdny text nesie nulovú informáciu (týka sa väčšiny riadkov exportu) — až
-  // vtedy, a len vtedy, rozhoduje sklad.
-  if (text === "") return input.stock > 0 ? "sellable" : "out_of_stock";
+  // Prázdny text NIE JE vypredané a `stock` do stavu nevstupuje vôbec (issue 219).
+  // Prázdna dostupnosť znamená, že produkt ju nemá priradenú, takže Shoptet
+  // zobrazí PREDVOLENÚ — na tomto e-shope zelené „Skladom" (overené naživo na
+  // 10-12106-087, 10-11284-083 a pončo Deerhunter Survivor: všetky vracajú
+  // `schema.org/InStock`). Majiteľ navyše skladovú logistiku v Shoptete
+  // NEPOUŽÍVA (rozhodnutie 4. 8. 2026) a `negativeAmount = 1` má na všetkých
+  // 14 071 riadkoch exportu, takže sa taký produkt kúpi aj pri nulovej zásobe.
+  // Zásoba tu preto nesmie nič rozhodovať — inak automatizácia zapína produkty,
+  // ktoré sú už dávno v predaji (6 793 takých riadkov).
   return "sellable";
 }
