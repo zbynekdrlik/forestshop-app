@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   availabilityFromSchemaToken,
@@ -10,6 +12,14 @@ import {
   parsePrice,
   visibleText,
 } from "./parse.js";
+
+function fixture(name: string): string {
+  return readFileSync(fileURLToPath(new URL(`./fixtures/${name}`, import.meta.url)), "utf8");
+}
+
+const HUNTINGSHOP_VYPREDANY = fixture("huntingshop-vypredany-ruksak.html");
+const HUNTINGSHOP_SKLADOM = fixture("huntingshop-skladom-tricko.html");
+const ODIMON_NEDOSTUPNA = fixture("odimon-nedostupna-strelecka-palica.html");
 
 describe("hostOf / isTrustedTextHost", () => {
   it("odreze www a zmensi pismena", () => {
@@ -170,20 +180,67 @@ describe("parsePage — poradie urovni", () => {
     expect(result.source).toBe("meta");
   });
 
-  it("volny text sa pouzije LEN na overenej domene", () => {
+  it("volny text sa pouzije LEN na overenej domene, a LEN na vyrezanej oblasti produktu", () => {
+    // Domena bez pravidla na vyrez (issue 223): text sa vobec necita, ostava unknown.
     const html = "<html><body><h1>Bunda</h1><p>Skladom</p></body></html>";
-    expect(parsePage(html, "https://huntingshop.eu/p/1")).toMatchObject({
-      availability: "available",
-      source: "text",
-    });
     expect(parsePage(html, "https://dogtrace.com/p/1")).toMatchObject({
       availability: "unknown",
       source: "none",
     });
   });
 
-  it("necitatelna stranka je unknown, nikdy dohad", () => {
-    const result = parsePage("<html><body>Popis produktu</body></html>", "https://huntingshop.eu/p/1");
+  it("necitatelna stranka na domene BEZ pravidla je unknown, nikdy dohad", () => {
+    const result = parsePage("<html><body>Popis produktu</body></html>", "https://dogtrace.com/p/1");
     expect(result).toEqual({ availability: "unknown", availabilityText: "", price: null, source: "none" });
+  });
+});
+
+describe("parsePage — issue 223: huntingshop.eu cita LEN stitok pri produkte", () => {
+  it("vypredany produkt (ziadny detailny stitok, len paticka a karusel) je unavailable", () => {
+    const result = parsePage(HUNTINGSHOP_VYPREDANY, "https://www.huntingshop.eu/hart-spean-25-ruksak-8060");
+    expect(result.availability).toBe("unavailable");
+  });
+
+  it("skladom produkt (skutocny detailny stitok badge-outline- bez badge-stock) je available", () => {
+    const result = parsePage(HUNTINGSHOP_SKLADOM, "https://www.huntingshop.eu/aktiva-z-green-funkcne-tricko");
+    expect(result.availability).toBe("available");
+    expect(result.source).toBe("text");
+    expect(result.availabilityText.toLowerCase()).toContain("skladom");
+  });
+
+  it("paticková veta SAMA O SEBE (bez detailneho stitku) nesmie stacit na available", () => {
+    // Rovnaka paticka ako v skladom-fixture, ale ako VLASTNA, izolovana stranka
+    // bez ziadneho badge-outline- stitku — presne situacia, ktora bola zdrojom
+    // falosneho pozitiva pred opravou (celostrankovy volny text).
+    const html = `<html><body><footer>
+      <h2 class="title h6">Skladová dostupnosť</h2>
+      <p class="fs-6 mb-0">Viac ako 90% ponúkaných produktov máme skladom ihneď k odberu.</p>
+    </footer></body></html>`;
+    const result = parsePage(html, "https://www.huntingshop.eu/nejaky-produkt");
+    expect(result.availability).not.toBe("available");
+  });
+});
+
+describe("parsePage — issue 225: odimon.sk — viditelna dostupnost prebija klamlive JSON-LD", () => {
+  it("rozpor JSON-LD (InStock) vs viditelne 'Nedostupny' pri produkte je unknown, nikdy available", () => {
+    const result = parsePage(
+      ODIMON_NEDOSTUPNA,
+      "https://www.odimon.sk/polovnicke-potreby/doplnky-na-lov/nastavitelna-strelecka-palica-odimon-primo-tetrao-gen.ii-4-noha",
+    );
+    expect(result.availability).toBe("unknown");
+    expect(result.availability).not.toBe("available");
+  });
+
+  it("zhoda JSON-LD a viditelnej dostupnosti sa pouzije (viditelna je zdroj textu)", () => {
+    const html = `<html><head><script type="application/ld+json">
+      {"@type":"Product","offers":{"@type":"Offer","availability":"OutOfStock"}}
+    </script></head><body>
+      <span class="product-availability__value product-availability__value--unavailable">
+        <span class="product-availability__value--text">Nedostupný</span>
+      </span>
+    </body></html>`;
+    const result = parsePage(html, "https://www.odimon.sk/p/nieco");
+    expect(result.availability).toBe("unavailable");
+    expect(result.source).toBe("text");
   });
 });
