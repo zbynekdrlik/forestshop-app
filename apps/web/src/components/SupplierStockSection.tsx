@@ -63,8 +63,12 @@ export function SupplierStockSection({
     setRunNotice("");
     runSupplierStockNow()
       .then((result) => {
+        // issue 224: `checked` je počet ODKAZOV, ale skladom/vypredané/neviem
+        // sú počty ZÁZNAMOV (odkaz × veľkosť) — odkaz s viacerými veľkosťami
+        // prispieva do rozpisu viac než raz, takže sa nesmú tváriť ako súčet
+        // rovnakej jednotky.
         setRunNotice(
-          `Skontrolovaných ${String(result.checked)} odkazov · skladom ${String(result.available)} · vypredané ${String(result.unavailable)} · neviem ${String(result.unknown)} · zlyhalo ${String(result.failed)}.`,
+          `Skontrolovaných ${String(result.checked)} odkazov · zlyhalo ${String(result.failed)}. Záznamy: skladom ${String(result.available)} · vypredané ${String(result.unavailable)} · neviem ${String(result.unknown)}.`,
         );
         load();
       })
