@@ -55,7 +55,9 @@ it("zobrazí tri dlaždice 'Prehľad e-shopu' s počtom objednávok aj tržbou",
   render(<OrdersOverviewTiles suppliers={[]} onSessionExpired={() => {}} />);
 
   await waitFor(() => {
-    expect(screen.getByTestId("overview-shop-today").textContent).toContain("3 objednávok");
+    // issue 237 (code review): 3 spadá do slovenského "málopočetného" (paucal)
+    // tvaru 2-4 → "objednávky", nie "objednávok" (`formatOrderCount`).
+    expect(screen.getByTestId("overview-shop-today").textContent).toContain("3 objednávky");
   });
   expect(screen.getByTestId("overview-shop-today").textContent).toContain("150.00 €");
   expect(screen.getByTestId("overview-shop-week").textContent).toContain("10 objednávok");

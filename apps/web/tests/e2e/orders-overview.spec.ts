@@ -40,7 +40,7 @@ test("blok 'Prehľad e-shopu' + 'Súhrn o objednávaní' sa zobrazí a čísla z
   // takže dlaždica DNES má DETERMINISTICKÉ, presne overiteľné číslo.
   const dnesDlazdica = page.getByTestId("overview-shop-today");
   await expect(dnesDlazdica).toBeVisible();
-  await expect(dnesDlazdica).toContainText("1 objednávok");
+  await expect(dnesDlazdica).toContainText("1 objednávka");
   await expect(dnesDlazdica).toContainText("77.50 €");
 
   // Tento týždeň/mesiac VŽDY obsahuje aspoň dnešnú objednávku — presný počet
@@ -48,8 +48,12 @@ test("blok 'Prehľad e-shopu' + 'Súhrn o objednávaní' sa zobrazí a čísla z
   // (staršie dátumované) seedovaným objednávkam, preto len dolná hranica.
   const tyzdenDlazdica = page.getByTestId("overview-shop-week");
   const mesiacDlazdica = page.getByTestId("overview-shop-month");
-  await expect(tyzdenDlazdica).toContainText("objednávok");
-  await expect(mesiacDlazdica).toContainText("objednávok");
+  // "objednáv" (spoločný prefix) namiesto presného tvaru — počet v týchto
+  // dvoch dlaždiciach môže padnúť do ktoréhokoľvek z troch slovenských tvarov
+  // (`formatOrderCount`: 1/2-4/5+), podľa toho, koľko ĎALŠÍCH seedovaných
+  // objednávok práve v momente behu spadá do tohto týždňa/mesiaca.
+  await expect(tyzdenDlazdica).toContainText(/\d+\s+objednáv/);
+  await expect(mesiacDlazdica).toContainText(/\d+\s+objednáv/);
 
   // "Súhrn o objednávaní" — porovnané NEZÁVISLE vypočítanou hodnotou z
   // reálnych dát `/api/orders/open` (rovnaká autentifikovaná session, čo

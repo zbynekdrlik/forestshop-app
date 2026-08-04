@@ -1,6 +1,6 @@
 import { useEffect, useState, type JSX } from "react";
 import { fetchOrdersOverview, OrdersUnauthorizedError, type OrdersOverview, type SupplierOpenOrders } from "../ordersApi.js";
-import { countAffectedOrders, oldestWaitingPlacedAt, summarizeOrderLines } from "../ordersSummary.js";
+import { countAffectedOrders, formatOrderCount, oldestWaitingPlacedAt, summarizeOrderLines } from "../ordersSummary.js";
 
 // issue 237: blok dlaždíc NAD zoznamom na obrazovke "Na objednanie" — dve
 // skupiny. "Prehľad e-shopu" (dnes/tento týždeň/tento mesiac, presne ako
@@ -91,7 +91,7 @@ function OverviewTile({
   return (
     <div className="overview-tile" data-testid={testId}>
       <p className="overview-tile-label">{label}</p>
-      <p className="overview-tile-value">{`${String(orderCount)} objednávok`}</p>
+      <p className="overview-tile-value">{formatOrderCount(orderCount)}</p>
       <p className="overview-tile-sub">{`${revenue} €`}</p>
     </div>
   );

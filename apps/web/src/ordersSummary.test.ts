@@ -2,6 +2,7 @@ import { expect, it } from "vitest";
 import {
   computeVariantTotals,
   countAffectedOrders,
+  formatOrderCount,
   formatOrderSummaryText,
   formatVariantTotalChip,
   isLineHiddenByFilter,
@@ -269,4 +270,25 @@ it("oldestWaitingPlacedAt — ignoruje VYBAVENÉ riadky, aj keby boli staršie",
 it("oldestWaitingPlacedAt — žiadny nevybavený riadok vráti null", () => {
   expect(oldestWaitingPlacedAt([overviewLine("O1", "objednane", true)])).toBeNull();
   expect(oldestWaitingPlacedAt([])).toBeNull();
+});
+
+// issue 237 (code review, minor): slovenský počítateľný tvar — 1 → jednotné
+// číslo, 2-4 → málopočetné (paucal), 0/5+ (vrátane 22/23/24…) → rodový pád
+// množného čísla.
+it("formatOrderCount — 1 je jednotné číslo", () => {
+  expect(formatOrderCount(1)).toBe("1 objednávka");
+});
+
+it("formatOrderCount — 2, 3, 4 sú málopočetné (paucal)", () => {
+  expect(formatOrderCount(2)).toBe("2 objednávky");
+  expect(formatOrderCount(3)).toBe("3 objednávky");
+  expect(formatOrderCount(4)).toBe("4 objednávky");
+});
+
+it("formatOrderCount — 0, 5+ (vrátane 22/23/24) sú rodový pád množného čísla", () => {
+  expect(formatOrderCount(0)).toBe("0 objednávok");
+  expect(formatOrderCount(5)).toBe("5 objednávok");
+  expect(formatOrderCount(22)).toBe("22 objednávok");
+  expect(formatOrderCount(23)).toBe("23 objednávok");
+  expect(formatOrderCount(24)).toBe("24 objednávok");
 });

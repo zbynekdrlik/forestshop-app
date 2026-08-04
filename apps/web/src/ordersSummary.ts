@@ -201,3 +201,17 @@ export function oldestWaitingPlacedAt(
   }
   return oldest;
 }
+
+// issue 237 (code review, minor): slovenčina má pri počítateľných
+// podstatných menách TRI tvary (1 → jednotné číslo, 2-4 → málopočetné
+// (paucal), 0/5+ vrátane 22/23/24… → rodový pád množného čísla — na rozdiel
+// od ruštiny/poľštiny sa tvar NEODVODZUJE z poslednej číslice). Priamy
+// náprotivok `apps/api/src/modules/orders/ingest.ts`'s (neexportovanej)
+// `formatCount` — rovnaká sadzba, len na frontende, kde appka počet
+// objednávok skloňuje priamo v texte dlaždice ("Prehľad e-shopu"), nie len
+// spolu s neutrálnou jednotkou ako `formatVariantTotalChip`'s "N ks".
+export function formatOrderCount(n: number): string {
+  if (n === 1) return "1 objednávka";
+  if (n === 2 || n === 3 || n === 4) return `${String(n)} objednávky`;
+  return `${String(n)} objednávok`;
+}
