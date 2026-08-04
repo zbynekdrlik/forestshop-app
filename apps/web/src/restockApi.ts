@@ -87,6 +87,39 @@ export async function fetchRestockStatus(): Promise<RestockStatus> {
   return statusSchema.parse(await readJson(response, "Prepínanie sa nepodarilo načítať"));
 }
 
+const waitingSchema = z.object({
+  total: z.number(),
+  rows: z.array(
+    z.object({
+      variantCode: z.string(),
+      pairCode: z.string().nullable(),
+      productName: z.string(),
+      supplier: z.string().nullable(),
+      supplierLink: z.string(),
+      supplierAvailabilityText: z.string(),
+      supplierPrice: z.string().nullable(),
+      confirmedAt: z.string(),
+    }),
+  ),
+  suppliers: z.array(z.object({ name: z.string(), count: z.number() })),
+});
+export type RestockWaitingPage = z.infer<typeof waitingSchema>;
+export type RestockWaitingRow = RestockWaitingPage["rows"][number];
+
+export async function fetchRestockWaiting(options: {
+  readonly limit: number;
+  readonly offset: number;
+  readonly supplier: string;
+}): Promise<RestockWaitingPage> {
+  const params = new URLSearchParams({
+    limit: String(options.limit),
+    offset: String(options.offset),
+  });
+  if (options.supplier !== "") params.set("supplier", options.supplier);
+  const response = await fetch(`/api/restock/waiting?${params.toString()}`);
+  return waitingSchema.parse(await readJson(response, "Zoznam sa nepodarilo načítať"));
+}
+
 export async function setRestockEnabled(enabled: boolean): Promise<boolean> {
   const response = await fetch("/api/restock/enabled", {
     method: "PUT",

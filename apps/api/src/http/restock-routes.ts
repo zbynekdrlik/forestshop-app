@@ -7,7 +7,7 @@ import { jobRuns, restockEvents } from "../db/schema.js";
 import { log } from "../logger.js";
 import { record } from "../modules/audit/service.js";
 import { MAX_PER_RUN, RESTOCK_JOB_NAME } from "../modules/restock/constants.js";
-import { selectRestockCandidates } from "../modules/restock/queries.js";
+import { listRestockWaiting, selectRestockCandidates } from "../modules/restock/queries.js";
 import type { RestockRunResult, RunRestockOptions } from "../modules/restock/run.js";
 import { isRestockEnabled, runRestock, setRestockEnabled } from "../modules/restock/run.js";
 import { getLatestJobRun } from "../modules/scheduler/queries.js";
@@ -15,6 +15,14 @@ import { requireRole, requireUser, type AppBindings } from "./middleware.js";
 import { requireSameOrigin } from "./origin-check.js";
 
 const setEnabledBody = z.object({ enabled: z.boolean() });
+
+// Strop stránky drží odpoveď v rozumnej veľkosti aj keď si niekto adresu
+// upraví ručne — kandidátov sú tisíce.
+const waitingQuery = z.object({
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+  offset: z.coerce.number().int().min(0).default(0),
+  supplier: z.string().max(200).optional(),
+});
 
 // HTTP vrstva dodá `db`/`now`; zvyšok (prihlasovacie údaje do Shoptetu)
 // zostavuje `index.ts` raz pri štarte — rovnaký vzor ako ostatné automatizácie.
@@ -86,6 +94,20 @@ export function registerRestockRoutes(app: Hono<AppBindings>, db: Database, deps
                   : null,
             },
     });
+  });
+
+  // Overovací zoznam (issue 217) — majiteľ si chce vzorku ručne preklikať skôr,
+  // než automatizáciu pustí. Literál `/waiting` nemá pod `/api/restock` žiadneho
+  // `:param` súrodenca, takže poradie registrácie tu nič nerozbíja
+  // (`.claude/rules/http-routes.md`).
+  app.get("/api/restock/waiting", requireUser(db), zValidator("query", waitingQuery), async (c) => {
+    const { limit, offset, supplier } = c.req.valid("query");
+    const page = await listRestockWaiting(db, new Date(), {
+      limit,
+      offset,
+      ...(supplier === undefined || supplier === "" ? {} : { supplier }),
+    });
+    return c.json(page);
   });
 
   // Štart/Stop gate-uje LEN naplánovaný nočný beh (`scheduler/jobs.ts`'s

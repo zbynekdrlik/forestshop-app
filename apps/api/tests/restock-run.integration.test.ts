@@ -4,7 +4,7 @@ import type { Database } from "../src/db/client.js";
 import { products, restockEvents, supplierStock, variants } from "../src/db/schema.js";
 import type { ShoptetImportConfig } from "../src/modules/shoptet-writeback/config.js";
 import { runRestock, setRestockEnabled } from "../src/modules/restock/run.js";
-import { selectRestockCandidates } from "../src/modules/restock/queries.js";
+import { listRestockWaiting, selectRestockCandidates } from "../src/modules/restock/queries.js";
 import { insertTestSnapshot } from "./helpers/catalog.js";
 import { withCleanDb } from "./helpers/db.js";
 
@@ -200,6 +200,40 @@ describe("prepínanie Vypredané → Skladom", () => {
 
     expect(result).toMatchObject({ status: "failed", attempted: 1 });
     expect(await db.select().from(restockEvents)).toHaveLength(0);
+  });
+
+  // issue 217 — overovací zoznam pre majiteľa. Kľúčová vlastnosť: musí ukazovať
+  // PRESNE to, čo automatizácia prepne, len bez stropu a po stránkach.
+  it("overovací zoznam ukáže aj kandidátov nad stropom a spočíta dodávateľov", async () => {
+    await seedSupplierStock();
+    for (let i = 0; i < 5; i += 1) await seedVariant(`W${String(i)}`);
+
+    const prva = await listRestockWaiting(db, NOW, { limit: 2, offset: 0 });
+    expect(prva.total).toBe(5);
+    expect(prva.rows).toHaveLength(2);
+    expect(prva.suppliers).toEqual([{ name: "Dodávateľ", count: 5 }]);
+
+    const druha = await listRestockWaiting(db, NOW, { limit: 2, offset: 2 });
+    expect(druha.rows.map((r) => r.variantCode)).not.toEqual(prva.rows.map((r) => r.variantCode));
+  });
+
+  it("overovací zoznam filtruje podľa dodávateľa", async () => {
+    await seedSupplierStock();
+    await seedVariant("X1");
+    await db.update(products).set({ supplier: "Iný" }).where(eq(products.key, "prod-X1"));
+    await seedVariant("X2");
+
+    expect((await listRestockWaiting(db, NOW, { limit: 50, offset: 0, supplier: "Iný" })).total).toBe(1);
+    expect((await listRestockWaiting(db, NOW, { limit: 50, offset: 0, supplier: "Dodávateľ" })).total).toBe(1);
+  });
+
+  // Zoznam, podľa ktorého sa majiteľ rozhoduje, sa nesmie rozísť s výberom
+  // nočného behu — inak by overil jedno a prepli by sa iné produkty.
+  it("overovací zoznam vylučuje detailOnly rovnako ako samotné prepínanie", async () => {
+    await seedSupplierStock();
+    await seedVariant("Y1", { productVisibility: "detailOnly" });
+
+    expect((await listRestockWaiting(db, NOW, { limit: 50, offset: 0 })).total).toBe(0);
   });
 
   it("bez kandidátov do Shoptetu vôbec nesiahne", async () => {

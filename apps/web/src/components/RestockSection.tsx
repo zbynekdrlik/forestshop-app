@@ -2,11 +2,18 @@ import { useCallback, useEffect, useState, type JSX } from "react";
 import type { Me } from "../api.js";
 import {
   fetchRestockStatus,
+  fetchRestockWaiting,
   RestockUnauthorizedError,
   runRestockNow,
   setRestockEnabled,
   type RestockStatus,
+  type RestockWaitingPage,
 } from "../restockApi.js";
+import { ourProductUrl } from "../shopLinks.js";
+
+// Majiteľ si chce vzorku preklikať po stovkách („potváram si zo sto a overím"),
+// takže stránka je 100 riadkov, nie tradičných 20.
+const PAGE_SIZE = 100;
 
 // Rovnaké dve role, ktoré server vyžaduje pre Štart/Stop + "Spustiť teraz"
 // (`requireRole("admin", "manazer")`, `restock-routes.ts`).
@@ -30,6 +37,9 @@ export function RestockSection({
   const [toggleBusy, setToggleBusy] = useState(false);
   const [runBusy, setRunBusy] = useState(false);
   const [runNotice, setRunNotice] = useState("");
+  const [waitingList, setWaitingList] = useState<RestockWaitingPage | null>(null);
+  const [supplier, setSupplier] = useState("");
+  const [offset, setOffset] = useState(0);
   const canControl = CONTROL_ROLES.has(role);
 
   const load = useCallback(() => {
@@ -49,6 +59,26 @@ export function RestockSection({
   }, [onSessionExpired]);
 
   useEffect(load, [load]);
+
+  useEffect(() => {
+    let current = true;
+    fetchRestockWaiting({ limit: PAGE_SIZE, offset, supplier })
+      .then((page) => {
+        // Odpoveď na starší filter nesmie prepísať novší zoznam.
+        if (current) setWaitingList(page);
+      })
+      .catch((err: unknown) => {
+        if (!current) return;
+        if (err instanceof RestockUnauthorizedError) {
+          onSessionExpired();
+          return;
+        }
+        setError("Zoznam pripravených na prepnutie sa nepodarilo načítať.");
+      });
+    return () => {
+      current = false;
+    };
+  }, [offset, supplier, onSessionExpired]);
 
   const toggle = useCallback(() => {
     if (status === null) return;
@@ -177,6 +207,104 @@ export function RestockSection({
                     <a href={event.supplierLink} target="_blank" rel="noreferrer noopener">
                       {event.supplierAvailabilityText === "" ? "skladom" : event.supplierAvailabilityText}
                     </a>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      <div className="card" data-testid="restock-waiting-list">
+        <h3>Pripravené na prepnutie{waitingList === null ? "" : ` (${String(waitingList.total)})`}</h3>
+        <p>
+          Zoznam na ručné overenie: vľavo odkaz na náš produkt, vpravo na stránku dodávateľa.
+          Otvárajú sa do novej karty, takže zoznam ti pod rukami nezmizne.
+        </p>
+
+        <div className="autohead">
+          <label>
+            Dodávateľ:{" "}
+            <select
+              data-testid="restock-waiting-supplier"
+              value={supplier}
+              onChange={(e) => {
+                setSupplier(e.target.value);
+                setOffset(0);
+              }}
+            >
+              <option value="">Všetci</option>
+              {(waitingList?.suppliers ?? []).map((s) => (
+                <option key={s.name} value={s.name}>
+                  {s.name} ({s.count})
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            className="btn sm ghost"
+            disabled={offset === 0}
+            onClick={() => {
+              setOffset(Math.max(0, offset - PAGE_SIZE));
+            }}
+            data-testid="restock-waiting-prev"
+          >
+            ← Predošlých {PAGE_SIZE}
+          </button>
+          <button
+            type="button"
+            className="btn sm ghost"
+            disabled={waitingList === null || offset + PAGE_SIZE >= waitingList.total}
+            onClick={() => {
+              setOffset(offset + PAGE_SIZE);
+            }}
+            data-testid="restock-waiting-next"
+          >
+            Ďalších {PAGE_SIZE} →
+          </button>
+          {waitingList !== null && waitingList.total > 0 && (
+            <span className="chip" data-testid="restock-waiting-range">
+              {offset + 1}–{Math.min(offset + waitingList.rows.length, waitingList.total)} z {waitingList.total}
+            </span>
+          )}
+        </div>
+
+        {waitingList === null ? (
+          <p role="status">Načítavam zoznam…</p>
+        ) : waitingList.rows.length === 0 ? (
+          <p className="empty">Nič nečaká — žiadny vypredaný produkt nemá čerstvé potvrdenie od dodávateľa.</p>
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Kód</th>
+                <th scope="col">Názov</th>
+                <th scope="col">Dodávateľ</th>
+                <th scope="col">Náš produkt</th>
+                <th scope="col">U dodávateľa</th>
+                <th scope="col">Čo hlási</th>
+              </tr>
+            </thead>
+            <tbody>
+              {waitingList.rows.map((row) => (
+                <tr key={row.variantCode} data-testid={`restock-waiting-${row.variantCode}`}>
+                  <td>{row.variantCode}</td>
+                  <td>{row.productName}</td>
+                  <td>{row.supplier ?? "—"}</td>
+                  <td>
+                    <a href={ourProductUrl(row.variantCode)} target="_blank" rel="noreferrer noopener">
+                      náš ↗
+                    </a>
+                  </td>
+                  <td>
+                    <a href={row.supplierLink} target="_blank" rel="noreferrer noopener">
+                      dodávateľ ↗
+                    </a>
+                  </td>
+                  <td>
+                    {row.supplierAvailabilityText === "" ? "skladom" : row.supplierAvailabilityText}
+                    {row.supplierPrice !== null && ` · ${row.supplierPrice}`}
                   </td>
                 </tr>
               ))}
