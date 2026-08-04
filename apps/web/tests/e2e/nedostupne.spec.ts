@@ -11,10 +11,15 @@ const E2E_NEDOSTUPNE_EMAIL = "e2e-nedostupne@forestshop.sk"; // musí sa zhodova
 // nenastavuje `MAIL_HOST`, takže `mailTransport` je v tomto behu `undefined`
 // (rovnaká úvaha ako `order-reminder.spec.ts`/`posta-uncollected.spec.ts`).
 // Fixtúrová objednávka "9008" (`scripts/e2e-setup.ts`) má riadok variantu
-// "40287" v stave 'nedostupne' — ten istý variant, ktorého katalógová
-// fixtúra reálne nesie `relatedProduct = "60297"`, takže náhrada sa dá
-// overiť naživo bez ďalšej fixtúry.
-test("zoznam zobrazí nedostupný variant s náhradou, povinný náhľad predchádza odoslaniu, konzola je čistá", async ({ page }) => {
+// "40287" v stave 'nedostupne', s pripraveným prekliku na náš e-shop
+// (`shop_product_url`) a na dodávateľa (`product_supplier_link_override`).
+//
+// issue 238: automatický "Náhrada: 60297" návrh (`product.relatedCodes`) je
+// preč — tento test overuje RUČNÉ pridanie/zmazanie odkazu náhrady namiesto
+// neho, prekliky na e-shop/dodávateľa, a že OBIDVE preview tlačidlá stále
+// ukazujú upraviteľné znenie e-mailu (existujúci `mail-templates` mechanizmus,
+// issue 192 — táto zmena mení len ZDROJ zoznamu náhrad, nie mechanizmus).
+test("ručné odkazy náhrad, prekliky na e-shop/dodávateľa, povinný náhľad predchádza odoslaniu, konzola je čistá", async ({ page }) => {
   const chyby: string[] = [];
   page.on("console", (m) => {
     if (m.type() === "error" || m.type() === "warning") chyby.push(m.text());
@@ -33,17 +38,67 @@ test("zoznam zobrazí nedostupný variant s náhradou, povinný náhľad predch�
   await expect(page.getByTestId("nedostupne-bcc-missing")).toBeVisible();
   await expect(page.getByTestId("nedostupne-mail-not-configured")).toBeVisible();
 
-  // Fixtúrová karta variantu "40287" s náhradou "60297" (neznámy kód —
-  // padá späť na seba samého ako meno, `.claude/rules/nedostupne` návrhový
-  // komentár na tickete).
   const group = page.getByTestId("nedostupne-group-40287");
   await expect(group).toBeVisible();
-  await expect(group.getByText("60297")).toBeVisible();
   await expect(group.getByText("E2E Zákazník Nedostupné")).toBeVisible();
 
-  // Klik na "náhľad" otvorí povinný náhľad e-mailu PRED akýmkoľvek odoslaním.
-  await page.getByTestId("nedostupne-send-9008-40287").click();
+  // issue 238: automatický návrh je PREČ — katalógová fixtúra stále nesie
+  // `relatedProduct = "60297"` pre tento variant, appka ho už nesmie
+  // zobraziť nikde na karte.
+  await expect(group.getByText("60297")).toHaveCount(0);
+
+  // Preklik na náš e-shop (názov produktu) a na dodávateľa (kód variantu) —
+  // obe pripravené vo fixtúre (`scripts/e2e-setup.ts`).
+  const shopLink = page.getByTestId("nedostupne-shop-link-40287");
+  await expect(shopLink).toBeVisible();
+  await expect(shopLink).toHaveAttribute("href", "https://www.forestshop.sk/e2e-nedostupne-40287/");
+  const supplierLink = page.getByTestId("nedostupne-supplier-link-40287");
+  await expect(supplierLink).toBeVisible();
+  await expect(supplierLink).toHaveAttribute("href", "https://dodavatel.example/e2e-nedostupne-40287");
+
+  // Ručné pridanie odkazu náhrady — pole musí prijať VIAC liniek na ten istý
+  // tovar (ticketova akceptačná podmienka).
+  const linkInput = group.getByTestId("nedostupne-replacement-link-input-40287");
+  await linkInput.fill("https://www.forestshop.sk/e2e-nahrada-1/");
+  await group.getByTestId("nedostupne-replacement-link-add-40287").click();
+  await expect(group.getByText("https://www.forestshop.sk/e2e-nahrada-1/")).toBeVisible();
+  await expect(linkInput).toHaveValue("");
+
+  await linkInput.fill("https://www.forestshop.sk/e2e-nahrada-2/");
+  await group.getByTestId("nedostupne-replacement-link-add-40287").click();
+  await expect(group.getByText("https://www.forestshop.sk/e2e-nahrada-2/")).toBeVisible();
+
+  // Odkazy prežijú znovunačítanie stránky (uložené v DB, nie len lokálny stav).
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Nedostupné tovary" })).toBeVisible();
+  const groupAfterReload = page.getByTestId("nedostupne-group-40287");
+  await expect(groupAfterReload.getByText("https://www.forestshop.sk/e2e-nahrada-1/")).toBeVisible();
+  await expect(groupAfterReload.getByText("https://www.forestshop.sk/e2e-nahrada-2/")).toBeVisible();
+
+  // Náhľad "S náhradou" ukáže PRESNE tieto ručné odkazy (nikdy automatický
+  // návrh) — a stále cez existujúci upraviteľný `mail-templates` mechanizmus
+  // (issue 192), táto zmena mení len zdroj `zoznam_nahrad`.
+  await groupAfterReload.getByTestId("nedostupne-alt-send-9008-40287").click();
   const preview = page.getByTestId("nedostupne-preview");
+  await expect(preview).toBeVisible();
+  await expect(preview).toContainText("https://www.forestshop.sk/e2e-nahrada-1/");
+  await expect(preview).toContainText("https://www.forestshop.sk/e2e-nahrada-2/");
+  await page.getByTestId("nedostupne-preview-cancel").click();
+  await expect(preview).toBeHidden();
+
+  // Zmazanie jedného odkazu — ostatné zostávajú.
+  const links = groupAfterReload.locator(".nedostupne-replacement-links li");
+  await expect(links).toHaveCount(2);
+  await groupAfterReload
+    .locator(".nedostupne-replacement-links li", { hasText: "e2e-nahrada-1" })
+    .getByRole("button", { name: /zmazať/ })
+    .click();
+  await expect(groupAfterReload.getByText("https://www.forestshop.sk/e2e-nahrada-1/")).toHaveCount(0);
+  await expect(groupAfterReload.getByText("https://www.forestshop.sk/e2e-nahrada-2/")).toBeVisible();
+
+  // Klik na "náhľad" (bez náhrady) otvorí povinný náhľad e-mailu PRED
+  // akýmkoľvek odoslaním.
+  await groupAfterReload.getByTestId("nedostupne-send-9008-40287").click();
   await expect(preview).toBeVisible();
   await expect(preview).toContainText("e2e-nedostupne@forestshop.sk");
 

@@ -9,7 +9,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { createDb } from "../apps/api/src/db/client.js";
-import { jobRuns, mailLog, orderLines, orderOpenStatuses, orderReminderSettings, orders, pairings, postaUncollectedSettings, products, shopProductUrl, supplierStock, users, variants } from "../apps/api/src/db/schema.js";
+import { jobRuns, mailLog, orderLines, orderOpenStatuses, orderReminderSettings, orders, pairings, postaUncollectedSettings, productSupplierLinkOverrides, products, shopProductUrl, supplierStock, users, variants } from "../apps/api/src/db/schema.js";
 import { CATALOG_IMPORT_JOB_NAME } from "../apps/api/src/modules/scheduler/jobs.js";
 import { hashPassword } from "../apps/api/src/modules/auth/passwords.js";
 import { ingestCatalog } from "../apps/api/src/modules/catalog/ingest.js";
@@ -550,13 +550,18 @@ if (objednavkaOdkaz === undefined) throw new Error("E2E objednávka (odkaz) sa n
 await db.insert(orderLines).values({ orderId: objednavkaOdkaz.id, variantCode: "278", quantity: 1 });
 
 // issue 176: JEDNA objednávka s riadkom v stave 'nedostupne' — variant
-// "40287" (rovnaký variant ako 9002/9003, katalógová fixtúra ho reálne nesie
-// s `relatedProduct = "60297"` po `ingestCatalog` nižšie, `.claude/rules/
-// catalog.md`), takže "Nedostupné tovary" (`nedostupne.spec.ts`) má naživo
-// čo zobraziť VRÁTANE náhradného produktu, bez potreby ďalšej fixtúry.
-// Pridáva GLOBÁLNE 1 riadok do "Na objednanie" (`orders.spec.ts`'s prvý test
-// preto počíta so "Všetci (8)"/"(bez dodávateľa) (5)" a s "Nedostupné 1" v
-// súhrne — "40287" nemá dodávateľa, rovnaký zámer ako 9002/9003).
+// "40287" (rovnaký variant ako 9002/9003), takže "Nedostupné tovary"
+// (`nedostupne.spec.ts`) má naživo čo zobraziť. Pridáva GLOBÁLNE 1 riadok do
+// "Na objednanie" (`orders.spec.ts`'s prvý test preto počíta so "Všetci (8)"/
+// "(bez dodávateľa) (5)" a s "Nedostupné 1" v súhrne — "40287" nemá
+// dodávateľa, rovnaký zámer ako 9002/9003).
+// AKTUALIZÁCIA (issue 238, 2026-08-04): automatický `relatedProduct` návrh
+// (`product.relatedCodes`, katalógová fixtúra ho stále nesie ako "60297",
+// appka ho už NEČÍTA) je nahradený majiteľovými RUČNÝMI odkazmi
+// (`nedostupne_replacement_link`, pridané cez UI priamo v e2e teste) —
+// nižšie pribúda `shop_product_url` (preklik na náš e-shop) a RUČNÝ
+// `product_supplier_link_override` (preklik na dodávateľa — fixtúra má pre
+// tento variant PRÁZDNy `internalNote`, overené priamo na CSV).
 const [objednavkaNedostupne] = await db
   .insert(orders)
   .values({
@@ -569,6 +574,24 @@ const [objednavkaNedostupne] = await db
   .returning();
 if (objednavkaNedostupne === undefined) throw new Error("E2E objednávka (nedostupné) sa nepodarila vložiť");
 await db.insert(orderLines).values({ orderId: objednavkaNedostupne.id, variantCode: "40287", quantity: 1, state: "nedostupne" });
+
+// issue 238: preklik na náš e-shop (názov produktu) a na dodávateľa (kód) na
+// obrazovke "Nedostupné tovary" — variant "40287" (rovnaký ako vyššie) má vo
+// fixtúre PRÁZDNY `internalNote` (overené priamo na fixtúre, `.claude/rules/
+// catalog.md`), takže preklik na dodávateľa musí ísť cez RUČNÝ override
+// (`product_supplier_link_override`), nie extrahovaný odkaz. Produktkey je
+// exportov `guid` stĺpec (identita produktu, `.claude/rules/catalog.md`),
+// overené priamym dopytom proti reálne naimportovanej fixtúre.
+await db.insert(shopProductUrl).values({
+  code: "40287",
+  url: "https://www.forestshop.sk/e2e-nedostupne-40287/",
+  fetchedAt: new Date("2026-07-27T09:00:00Z"),
+});
+await db.insert(productSupplierLinkOverrides).values({
+  productKey: "d63e07c9-3c48-11e6-8a3b-0cc47a6c92bc",
+  url: "https://dodavatel.example/e2e-nedostupne-40287",
+  updatedAt: new Date("2026-07-27T09:00:00Z"),
+});
 
 // F4 (#45): jeden UŽ NAVRHNUTÝ (nepotvrdený) pairing kandidát — simuluje to,
 // čo by inak vložilo #46 (automatické hľadanie kandidátov, ešte
