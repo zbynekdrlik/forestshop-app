@@ -76,11 +76,26 @@ export function ThemeColorPicker({ role, onSessionExpired }: { readonly role: Me
   const [busy, setBusy] = useState(false);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
+  // Code review finding: close→reopen before the FIRST fetch resolves could
+  // let the STALE response's `.then()` land after a newer one and overwrite
+  // state with old values (same "latest wins" class of race as issue 151/251,
+  // `.claude/rules/frontend-design.md`) — each `openPicker()` bumps this and
+  // the `.then()` only applies if it is still the most recent request.
+  const fetchSeqRef = useRef(0);
 
+  // Code review finding: closing (Escape/backdrop/Cancel) WHILE a save/reset
+  // request is in flight reverted the live CSS preview to `baseline`
+  // immediately, but the in-flight request's OWN success handler (below)
+  // never re-applied its result — the page could keep showing the OLD
+  // colours even though the server (and this component's `baseline`) already
+  // has the NEW ones. Making `close()` a no-op while `busy` removes the race
+  // entirely: the dialog can only close once the request has settled, and
+  // both the save/reset success handlers close it themselves at that point.
   const close = useCallback(() => {
+    if (busy) return;
     applyThemeColors(baseline);
     setOpen(false);
-  }, [baseline]);
+  }, [busy, baseline]);
 
   // Esc zavrie dialóg rovnako ako "Zrušiť" (vráti pôvodné farby) — rovnaký
   // vzor ako `MailPreviewDialog.tsx` (issue 191).
@@ -110,9 +125,18 @@ export function ThemeColorPicker({ role, onSessionExpired }: { readonly role: Me
   function openPicker(e: MouseEvent<HTMLButtonElement>): void {
     previousFocusRef.current = e.currentTarget;
     setError("");
+    // Code review finding: without resetting these, a reopen whose refetch
+    // fails (network hiccup) would silently keep rendering the PREVIOUS
+    // session's draft/baseline as if fresh — `colors !== null` would skip the
+    // "Načítavam…" state and Save could re-persist a stale draft unnoticed.
+    setColors(null);
+    setDraft({});
+    setBaseline({});
     setOpen(true);
+    const seq = ++fetchSeqRef.current;
     fetchThemeColors()
       .then((list) => {
+        if (fetchSeqRef.current !== seq) return; // closed+reopened while this was in flight — a newer fetch already applied its own state
         setColors(list);
         const values = Object.fromEntries(list.map((c) => [c.key, c.value]));
         setDraft(values);
@@ -120,6 +144,7 @@ export function ThemeColorPicker({ role, onSessionExpired }: { readonly role: Me
         applyThemeColors(values);
       })
       .catch((err: unknown) => {
+        if (fetchSeqRef.current !== seq) return;
         if (err instanceof ThemeColorsUnauthorizedError) {
           onSessionExpired();
           return;
@@ -146,8 +171,12 @@ export function ThemeColorPicker({ role, onSessionExpired }: { readonly role: Me
         setBaseline(draft);
         setOpen(false);
       })
-      .catch(() => {
+      .catch((err: unknown) => {
         setBusy(false);
+        if (err instanceof ThemeColorsUnauthorizedError) {
+          onSessionExpired();
+          return;
+        }
         setError("Uloženie farieb zlyhalo.");
       });
   }
@@ -220,7 +249,7 @@ export function ThemeColorPicker({ role, onSessionExpired }: { readonly role: Me
               <button type="button" className="btn lg good" disabled={busy || !dirty || !allValid} onClick={save} data-testid="themecolor-save">
                 Uložiť
               </button>
-              <button type="button" className="btn lg ghost" onClick={close} data-testid="themecolor-cancel">
+              <button type="button" className="btn lg ghost" disabled={busy} onClick={close} data-testid="themecolor-cancel">
                 Zrušiť
               </button>
               <button type="button" className="btn lg ghost" disabled={busy || colors === null} onClick={resetToDefaults} data-testid="themecolor-reset">

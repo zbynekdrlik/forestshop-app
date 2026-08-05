@@ -92,6 +92,34 @@ it("Uložiť odošle celý draft a po úspechu popup zavrie", async () => {
   });
 });
 
+it("kým Uložiť čaká na server, Zrušiť/Esc nič nerobí — žiadny reverted náhľad prežívajúci úspešné uloženie", async () => {
+  fetchThemeColors.mockResolvedValue(COLORS);
+  let resolveSave: (result: { ok: true }) => void = () => {};
+  saveThemeColors.mockImplementation(() => new Promise((resolve) => { resolveSave = resolve; }));
+  render(<ThemeColorPicker role="admin" onSessionExpired={vi.fn()} />);
+  fireEvent.click(screen.getByTestId("themecolor-btn"));
+  await screen.findByTestId("themecolor-dialog");
+
+  fireEvent.change(screen.getByTestId("themecolor-hex-chip-done-bg"), { target: { value: "#123456" } });
+  fireEvent.click(screen.getByTestId("themecolor-save"));
+
+  // Save request is in flight — Cancel must be a no-op (button disabled AND
+  // the click itself must not close/revert), otherwise the live CSS var
+  // would revert to baseline and never get re-applied once the save
+  // actually succeeds (code-review finding — the popup must stay open, not
+  // just the button disabled, since Escape bypasses the button entirely).
+  expect(screen.getByTestId<HTMLButtonElement>("themecolor-cancel").disabled).toBe(true);
+  fireEvent.click(screen.getByTestId("themecolor-cancel"));
+  expect(screen.getByTestId("themecolor-dialog")).not.toBeNull();
+  expect(cssVar("chip-done-bg")).toBe("#123456");
+
+  resolveSave({ ok: true });
+  await waitFor(() => {
+    expect(screen.queryByTestId("themecolor-dialog")).toBeNull();
+  });
+  expect(cssVar("chip-done-bg")).toBe("#123456");
+});
+
 it("zamietnuté uloženie zobrazí hlášku servera a popup neZAVRIE", async () => {
   fetchThemeColors.mockResolvedValue(COLORS);
   saveThemeColors.mockResolvedValue({ ok: false, error: "Neplatný kód farby." });

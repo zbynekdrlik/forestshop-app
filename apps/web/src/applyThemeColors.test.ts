@@ -11,8 +11,9 @@ it("zapíše každý kľúč ako CSS premennú s `--` prefixom na document.docum
   expect(document.documentElement.style.getPropertyValue("--chip-done-text")).toBe("#ffffff");
 });
 
-it("prázdny objekt nezapíše nič a nespadne", () => {
+it("prázdny objekt nezapíše žiadnu CSS premennú a nespadne", () => {
   expect(() => {
     applyThemeColors({});
   }).not.toThrow();
+  expect(document.documentElement.getAttribute("style")).toBeFalsy();
 });
