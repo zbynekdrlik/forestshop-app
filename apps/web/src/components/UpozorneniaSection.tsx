@@ -82,10 +82,20 @@ export function UpozorneniaSection({ role, onSessionExpired }: { readonly role: 
   // úspešnej mutácii (`withBusy`/`saveDraft`), aby ostal pravdivý aj keď
   // obsluha zostane na tejto obrazovke.
   const { refresh: refreshBadge } = useContext(UpozorneniaBadgeRefreshContext);
+  // Code review: `load()`'s doplnkový klasifikačný dopyt (nižšie) nemal
+  // žiadnu poistku proti ZASTARANEJ odpovedi — presne tá istá trieda race,
+  // akú `.claude/rules/frontend-design.md` rieši "latest ref" vzorom (issue
+  // 151/251/264: mikrotaska z PREDCHÁDZAJÚCEHO `load()` volania môže
+  // doraziť AŽ PO novšom a prepísať jeho výsledok zastaraným). `loadSeqRef`
+  // sa inkrementuje na ZAČIATKU každého `load()` volania; oba `.then()` nižšie
+  // sa uplatnia len ak je stále najnovšie.
+  const loadSeqRef = useRef(0);
 
   const load = useCallback(() => {
+    const seq = ++loadSeqRef.current;
     fetchUpozornenia({ includeResolved, includePostponed })
       .then((data) => {
+        if (loadSeqRef.current !== seq) return;
         setRows(data);
         if (data.length > 0) return;
         // Zoznam je prázdny pod AKTUÁLNYMI (možno užšími) filtrami — ak sú
@@ -97,13 +107,14 @@ export function UpozorneniaSection({ role, onSessionExpired }: { readonly role: 
         }
         fetchUpozornenia({ includeResolved: true, includePostponed: true })
           .then((all) => {
-            setEmptyMessage(classifyEmptyMessage(all));
+            if (loadSeqRef.current === seq) setEmptyMessage(classifyEmptyMessage(all));
           })
           .catch(() => {
-            setEmptyMessage("Žiadne upozornenia v tomto zobrazení.");
+            if (loadSeqRef.current === seq) setEmptyMessage("Žiadne upozornenia v tomto zobrazení.");
           });
       })
       .catch((err: unknown) => {
+        if (loadSeqRef.current !== seq) return;
         if (err instanceof UpozorneniaUnauthorizedError) {
           onSessionExpired();
           return;
