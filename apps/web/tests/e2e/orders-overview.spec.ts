@@ -8,6 +8,7 @@ interface RawOrderLine {
   readonly ordered: boolean;
   readonly state: "objednane" | "caka_sa" | "skladom" | "nedostupne";
   readonly placedAt: string;
+  readonly quantity: number;
 }
 interface RawSupplierGroup {
   readonly lines: readonly RawOrderLine[];
@@ -65,9 +66,13 @@ test("blok 'Prehľad e-shopu' + 'Súhrn o objednávaní' sa zobrazí a čísla z
   const allLines = suppliers.flatMap((g) => g.lines);
   const isResolved = (l: RawOrderLine): boolean => l.ordered || l.state !== "objednane";
   const nevybavene = allLines.filter((l) => !isResolved(l));
-  const ocakavaneRemaining = nevybavene.length;
+  // issue 260: "Položiek na objednanie"/"Už objednané" sčítavajú MNOŽSTVÁ
+  // (`summarizeOrderLines`), nie počet riadkov — `ocakavaneAffected` ostáva
+  // počtom RIADKOV/objednávok (`countAffectedOrders`), tá funkcia sa
+  // nemenila.
+  const ocakavaneRemaining = nevybavene.reduce((sum, l) => sum + l.quantity, 0);
   const ocakavaneAffected = new Set(nevybavene.map((l) => l.orderId)).size;
-  const ocakavaneOrdered = allLines.filter((l) => l.ordered).length;
+  const ocakavaneOrdered = allLines.filter((l) => l.ordered).reduce((sum, l) => sum + l.quantity, 0);
 
   await expect(page.getByTestId("overview-ordering-remaining")).toContainText(String(ocakavaneRemaining));
   await expect(page.getByTestId("overview-ordering-affected-orders")).toContainText(String(ocakavaneAffected));
