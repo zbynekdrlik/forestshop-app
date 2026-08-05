@@ -61,6 +61,58 @@ describe("GET /api/upozornenia", () => {
     const allBody = (await allRes.json()) as { rows: readonly { title: string }[] };
     expect(allBody.rows.map((r) => r.title).sort()).toEqual(["Aktívna", "Vyriešená"]);
   });
+
+  // Živé overenie po nasadení (issue 267 follow-up, gap 2): odložená karta
+  // bola neviditeľná ÚPLNE VŽDY, aj s `includeResolved=true` — nová nezávislá
+  // os `includePostponed` ju odkryje bez toho, aby menila význam
+  // "aj vybavené".
+  it("predvolený filter vynechá odloženú kartu, 'aj odložené' ju vráti", async () => {
+    const { app, cookie, db } = await boot("manazer");
+    const now = new Date("2026-08-05T08:00:00Z");
+    await upsertUpozornenie(db, { type: "vlastna_poznamka", source: "vlastne", title: "Aktívna", now });
+    const postponedCreate = await upsertUpozornenie(db, { type: "vlastna_poznamka", source: "vlastne", title: "Odložená", now });
+    await app.request(`/api/upozornenia/${postponedCreate.id}/postpone`, {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({ until: "2099-01-01T00:00:00.000Z" }),
+    });
+
+    const defaultRes = await app.request("/api/upozornenia", { headers: { cookie } });
+    const defaultBody = (await defaultRes.json()) as { rows: readonly { title: string }[] };
+    expect(defaultBody.rows.map((r) => r.title)).toEqual(["Aktívna"]);
+
+    const postponedRes = await app.request("/api/upozornenia?includePostponed=true", { headers: { cookie } });
+    const postponedBody = (await postponedRes.json()) as { rows: readonly { title: string }[] };
+    expect(postponedBody.rows.map((r) => r.title).sort()).toEqual(["Aktívna", "Odložená"]);
+  });
+});
+
+describe("POST /api/upozornenia/:id/cancel-postpone", () => {
+  it("zruší odloženie a karta sa vráti aj do PREDVOLENÉHO (bez includePostponed) zoznamu", async () => {
+    const { app, cookie, db } = await boot("manazer");
+    const now = new Date("2026-08-05T08:00:00Z");
+    const created = await upsertUpozornenie(db, { type: "vlastna_poznamka", source: "vlastne", title: "Odložená omylom", now });
+    await app.request(`/api/upozornenia/${created.id}/postpone`, {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({ until: "2099-01-01T00:00:00.000Z" }),
+    });
+
+    const cancelRes = await app.request(`/api/upozornenia/${created.id}/cancel-postpone`, { method: "POST", headers: { cookie } });
+    expect((await cancelRes.json()) as { ok: boolean; cancelled: boolean }).toEqual({ ok: true, cancelled: true });
+
+    const list = await app.request("/api/upozornenia", { headers: { cookie } });
+    const body = (await list.json()) as { rows: readonly { title: string; status: string }[] };
+    expect(body.rows.map((r) => r.title)).toEqual(["Odložená omylom"]);
+    expect(body.rows[0]?.status).toBe("otvorene");
+  });
+
+  it("neznáme id vráti 200 {cancelled:false}, nikdy chybu", async () => {
+    const { app, cookie } = await boot("manazer");
+    const res = await app.request("/api/upozornenia/00000000-0000-0000-0000-000000000000/cancel-postpone", { method: "POST", headers: { cookie } });
+    expect(res.status).toBe(200);
+    expect((await res.json()) as { ok: boolean; cancelled: boolean }).toEqual({ ok: true, cancelled: false });
+  });
 });
 
 describe("GET /api/upozornenia/count", () => {
