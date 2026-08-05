@@ -80,9 +80,12 @@ test("ručné odkazy náhrad, prekliky na e-shop/dodávateľa, povinný náhľad
   // (issue 192), táto zmena mení len zdroj `zoznam_nahrad`.
   await groupAfterReload.getByTestId("nedostupne-alt-send-9008-40287").click();
   const preview = page.getByTestId("nedostupne-preview");
+  const previewBody = page.getByTestId("nedostupne-preview-body");
   await expect(preview).toBeVisible();
-  await expect(preview).toContainText("https://www.forestshop.sk/e2e-nahrada-1/");
-  await expect(preview).toContainText("https://www.forestshop.sk/e2e-nahrada-2/");
+  // issue 277: text e-mailu je odteraz EDITOVATEĽNÝ (textarea, nie read-only
+  // náhľad) — predvyplnený plain-textovou verziou appky.
+  await expect(previewBody).toHaveValue(/https:\/\/www\.forestshop\.sk\/e2e-nahrada-1\//);
+  await expect(previewBody).toHaveValue(/https:\/\/www\.forestshop\.sk\/e2e-nahrada-2\//);
   await page.getByTestId("nedostupne-preview-cancel").click();
   await expect(preview).toBeHidden();
 
@@ -124,6 +127,13 @@ test("ručné odkazy náhrad, prekliky na e-shop/dodávateľa, povinný náhľad
   // Znovu otvoriť a pokračovať v pôvodnom overení odoslania.
   await page.getByTestId("nedostupne-send-9008-40287").click();
   await expect(preview).toBeVisible();
+
+  // issue 277: obsluha text v okne priamo prepíše — appka to prijme (žiadna
+  // validácia formátu, len nesmie zostať prázdne) a pokúsi sa poslať
+  // upravenú verziu (fail-closed BCC kontrola nižšie to aj tak zastaví, no
+  // úprava samotná appku nezablokuje).
+  await previewBody.fill("Dobrý deň, e2e zákazník — dopĺňam vlastnú vetu priamo v náhľade.");
+  await expect(previewBody).toHaveValue("Dobrý deň, e2e zákazník — dopĺňam vlastnú vetu priamo v náhľade.");
 
   // Potvrdenie odoslania bez nakonfigurovaného mailu vráti graceful chybu
   // (fail-closed, žiadny skutočný pokus o SMTP spojenie) — BCC kontrola beží
