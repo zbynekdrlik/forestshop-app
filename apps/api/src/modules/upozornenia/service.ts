@@ -183,6 +183,22 @@ export async function cancelPostpone(db: Database, input: CancelPostponeInput): 
   return result.length > 0;
 }
 
+// issue 268: automatický zdroj (napr. `posta-uncollected/run.ts`) volá TOTO
+// namiesto `resolveUpozornenie`, keď zásielka prestane byť problémom SAMA od
+// seba (doručená/vrátená) — na rozdiel od ručného vyriešenia
+// `resolvedByUserId` ostáva `null` (schéma to explicitne predpovedá: "null
+// pri vyplnenom resolvedAt znamená vybavené systémom"). Bezpečný no-op, keď
+// pre daný `dedupKey` žiadny NEVYRIEŠENÝ riadok neexistuje (karta ešte
+// nevznikla, alebo bola vyriešená/nahradená novou vlnou už skôr).
+export async function autoResolveByDedupKey(db: UpozornenieExecutor, dedupKey: string, now: Date): Promise<boolean> {
+  const result = await db
+    .update(upozornenie)
+    .set({ resolvedAt: now })
+    .where(and(eq(upozornenie.dedupKey, dedupKey), isNull(upozornenie.resolvedAt)))
+    .returning({ id: upozornenie.id });
+  return result.length > 0;
+}
+
 // Volané pri OTVORENÍ záložky — hromadne označí VŠETKY práve "Nové" karty
 // ako videné naraz (inbox vzor "otvoriť = prečítané"), žiadne per-kartové
 // tlačidlo "videné" navyše. Zámerne LEN `seenAt IS NULL` (nikdy nerieši

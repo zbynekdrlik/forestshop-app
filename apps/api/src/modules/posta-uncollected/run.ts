@@ -3,8 +3,19 @@ import { log } from "../../logger.js";
 import type { MailTransport } from "../mail/transport.js";
 import { recordSkippedMail, sendLoggedMail, type MailLogContext } from "../mail-log/service.js";
 import { buildShoptetAdminOrderUrl } from "../orders/queries.js";
+import { pluralWord } from "../orders/pluralize.js";
 import { resolveTemplate } from "../mail-templates/store.js";
-import { buildEmail, classifyTracking, postaTemplateKey, shouldSend, sourceCoverage, terminalState, type SourceCoverage } from "./logic.js";
+import { autoResolveByDedupKey, upsertUpozornenie } from "../upozornenia/service.js";
+import {
+  buildEmail,
+  classifyTracking,
+  postaTemplateKey,
+  postaUpozornenieDedupKey,
+  shouldSend,
+  sourceCoverage,
+  terminalState,
+  type SourceCoverage,
+} from "./logic.js";
 import { loadEligibleOrders } from "./orders-source.js";
 import { loadPostaUncollectedState, prunePostaUncollectedState, upsertPostaUncollectedState } from "./state.js";
 import { TERMINAL_CACHE_DAYS, trackingLink } from "./constants.js";
@@ -175,6 +186,10 @@ async function runPostaUncollectedLocked(options: RunPostaUncollectedOptions): P
         },
         now,
       );
+      // issue 268: zásielka je doručená/vrátená — karta na Upozorneniach (ak
+      // vôbec vznikla) sa ZATVÁRA SAMA, bez zásahu majiteľa. Bezpečný no-op,
+      // keď žiadna nevyriešená karta pre tento dedupKey neexistuje.
+      await autoResolveByDedupKey(db, postaUpozornenieDedupKey(packageNumber), now);
       continue;
     }
 
@@ -286,6 +301,24 @@ async function runPostaUncollectedLocked(options: RunPostaUncollectedOptions): P
     }
 
     if (cls.uncollected) {
+      // issue 268: JEDINÁ zapisovacia cesta (#267/#272) — opakovaný denný
+      // beh na TÚ ISTÚ zásielku len OBNOVÍ existujúcu kartu (rovnaký
+      // `dedupKey`), nikdy nevyrobí druhú.
+      const daysWord = pluralWord(cls.daysAtPost, "deň", "dni", "dní");
+      await upsertUpozornenie(db, {
+        type: "nevyzdvihnuta_zasielka",
+        source: "appka",
+        title: `Zásielka pre objednávku ${shipment.externalOrderId} sa nevyzdvihla — ${String(cls.daysAtPost)} ${daysWord} na pošte`,
+        details: [
+          `Zákazník: ${shipment.customerName}`,
+          `Číslo zásielky: ${packageNumber}`,
+          `Dopravca: ${shipment.shippingCarrierName ?? ""}`,
+          `Čaká: ${String(cls.daysAtPost)} ${daysWord} na pošte`,
+        ].join("\n"),
+        link: adminOrderUrl(shipment),
+        dedupKey: postaUpozornenieDedupKey(packageNumber),
+        now,
+      });
       uncollected.push({
         orderCode: shipment.externalOrderId,
         packageNumber,
