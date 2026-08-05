@@ -2897,3 +2897,25 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
   prehltnutie zápisu vyzerá ako bug), `.claude/rules/orders.md`
   (`listMergeCandidateGroups` nepotrebuje `order_line` + testid podľa
   `externalOrderId`, nie UUID).
+
+## Issue 263 — Na objednanie: farbiť riadok dodávateľa (nie produkty), výrazné farby (2026-08-05)
+
+- Commit `c0d9677` — chore: version bump 0.3.0-dev.152.
+- Commit `5c604af` — `[red]` failing unit tests (`OrdersToolbar.test.tsx`
+  chip-all, nový `SupplierActionsPanel.groupColor.test.tsx`) + live e2e
+  colour assertions in `orders-layout.spec.ts`.
+- Commit `0080b24` — `[green]`: `--chip-done/todo/active-bg/text` root
+  CSS vars; `.chip`/`.toorder-supplier` recoloured (green/red/orange);
+  new `chip-all` modifier keeps "Všetci" neutral (no data state); removed
+  issue 259's `tr.order-row.line-resolved`/`.line-unresolved` colouring
+  entirely + its now-obsolete test file.
+- Commit `d8a7b3a` — strengthened e2e proof that active (orange) really
+  overrides done (red) via getComputedStyle, not just class presence.
+- Commit `12b969b` — playbook entries (`.claude/rules/frontend-design.md`).
+- Design comment + STEP 0 validation comment + review comment all posted
+  to issue 263 before/after the respective steps.
+- Lokálne gates: `pnpm typecheck`, `pnpm lint` čisté; web unit 425/425
+  (53 súborov), API unit 579/579 (36 súborov), API integration 484/484
+  (66 súborov, po `db:migrate`), e2e 44/44.
+- No PR/merge/deploy in this dispatch — supervisor owns CI/PR/merge/deploy
+  for this ticket per the dispatch's HARD CONSTRAINT.
