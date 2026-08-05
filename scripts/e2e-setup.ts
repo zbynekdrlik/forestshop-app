@@ -336,12 +336,7 @@ await db.insert(users).values({
   displayName: "E2E Čítanie",
   role: "citanie",
 });
-await db.insert(users).values({
-  email: E2E_RACE_EMAIL,
-  passwordHash: await hashPassword(E2E_HESLO),
-  displayName: "E2E Manažér",
-  role: "manazer",
-});
+await db.insert(users).values({ email: E2E_RACE_EMAIL, passwordHash: await hashPassword(E2E_HESLO), displayName: "E2E Manažér", role: "manazer" });
 
 // Katalóg pre E2E: tá istá commitnutá fixtúra ako v jednotkových testoch, cez tú istú
 // službu importu — E2E tak overuje skutočnú cestu dát, nie ručne nasypané riadky.
