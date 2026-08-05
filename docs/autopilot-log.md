@@ -2791,3 +2791,28 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
   odmietol `column total does not exist` cez drizzle-ov `FILTER`-generovaný
   SQL, vrátené späť a zdokumentované; slabšia e2e asercia na celý riadok —
   spresnené na konkrétne `<td>` bunky). PR #249.
+
+## 2026-08-05 — #245 (product.related_codes je po #238 mŕtvy kód)
+
+- Solo ticket (Scope-gate: schema-migration, own PR, no bundling).
+- Version bump `b27c047` (0.3.0-dev.145→.146), first commit.
+- RED `1eb998c`: mapRow record must not have `relatedCodes` key
+  (`map-row.test.ts`, "mapRow už nevracia relatedCodes") + DB-level
+  regression (`catalog-schema.integration.test.ts`, "stĺpec
+  product.related_codes už v schéme neexistuje").
+- GREEN `7fffa72`: incremental migration `0033_breezy_manta.sql`
+  (`ALTER TABLE product DROP COLUMN related_codes`), removed
+  `extractRelatedCodes`/`RELATED_COLUMNS`/`MAX_ALTERNATIVES` +
+  `VariantRecord.relatedCodes` from `map-row.ts`, removed population
+  in `ingest.ts` (insert + onConflictDoUpdate), removed unused
+  `relatedCodes` fixture option from `tests/helpers/orders.ts`.
+- Code review (dispatched subagent) found `.claude/rules/nedostupne.md`
+  had two stale notes from #238 describing the column as "still in
+  code, follow-up: #245" — fixed in `8cbc129` (docs-only, `[no-design]`
+  bypass since it's a review-feedback playbook fix, not a new design
+  decision).
+- PR #252, merge `eb580d97`. Live-verified on dev2: `related_codes`
+  column gone from production `product` table (0 rows in
+  information_schema), row counts intact (4542 products / 14139
+  variants), manual "Stiahnuť teraz" catalog-import trigger completed
+  with no error, console clean. Deployed version `0.3.0-dev.146`.
