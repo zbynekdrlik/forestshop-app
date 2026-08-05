@@ -725,51 +725,70 @@ tr:last-child td {
 
 /* issue 237: blok dlaždíc NAD zoznamom "Na objednanie" — dve skupiny
    ("Prehľad e-shopu" + "Súhrn o objednávaní"). Dlaždice sú PREHĽAD, nikdy
-   klikateľný filter (žiadny `cursor: pointer`/`onClick`). */
+   klikateľný filter (žiadny `cursor: pointer`/`onClick`). issue 258
+   (majiteľ: "je to strašne veľké... musím dosť rolovať dole... pre mna je to
+   len informatívna informácia") zmenšilo celý blok — pôvodné 3-riadkové
+   dlaždice (label/hodnota/vedľajší údaj, každý na vlastnom riadku, veľký
+   `--fs-text-lg` súčet + veľké odsadenie) namerané naživo
+   (`page.addStyleTag` kandidát proti produkcii, rovnaká metodika ako
+   `.claude/rules/frontend-design.md`'s `<colgroup>` merania) na 103px/79.5px
+   výšku dlaždice, celý blok 253.5px pri 1366×768. Fix: dlaždica je teraz
+   JEDEN riadok popisku + JEDEN riadok hodnoty (label si necháva vlastný
+   `flex: 1 1 100%`, aby sa vždy zalomil PRED hodnotou, nikdy vedľa nej pri
+   užšom okne), menšie písmo (`--fs-text-base` namiesto `--fs-text-lg`) aj
+   odsadenie (`--fs-space-2`/`--fs-space-3` namiesto `--fs-space-3`/
+   `--fs-space-4`) — namerané 58.5px/dlaždicu, blok 169px (−33 %), tabuľka
+   pod ním sa posunula o ~96px vyššie. Všetkých 7 čísel ostáva plne čitateľné
+   (žiadna hodnota sa neskrátila/neorezala) — len menšie, nie chýbajúce. */
 .orders-overview {
   display: flex;
   flex-direction: column;
-  gap: var(--fs-space-4);
-  margin-bottom: var(--fs-space-5);
+  gap: var(--fs-space-2);
+  margin-bottom: var(--fs-space-3);
 }
 .overview-group-title {
-  font-size: var(--fs-text-sm);
+  font-size: var(--fs-text-xs);
   font-weight: var(--fs-weight-semibold);
   color: var(--fs-ink-muted);
   text-transform: uppercase;
   letter-spacing: 0.03em;
-  margin: 0 0 var(--fs-space-2);
+  margin: 0 0 var(--fs-space-1);
 }
 .overview-tiles {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--fs-space-3);
+  gap: var(--fs-space-2);
 }
 .overview-tile {
-  flex: 1 1 10rem;
-  min-width: 10rem;
+  flex: 1 1 9rem;
+  min-width: 9rem;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  column-gap: var(--fs-space-2);
   background: var(--fs-surface);
   border: 1px solid var(--fs-border-soft);
   border-radius: var(--fs-radius-md);
   box-shadow: var(--fs-shadow-sm);
-  padding: var(--fs-space-3) var(--fs-space-4);
+  padding: var(--fs-space-2) var(--fs-space-3);
 }
 .overview-tile-label {
+  flex: 1 1 100%;
   font-size: var(--fs-text-xs);
   color: var(--fs-ink-muted);
-  margin: 0 0 var(--fs-space-1);
+  margin: 0;
 }
 .overview-tile-value {
-  font-size: var(--fs-text-lg);
+  font-size: var(--fs-text-base);
   font-weight: var(--fs-weight-bold);
   color: var(--fs-ink);
   margin: 0;
 }
 .overview-tile-sub {
-  font-size: var(--fs-text-sm);
+  font-size: var(--fs-text-xs);
   color: var(--fs-brand);
   font-weight: var(--fs-weight-medium);
-  margin: var(--fs-space-1) 0 0;
+  margin: 0;
 }
 
 /* issue 61: filtrovacie štítky dodávateľov + súhrn "ostáva vybaviť" +
