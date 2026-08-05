@@ -324,7 +324,7 @@ export function UpozorneniaSection({ role, onSessionExpired }: { readonly role: 
                 </p>
                 {row.link !== null && (
                   <a href={row.link} data-testid={`upozornenie-link-${row.id}`}>
-                    Otvoriť v appke
+                    Otvoriť objednávku v Shoptete
                   </a>
                 )}
                 {canControl && row.status !== "vybavene" && (
