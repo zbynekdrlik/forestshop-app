@@ -2,6 +2,11 @@ import { expect, test } from "@playwright/test";
 
 const E2E_HESLO = "e2e-test-heslo"; // účet existuje len v testovacej databáze
 
+// issue 254: VLASTNÝ izolovaný účet (rovnaký mechanizmus ako v
+// `pairing.spec.ts` — balík `e2e@forestshop.sk` je UŽ na hranici
+// `MAX_ATTEMPTS`), rola "manazer" pokrýva `IMPORT_ROLES`.
+const E2E_RACE_EMAIL = "e2e-race@forestshop.sk";
+
 // `GET /api/me` s odpoveďou 401 hneď po otvorení stránky. Rozpoznáva sa podľa
 // `location().url`, nie podľa textu — Chromium URL do textu „Failed to load
 // resource" nedáva. Rozširovanie výnimky na ďalšie cesty je zakázané.
@@ -83,4 +88,78 @@ test("filter 'Chýbajúce' nájde presne označený variant a riadok ukazuje, od
   const riadok = page.getByTestId("variant-40287");
   await expect(riadok).toBeVisible();
   await expect(riadok).toContainText("chýba od");
+});
+
+// issue 254 (súrodenec issue 251): `runIngest`'s `.then()` volalo
+// `search(query, state)` PRIAMO z uzáveru vykresľovacej inštancie zafixovanej
+// na klik na "Stiahnuť a naimportovať export". Reprodukcia NEMÔŽE nechať
+// požiadavku doletieť na SKUTOČNÝ server ako `pairing.spec.ts`/`supplier-
+// links.spec.ts` (len oneskorenú) — `SHOPTET_EXPORT_URL` nie je v E2E
+// prostredí nastavené (`.claude/rules/catalog.md`), takže reálny
+// `POST /api/catalog/ingest` vždy vráti 503 a `runIngest` by skončil v
+// `.catch()`, ktorý `search()` vôbec nevolá (chyba, nie race). Namiesto toho
+// FALOŠNÁ (nie reálna sieťová) oneskorená úspešná odpoveď — rovnaký
+// zaužívaný vzor ako `orders-write-failures.spec.ts`'s fake `Response`
+// (simuluje výsledok BEZ reálneho zápisu/zavolania servera, `.claude/rules/
+// testing.md`), len s pridaným `setTimeout` oneskorením.
+test("import (ešte prebiehajúci) nesmie prepísať MEDZITÝM zmenený filter zastaraným výsledkom (issue 254)", async ({
+  page,
+}) => {
+  const chyby: string[] = [];
+  page.on("console", (m) => {
+    if (m.type() === "error" || m.type() === "warning") chyby.push(m.text());
+  });
+  page.on("pageerror", (e) => {
+    chyby.push(e.message);
+  });
+
+  await page.addInitScript(() => {
+    const puvodny = window.fetch.bind(window);
+    window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      if (init?.method === "POST" && url.includes("/api/catalog/ingest")) {
+        return new Promise((resolve) => {
+          setTimeout(() => {
+            resolve(
+              new Response(JSON.stringify({ status: "duplicate", snapshotId: "e2e-issue-254-fake" }), {
+                status: 200,
+                headers: { "content-type": "application/json" },
+              }),
+            );
+          }, 400);
+        });
+      }
+      return puvodny(input, init);
+    };
+  });
+
+  await page.goto("/?tab=catalog");
+  await page.getByLabel("E-mail").fill(E2E_RACE_EMAIL);
+  await page.getByLabel("Heslo").fill(E2E_HESLO);
+  await page.getByRole("button", { name: "Prihlásiť sa" }).click();
+  await expect(page.getByTestId("total")).toHaveText("Nájdených: 40");
+
+  await page.getByRole("button", { name: "Stiahnuť a naimportovať export" }).click();
+
+  // ZÁMERNE bez čakania na odpoveď — filter sa mení HNEĎ po kliknutí na
+  // import, presne to poradie udalostí, ktoré pôvodný bug reprodukovalo.
+  await page.getByLabel("Kód alebo názov").fill("40287");
+  await page.getByRole("button", { name: "Hľadať", exact: true }).click();
+
+  // `window.fetch` je tu ÚPLNE nahradené (falošná odpoveď, viď komentár
+  // vyššie) — nikdy neprejde cez skutočnú sieťovú vrstvu prehliadača, takže
+  // `page.waitForResponse` (počúva CDP sieťové udalosti) by naň nikdy
+  // nezareagovalo. Čaká sa preto priamym `waitForTimeout` (400ms oneskorenie
+  // + rezerva na `.then()`/render reťazec).
+  await page.waitForTimeout(700);
+
+  // S opravou: `runIngest`'s `.then()` číta AKTUÁLNY filter cez ref, takže
+  // jeho neskoro doručený výsledok žiada PRESNE ten istý filter ("40287"),
+  // aký použil aj testov vlastný dopyt. BEZ opravy by zastaraný `.then()`
+  // (uzáver s query="", state="all" z okamihu kliknutia na import) prepísal
+  // zoznam CELÝM (nefiltrovaným) výpisom.
+  await expect(page.getByTestId("total")).toHaveText("Nájdených: 1");
+  await expect(page.getByTestId("variant-40287")).toBeVisible();
+
+  expect(chyby).toEqual([]);
 });

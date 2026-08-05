@@ -170,6 +170,15 @@ const E2E_PREHLAD_EMAIL = "e2e-prehlad@forestshop.sk"; // musí sa zhodovať s h
 // e-shop) dostáva VLASTNÝ izolovaný účet.
 const E2E_DOMENY_EMAIL = "e2e-domeny@forestshop.sk"; // musí sa zhodovať s hodnotou v supplier-stock.spec.ts
 
+// issue 254: rovnaký mechanizmus a dôvod ako `E2E_DOMENY_EMAIL` vyššie —
+// nové race-testy (stale-closure refetch/search race + cross-row editor-close
+// guard) v `pairing.spec.ts`/`catalog.spec.ts` dostávajú VLASTNÝ izolovaný účet
+// namiesto ďalšieho prihlásenia pod zdieľaným `e2e@forestshop.sk` (balík je
+// UŽ na hranici `MAX_ATTEMPTS`, komentár vyššie pri `E2E_NAV_EMAIL`). Rola
+// "manazer" pokrýva `CAN_CONFIRM_ROLES` (párovanie) aj `IMPORT_ROLES`
+// (katalóg) — jeden účet stačí pre testy v OBOCH spec súboroch.
+const E2E_RACE_EMAIL = "e2e-race@forestshop.sk"; // musí sa zhodovať s hodnotou v pairing.spec.ts/catalog.spec.ts
+
 const { db, pool } = createDb();
 // Konštantný literál bez interpolácie — obyčajný reťazec je tu rovnako bezpečný
 // ako `sql` tagovaná šablóna (tú používa ekvivalentný apps/api/tests/helpers/db.ts),
@@ -326,6 +335,12 @@ await db.insert(users).values({
   passwordHash: await hashPassword(E2E_HESLO),
   displayName: "E2E Čítanie",
   role: "citanie",
+});
+await db.insert(users).values({
+  email: E2E_RACE_EMAIL,
+  passwordHash: await hashPassword(E2E_HESLO),
+  displayName: "E2E Manažér",
+  role: "manazer",
 });
 
 // Katalóg pre E2E: tá istá commitnutá fixtúra ako v jednotkových testoch, cez tú istú
