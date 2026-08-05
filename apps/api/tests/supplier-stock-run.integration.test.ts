@@ -167,6 +167,54 @@ describe("beh dodávateľského skladu", () => {
     expect(h?.checkedAt.toISOString()).toBe(neskor.toISOString());
   });
 
+  // issue 227: `forestshop.sk` je náš vlastný e-shop, nie dodávateľ — omylom
+  // vytiahnutý z `internalNote` tým istým regexom ako skutočné odkazy.
+  it("odkaz na náš vlastný e-shop (forestshop.sk) sa vôbec nesťahuje", async () => {
+    await insertTestVariant(db, "J1", "Dod 10", {
+      internalNote: "https://www.forestshop.sk/polovnicke-tricko-dr-s-motivom-srnec/",
+    });
+    await insertTestVariant(db, "J2", "Dod 11", { internalNote: "https://huntingshop.eu/j" });
+
+    let volani = 0;
+    const result = await runSupplierStock({
+      db,
+      now: NOW,
+      sleep: noSleep,
+      fetchPage: () => {
+        volani += 1;
+        return Promise.resolve(okPage(IN_STOCK));
+      },
+    });
+
+    expect(result.total).toBe(1);
+    expect(volani).toBe(1);
+    expect(await row("https://www.forestshop.sk/polovnicke-tricko-dr-s-motivom-srnec/")).toBeUndefined();
+  });
+
+  // Staré riadky (z behu PRED touto opravou) sa nesmú tváriť ako čitateľná
+  // dodávateľská domena navždy — každý ďalší beh ich vyčistí.
+  it("staré riadky z predošlého behu pre forestshop.sk sa pri ďalšom behu vymažú", async () => {
+    await insertTestVariant(db, "K1", "Dod 12", { internalNote: "https://huntingshop.eu/k" });
+    await db.insert(supplierStock).values({
+      link: "https://www.forestshop.sk/stary-odkaz/",
+      sizeLabel: "",
+      host: "forestshop.sk",
+      availability: "unknown",
+      availabilityText: "",
+      price: null,
+      source: "none",
+      ok: true,
+      error: null,
+      httpStatus: 200,
+      checkedAt: NOW,
+      confirmedAt: null,
+    });
+
+    await runSupplierStock({ db, now: NOW, sleep: noSleep, fetchPage: () => Promise.resolve(okPage(IN_STOCK)) });
+
+    expect(await row("https://www.forestshop.sk/stary-odkaz/")).toBeUndefined();
+  });
+
   it("tá istá linka na viacerých produktoch sa sťahuje len raz", async () => {
     await insertTestVariant(db, "I1", "Dod 9", { internalNote: "https://huntingshop.eu/spolocna" });
     await insertTestVariant(db, "I2", "Dod 9", { internalNote: "https://huntingshop.eu/spolocna" });
