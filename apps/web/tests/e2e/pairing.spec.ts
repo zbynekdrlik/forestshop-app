@@ -123,6 +123,166 @@ test("manažér potvrdí navrhnutú adresu jedným klikom, filter podľa stavu f
 // zbalený riadok (homogénne: všetkých 9 veľkostí má `supplierUrl: null`).
 const PRODUCT_KEY = "0a486205-d9e7-11e0-92ec-e1ef0b66e031";
 
+// issue 254: VLASTNÝ izolovaný účet (rovnaký mechanizmus ako
+// `E2E_SKUPINY_EMAIL` vyššie — balík je UŽ na hranici `MAX_ATTEMPTS`), pre
+// OBA nové race-testy nižšie (rola "manazer" pokrýva `CAN_CONFIRM_ROLES`).
+const E2E_RACE_EMAIL = "e2e-race@forestshop.sk";
+
+// issue 254: "Nohavice FOREST 5003" — 6 veľkostí (3XL, L, M, S, XL, XXL),
+// dovtedy NEPOUŽITÝ v žiadnom e2e spec súbore (overené grepom), VŠETKY bez
+// dodávateľa/adresy → homogénna skupina, zbalená pri prvom zobrazení.
+const FOREST_5003_PRODUCT_KEY = "b7727300-3927-11e6-8a3b-0cc47a6c92bc";
+
+// issue 254: "Pohonová bunda G7 Light" — 6 veľkostí (3XL, L, M, S, XL, XXL),
+// vo `.claude/rules/testing.md`'s zmysle dovtedy nepoužitý v ŽIADNOM
+// pairing teste (`60035/L`/`60035/M` sa používajú len v `orders-supplier-
+// assign.spec.ts` — INÁ tabuľka, `product_supplier_override`, nie
+// `pairing`) — samostatná skupina od `FOREST_5003_PRODUCT_KEY` vyššie, aby
+// cross-row test nezávisel od poradia behu so stale-closure testom.
+const G7_LIGHT_PRODUCT_KEY = "7d539b99-b0b4-11e6-968a-0cc47a6c92bc";
+
+// issue 254 (súrodenec issue 251): `refetch` v `PairingSection.tsx` mala
+// PRESNE ten istý (pred-opravou issue 251) tvar — priamy uzáver nad
+// `query`/`state`, žiadny ref. Rovnaká reprodukčná technika ako
+// `supplier-links.spec.ts`'s hlavný test: `window.fetch` prepichnutý cez
+// `addInitScript`, REÁLNA odpoveď (nie fake) len o 400ms oneskorená.
+test("uloženie manuálnej adresy (ešte čakajúce na odpoveď) nesmie prepísať MEDZITÝM zmenený filter zastaraným výsledkom (issue 254)", async ({
+  page,
+}) => {
+  const chyby: string[] = [];
+  page.on("console", (m) => {
+    if (m.type() === "error" || m.type() === "warning") chyby.push(m.text());
+  });
+  page.on("pageerror", (e) => {
+    chyby.push(e.message);
+  });
+
+  await page.addInitScript(() => {
+    const puvodny = window.fetch.bind(window);
+    window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      if (init?.method === "POST" && url.includes("/api/pairing/confirm")) {
+        return new Promise((resolve) => {
+          setTimeout(() => {
+            resolve(puvodny(input, init));
+          }, 400);
+        });
+      }
+      return puvodny(input, init);
+    };
+  });
+
+  await page.goto("/?tab=pairing");
+  await page.getByLabel("E-mail").fill(E2E_RACE_EMAIL);
+  await page.getByLabel("Heslo").fill(E2E_HESLO);
+  await page.getByRole("button", { name: "Prihlásiť sa" }).click();
+  await expect(page.getByRole("heading", { name: "Kontrola párovania" })).toBeVisible();
+
+  await page.getByTestId(`split-${FOREST_5003_PRODUCT_KEY}`).click();
+  const riadokM = page.getByTestId("pairing-40269/M");
+  await expect(riadokM).toBeVisible();
+  await riadokM.getByTestId("reject-40269/M").click();
+  await riadokM
+    .getByLabel("Adresa u dodávateľa pre 40269/M")
+    .fill("https://www.grube.sk/p/e2e-race-40269-m/1");
+
+  // `saveManualUrl` tu volané cez klik na Uložiť je zafixované na `refetch`
+  // inštanciu vykreslenú PRED nasledujúcou zmenou filtra — presne ten
+  // uzáver, ktorý issue 254 opravuje. `waitForResponse` sa zakladá PRED
+  // kliknutím, aby nezmeškal odpoveď doletiacu skôr, než by naň test začal čakať.
+  const odpoved = page.waitForResponse(
+    (res) => res.request().method() === "POST" && res.url().includes("/api/pairing/confirm"),
+  );
+  await riadokM.getByRole("button", { name: "Potvrdiť" }).click();
+
+  // ZÁMERNE bez čakania na odpoveď — zmena filtra a nové vyhľadanie hneď po
+  // kliknutí na Uložiť je presne to poradie udalostí, ktoré pôvodný bug
+  // reprodukovalo (rovnaký komentár ako `supplier-links.spec.ts`'s hlavný test).
+  await page.getByLabel("Kód variantu alebo produktu").fill("40269/L");
+  await page.getByRole("button", { name: "Filtrovať" }).click();
+
+  await odpoved;
+  await page.waitForTimeout(200); // rezerva na `.then()`/render reťazec
+
+  // S opravou: `refetch()` číta AKTUÁLNY filter cez ref, takže jeho neskoro
+  // doručený výsledok (ak vôbec dorazí až po tomto bode) žiada PRESNE ten
+  // istý filter ("40269/L"), aký použil aj testov vlastný dopyt — výsledok
+  // teda ostáva zúžený bez ohľadu na poradie doručenia odpovedí. BEZ opravy
+  // by zastaraný `refetch()` (uzáver s query="", state="all" z okamihu
+  // kliknutia na Uložiť) prepísal zoznam CELÝM (nefiltrovaným) výpisom.
+  await expect(page.getByTestId("pairing-total")).toHaveText("Nájdených: 1");
+  await expect(page.getByTestId("pairing-40269/L")).toBeVisible();
+  await expect(page.getByTestId("pairing-40269/M")).toHaveCount(0);
+
+  expect(chyby).toEqual([]);
+});
+
+// issue 254 (súrodenec issue 251's code-review finding 1): `saveManualUrl`'s
+// `.then()` malo PRESNE ten istý (pred-opravou issue 251) nepodmienený
+// `setEditingCode(null)` — riadku A's uloženie by ticho zavrelo riadok B's
+// PRÁVE otvorený editor, otvorený medzitým, kým A ešte čakalo na odpoveď.
+test("uloženie riadku A (ešte čakajúce na odpoveď) nesmie zavrieť editor riadku B otvorený medzitým (issue 254)", async ({
+  page,
+}) => {
+  const chyby: string[] = [];
+  page.on("console", (m) => {
+    if (m.type() === "error" || m.type() === "warning") chyby.push(m.text());
+  });
+  page.on("pageerror", (e) => {
+    chyby.push(e.message);
+  });
+
+  await page.addInitScript(() => {
+    const puvodny = window.fetch.bind(window);
+    window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      if (init?.method === "POST" && url.includes("/api/pairing/confirm")) {
+        return new Promise((resolve) => {
+          setTimeout(() => {
+            resolve(puvodny(input, init));
+          }, 400);
+        });
+      }
+      return puvodny(input, init);
+    };
+  });
+
+  await page.goto("/?tab=pairing");
+  await page.getByLabel("E-mail").fill(E2E_RACE_EMAIL);
+  await page.getByLabel("Heslo").fill(E2E_HESLO);
+  await page.getByRole("button", { name: "Prihlásiť sa" }).click();
+  await expect(page.getByRole("heading", { name: "Kontrola párovania" })).toBeVisible();
+
+  await page.getByTestId(`split-${G7_LIGHT_PRODUCT_KEY}`).click();
+  const riadokA = page.getByTestId("pairing-60035/S");
+  const riadokB = page.getByTestId("pairing-60035/XL");
+  await expect(riadokA).toBeVisible();
+  await expect(riadokB).toBeVisible();
+
+  const odpovedA = page.waitForResponse(
+    (res) => res.request().method() === "POST" && res.url().includes("/api/pairing/confirm"),
+  );
+  await riadokA.getByTestId("reject-60035/S").click();
+  await riadokA.getByLabel("Adresa u dodávateľa pre 60035/S").fill("https://www.grube.sk/p/e2e-race-a/1");
+  await riadokA.getByRole("button", { name: "Potvrdiť" }).click();
+
+  // B: kým A ešte čaká na odpoveď, otvoriť JEHO editor.
+  await riadokB.getByTestId("reject-60035/XL").click();
+  const vstupB = page.getByLabel("Adresa u dodávateľa pre 60035/XL");
+  await expect(vstupB).toBeVisible();
+
+  await odpovedA;
+  await page.waitForTimeout(200);
+
+  // B's editor musí ostať otvorený — A's `.then()` nesmie zavrieť CUDZÍ (v
+  // tomto momente už nesúvisiaci) editor. Jednorazová kontrola aktuálneho
+  // stavu (nie auto-retry `toBeVisible()`, ktoré by stačilo zachytiť prvok
+  // len na okamih).
+  expect(await vstupB.isVisible()).toBe(true);
+
+  expect(chyby).toEqual([]);
+});
+
 // VLASTNÝ účet (nie zdieľaný `e2e@forestshop.sk`) — `checkLoginRateLimit`
 // (`apps/api/src/http/login-rate-limit.ts`) počíta KAŽDÝ `POST /api/login`
 // proti dvojici (IP, e-mail), max. 10 v 5-minútovom okne, a celý e2e beh
