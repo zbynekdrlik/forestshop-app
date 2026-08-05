@@ -59,3 +59,45 @@ paths:
   nedostupne.md`'s povinný náhľad — front-end skrytie nie je vynútenie).
   Server vráti `updated`/`removed: false` namiesto chyby pri pokuse o cudziu
   kartu.
+- **Odložená karta bola živo nájdená ako NEVIDITEĽNÁ ÚPLNE VŽDY — žiadna
+  hodnota žiadneho filtra ju neodkryla, a neexistovala akcia na jej
+  vrátenie skôr, než sa vráti sama** (issue 267 follow-up, gap 2, nájdené
+  post-deploy Playwright overením na produkcii `0.3.0-dev.155`:
+  `GET /api/upozornenia?includeResolved=true` vrátil `{"rows":[]}`, hoci
+  riadok existoval s `postponed_until` v budúcnosti). Fix je NEZÁVISLÝ
+  druhý filter `includePostponed` (mirror `includeResolved` — `queries.ts`'s
+  `listUpozornenia` vynechá `notPostponedCondition` len keď je `true`) PLUS
+  nová akcia `cancelPostpone`/`POST /api/upozornenia/:id/cancel-postpone`
+  (nastaví `postponedUntil: null`, seenAt sa NEDOTÝKA — karta bola už
+  videná v momente odloženia). **`countActionableUpozornenia` (odznak)
+  túto výnimku NIKDY nedostáva** — je to len UI zobrazenie na požiadanie,
+  nikdy zmena toho, čo je "akčné". Pri KAŽDOM ĎALŠOM boolean UI filtri v
+  tejto appke, ktorý pridáva DRUHÚ os k existujúcemu (`includeResolved`):
+  over, či osi sú naozaj ORTOGONÁLNE (karta môže byť A bez B) — ak áno,
+  nezlučuj ich do jedného checkboxu, daj druhý nezávislý.
+- **Prázdny zoznam tvrdil natvrdo "všetko je vybavené" bez ohľadu na
+  SKUTOČNÚ príčinu — živo nájdené s jedinou odloženou (nie vybavenou)
+  kartou** (issue 267 follow-up, gap 3). Fix: `classifyEmptyMessage()`
+  (`UpozorneniaSection.tsx`) rozhodne podľa JEDNÉHO doplnkového najširšieho
+  dopytu (`{includeResolved:true, includePostponed:true}`), spusteného LEN
+  keď je aktuálny (možno užší) zoznam prázdny — nikdy pri každom `load()`.
+  **Code review našiel, že tento doplnkový dopyt (presne ako HLAVNÝ
+  `fetchUpozornenia` dopyt) potrebuje "latest ref" poistku proti
+  zastaranej odpovedi** (`loadSeqRef`, inkrementovaný na začiatku KAŽDÉHO
+  `load()` volania) — ĎALŠÍ sibling výskyt tej istej triedy race, ktorú
+  `.claude/rules/frontend-design.md` dokumentuje pri issue 151/251/264.
+  Akýkoľvek BUDÚCI reťazený/doplnkový fetch v tomto súbore potrebuje ten
+  istý guard, nie len ten prvý v reťazci.
+- **Pridanie doplnkového `fetchUpozornenia` volania, ktoré sa spúšťa
+  PODMIENEČNE (len keď je zoznam prázdny), rozbije EXISTUJÚCE testy s
+  pevnou `mockResolvedValueOnce().mockResolvedValueOnce()` sekvenciou** —
+  ak prvé volanie vráti prázdne pole, vloží sa medzi ne NEČAKANÉ ĎALŠIE
+  volanie, ktoré spotrebuje `Once` hodnotu určenú pre NESKORŠÍ (napr.
+  po-mutácii) reload, a ten potom dostane `undefined` z vyčerpanej fronty
+  (`TypeError` na `.then` alebo test timeout). Fix (viď `UpozorneniaSection
+  .test.tsx`/`.badgeRefresh.test.tsx`): vlož TRETIE `mockResolvedValueOnce
+  ([])` presne na miesto, kde sa doplnkový dopyt spustí. Test, ktorý
+  namiesto sekvenčných `Once` hodnôt používa `mockImplementation` podľa
+  argumentu filtra (`UpozorneniaSection.emptyMessage.test.tsx`), tomuto
+  problému nepodlieha vôbec — uprednostni ten vzor, keď test musí
+  rozlišovať MEDZI viacerými súbežne možnými volaniami tej istej funkcie.

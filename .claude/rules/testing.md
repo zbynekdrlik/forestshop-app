@@ -553,3 +553,21 @@ paths:
   — potrebné je NIEKOĽKO NEZÁVISLÝCH behov, každý s čerstvým DB reseedom
   (`scripts/e2e-setup.ts`) a reštartom API servera, nie opakovanie v tom
   istom procese/stave.
+- **Súbežne bežiace/zabudnuté `pnpm --filter @forestshop/api test:integration`
+  procesy (napr. z predošlého overovania, ktoré agent zabudol počkať/
+  zabiť) spôsobia SKUTOČNÉ zlyhania v INÝCH testoch — nie len pomalší
+  beh.** Issue 267 follow-up: paralelný beh nechal 19 testov v
+  `restock-run.integration.test.ts` padnúť na `Error: Hook timed out in
+  10000ms` (v `beforeEach`'s `withCleanDb()`) a `db-isolation-lock
+  .integration.test.ts` na `TypeError: close is not a function` — vyzeralo
+  to ako regresia z aktuálnej zmeny, no príčinou bol vyčerpaný Postgres
+  connection pool/súperenie o zdieľanú lokálnu DB medzi DVOMA súčasne
+  bežiacimi `vitest run tests` procesmi (`.claude/rules/testing.md`'s
+  vlastný advisory-zámok popis rieši len TRUNCATE-kolíziu, nie všeobecné
+  vyčerpanie zdrojov pri plnom paralelnom behu celej sady). Fresh beh PO
+  `ps aux | grep vitest` (a `kill -9` akéhokoľvek nájdeného osirelého
+  procesu z predošlého overovania) prešiel 69/69 súborov, 518/518 testov
+  čisto. Pred DÔVEROVANÍM červenému `test:integration` výsledku vždy over
+  `ps aux | grep vitest`, či nebeží iný súbežný beh — najmä po tom, čo
+  agent spustil viac `run_in_background` testovacích príkazov v tej istej
+  relácii bez čakania na ich skutočné dokončenie.
