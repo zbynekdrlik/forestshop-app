@@ -21,6 +21,8 @@ import { requireSameOrigin } from "./origin-check.js";
 import { registerPairingRoutes } from "./pairing-routes.js";
 import { registerPostaUncollectedRoutes, type PostaUncollectedRunDeps } from "./posta-uncollected-routes.js";
 import { registerProductLinksRoutes } from "./product-links-routes.js";
+import { registerProductDetailRoutes } from "./product-detail-routes.js";
+import { registerSearchRoutes } from "./search-routes.js";
 import type { PageFetcher, PageFetchResult } from "../modules/supplier-stock/page-fetcher.js";
 import { registerSupplierStockRoutes } from "./supplier-stock-routes.js";
 import { registerRestockRoutes, type RestockRunDeps } from "./restock-routes.js";
@@ -185,6 +187,12 @@ export function createApp(
   // `product_supplier_link_override` tabuľky ako #121, žiadna nová cesta do
   // Shoptetu).
   registerProductLinksRoutes(app, db);
+  // issue 240: "Eshop → Vyhľadať" — hľadanie naprieč katalógom + objednávkami,
+  // a detail produktu (za výsledkom hľadania) so VŠETKÝMI jeho variantmi.
+  // Editácia dodávateľskej linky ide cez existujúcu `registerProductLinksRoutes`
+  // trasu vyššie (#239) — žiadna nová zapisovacia cesta.
+  registerProductDetailRoutes(app, db);
+  registerSearchRoutes(app, db, options.adminBaseUrl ?? "https://www.forestshop.sk");
   registerPostaUncollectedRoutes(
     app,
     db,

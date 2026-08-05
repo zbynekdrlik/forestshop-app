@@ -14,8 +14,9 @@ const E2E_NAV_EMAIL = "e2e-nav@forestshop.sk";
 // #57 pôvodne chcel naľavo PRESNE dve položky. Issue 185 (2026-08-03) pridáva
 // tretí priečinok "Automatizácie" s tromi hotovými obrazovkami, dovtedy len v
 // `HIDDEN_TABS` bez odkazu v menu. Issue 239 (2026-08-04) pridáva "Párovanie
-// produktov" pod "Eshop" — desiata záložka.
-test("ľavé menu má tri priečinky (Systém/Eshop/Automatizácie) s desiatimi záložkami, klik prepne obrazovku, panel sa zbalí do lišty a stav si pamätá, konzola je čistá", async ({
+// produktov" pod "Eshop" — desiata záložka. Issue 240 (2026-08-05) pridáva
+// "Vyhľadať" pod "Eshop" — jedenásta záložka.
+test("ľavé menu má tri priečinky (Systém/Eshop/Automatizácie) s jedenástimi záložkami, klik prepne obrazovku, panel sa zbalí do lišty a stav si pamätá, konzola je čistá", async ({
   page,
 }) => {
   const chyby: string[] = [];
@@ -36,8 +37,8 @@ test("ľavé menu má tri priečinky (Systém/Eshop/Automatizácie) s desiatimi 
   await expect(page.getByRole("button", { name: "Eshop" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Automatizácie" })).toBeVisible();
 
-  // Presne desať záložiek v CELOM menu.
-  await expect(page.locator(".side-nav .tab")).toHaveCount(10);
+  // Presne jedenásť záložiek v CELOM menu.
+  await expect(page.locator(".side-nav .tab")).toHaveCount(11);
   await expect(page.getByRole("button", { name: "Sync zo Shoptetu" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Texty e-mailov" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Na objednanie" })).toBeVisible();
@@ -45,6 +46,7 @@ test("ľavé menu má tri priečinky (Systém/Eshop/Automatizácie) s desiatimi 
   await expect(page.getByRole("button", { name: "Pripomienky objednávok" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Nedostupné tovary" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Párovanie produktov" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Vyhľadať" })).toBeVisible();
 
   // Predvolená obrazovka (bez kliknutia) je "Sync zo Shoptetu".
   await expect(page.getByRole("heading", { name: "Sync zo Shoptetu" })).toBeVisible();
@@ -101,6 +103,12 @@ test("ľavé menu má tri priečinky (Systém/Eshop/Automatizácie) s desiatimi 
   await expect(page.getByRole("heading", { name: "Párovanie produktov" })).toBeVisible();
   await expect(page.getByTestId("nav-status-supplier-links")).toHaveCount(0);
 
+  // issue 240: rovnaký dôvod ako "Párovanie produktov" vyššie — žiadny
+  // plán/zapnuté-vypnuté koncept, teda žiadny stavový odznak v menu.
+  await page.getByRole("button", { name: "Vyhľadať" }).click();
+  await expect(page.getByRole("heading", { name: "Vyhľadať" })).toBeVisible();
+  await expect(page.getByTestId("nav-status-search")).toHaveCount(0);
+
   // issue 190: zbalenie panela do úzkej lišty. Zámerne je to SÚČASŤ tohto
   // testu, nie samostatný test — každý ďalší test v tomto súbore by znamenal
   // ďalšie prihlásenie na zdieľanom `MAX_ATTEMPTS=10` rozpočte
@@ -123,7 +131,7 @@ test("ľavé menu má tri priečinky (Systém/Eshop/Automatizácie) s desiatimi 
 
   // Hlavičky priečinkov zmiznú, ikony všetkých modulov ostanú.
   await expect(page.getByRole("button", { name: "Systém" })).toHaveCount(0);
-  await expect(page.locator(".side-nav .tab")).toHaveCount(10);
+  await expect(page.locator(".side-nav .tab")).toHaveCount(11);
   // Názov sa v lište ukáže bublinou pri prejdení myšou.
   await expect(page.getByRole("button", { name: "Na objednanie" })).toHaveAttribute(
     "title",

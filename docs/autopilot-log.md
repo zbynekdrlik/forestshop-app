@@ -2658,3 +2658,60 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
   vymyslenej adresy. Konzola čistá. Issue zavreté ručne s dôkazom, Discord
   run-card odoslaná. Playbook doplnený (`.claude/rules/nedostupne.md`,
   `.claude/rules/mail-templates.md`).
+
+## 2026-08-04/05 — #239 (Eshop → Párovanie produktov — chýbajúce dodávateľské linky)
+
+- Solo ticket. Version bump `8fdf23e` (0.3.0-dev.140→.141), first commit.
+- Design comment BEFORE first code commit:
+  https://github.com/zbynekdrlik/forestshop-app/issues/239#issuecomment-5184875036
+  — rozhodnutie: SAMOSTATNÁ nová obrazovka, nie rozšírenie skrytej `pairing`
+  záložky (tá je variant-kľúčovaný stavový automat pre budúce automatické
+  párovanie s dodávateľom, #46/#48, nezapisuje do Shoptetu vôbec — odlišný
+  dátový model aj downstream konzument od tohto ticketu).
+- Backend `4b88111`: `apps/api/src/modules/product-links/queries.ts`
+  (`listProductLinks` — JS-side efektívna linka cez existujúce
+  `resolveEffectiveSupplierLink`, rovnaký vzor ako `supplier-stock/run.ts`),
+  `product-links-routes.ts`, refaktor `supplier-link-assignment.ts`
+  (zdieľané `upsertProductSupplierLink` jadro medzi `lineId`-cestou #121 a
+  novou `productKey`-cestou, zúžený `UpsertExecutor` tx-parameter presne
+  podľa `.claude/rules/database.md`), zdieľaná zod schéma `supplierLinkUrlBody`
+  (odstránená duplicita v `orders-routes.ts`). Integračné testy:
+  `product-links-http.integration.test.ts` (9 testov).
+- Frontend `fb7530d`: `SupplierLinksSection.tsx` + `supplierLinksApi.ts`,
+  nová VIDITEĽNÁ záložka v `nav.ts` (skupina Eshop, `supplier-links`),
+  `nav.spec.ts`/`nav.test.ts` prepočítané na 10 záložiek, nový e2e
+  `supplier-links.spec.ts` (vlastný izolovaný účet `e2e-parovanie@…`),
+  fixtúry vyčlenené do `scripts/e2e-fixtures-product-links.ts` (eslint
+  max-lines). `df4c288`: odstránený duplicitný `<h2>` (viditeľná záložka
+  dostáva titulok od Topbar-u, presne ako issue 185's poznámka v nav.ts
+  žiadala), `catalog.spec.ts` počty posunuté (37→39, 7→9) — nové e2e
+  fixtúrové produkty zdieľajú katalógový snapshot.
+- Nesúvisiaci CI-blokujúci nález opravený v tomto PR (`49f67d3`):
+  `orders-overview.integration.test.ts` mal pevný dátumový literál ako
+  "dnes" (2026-08-03/04), trasa počíta skutočný `new Date()` — pri
+  prechode kalendárneho dňa počas vývoja test spoľahlivo spadol. Fix:
+  hranica prepočítaná pri behu testu cez existujúci
+  `computeBratislavaPeriodBoundaries` — poučenie pre ĎALŠÍ podobný test:
+  hardcoded "dnes" literál oproti route, čo číta skutočný čas, je časovaná
+  bomba, nie jednorazová fixtúra.
+- Code review: vlastný `/review` prechod + nezávislý
+  `superpowers:requesting-code-review` subagent (base `db2a6b0` → head
+  `df4c288`) — obidva 0 Critical, 0 Important; len neblokujúce poznámky
+  (stránkovanie nad 50 riadkov ako existujúci vzor `PairingSection`,
+  `variantCount` nefiltrovaný podľa stavu ako existujúci `catalogStats`
+  vzor). PR #247, merge `6742cc5`.
+- Naživo overené na `forestshop-novy.newlevel.media` (v0.3.0-dev.141):
+  zoznam ukázal reálnych 2301 produktov bez linky (zodpovedá živému
+  rozboru pri validácii ticketu: 4542 produktov, 2241 s rozpoznateľnou
+  linkou, 2 override). Doplnenie/oprava vyskúšaná na REÁLNOM produkte
+  ("01 Detské tričko - Jeleň ručiaci") — keďže adresa sa nikdy nedopĺňa
+  odhadom, na overenie bola použitá JEHO VLASTNÁ už existujúca linka (zo
+  Shoptet-ovho `internalNote`, prefill cez "Upraviť"), nie vymyslená
+  hodnota. Stav sa zmenil "⏳ Uložené, čaká na odoslanie" → po ručnom
+  spustení `shoptet-writeback` jobu (dokumentovaný postup,
+  `.claude/rules/shoptet-writeback.md`, výsledok `{"status":"ok",
+  "productCount":1,"rowCount":5}`) → "✅ Odoslané do Shoptetu" — `runShoptetWriteback`
+  potvrdzuje úspech spätným čítaním Shoptet-ovho vlastného Logu, teda
+  reálny dôkaz, že linka dorazila do Shoptet administrácie. Konzola čistá
+  počas celého overovania. Issue zavreté ručne s dôkazom, Discord run-card
+  odoslaná.

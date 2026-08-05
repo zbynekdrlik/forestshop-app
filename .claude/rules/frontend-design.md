@@ -28,6 +28,21 @@ paths:
   to visible = move its entry from `HIDDEN_TABS` to a `NAV` folder — the
   component itself needs no change (`findTab`/`isVisibleTabId` already
   handle both).
+- **A VISIBLE tab (in `NAV`, not `HIDDEN_TABS`) must NEVER render its own
+  `<h1>`/`<h2>` matching the tab's `label` — `App.tsx` renders that title
+  itself via `Topbar` for any `isVisibleTabId(activeTabId)` tab, so a
+  component-owned heading duplicates it (`getByRole("heading", {name})`
+  then resolves to 2 elements — found live on issue 239's brand-new
+  "Párovanie produktov" screen, which shipped with its own `<h2>` because
+  it was written as a fresh visible tab, not a hidden-tab migration). The
+  existing rule "moving hidden→visible removes the old `<h2>`"
+  (`nav.ts`'s own comment, `isVisibleTabId`) applies EQUALLY to a
+  brand-NEW visible tab written from scratch — never add a
+  `<h1>`/`<h2>` inside a section component whose tab already lives in
+  `NAV` (see `OrdersSection.tsx`/`NedostupneSection.tsx`/
+  `PostaUncollectedSection.tsx` for the established no-own-heading
+  pattern). Only `HIDDEN_TABS` components (`CatalogPage.tsx`/
+  `PairingSection.tsx`/`SchedulerSection.tsx`) keep their own heading.
 - **User account controls (greeting/logout/change-password) live in
   `Topbar.tsx` as a dropdown "user menu" in the HEADER — not the sidebar
   footer.** This was an explicit ticket decision (#57): "change-password
