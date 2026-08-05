@@ -26,6 +26,8 @@ const RIADOK = {
   variantCode: null,
   packageNumber: "RR123456789SK",
   sequence: 1,
+  // issue 277: skutočne odoslaný text — `null` len pre "preskočené" (nižšie).
+  body: "Dobrý deň,\n\nvaša zásielka čaká na pošte.",
   reason: null,
   actorName: null,
   adminLink: "https://www.forestshop.sk/admin/objednavky-detail/?id=1",
@@ -39,6 +41,7 @@ const DUPLICITA = {
   actorName: "Zbyněk",
   source: "nedostupne" as const,
   sequence: null,
+  body: null,
   reason: "už bolo odoslané skôr — druhý e-mail sa neposiela",
 };
 
@@ -79,6 +82,19 @@ it("zablokovaná duplicita je vidno aj s menom zamestnanca, ktorý ju vyvolal", 
   expect(riadok.textContent).toContain("Preskočené");
   expect(riadok.textContent).toContain("už bolo odoslané skôr");
   expect(riadok.textContent).toContain("Zbyněk");
+});
+
+// issue 277: kniha musí vedieť ukázať SKUTOČNE odoslaný text — inak by
+// akceptačná podmienka "kniha nesmie klamať" nebola overiteľná na obrazovke.
+it("riadok s uloženým textom má tlačidlo na jeho zobrazenie; riadok bez textu (preskočené) ho nemá", async () => {
+  renderSection();
+  const riadokSoTextom = await screen.findByTestId("mail-log-row-r1");
+  expect(riadokSoTextom.textContent).not.toContain("vaša zásielka čaká na pošte");
+
+  fireEvent.click(screen.getByTestId("mail-log-body-toggle-r1"));
+  await screen.findByText(/vaša zásielka čaká na pošte/);
+
+  expect(screen.queryByTestId("mail-log-body-toggle-r2")).toBeNull();
 });
 
 it("zmena filtra automatizácie znovu načíta prehľad s tým filtrom", async () => {

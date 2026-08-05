@@ -20,7 +20,9 @@ export interface OrderMergeRunDeps {
 const previewBody = z.object({ baseOrderId: z.string().uuid(), otherOrderIds: z.array(z.string().uuid()).min(1) });
 // `/send` musí priniesť token vydaný `/preview` PRE PRESNE tento (baseOrderId,
 // zoradený výber) — rovnaká disciplína ako `nedostupne-routes.ts`.
-const sendBody = previewBody.extend({ previewToken: z.string().min(1) });
+// issue 277: rovnaký zámer ako `nedostupne-routes.ts` — voliteľná ručná
+// úprava textu z okna náhľadu.
+const sendBody = previewBody.extend({ previewToken: z.string().min(1), editedBody: z.string().trim().min(1).max(20000).optional() });
 
 function bccMissing(deps: OrderMergeRunDeps): boolean {
   return deps.bccEmail === undefined || deps.bccEmail.trim() === "";
@@ -80,6 +82,7 @@ export function registerOrderMergeRoutes(app: Hono<AppBindings>, db: Database, d
         ok: true as const,
         subject: built.content.subject,
         html: built.content.html,
+        text: built.content.text,
         recipient: built.content.to ?? "",
         customerName: built.content.customerName,
         orderNumbers: built.content.orderNumbers,
@@ -97,7 +100,7 @@ export function registerOrderMergeRoutes(app: Hono<AppBindings>, db: Database, d
     requireRole("admin", "manazer"),
     zValidator("json", sendBody),
     async (c) => {
-      const { baseOrderId, otherOrderIds, previewToken } = c.req.valid("json");
+      const { baseOrderId, otherOrderIds, previewToken, editedBody } = c.req.valid("json");
       const user = c.get("user");
       const now = new Date();
       // Server-side vynútenie povinného náhľadu — token sa KONZUMUJE
@@ -113,6 +116,7 @@ export function registerOrderMergeRoutes(app: Hono<AppBindings>, db: Database, d
         mailTransport: deps.mailTransport,
         bccEmail: deps.bccEmail,
         actorUserId: user.userId,
+        ...(editedBody === undefined ? {} : { editedBody }),
       });
       if (result.status !== "sent") {
         return c.json({ ok: false as const, error: sendErrorMessage(result) });

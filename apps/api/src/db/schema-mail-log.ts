@@ -45,6 +45,11 @@ export const mailLog = pgTable(
     recipient: text("recipient").notNull().default(""),
     bcc: text("bcc"),
     subject: text("subject"),
+    // issue 277: skutočne ODOSLANÝ text e-mailu (`MailMessage.text`) — bez
+    // tohto stĺpca kniha nemala ako dokázať, ČO presne odišlo, len KOMU/KEDY.
+    // `null` pre `skipped` záznamy (appka vtedy nič neposlala, žiadny text
+    // neexistuje).
+    body: text("body"),
     orderCode: text("order_code"),
     variantCode: text("variant_code"),
     packageNumber: text("package_number"),

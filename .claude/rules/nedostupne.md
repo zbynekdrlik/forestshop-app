@@ -72,3 +72,28 @@ paths:
 - **`insertTestVariantForProduct` (`tests/helpers/orders.ts`) NEMÁ od issue 245
   `relatedCodes` voľbu — odstránená spolu s celým `product.related_codes`
   stĺpcom (žiadny existujúci test ju reálne používal).**
+- **issue 277: `MailPreviewDialog.tsx` (zdieľaná s "Zlúčenie objednávok",
+  `.claude/rules/orders.md`) prestala byť READ-ONLY — telo je editovateľná
+  `<textarea>` (`bodyText`/`onBodyTextChange`), predvyplnená
+  `RenderedEmail.text` (appka ju už počítala od issue 192, len ju
+  nikam neposielala). Predmet/príjemca zostávajú needitovateľné.**
+  `sendNedostupneEmail`'s nový voliteľný `editedBody` PREPÍŠE
+  `html`/`text` tesne pred odoslaním (`renderEditedBody`,
+  `mail-templates/render.ts` — plain text → escapovaný HTML, ŽIADEN
+  `{{pole}}`/`**tučné**` engine druhýkrát), predmet ostáva z
+  NEUPRAVENÉHO vyrenderovania. Šablóna v `mail_template` sa touto
+  editáciou nikdy nemení — číta sa len na zostavenie predmetu
+  (integračný test `mail-edited-body.integration.test.ts` to dokazuje
+  bajt-na-bajt porovnaním riadku pred/po odoslaní). Server-side sa
+  editovaný text VALIDUJE len minimálne (`z.string().trim().min(1)
+  .max(20000)`) — žiadna kontrola formátu, appka dôveruje obsluhe (nie
+  klientom mimo appky) na TEXT, nikdy nie na business polia (recipient/
+  orderCode/dedup token), tie appka vždy prepočíta sama.
+- **Playwright's `toContainText`/testing-library's `textContent` NEVIDIA
+  hodnotu kontrolovaného `<textarea>`** (React nastavuje `.value` ako
+  DOM vlastnosť, nie textový uzol) — e2e/unit testy tela náhľadu preto
+  musia čítať `toHaveValue()`/`screen.getByTestId<HTMLTextAreaElement>
+  (...).value`, nikdy `toContainText`/`textContent` na kontajneri, ktorý
+  textarea obsahuje (`nedostupne.spec.ts`/`order-merge.spec.ts`, issue
+  277 — pôvodné testy kontrolovali `dangerouslySetInnerHTML` div a
+  ticho by prestali overovať čokoľvek po prechode na textarea).

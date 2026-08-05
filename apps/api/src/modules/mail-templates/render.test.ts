@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { renderTemplate, validateTemplateText, type TemplateContext } from "./render.js";
+import { renderEditedBody, renderTemplate, validateTemplateText, type TemplateContext } from "./render.js";
 
 // issue 192. Čistá jednotka — žiadna databáza, žiadna sieť, nikdy sa nič
 // neodosiela.
@@ -131,5 +131,36 @@ describe("validateTemplateText", () => {
   it("prázdny predmet aj prázdne telo sa odmietnu", () => {
     const errors = validateTemplateText({ subject: "   ", body: "\n" }, ALLOWED);
     expect(errors).toHaveLength(2);
+  });
+});
+
+// issue 277: jednorazová RUČNÁ úprava textu tesne pred odoslaním — text je UŽ
+// HOTOVÝ (zástupné polia dosadené obsluhou v okne náhľadu), takže sa
+// NEPÚŠŤA cez `{{pole}}`/`**tučné**` šablónový engine znova. Prázdny riadok =
+// nový odstavec (rovnaká konvencia ako šablóny).
+describe("renderEditedBody — jednorazová ručná úprava (issue 277)", () => {
+  it("prázdny riadok oddeľuje odstavce, jednoduchý riadok zalomí VNÚTRI odstavca", () => {
+    const out = renderEditedBody("Dobrý deň,\nešte dopĺňam vetu.\n\nS pozdravom,\nobchod");
+    expect(out.html).toContain("<p>Dobrý deň,<br>\n      ešte dopĺňam vetu.</p>");
+    expect(out.html).toContain("<p>S pozdravom,<br>\n      obchod</p>");
+    expect(out.text).toBe("Dobrý deň,\nešte dopĺňam vetu.\n\nS pozdravom,\nobchod");
+  });
+
+  it("HTML napísané obsluhou sa ESCAPUJE, nikdy sa nestane surovou značkou", () => {
+    const out = renderEditedBody('Dopisujem <script>alert("x")</script> priamo.');
+    expect(out.html).toContain("&lt;script&gt;");
+    expect(out.html).not.toContain("<script>");
+    expect(out.text).toContain("<script>"); // čistý text sa neescapuje, ide len ako telo e-mailu
+  });
+
+  it("prázdne odstavce (viac za sebou idúcich prázdnych riadkov) sa zahodia, nezostanú prázdne <p>", () => {
+    const out = renderEditedBody("Prvý.\n\n\n\nDruhý.");
+    expect(out.html.match(/<p>/g)).toHaveLength(2);
+    expect(out.text).toBe("Prvý.\n\nDruhý.");
+  });
+
+  it("okolité biele znaky celého textu aj každého odseku sa orežú", () => {
+    const out = renderEditedBody("  \n  Ahoj.  \n\n  ");
+    expect(out.text).toBe("Ahoj.");
   });
 });

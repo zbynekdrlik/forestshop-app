@@ -91,7 +91,7 @@ function parse(source: string): readonly Node[] {
   return root;
 }
 
-function htmlEscape(value: string): string {
+export function htmlEscape(value: string): string {
   return value
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
@@ -262,6 +262,39 @@ export function renderTemplate(template: MailTemplateText, ctx: TemplateContext)
     html: assembleHtml(toPieces(bodyNodes, ctx, "html")),
     text: assembleText(toPieces(bodyNodes, ctx, "text")),
   };
+}
+
+export interface RenderedEditedBody {
+  readonly html: string;
+  readonly text: string;
+}
+
+/**
+ * issue 277: jednorazová RUČNÁ úprava textu tesne pred odoslaním (okno
+ * náhľadu, `MailPreviewDialog.tsx`) — obsluha edituje UŽ HOTOVÝ text (zástupné
+ * polia dosadené, žiadna `{{pole}}`/`**tučné**` šablónová syntax), preto sa
+ * NEPÚŠŤA cez `parse`/placeholder engine znova (`renderTemplate`). Prázdny
+ * riadok = nový odstavec (rovnaká konvencia ako šablóny), jednoduchý riadok v
+ * odstavci = zalomenie. Escapovanie je VÝHRADNE tu — obsluha smie napísať
+ * čokoľvek, nikdy sa to nezapíše ako surové HTML (rovnaká disciplína ako
+ * `assembleHtml` vyššie).
+ */
+export function renderEditedBody(text: string): RenderedEditedBody {
+  const paragraphs = text
+    .replaceAll("\r\n", "\n")
+    .split(/\n[ \t]*\n+/)
+    .map((p) => p.trim())
+    .filter((p) => p !== "");
+  const htmlParagraphs = paragraphs.map((p) => `    <p>${htmlEscape(p).replaceAll("\n", "<br>\n      ")}</p>`);
+  const html = [
+    "<!DOCTYPE html>",
+    "<html>",
+    '  <body style="font-family: Arial, sans-serif; font-size: 16px; color: #333;">',
+    ...htmlParagraphs,
+    "  </body>",
+    "</html>",
+  ].join("\n");
+  return { html, text: paragraphs.join("\n\n") };
 }
 
 /** Mená zástupných polí použitých v texte — vrátane tých v podmienkach. */

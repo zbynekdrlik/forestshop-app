@@ -159,7 +159,7 @@ it("rola citanie NEVIDÍ žiadne akčné tlačidlá (len admin/manazer smie odos
 
 it("klik na 'náhľad' otvorí povinný náhľad PRED odoslaním — Odoslať sa ešte nevolá", async () => {
   fetchNedostupneList.mockResolvedValue(LIST_WITH_GROUP);
-  fetchNedostupnePreview.mockResolvedValue({ ok: true, subject: "Informácia o dostupnosti vašej objednávky — Forestshop.sk", html: "<p>Ahoj</p>", recipient: "jan@example.sk", customerName: "Ján Novák", previewToken: "tok-1" });
+  fetchNedostupnePreview.mockResolvedValue({ ok: true, subject: "Informácia o dostupnosti vašej objednávky — Forestshop.sk", html: "<p>Ahoj</p>", text: "Ahoj", recipient: "jan@example.sk", customerName: "Ján Novák", previewToken: "tok-1" });
   render(<NedostupneSection role="manazer" onSessionExpired={vi.fn()} />);
   await screen.findByTestId("nedostupne-group-40237/L");
 
@@ -176,7 +176,7 @@ it("potvrdenie náhľadu odošle presne s parametrami náhľadu a znovu načíta
     bccMissing: false,
     mailNotConfigured: false,
   });
-  fetchNedostupnePreview.mockResolvedValue({ ok: true, subject: "Predmet", html: "<p>Ahoj</p>", recipient: "jan@example.sk", customerName: "Ján Novák", previewToken: "tok-1" });
+  fetchNedostupnePreview.mockResolvedValue({ ok: true, subject: "Predmet", html: "<p>Ahoj</p>", text: "Ahoj", recipient: "jan@example.sk", customerName: "Ján Novák", previewToken: "tok-1" });
   sendNedostupneEmail.mockResolvedValue({ ok: true });
   render(<NedostupneSection role="manazer" onSessionExpired={vi.fn()} />);
   await screen.findByTestId("nedostupne-group-40237/L");
@@ -186,16 +186,49 @@ it("potvrdenie náhľadu odošle presne s parametrami náhľadu a znovu načíta
   fireEvent.click(screen.getByTestId("nedostupne-preview-confirm"));
 
   await waitFor(() => {
-    expect(sendNedostupneEmail).toHaveBeenCalledWith("17600001", "40237/L", "nedostupne", "tok-1");
+    expect(sendNedostupneEmail).toHaveBeenCalledWith("17600001", "40237/L", "nedostupne", "tok-1", "Ahoj");
   });
   await waitFor(() => {
     expect(screen.queryByTestId("nedostupne-preview")).toBeNull();
   });
 });
 
+// issue 277: obsluha vie priamo v okne prepísať text — odošle sa PRESNE to,
+// čo je v textovom poli v momente kliknutia na Odoslať, nikdy pôvodný náhľad.
+it("obsluha upraví text v náhľade — odošle sa upravený text, nie pôvodný", async () => {
+  fetchNedostupneList.mockResolvedValue(LIST_WITH_GROUP);
+  fetchNedostupnePreview.mockResolvedValue({ ok: true, subject: "Predmet", html: "<p>Ahoj</p>", text: "Ahoj", recipient: "jan@example.sk", customerName: "Ján Novák", previewToken: "tok-1" });
+  sendNedostupneEmail.mockResolvedValue({ ok: true });
+  render(<NedostupneSection role="manazer" onSessionExpired={vi.fn()} />);
+  await screen.findByTestId("nedostupne-group-40237/L");
+
+  fireEvent.click(screen.getByTestId("nedostupne-send-17600001-40237/L"));
+  await screen.findByTestId("nedostupne-preview");
+  const textarea = screen.getByTestId("nedostupne-preview-body");
+  fireEvent.change(textarea, { target: { value: "Ešte dopisujem vlastnú vetu." } });
+  fireEvent.click(screen.getByTestId("nedostupne-preview-confirm"));
+
+  await waitFor(() => {
+    expect(sendNedostupneEmail).toHaveBeenCalledWith("17600001", "40237/L", "nedostupne", "tok-1", "Ešte dopisujem vlastnú vetu.");
+  });
+});
+
+it("prázdny text v náhľade zablokuje tlačidlo Odoslať", async () => {
+  fetchNedostupneList.mockResolvedValue(LIST_WITH_GROUP);
+  fetchNedostupnePreview.mockResolvedValue({ ok: true, subject: "Predmet", html: "<p>Ahoj</p>", text: "Ahoj", recipient: "jan@example.sk", customerName: "Ján Novák", previewToken: "tok-1" });
+  render(<NedostupneSection role="manazer" onSessionExpired={vi.fn()} />);
+  await screen.findByTestId("nedostupne-group-40237/L");
+
+  fireEvent.click(screen.getByTestId("nedostupne-send-17600001-40237/L"));
+  await screen.findByTestId("nedostupne-preview");
+  fireEvent.change(screen.getByTestId("nedostupne-preview-body"), { target: { value: "   " } });
+
+  expect(screen.getByTestId("nedostupne-preview-confirm").hasAttribute("disabled")).toBe(true);
+});
+
 it("zrušenie náhľadu NEPOŠLE nič", async () => {
   fetchNedostupneList.mockResolvedValue(LIST_WITH_GROUP);
-  fetchNedostupnePreview.mockResolvedValue({ ok: true, subject: "Predmet", html: "<p>Ahoj</p>", recipient: "jan@example.sk", customerName: "Ján Novák", previewToken: "tok-1" });
+  fetchNedostupnePreview.mockResolvedValue({ ok: true, subject: "Predmet", html: "<p>Ahoj</p>", text: "Ahoj", recipient: "jan@example.sk", customerName: "Ján Novák", previewToken: "tok-1" });
   render(<NedostupneSection role="manazer" onSessionExpired={vi.fn()} />);
   await screen.findByTestId("nedostupne-group-40237/L");
 
@@ -210,7 +243,7 @@ it("zrušenie náhľadu NEPOŠLE nič", async () => {
 
 it("zlyhané odoslanie (ok:false) zobrazí server hlášku a nezavrie náhľad", async () => {
   fetchNedostupneList.mockResolvedValue(LIST_WITH_GROUP);
-  fetchNedostupnePreview.mockResolvedValue({ ok: true, subject: "Predmet", html: "<p>Ahoj</p>", recipient: "jan@example.sk", customerName: "Ján Novák", previewToken: "tok-1" });
+  fetchNedostupnePreview.mockResolvedValue({ ok: true, subject: "Predmet", html: "<p>Ahoj</p>", text: "Ahoj", recipient: "jan@example.sk", customerName: "Ján Novák", previewToken: "tok-1" });
   sendNedostupneEmail.mockResolvedValue({ ok: false, error: "Tento e-mail už bol tejto objednávke odoslaný." });
   render(<NedostupneSection role="manazer" onSessionExpired={vi.fn()} />);
   await screen.findByTestId("nedostupne-group-40237/L");
@@ -236,7 +269,7 @@ it("401 pri načítaní zavolá onSessionExpired", async () => {
 // aj klikom mimo neho, a ani jedna z týchto ciest NESMIE nič odoslať.
 async function otvorNahlad(): Promise<void> {
   fetchNedostupneList.mockResolvedValue(LIST_WITH_GROUP);
-  fetchNedostupnePreview.mockResolvedValue({ ok: true, subject: "Predmet", html: "<p>Ahoj</p>", recipient: "jan@example.sk", customerName: "Ján Novák", previewToken: "tok-1" });
+  fetchNedostupnePreview.mockResolvedValue({ ok: true, subject: "Predmet", html: "<p>Ahoj</p>", text: "Ahoj", recipient: "jan@example.sk", customerName: "Ján Novák", previewToken: "tok-1" });
   render(<NedostupneSection role="manazer" onSessionExpired={vi.fn()} />);
   await screen.findByTestId("nedostupne-group-40237/L");
   fireEvent.click(screen.getByTestId("nedostupne-send-17600001-40237/L"));

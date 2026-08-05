@@ -43,10 +43,14 @@ test("záložka vypíše zákazníkov s ≥2 otvorenými objednávkami, povinný
   // ako "Nedostupné tovary" — server-side vynútený token).
   await group.getByTestId("order-merge-send-9011").click();
   const preview = page.getByTestId("order-merge-preview");
+  const previewBody = page.getByTestId("order-merge-preview-body");
   await expect(preview).toBeVisible();
   await expect(preview).toContainText("e2e-zakaznik-zlucenie@example.sk");
-  await expect(preview).toContainText("9010");
-  await expect(preview).toContainText("9011");
+  // issue 277: text e-mailu je odteraz EDITOVATEĽNÝ (textarea, nie read-only
+  // náhľad) — čísla objednávok sú v TELE (predmet ich nenesie), preto sa
+  // overujú cez hodnotu poľa, nie cez textContent dialógu.
+  await expect(previewBody).toHaveValue(/9010/);
+  await expect(previewBody).toHaveValue(/9011/);
 
   // Zavrieť klávesom Esc bez odoslania — nič sa nezmení.
   await page.keyboard.press("Escape");
@@ -58,6 +62,12 @@ test("záložka vypíše zákazníkov s ≥2 otvorenými objednávkami, povinný
   // sa zobrazí.
   await group.getByTestId("order-merge-send-9011").click();
   await expect(preview).toBeVisible();
+
+  // issue 277: obsluha text priamo prepíše — appka to prijme (žiadna zmena
+  // formátu, len nesmie zostať prázdne).
+  await previewBody.fill("Dobrý deň, e2e zákazník — obe objednávky posielame spolu, vlastná veta z e2e testu.");
+  await expect(previewBody).toHaveValue("Dobrý deň, e2e zákazník — obe objednávky posielame spolu, vlastná veta z e2e testu.");
+
   await page.getByTestId("order-merge-preview-confirm").click();
   await expect(page.getByText("chýba adresa pre skrytú kópiu majiteľovi (ORDER_MERGE_BCC_EMAIL)", { exact: true })).toBeVisible();
 

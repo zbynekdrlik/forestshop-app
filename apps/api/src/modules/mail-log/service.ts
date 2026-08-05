@@ -27,6 +27,9 @@ interface MailLogEntry extends MailLogContext {
   readonly recipient: string;
   readonly bcc?: string | undefined;
   readonly subject?: string;
+  // issue 277: skutočne odoslaný/pokúšaný text — `undefined` pre `skipped`
+  // (appka vtedy žiadny text nevygenerovala).
+  readonly body?: string;
   readonly reason?: string;
 }
 
@@ -41,6 +44,7 @@ async function insertEntry(db: Pick<Database, "insert">, now: Date, entry: MailL
       recipient: entry.recipient,
       bcc: entry.bcc ?? null,
       subject: entry.subject ?? null,
+      body: entry.body ?? null,
       orderCode: entry.orderCode ?? null,
       variantCode: entry.variantCode ?? null,
       packageNumber: entry.packageNumber ?? null,
@@ -121,10 +125,11 @@ export async function sendLoggedMail(
       recipient: message.to,
       bcc: message.bcc,
       subject: message.subject,
+      body: message.text,
       reason: rawErrorMessage,
     });
     return { ok: false, rawErrorMessage };
   }
-  await insertEntry(db, now, { ...ctx, status: "sent", recipient: message.to, bcc: message.bcc, subject: message.subject });
+  await insertEntry(db, now, { ...ctx, status: "sent", recipient: message.to, bcc: message.bcc, subject: message.subject, body: message.text });
   return { ok: true };
 }

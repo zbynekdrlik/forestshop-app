@@ -8,6 +8,7 @@ import { recordSkippedMail, sendLoggedMail, type MailLogContext } from "../mail-
 import { resolveTemplate } from "../mail-templates/store.js";
 import { listOpenStatusNames } from "../orders/open-statuses.js";
 import { NEDOSTUPNE_SEND_LOCK_KEY, TYPE_ALTERNATIVE, type NedostupneEmailType } from "./constants.js";
+import { renderEditedBody } from "../mail-templates/render.js";
 import { buildAlternativeEmail, buildUnavailableEmail, type BuiltNedostupneEmail } from "./logic.js";
 import { listReplacementLinksForVariant } from "./replacement-links.js";
 import { hasSentNedostupne, markSentNedostupne } from "./state.js";
@@ -93,6 +94,11 @@ export interface SendNedostupneOptions {
   // zamestnanca (žiadny naplánovaný beh), takže sa zapisuje do knihy
   // odoslaných e-mailov ako `manual` s jeho menom.
   readonly actorUserId?: string;
+  // issue 277: obsluha upravila text priamo v okne náhľadu — keď je
+  // prítomný, PREPÍŠE vygenerované `html`/`text` (predmet ostáva pôvodný,
+  // ticket edituje len text e-mailu). Šablóna v DB sa touto úpravou nikdy
+  // nemení — číta sa len na zostavenie predmetu (`buildEmailForType`).
+  readonly editedBody?: string;
 }
 
 /**
@@ -123,7 +129,7 @@ export async function sendNedostupneEmail(options: SendNedostupneOptions): Promi
 }
 
 async function sendNedostupneEmailLocked(options: SendNedostupneOptions): Promise<SendNedostupneResult> {
-  const { db, now, orderCode, variantCode, emailType, mailTransport, bccEmail, actorUserId } = options;
+  const { db, now, orderCode, variantCode, emailType, mailTransport, bccEmail, actorUserId, editedBody } = options;
 
   // issue 193: každý pokus (aj neúspešný) sa zapisuje do spoločnej knihy
   // odoslaných e-mailov — `mail-log/service.ts`.
@@ -166,10 +172,14 @@ async function sendNedostupneEmailLocked(options: SendNedostupneOptions): Promis
   }
 
   const built = await buildEmailForType(db, ctx, emailType);
+  // issue 277: obsluha mohla text v okne náhľadu upraviť — odošle sa PRESNE
+  // to (predmet ostáva z pôvodného vyrenderovania), nikdy znova
+  // vygenerovaná šablóna.
+  const finalEmail: BuiltNedostupneEmail = editedBody === undefined ? built : { subject: built.subject, ...renderEditedBody(editedBody) };
   const sendResult = await sendLoggedMail(
     db,
     mailTransport,
-    { to: email, subject: built.subject, text: built.text, html: built.html, bcc: bccEmail },
+    { to: email, subject: finalEmail.subject, text: finalEmail.text, html: finalEmail.html, bcc: bccEmail },
     now,
     logCtx,
   );

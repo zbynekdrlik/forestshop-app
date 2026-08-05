@@ -2073,6 +2073,24 @@ tr:last-child td {
   border-radius: var(--fs-radius-md);
   padding: var(--fs-space-3) var(--fs-space-4);
 }
+.modal-body-label {
+  display: block;
+  margin-bottom: var(--fs-space-1);
+  font-size: var(--fs-text-sm);
+  color: var(--fs-ink-muted);
+}
+/* issue 277: editovateľné telo náhľadu — rovnaký vizuálny rámec ako
+   pôvodný read-only `.modal-body`, len ako skutočný ovládací prvok
+   (`width: 100%`/`resize: vertical`/font zdedený z appky). */
+.modal-body-edit {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  font-family: inherit;
+  font-size: var(--fs-text-base);
+  color: var(--fs-ink);
+}
 .modal-actions {
   display: flex;
   flex-wrap: wrap;
@@ -2335,6 +2353,23 @@ tr:last-child td {
 .ml-status {
   font-weight: var(--fs-weight-medium);
   white-space: nowrap;
+}
+/* issue 277: skutočne odoslaný text — tlačidlo je vlastný riadok pod
+   predmetom (rovnaký "doplnkový údaj pod hlavným" vzor ako `.ml-trigger`/
+   `.ml-reason` vyššie), rozbalené telo je samostatný riadok tabuľky cez
+   celú šírku. */
+.ml-body-toggle {
+  display: block;
+  margin-top: var(--fs-space-1);
+}
+.ml-body-row td {
+  background: var(--fs-surface-alt);
+}
+.ml-body-text {
+  margin: 0;
+  white-space: pre-wrap;
+  font-family: inherit;
+  font-size: var(--fs-text-sm);
 }
 .ml-status-sent {
   color: var(--fs-brand);

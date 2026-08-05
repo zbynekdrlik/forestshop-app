@@ -2982,3 +2982,51 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
   check).
 - No PR/merge/deploy in this dispatch — supervisor owns CI/PR/merge/deploy
   for this follow-up per the dispatch's HARD CONSTRAINT.
+
+## issue 277 — Náhľad e-mailu: text sa dá upraviť priamo v okne pred odoslaním
+- `5be33ca` chore: bump version to 0.3.0-dev.158.
+- `2c38151`/`e7cc0ab` [red]/[green]: `renderEditedBody` (`mail-templates/
+  render.ts`) — plain-text-edit → safe escaped HTML/text, exported
+  `htmlEscape`. Pure unit tests (`render.test.ts`).
+- `89febb3`/`0e297bb`: [red]/[green] `editedBody` flows through
+  `sendNedostupneEmail`/`sendOrderMergeMail` (subject stays from the
+  rendered template, only html/text get overridden) + new `mail_log.body`
+  column (migration `0038_sad_kinsey_walden.sql`) — `sendLoggedMail` now
+  persists `message.text` for every sender, not just the two editable
+  ones. New integration file `mail-edited-body.integration.test.ts`
+  proves: edited text is what's actually sent, the `mail_template` row
+  the owner customized stays byte-identical after sending, and `mail_log`
+  stores the edited text (HTTP round trip too — preview returns `text`,
+  `/send` accepts `editedBody`, `GET /api/mail-log` shows it).
+- `44ccc5f`: routes wiring (`nedostupne-routes.ts`/`order-merge-routes.ts`
+  zod schemas + preview response `text` field), `mail-log/queries.ts`
+  exposes `body`.
+- `9d12ba5`: `MailPreviewDialog.tsx` — the read-only `dangerouslySetInnerHTML`
+  div became a `<textarea>` bound to `bodyText`/`onBodyTextChange` (subject/
+  recipient stay non-editable). Wired into `NedostupneSection.tsx`.
+- `8b21cc0`: same wiring into `OrderMergeSection.tsx` + new unit test file
+  (none existed before).
+- `e559a8d`/`26b1c04`: [red]/[green] `MailLogSection.tsx` gets a per-row
+  "👁 zobraziť text" toggle (only when `body !== null`) — the actually-sent
+  text is now visible on the "Odoslané e-maily" screen, not just stored.
+- `e61e6a4`: e2e specs (`nedostupne.spec.ts`/`order-merge.spec.ts`) updated
+  to `toHaveValue()` on the textarea instead of `toContainText()` on the
+  dialog (a `<textarea>`'s live value isn't part of DOM `textContent`) +
+  added an actual edit-and-verify-value step in both.
+- **Scope decision (documented on the ticket + in the PR):** only the TWO
+  flows where Send is TODAY gated by Preview (server-enforced
+  `previewToken`) got the editable dialog — Nedostupné tovary, Zlúčenie
+  objednávok. "Pripomienky objednávok"/"Nevyzdvihnuté zásielky" show a
+  preview that is informational only (Send doesn't require it, no
+  previewToken) and "Objednávka dodávateľovi" is a HIDDEN feature
+  (`SHOW_ORDER_MAIL_ACTIONS = false`, issue 118) — none of the three were
+  converted; each documented with its reason rather than silently
+  skipped.
+- Design comment + STEP-0 validation comment posted to issue 277 before
+  the first code commit.
+- Local gates: `pnpm typecheck`, `pnpm lint` clean; web unit 459/459 (59
+  files, incl. new `OrderMergeSection.test.tsx`); API unit 589/589 (37
+  files); API integration 525/525 (70 files, after `db:migrate`); e2e
+  46/46, zero console errors.
+- No PR/merge/deploy in this dispatch — supervisor owns CI/PR/merge/deploy
+  per the dispatch's HARD CONSTRAINT.

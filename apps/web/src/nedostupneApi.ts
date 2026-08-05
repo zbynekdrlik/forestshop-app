@@ -39,7 +39,9 @@ export type NedostupneList = z.infer<typeof listSchema>;
 export type NedostupneEmailType = "nedostupne" | "alternativa";
 
 const previewResultSchema = z.union([
-  z.object({ ok: z.literal(true), subject: z.string(), html: z.string(), recipient: z.string(), customerName: z.string(), previewToken: z.string() }),
+  // issue 277: `text` je plain-textová verzia (rovnaká, akú appka odošle ako
+  // fallback) — frontend ju predvyplní do editovateľného okna náhľadu.
+  z.object({ ok: z.literal(true), subject: z.string(), html: z.string(), text: z.string(), recipient: z.string(), customerName: z.string(), previewToken: z.string() }),
   z.object({ ok: z.literal(false), error: z.string() }),
 ]);
 export type NedostupnePreview = Extract<z.infer<typeof previewResultSchema>, { readonly ok: true }>;
@@ -97,11 +99,14 @@ export async function sendNedostupneEmail(
   variantCode: string,
   emailType: NedostupneEmailType,
   previewToken: string,
+  // issue 277: text, ktorý obsluha (prípadne) upravila v okne náhľadu —
+  // appka ho pošle PRESNE takto, nikdy znova vygenerovanú šablónu.
+  editedBody: string,
 ): Promise<NedostupneSendResult> {
   const response = await fetch("/api/nedostupne/send", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ orderCode, variantCode, emailType, previewToken }),
+    body: JSON.stringify({ orderCode, variantCode, emailType, previewToken, editedBody }),
   });
   if (response.status === 401) throw new NedostupneUnauthorizedError();
   return sendResultSchema.parse(await response.json());
