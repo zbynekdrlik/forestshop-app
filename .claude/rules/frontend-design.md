@@ -757,3 +757,28 @@ paths:
   PRVOM teste súboru). Vzor pre tento guard: `useEffect(() => {
   mountedRef.current = true; return () => { mountedRef.current = false; };
   }, [])` — nikdy len holý cleanup bez zodpovedajúceho "nastav true" v tele.
+
+- **Riadkové farebné odlíšenie v tabuľke "Na objednanie" prešlo z
+  3-stavového (`state-caka_sa`/`state-skladom`/`state-nedostupne`) na
+  BINÁRNE podľa kanonického `isLineResolved` (issue 259) — každý ĎALŠÍ
+  "farbi riadok podľa X" nápad na tejto tabuľke sa má najprv opýtať, či X
+  je skutočne to, čo majiteľ chce vidieť, alebo len jeho PROXY.** Pôvodné
+  3-stavové farbenie nechávalo VÄČŠINU riadkov (predvolený stav
+  "objednane", ešte neobjednané) úplne biele — presne tie, čo "treba
+  vybaviť" — a majiteľ to opísal ako "dnes sa nefarbí nič", hoci appka
+  TECHNICKY farbila 3 z 5 stavov. Nová trieda `.line-resolved`/
+  `.line-unresolved` (`app.css`) farbí podľa TOHO ISTÉHO predikátu, čo appka
+  všade inde používa na "je tento riadok hotový" — nie podľa nového
+  vlastného výpočtu. Farba NIKDY nie je jediný signál (existujúci stĺpec
+  "Stav" + checkbox "Objednané" ostávajú) — colour-blind-safe bez extra
+  UI prvku.
+- **Meranie/zmenšovanie výšky nekontextuálneho bloku (dlaždice, panel,
+  hlavička) naživo cez `page.addStyleTag` proti PRODUKCII je rovnako
+  použiteľné na VÝŠKU ako na `<colgroup>` percentá (doteraz zdokumentované
+  len pre tabuľkové stĺpce).** Issue 258 (dlaždice "Prehľad e-shopu"/"Súhrn
+  o objednávaní" príliš veľké): namerané PRED zmenou (103px/79.5px na
+  dlaždicu, blok 253.5px pri 1366×768), potom `page.addStyleTag` s
+  kandidátskym CSS priamo na živej stránke, opäť namerané (58.5px/dlaždicu,
+  169px blok, −33 %) — až PO potvrdení čísel sa kandidát preniesol do
+  `app.css`. Rovnaký postup funguje pre AKÝKOĽVEK "toto zaberá príliš veľa
+  miesta" ticket, nielen šírkové stĺpce.

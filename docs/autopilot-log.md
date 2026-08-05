@@ -2840,3 +2840,35 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
 - Local gates all green: `pnpm typecheck`, `pnpm lint`, `pnpm --filter
   @forestshop/web test` (413 tests), `pnpm --filter @forestshop/web e2e`
   (42/42).
+
+## Issues 260/259/258 — "Na objednanie": kusy, farby, kompaktné dlaždice (batch, one PR)
+
+- **#260 (bug):** `summarizeOrderLines` (`ordersSummary.ts`) counted LINES
+  (`lines.length`, `+= 1`), not summed `quantity` — two identical products
+  merged into one `order_line` with `quantity: 2` (`ingest.ts`'s known
+  same-product-same-order merge) showed as "1", not "2". RED
+  (`ffc7604`→`3cbbae8`) proved the exact symptom against unfixed code
+  (`{total:1,remaining:1}` vs expected `{total:2,remaining:2}`), GREEN
+  (`4058d02`) fixed every field to sum `line.quantity`. `OrdersSection.tsx`'s
+  nav badge (issue 147, its own documented "count of LINES" intent) was
+  deliberately given its OWN direct `isLineResolved` filter instead of
+  riding `summarizeOrderLines(...).remaining`, so it keeps its original
+  meaning unchanged.
+- **#259 (enhancement):** row coloring went from 3-state
+  (`state-caka_sa`/`state-skladom`/`state-nedostupne`) to BINARY red/green
+  keyed on the canonical `isLineResolved` predicate (`4c1ff17`) — owner's
+  verbatim mapping: red = already done, green = still to order. The old
+  3-state scheme left the DEFAULT/most-common "objednane" rows fully white,
+  which is what the owner meant by "nothing is colored today".
+- **#258 (enhancement):** overview tiles block compacted (`a656302`) —
+  measured live via `page.addStyleTag` against production: 103px/79.5px
+  tile → 58.5px, `.orders-overview` block 253.5px → 169px (−33%) at
+  1366×768, all 7 numbers stay fully readable.
+- Design/root-cause/rejected-alternative comments posted to all three
+  issues BEFORE their first code commit; STILL-VALID evidence comments
+  posted for each (live Playwright screenshots + measurements against
+  `forestshop-novy.newlevel.media`).
+- Local gates all green: `pnpm typecheck`, `pnpm lint`, `pnpm --filter
+  @forestshop/web test` (421 tests, 52 files), `pnpm --filter @forestshop/api
+  test` (571 tests), `pnpm --filter @forestshop/api test:integration` (477
+  tests), `pnpm --filter @forestshop/web e2e` (42/42).
