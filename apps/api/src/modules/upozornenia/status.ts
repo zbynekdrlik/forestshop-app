@@ -14,13 +14,18 @@ export interface UpozornenieStatusInput {
   readonly resolvedAt: Date | null;
 }
 
-// [red] issue 267: zámerne nehotový stub — implementácia prichádza v
-// nasledujúcom [green] commite, tento len dokazuje, že `status.test.ts`
-// naozaj zlyhá bez skutočnej logiky.
-export function computeStatus(_row: UpozornenieStatusInput, _now: Date): UpozornenieStatus {
-  return "nove";
+export function computeStatus(row: UpozornenieStatusInput, now: Date): UpozornenieStatus {
+  if (row.resolvedAt !== null) return "vybavene";
+  if (row.postponedUntil !== null && row.postponedUntil.getTime() > now.getTime()) return "odlozene";
+  if (row.seenAt === null) return "nove";
+  return "otvorene";
 }
 
-export function isActionableNow(_row: UpozornenieStatusInput, _now: Date): boolean {
-  return false;
+// Odznak v ľavom menu aj predvolený filter "len nevybavené" ukazujú TO ISTÉ
+// číslo (návrhové rozhodnutie na tickete): nevyriešené A práve NEODLOŽENÉ.
+// Odložená karta sa do tohto počtu vráti sama v deň návratu (computeStatus
+// vyššie), bez zásahu.
+export function isActionableNow(row: UpozornenieStatusInput, now: Date): boolean {
+  const status = computeStatus(row, now);
+  return status === "nove" || status === "otvorene";
 }
