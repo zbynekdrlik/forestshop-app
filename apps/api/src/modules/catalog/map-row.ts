@@ -41,10 +41,6 @@ export interface VariantRecord {
   // ako `supplier` nižšie), NIE `variant` — na reálnom exporte je v rámci
   // jedného produktu vždy rovnaké naprieč všetkými veľkosťami.
   readonly internalNote: string | null;
-  // issue 176: kódy náhradných produktov (`relatedCodes` — pozri `RELATED_
-  // COLUMNS`/`MAX_ALTERNATIVES` nižšie), vlastnosť PRODUKTU rovnako ako
-  // `internalNote` vyššie.
-  readonly relatedCodes: readonly string[];
   readonly currency: string | null;
   readonly price: string | null;
   readonly standardPrice: string | null;
@@ -83,28 +79,6 @@ export function splitCode(code: string): { readonly productKey: string; readonly
 
 function textOrNull(raw: string): string | null {
   return raw === "" ? null : raw;
-}
-
-// issue 176: max. počet náhradných produktov, ktoré appka niekedy zobrazí
-// (stará appka's `nedostupne.py`'s `MAX_ALTERNATIVES` — boss: relatedProduct1..8).
-export const MAX_ALTERNATIVES = 8;
-
-// export's stĺpce s náhradnými produktmi — PRVÝ je bare `relatedProduct`
-// (NIE `relatedProduct1`), potom `relatedProduct2`..`relatedProduct8` (stará
-// appka's `nedostupne.py`'s `_RELATED_COLS`, overené priamo na reálnej
-// fixtúre — export nemá stĺpec `relatedProduct1`).
-export const RELATED_COLUMNS: readonly string[] = ["relatedProduct", ...Array.from({ length: 7 }, (_, i) => `relatedProduct${String(i + 2)}`)];
-
-/** Neprázdne, orezané kódy z `RELATED_COLUMNS`, orezané na `MAX_ALTERNATIVES` —
- * poradie stĺpcov exportu sa zachováva (rovnaký zámer ako stará appka). */
-export function extractRelatedCodes(row: Readonly<Record<string, string>>): readonly string[] {
-  const codes: string[] = [];
-  for (const col of RELATED_COLUMNS) {
-    const value = (row[col] ?? "").trim();
-    if (value !== "") codes.push(value);
-    if (codes.length >= MAX_ALTERNATIVES) break;
-  }
-  return codes;
 }
 
 // `percent_vat` je `numeric(5, 2)` — najviac 3 číslice pred desatinnou čiarkou
@@ -221,7 +195,6 @@ export function mapRow(row: Readonly<Record<string, string>>): {
       name,
       supplier: textOrNull((row["supplier"] ?? "").trim()),
       internalNote: textOrNull((row["internalNote"] ?? "").trim()),
-      relatedCodes: extractRelatedCodes(row),
       currency,
       price,
       standardPrice,

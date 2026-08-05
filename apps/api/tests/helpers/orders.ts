@@ -85,9 +85,6 @@ export async function insertTestVariantForProduct(
     // own row-matching column) — default null matches every existing call
     // (no prior test needed one).
     readonly pairCode?: string | null;
-    // issue 176: náhradné produkty (`product.related_codes`) — default
-    // `undefined` necháva stĺpec `null` (žiadny existujúci test ho potreboval).
-    readonly relatedCodes?: readonly string[] | null;
     // issue 224: dodávateľská linka na PRODUKTE — potrebné pre testy, kde má
     // JEDEN produkt VIAC variantov (veľkostí) zdieľajúcich tú istú linku.
     readonly internalNote?: string | null;
@@ -106,7 +103,6 @@ export async function insertTestVariantForProduct(
       // dodávateľa — potrebné pre testy ručného priradenia dodávateľa).
       supplier: "supplier" in options ? options.supplier : "Test dodávateľ",
       internalNote: options.internalNote ?? null,
-      relatedCodes: options.relatedCodes === undefined || options.relatedCodes === null ? null : [...options.relatedCodes],
       firstSeenAt: new Date("2026-01-01T00:00:00Z"),
       lastSeenAt: new Date("2026-01-01T00:00:00Z"),
       lastSeenSnapshotId: snapshotId,

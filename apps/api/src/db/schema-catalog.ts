@@ -97,17 +97,6 @@ export const products = pgTable(
     // (`modules/catalog/supplier-link.ts`), nikdy pri importe — žiadny ďalší
     // odvodený stĺpec, žiadne riziko rozídenia sa algoritmu a uložených dát.
     internalNote: text("internal_note"),
-    // issue 176: kódy NÁHRADNÝCH produktov, export's `relatedProduct`/
-    // `relatedProduct2`..`relatedProduct8` (stará appka's `nedostupne.py`'s
-    // `_RELATED_COLS` — PRVÝ je bare `relatedProduct`, nie `relatedProduct1`).
-    // Vlastnosť PRODUKTU (rovnaká úvaha ako `internalNote` vyššie — na
-    // reálnej fixtúre má KAŽDÁ veľkosť toho istého produktu zhodnú hodnotu),
-    // nie variantu. Každý kód je surový (variant `code` ALEBO `pairCode` —
-    // rieši sa až pri čítaní, `modules/nedostupne/queries.ts`), max 8 prvkov
-    // (`MAX_ALTERNATIVES`, `modules/catalog/map-row.ts`). `null` = žiadny
-    // náhradný tovar priradený (nikdy prázdne pole — rozlišuje "nevieme" od
-    // "explicitne žiadny", rovnaký zámer ako `internalNote`'s `null`).
-    relatedCodes: text("related_codes").array(),
     firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).notNull(),
     lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull(),
     lastSeenSnapshotId: uuid("last_seen_snapshot_id")
