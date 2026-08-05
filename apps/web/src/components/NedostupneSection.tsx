@@ -37,6 +37,9 @@ export function NedostupneSection({ role, onSessionExpired }: { readonly role: M
   const [busyKey, setBusyKey] = useState("");
   const [actionError, setActionError] = useState("");
   const [pending, setPending] = useState<PendingSend | null>(null);
+  // issue 277: obsluhou upravený text okna náhľadu — predvyplnený z
+  // `preview.text` pri otvorení, needovateľný pri zatvorení/novom otvorení.
+  const [editedBody, setEditedBody] = useState("");
   // issue 191: spúšťacie tlačidlo si pamätáme už pri kliknutí — kým sa náhľad
   // načítava, je `disabled` a prehliadač z neho fokus zhodí, takže po zavretí
   // dialógu by sa nemal kam vrátiť (naživo overené na produkcii).
@@ -76,6 +79,7 @@ export function NedostupneSection({ role, onSessionExpired }: { readonly role: M
       fetchNedostupnePreview(orderCode, variantCode, emailType)
         .then((preview) => {
           setPending({ orderCode, variantCode, emailType, preview });
+          setEditedBody(preview.text);
         })
         .catch((err: unknown) => {
           if (err instanceof NedostupneUnauthorizedError) {
@@ -95,7 +99,7 @@ export function NedostupneSection({ role, onSessionExpired }: { readonly role: M
     if (pending === null) return;
     const key = `${pending.orderCode}|${pending.variantCode}|${pending.emailType}`;
     setBusyKey(key);
-    sendNedostupneEmail(pending.orderCode, pending.variantCode, pending.emailType, pending.preview.previewToken)
+    sendNedostupneEmail(pending.orderCode, pending.variantCode, pending.emailType, pending.preview.previewToken, editedBody)
       .then((result) => {
         if (!result.ok) {
           setActionError(result.error);
@@ -114,7 +118,7 @@ export function NedostupneSection({ role, onSessionExpired }: { readonly role: M
       .finally(() => {
         setBusyKey("");
       });
-  }, [pending, load, onSessionExpired]);
+  }, [pending, editedBody, load, onSessionExpired]);
 
   // issue 238: pridanie majiteľovho ručného odkazu náhrady — po úspechu sa
   // draft vyprázdni a zoznam sa znova načíta (server je zdroj pravdy, žiadny
@@ -326,9 +330,10 @@ export function NedostupneSection({ role, onSessionExpired }: { readonly role: M
           title="Náhľad e-mailu — povinné pred odoslaním"
           recipient={pending.preview.recipient}
           subject={pending.preview.subject}
-          html={pending.preview.html}
+          bodyText={editedBody}
+          onBodyTextChange={setEditedBody}
           confirmLabel="📧 Odoslať zákazníkovi"
-          confirmDisabled={busyKey !== ""}
+          confirmDisabled={busyKey !== "" || editedBody.trim() === ""}
           onConfirm={confirmSend}
           returnFocusRef={triggerRef}
           onClose={() => {

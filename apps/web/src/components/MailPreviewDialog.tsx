@@ -10,12 +10,22 @@ import { useEffect, useRef, type JSX, type ReactNode, type RefObject } from "rea
 // Komponenta je generická (žiadna zmienka o "nedostupných tovaroch") — ďalšie
 // automatizácie posielajú e-maily rovnakým spôsobom a majú ten istý kontrakt
 // "bez potvrdenia človekom e-mail neodíde".
+//
+// issue 277: telo e-mailu je odteraz EDITOVATEĽNÉ priamo v okne — `bodyText`/
+// `onBodyTextChange` nahrádzajú pôvodný read-only `dangerouslySetInnerHTML`
+// z `html`. Volajúci sedí na PLAIN-TEXTOVEJ verzii (`RenderedEmail.text`,
+// appka ju už počíta od issue 192) — HTML formátovanie (tučné písmo) sa pri
+// ručnej úprave zámerne nezachováva (obsluha edituje hotové vety, nie
+// šablónu); server escapuje a bezpečne prevedie späť na HTML
+// (`renderEditedBody`). Predmet/príjemca ostávajú needitovateľné — ticket
+// hovorí o úprave TEXTU e-mailu, nie predmetu.
 export function MailPreviewDialog({
   testId,
   title,
   recipient,
   subject,
-  html,
+  bodyText,
+  onBodyTextChange,
   confirmLabel,
   confirmDisabled,
   onConfirm,
@@ -27,7 +37,8 @@ export function MailPreviewDialog({
   readonly title: string;
   readonly recipient: string;
   readonly subject: string;
-  readonly html: string;
+  readonly bodyText: string;
+  readonly onBodyTextChange: (value: string) => void;
   readonly confirmLabel: string;
   readonly confirmDisabled: boolean;
   readonly onConfirm: () => void;
@@ -101,11 +112,22 @@ export function MailPreviewDialog({
         <p className="modal-meta">
           Komu: {recipient} — Predmet: {subject}
         </p>
-        {/* `html` je appkou GENEROVANÝ e-mail (napr. `buildEmailForType`,
-            `modules/nedostupne/logic.ts`) — meno zákazníka aj náhradné
-            produkty sú tam už HTML-escapované, nikdy surový užívateľský
-            vstup priamo tu. */}
-        <div className="modal-body" dangerouslySetInnerHTML={{ __html: html }} />
+        <label className="modal-body-label" htmlFor={`${testId}-body`}>
+          Text e-mailu (dá sa upraviť pred odoslaním)
+        </label>
+        {/* issue 277: obsluha edituje priamo tu — odošle sa PRESNE tento
+            text (server ho pri odoslaní escapuje a bezpečne prevedie na
+            HTML, `renderEditedBody`), nikdy pôvodná šablóna. */}
+        <textarea
+          id={`${testId}-body`}
+          className="modal-body modal-body-edit"
+          data-testid={`${testId}-body`}
+          value={bodyText}
+          onChange={(e) => {
+            onBodyTextChange(e.target.value);
+          }}
+          rows={10}
+        />
         {children}
         <div className="modal-actions">
           <button
