@@ -56,7 +56,7 @@ const CP1250_ENCODE: ReadonlyMap<string, number> = (() => {
 })();
 
 function encodeCp1250(text: string): Buffer {
-  return Buffer.from(Uint8Array.from([...text].map((ch) => CP1250_ENCODE.get(ch) ?? 0x3f)));
+  return Buffer.from(Uint8Array.from(Array.from(text, (ch) => CP1250_ENCODE.get(ch) ?? 0x3f)));
 }
 
 function buildCsv(header: readonly string[], rows: readonly Record<string, string>[]): Buffer {
