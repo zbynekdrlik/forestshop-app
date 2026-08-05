@@ -2,6 +2,7 @@ import { useCallback, useContext, useEffect, useRef, useState, type JSX } from "
 import type { Me } from "../api.js";
 import { UpozorneniaBadgeRefreshContext } from "../upozorneniaBadgeContext.js";
 import {
+  cancelPostponeUpozornenie,
   createOwnNote,
   deleteOwnNote,
   fetchUpozornenia,
@@ -54,6 +55,9 @@ export function UpozorneniaSection({ role, onSessionExpired }: { readonly role: 
   const [rows, setRows] = useState<readonly UpozornenieRow[] | null>(null);
   const [error, setError] = useState("");
   const [includeResolved, setIncludeResolved] = useState(false);
+  // issue 267 (živé overenie, gap 2): nezávislý filter od `includeResolved`
+  // — odložená karta bola bez tohto NAVŽDY skrytá, aj s "aj vybavené".
+  const [includePostponed, setIncludePostponed] = useState(false);
   const [busyId, setBusyId] = useState("");
   const [draft, setDraft] = useState<EditDraft | null>(null);
   const [postponeDraft, setPostponeDraft] = useState<Record<string, string>>({});
@@ -65,7 +69,7 @@ export function UpozorneniaSection({ role, onSessionExpired }: { readonly role: 
   const { refresh: refreshBadge } = useContext(UpozorneniaBadgeRefreshContext);
 
   const load = useCallback(() => {
-    fetchUpozornenia({ includeResolved })
+    fetchUpozornenia({ includeResolved, includePostponed })
       .then(setRows)
       .catch((err: unknown) => {
         if (err instanceof UpozorneniaUnauthorizedError) {
@@ -74,7 +78,7 @@ export function UpozorneniaSection({ role, onSessionExpired }: { readonly role: 
         }
         setError("Upozornenia sa nepodarilo načítať.");
       });
-  }, [includeResolved, onSessionExpired]);
+  }, [includeResolved, includePostponed, onSessionExpired]);
 
   // Otvorenie záložky = "prečítané" (inbox vzor) — PRVÉ spustenie tohto
   // efektu (mountedRef ešte `false`) hromadne označí všetky práve "Nové"
@@ -166,6 +170,16 @@ export function UpozorneniaSection({ role, onSessionExpired }: { readonly role: 
           />{" "}
           aj vybavené
         </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={includePostponed}
+            onChange={(e) => {
+              setIncludePostponed(e.target.checked);
+            }}
+          />{" "}
+          aj odložené
+        </label>
         {canControl && (
           <button
             type="button"
@@ -251,6 +265,11 @@ export function UpozorneniaSection({ role, onSessionExpired }: { readonly role: 
                   </span>
                   {row.status === "nove" && <strong data-testid={`upozornenie-nove-${row.id}`}>Nové</strong>}
                   {row.status === "vybavene" && <span className="pill off">Vybavené</span>}
+                  {row.status === "odlozene" && (
+                    <span className="pill" data-testid={`upozornenie-odlozene-${row.id}`}>
+                      Odložené{row.postponedUntil !== null && <> do {formatDate(row.postponedUntil)}</>}
+                    </span>
+                  )}
                 </div>
                 <p className="upozornenie-title">{row.title}</p>
                 {row.details !== "" && <p className="upozornenie-details">{row.details}</p>}
@@ -300,6 +319,22 @@ export function UpozorneniaSection({ role, onSessionExpired }: { readonly role: 
                     >
                       Odložiť
                     </button>
+                    {row.status === "odlozene" && (
+                      // issue 267 (živé overenie, gap 2): jediný spôsob, ako
+                      // vrátiť odloženú kartu SKÔR, než sa vráti sama (napr.
+                      // majiteľ sa pomýlil v dátume).
+                      <button
+                        type="button"
+                        className="btn sm ghost"
+                        disabled={rowBusy}
+                        onClick={() => {
+                          withBusy(row.id, () => cancelPostponeUpozornenie(row.id));
+                        }}
+                        data-testid={`upozornenie-cancel-postpone-${row.id}`}
+                      >
+                        Zrušiť odloženie
+                      </button>
+                    )}
                     {isOwn && (
                       <>
                         <button
