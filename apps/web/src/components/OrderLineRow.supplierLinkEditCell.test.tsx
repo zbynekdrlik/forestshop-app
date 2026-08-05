@@ -36,6 +36,7 @@ const ZAKLAD = {
   externalCode: null,
   supplierAssignable: false,
   manualSupplierOverride: null,
+  ourUrl: null,
 };
 
 const RIADOK_BEZ_ODKAZU = { ...ZAKLAD, lineId: "11111111-0000-0000-0000-000000000010", supplierUrl: null };

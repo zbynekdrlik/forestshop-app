@@ -244,6 +244,32 @@ export function OrderLineRow({
           >
             {line.externalOrderId}
           </a>
+          {/* issue 276: majiteľ, "pod číslom objednávky aj kód produktu,
+              prelinkovaný na náš eshop — niekedy sa musím pozrieť, ako ten
+              produkt vyzerá". Adresa ide z rovnakého feedu pre porovnávače
+              ako `nedostupne`/`restock` (issue 220) — keď kód vo feede nie
+              je, `line.ourUrl` je `null` a kód sa vykreslí ako neaktívny
+              text, NIKDY vyhľadávací fallback (majiteľova výslovná
+              podmienka). */}
+          <div className="ord-code-cell" data-testid={`code-cell-${line.lineId}`}>
+            {line.ourUrl !== null ? (
+              <a
+                href={line.ourUrl}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="ord-code-link"
+                data-testid={`code-link-${line.lineId}`}
+                aria-label={`Otvoriť produkt ${line.variantCode} na našom eshope`}
+                title="Otvoriť produkt na našom eshope"
+              >
+                {line.variantCode}
+              </a>
+            ) : (
+              <span className="ord-code-text" data-testid={`code-text-${line.lineId}`}>
+                {line.variantCode}
+              </span>
+            )}
+          </div>
         </td>
         <td>{line.customerName}</td>
         {/* issue 171: majiteľ, doslovne "poznamka zakaznika daj pod text

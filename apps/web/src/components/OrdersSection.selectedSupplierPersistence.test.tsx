@@ -42,6 +42,7 @@ const LINE_ALFA = {
   externalCode: null,
   supplierAssignable: false,
   manualSupplierOverride: null,
+  ourUrl: null,
 };
 
 const LINE_BETA = { ...LINE_ALFA, lineId: "22222222-2222-2222-2222-222222222148", variantCode: "P-2" };

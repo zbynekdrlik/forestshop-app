@@ -37,6 +37,7 @@ const ZAKLAD = {
   supplierNote: null,
   externalCode: null,
   manualSupplierOverride: null,
+  ourUrl: null,
 };
 
 const RIADOK_NERADITELNY = {

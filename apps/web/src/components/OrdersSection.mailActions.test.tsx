@@ -53,6 +53,7 @@ const LINE_STARA = {
   externalCode: null,
   supplierAssignable: false,
   manualSupplierOverride: null,
+  ourUrl: null,
 };
 
 // Rovnaký riadok, ale vo stave "caka_sa" (vybavený, nie "objednane") —

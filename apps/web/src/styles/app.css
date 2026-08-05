@@ -1427,6 +1427,34 @@ tr:last-child td {
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+/* issue 276: majiteľ, "pod číslom objednávky nech je aj kód produktu,
+   prelinkovaný na náš eshop" — druhý (block-level) riadok POD číslom
+   objednávky, v TEJ ISTEJ bunke (žiadny nový stĺpec) — rovnaký "žiadny
+   display:flex priamo na `<td>`" princíp ako `.ord-remark-cell`/
+   `.ord-product-name` (issue 163/171/95). Kód sa vykreslí ako odkaz LEN keď
+   poznáme jeho adresu z feedu pre porovnávače (`line.ourUrl`), inak ako
+   neaktívny text — nikdy vyhľadávací fallback (majiteľova výslovná
+   podmienka, rovnaký zámer ako `nedostupne/queries.ts`'s `ourProductUrl`,
+   issue 238 — na rozdiel od `shopLinks.ts`'s `ourProductLink`, ktorý
+   fallback POUŽÍVA na `restock` obrazovke). Druhoradý údaj → tlmená farba +
+   menšie písmo, rovnaký vzor ako `.ord-remark`. */
+.ord-code-cell {
+  max-width: 100%;
+  margin-top: var(--fs-space-1);
+}
+.ord-code-link,
+.ord-code-text {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-text-xs);
+  color: var(--fs-ink-muted);
+}
+.ord-code-link {
+  text-decoration: underline;
+}
 /* issue 65: upozornenie na starú nevybavenú objednávku (>14 dní) — výrazná
    farba (`--fs-warning`), rovnaká sémantika ako `.orders-table tr.state-
    caka_sa` vyššie, ale nezávislá od stavu riadku (môže sa zobraziť pri

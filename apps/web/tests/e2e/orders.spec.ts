@@ -305,6 +305,14 @@ test("manažér vidí otvorené objednávky zoskupené podľa dodávateľa, konz
   // Objednávka 9001 je UŽ vybavená (stav "caka_sa") — upozornenie na staré
   // objednávky sa NIKDY nezobrazí pre vybavený riadok, aj keby bol starý.
   await expect(riadokAlfa.locator("[data-testid^='stale-badge-']")).toHaveCount(0);
+  // issue 276: "4859/46" NEMÁ riadok v `shop_product_url` (feed pre
+  // porovnávače, `scripts/e2e-setup.ts` ho seeduje LEN pre "40287"/
+  // "PREP-2") — kód sa preto zobrazí ako obyčajný, nekliknuteľný text
+  // (akceptačná podmienka 2), nikdy vyhľadávací fallback.
+  const kodAlfa = riadokAlfa.getByText("4859/46", { exact: true });
+  await expect(kodAlfa).toBeVisible();
+  expect(await kodAlfa.evaluate((el) => el.tagName)).toBe("SPAN");
+  await expect(riadokAlfa.getByRole("link", { name: "Otvoriť produkt 4859/46 na našom eshope" })).toHaveCount(0);
 
   // Objednávka 9002 je nad variantom "40287", ktorý nemá dodávateľa
   // (`product.supplier` je `null`) — zoskupí sa pod zástupný kľúč, nie pod
@@ -320,10 +328,16 @@ test("manažér vidí otvorené objednávky zoskupené podľa dodávateľa, konz
   await expect(riadokBez).toContainText("9002");
   await expect(riadokBez).toContainText("E2E Zákazník Bez dodávateľa");
   await expect(riadokBez).toContainText("Čiapka Polar FOREST");
-  // issue 117: variant kód ("40287") sa už NIKDE nezobrazuje viditeľne —
-  // stále však nesie zmysel (a je overiteľný) cez aria-label na obale
-  // stavových tlačidiel tohto riadku (issue 161: predtým `<select>`, ten
-  // istý `aria-label` ostal zachovaný na `role="radiogroup"` obale).
+  // issue 117: variant kód sa PREDTÝM nikde nezobrazoval viditeľne (zostal
+  // len v aria-label na obale stavových tlačidiel, issue 161) — issue 276
+  // ho vrátilo naspäť, pod číslo objednávky, ako odkaz na náš eshop.
+  // `scripts/e2e-setup.ts` seeduje `shop_product_url` riadok pre "40287"
+  // (preklik na eshop pre "Nedostupné tovary", issue 238) — TEN ISTÝ riadok
+  // (kľúčovaný len kódom variantu, nie objednávkou) sa preto použije aj tu.
+  const kodBez = riadokBez.getByRole("link", { name: "Otvoriť produkt 40287 na našom eshope" });
+  await expect(kodBez).toHaveAttribute("href", "https://www.forestshop.sk/e2e-nedostupne-40287/");
+  await expect(kodBez).toHaveAttribute("target", "_blank");
+  await expect(kodBez).toHaveText("40287");
   await expect(riadokBez.getByLabel("Zmeniť stav riadku objednávky 9002 / 40287")).toBeVisible();
   // Predvolený stav riadku (schema default "objednane") a chýbajúca veľkosť —
   // issue 60: premenované na "Nevybavené" (slovo "Objednané" teraz patrí
