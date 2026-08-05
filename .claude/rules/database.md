@@ -196,3 +196,16 @@ paths:
   proti reálnej DB predtým, než tomu dôveruješ — "vyzerá to ako správny SQL
   text v zdrojáku" nestačí, JS parsing šablóny beží PRED tým, než sa
   reťazec vôbec dostane k drizzle.
+- **`.orderBy(...)` sa NESMIE odvolávať na `select`-ov ALIAS pomenovaný
+  agregátnym `count(*) filter (where ...)` výrazom cez `sql\`aliasMeno\``
+  — drizzle taký alias negeneruje ako bežný výstupný stĺpec, Postgres
+  vráti `column "aliasMeno" does not exist` (issue 227, naživo overené
+  integračným testom, `supplier-stock/queries.ts`'s
+  `getSupplierStockHostOverview`). Code review navrhol `desc(sql\`total\`)`
+  namiesto opakovaného `desc(sql\`count(*)\`)` ako "menej duplicitné" — pri
+  reálnom behu to zhodilo `GET /api/supplier-stock` na 500. Fix: vrátiť sa
+  k opakovanému `count(*)`/inému AGREGÁTNEMU VÝRAZU priamo v `ORDER BY`,
+  nikdy sa nespoliehať na alias z `FILTER`-ovaného `sql` výrazu. Test na
+  KAŽDÝ ĎALŠÍ pokus "zjednodušiť" `ORDER BY` odkazom na alias z podobného
+  agregátu: over PRIAMO integračným testom proti reálnej DB (nie len že
+  `tsc`/`eslint` prejdú) — statická kontrola typov toto nezachytí.

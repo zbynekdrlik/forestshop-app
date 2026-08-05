@@ -239,8 +239,15 @@ export function fromMetaTags(html: string): SchemaHit | null {
 
 interface TextAvailabilityRule {
   readonly host: string;
-  /** Vyberie z CELEJ stránky LEN oblasť s dostupnosťou TOHTO produktu. `null` = oblasť sa nenašla. */
-  readonly extractRegion: (html: string) => string | null;
+  /**
+   * Vyberie z CELEJ stránky LEN oblasť s dostupnosťou TOHTO produktu. `null`
+   * = oblasť sa nenašla. `url` (issue 241) je k dispozícii pre extraktory,
+   * ktoré vedia krížovo overiť nájdenú oblasť proti ID/slugu SCRAPOVANÉHO
+   * produktu (napr. `trigonaStockRegion`) — extraktor, ktorý takú kontrolu
+   * nepotrebuje (má vlastnú štruktúrnu záruku inak, napr. CSS triedu), ho
+   * jednoducho nemusí deklarovať vo svojej signatúre.
+   */
+  readonly extractRegion: (html: string, url: string) => string | null;
   /** Čo znamená CHÝBAJÚCA oblasť (žiadny štítok pri produkte). */
   readonly whenRegionMissing: SupplierAvailability;
 }
@@ -264,38 +271,52 @@ function huntingshopDetailBadges(html: string): string | null {
   return texts.length > 0 ? texts.join(" ") : null;
 }
 
+const TRIGONA_STOCK_COUNT_RE =
+  /<span\b[^>]*\bid="StockCountText(\d+)"[^>]*>\s*<span\b[^>]*\bstyle="[^"]*color:\s*(#[0-9a-fA-F]{6})[^"]*"[^>]*>/gi;
+const TRIGONA_PRODUCT_ID_RE = /\/p-(\d+)\.xhtml/i;
+
 /**
- * trigona.sk (issue 230): dostupnosť PRI produkte nesie `<span
- * id="StockCountText<ID>">` s vnoreným `<span style="color: …">` — `<ID>`
- * je ČÍSLO KONKRÉTNEHO produktu z URL, takže na rozdiel od huntingshop.eu
- * tu nehrozí žiadna karuselová kolízia (overené naživo: na 31 rôznych
- * produktových stránkach naprieč viacerými kategóriami sa tento prvok
- * vyskytol VŽDY práve raz). Farba rozhoduje o dostupnosti — obe polarity sú
- * naživo overené proti JSON-LD na TOM ISTOM produkte: `#00b020` (zelená,
- * text "Na sklade") zodpovedá JSON-LD `InStock`; `#024bbd` (modrá, text
- * "1 - 4 týždne" — dodacia lehota, nie doslovné slovo "vypredané")
- * zodpovedá JSON-LD `OutOfStock`. Farba sa prekladá na kanonické slovo, aby
- * prešlo existujúcim `availabilityFromText` zoznamom kľúčových slov.
+ * trigona.sk (issue 230, ID krížová kontrola issue 241): dostupnosť PRI
+ * produkte nesie `<span id="StockCountText<ID>">` s vnoreným `<span
+ * style="color: …">` — `<ID>` je ČÍSLO KONKRÉTNEHO produktu, ktoré sa MUSÍ
+ * zhodovať s ID v URL (`.../p-<ID>.xhtml`), inak sa oblasť nepovažuje za
+ * patriacu scrapovanému produktu. Predtým (issue 230) sa bral PRVÝ výskyt v
+ * dokumente bez tejto kontroly — fungovalo to len vďaka empirickému dôkazu
+ * (31 naživo overených stránok, vždy práve jeden výskyt), nie vďaka
+ * štruktúrnej záruke. Keby trigona.sk niekedy pridala súvisiaci produkt s
+ * rovnakou značkou VYŠŠIE na stránke, prvý-v-poradí by bol ISTO ZLÁ
+ * odpoveď — preto sa teraz prechádzajú VŠETKY výskyty a vyberie sa ten,
+ * ktorého `<ID>` sedí s URL.
  *
- * Nerozpoznaná farba ANI chýbajúci prvok sa NEHÁDŽE na žiadnu stranu —
- * vracia sa `null` (`whenRegionMissing: "unknown"` nižšie). Na rozdiel od
- * huntingshop.eu, kde je naživo overené, že vypredaný produkt štítok vôbec
- * nemá, sa na trigona.sk medzi overenými vzorkami nikdy nevyskytla stránka
- * bez tohto prvku — preto tu niet dôkazu, čo by chýbajúci štítok znamenal.
+ * Farba rozhoduje o dostupnosti — obe polarity sú naživo overené proti
+ * JSON-LD na TOM ISTOM produkte: `#00b020` (zelená, text "Na sklade")
+ * zodpovedá JSON-LD `InStock`; `#024bbd` (modrá, text "1 - 4 týždne" —
+ * dodacia lehota, nie doslovné slovo "vypredané") zodpovedá JSON-LD
+ * `OutOfStock`. Farba sa prekladá na kanonické slovo, aby prešlo
+ * existujúcim `availabilityFromText` zoznamom kľúčových slov.
+ *
+ * Nerozpoznaná farba, nerozobrateľné ID z URL, chýbajúci/nezhodný prvok,
+ * ANI DVA zhodné-ID výskyty s ROZDIELNOU farbou (nejednoznačné, rovnaká
+ * disciplína ako `matchSizeLabel`: viac než jedna zhoda sa počíta ako
+ * žiadna) sa NEHÁDŽU na žiadnu stranu — vracia sa `null`
+ * (`whenRegionMissing: "unknown"` nižšie). Na rozdiel od huntingshop.eu,
+ * kde je naživo overené, že vypredaný produkt štítok vôbec nemá, sa na
+ * trigona.sk medzi overenými vzorkami nikdy nevyskytla stránka bez tohto
+ * prvku — preto tu niet dôkazu, čo by chýbajúci štítok znamenal.
  */
-function trigonaStockRegion(html: string): string | null {
-  // `[^>]*` okolo id/style (rovnaký vzor ako huntingshopDetailBadges/
-  // odimonVisibleAvailability nižšie) toleruje ďalšie atribúty aj iné
-  // poradie — nie len presne ten tvar, aký mali naživo overené vzorky.
-  const match =
-    /<span\b[^>]*\bid="StockCountText\d+"[^>]*>\s*<span\b[^>]*\bstyle="[^"]*color:\s*(#[0-9a-fA-F]{6})[^"]*"[^>]*>/i.exec(
-      html,
-    );
-  if (match === null) return null;
-  const color = (match[1] ?? "").toLowerCase();
-  if (color === "#00b020") return "skladom";
-  if (color === "#024bbd") return "vypredané";
-  return null;
+function trigonaStockRegion(html: string, url: string): string | null {
+  const productId = TRIGONA_PRODUCT_ID_RE.exec(url)?.[1];
+  if (productId === undefined) return null;
+  const resolved = new Set<string>();
+  for (const match of html.matchAll(TRIGONA_STOCK_COUNT_RE)) {
+    const [, id, colorRaw] = match;
+    if (id !== productId) continue;
+    const color = (colorRaw ?? "").toLowerCase();
+    if (color === "#00b020") resolved.add("skladom");
+    else if (color === "#024bbd") resolved.add("vypredané");
+  }
+  const values = [...resolved];
+  return values.length === 1 ? (values[0] ?? null) : null;
 }
 
 /**
@@ -605,7 +626,7 @@ export function parsePage(html: string, url: string): ParsedPage {
 
   const textRule = textAvailabilityRuleFor(url);
   if (textRule !== null) {
-    const region = textRule.extractRegion(html);
+    const region = textRule.extractRegion(html, url);
     if (region === null) {
       return { availability: textRule.whenRegionMissing, availabilityText: "", price: null, source: "text" };
     }
