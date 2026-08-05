@@ -3,10 +3,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { eq } from "drizzle-orm";
 import { afterEach, expect, it } from "vitest";
-import { upozornenie } from "../src/db/schema.js";
+import { upozornenie, users } from "../src/db/schema.js";
+import { hashPassword } from "../src/modules/auth/passwords.js";
 import { ingestOrders, type OrdersExportFetcher } from "../src/modules/orders/ingest.js";
-import { insertTestVariant } from "./helpers/orders.js";
+import { resolveUpozornenie } from "../src/modules/upozornenia/service.js";
 import { withCleanDb } from "./helpers/db.js";
+import { insertTestVariant } from "./helpers/orders.js";
+import { encodeCp1250, RETURN_STATUS_CSV_HEADER, buildReturnStatusCsv, returnStatusRowOf } from "./helpers/orders-return-csv.js";
 
 // issue 269: import objednávok vyrobí/obnoví kartu na Upozorneniach (#267),
 // keď objednávka prejde do vrátkového stavu — vydelené do VLASTNÉHO súboru
@@ -42,45 +45,13 @@ function fetcherOf(body: Buffer): OrdersExportFetcher {
 // diakritiku pri UTF-8 zápise na druhej strane pokazila, `.claude/rules/
 // orders.md`), tento súbor POTREBUJE reálne vrátkové stavy s diakritikou
 // ("Vratený tovar" a pod.) — preto sa CSV zapisuje priamo ako cp1250 BYTES,
-// nie ako UTF-8 text. Kódovaciu tabuľku (znak → byte) staviame DYNAMICKY
-// dekódovaním všetkých 256 bajtov cez `TextDecoder("windows-1250")` a
-// obrátením mapy — žiadna nová závislosť (`iconv-lite`), žiadna ručne
-// prepisovaná tabuľka kódových bodov.
-const CP1250_ENCODE: ReadonlyMap<string, number> = (() => {
-  const map = new Map<string, number>();
-  for (let byte = 0; byte < 256; byte += 1) {
-    const ch = new TextDecoder("windows-1250").decode(Buffer.from([byte]));
-    if (!map.has(ch)) map.set(ch, byte);
-  }
-  return map;
-})();
-
-function encodeCp1250(text: string): Buffer {
-  return Buffer.from(Uint8Array.from(Array.from(text, (ch) => CP1250_ENCODE.get(ch) ?? 0x3f)));
-}
-
-function buildCsv(header: readonly string[], rows: readonly Record<string, string>[]): Buffer {
-  const esc = (v: string): string => `"${v.replaceAll('"', '""')}"`;
-  const lines = [header.map(esc).join(";") + ";"];
-  for (const row of rows) {
-    lines.push(header.map((c) => esc(row[c] ?? "")).join(";") + ";");
-  }
-  return encodeCp1250(lines.join("\r\n") + "\r\n");
-}
-
-const HEADER = ["code", "date", "statusName", "billFullName", "itemName", "itemAmount", "itemCode"] as const;
-
-function rowOf(code: string, statusName: string): Record<string, string> {
-  return {
-    code,
-    date: "2026-06-15 10:30:00",
-    statusName,
-    billFullName: "Ján Novák",
-    itemName: "Nohavice",
-    itemAmount: "1",
-    itemCode: "40237/XL",
-  };
-}
+// nie ako UTF-8 text. Pomocníky sú od issue 269's TOCTOU zámkového testu
+// ZDIEĽANÉ (`./helpers/orders-return-csv.js`), aby ich nemal aj DRUHÝ súbor
+// (`orders-ingest-return-upozornenie-lock.integration.test.ts`) stavať
+// nezávisle znova.
+const HEADER = RETURN_STATUS_CSV_HEADER;
+const buildCsv = buildReturnStatusCsv;
+const rowOf = returnStatusRowOf;
 
 it("encodeCp1250 je verný inverzný krok voči appkinmu decodeCp1250 (sebakontrola fixtúry)", () => {
   const original = "Vratený tovar — Vybavená výmena — Vybavený Dobropis";
@@ -171,4 +142,88 @@ it("prechod z jedného vrátkového stavu do druhého (Vratený tovar -> Vybaven
   expect(after).toHaveLength(1); // stále JEDNA karta na objednávku, nikdy druhá pre nový pod-stav
   expect(after[0]?.id).toBe(before[0]?.id);
   expect(after[0]?.title).toContain("vybavený dobropis");
+});
+
+// issue 269 (naživo overenie na 0.3.0-dev.160): vybavené vrátenie je
+// KONEČNÉ — na rozdiel od #268's nevyzdvihnutej zásielky sa nesmie NIKDY
+// znova ohlásiť, aj keď Shoptet-ov status objednávky ostáva v tom istom
+// vrátkovom stave navždy (žiadna budúca zmena ho nikdy nevráti späť).
+it("po vybavení karty (Vybavené) opakovaný import UŽ NEVYROBÍ druhú kartu na tú istú objednávku", async () => {
+  const { db, dir } = await boot();
+  await insertTestVariant(db, "40237/XL");
+  const csv = buildCsv(HEADER, [rowOf("20600005", "Vratený tovar")]);
+
+  await ingestOrders(db, { fetchExport: fetcherOf(csv), now: NOW, rawDir: dir, windowStart: WINDOW_START, windowEnd: WINDOW_END });
+  const before = await db.select().from(upozornenie).where(eq(upozornenie.dedupKey, "vratenie:20600005"));
+  expect(before).toHaveLength(1);
+  const cardId = before[0]?.id;
+  if (cardId === undefined) throw new Error("karta sa nevyrobila");
+
+  const [user] = await db
+    .insert(users)
+    .values({ email: "majitel-269@forestshop.sk", passwordHash: await hashPassword("test-heslo-abc"), displayName: "Majiteľ", role: "manazer" })
+    .returning({ id: users.id });
+  if (user === undefined) throw new Error("test používateľ sa nepodarilo vložiť");
+  const resolved = await resolveUpozornenie(db, { id: cardId, resolvedByUserId: user.id, now: new Date("2026-07-31T09:00:00Z") });
+  expect(resolved).toBe(true);
+
+  await ingestOrders(db, {
+    fetchExport: fetcherOf(csv),
+    now: new Date("2026-08-01T10:00:00Z"),
+    rawDir: dir,
+    windowStart: WINDOW_START,
+    windowEnd: WINDOW_END,
+  });
+
+  const after = await db.select().from(upozornenie).where(eq(upozornenie.dedupKey, "vratenie:20600005"));
+  expect(after).toHaveLength(1); // presne jedna karta — stále tá vybavená, žiadna nová
+  expect(after[0]?.id).toBe(cardId);
+  expect(after[0]?.resolvedAt).not.toBeNull();
+});
+
+// Code review (issue 269): jediný predošlý test overoval vždy PRESNE JEDNU
+// vrátkovú objednávku za beh — ale skutočná nová logika je dávkový `Set`
+// (`resolvedReturnDedupKeys`), postavený nad VŠETKÝMI kandidátmi TOHO ISTÉHO
+// importu naraz. Tento test dokazuje, že vybavenie JEDNEJ objednávky v dávke
+// NEOVPLYVNÍ ostatné — objednávka, čo ešte nie je vybavená, sa naďalej
+// normálne obnoví, aj keď je v tom istom CSV/behu ako tá vybavená.
+it("v jednom importe s viacerými vrátkovými objednávkami ovplyvní vybavenie LEN tú svoju kartu", async () => {
+  const { db, dir } = await boot();
+  await insertTestVariant(db, "40237/XL");
+  const csv = buildCsv(HEADER, [rowOf("20600008", "Vratený tovar"), rowOf("20600009", "Vybavená výmena")]);
+
+  await ingestOrders(db, { fetchExport: fetcherOf(csv), now: NOW, rawDir: dir, windowStart: WINDOW_START, windowEnd: WINDOW_END });
+  const beforeResolved = await db.select().from(upozornenie).where(eq(upozornenie.dedupKey, "vratenie:20600008"));
+  const beforeOpen = await db.select().from(upozornenie).where(eq(upozornenie.dedupKey, "vratenie:20600009"));
+  expect(beforeResolved).toHaveLength(1);
+  expect(beforeOpen).toHaveLength(1);
+  const resolvedCardId = beforeResolved[0]?.id;
+  const openCardId = beforeOpen[0]?.id;
+  if (resolvedCardId === undefined || openCardId === undefined) throw new Error("karty sa nevyrobili");
+
+  const [user] = await db
+    .insert(users)
+    .values({ email: "majitel-269-dvojica@forestshop.sk", passwordHash: await hashPassword("test-heslo-abc"), displayName: "Majiteľ", role: "manazer" })
+    .returning({ id: users.id });
+  if (user === undefined) throw new Error("test používateľ sa nepodarilo vložiť");
+  expect(await resolveUpozornenie(db, { id: resolvedCardId, resolvedByUserId: user.id, now: new Date("2026-07-31T09:00:00Z") })).toBe(true);
+
+  // Druhý import — rovnaké CSV, obe objednávky ostávajú vo vrátkovom stave.
+  await ingestOrders(db, {
+    fetchExport: fetcherOf(csv),
+    now: new Date("2026-08-01T10:00:00Z"),
+    rawDir: dir,
+    windowStart: WINDOW_START,
+    windowEnd: WINDOW_END,
+  });
+
+  const afterResolved = await db.select().from(upozornenie).where(eq(upozornenie.dedupKey, "vratenie:20600008"));
+  expect(afterResolved).toHaveLength(1); // vybavená ostáva vybavená, žiadna nová
+  expect(afterResolved[0]?.id).toBe(resolvedCardId);
+  expect(afterResolved[0]?.resolvedAt).not.toBeNull();
+
+  const afterOpen = await db.select().from(upozornenie).where(eq(upozornenie.dedupKey, "vratenie:20600009"));
+  expect(afterOpen).toHaveLength(1); // stále JEDNA karta, ale STÁLE OBNOVENÁ — nikdy sa nedotkla druhého kandidáta
+  expect(afterOpen[0]?.id).toBe(openCardId);
+  expect(afterOpen[0]?.resolvedAt).toBeNull();
 });

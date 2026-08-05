@@ -151,3 +151,62 @@ paths:
   DB, nie chyba tejto techniky. Rovnaký postup (predhriaty pool + vyšší
   počet súbežných volaní) použi pri KAŽDOM ĎALŠOM teste, čo dokazuje opravu
   TOCTOU/race-u cez skutočný Postgres, nie mock.
+- **Issue 269 (živé overenie na 0.3.0-dev.160): vybavené vrátenie sa PO
+  ĎALŠOM importe znova vyrobilo ako DRUHÁ karta — DRUHÝ krát, čo tento istý
+  ČIASTOČNÝ index (`WHERE resolved_at IS NULL`) prekvapil (prvý bol #272's
+  TOCTOU vyššie).** Príčina: index dovoľuje ĎALŠÍ výskyt PO vyriešení prvého
+  — zámerné pre #268 (zásielka sa smie o mesiac znova zaseknúť), ale pre
+  `vratenie` je vybavený riadok KONEČNÝ, nikdy sa nemá zopakovať. **Poučenie
+  pre KAŽDÝ ĎALŠÍ budúci automatický zdroj, čo bude volať `upsertUpozornenie`
+  s vlastným `dedupKey`:** rozhodni sa VOPRED a EXPLICITNE, do ktorej z dvoch
+  kategórií patrí — "znova sa smie ohlásiť po vybavení" (#268, žiadna extra
+  práca, `upsertUpozornenie` samo osebe stačí) VERZUS "vybavené je KONEČNÉ,
+  nikdy sa nemá zopakovať" (#269) — ten druhý prípad si musí sám dopísať
+  vlastný existence pre-check (nikdy zmenu `upsertUpozornenie`/schémy/indexu
+  samotného, ktoré ostávajú zdieľané a nezmenené pre PRVÚ kategóriu).
+- **Existence pre-check pre "KONEČNÉ" kategóriu (`orders/ingest.ts`'s
+  `resolvedReturnDedupKeys`) je JEDEN batchovaný `SELECT ... WHERE dedup_key
+  IN (...) ... .for("update")` nad VŠETKÝMI kandidátmi TOHO ISTÉHO behu
+  naraz, NIE dopyt v cykle** — `.for("update")` je POVINNÉ, nie voliteľné
+  vylepšenie: bez neho je to obyčajné READ COMMITTED čítanie, ktoré sa
+  NIKDY nezablokuje na súbežnom ručnom "Vybavené" (`resolveUpozornenie`, mimo
+  tejto transakcie) — ten by mohol commitnúť PRESNE medzi pre-checkom a
+  neskorším `upsertUpozornenie` volaním PRE TEN ISTÝ kandidát, čím by sa ten
+  istý bug zopakoval, len naživo zriedkavejšie (code review nález, nie
+  pôvodný test). `.for("update")` zamkne KAŽDÝ existujúci kandidátny riadok
+  na zvyšok transakcie (rovnaký vzor ako `orders/state.ts`/`.claude/rules/
+  database.md`) — súbežné `resolveUpozornenie` naň POČKÁ, takže rozhodnutie
+  je vždy postavené na ČERSTVOM, nie zastaranom stave. Bez JOINu (jedna
+  tabuľka) nepotrebuje `of` zoznam.
+- **Set-based dávkový skip (`resolvedReturnDedupKeys.has(dedupKey)`)
+  POTREBUJE explicitný test s ≥2 kandidátmi v JEDNOM behu, kde je vybavený
+  LEN JEDEN — jednotlivé (1-kandidátové) testy nedokážu odhaliť regresiu na
+  "všetko alebo nič za celú dávku" namiesto správneho rozlíšenia PO
+  KĽÚČOCH.** (`orders-ingest-return-upozornenie.integration.test.ts`'s
+  "v jednom importe s viacerými..." test — pridané až pri code review, nie
+  v pôvodnom RED/GREEN páre.) Test na KAŽDÝ ĎALŠÍ Set/Map-based dávkový
+  rozhodovací mechanizmus v tomto module: over samostatne, že jeden člen
+  dávky neovplyvní rozhodnutie o INOM členovi tej istej dávky.
+- **Deterministický dôkaz, že `.for("update")` fix naozaj UZAVIERA TOCTOU
+  okno (nie len "vyzerá správne"), potrebuje `pg_blocking_pids` SCOPOVANÝ na
+  KONKRÉTNY backend pid, nie holé `pg_stat_activity WHERE wait_event_type =
+  'Lock'`** (`.claude/rules/database.md`'s technika, spresnená) — tento box
+  beží súbežné testovacie/vývojové relácie na tej istej lokálnej Postgres
+  inštancii, takže holý "čaká NIEKTO na NEJAKÝ zámok" dopyt môže dať falošný
+  pozitív z úplne nesúvisiacej aktivity. Správny dopyt: `SELECT count(*)
+  FROM pg_stat_activity a WHERE a.wait_event_type = 'Lock' AND $1 = ANY
+  (pg_blocking_pids(a.pid))`, kde `$1` je PRIAMO `rawClient`'s vlastný
+  `pg_backend_pid()` (zistený ihneď po pripojení, pred `BEGIN`).
+  **Prekvapenie objavené priamym dočasným odstránením `.for("update")` a
+  behom testu proti starému kódu (nie len úvahou):** `INSERT ... ON CONFLICT`
+  sám osebe ČAKÁ na uvoľnenie riadkového zámku súbežnej transakcie na
+  kandidátnom riadku (Postgres to potrebuje na správne vyhodnotenie
+  arbitra) — takže "niekto sa zasekol na `rawClient`'s zámku" bolo PRAVDA
+  aj BEZ nášho `.for("update")`, len na INOM mieste (samotný `INSERT`, nie
+  náš pre-check). To znamená: samotný "zaseknutý?" medzikrok NEROZLIŠUJE
+  opravený/neopravený kód — dokazuje len že test vytvoril SKUTOČNÝ súbeh
+  (nie no-op). **Skutočný dôkaz opravy je AŽ finálna asercia počtu
+  riadkov** (bez opravy 2 riadky, s opravou 1) — over to VŽDY OBOMA smermi
+  (dočasne odstrániť opravu → test spadne presne na tomto mieste, vrátiť →
+  zelený), presne ako `.claude/rules/regression-test-first.md` vyžaduje pre
+  RED/GREEN, aj keď ide o code-review-dodaný test mimo pôvodného páru.
