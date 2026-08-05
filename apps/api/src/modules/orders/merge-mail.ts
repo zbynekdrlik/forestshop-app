@@ -4,7 +4,7 @@ import { orders } from "../../db/schema.js";
 import { log } from "../../logger.js";
 import { recordSkippedMail, sendLoggedMail, type MailLogContext } from "../mail-log/service.js";
 import { globalContext, textValue } from "../mail-templates/context.js";
-import { renderTemplate } from "../mail-templates/render.js";
+import { renderEditedBody, renderTemplate } from "../mail-templates/render.js";
 import { resolveTemplate } from "../mail-templates/store.js";
 import type { MailTransport } from "../mail/transport.js";
 import { listOpenStatusNames } from "./open-statuses.js";
@@ -216,6 +216,9 @@ export interface SendOrderMergeMailOptions {
   // issue 193: kto tlačidlo stlačil — táto cesta je VŽDY ručná akcia
   // zamestnanca.
   readonly actorUserId?: string;
+  // issue 277: rovnaký zámer ako `nedostupne/send.ts`'s `editedBody` — obsluha
+  // upravila text priamo v okne náhľadu, predmet ostáva pôvodný.
+  readonly editedBody?: string;
 }
 
 /**
@@ -228,9 +231,12 @@ export interface SendOrderMergeMailOptions {
  * (`merge-mail-preview-tokens.ts`, vynútené v `http/order-merge-routes.ts`).
  */
 export async function sendOrderMergeMail(options: SendOrderMergeMailOptions): Promise<SendOrderMergeMailResult> {
-  const { db, now, baseOrderId, otherOrderIds, mailTransport, bccEmail, actorUserId } = options;
+  const { db, now, baseOrderId, otherOrderIds, mailTransport, bccEmail, actorUserId, editedBody } = options;
   const built = await buildOrderMergeMailContent(db, baseOrderId, otherOrderIds);
   if (!built.ok) return { status: built.error };
+  // issue 277: obsluha mohla text v okne náhľadu upraviť — odošle sa PRESNE
+  // to (predmet ostáva z pôvodného vyrenderovania).
+  const finalContent = editedBody === undefined ? built.content : { ...built.content, ...renderEditedBody(editedBody) };
 
   const logCtx: MailLogContext = {
     source: "order_merge",
@@ -261,7 +267,7 @@ export async function sendOrderMergeMail(options: SendOrderMergeMailOptions): Pr
   const sendResult = await sendLoggedMail(
     db,
     mailTransport,
-    { to, subject: built.content.subject, text: built.content.text, html: built.content.html, bcc: bccEmail },
+    { to, subject: built.content.subject, text: finalContent.text, html: finalContent.html, bcc: bccEmail },
     now,
     logCtx,
   );
