@@ -25,7 +25,10 @@ const previewBody = z.object({ orderCode: z.string().min(1), variantCode: z.stri
 // server-side vynútenie "náhľad VŽDY predchádza odoslaniu", pozri
 // `preview-tokens.ts`. Bez tohto by priame volanie API (mimo React UI) mohlo
 // poslať e-mail bez toho, aby čokoľvek jeho obsah niekedy zobrazilo.
-const sendBody = previewBody.extend({ previewToken: z.string().min(1) });
+// issue 277: obsluha mohla text v okne náhľadu upraviť pred odoslaním —
+// voliteľné, aby priame API volanie bez úpravy (nič neposlalo v `editedBody`)
+// ostalo spätne kompatibilné a poslalo pôvodné vyrenderované znenie.
+const sendBody = previewBody.extend({ previewToken: z.string().min(1), editedBody: z.string().trim().min(1).max(20000).optional() });
 
 // issue 238: majiteľov RUČNE vložený odkaz náhrady — validovaný ako URL
 // (rovnaká disciplína ako `orders-routes.ts`'s `orderLineSupplierLinkBody`,
@@ -102,7 +105,9 @@ export function registerNedostupneRoutes(app: Hono<AppBindings>, db: Database, d
       }
       const built = await buildEmailForType(db, ctx, emailType);
       const previewToken = issuePreviewToken(orderCode, variantCode, emailType, new Date());
-      return c.json({ ok: true as const, subject: built.subject, html: built.html, recipient: ctx.email, customerName: ctx.customerName, previewToken });
+      // issue 277: `text` je plain-textová verzia (rovnaká, akú appka odošle
+      // ako fallback) — frontend ju predvyplní do editovateľného okna.
+      return c.json({ ok: true as const, subject: built.subject, html: built.html, text: built.text, recipient: ctx.email, customerName: ctx.customerName, previewToken });
     },
   );
 
@@ -114,7 +119,7 @@ export function registerNedostupneRoutes(app: Hono<AppBindings>, db: Database, d
     requireRole("admin", "manazer"),
     zValidator("json", sendBody),
     async (c) => {
-      const { orderCode, variantCode, emailType, previewToken } = c.req.valid("json");
+      const { orderCode, variantCode, emailType, previewToken, editedBody } = c.req.valid("json");
       const user = c.get("user");
       const now = new Date();
       // Server-side vynútenie povinného náhľadu (code review pred mergom,
@@ -133,6 +138,7 @@ export function registerNedostupneRoutes(app: Hono<AppBindings>, db: Database, d
         bccEmail: deps.bccEmail,
         // issue 193: kniha odoslaných e-mailov ukáže, KTO odoslanie spustil.
         actorUserId: user.userId,
+        ...(editedBody === undefined ? {} : { editedBody }),
       });
       if (!result.ok) {
         return c.json({ ok: false as const, error: sendErrorMessage(result) });

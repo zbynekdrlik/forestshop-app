@@ -21,6 +21,9 @@ export interface MailLogRow {
   readonly templateKey: string | null;
   readonly recipient: string;
   readonly subject: string | null;
+  // issue 277: skutočne odoslaný/pokúšaný text — `null` pre `skipped` (appka
+  // vtedy žiadny text nevygenerovala).
+  readonly body: string | null;
   readonly orderCode: string | null;
   readonly variantCode: string | null;
   readonly packageNumber: string | null;
@@ -64,6 +67,7 @@ export async function listMailLog(db: Database, filter: MailLogFilter, adminBase
       templateKey: mailLog.templateKey,
       recipient: mailLog.recipient,
       subject: mailLog.subject,
+      body: mailLog.body,
       orderCode: mailLog.orderCode,
       variantCode: mailLog.variantCode,
       packageNumber: mailLog.packageNumber,
@@ -90,6 +94,7 @@ export async function listMailLog(db: Database, filter: MailLogFilter, adminBase
     templateKey: r.templateKey,
     recipient: r.recipient,
     subject: r.subject,
+    body: r.body,
     orderCode: r.orderCode,
     variantCode: r.variantCode,
     packageNumber: r.packageNumber,
