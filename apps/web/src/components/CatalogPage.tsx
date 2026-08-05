@@ -105,6 +105,23 @@ export function CatalogPage({
   // dokončenia by sa vykreslil zastaraný výsledok nad novým textom hľadania.
   const searchSeq = useRef(0);
 
+  // issue 254 (súrodenec issue 251's queryRef/stateRef nález, `.claude/
+  // rules/frontend-design.md`): `runIngest`u's `.then()` (nižšie) volá
+  // `search(query, state)` PRIAMO z uzáveru tejto konkrétnej vykresľovacej
+  // inštancie zafixovanej na `onClick`u v momente kliknutia na "Stiahnuť a
+  // naimportovať export". Import reálne trvá sekundy až desiatky sekúnd —
+  // ak manažér medzitým zmení filter/dopyt a spustí VLASTNÉ vyhľadanie,
+  // dokončený import by (bez tohto refu) neskôr TICHO prepísal jeho výsledok
+  // STARÝM filtrom — rovnaký mechanizmus ako `PairingSection.tsx`'s
+  // `refetch()`/`SupplierLinksSection.tsx`'s `refetch()` (issue 251). Ref sa
+  // syncuje PRIAMO V TELE komponentu (počas renderu), NIE cez `useEffect`
+  // (rovnaký dôvod ako tam — mikrotaska `.then()` by mohla prečítať ref v
+  // okne PRED tým, než by neskôr naplánovaný efekt stihol ref aktualizovať).
+  const queryRef = useRef(query);
+  queryRef.current = query;
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
   const loadStats = useCallback(() => {
     fetchCatalogStats()
       .then((s) => {
@@ -164,7 +181,7 @@ export function CatalogPage({
       .then((result) => {
         setImportOutcome(describeIngestOutcome(result));
         loadStats();
-        search(query, state);
+        search(queryRef.current, stateRef.current);
       })
       .catch((err: unknown) => {
         if (err instanceof CatalogUnauthorizedError) {

@@ -104,9 +104,34 @@ export function PairingSection({
   // `CatalogPage`'s `runIngest` (`loadStats(); search(query, state);`) — jediný
   // spôsob, ako zobraziť AUTORITATÍVNu hodnotu bez toho, aby si klient
   // "hádal" meno/čas.
+  //
+  // issue 254 (súrodenec issue 251's finding — `.claude/rules/frontend-
+  // design.md`'s "latest ref" záznam): `refetch` NESMIE čítať `query`/`state`
+  // priamo z uzáveru — `confirmAsIs`/`saveManualUrl`/`confirmGroupAsIs`/
+  // `saveManualUrlForGroup` sú KAŽDÁ zafixovaná na KONKRÉTNU inštanciu
+  // `refetch` v okamihu, keď bolo príslušné tlačidlo naposledy vykreslené
+  // (typicky v okamihu kliknutia). Ak sa medzitým (kým čaká na serverovú
+  // odpoveď) zmení filter/dopyt, `refetch()` volaný z neskoro doručeného
+  // `.then()` by aj tak zavolal `search` so STARÝMI hodnotami — a keďže
+  // `searchSeq` prideľuje poradové číslo pri ZAVOLANÍ (nie pri odpovedi),
+  // takýto neskorý-no-zastaraný refetch dostane VYŠŠIE číslo než medzitým
+  // spustené korektné vyhľadanie a jeho výsledok by ho ticho prepísal.
+  // `queryRef`/`stateRef` sa preto syncujú PRIAMO V TELE komponentu (počas
+  // renderu), NIE cez `useEffect` — ten beží AŽ PO commite ako pasívny efekt
+  // na samostatnom priechode, takže medzi commitom nového `query`/`state` a
+  // skutočným prebehnutím efektu existuje reálne okno, počas ktorého by ref
+  // ešte niesol STARÚ hodnotu; keďže `.then()` je mikrotaska, mohla by sa
+  // spustiť presne v tomto okne. Bezpečné len preto, že tento strom
+  // nepoužíva `startTransition`/Suspense (viď rovnaký komentár pri
+  // `SupplierLinksSection.tsx`'s `queryRef`/`stateRef`).
+  const queryRef = useRef(query);
+  queryRef.current = query;
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
   const refetch = useCallback(() => {
-    search(query, state);
-  }, [search, query, state]);
+    search(queryRef.current, stateRef.current);
+  }, [search]);
 
   const groups = useMemo(() => groupPairingItems(items), [items]);
 
@@ -145,6 +170,16 @@ export function PairingSection({
     setActionError("");
   }, []);
 
+  // issue 254 (súrodenec issue 251's code-review finding 1): `busyCode`
+  // blokuje LEN tlačidlá VLASTNÉHO riadku — "✗ Zadať inú adresu" na VŠETKÝCH
+  // ostatných riadkoch ostáva aktívne. Ak počas čakania na odpoveď riadku A
+  // užívateľ otvorí editor riadku B, `editingCode` sa presunie na B — keby
+  // `saveManualUrl`'s `.then()` nepodmienene volalo `setEditingCode(null)`,
+  // ticho by zavrelo B's PRÁVE otvorený editor. Rovnaký "latest ref" princíp
+  // ako `queryRef`/`stateRef` vyššie, len na `editingCode`.
+  const editingKeyRef = useRef(editingCode);
+  editingKeyRef.current = editingCode;
+
   // "zamietni a zadaj inú adresu ručne" — server prepíše uloženú adresu touto
   // novou a rovno ju potvrdí (viď návrhový komentár na issue 45).
   const saveManualUrl = useCallback(
@@ -153,7 +188,7 @@ export function PairingSection({
       setBusyCode(variantCode);
       confirmPairing(variantCode, urlDraft.trim())
         .then(() => {
-          setEditingCode(null);
+          if (editingKeyRef.current === variantCode) setEditingCode(null);
           refetch();
         })
         .catch((err: unknown) => {
