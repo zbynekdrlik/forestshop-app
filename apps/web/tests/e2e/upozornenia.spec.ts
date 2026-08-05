@@ -32,7 +32,9 @@ test("vlastná poznámka — vytvorenie, 'Nové' zmizne po znovuotvorení, úpra
   await page.getByLabel("Heslo").fill(E2E_HESLO);
   await page.getByRole("button", { name: "Prihlásiť sa" }).click();
   await expect(page.getByRole("heading", { name: "Upozornenia" })).toBeVisible();
-  await expect(page.getByTestId("upozornenia-empty")).toBeVisible();
+  // issue 267 follow-up gap 3: skutočne nič nie je zapísané — hláška to
+  // musí povedať pravdivo, nie natvrdo "všetko je vybavené".
+  await expect(page.getByTestId("upozornenia-empty")).toHaveText("Žiadne upozornenia — nič nie je zapísané.");
 
   // Vytvorenie vlastnej poznámky.
   await page.getByTestId("upozornenie-new").click();
@@ -73,6 +75,17 @@ test("vlastná poznámka — vytvorenie, 'Nové' zmizne po znovuotvorení, úpra
   await page.getByText("aj vybavené").click();
   await expect(kartaSNadpisom(page, "Schôdzka v stredu — presunutá")).toHaveCount(0);
   await page.getByText("aj vybavené").click();
+
+  // issue 267 follow-up gap 2: "aj odložené" (NEZÁVISLÝ filter od "aj
+  // vybavené" vyššie) JU odkryje, a "Zrušiť odloženie" ju vráti naspäť skôr,
+  // než sa vráti sama.
+  await page.getByText("aj odložené").click();
+  const odlozenaKarta = kartaSNadpisom(page, "Schôdzka v stredu — presunutá");
+  await expect(odlozenaKarta).toBeVisible();
+  await expect(odlozenaKarta).toContainText("Odložené");
+  await odlozenaKarta.getByRole("button", { name: "Zrušiť odloženie" }).click();
+  await page.getByText("aj odložené").click(); // vypnúť filter — karta musí byť viditeľná AJ bez neho
+  await expect(kartaSNadpisom(page, "Schôdzka v stredu — presunutá")).toBeVisible();
 
   // Vlastná druhá poznámka, ktorú rovno vybavíme a zmažeme.
   await page.getByTestId("upozornenie-new").click();

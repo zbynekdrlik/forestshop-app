@@ -65,7 +65,9 @@ it("klik na 'Vybavené' zavolá refresh() z UpozorneniaBadgeRefreshContext (odzn
 
 it("uloženie novej vlastnej poznámky ('+ Nové upozornenie') tiež zavolá refresh()", async () => {
   markUpozorneniaSeen.mockResolvedValue(undefined);
-  fetchUpozornenia.mockResolvedValueOnce([]).mockResolvedValueOnce([KARTA]);
+  // Tretie `[]` je issue 267 follow-up gap 3's doplnkový najširší dopyt,
+  // ktorý `load()` spraví, keď je zoznam prázdny (tu: hneď po mounte).
+  fetchUpozornenia.mockResolvedValueOnce([]).mockResolvedValueOnce([]).mockResolvedValueOnce([KARTA]);
   createOwnNote.mockResolvedValue(undefined);
   const refresh = vi.fn();
 

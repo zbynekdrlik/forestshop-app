@@ -29,6 +29,18 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("sk-SK", { day: "numeric", month: "numeric", year: "numeric" });
 }
 
+// issue 267 (živé overenie, gap 3): prázdny zoznam tvrdil natvrdo "všetko je
+// vybavené" bez ohľadu na SKUTOČNÚ príčinu — čistá funkcia rozhodne podľa
+// NAJŠIRŠIEHO dopytu (volaného len keď je aktuálny, možno UŽŠIE filtrovaný
+// zoznam prázdny — pozri `load()`), aby hláška nikdy netvrdila niečo, čo
+// nie je pravda.
+function classifyEmptyMessage(all: readonly UpozornenieRow[]): string {
+  if (all.length === 0) return "Žiadne upozornenia — nič nie je zapísané.";
+  if (all.every((r) => r.status === "vybavene")) return "Žiadne upozornenia — všetko je vybavené.";
+  if (all.every((r) => r.status === "odlozene")) return "Žiadne upozornenia — všetko je odložené.";
+  return "Žiadne upozornenia v tomto zobrazení — zvyšné sú vybavené alebo odložené.";
+}
+
 // Code review: "Odložiť do" nemalo `min` — dalo sa vybrať dátum v minulosti
 // (neškodné, `computeStatus` by ho vzalo ako "už sa vrátilo", ale mätúce
 // no-op). `<input type="date">`'s `min` očakáva `YYYY-MM-DD` v LOKÁLNOM
@@ -61,6 +73,9 @@ export function UpozorneniaSection({ role, onSessionExpired }: { readonly role: 
   const [busyId, setBusyId] = useState("");
   const [draft, setDraft] = useState<EditDraft | null>(null);
   const [postponeDraft, setPostponeDraft] = useState<Record<string, string>>({});
+  // issue 267 (živé overenie, gap 3): pravdivá príčina prázdneho zoznamu —
+  // počíta sa v `load()` nižšie, len keď je zoznam skutočne prázdny.
+  const [emptyMessage, setEmptyMessage] = useState("Žiadne upozornenia.");
   const canControl = CONTROL_ROLES.has(role);
   // issue 267 (živé overenie, gap 1): odznak v ľavom menu (`App.tsx`) sa bez
   // tohto refetchoval len pri zmene záložky — refresh() sa zavolá po KAŽDEJ
@@ -70,7 +85,24 @@ export function UpozorneniaSection({ role, onSessionExpired }: { readonly role: 
 
   const load = useCallback(() => {
     fetchUpozornenia({ includeResolved, includePostponed })
-      .then(setRows)
+      .then((data) => {
+        setRows(data);
+        if (data.length > 0) return;
+        // Zoznam je prázdny pod AKTUÁLNYMI (možno užšími) filtrami — ak sú
+        // už najširšie, `data` JE tá pravda; inak treba doplnkový najširší
+        // dopyt, aby hláška nikdy nehádala/netvrdila nesprávnu príčinu.
+        if (includeResolved && includePostponed) {
+          setEmptyMessage(classifyEmptyMessage(data));
+          return;
+        }
+        fetchUpozornenia({ includeResolved: true, includePostponed: true })
+          .then((all) => {
+            setEmptyMessage(classifyEmptyMessage(all));
+          })
+          .catch(() => {
+            setEmptyMessage("Žiadne upozornenia v tomto zobrazení.");
+          });
+      })
       .catch((err: unknown) => {
         if (err instanceof UpozorneniaUnauthorizedError) {
           onSessionExpired();
@@ -251,7 +283,7 @@ export function UpozorneniaSection({ role, onSessionExpired }: { readonly role: 
       )}
 
       {rows.length === 0 ? (
-        <p data-testid="upozornenia-empty">Žiadne upozornenia — všetko je vybavené.</p>
+        <p data-testid="upozornenia-empty">{emptyMessage}</p>
       ) : (
         <div className="upozornenia-list" data-testid="upozornenia-list">
           {rows.map((row) => {

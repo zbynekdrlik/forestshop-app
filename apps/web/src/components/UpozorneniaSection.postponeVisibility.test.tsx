@@ -47,8 +47,12 @@ it("zaškrtnutie 'aj odložené' znova načíta zoznam s includePostponed: true"
 
   fireEvent.click(screen.getByLabelText("aj odložené"));
 
+  // `toHaveBeenCalledWith` (nie `toHaveBeenLastCalledWith`) — issue 267
+  // follow-up gap 3's doplnkový najširší klasifikačný dopyt (spustený, lebo
+  // zoznam je prázdny) môže dobehnúť AŽ PO tomto volaní, takže "posledné"
+  // volanie nie je deterministicky toto.
   await waitFor(() => {
-    expect(fetchUpozornenia).toHaveBeenLastCalledWith({ includeResolved: false, includePostponed: true });
+    expect(fetchUpozornenia).toHaveBeenCalledWith({ includeResolved: false, includePostponed: true });
   });
 });
 

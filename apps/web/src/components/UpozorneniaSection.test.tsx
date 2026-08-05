@@ -81,7 +81,9 @@ it("karta zo zdroja 'appka' nemá Upraviť/Zmazať, len Vybavené/Odložiť", as
 
 it("'+ Nové upozornenie' otvorí formulár, uloženie zavolá createOwnNote a znova načíta zoznam", async () => {
   markUpozorneniaSeen.mockResolvedValue(undefined);
-  fetchUpozornenia.mockResolvedValueOnce([]).mockResolvedValueOnce([VLASTNA_KARTA]);
+  // Tretie `[]` je issue 267 follow-up gap 3's doplnkový najširší dopyt,
+  // ktorý `load()` spraví, keď je zoznam prázdny (tu: hneď po mounte).
+  fetchUpozornenia.mockResolvedValueOnce([]).mockResolvedValueOnce([]).mockResolvedValueOnce([VLASTNA_KARTA]);
   createOwnNote.mockResolvedValue(undefined);
   render(<UpozorneniaSection role="manazer" onSessionExpired={vi.fn()} />);
   await screen.findByTestId("upozornenia-empty");
@@ -123,7 +125,9 @@ it("Upraviť predvyplní formulár existujúcimi hodnotami vlastnej poznámky", 
 
 it("Zmazať zavolá deleteOwnNote a znova načíta zoznam", async () => {
   markUpozorneniaSeen.mockResolvedValue(undefined);
-  fetchUpozornenia.mockResolvedValueOnce([VLASTNA_KARTA]).mockResolvedValueOnce([]);
+  // Tretie `[]` je issue 267 follow-up gap 3's doplnkový najširší dopyt,
+  // ktorý `load()` spraví, keď je zoznam prázdny (tu: po zmazaní).
+  fetchUpozornenia.mockResolvedValueOnce([VLASTNA_KARTA]).mockResolvedValueOnce([]).mockResolvedValueOnce([]);
   deleteOwnNote.mockResolvedValue(undefined);
   render(<UpozorneniaSection role="manazer" onSessionExpired={vi.fn()} />);
   await screen.findByTestId("upozornenie-own-1");
