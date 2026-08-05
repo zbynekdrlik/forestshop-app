@@ -141,6 +141,82 @@ const FOREST_5003_PRODUCT_KEY = "b7727300-3927-11e6-8a3b-0cc47a6c92bc";
 // cross-row test nezávisel od poradia behu so stale-closure testom.
 const G7_LIGHT_PRODUCT_KEY = "7d539b99-b0b4-11e6-968a-0cc47a6c92bc";
 
+// issue 255 (súrodenec issue 251's finding 1 — nájdené pri issue 254, ale
+// mimo jej scope, tvar pre BULK/skupinovú cestu): `saveManualUrlForGroup`
+// v `PairingSection.tsx` mala PRESNE ten istý (pred-opravou) nepodmienený
+// `setEditingGroupKey(null)` ako `saveManualUrl` pred issue 251/254. Musí
+// bežať SKÔR než testy nižšie (ktoré tie isté dve skupiny mutujú
+// per-variantne) — obe skupiny sú tu ešte homogénne/nepotvrdené, jediné dve
+// viacvariantné skupiny vo fixtúre, ktoré nepoužíva žiadny INÝ test v tomto
+// súbore skôr.
+test("uloženie bulk adresy skupiny A (ešte čakajúce na odpoveď) nesmie zavrieť bulk editor skupiny B otvorený medzitým (issue 255)", async ({
+  page,
+}) => {
+  const chyby: string[] = [];
+  page.on("console", (m) => {
+    if (m.type() === "error" || m.type() === "warning") chyby.push(m.text());
+  });
+  page.on("pageerror", (e) => {
+    chyby.push(e.message);
+  });
+
+  await page.addInitScript(() => {
+    const puvodny = window.fetch.bind(window);
+    window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      if (init?.method === "POST" && url.includes("/api/pairing/confirm")) {
+        return new Promise((resolve) => {
+          setTimeout(() => {
+            resolve(puvodny(input, init));
+          }, 400);
+        });
+      }
+      return puvodny(input, init);
+    };
+  });
+
+  await page.goto("/?tab=pairing");
+  await page.getByLabel("E-mail").fill(E2E_RACE_EMAIL);
+  await page.getByLabel("Heslo").fill(E2E_HESLO);
+  await page.getByRole("button", { name: "Prihlásiť sa" }).click();
+  await expect(page.getByRole("heading", { name: "Kontrola párovania" })).toBeVisible();
+
+  const skupinaA = page.getByTestId(`pairing-group-${FOREST_5003_PRODUCT_KEY}`);
+  const skupinaB = page.getByTestId(`pairing-group-${G7_LIGHT_PRODUCT_KEY}`);
+  await expect(skupinaA).toBeVisible();
+  await expect(skupinaB).toBeVisible();
+
+  // A: bulk editor, vyplniť platnú adresu, uložiť (6 paralelných POST-ov,
+  // každý oneskorený 400ms).
+  const odpovedA = page.waitForResponse(
+    (res) => res.request().method() === "POST" && res.url().includes("/api/pairing/confirm"),
+  );
+  await skupinaA.getByTestId(`reject-group-${FOREST_5003_PRODUCT_KEY}`).click();
+  await skupinaA
+    .getByLabel("Adresa u dodávateľa pre Nohavice FOREST 5003 (všetky veľkosti)")
+    .fill("https://www.grube.sk/p/e2e-bulk-race-a/1");
+  await skupinaA.getByRole("button", { name: "Potvrdiť" }).click();
+
+  // B: kým A ešte čaká na odpoveď, otvoriť JEHO bulk editor.
+  await skupinaB.getByTestId(`reject-group-${G7_LIGHT_PRODUCT_KEY}`).click();
+  const vstupB = skupinaB.getByLabel("Adresa u dodávateľa pre Pohonová bunda G7 Light (všetky veľkosti)");
+  await expect(vstupB).toBeVisible();
+
+  // Počkať na SKUTOČNÚ sieťovú odpoveď A-čka + rezervu na dobehnutie
+  // zvyšných 5 paralelných POST-ov (`Promise.allSettled` čaká na VŠETKY) a
+  // na React-ov `.then()`/render reťazec.
+  await odpovedA;
+  await page.waitForTimeout(300);
+
+  // B's bulk editor musí ostať otvorený — A's `.then()` nesmie zavrieť
+  // CUDZÍ (v tomto momente už nesúvisiaci) bulk editor. Jednorazová
+  // kontrola aktuálneho stavu (nie auto-retry `toBeVisible()`, ktoré by
+  // stačilo zachytiť prvok len na okamih).
+  expect(await vstupB.isVisible()).toBe(true);
+
+  expect(chyby).toEqual([]);
+});
+
 // issue 254 (súrodenec issue 251): `refetch` v `PairingSection.tsx` mala
 // PRESNE ten istý (pred-opravou issue 251) tvar — priamy uzáver nad
 // `query`/`state`, žiadny ref. Rovnaká reprodukčná technika ako

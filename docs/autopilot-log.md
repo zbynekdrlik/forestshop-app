@@ -2816,3 +2816,27 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
   information_schema), row counts intact (4542 products / 14139
   variants), manual "Stiahnuť teraz" catalog-import trigger completed
   with no error, console clean. Deployed version `0.3.0-dev.146`.
+
+## Issue 255 — cross-row/unmount guard siblings (found during issue 254)
+
+- Version bump `c7e5f13` (0.3.0-dev.148 → 0.3.0-dev.149).
+- `[red]` test `dba794d`: `pairing.spec.ts` — bulk group-editor cross-row
+  race ("uloženie bulk adresy skupiny A ... nesmie zavrieť bulk editor
+  skupiny B otvorený medzitým"). Confirmed FAILS against unfixed code
+  (`vstupB.isVisible()` → `false`).
+- `[green]` fix `78a307b`: `PairingSection.tsx`'s `saveManualUrlForGroup`
+  gets an `editingGroupKeyRef` "latest ref" guard (mirrors the existing
+  `editingKeyRef` fix from issue 251/254, for the bulk/group path).
+  `PairingSection.tsx` + `CatalogPage.tsx` both get the `mountedRef`
+  unmount guard `SupplierLinksSection.tsx` got in issue 251 finding 3 —
+  no dedicated regression test for this half (investigated: no
+  React-18-observable difference exists — see design comment on the
+  issue and the commit body).
+- Both fixes reuse `FOREST_5003_PRODUCT_KEY`/`G7_LIGHT_PRODUCT_KEY`
+  (already declared for issue 254's per-variant race tests), positioned
+  BEFORE those tests in the file so both groups are still homogeneous —
+  see `.claude/rules/pairing.md`'s new entry (only one fully-unused
+  multi-variant group remains in the fixture after issue 47/254).
+- Local gates all green: `pnpm typecheck`, `pnpm lint`, `pnpm --filter
+  @forestshop/web test` (413 tests), `pnpm --filter @forestshop/web e2e`
+  (42/42).

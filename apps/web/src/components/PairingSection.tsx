@@ -61,18 +61,32 @@ export function PairingSection({
   // staršiu, širšiu odpoveď doručiť neskôr než novšiu, užšiu).
   const searchSeq = useRef(0);
 
+  // issue 255 (súrodenec issue 251's finding 3 — tento súbor je HIDDEN_TABS
+  // komponent, `nav.ts`, odmountuje sa pri prepnutí záložky): rovnaký vzor
+  // ako `SupplierLinksSection.tsx`'s `mountedRef`, vrátane StrictMode pasce
+  // (`true` musí byť nastavené AJ v efekte, nielen v `useRef(true)`).
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
   const search = useCallback(
     (q: string, s: PairingState) => {
       const seq = (searchSeq.current += 1);
       setSearchError("");
       searchPairings({ q, state: s, page: 1 })
         .then((result) => {
+          if (!mountedRef.current) return; // odmountované skôr, než odpoveď doletela
           if (seq !== searchSeq.current) return; // medzitým prišla novšia požiadavka
           setItems(result.items);
           setTotal(result.total);
           setSearchLoaded(true);
         })
         .catch((err: unknown) => {
+          if (!mountedRef.current) return;
           if (seq !== searchSeq.current) return;
           setSearchLoaded(true);
           if (err instanceof PairingUnauthorizedError) {
@@ -180,6 +194,12 @@ export function PairingSection({
   const editingKeyRef = useRef(editingCode);
   editingKeyRef.current = editingCode;
 
+  // issue 255 (rovnaký "latest ref" princíp ako `editingKeyRef` vyššie, len
+  // pre BULK/skupinovú cestu — `saveManualUrlForGroup`'s `.then()` nesmie
+  // zavrieť CUDZÍ, medzitým otvorený bulk editor INEJ skupiny).
+  const editingGroupKeyRef = useRef(editingGroupKey);
+  editingGroupKeyRef.current = editingGroupKey;
+
   // "zamietni a zadaj inú adresu ručne" — server prepíše uloženú adresu touto
   // novou a rovno ju potvrdí (viď návrhový komentár na issue 45).
   const saveManualUrl = useCallback(
@@ -254,7 +274,7 @@ export function PairingSection({
       const codes = group.variants.map((v) => v.variantCode);
       Promise.allSettled(codes.map((code) => confirmPairing(code, url)))
         .then((results) => {
-          setEditingGroupKey(null);
+          if (editingGroupKeyRef.current === group.productKey) setEditingGroupKey(null);
           refetch();
           assertBulkConfirmSucceeded(codes, results);
         })
