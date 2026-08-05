@@ -79,6 +79,21 @@ test("produkt bez linky ponúka 'Doplniť', po uložení sa presunie do 'S linko
   await vstup.fill("https://e2e-dodavatel.example.com/parovanie-nova");
   await page.getByTestId("product-link-save-E2E-PL-CHYBA").click();
 
+  // issue 251: `save()` v `SupplierLinksSection.tsx` zavolá vo svojom
+  // `.then()` VLASTNÝ `refetch()`, ktorého uzáver má PRIVIAZANÝ filter
+  // ("Bez linky") z okamihu KLIKNUTIA na Uložiť — nie aktuálny filter. Ak
+  // test prepne filter a znova vyhľadá SKÔR, než sa PATCH zápis skutočne
+  // vráti, tento "starý" refetch sa zavolá AŽ NESKÔR (keď PATCH doletí) a
+  // keďže interné poradové číslo (`searchSeq`) sa prideľuje pri ZAVOLANÍ,
+  // nie pri odpovedi, tento neskorší-no-zastaraný refetch prepíše
+  // (zobrazí prázdny "Bez linky" výsledok) výsledok testovho VLASTNÉHO,
+  // správneho vyhľadania. Počkanie na zmiznutie edit-formulára garantuje,
+  // že `.then()` (a teda aj jeho `refetch()` volanie/poradové číslo) už
+  // prebehlo SKÔR, než test prepne filter — takže testov ĎALŠÍ dopyt má
+  // vždy VYŠŠIE poradové číslo a vyhráva bez ohľadu na to, kedy sieťovo
+  // doletí.
+  await expect(vstup).toBeHidden();
+
   // Po uložení produkt už MÁ linku — predvolený filter "Bez linky" ho už
   // nezobrazí, treba prepnúť na "Všetky", aby bolo vidno stav.
   await page.getByLabel("Zobraziť produkty").selectOption("all");

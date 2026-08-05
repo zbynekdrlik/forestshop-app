@@ -99,9 +99,31 @@ export function SupplierLinksSection({
     search(query, state);
   }
 
+  // issue 251: `refetch` MUSÍ vždy čítať AKTUÁLNY filter/dopyt, nie ten,
+  // ktorý bol platný v okamihu, keď bol `save()`'s uzáver (nižšie) vytvorený.
+  // `save()` je samostatná `useCallback` inštancia zafixovaná na tlačidle v
+  // momente kliknutia — ak sa medzitým (kým čaká na PATCH odpoveď) zmení
+  // filter/dopyt, `refetch` cez PRIAMY uzáver nad `query`/`state` by aj tak
+  // zavolal `search` so STARÝMI hodnotami, akonáhle zápis doletí. Keďže
+  // `searchSeq` prideľuje poradové číslo pri ZAVOLANÍ (nie pri odpovedi),
+  // takýto neskorý-no-zastaraný refetch by mal VYŠŠIE číslo než medzitým
+  // spustené korektné vyhľadanie a jeho (prázdny/starý) výsledok by ho
+  // ticho prepísal — presne toto spôsobilo `element(s) not found` na main
+  // CI hneď po mergi issue 241. Refy namiesto priameho uzáveru zaručujú, že
+  // `refetch()` (nech je zavolaná odkiaľkoľvek a kedykoľvek) vždy prečíta
+  // NAJNOVŠIE hodnoty — rovnaký princíp ako `.claude/rules/frontend-
+  // design.md`'s "derived value instead of stale local state" (issue 151),
+  // len cez ref namiesto zdvihnutia do rodiča (tu žiadny rodič netreba).
+  const queryRef = useRef(query);
+  const stateRef = useRef(state);
+  useEffect(() => {
+    queryRef.current = query;
+    stateRef.current = state;
+  }, [query, state]);
+
   const refetch = useCallback(() => {
-    search(query, state);
-  }, [search, query, state]);
+    search(queryRef.current, stateRef.current);
+  }, [search]);
 
   const startEdit = useCallback((item: ProductLinkItem) => {
     setEditingKey(item.productKey);
