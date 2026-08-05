@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it } from "vitest";
 import { upozornenie, users } from "../src/db/schema.js";
 import { hashPassword } from "../src/modules/auth/passwords.js";
@@ -91,6 +91,47 @@ describe("upsertUpozornenie", () => {
     const [row] = await db.select().from(upozornenie);
     expect(row?.title).toBe("Obnovený text");
     expect(row?.postponedUntil?.toISOString()).toBe("2026-08-20T00:00:00.000Z");
+  });
+});
+
+// issue 272: TOCTOU race na `dedupKey` — dve súbežné volania s tým istým,
+// dosiaľ nepoužitým `dedupKey` (žiadny existujúci riadok) nesmú nikdy
+// vyhodiť unique-violation ani vyrobiť dva riadky. Na starom kóde (SELECT,
+// potom podmienený UPDATE/INSERT) obe volania uvidia "žiadny riadok" pri
+// svojom SELECTe skôr, než ktorékoľvek stihne INSERT — druhé INSERT-ne
+// narazí na `upozornenie_dedup_key_uq` a `Promise.all` zamietne s chybou
+// databázy.
+//
+// **Pool sa musí PREDHRIAŤ pred štartom závodu** — inak sa "závod" v praxi
+// nikdy nestretne: na studenom pripojení dominuje latencia TCP handshaku
+// (~15-20ms na tomto Dockeri) nad latenciou samotného SQL dopytu (~3ms), takže
+// prvé volanie, ktoré náhodou dostane pripojenie skôr, stihne CELÝ
+// SELECT+INSERT cyklus skôr, než ostatné vôbec stihnú odoslať svoj SELECT —
+// žiadny skutočný závod, test by ticho prešiel aj na chybnom kóde (overené
+// priamym `pg.Pool` pokusom mimo vitestu: bez predhriatia 5/5 "OK", s
+// predhriatím 2/5 "duplicate key" na starom kóde). `select 1` na `N`
+// súbežných pripojeniach vopred zabezpečí `N` HOTOVÝCH (idle) pripojení v
+// poole, takže samotný závod už pretekáva len o rýchlosť SQL, nie o
+// pripojenie.
+describe("upsertUpozornenie — súbežnosť (issue 272)", () => {
+  it("dve súbežné volania s rovnakým NOVÝM dedupKey nikdy nezlyhajú a vyrobia PRESNE jeden riadok", async () => {
+    const { db } = await bootDb();
+    const now = new Date("2026-08-05T08:00:00Z");
+    const dedupKey = "posta:EF999999999SK";
+    const CONCURRENCY = 5;
+
+    await Promise.all(Array.from({ length: CONCURRENCY }, () => db.execute(sql`select 1`)));
+
+    const results = await Promise.all(
+      Array.from({ length: CONCURRENCY }, (_, i) =>
+        upsertUpozornenie(db, { type: "vlastna_poznamka", source: "appka", title: `Pokus ${String(i)}`, dedupKey, now }),
+      ),
+    );
+
+    const rows = await db.select().from(upozornenie).where(eq(upozornenie.dedupKey, dedupKey));
+    expect(rows).toHaveLength(1);
+    // Všetkých 5 volaní muselo skončiť na TOM ISTOM riadku (atomický upsert).
+    for (const r of results) expect(r.id).toBe(rows[0]?.id);
   });
 });
 
