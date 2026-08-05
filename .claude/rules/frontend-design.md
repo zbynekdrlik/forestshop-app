@@ -706,3 +706,54 @@ paths:
   kontrola cez `td.scrollWidth` to nezachytila — treba merať orezanie na
   samotnom odkaze). Pri ďalšom hľadaní darcu preto meraj OREZANIE obsahu darcu,
   nielen výšku riadkov.
+- **Ref, ktorý má vždy niesť AKTUÁLNU hodnotu pre kód volaný z mikrotasky
+  (`.then()` callback), sa musí syncovať SYNCHRÓNNE v tele komponentu (počas
+  renderu), NIE cez `useEffect`.** Issue 251 (`SupplierLinksSection.tsx`'s
+  `queryRef`/`stateRef`, čítané `refetch()`'om volaným zo `save()`'s
+  `.then()`): `useEffect` beží AŽ PO commite ako pasívny efekt na
+  samostatnom priechode (React ho môže odložiť za `paint`) — medzi commitom
+  nového `query`/`state` a skutočným prebehnutím efektu existuje reálne
+  okno, počas ktorého ref ešte nesie STARÚ hodnotu. Keďže `.then()` je
+  mikrotaska, môže sa spustiť presne v tomto okne a prečítať zastaraný ref —
+  teda ten istý race, aký mal "latest ref" vzor (issue 151, `.claude/rules/
+  frontend-design.md`'s "derived value instead of stale local state")
+  odstrániť, len preložený o jednu vrstvu nižšie. Fix: priama synchrónna
+  aktualizácia (`queryRef.current = query;` hneď v tele komponentu, žiadny
+  `useEffect`, žiadne pole závislostí) — React zaručuje, že táto priradenie
+  prebehne skôr, než čokoľvek iné (vrátane akejkoľvek čakajúcej mikrotasky)
+  môže ref prečítať. **Test na KAŽDÝ ĎALŠÍ "latest ref" vzor v tomto
+  kódovej báze, kde ref číta kód spúšťaný z promise `.then()`/mikrotasky:**
+  je sync v `useEffect`e, alebo priamo v tele komponentu? `useEffect` je
+  správny LEN keď nič mikrotaskového ref nečíta pred ďalším renderom;
+  sibling výskyty rovnakého (pred-opravou) tvaru nájdené a zapísané ako
+  issue 254 (`PairingSection.tsx`'s `refetch`, `CatalogPage.tsx`'s
+  `runIngest`) — over ich pri práci na tomto ticket-e.
+- **Rovnaké "iba VLASTNÝ riadok" nedopatrenie sa dá skryť aj v busy-guarde,
+  nielen v ref-synchronizácii vyššie — `busyKey`/`disabled` musí zvážiť
+  vzťah k CUDZÍM riadkom, nie len k sebe.** Code review na issue 251's PR
+  (`SupplierLinksSection.tsx`): `busyKey` disabluje LEN tlačidlá riadku,
+  ktorého zápis prebieha — Upraviť/Doplniť na VŠETKÝCH ostatných riadkoch
+  ostáva aktívne. Keď užívateľ otvoril INÝ riadok, kým prvý ešte čakal na
+  PATCH odpoveď, jej `.then()`'s nepodmienené `setEditingKey(null)` ticho
+  zavrelo ten cudzí, práve otvorený editor. Fix — rovnaký "latest ref"
+  princíp ako záznam vyššie, len na `editingKey`: `editingKeyRef` sync
+  priamo v tele komponentu, `.then()` zavrie editor LEN ak
+  `editingKeyRef.current === productKey` (t.j. stále patrí TOMUTO zápisu).
+  Regresný dôkaz musí byť SIEŤOVO deterministický (`page.waitForResponse()`
+  na presnú POST URL), nie textová asercia stavu riadku — v zdieľanom e2e
+  súbore môže PREDCHÁDZAJÚCI test v tom istom súbore ten istý stavový text
+  ("čaká na odoslanie") už nastaviť skôr, takže by test prešiel aj keby sa
+  spoľahol na cudziu, staršiu mutáciu namiesto vlastnej akcie.
+- **`mountedRef`/unmount-guard vzor (`if (!mountedRef.current) return;` v
+  `.then()`/`.catch()`) POTREBUJE nastaviť `true` AJ v samotnom
+  `useEffect`'s TELE, nielen v `useRef(true)`'s počiatočnej hodnote.**
+  Issue 251 (finding 3, `search()`'s guard): appka beží pod `<StrictMode>`
+  (`main.tsx`) a vo VÝVOJOVOM móde (teda aj v `pnpm --filter @forestshop/web
+  e2e`, ktorá ide cez `vite dev`) React zámerne efekt spustí, zruší a znova
+  spustí — bez `mountedRef.current = true;` priamo v `useEffect`'s tele by
+  toto PRVÉ simulované zrušenie navždy nechalo ref na `false` a appka by
+  nikdy nezapísala žiadny výsledok vyhľadávania (živo namerané:
+  `expect(riadok).toBeVisible()` padalo s "element(s) not found" na úplne
+  PRVOM teste súboru). Vzor pre tento guard: `useEffect(() => {
+  mountedRef.current = true; return () => { mountedRef.current = false; };
+  }, [])` — nikdy len holý cleanup bez zodpovedajúceho "nastav true" v tele.

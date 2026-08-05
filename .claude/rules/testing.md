@@ -525,3 +525,31 @@ paths:
   literálom? Ak áno, a testovaná trasa/funkcia si "teraz" berie sama zo
   systémového hodín, prepočítaj hranicu pri behu testu namiesto písania
   literálu — inak test raz, nevyhnutne, prestane platiť.
+- **Čakanie pridané DO e2e testu (napr. `await expect(prvok).toBeHidden()`)
+  môže test spraviť zeleným zo ZLÉHO dôvodu — zaručí bezpečné poradie
+  udalostí bez ohľadu na to, či je race v komponente skutočne opravený.**
+  Issue 251 (`supplier-links.spec.ts`): pôvodná verzia testu mala
+  `await expect(vstup).toBeHidden()` PRED prepnutím filtra — to zaručilo,
+  že `.then()`'s `refetch()` (a teda aj jeho `searchSeq`) prebehne SKÔR, než
+  test prepne filter, takže test prešiel AJ keby bola oprava komponentu
+  vrátená naspäť (empiricky overené: s vráteným produkčným fixom test s
+  týmto čakaním prešiel 4/4). Fix nie je len odstránenie čakania — je
+  **overenie testovej rozlišovacej sily**: po KAŽDEJ oprave race/timing bugu
+  dočasne vráť produkčný fix naspäť a potvrď, že test SPADNE (tu: 3/3
+  nezávislé behy zlyhali s presne nahláseným symptómom, keď bol fix
+  vrátený, a 6/6 prešlo s hotovým kódom). Samotný zelený beh nič
+  nedokazuje o tom, či test race skutočne testuje.
+- **Reprodukčná technika pre save-then-refetch/stale-closure race:
+  prepichnutý `window.fetch` cez `addInitScript`, ktorý REÁLNU odpoveď (nie
+  fake/mock) oneskorí o ~400ms, plus OPAKOVANÉ nezávislé behy s čerstvým DB
+  reseedom + reštartom API medzi nimi.** Issue 251 (rovnaký vzor ako
+  `orders-write-failures.spec.ts`, pozri jeho `addInitScript` blok vyššie v
+  tomto súbore — tu ale REÁLNA odpoveď je len oneskorená (`setTimeout` vo
+  wrapperi okolo `puvodny(...)`), nie reject/fake-response): oneskorenie
+  SKUTOČNEJ odpovede je nutné, lebo test musí overiť, ktorý REÁLNY výsledok
+  (aktuálny vs. zastaraný filter) `refetch()` skutočne zapíše — fake
+  response by netestovala nič o tom, čo server vrátil. Jeden zelený beh
+  nestačí na potvrdenie/vyvrátenie race fixu (flaky failure sa môže minúť)
+  — potrebné je NIEKOĽKO NEZÁVISLÝCH behov, každý s čerstvým DB reseedom
+  (`scripts/e2e-setup.ts`) a reštartom API servera, nie opakovanie v tom
+  istom procese/stave.
