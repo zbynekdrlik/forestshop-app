@@ -86,6 +86,9 @@ const OUT_KEYWORDS: readonly string[] = Object.freeze([
   "neni skladem",
   "momentálne nedostupné",
   "momentalne nedostupne",
+  // Český tvar s mäkkým "ě" (issue 227, tenolix.cz) — INÝ reťazec než
+  // slovenské "momentálne" vyššie, obe sa musia kontrolovať samostatne.
+  "momentálně nedostupné",
   "dočasne nedostupné",
   "docasne nedostupne",
   "predaj skončil",
@@ -295,9 +298,57 @@ function trigonaStockRegion(html: string): string | null {
   return null;
 }
 
+/**
+ * virginiashop.sk/tenolix.cz/luko.cz (issue 227): rovnaká Shoptet šablóna,
+ * jednoveľkostný produkt nesie `<span class="availability-label" ...
+ * data-testid="labelAvailability">Skladom/Skladem/Momentálne(ě)
+ * nedostupné</span>` — text sa vracia AKO JE a ide cez existujúci
+ * `availabilityFromText` (žiadna nová farebná/triedová logika, na rozdiel od
+ * trigona.sk). Naživo overené OBE polarity priamo na virginiashop.sk aj
+ * tenolix.cz (rovnaká trieda, rovnaké farby #009901/#cb0000); luko.cz má
+ * naživo overenú len zelenú vetvu — jej sledované odkazy sú takmer vždy
+ * VIACVEĽKOSTNÉ produkty, ktoré tento `data-testid` vôbec nemajú (viď
+ * `whenRegionMissing` nižšie), takže ostávajú `unknown` presne ako predtým.
+ * Viacvariantový produkt (viac veľkostí/farieb naraz) tento `data-testid`
+ * NEVYKRESĽUJE vôbec — vtedy sa nesmie nič uhádnuť z niektorej z viacerých
+ * zhôd, preto `whenRegionMissing: "unknown"`.
+ */
+function shoptetLabelAvailability(html: string): string | null {
+  const match = /<span\b[^>]*data-testid="labelAvailability"[^>]*>([\s\S]*?)<\/span>/i.exec(html);
+  if (match === null) return null;
+  const text = (match[1] ?? "").replace(/\s+/g, " ").trim();
+  return text === "" ? null : text;
+}
+
+/**
+ * fomei.com (issue 227): JSON-LD na stránke nie je Product/Offer (len
+ * breadcrumb), ale schema.org MIKRODÁTA (`<span class="availability
+ * availability--inStock|noStock">`) sa OPAKUJÚ naprieč stránkou — hlavný
+ * produkt aj karusel "Súvisiace" nižšie majú ROVNAKÚ triedu (rovnaká
+ * kolízia ako huntingshop.eu, issue 223). Preto sa hľadá LEN PRED nadpisom
+ * "Súvisiace" (rovnaký "prvý patrí hlavnému produktu" princíp ako odimon.sk,
+ * issue 225) a rozhoduje TRIEDA (`inStock`/`noStock`), nikdy viditeľný text
+ * (ten sa medzi produktmi líši — "na dotaz" pri `noStock`). Neznáma trieda
+ * ani chýbajúci prvok sa nikdy nehádaju na žiadnu stranu.
+ */
+function fomeiAvailabilityRegion(html: string): string | null {
+  const relatedIndex = html.indexOf(">Súvisiace<");
+  const scope = relatedIndex === -1 ? html : html.slice(0, relatedIndex);
+  const match = /<span\b[^>]*class="[^"]*\bavailability--(inStock|noStock)\b[^"]*"[^>]*>/i.exec(scope);
+  if (match === null) return null;
+  const token = (match[1] ?? "").toLowerCase();
+  if (token === "instock") return "skladom";
+  if (token === "nostock") return "vypredané";
+  return null;
+}
+
 const TEXT_AVAILABILITY_RULES: readonly TextAvailabilityRule[] = Object.freeze([
   { host: "huntingshop.eu", extractRegion: huntingshopDetailBadges, whenRegionMissing: "unavailable" },
   { host: "trigona.sk", extractRegion: trigonaStockRegion, whenRegionMissing: "unknown" },
+  { host: "virginiashop.sk", extractRegion: shoptetLabelAvailability, whenRegionMissing: "unknown" },
+  { host: "tenolix.cz", extractRegion: shoptetLabelAvailability, whenRegionMissing: "unknown" },
+  { host: "luko.cz", extractRegion: shoptetLabelAvailability, whenRegionMissing: "unknown" },
+  { host: "fomei.com", extractRegion: fomeiAvailabilityRegion, whenRegionMissing: "unknown" },
 ]);
 
 function textAvailabilityRuleFor(url: string): TextAvailabilityRule | null {
@@ -412,8 +463,44 @@ function lastingSizeList(html: string): readonly SizeAvailability[] {
   return result;
 }
 
+const CHIRUCA_SELECT_RE = /<select\b[^>]*\bid="simple-variants-select"[^>]*>([\s\S]*?)<\/select>/i;
+const CHIRUCA_OPTION_RE = /<option\b[^>]*>([\s\S]*?)<\/option>/gi;
+const CHIRUCA_SIZE_TEXT_RE = /^Veľkosť:\s*([^-]+?)\s*-\s*(.+)$/i;
+
+/**
+ * chiruca.sk (issue 227): `<select id="simple-variants-select">` nesie
+ * PRESNE JEDEN `<option>` na veľkosť, s veľkosťou aj dostupnosťou v tom
+ * istom viditeľnom texte ("Veľkosť: 38 - Vypredané (€100)") — na rozdiel
+ * od shop.lasting.eu tu netreba hľadať skupinovú hranicu ani popisok, celý
+ * `<select>` patrí jednému produktu. Placeholder `<option>` ("Zvoľte
+ * variant") nezačína "Veľkosť:", takže sa jednoducho preskočí bez
+ * osobitného rozlíšenia. Dostupnosť sa číta cez existujúci
+ * `availabilityFromText` (rovnaké slová "Skladom"/"Vypredané" ako inde),
+ * nikdy z `data-stock` atribútu — ten by bol dohad bez preukázateľného
+ * mapovania (`-1`/`-2`), zatiaľ čo text je to, čo naozaj vidí zákazník.
+ */
+function chirucaSizeList(html: string): readonly SizeAvailability[] {
+  const selectMatch = CHIRUCA_SELECT_RE.exec(html);
+  if (selectMatch === null) return [];
+  const body = selectMatch[1] ?? "";
+  const result: SizeAvailability[] = [];
+  for (const [, raw] of body.matchAll(CHIRUCA_OPTION_RE)) {
+    const clean = (raw ?? "").replace(/&nbsp;/gi, " ").replace(/\s+/g, " ").trim();
+    const sizeMatch = CHIRUCA_SIZE_TEXT_RE.exec(clean);
+    if (sizeMatch === null) continue;
+    const sizeLabel = (sizeMatch[1] ?? "").trim();
+    const rest = sizeMatch[2] ?? "";
+    if (sizeLabel === "") continue;
+    const { availability } = availabilityFromText(rest);
+    if (availability === "unknown") continue;
+    result.push({ sizeLabel, availability });
+  }
+  return result;
+}
+
 const SIZE_AVAILABILITY_RULES: readonly SizeAvailabilityRule[] = Object.freeze([
   { host: "shop.lasting.eu", read: lastingSizeList },
+  { host: "chiruca.sk", read: chirucaSizeList },
 ]);
 
 function sizeAvailabilityRuleFor(url: string): SizeAvailabilityRule | null {

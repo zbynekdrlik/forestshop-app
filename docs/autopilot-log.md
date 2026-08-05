@@ -2715,3 +2715,79 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
   reálny dôkaz, že linka dorazila do Shoptet administrácie. Konzola čistá
   počas celého overovania. Issue zavreté ručne s dôkazom, Discord run-card
   odoslaná.
+
+## Issue 240 — Eshop → Vyhľadať (nový, 2026-08-05)
+
+- Návrh (pred prvým commitom): dve oddelené polia `GET /api/search`
+  (produkty ILIKE kód/názov/dodávateľ/externalCode, objednávky ILIKE
+  číslo/meno/e-mail, žiadna umelá relevance logika) + nová READ-ONLY
+  `GET /api/product-detail/:productKey` (všetky varianty + efektívna linka
+  + adresa u nás + dostupnosť u dodávateľa). Editácia linky ide cez
+  EXISTUJÚcu `POST /api/product-links/:productKey` (#239) — žiadna nová
+  zapisovacia cesta. Zamietnutá alternatíva: rozšíriť skrytú `CatalogPage`
+  namiesto novej záložky (riziko regresie `catalog.spec.ts`, zliatie dvoch
+  odlišných úloh). Komentáre na tickete #240 (validácia + návrh + review).
+- TDD: `search-http.integration.test.ts` (11 testov), `product-detail-http
+  .integration.test.ts` (8 testov), `SearchSection.test.tsx` (10 testov),
+  `search.spec.ts` (e2e, find→open→edit→save→verify). `pnpm test` (970),
+  `pnpm test:integration` (472), `pnpm --filter @forestshop/web e2e` (36) —
+  všetko zelené pred pushom.
+- Nová záložka "Vyhľadať" v `nav.ts` kolidovala substring-om s existujúcimi
+  `getByRole("button", {name:"Hľadať"})` v `catalog.spec.ts` (Sidebar je
+  vždy namountovaný) — opravené `{exact:true}` na strane existujúceho
+  (užšieho) locatora, zapísané do `.claude/rules/testing.md`. `catalog
+  .spec.ts`'s pevné počty variantov posunuté +1 (nový sellable produkt
+  e2e fixtúry). `nav.test.ts`/`nav.spec.ts` na 11 záložiek.
+- `superpowers:requesting-code-review` (base `ca4c4fd` → head `f8b330e`):
+  0 Critical, 0 Important, 2 Minor (žiadny integračný test priamo pre
+  `escapeLikePattern` cez `/api/search`; kozmetické preformátovanie
+  jedného riadku v `e2e-setup.ts` kvôli eslint `max-lines`). PR #248,
+  merge `46a87eb8`.
+- Naživo overené na `forestshop-novy.newlevel.media` (v0.3.0-dev.142):
+  hľadanie podľa časti názvu ("OPASOK LYNX"/"Nohavice") našlo reálne
+  produkty, detail otvoril 6 variantov "01 Nohavice ALASKA YUKON" so
+  skutočnými cenami/skladom; efektívna linka produktu "OPASOK LYNX"
+  (`https://www.tthunt.sk/...`) sa zhodovala s "Párovanie produktov"'s
+  zobrazením toho istého produktu. Úprava (na tú istú hodnotu, aby sa
+  nezmenili reálne dáta) prešla, stav sa zmenil na "⏳ Uložené, čaká na
+  odoslanie". Hľadanie podľa reálneho čísla objednávky ("20261296") našlo
+  presne tú objednávku (meno/e-mail zákazníka zámerne nezverejnené, verejný
+  repozitár), žiadny produktový blok sa nezobrazil. Konzola čistá počas
+  celého overovania. Issue zavreté ručne s dôkazom, Discord run-card
+  odoslaná.
+
+## 2026-08-05 — #227 (Scraper — 5 nových domén + vylúčenie vlastného e-shopu)
+
+- Solo ticket. Overenie naživo (produkčná DB): `supplier_stock` 2305 riadkov,
+  629 `unknown` (mierne viac než ticket's 601 — nové odkazy medzičasom).
+  Design comment PRED prvým commitom:
+  https://github.com/zbynekdrlik/forestshop-app/issues/227#issuecomment-5186182379
+  — root cause: `parsePage` dôveruje voľnému textu/veľkostiam LEN na
+  registrovaných doménach (issue 223/225 disciplína), cieľové domény tam
+  jednoducho neboli. Zamietnutá alternatíva: slepo dôverovať JSON-LD/mikro-
+  dátam na celej stránke bez obmedzenia na hlavný produkt (rovnaká chyba,
+  akú issue 223/225 už raz opravili).
+- Version bump `d44fb6e` (0.3.0-dev.142→.143), prvý commit.
+- TDD (4 RED→GREEN páry): `94a2896`→`4c4d3f2` (5 domén v `parse.ts`:
+  virginiashop.sk/tenolix.cz/luko.cz zdieľaná Shoptet šablóna
+  `data-testid="labelAvailability"`, fomei.com mikrodata pred "Súvisiace",
+  chiruca.sk zoznam veľkostí v `<select>`), `1698bcd`→`2b97513` (vylúčenie
+  + čistenie forestshop.sk), `2f1bb0d`→`d2b455a` (GET vracia hostOverview/
+  ownShopLinksCount), `d68f2a2`→`9b313f6` (obrazovka — nová karta + upozor-
+  nenie). `pnpm test` (571+413), `pnpm test:integration` (476, novo
+  pridaný `supplier-stock-http.integration.test.ts` — dovtedy pre túto
+  trasu žiadny integračný test neexistoval), `pnpm --filter @forestshop/web
+  e2e` (37, nový `supplier-stock.spec.ts` s izolovaným účtom
+  `e2e-domeny@forestshop.sk`) — všetko zelené pred pushom.
+- `luko.cz` má naživo overenú len zelenú vetvu (35 z 36 sledovaných odkazov
+  sú viacveľkostné produkty bez `data-testid`, ostávajú `unknown`) —
+  zdokumentované ako zámerný, čiastočný pokrok v `.claude/rules/
+  supplier-stock.md`, nie tichá medzera.
+- `superpowers:requesting-code-review` (base `46a87eb8` → head `b977e50`):
+  0 Critical, 1 Important (chýbajúci tento log — doplnené týmto commitom),
+  5 Minor (duplicitná scan logika `collectSupplierLinks`/`countOwnShopLinks`
+  — ponechané, MVP filozofia, žiadny spoločný volajúci; redundantný
+  `count(*)` v ORDER BY — SKÚSENÉ nahradiť aliasom `total`, Postgres to
+  odmietol `column total does not exist` cez drizzle-ov `FILTER`-generovaný
+  SQL, vrátené späť a zdokumentované; slabšia e2e asercia na celý riadok —
+  spresnené na konkrétne `<td>` bunky). PR #249.

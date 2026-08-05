@@ -218,6 +218,34 @@ paths:
   `role="alert"`/`role="status"` pridanom do zdieľanej obrazovky: spusti
   CELÝ e2e balík (nie len nový spec súbor), presne ako pri `aria-label`
   vyššie.
+- **Rovnaká kolízna trieda platí aj pre NOVÚ ZÁLOŽKU v ľavom menu (`nav.ts`)
+  — jej tlačidlo je SÚČASŤOU KAŽDEJ stránky appky (Sidebar je vždy
+  namountovaný), takže jeho prístupné meno môže substring-om kolidovať s
+  `getByRole("button", {...})` v ĽUBOVOĽNOM inom e2e spec súbore, nielen v
+  tom, čo novú záložku pridáva.** Issue 240 (nová záložka "Vyhľadať"):
+  `page.getByRole("button", { name: "Hľadať" })` v `catalog.spec.ts` (3×,
+  existujúci submit button hľadania) začal padať na "strict mode violation
+  ... resolved to 2 elements" — `"Vyhľadať"` obsahuje `"Hľadať"` ako
+  substring (case-insensitive), presne ako v predošlých nálezoch vyššie.
+  Rovnaká oprava (na strane KOLÍDUJÚCEHO existujúceho locatora, nie
+  premenovaním novej záložky — jej meno je jej JEDINÝ zmysluplný popis):
+  `{ name: "Hľadať", exact: true }`. Test pri KAŽDEJ ďalšej novej záložke v
+  `nav.ts`: `grep -rn 'name: "<časť nového label-u>"' apps/web/tests/e2e/`
+  (bez `exact: true`) naprieč CELÝM e2e priečinkom, nie len v novo písanom
+  spec súbore — spusti aj celý balík (`pnpm --filter @forestshop/web e2e`),
+  nikdy len nový súbor.
+- **`scripts/e2e-setup.ts` sedí presne NA HRANICI eslint `max-lines: 400`
+  (skipBlankLines/skipComments) — pridanie čo i len JEDNÉHO nového importu +
+  JEDNÉHO volania `seedXFixtures(...)` (typický vzor pre novú fixtúru
+  vyčlenenú do vlastného súboru, viď issue 239/240) ju hneď prehodí cez
+  limit, aj keď sprievodný komentár nepočítaš** (komentáre/prázdne riadky
+  eslint nepočíta, takže ich skracovanie nepomôže). Fix nie je ďalšie
+  vyčleňovanie do súborov (fixtúra je už vyčlenená) — nájdi v súbore
+  existujúci viacriadkový `await db.insert(x).values({ ... })` s pár poľami
+  a zbaľ ho na JEDEN riadok (dlhé riadky sú v tomto súbore bežné, žiadne
+  `max-len` pravidlo nie je aktívne), čím uvoľníš presne toľko riadkov,
+  koľko tvoj nový kód pridáva. Over `pnpm lint` PRED pushom, nie až keď
+  spadne v CI.
 - **`job_run` tabuľka má od #115 JEDEN GLOBÁLNY, natrvalo seedovaný riadok**
   (`scripts/e2e-setup.ts`: umelo zostarnutý úspešný `catalog-import` beh z
   roku 2020) — kvôli `nav.spec.ts`'s staleness testu. Dôsledok: "Sync zo

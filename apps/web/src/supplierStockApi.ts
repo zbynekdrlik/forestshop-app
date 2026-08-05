@@ -34,6 +34,19 @@ const unreadableSchema = z.object({
 });
 export type UnreadableHost = z.infer<typeof unreadableSchema>;
 
+// issue 227: prehľad podľa domény — VŠETKY sledované domény (na rozdiel od
+// `unreadableSchema` vyššie, ktorá je len pre domény S PROBLÉMOM), zoradené
+// podľa počtu odkazov klesajúco.
+const hostOverviewRowSchema = z.object({
+  host: z.string(),
+  total: z.number(),
+  readable: z.number(),
+  unknown: z.number(),
+  failed: z.number(),
+  lastConfirmedAt: z.string().nullable(),
+});
+export type HostOverviewRow = z.infer<typeof hostOverviewRowSchema>;
+
 const runResultSchema = z.object({
   total: z.number(),
   skipped: z.number(),
@@ -57,6 +70,8 @@ const statusSchema = z.object({
   }),
   rows: z.array(rowSchema),
   unreadable: z.array(unreadableSchema),
+  hostOverview: z.array(hostOverviewRowSchema),
+  ownShopLinksCount: z.number(),
   lastRun: z
     .object({
       startedAt: z.string(),

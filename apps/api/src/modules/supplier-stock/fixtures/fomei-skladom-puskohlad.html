@@ -1,0 +1,28 @@
+<!-- issue 227: verné, orezané zachytenie skutočnej stránky (5. 8. 2026).
+     Rovnaká trieda "availability availability--…" sa OPAKUJE v karuseli
+     "Súvisiace" nižšie na stránke (rovnaká kolízia ako huntingshop.eu, issue
+     223) — čítač preto smie hľadať LEN PRED nadpisom "Súvisiace". -->
+<!doctype html>
+<html lang="sk">
+<head><title>FOMEI 1,7-10x42 FOREMAN HTC PRO G4 puškohľad</title></head>
+<body>
+<div class="product__offers product__offers--detail">
+  <div class="cOffersInfoWrapper">
+    <div class="product__component product__avail">
+      <span class="availability availability--inStock">Skladom</span>
+      <link itemprop="availability" href="http://schema.org/InStock" />
+    </div>
+  </div>
+</div>
+
+<h2 class="hidden-md-down">Súvisiace</h2>
+<div class="carouselOffers">
+  <div class="listBoxed">
+    <div class="productList productList--table">
+      <span class="availability availability--noStock c-na-dotaz">na dotaz</span>
+      <link itemprop="availability" href="http://schema.org/OutOfStock" />
+    </div>
+  </div>
+</div>
+</body>
+</html>

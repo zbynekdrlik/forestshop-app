@@ -8,12 +8,13 @@ import { getLatestJobRun } from "../modules/scheduler/queries.js";
 import { SUPPLIER_STOCK_JOB_NAME } from "../modules/supplier-stock/constants.js";
 import type { PageFetcher } from "../modules/supplier-stock/page-fetcher.js";
 import {
+  getSupplierStockHostOverview,
   getSupplierStockOverview,
   listSupplierStock,
   listUnreadableHosts,
 } from "../modules/supplier-stock/queries.js";
 import type { SupplierStockRunResult } from "../modules/supplier-stock/run.js";
-import { runSupplierStock } from "../modules/supplier-stock/run.js";
+import { countOwnShopLinks, runSupplierStock } from "../modules/supplier-stock/run.js";
 import { requireRole, requireUser, type AppBindings } from "./middleware.js";
 import { requireSameOrigin } from "./origin-check.js";
 
@@ -69,16 +70,20 @@ export function registerSupplierStockRoutes(
   // čím chrániť. Prepínač má AŽ automatizácia, ktorá na základe týchto dát
   // zapisuje do Shoptetu (issue 213).
   app.get("/api/supplier-stock", requireUser(db), async (c) => {
-    const [overview, rows, unreadable, lastRun] = await Promise.all([
+    const [overview, rows, unreadable, hostOverview, ownShopLinksCount, lastRun] = await Promise.all([
       getSupplierStockOverview(db),
       listSupplierStock(db),
       listUnreadableHosts(db),
+      getSupplierStockHostOverview(db),
+      countOwnShopLinks(db),
       getLatestJobRun(db, SUPPLIER_STOCK_JOB_NAME),
     ]);
     return c.json({
       overview,
       rows,
       unreadable,
+      hostOverview,
+      ownShopLinksCount,
       lastRun:
         lastRun === null
           ? null

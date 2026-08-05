@@ -189,3 +189,66 @@ paths:
   `unknown` presne ako predtým — dokumentované v `constants.ts` aj na
   ticket-e, nie tichá medzera. Vzor na ĎALŠIU doménu bez overeného
   protipólu: rovnaký postup, nie dohad podľa analógie s inou doménou.
+- **NÁŠ VLASTNÝ e-shop (`forestshop.sk`) sa dokáže omylom dostať do
+  `supplier_stock` presne tou istou cestou ako skutočný dodávateľ — issue
+  227, 21 odkazov** — `extractSupplierLink` (`catalog/supplier-link.ts`)
+  vytiahne AKÚKOĽVEK URL z `internalNote`, bez ohľadu na to, či ide o
+  dodávateľa. Fix: `run.ts`'s `collectSupplierLinks` vylučuje `hostOf(url)
+  === OWN_SHOP_HOST` (a jeho poddomény) PRI ZBERE, nikdy sa teda nedostane
+  ani do prvého fetchu; `runSupplierStockLocked` navyše pri KAŽDOM behu
+  vymaže staré riadky s týmto hostom (z behov PRED opravou) — inak by
+  tvárili ako "nečitateľná dodávateľská doména" navždy. Počet vylúčených
+  odkazov (`countOwnShopLinks`, živo z `internalNote`) sa ukazuje na
+  obrazovke ako „Vlastný e-shop (nie dodávateľ)" — vylúčenie NIKDY nie je
+  tiché. Ďalší podobný nález (iný vlastný/interný odkaz omylom vytiahnutý
+  z voľného textu): rovnaký vzor — vylúčiť PRI ZBERE podľa hosta, vyčistiť
+  staré riadky, ukázať počet, nikdy len ticho prestať zapisovať nové.
+- **Ten istý Shoptet FRONTEND ŠABLÓNOVÝ prvok (`<span class="availability-
+  label" ... data-testid="labelAvailability">`) sa opakuje NAPRIEČ VIACERÝMI
+  nezávislými doménami (issue 227: `virginiashop.sk`, `tenolix.cz`,
+  `luko.cz`) — jeden zdieľaný extraktor (`shoptetLabelAvailability` v
+  `parse.ts`) pokrýva všetky tri naraz, namiesto samostatného pravidla na
+  doménu.** Farba (`#009901`/`#cb0000`) rozhoduje len VIZUÁLNE — samotné
+  ČÍTANIE ide cez text vnútri `<span>` (napr. "Skladom"/"Skladem"/
+  "Momentálne(ě) nedostupné") a existujúci `availabilityFromText`, žiadna
+  nová farebná mapovacia logika netreba (na rozdiel od `trigona.sk`, kde
+  text sám osebe nestačil a rozhodovala farba). Tento `data-testid` sa
+  VÔBEC nevykresľuje na VIACVARIANTOVÝCH produktoch (viac veľkostí/farieb
+  naraz — každá veľkosť má VLASTNÝ `<span class="availability-label">` BEZ
+  `data-testid`, JS ich prepína cez `parameter-dependent`/`no-display`
+  triedy) — taký produkt ostáva `unknown` presne ako predtým
+  (`whenRegionMissing: "unknown"`), nikdy sa nehádaj z niektorej z
+  viacerých zhôd. `luko.cz` má tento jav VÄČŠINOVO (35 z 36 sledovaných
+  odkazov sú viacveľkostné košele) — čitateľnosť tejto domény preto ostáva
+  nízka aj po tejto zmene; skutočný pokrok by vyžadoval mapovanie
+  číselných JS parameter-ID na konkrétnu veľkosť (podobné, ale iné, než
+  `shop.lasting.eu`'s `title=""` atribút), mimo rozsahu tohto ticketu.
+- **Český tvar "Momentálně nedostupné" (mäkké `ě`) je INÝ reťazec než
+  slovenské "momentálne nedostupné" — `OUT_KEYWORDS` (`parse.ts`) potrebuje
+  OBA, `.includes()` porovnanie nevidí medzi nimi žiadnu podobnosť** (issue
+  227, `tenolix.cz`). Test na KAŽDÝ ďalší český text: over diakritiku
+  znak-po-znaku voči slovenskému tvaru, nikdy nepredpokladaj, že jeden
+  zoznam kľúčových slov pokryje obe reči automaticky.
+- **Rovnaká karuselová kolízia ako `huntingshop.eu` (issue 223) sa vie
+  zopakovať aj na SCHEMA.ORG MIKRODÁTACH (`<link itemprop="availability"
+  href="...">`), nielen na voľnom texte — `fomei.com` (issue 227) má túto
+  značku 10-11× na stránke (hlavný produkt + karusel "Súvisiace" nižšie).**
+  Fix je identický princíp ako `odimon.sk` (issue 225, "prvý výskyt patrí
+  hlavnému produktu"): hľadať LEN PRED nadpisom `>Súvisiace<`
+  (`fomeiAvailabilityRegion` v `parse.ts`). Rozhoduje TRIEDA
+  (`availability--inStock`/`availability--noStock`), nikdy viditeľný text —
+  ten sa medzi produktmi líši ("na dotaz" pri `noStock` nie je vždy rovnaké
+  slovo). Test na KAŽDÚ ďalšiu doménu s opakovaným mikrodátovým/textovým
+  prvkom naprieč stránkou: nájdi nadpis podobný "Súvisiace"/"Odporúčame" a
+  obmedz hľadanie na oblasť PRED ním, nikdy na celý dokument.
+- **`chiruca.sk` (issue 227) nesie veľkosť AJ dostupnosť v JEDNOM viditeľnom
+  texte `<option>` prvku (`<select id="simple-variants-select">`, "Veľkosť:
+  38 - Vypredané (€100)") — na rozdiel od `shop.lasting.eu` (issue 224) tu
+  netreba hľadať skupinovú hranicu ani popisok, celý `<select>` patrí
+  jednému produktu, každý `<option>` je presne jedna veľkosť.** Dostupnosť
+  sa číta z TEXTU (cez `availabilityFromText`), nikdy z `data-stock`
+  atribútu (`-1`/`-2`) — ten by bol dohad bez preukázateľného mapovania,
+  zatiaľ čo text je presne to, čo vidí zákazník. Naše `variant.size_label`
+  sú u `chiruca.sk` holé čísla ("37".."47"), zhodujú sa priamo s
+  dodávateľovým "Veľkosť: NN" bez potreby `matchSizeLabel`'s tolerantného
+  porovnávania.

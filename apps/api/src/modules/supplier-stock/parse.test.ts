@@ -26,6 +26,16 @@ const LASTING_BONY = fixture("lasting-bony-cepica-l-xl.html");
 const LASTING_HILA = fixture("lasting-hila-tricko-bez-xs.html");
 const TRIGONA_SKLADOM = fixture("trigona-skladom-10x42-sahara.html");
 const TRIGONA_VYPREDANE = fixture("trigona-vypredane-8x56-ed-savannah.html");
+const VIRGINIASHOP_SKLADOM = fixture("virginiashop-skladom-noz.html");
+const VIRGINIASHOP_NEDOSTUPNE = fixture("virginiashop-nedostupne-puzdro.html");
+const VIRGINIASHOP_VIACVARIANTOVY = fixture("virginiashop-viacvariantovy-bez-testid.html");
+const TENOLIX_SKLADEM = fixture("tenolix-skladem-alpex.html");
+const TENOLIX_NEDOSTUPNE = fixture("tenolix-nedostupne-falcon.html");
+const LUKO_SKLADEM = fixture("luko-skladem-halenka.html");
+const LUKO_VIACVELKOSTNA = fixture("luko-viacvelkostna-bez-testid.html");
+const FOMEI_SKLADOM = fixture("fomei-skladom-puskohlad.html");
+const FOMEI_NA_DOTAZ = fixture("fomei-nadotaz-dalekohlad.html");
+const CHIRUCA_VELKOSTI = fixture("chiruca-velkosti-cameros.html");
 
 describe("hostOf / isTrustedTextHost", () => {
   it("odreze www a zmensi pismena", () => {
@@ -297,6 +307,90 @@ describe("parsePage — issue 230: trigona.sk cita farebny StockCountText stitok
       '<span id="StockCountText42"><span style="color: #ff9900">Na dopyt</span></span>';
     const result = parsePage(html, "https://www.trigona.sk/eshop/nieco/p-42.xhtml");
     expect(result.availability).toBe("unknown");
+  });
+});
+
+describe("parsePage — issue 227: virginiashop.sk/tenolix.cz/luko.cz zdieľaná Shoptet šablóna (data-testid=labelAvailability)", () => {
+  it("virginiashop.sk skladom je available (zelena farba, text 'Skladom')", () => {
+    const result = parsePage(VIRGINIASHOP_SKLADOM, "https://www.virginiashop.sk/polovnicke-noze/polovnicky-noz-kandar-motiv-diviak-23-11cm-puzdro/");
+    expect(result.availability).toBe("available");
+    expect(result.source).toBe("text");
+  });
+
+  it("virginiashop.sk 'Momentálne nedostupné' (cervena farba) je unavailable", () => {
+    const result = parsePage(
+      VIRGINIASHOP_NEDOSTUPNE,
+      "https://www.virginiashop.sk/penazenky-a-dokladovky/kozene-puzdro-na-plovnicke--doklady-motiv-jelen-sv--hubert/",
+    );
+    expect(result.availability).toBe("unavailable");
+  });
+
+  it("viacvariantovy produkt (bez data-testid) je unknown, nikdy dohad z niektorej z viacerych zhod", () => {
+    const result = parsePage(
+      VIRGINIASHOP_VIACVARIANTOVY,
+      "https://www.virginiashop.sk/ploskacky-s-poharikmi/ploskacka-4-pohariky-v-darcekovej-kazete-s-polovnickym-motivom-jelen-fj6-2/",
+    );
+    expect(result.availability).toBe("unknown");
+  });
+
+  it("tenolix.cz 'Skladem' (cesky tvar) je available", () => {
+    const result = parsePage(TENOLIX_SKLADEM, "https://www.tenolix.cz/nocni-videni/hikmicro-alpex-4k-lrf-a50el/");
+    expect(result.availability).toBe("available");
+  });
+
+  it("tenolix.cz 'Momentálně nedostupné' (mäkké č.ě, nie slovenské 'momentálne') je unavailable", () => {
+    const result = parsePage(TENOLIX_NEDOSTUPNE, "https://www.tenolix.cz/termovize/hikmicro-falcon-fq25/");
+    expect(result.availability).toBe("unavailable");
+  });
+
+  it("luko.cz jednoveľkostny produkt 'Skladem' je available", () => {
+    const result = parsePage(
+      LUKO_SKLADEM,
+      "https://www.luko.cz/halenky-s-dlouhym-rukavem/damska-halenka-s-dlouhym-rukavem-model-162214/",
+    );
+    expect(result.availability).toBe("available");
+  });
+
+  it("luko.cz viacveľkostny produkt (bez data-testid, beznejsi pripad) je unknown, nikdy dohad", () => {
+    const result = parsePage(
+      LUKO_VIACVELKOSTNA,
+      "https://www.luko.cz/myslivecke-a-outdoorove-kosile/bila-kosile--s-vysivkou-model-182115/",
+    );
+    expect(result.availability).toBe("unknown");
+  });
+});
+
+describe("parsePage — issue 227: fomei.com — mikrodata triedy PRED nadpisom 'Súvisiace', nikdy z karuselu", () => {
+  it("hlavny produkt 'availability--inStock' je available, aj ked karusel nizsie na stranke ma 'noStock'", () => {
+    const result = parsePage(
+      FOMEI_SKLADOM,
+      "https://www.fomei.com/sk/produkty-fomei-1-7-10x42-foreman-htc-pro-g4-puskohlad-detail-277806",
+    );
+    expect(result.availability).toBe("available");
+    expect(result.source).toBe("text");
+  });
+
+  it("hlavny produkt 'availability--noStock' ('na dotaz') je unavailable", () => {
+    const result = parsePage(
+      FOMEI_NA_DOTAZ,
+      "https://www.fomei.com/sk/produkty-fomei-10x52-foreman-pro-xld-dalekohlad-detail-249108",
+    );
+    expect(result.availability).toBe("unavailable");
+  });
+});
+
+describe("parseSizeAvailability — issue 227: chiruca.sk zoznam veľkostí v <select>", () => {
+  it("precita KAZDU velkost z <option> textu, nikdy stranku ako celok", () => {
+    const sizes = parseSizeAvailability(CHIRUCA_VELKOSTI, "https://www.chiruca.sk/cameros/");
+    expect(sizes).toEqual([
+      { sizeLabel: "38", availability: "unavailable" },
+      { sizeLabel: "40", availability: "available" },
+      { sizeLabel: "42", availability: "unavailable" },
+    ]);
+  });
+
+  it("stranka bez pravidla (ina domena) vracia null", () => {
+    expect(parseSizeAvailability(CHIRUCA_VELKOSTI, "https://www.huntingshop.eu/p/1")).toBeNull();
   });
 });
 
