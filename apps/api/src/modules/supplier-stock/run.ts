@@ -4,11 +4,11 @@
 // (`huntingshop.eu`), takže paralelné sťahovanie by na ňu vyzeralo ako útok.
 // Medzi dvomi požiadavkami na tú istú doménu je pauza (`PER_HOST_DELAY_MS`).
 
-import { and, eq, isNotNull, notInArray } from "drizzle-orm";
+import { and, eq, isNotNull, like, notInArray, or } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
 import { products, supplierStock, variants } from "../../db/schema.js";
 import { extractSupplierLink } from "../catalog/supplier-link.js";
-import { MAX_AGE_HOURS, PER_HOST_DELAY_MS, SUPPLIER_STOCK_RUN_LOCK_KEY } from "./constants.js";
+import { MAX_AGE_HOURS, OWN_SHOP_HOST, PER_HOST_DELAY_MS, SUPPLIER_STOCK_RUN_LOCK_KEY } from "./constants.js";
 import type { PageFetcher } from "./page-fetcher.js";
 import {
   hostOf,
@@ -52,7 +52,15 @@ const defaultSleep = (ms: number): Promise<void> =>
     setTimeout(resolve, ms);
   });
 
-/** Unikátne dodávateľské linky z katalógu, v stabilnom poradí. */
+/** `true`, keď host (alebo jeho poddoména) patrí NÁŠMU VLASTNÉMU e-shopu —
+ * také odkazy nie sú dodávateľ, nikdy sa nescrapujú (issue 227). */
+function isOwnShopHost(host: string): boolean {
+  return host === OWN_SHOP_HOST || host.endsWith(`.${OWN_SHOP_HOST}`);
+}
+
+/** Unikátne dodávateľské linky z katalógu, v stabilnom poradí. Odkazy na NÁŠ
+ * VLASTNÝ e-shop (issue 227 — omylom vytiahnuté z `internalNote` tým istým
+ * regexom ako skutočné odkazy) sa sem nikdy nedostanú. */
 export async function collectSupplierLinks(db: Database): Promise<readonly string[]> {
   const rows = await db
     .select({ internalNote: products.internalNote })
@@ -61,9 +69,30 @@ export async function collectSupplierLinks(db: Database): Promise<readonly strin
   const links = new Set<string>();
   for (const row of rows) {
     const url = extractSupplierLink(row.internalNote).url;
-    if (url !== null && hostOf(url) !== "") links.add(url);
+    const host = url === null ? "" : hostOf(url);
+    if (url !== null && host !== "" && !isOwnShopHost(host)) links.add(url);
   }
   return [...links].sort((a, b) => a.localeCompare(b));
+}
+
+/**
+ * Počet odkazov na NÁŠ VLASTNÝ e-shop, extrahovaných živo z `internalNote`
+ * (issue 227) — pre obrazovku, aby vylúčenie nebolo tiché: majiteľ vidí,
+ * koľko odkazov sa NEscrapuje a prečo ("toto nie je dodávateľský odkaz").
+ * Počíta UNIKÁTNE odkazy, rovnaká jednotka ako `collectSupplierLinks`.
+ */
+export async function countOwnShopLinks(db: Database): Promise<number> {
+  const rows = await db
+    .select({ internalNote: products.internalNote })
+    .from(products)
+    .where(isNotNull(products.internalNote));
+  const links = new Set<string>();
+  for (const row of rows) {
+    const url = extractSupplierLink(row.internalNote).url;
+    const host = url === null ? "" : hostOf(url);
+    if (url !== null && host !== "" && isOwnShopHost(host)) links.add(url);
+  }
+  return links.size;
 }
 
 /**
@@ -130,6 +159,14 @@ interface StockRowInput {
 async function runSupplierStockLocked(options: RunSupplierStockOptions): Promise<SupplierStockRunResult> {
   const { db, now, fetchPage } = options;
   const sleep = options.sleep ?? defaultSleep;
+
+  // issue 227: staré riadky z BEHOV PRED touto opravou (keď sa vlastný
+  // e-shop ešte scrapoval) sa vymažú pri KAŽDOM behu — nikdy nemajú dôvod
+  // v tabuľke byť, takže ich ponechanie by ich tvárilo ako "nečitateľnú
+  // dodávateľskú doménu" navždy namiesto toho, aby jednoducho zmizli.
+  await db
+    .delete(supplierStock)
+    .where(or(eq(supplierStock.host, OWN_SHOP_HOST), like(supplierStock.host, `%.${OWN_SHOP_HOST}`)));
 
   const links = await collectSupplierLinks(db);
   const ourSizesByLink = await collectOurSizesByLink(db);

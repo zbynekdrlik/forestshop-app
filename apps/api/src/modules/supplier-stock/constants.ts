@@ -59,3 +59,11 @@ export const USER_AGENT =
 // overených 67+ produktových stránok malo VŽDY rovnaký ("success") štítok,
 // takže sa nepodarilo nájsť overený "vypredaný" príklad a pridanie pravidla
 // by bol nepodložený dohad (viď issue 230 komentáre).
+
+// issue 227: 21 odkazov v `internalNote` omylom mieri na NÁŠ VLASTNÝ e-shop
+// (`extractSupplierLink`'s regex vytiahne akúkoľvek URL z voľného textu,
+// bez ohľadu na to, či ide o dodávateľa) — to nie je dodávateľský odkaz a
+// nemá zmysel ho scrapovať. Vylučuje sa podľa hosta (`hostOf`), nikdy podľa
+// presného reťazca URL — `www.forestshop.sk` aj `forestshop.sk` musia sedieť
+// rovnako (`hostOf` už `www.` odstraňuje).
+export const OWN_SHOP_HOST = "forestshop.sk";
