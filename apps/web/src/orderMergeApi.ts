@@ -21,6 +21,9 @@ const previewResultSchema = z.union([
     ok: z.literal(true),
     subject: z.string(),
     html: z.string(),
+    // issue 277: plain-textová verzia — frontend ju predvyplní do
+    // editovateľného okna náhľadu.
+    text: z.string(),
     recipient: z.string(),
     customerName: z.string(),
     orderNumbers: z.array(z.string()),
@@ -81,11 +84,13 @@ export async function sendOrderMergeMail(
   baseOrderId: string,
   otherOrderIds: readonly string[],
   previewToken: string,
+  // issue 277: text, ktorý obsluha (prípadne) upravila v okne náhľadu.
+  editedBody: string,
 ): Promise<OrderMergeSendResult> {
   const response = await fetch("/api/order-merge/send", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ baseOrderId, otherOrderIds, previewToken }),
+    body: JSON.stringify({ baseOrderId, otherOrderIds, previewToken, editedBody }),
   });
   if (response.status === 401) throw new OrderMergeUnauthorizedError();
   return sendResultSchema.parse(await response.json());

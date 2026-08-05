@@ -34,6 +34,9 @@ export function OrderMergeSection({ role, onSessionExpired }: { readonly role: M
   const [busyKey, setBusyKey] = useState("");
   const [actionError, setActionError] = useState("");
   const [pending, setPending] = useState<PendingSend | null>(null);
+  // issue 277: obsluhou upravený text okna náhľadu — rovnaký vzor ako
+  // `NedostupneSection.tsx`.
+  const [editedBody, setEditedBody] = useState("");
   // issue 191's vzor (`NedostupneSection.tsx`) — spúšťacie tlačidlo sa počas
   // načítania náhľadu stáva `disabled`, prehliadač z neho fokus zhodí.
   const triggerRef = useRef<HTMLElement | null>(null);
@@ -71,6 +74,7 @@ export function OrderMergeSection({ role, onSessionExpired }: { readonly role: M
       )
         .then((preview) => {
           setPending({ group, preview });
+          setEditedBody(preview.text);
         })
         .catch((err: unknown) => {
           if (err instanceof OrderMergeUnauthorizedError) {
@@ -96,6 +100,7 @@ export function OrderMergeSection({ role, onSessionExpired }: { readonly role: M
       base.orderId,
       rest.map((o) => o.orderId),
       pending.preview.previewToken,
+      editedBody,
     )
       .then((result) => {
         if (!result.ok) {
@@ -115,7 +120,7 @@ export function OrderMergeSection({ role, onSessionExpired }: { readonly role: M
       .finally(() => {
         setBusyKey("");
       });
-  }, [pending, load, onSessionExpired]);
+  }, [pending, editedBody, load, onSessionExpired]);
 
   if (!loaded) return <p>Načítavam…</p>;
   if (error !== "") return <p role="alert">{error}</p>;
@@ -185,9 +190,10 @@ export function OrderMergeSection({ role, onSessionExpired }: { readonly role: M
           title="Náhľad e-mailu — povinné pred odoslaním"
           recipient={pending.preview.recipient}
           subject={pending.preview.subject}
-          html={pending.preview.html}
+          bodyText={editedBody}
+          onBodyTextChange={setEditedBody}
           confirmLabel="📧 Odoslať zákazníkovi"
-          confirmDisabled={busyKey !== ""}
+          confirmDisabled={busyKey !== "" || editedBody.trim() === ""}
           onConfirm={confirmSend}
           returnFocusRef={triggerRef}
           onClose={() => {
