@@ -126,6 +126,11 @@ services:
       # Chýbajúca = automatizácia NEPOŠLE ani jeden e-mail zákazníkovi
       # (fail-closed, majiteľova jediná bezpečnostná podmienka).
       ORDER_REMINDER_BCC_EMAIL:
+      # issue 257: "Zlúčenie objednávok" — skrytá kópia (BCC) majiteľovi,
+      # NEZÁVISLÁ vyhradená premenná (rovnaký dôvod ako ostatné *_BCC_EMAIL
+      # vyššie). Chýbajúca = automatizácia NEPOŠLE ani jeden e-mail
+      # zákazníkovi (fail-closed).
+      ORDER_MERGE_BCC_EMAIL:
     volumes:
       - catalog-raw:/data/catalog-raw
       - orders-raw:/data/orders-raw

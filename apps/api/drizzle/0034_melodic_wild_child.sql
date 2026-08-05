@@ -1,0 +1,1 @@
+ALTER TYPE "public"."mail_log_source" ADD VALUE 'order_merge';

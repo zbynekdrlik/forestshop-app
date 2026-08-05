@@ -5,7 +5,7 @@ import { log } from "../../logger.js";
 import type { MailMessage, MailTransport } from "../mail/transport.js";
 import type { MailTemplateKey } from "../mail-templates/registry.js";
 
-export type MailLogSource = "nedostupne" | "posta_uncollected" | "order_reminder" | "supplier_order";
+export type MailLogSource = "nedostupne" | "posta_uncollected" | "order_reminder" | "supplier_order" | "order_merge";
 export type MailLogTrigger = "scheduled" | "manual";
 
 /** Spoločný popis "o čom ten e-mail bol" — každé pole je nepovinné, lebo

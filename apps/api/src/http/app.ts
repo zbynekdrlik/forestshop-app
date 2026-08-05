@@ -17,6 +17,7 @@ import { registerOrderReminderRoutes, type OrderReminderRunDeps } from "./order-
 import { registerMailLogRoutes } from "./mail-log-routes.js";
 import { registerMailTemplateRoutes } from "./mail-template-routes.js";
 import { registerNedostupneRoutes, type NedostupneRunDeps } from "./nedostupne-routes.js";
+import { registerOrderMergeRoutes, type OrderMergeRunDeps } from "./order-merge-routes.js";
 import { requireSameOrigin } from "./origin-check.js";
 import { registerPairingRoutes } from "./pairing-routes.js";
 import { registerPostaUncollectedRoutes, type PostaUncollectedRunDeps } from "./posta-uncollected-routes.js";
@@ -67,6 +68,11 @@ export function createApp(
     // vyššie: voliteľné, bezpečný default nižšie pre testy/lokálny vývoj,
     // `index.ts` v produkcii VŽDY nahradí reálnymi dependencies.
     readonly nedostupne?: NedostupneRunDeps;
+    // issue 257: "Zlúčenie objednávok" — nová záložka v Eshope. Voliteľné z
+    // rovnakého dôvodu ako `nedostupne` vyššie: bezpečný default pre testy/
+    // lokálny vývoj, `index.ts` v produkcii VŽDY nahradí reálnymi
+    // dependencies.
+    readonly orderMerge?: OrderMergeRunDeps;
     // issue 212: "Dodávateľský sklad" — sťahovanie stránky dodávateľa.
     // Voliteľné z rovnakého dôvodu ako `nedostupne` vyššie; testy dodajú
     // vlastnú implementáciu a NIKDY nechodia na skutočnú stránku dodávateľa.
@@ -232,6 +238,16 @@ export function createApp(
       mailTransport: undefined,
       bccEmail: undefined,
       adminBaseUrl: options.adminBaseUrl ?? "https://www.forestshop.sk",
+    },
+  );
+  // issue 257: "Zlúčenie objednávok" — bezpečný default z rovnakého dôvodu
+  // ako `nedostupne` vyššie.
+  registerOrderMergeRoutes(
+    app,
+    db,
+    options.orderMerge ?? {
+      mailTransport: undefined,
+      bccEmail: undefined,
     },
   );
 

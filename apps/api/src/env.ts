@@ -84,6 +84,12 @@ const envSchema = z.object({
   // `MAIL_BCC`). Chýbajúca = automatizácia NEPOŠLE ani jeden e-mail
   // zákazníkovi (fail-closed).
   NEDOSTUPNE_BCC_EMAIL: z.string().email().optional(),
+  // issue 257: "Zlúčenie objednávky" — e-mail zákazníkovi, keď sa jeho
+  // viaceré objednávky posielajú spolu ako jedna zásielka. Rovnaká úvaha ako
+  // `NEDOSTUPNE_BCC_EMAIL` vyššie (NEZÁVISLÁ, vyhradená premenná, nikdy
+  // zdieľané všeobecné `MAIL_BCC`). Chýbajúca = automatizácia NEPOŠLE ani
+  // jeden e-mail zákazníkovi (fail-closed).
+  ORDER_MERGE_BCC_EMAIL: z.string().email().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

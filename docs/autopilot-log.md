@@ -2872,3 +2872,28 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
   @forestshop/web test` (421 tests, 52 files), `pnpm --filter @forestshop/api
   test` (571 tests), `pnpm --filter @forestshop/api test:integration` (477
   tests), `pnpm --filter @forestshop/web e2e` (42/42).
+
+## Issue 257 — Zlúčenie objednávok (majiteľova korekcia: záložka, nie tlačidlo)
+
+- Prevzaté od pozastaveného workera: verzia už bola bumpnutá (0.3.0-dev.151,
+  4c3e582), salvage mail-log/mail-templates/env.ts infra + preview-token
+  modul + migrácia `0034_melodic_wild_child` (zostali nezmenené — nezávislé
+  od vstupného bodu).
+- Commit `17de3be` — backend: `listMergeCandidateGroups` (merge-mail.ts) +
+  HTTP trasy `GET/POST /api/order-merge/*` + wiring do app.ts/index.ts +
+  mail-log-routes.ts enum + docker-compose.prod.yml BCC premenná. Unit test
+  `formatOrderNumbers` (src), integration test `order-merge-http
+  .integration.test.ts` (kandidáti/preview/send/role-gating).
+- Commit `8cc6e9c` — frontend: `OrderMergeSection.tsx` + `orderMergeApi.ts`
+  + nová záložka v `nav.ts`'s Eshop priečinku (12. záložka) + e2e fixtúra
+  (dve objednávky bez `order_line`) + `order-merge.spec.ts`.
+- Design comment na tickete (root cause, salvage vs. zmena, alternatívy)
+  pred prvým kódovým commitom.
+- Lokálne gates: `pnpm typecheck`, `pnpm lint` čisté; web unit 421/421 (52
+  súborov), API unit 579/579 (36 súborov), API integration 484/484 (66
+  súborov, po `db:migrate`), e2e 43/43.
+- Playbook: `.claude/rules/database.md` (nová `pgEnum` hodnota potrebuje
+  `db:migrate` PRED `test:integration`, inak `insertEntry`'s tiché
+  prehltnutie zápisu vyzerá ako bug), `.claude/rules/orders.md`
+  (`listMergeCandidateGroups` nepotrebuje `order_line` + testid podľa
+  `externalOrderId`, nie UUID).

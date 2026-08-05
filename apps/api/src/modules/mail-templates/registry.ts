@@ -24,6 +24,7 @@ export const MAIL_TEMPLATE_KEYS = [
   "posta_4",
   "order_reminder",
   "supplier_order",
+  "order_merge",
 ] as const;
 
 export type MailTemplateKey = (typeof MAIL_TEMPLATE_KEYS)[number];
@@ -257,6 +258,35 @@ const KINDS: readonly MailTemplateKind[] = [
       // zalomenie — presne tak, ako to appka posielala doteraz
       // (`[subject, ...lines].join("\n")`).
       body: "Objednávka — {{dodavatel}} ({{pocet_poloziek}} {{slovo_poloziek}})\n{{zoznam_poloziek}}",
+    },
+  },
+  {
+    key: "order_merge",
+    label: "Zlúčenie objednávky",
+    description: "E-mail zákazníkovi, keď sa jeho viaceré objednávky posielajú spolu ako jedna zásielka.",
+    // issue 257: `zoznam_objednavok` je OBYČAJNÝ TEXT (nie `list`) — ide o
+    // spojené čísla objednávok priamo vo vete ("vaše objednávky č. X a č. Y"),
+    // `list` by šablónový engine vykreslil ako samostatný `<ul>` blok a
+    // rozbil by plynulosť vety (`modules/orders/merge-mail.ts` skladá text).
+    ownPlaceholders: [
+      MENO,
+      {
+        name: "zoznam_objednavok",
+        label: "Čísla zlučovaných objednávok (spojený text)",
+        example: { kind: "text", text: "č. 20260123 a č. 20260124" },
+      },
+    ],
+    defaultText: {
+      subject: "Vaše objednávky spájame do jednej zásielky — Forestshop.sk",
+      body: [
+        "Dobrý deň, **{{meno_zakaznika}}**,",
+        "",
+        "radi by sme vás informovali, že vaše objednávky {{zoznam_objednavok}} spolu odosielame ako JEDNU zásielku — ušetríte tak na poštovnom aj na čakaní.",
+        "",
+        "Ak máte akékoľvek otázky, pokojne nás kontaktujte na {{kontakt_email}} alebo na telefónnom čísle {{kontakt_telefon}}.",
+        "",
+        PODPIS_TIM,
+      ].join("\n"),
     },
   },
 ];

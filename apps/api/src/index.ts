@@ -204,6 +204,15 @@ const nedostupneDeps = {
   adminBaseUrl: env.SHOPTET_ADMIN_BASE_URL,
 };
 
+// issue 257: "Zlúčenie objednávok" — rovnaká úvaha ako `nedostupneDeps`
+// vyššie: zdieľaný `sendSupplierMail`, vlastná fail-closed BCC premenná,
+// žiadny `classifyClient` (žiadna AI klasifikácia, e-mail posiela človek
+// ručne po povinnom náhľade).
+const orderMergeDeps = {
+  mailTransport: sendSupplierMail,
+  bccEmail: env.ORDER_MERGE_BCC_EMAIL,
+};
+
 const app = createApp(db, {
   cookieSecure: env.SESSION_COOKIE_SECURE,
   ...(runIngest === undefined ? {} : { runIngest }),
@@ -213,6 +222,7 @@ const app = createApp(db, {
   postaUncollected: postaUncollectedDeps,
   orderReminder: orderReminderDeps,
   nedostupne: nedostupneDeps,
+  orderMerge: orderMergeDeps,
   fetchSupplierPage,
 });
 

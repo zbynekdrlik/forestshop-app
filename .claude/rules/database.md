@@ -209,3 +209,22 @@ paths:
   KAŽDÝ ĎALŠÍ pokus "zjednodušiť" `ORDER BY` odkazom na alias z podobného
   agregátu: over PRIAMO integračným testom proti reálnej DB (nie len že
   `tsc`/`eslint` prejdú) — statická kontrola typov toto nezachytí.
+- **Nová `pgEnum` hodnota (`ALTER TYPE ... ADD VALUE`, napr. `mail_log_source`)
+  je NA LOKÁLNEJ Postgres inštancii neviditeľná, kým nebeží `pnpm --filter
+  @forestshop/api db:migrate` — integračné testy/`e2e-setup.ts` proti nej
+  BEŽIA ĎALEJ BEZ CHYBY, len TICHO stratia riadok.** Issue 257
+  (`mail_log_source` pridalo `'order_merge'`): `mail-log/service.ts`'s
+  `insertEntry` zámerne NEVYHADZUJE pri zlyhanom zápise (len `log.error` +
+  `return` — "zlyhanie zápisu do knihy nesmie zhodiť samotné odosielanie"),
+  takže `POST /api/order-merge/send` proti neaktualizovanej lokálnej DB
+  vrátil `{ok:true}` (fake mail transport dostal správu), ale `SELECT *
+  FROM mail_log` vrátil 0 riadkov — vyzeralo to ako bug v novom kóde,
+  skutočná príčina bola len zabudnutý `db:migrate` po pridaní migrácie
+  (`.claude/rules/local-dev.md`'s bežný cyklus `db:migrate` → `test:
+  integration`, jednoducho preskočený uprostred session). CI toto nikdy
+  nezasiahne (ephemerálny Postgres, `db:migrate` je vlastný krok v
+  `ci.yml`) — past je čisto lokálna. Test na KAŽDÚ ďalšiu novú `pgEnum`
+  hodnotu pridanú migráciou: PRED spustením `test:integration` lokálne
+  vždy `pnpm --filter @forestshop/api db:migrate` proti tej istej
+  `DATABASE_URL` — a ak sa nejaký zápis "úspešne" prejde, ale zodpovedajúci
+  SELECT ukáže menej riadkov, než očakávaš, over NAJPRV toto, nie logiku.

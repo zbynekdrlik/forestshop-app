@@ -8,13 +8,15 @@ import { DEFAULT_TAB_ID, HIDDEN_TABS, NAV, findTab, isVisibleTabId } from "./nav
 // pridalo "Texty e-mailov" do Systému (nastavenie spoločné pre VŠETKY
 // automatizácie). Issue 239 pridalo "Párovanie produktov" pod "Eshop"
 // (rovnaký dôvod ako "Nedostupné tovary" — pracovná obrazovka bez plánu).
-// Issue 240 pridalo "Vyhľadať" pod "Eshop" z rovnakého dôvodu.
+// Issue 240 pridalo "Vyhľadať" pod "Eshop" z rovnakého dôvodu. Issue 257
+// pridalo "Zlúčenie objednávok" pod "Eshop" z rovnakého dôvodu (majiteľ:
+// vlastná záložka, nie tlačidlo pri objednávke).
 // Tento test je najbližšie k tomu, čo strojovo overiť dá (registrácia, nie DOM).
-it("NAV má tri priečinky (Systém/Eshop/Automatizácie), s 3/4/4 záložkami v poradí podľa dôležitosti", () => {
+it("NAV má tri priečinky (Systém/Eshop/Automatizácie), s 3/5/4 záložkami v poradí podľa dôležitosti", () => {
   expect(NAV).toHaveLength(3);
   expect(NAV.map((f) => f.label)).toEqual(["Systém", "Eshop", "Automatizácie"]);
   expect(NAV[0]?.tabs).toHaveLength(3);
-  expect(NAV[1]?.tabs).toHaveLength(4);
+  expect(NAV[1]?.tabs).toHaveLength(5);
   expect(NAV[2]?.tabs).toHaveLength(4);
   // issue 212: "Dodávateľský sklad" — scraper dostupnosti u dodávateľa;
   // patrí do Systému (zadanie majiteľa), nie medzi Automatizácie.
@@ -24,6 +26,7 @@ it("NAV má tri priečinky (Systém/Eshop/Automatizácie), s 3/4/4 záložkami v
     "Nedostupné tovary",
     "Párovanie produktov",
     "Vyhľadať",
+    "Zlúčenie objednávok",
   ]);
   // issue 193: "Odoslané e-maily" — prehľad toho, čo automatizácie poslali.
   expect(NAV[2]?.tabs.map((t) => t.label)).toEqual([
