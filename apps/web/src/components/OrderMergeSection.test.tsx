@@ -48,7 +48,7 @@ it("klik na 'náhľad' otvorí povinný náhľad — Odoslať sa ešte nevolá, 
   fireEvent.click(screen.getByTestId("order-merge-send-27700101"));
   await screen.findByTestId("order-merge-preview");
   expect(sendOrderMergeMail).not.toHaveBeenCalled();
-  expect((screen.getByTestId("order-merge-preview-body") as HTMLTextAreaElement).value).toBe("Ahoj");
+  expect(screen.getByTestId<HTMLTextAreaElement>("order-merge-preview-body").value).toBe("Ahoj");
 });
 
 it("potvrdenie BEZ úpravy odošle pôvodný predvyplnený text", async () => {

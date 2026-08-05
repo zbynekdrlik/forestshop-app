@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type JSX } from "react";
+import { Fragment, useCallback, useEffect, useState, type JSX } from "react";
 import {
   fetchMailLog,
   MailLogUnauthorizedError,
@@ -48,6 +48,10 @@ export function MailLogSection({ onSessionExpired }: { readonly onSessionExpired
   const [source, setSource] = useState<MailLogSource | "">("");
   const [status, setStatus] = useState<MailLogRow["status"] | "">("");
   const [period, setPeriod] = useState<MailLogPeriod>("30");
+  // issue 277: ktoré riadky majú práve rozbalené zobrazenie skutočne
+  // odoslaného textu — appka ho zámerne neukazuje vždy (dlhý text by
+  // rozbil hustú tabuľku), obsluha si ho vyžiada per riadok.
+  const [expandedBodyIds, setExpandedBodyIds] = useState<ReadonlySet<string>>(new Set());
 
   const load = useCallback(() => {
     fetchMailLog({ source, status, period })
@@ -160,36 +164,67 @@ export function MailLogSection({ onSessionExpired }: { readonly onSessionExpired
               </tr>
             </thead>
             <tbody>
-              {data.rows.map((row) => (
-                <tr key={row.id} data-testid={`mail-log-row-${row.id}`} className={`ml-row ml-row-${row.status}`}>
-                  <td className="ml-when">
-                    {formatWhen(row.createdAt)}
-                    <span className="ml-trigger">{row.trigger === "manual" ? (row.actorName ?? "ručne") : "plán"}</span>
-                  </td>
-                  <td>
-                    {MAIL_LOG_SOURCE_LABELS[row.source]}
-                    {row.sequence !== null && <span className="ml-seq">{row.sequence}. upozornenie</span>}
-                  </td>
-                  <td className="ml-recipient">{row.recipient === "" ? "—" : row.recipient}</td>
-                  <td>
-                    {row.adminLink === null ? (
-                      subjectOfRow(row) === "" ? (
-                        (row.subject ?? "—")
-                      ) : (
-                        subjectOfRow(row)
-                      )
-                    ) : (
-                      <a href={row.adminLink} target="_blank" rel="noreferrer noopener">
-                        {subjectOfRow(row)}
-                      </a>
+              {data.rows.map((row) => {
+                const expanded = expandedBodyIds.has(row.id);
+                return (
+                  <Fragment key={row.id}>
+                    <tr data-testid={`mail-log-row-${row.id}`} className={`ml-row ml-row-${row.status}`}>
+                      <td className="ml-when">
+                        {formatWhen(row.createdAt)}
+                        <span className="ml-trigger">{row.trigger === "manual" ? (row.actorName ?? "ručne") : "plán"}</span>
+                      </td>
+                      <td>
+                        {MAIL_LOG_SOURCE_LABELS[row.source]}
+                        {row.sequence !== null && <span className="ml-seq">{row.sequence}. upozornenie</span>}
+                      </td>
+                      <td className="ml-recipient">{row.recipient === "" ? "—" : row.recipient}</td>
+                      <td>
+                        {row.adminLink === null ? (
+                          subjectOfRow(row) === "" ? (
+                            (row.subject ?? "—")
+                          ) : (
+                            subjectOfRow(row)
+                          )
+                        ) : (
+                          <a href={row.adminLink} target="_blank" rel="noreferrer noopener">
+                            {subjectOfRow(row)}
+                          </a>
+                        )}
+                        {/* issue 277: `body` je `null` len pre "preskočené" —
+                            appka vtedy žiadny text nevygenerovala. */}
+                        {row.body !== null && (
+                          <button
+                            type="button"
+                            className="btn sm ghost ml-body-toggle"
+                            data-testid={`mail-log-body-toggle-${row.id}`}
+                            onClick={() => {
+                              setExpandedBodyIds((ids) => {
+                                const next = new Set(ids);
+                                if (next.has(row.id)) next.delete(row.id);
+                                else next.add(row.id);
+                                return next;
+                              });
+                            }}
+                          >
+                            {expanded ? "▲ skryť text" : "👁 zobraziť text"}
+                          </button>
+                        )}
+                      </td>
+                      <td>
+                        <span className={`ml-status ml-status-${row.status}`}>{STATUS_LABELS[row.status]}</span>
+                        {row.reason !== null && <span className="ml-reason">{row.reason}</span>}
+                      </td>
+                    </tr>
+                    {expanded && row.body !== null && (
+                      <tr className="ml-body-row" data-testid={`mail-log-body-${row.id}`}>
+                        <td colSpan={5}>
+                          <pre className="ml-body-text">{row.body}</pre>
+                        </td>
+                      </tr>
                     )}
-                  </td>
-                  <td>
-                    <span className={`ml-status ml-status-${row.status}`}>{STATUS_LABELS[row.status]}</span>
-                    {row.reason !== null && <span className="ml-reason">{row.reason}</span>}
-                  </td>
-                </tr>
-              ))}
+                  </Fragment>
+                );
+              })}
             </tbody>
           </table>
         </div>

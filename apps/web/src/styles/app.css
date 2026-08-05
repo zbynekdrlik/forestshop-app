@@ -2354,6 +2354,23 @@ tr:last-child td {
   font-weight: var(--fs-weight-medium);
   white-space: nowrap;
 }
+/* issue 277: skutočne odoslaný text — tlačidlo je vlastný riadok pod
+   predmetom (rovnaký "doplnkový údaj pod hlavným" vzor ako `.ml-trigger`/
+   `.ml-reason` vyššie), rozbalené telo je samostatný riadok tabuľky cez
+   celú šírku. */
+.ml-body-toggle {
+  display: block;
+  margin-top: var(--fs-space-1);
+}
+.ml-body-row td {
+  background: var(--fs-surface-alt);
+}
+.ml-body-text {
+  margin: 0;
+  white-space: pre-wrap;
+  font-family: inherit;
+  font-size: var(--fs-text-sm);
+}
 .ml-status-sent {
   color: var(--fs-brand);
 }
