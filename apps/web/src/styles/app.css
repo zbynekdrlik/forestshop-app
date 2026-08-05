@@ -2357,3 +2357,10 @@ tr:last-child td {
   font-family: monospace;
   text-transform: lowercase;
 }
+/* issue 264 živé overenie: neplatný kód farby musí byť VIDIEĽNÝ na samotnom
+   poli, nielen v spoločnej hláške vyššie — s 6 otvorenými poľami inak nie je
+   jasné, KTORÉ z nich je zlé. */
+.themecolor-hex-input[aria-invalid="true"] {
+  border-color: var(--fs-danger);
+  background: var(--fs-danger-bg);
+}
