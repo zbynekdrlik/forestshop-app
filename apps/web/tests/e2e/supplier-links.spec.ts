@@ -23,6 +23,38 @@ test("produkt bez linky ponúka 'Doplniť', po uložení sa presunie do 'S linko
     chyby.push(e.message);
   });
 
+  // issue 251 (regresný dôkaz, natrvalo): prehliadka na main CI hneď po
+  // mergi issue 241 ukázala presne tento test zlyhať s "element(s) not
+  // found" na `product-link-url-E2E-PL-CHYBA" — koreňová príčina je
+  // vysvetlená pri `save()` volaní nižšie. Skutočný sieťový race záviselo
+  // na náhodnom časovaní (na PR CI dvakrát prešiel, na main raz zlyhal,
+  // jeden rerun prešiel čisto), takže bez umelého oneskorenia by tento
+  // test regresiu nezachytil spoľahlivo. Tu sa REÁLNY zápis (`saveProduct
+  // Link`'s `POST /api/product-links/:productKey`) len o 400ms oneskorí —
+  // požiadavka ide naďalej na skutočný server cez pôvodný `fetch`
+  // (`puvodny`), žiadna odpoveď sa nefalšuje ani nezamieta, takže toto
+  // NIE JE prípad `.claude/rules/testing.md`'s zákazu `page.route()
+  // .abort()/.fulfill(4xx/5xx)` (simulácia ZLYHANIA) — ide o rovnaký
+  // `window.fetch`-prepichnutý vzor ako `orders-write-failures.spec.ts`,
+  // len s oneskorením namiesto s falošnou odpoveďou. Overené opakovane
+  // lokálne (`.claude/rules/testing.md`): BEZ opravy nižšie zlyhá
+  // spoľahlivo (3/3 samostatných behov), S opravou prejde spoľahlivo
+  // (6+/6 samostatných behov) — vždy s týmto oneskorením zapnutým.
+  await page.addInitScript(() => {
+    const puvodny = window.fetch.bind(window);
+    window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      if (init?.method === "POST" && url.includes("/api/product-links/")) {
+        return new Promise((resolve) => {
+          setTimeout(() => {
+            resolve(puvodny(input, init));
+          }, 400);
+        });
+      }
+      return puvodny(input, init);
+    };
+  });
+
   await page.goto("/");
   await page.getByLabel("E-mail").fill(E2E_PAROVANIE_EMAIL);
   await page.getByLabel("Heslo").fill(E2E_HESLO);
