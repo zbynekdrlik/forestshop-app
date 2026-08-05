@@ -63,12 +63,31 @@ export function SupplierLinksSection({
   // katalógom môže staršiu, širšiu odpoveď doručiť neskôr než novšiu, užšiu).
   const searchSeq = useRef(0);
 
+  // Code review (issue 251, finding 3): odpoveď na `search()` môže doraziť
+  // AŽ PO odmountovaní tejto sekcie (napr. užívateľ medzitým prepol
+  // záložku) — bez tejto stráže by `.then()`/`.catch()` zavolali `setState`
+  // na už odmountovanom komponente. Nastavenie `true` MUSÍ byť aj v samotnom
+  // efekte (nielen v `useRef(true)`'s počiatočnej hodnote) — React 18
+  // `StrictMode` (`main.tsx`) vo VÝVOJOVOM móde efekt zámerne spustí,
+  // zruší a znova spustí ("simulované odmountovanie/namountovanie"), takže
+  // BEZ tohto riadku by prvé (simulované) zrušenie navždy nechalo
+  // `mountedRef.current` na `false` a appka by v dev/e2e móde nikdy
+  // nezapísala žiadny výsledok vyhľadávania.
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
   const search = useCallback(
     (q: string, s: ProductLinkState) => {
       const seq = (searchSeq.current += 1);
       setSearchError("");
       searchProductLinks({ q, state: s, page: 1 })
         .then((result) => {
+          if (!mountedRef.current) return; // odmountované skôr, než odpoveď doletela
           if (seq !== searchSeq.current) return; // medzitým prišla novšia požiadavka
           setItems(result.items);
           setTotal(result.total);
@@ -76,6 +95,7 @@ export function SupplierLinksSection({
           setSearchLoaded(true);
         })
         .catch((err: unknown) => {
+          if (!mountedRef.current) return;
           if (seq !== searchSeq.current) return;
           setSearchLoaded(true);
           if (err instanceof SupplierLinksUnauthorizedError) {
@@ -126,6 +146,13 @@ export function SupplierLinksSection({
   // prečítať. Rovnaký "latest ref" princíp ako `.claude/rules/frontend-
   // design.md`'s "derived value instead of stale local state" (issue 151),
   // len cez ref namiesto zdvihnutia do rodiča (tu žiadny rodič netreba).
+  // Code review (issue 251, finding 2): táto priama ref-mutácia POČAS
+  // renderu (namiesto `useEffect`u, pozri komentár vyššie) je bezpečná LEN
+  // preto, že tento strom nepoužíva `startTransition`/Suspense ani žiadnu
+  // inú concurrent funkciu, ktorá by mohla render ZAHODIŤ predtým, než sa
+  // commitne — vtedy by tento priamy zápis ostal vykonaný napriek
+  // zahodenému renderu. Ak sa `startTransition` niekedy zavedie do tohto
+  // stromu, tento vzor (aj `editingKeyRef` nižšie) treba prehodnotiť.
   const queryRef = useRef(query);
   queryRef.current = query;
   const stateRef = useRef(state);
@@ -134,6 +161,16 @@ export function SupplierLinksSection({
   const refetch = useCallback(() => {
     search(queryRef.current, stateRef.current);
   }, [search]);
+
+  // Code review (issue 251, finding 1): `save()`'s `.then()` (nižšie) musí
+  // vedieť, KTORÝ riadok je PRÁVE editovaný V OKAMIHU, keď odpoveď doletí —
+  // nie ten, ktorý bol editovaný v momente KLIKNUTIA na Uložiť (`save` je
+  // sama osebe zafixovaná na `productKey` parametri cez uzáver, to je v
+  // poriadku; problém je čítanie `editingKey`). Rovnaký "latest ref" dôvod
+  // ako `queryRef`/`stateRef` vyššie — synchrónne priamo v tele komponentu,
+  // nie cez `useEffect`.
+  const editingKeyRef = useRef(editingKey);
+  editingKeyRef.current = editingKey;
 
   const startEdit = useCallback((item: ProductLinkItem) => {
     setEditingKey(item.productKey);
@@ -160,7 +197,13 @@ export function SupplierLinksSection({
       setBusyKey(productKey);
       saveProductLink(productKey, urlDraft.trim())
         .then(() => {
-          setEditingKey(null);
+          // issue 251 (finding 1): `busyKey` blokuje LEN tlačidlá TOHTO
+          // riadku — Upraviť/Doplniť na VŠETKÝCH ostatných riadkoch ostáva
+          // aktívne. Kým táto odpoveď čakala, užívateľ mohol otvoriť INÝ
+          // riadok (`editingKey` sa presunul na neho) — vtedy toto
+          // zatvorenie NESMIE prebehnúť, inak by ticho zavrelo CUDZÍ,
+          // práve rozpísaný editor.
+          if (editingKeyRef.current === productKey) setEditingKey(null);
           refetch();
         })
         .catch((err: unknown) => {
