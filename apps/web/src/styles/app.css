@@ -1891,6 +1891,35 @@ tr:last-child td {
   overflow-x: auto;
 }
 
+/* ---------------- 16. ZLÚČENIE OBJEDNÁVOK (issue 257) ---------------- */
+/* Rovnaký "zoznam kariet" vzor ako Nedostupné tovary vyššie — jedna karta =
+   jeden zákazník s ≥2 otvorenými objednávkami. */
+.order-merge-groups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--fs-space-5);
+  margin-top: var(--fs-space-4);
+}
+.order-merge-group-header {
+  display: flex;
+  align-items: baseline;
+  gap: var(--fs-space-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--fs-space-2);
+}
+.order-merge-customer {
+  font-size: var(--fs-text-md);
+  font-weight: var(--fs-weight-bold);
+}
+.order-merge-orders {
+  display: flex;
+  gap: var(--fs-space-3);
+  flex-wrap: wrap;
+  margin: 0 0 var(--fs-space-3);
+  padding-left: var(--fs-space-5);
+  color: var(--fs-ink-muted);
+}
+
 /* ---------------- MODÁLNY DIALÓG (issue 191) ----------------
    Náhľad e-mailu pred odoslaním sa už nerozbaľuje na spodku stránky —
    otvorí sa cez obrazovku, takže je okamžite v zornom poli. `z-index`

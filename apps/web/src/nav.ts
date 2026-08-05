@@ -4,6 +4,7 @@ import { CatalogPage } from "./components/CatalogPage.js";
 import { MailLogSection } from "./components/MailLogSection.js";
 import { MailTemplatesSection } from "./components/MailTemplatesSection.js";
 import { NedostupneSection } from "./components/NedostupneSection.js";
+import { OrderMergeSection } from "./components/OrderMergeSection.js";
 import { OrderReminderSection } from "./components/OrderReminderSection.js";
 import { OrdersSection } from "./components/OrdersSection.js";
 import { PairingSection } from "./components/PairingSection.js";
@@ -92,6 +93,11 @@ export const NAV: readonly NavFolder[] = [
       // dôvodu ako "Párovanie produktov" vyššie (obsluha na nej pracuje,
       // žiadny plán/zapnuté-vypnuté koncept).
       { id: "search", label: "Vyhľadať", icon: "🔍", Component: SearchSection, wide: true },
+      // issue 257: majiteľ, "malo by to byt zalozka v eshope a mali by tam
+      // vyskocit ak su dve objedanvky na toho isteho zakaznika" — patrí sem
+      // z rovnakého dôvodu ako "Párovanie produktov"/"Vyhľadať" vyššie
+      // (obsluha na nej pracuje, žiadny plán/zapnuté-vypnuté koncept).
+      { id: "order-merge", label: "Zlúčenie objednávok", icon: "🔀", Component: OrderMergeSection, wide: true },
     ],
   },
   {

@@ -179,6 +179,14 @@ const E2E_DOMENY_EMAIL = "e2e-domeny@forestshop.sk"; // musí sa zhodovať s hod
 // (katalóg) — jeden účet stačí pre testy v OBOCH spec súboroch.
 const E2E_RACE_EMAIL = "e2e-race@forestshop.sk"; // musí sa zhodovať s hodnotou v pairing.spec.ts/catalog.spec.ts
 
+// issue 257: rovnaký mechanizmus a dôvod ako `E2E_RACE_EMAIL` vyššie — nový
+// spec súbor (`order-merge.spec.ts` — "Zlúčenie objednávok") dostáva VLASTNÝ
+// izolovaný účet namiesto ďalšieho prihlásenia pod zdieľaným
+// `e2e@forestshop.sk` (balík je už na hranici `MAX_ATTEMPTS`, komentár
+// vyššie pri `E2E_NAV_EMAIL`). Rola "manazer" — táto obrazovka vyžaduje
+// `admin`/`manazer` na odoslanie, rovnaká úroveň ako "Nedostupné tovary".
+const E2E_ZLUCENIE_EMAIL = "e2e-zlucenie@forestshop.sk"; // musí sa zhodovať s hodnotou v order-merge.spec.ts
+
 const { db, pool } = createDb();
 // Konštantný literál bez interpolácie — obyčajný reťazec je tu rovnako bezpečný
 // ako `sql` tagovaná šablóna (tú používa ekvivalentný apps/api/tests/helpers/db.ts),
@@ -337,6 +345,7 @@ await db.insert(users).values({
   role: "citanie",
 });
 await db.insert(users).values({ email: E2E_RACE_EMAIL, passwordHash: await hashPassword(E2E_HESLO), displayName: "E2E Manažér", role: "manazer" });
+await db.insert(users).values({ email: E2E_ZLUCENIE_EMAIL, passwordHash: await hashPassword(E2E_HESLO), displayName: "E2E Manažér", role: "manazer" });
 
 // Katalóg pre E2E: tá istá commitnutá fixtúra ako v jednotkových testoch, cez tú istú
 // službu importu — E2E tak overuje skutočnú cestu dát, nie ručne nasypané riadky.
@@ -472,37 +481,32 @@ await db.insert(orderLines).values({
 // "Σ spolu" (issue 62) tak pri prvom vykreslení ukazuje CELÉ dopytované
 // množstvo ako zostávajúce (3 + 2 = 5 ks), presne to, čo e2e test tohto
 // ticketu overuje pred aj po prepnutí stavu jedného z riadkov.
-const [objednavkaSucetPrva] = await db
-  .insert(orders)
-  .values({
-    externalOrderId: "9004",
-    customerName: "E2E Zákazník Súčet Prvá",
-    statusName: DEFAULT_ORDER_OPEN_STATUS,
-    placedAt: new Date("2026-07-23T09:00:00Z"),
-  })
-  .returning();
+const [objednavkaSucetPrva] = await db.insert(orders).values({ externalOrderId: "9004", customerName: "E2E Zákazník Súčet Prvá", statusName: DEFAULT_ORDER_OPEN_STATUS, placedAt: new Date("2026-07-23T09:00:00Z") }).returning();
 if (objednavkaSucetPrva === undefined) throw new Error("E2E objednávka (súčet, prvá) sa nepodarila vložiť");
-await db.insert(orderLines).values({
-  orderId: objednavkaSucetPrva.id,
-  variantCode: "60055/10",
-  quantity: 3,
-});
+await db.insert(orderLines).values({ orderId: objednavkaSucetPrva.id, variantCode: "60055/10", quantity: 3 });
 
-const [objednavkaSucetDruha] = await db
-  .insert(orders)
-  .values({
-    externalOrderId: "9005",
-    customerName: "E2E Zákazník Súčet Druhá",
-    statusName: DEFAULT_ORDER_OPEN_STATUS,
-    placedAt: new Date("2026-07-24T09:00:00Z"),
-  })
-  .returning();
+const [objednavkaSucetDruha] = await db.insert(orders).values({ externalOrderId: "9005", customerName: "E2E Zákazník Súčet Druhá", statusName: DEFAULT_ORDER_OPEN_STATUS, placedAt: new Date("2026-07-24T09:00:00Z") }).returning();
 if (objednavkaSucetDruha === undefined) throw new Error("E2E objednávka (súčet, druhá) sa nepodarila vložiť");
-await db.insert(orderLines).values({
-  orderId: objednavkaSucetDruha.id,
-  variantCode: "60055/10",
-  quantity: 2,
-});
+await db.insert(orderLines).values({ orderId: objednavkaSucetDruha.id, variantCode: "60055/10", quantity: 2 });
+
+// issue 257: DVE otvorené objednávky TOHO ISTÉHO (fiktívneho) zákazníka —
+// presne jeden kandidát na zlúčenie, ktorý nová záložka "Zlúčenie
+// objednávok" má vypísať. `listMergeCandidateGroups` (`orders/merge-mail.ts`)
+// číta VÝHRADNE tabuľku `orders` (customerIdentityKey podľa e-mailu), takže
+// tieto dve objednávky ZÁMERNE nemajú ŽIADEN `order_line` riadok — nulový
+// dopad na presné počty riadkov/dodávateľských skupín, ktoré iné testy v
+// `orders.spec.ts` overujú (`.claude/rules/testing.md`'s "nový fixtúrový
+// variant sa nesmie vybrať len podľa 'je nepoužitý'" poučenie sa tu netýka,
+// lebo žiadny variant sa vôbec nepoužíva).
+// Žiadne `.returning()`/id netreba — nič ďalšie v tomto skripte sa naň
+// neodkazuje (na rozdiel od objednávok vyššie, ktoré potrebujú vlastný `id`
+// pre `order_line`).
+await db
+  .insert(orders)
+  .values({ externalOrderId: "9010", customerName: "E2E Zákazník Zlúčenie", email: "e2e-zakaznik-zlucenie@example.sk", statusName: DEFAULT_ORDER_OPEN_STATUS, placedAt: new Date("2026-07-25T09:00:00Z") });
+await db
+  .insert(orders)
+  .values({ externalOrderId: "9011", customerName: "E2E Zákazník Zlúčenie", email: "e2e-zakaznik-zlucenie@example.sk", statusName: DEFAULT_ORDER_OPEN_STATUS, placedAt: new Date("2026-07-26T09:00:00Z") });
 
 // issue 63: DVE riadky BEZ dodávateľa nad DVOMA veľkosťami TOHO ISTÉHO
 // produktu ("60035/L", "60035/M" — CSV fixtúra ich nesie s prázdnym
