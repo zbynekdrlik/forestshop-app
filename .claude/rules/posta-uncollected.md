@@ -75,10 +75,21 @@ paths:
   `terminalState(trackingJson) !== ""` (pred `continue`). `dedupKey` je
   `posta:<packageNumber>` (`logic.ts`'s `postaUpozornenieDedupKey`) — JEDEN
   zdieľaný helper pre OBE volania, aby zápis a zatvorenie nikdy nedostali
-  rôzny formát kľúča. **Známa medzera (code review, issue 275):** vetva
-  `cls.status === "invalid_format"` nerobí ani jedno z toho — karta
-  vytvorená pri predošlom "notified" behu ostane navždy otvorená, keď
-  tracking neskôr začne vracať neparsovateľný formát. Zriedkavé (formát sa
-  po platnom stave zvyčajne nemení), ale pri KAŽDOM ĎALŠOM novom stavu/
-  vetve pridanom do tejto funkcie over, či nepotrebuje TIEŽ napojenie na
-  write/auto-resolve cestu.
+  rôzny formát kľúča. **Oprava medzery (issue 275, pôvodne nájdenej code
+  review-om na #268):** vetva `cls.status === "invalid_format"` predtým
+  nerobila ani jedno z toho — karta vytvorená pri predošlom "notified" behu
+  ostávala navždy otvorená, keď tracking neskôr začal vracať neparsovateľný
+  formát, bez akéhokoľvek signálu pre majiteľa. Fix je TRETIA funkcia,
+  `updateIfUnresolvedByDedupKey` (`upozornenia/service.ts`) — na rozdiel od
+  `upsertUpozornenie` (create-or-refresh) a `autoResolveByDedupKey` (close),
+  táto je čisté UPDATE-if-exists: keď pre `dedupKey` existuje nevyriešená
+  karta, jej titulok/podrobnosti sa prepíšu na "sledovanie zlyhalo, over
+  ručne", ale `resolvedAt` sa nedotýka (karta ostáva otvorená — auto-
+  zatvorenie by mohlo skryť reálny, ešte nevyriešený problém) A NIKDY sa
+  nevytvorí NOVÁ karta (zásielka, čo nikdy predtým nebola nahlásená ako
+  nevyzdvihnutá, nepotrebuje kartu len kvôli jednorazovému zlyhaniu
+  trackingu — to by bol zbytočný šum). Pri KAŽDOM ĎALŠOM novom stave/vetve
+  pridanom do tejto funkcie over, či nepotrebuje TIEŽ napojenie na
+  write/auto-resolve/update-in-place cestu — a ak ide o zdroj, čo môže
+  STRATIŤ SCHOPNOSŤ rozhodnúť (nie o skutočnú zmenu stavu), zváž
+  `updateIfUnresolvedByDedupKey`, nie automatické zatvorenie.

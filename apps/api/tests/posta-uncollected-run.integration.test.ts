@@ -332,3 +332,58 @@ it("doručená zásielka zavrie svoju kartu SAMA, bez zásahu majiteľa (resolve
   expect(after[0]?.resolvedAt).not.toBeNull();
   expect(after[0]?.resolvedByUserId).toBeNull();
 });
+
+// issue 275: code review na #268 našlo medzeru — vetva `invalid_format`
+// nerobila ani vytvorenie/obnovu, ani zatvorenie karty. Zásielka, ktorá UŽ
+// MALA nevyriešenú kartu (z predošlého "notified"/ZNP behu), a ktorej
+// tracking neskôr začne vracať nečitateľný formát, ostávala navždy otvorená
+// bez akéhokoľvek signálu pre majiteľa. Fix: karta sa OZNAČÍ inak (titulok
+// vysvetlí, že sledovanie zlyhalo), ale NIKDY sa nezatvorí sama — majiteľ ju
+// musí vybaviť ručne, presne ako inú kartu tohto typu.
+it("zásielka s existujúcou kartou, ktorej sledovanie prestane fungovať (invalid_format), dostane OZNAČENIE — karta ostáva otvorená", async () => {
+  const db = await boot();
+  await insertOrder(db, { externalOrderId: "20500013" });
+
+  await runPostaUncollected({
+    db,
+    now: TODAY,
+    trackingClient: notifiedTrackingClient(),
+    mailTransport: undefined,
+    bccEmail: "majitel@forestshop.sk",
+    adminBaseUrl: "https://www.forestshop.sk",
+  });
+  const midway = await db.select().from(upozornenie).where(eq(upozornenie.dedupKey, "posta:EF123456789SK"));
+  expect(midway).toHaveLength(1);
+  expect(midway[0]?.resolvedAt).toBeNull();
+
+  await runPostaUncollected({
+    db,
+    now: new Date("2026-08-03T10:00:00Z"),
+    trackingClient: () => Promise.resolve({ results: [{ status: "invalid_format" }] }),
+    mailTransport: undefined,
+    bccEmail: "majitel@forestshop.sk",
+    adminBaseUrl: "https://www.forestshop.sk",
+  });
+
+  const after = await db.select().from(upozornenie).where(eq(upozornenie.dedupKey, "posta:EF123456789SK"));
+  expect(after).toHaveLength(1); // stále len JEDNA karta, nikdy druhá
+  expect(after[0]?.resolvedAt).toBeNull(); // NIKDY sa nezavrie sama (skrylo by reálny problém)
+  expect(after[0]?.title).toContain("sledovanie zlyhalo");
+});
+
+it("zásielka BEZ existujúcej karty, ktorej prvá klasifikácia je invalid_format, NEVYROBÍ novú kartu (žiadny šum)", async () => {
+  const db = await boot();
+  await insertOrder(db, { externalOrderId: "20500014", packageNumber: "12345678901234" });
+
+  await runPostaUncollected({
+    db,
+    now: TODAY,
+    trackingClient: () => Promise.resolve({ results: [{ status: "invalid_format" }] }),
+    mailTransport: undefined,
+    bccEmail: "majitel@forestshop.sk",
+    adminBaseUrl: "https://www.forestshop.sk",
+  });
+
+  const rows = await db.select().from(upozornenie).where(eq(upozornenie.dedupKey, "posta:12345678901234"));
+  expect(rows).toHaveLength(0);
+});

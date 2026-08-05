@@ -4,6 +4,7 @@ import type { Database } from "../../db/client.js";
 import { orderLines, orders, variants } from "../../db/schema.js";
 import { log } from "../../logger.js";
 import { storeRawSnapshot } from "../catalog/raw-store.js";
+import { upsertUpozornenie } from "../upozornenia/service.js";
 import { redactSourceLabel, type OrderIdsFetcher } from "./fetcher.js";
 import {
   decodeCp1250,
@@ -17,6 +18,8 @@ import {
   type OrderLineCandidate,
   type OrderRowIssue,
 } from "./parser.js";
+import { buildShoptetAdminOrderUrl } from "./queries.js";
+import { classifyReturnStatus, returnUpozornenieDedupKey } from "./return-status.js";
 
 // Zámok je JEDEN pevný kľúč, NIE odvodený z obsahu — rovnaký dôvod ako
 // katalógov `INGEST_ADVISORY_LOCK_KEY` (`catalog/ingest.ts`): serializuje
@@ -91,6 +94,13 @@ export interface OrdersIngestOptions {
   // prijatia dát). Pri zlyhaní sa jednoducho zaloguje varovanie a použije
   // sa prázdna mapa — `COALESCE` v zápise nižšie ochráni predtým zistené id.
   readonly fetchOrderIds?: OrderIdsFetcher;
+  // issue 269: základ odkazu do Shoptet administrácie pre kartu na
+  // Upozorneniach (`buildShoptetAdminOrderUrl`) — nepovinné, rovnaký vzor
+  // ako `http/app.ts`'s `options.adminBaseUrl ?? "https://www.forestshop.sk"`
+  // (nikdy natvrdo importovaný `env.ts` priamo do tohto modulu). Chýbajúci
+  // v testoch, čo tento zdroj netestujú, je bezpečný — použije sa
+  // predvolená verejná adresa appky.
+  readonly adminBaseUrl?: string;
 }
 
 export type OrdersIngestResult =
@@ -395,6 +405,34 @@ export async function ingestOrders(db: Database, options: OrdersIngestOptions): 
           })
           .returning({ id: orders.id, externalOrderId: orders.externalOrderId });
         for (const row of inserted) orderIdByExternalId.set(row.externalOrderId, row.id);
+      }
+
+      // issue 269: druhý automatický zdroj pre nástenku Upozornenia (#267) —
+      // objednávka, ktorej `statusName` je jeden zo živo overených vrátkových
+      // stavov (`return-status.ts`), dostane/obnoví kartu cez ZDIEĽANÚ
+      // zapisovaciu cestu (`upsertUpozornenie`, #267/#272), volanú PRIAMO
+      // vnútri TEJTO transakcie (rovnaký vzor, akým sa #268 napojilo na
+      // `posta-uncollected/run.ts`). `dedupKey` je na OBJEDNÁVKU (nie na
+      // pod-stav) — opakovaný import tej istej objednávky v tom istom
+      // vrátkovom stave, alebo jej prechod medzi dvomi vrátkovými stavmi,
+      // len OBNOVÍ tú istú kartu. Karta sa NIKDY nezatvára automaticky
+      // (ticket to explicitne žiada — majiteľ ju zavrie ručne cez
+      // "Vybavené"), preto tu na rozdiel od #268 niet `autoResolveByDedupKey`
+      // volania. `shoptetOrderId` je to isté, čo sa práve zapísalo vyššie
+      // (`orderIdsByCode`, best-effort XML fetch) — žiadny extra dopyt.
+      const adminBaseUrl = options.adminBaseUrl ?? "https://www.forestshop.sk";
+      for (const [externalOrderId, info] of orderInfo) {
+        const returnLabel = classifyReturnStatus(info.statusName);
+        if (returnLabel === null) continue;
+        await upsertUpozornenie(tx, {
+          type: "vratenie",
+          source: "appka",
+          title: `Objednávka ${externalOrderId} — ${returnLabel}`,
+          details: [`Zákazník: ${info.customerName}`, `Stav objednávky: ${info.statusName}`].join("\n"),
+          link: buildShoptetAdminOrderUrl(adminBaseUrl, externalOrderId, orderIdsByCode.get(externalOrderId) ?? null),
+          dedupKey: returnUpozornenieDedupKey(externalOrderId),
+          now: options.now,
+        });
       }
 
       // issue 132: `orderIdsByCode` (best-effort XML fetch, prípadne

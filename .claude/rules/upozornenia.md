@@ -101,6 +101,22 @@ paths:
   argumentu filtra (`UpozorneniaSection.emptyMessage.test.tsx`), tomuto
   problému nepodlieha vôbec — uprednostni ten vzor, keď test musí
   rozlišovať MEDZI viacerými súbežne možnými volaniami tej istej funkcie.
+- **Issue 269 (druhý automatický zdroj, vrátenie/výmena/dobropis) sa napojilo
+  na import objednávok (`orders/ingest.ts`'s `ingestOrders`) PRIAMO vnútri
+  jeho existujúcej DB transakcie — rovnaký vzor ako #268's napojenie na
+  `posta-uncollected/run.ts`.** Nová `pgEnum` hodnota `vratenie`. `dedupKey`
+  je `vratenie:<externalOrderId>` — na OBJEDNÁVKU, NIE na konkrétny
+  pod-stav: prechod "Vratený tovar" → "Vybavený Dobropis" tej istej
+  objednávky OBNOVÍ tú istú kartu, nikdy nevyrobí druhú (rovnaký princíp
+  ako `posta-uncollected`'s dedup na ZÁSIELKU, nie na jej okamžitú
+  klasifikáciu). Presný zoznam rozpoznaných stavov (`orders/return-status.ts`'s
+  `classifyReturnStatus`) bol OVERENÝ ŽIVO na produkčnej DB pred
+  implementáciou (`docker exec forestshop-postgres-1 psql ... GROUP BY
+  status_name`) — presne tri stavy z tela ticketu, žiadny ďalší. Karta sa
+  NIKDY nezatvára automaticky (na rozdiel od #268) — ticket to explicitne
+  žiada, majiteľ ju zavrie ručne cez "Vybavené". `shoptetOrderId` pre odkaz
+  do administrácie sa berie PRIAMO z `orderIdsByCode` (best-effort XML
+  fetch, už načítaná mapa vnútri tej istej funkcie) — žiadny extra dopyt.
 - **`upsertUpozornenie()` mal TOCTOU medzeru (issue 272, objavené code
   review-om pri #267, opravené pri #268 — prvom reálnom automatickom
   volajúcom): samostatný `SELECT` a podľa jeho výsledku podmienený

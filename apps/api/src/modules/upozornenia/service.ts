@@ -199,6 +199,30 @@ export async function autoResolveByDedupKey(db: UpozornenieExecutor, dedupKey: s
   return result.length > 0;
 }
 
+export interface UpdateIfUnresolvedInput {
+  readonly title: string;
+  readonly details: string;
+}
+
+// issue 275: keď automatický zdroj zistí, že jeho vlastné sledovanie (napr.
+// tracking na Pošte SK) prestalo fungovať, a pre `dedupKey` UŽ existuje
+// nevyriešená karta (vznikla skôr, kým sledovanie ešte fungovalo) — táto
+// karta sa má OZNAČIŤ inak (aby majiteľ vedel, PREČO sa sama nezavrie), ale
+// NIKDY automaticky zavrieť (to by skrylo reálny, ešte nevyriešený problém)
+// ani NIKDY vytvoriť ako novú (zdroj, čo nikdy predtým problém nehlásil,
+// nepotrebuje novú kartu len kvôli jednorazovému/prechodnému zlyhaniu
+// sledovania). Na rozdiel od `upsertUpozornenie` preto NIKDY nevkladá nový
+// riadok — čisto UPDATE-if-exists. Bezpečný no-op, keď pre `dedupKey` žiadna
+// nevyriešená karta neexistuje.
+export async function updateIfUnresolvedByDedupKey(db: UpozornenieExecutor, dedupKey: string, input: UpdateIfUnresolvedInput): Promise<boolean> {
+  const result = await db
+    .update(upozornenie)
+    .set({ title: input.title, details: input.details })
+    .where(and(eq(upozornenie.dedupKey, dedupKey), isNull(upozornenie.resolvedAt)))
+    .returning({ id: upozornenie.id });
+  return result.length > 0;
+}
+
 // Volané pri OTVORENÍ záložky — hromadne označí VŠETKY práve "Nové" karty
 // ako videné naraz (inbox vzor "otvoriť = prečítané"), žiadne per-kartové
 // tlačidlo "videné" navyše. Zámerne LEN `seenAt IS NULL` (nikdy nerieši

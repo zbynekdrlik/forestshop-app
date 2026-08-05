@@ -5,7 +5,7 @@ import { recordSkippedMail, sendLoggedMail, type MailLogContext } from "../mail-
 import { buildShoptetAdminOrderUrl } from "../orders/queries.js";
 import { pluralWord } from "../orders/pluralize.js";
 import { resolveTemplate } from "../mail-templates/store.js";
-import { autoResolveByDedupKey, upsertUpozornenie } from "../upozornenia/service.js";
+import { autoResolveByDedupKey, updateIfUnresolvedByDedupKey, upsertUpozornenie } from "../upozornenia/service.js";
 import {
   buildEmail,
   classifyTracking,
@@ -195,6 +195,24 @@ async function runPostaUncollectedLocked(options: RunPostaUncollectedOptions): P
 
     const cls = classifyTracking(trackingJson, now);
     if (cls.status === "invalid_format") {
+      // issue 275 (medzera nájdená code review-om na #268): zásielka, ktorá
+      // UŽ MÁ nevyriešenú kartu na Upozorneniach (vznikla skôr, kým bola v
+      // stave notified/ZNP), a ktorej tracking neskôr začne vracať
+      // nečitateľný formát — karta sa OZNAČÍ inak (aby majiteľ vedel, PREČO
+      // sa sama nezavrie), ale NIKDY sa automaticky nezavrie (to by skrylo
+      // reálny, ešte nevyriešený problém) a NIKDY sa nevyrobí NOVÁ (zásielka,
+      // čo nikdy predtým nebola nahlásená, nepotrebuje kartu len kvôli
+      // jednorazovému/prechodnému zlyhaniu sledovania) —
+      // `updateIfUnresolvedByDedupKey` je čisto UPDATE-if-exists.
+      await updateIfUnresolvedByDedupKey(db, postaUpozornenieDedupKey(packageNumber), {
+        title: `Zásielka pre objednávku ${shipment.externalOrderId} — sledovanie zlyhalo (over ručne)`,
+        details: [
+          `Zákazník: ${shipment.customerName}`,
+          `Číslo zásielky: ${packageNumber}`,
+          "Sledovanie na Pošte SK vrátilo nečitateľný formát — appka už nevie automaticky rozoznať, či je zásielka vyzdvihnutá.",
+          "Over stav ručne (posta.sk alebo Shoptet) a kartu vybav manuálne.",
+        ].join("\n"),
+      });
       invalid.push({
         orderCode: shipment.externalOrderId,
         packageNumber,
