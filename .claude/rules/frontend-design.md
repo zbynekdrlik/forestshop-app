@@ -782,3 +782,39 @@ paths:
   169px blok, −33 %) — až PO potvrdení čísel sa kandidát preniesol do
   `app.css`. Rovnaký postup funguje pre AKÝKOĽVEK "toto zaberá príliš veľa
   miesta" ticket, nielen šírkové stĺpce.
+- **Keď JEDNA položka v skupine (napr. "Všetci" súhrnný čip nad
+  dodávateľskými čipmi) NEMÁ mať vlastný odvodený dátový stav, hoci
+  vizuálne vyzerá ako člen tej istej skupiny** — daj jej VLASTNÝ
+  modifikátor triedy (`chip-all` vedľa spoločného `chip`), ktorý v CSS
+  resetuje späť na neutrál, namiesto toho, aby JS jednoducho prestal
+  počítať jej stav. Issue 263 (majiteľ, doslovne "'Všetci' chip keeps its
+  neutral/selected behaviour — it has no data state of its own"):
+  `.chip` (základ) je teraz VÝRAZNÁ farba dátového stavu (zelená/červená
+  cez `.done`), takže "Všetci" by ju dedil automaticky bez vlastného
+  pravidla — `.chip.chip-all` prepíše späť na neutrálnu `--fs-surface-alt`,
+  a `.chip.active` (deklarované AŽ PO `.chip-all` v súbore) stále víťazí pri
+  výbere vďaka poradiu pravidiel pri rovnakej špecificite (dve triedy vs.
+  dve triedy — vyhráva posledné v poradí zdroja).
+- **"Aktívny výber prebíja odvodený dátový stav" (oranžová prebíja
+  červenú/zelenú) sa dá zaručiť ČISTO poradím CSS pravidiel — deklaruj
+  `.chip.active`/`.toorder-supplier.active` AKO POSLEDNÉ v súbore, po
+  `.done`, keď obe majú rovnaký počet tried (rovnaká špecificita, posledné
+  v zdroji vyhráva).** Toto NEPOTREBUJE `!important` ani vyššiu
+  špecificitu — len vedomé poradie. Overuj to VŽDY živým
+  `getComputedStyle` (Playwright), nikdy len prítomnosťou oboch tried v
+  `className` — jednotkový test cez `className.toContain("active")` a
+  `.toContain("done")` prejde aj vtedy, keď by CSS poradie bolo obrátené a
+  vyhrávala by červená namiesto oranžovej (issue 263: `orders-layout
+  .spec.ts` explicitne klikne na "vybavený" DODAVATEL-TEST-1 čip a
+  porovná skutočnú `rgb(...)` farbu pozadia, nie len triedy).
+- **Dve fixtúrové skupiny dodávateľa v `scripts/e2e-setup.ts` už DNES
+  pokrývajú oba krajné dátové stavy bez akejkoľvek mutácie** — DODAVATEL-
+  TEST-1 (`4859/46`, `state: "caka_sa"`) je odjakživa "vybavený"
+  (`isLineResolved` = true), DODAVATEL-TEST-2 (`60055/10` ×2, predvolený
+  `"objednane"`) je odjakživa "nespracovaný". Nový e2e test na farbenie
+  podľa stavu (issue 263) toto využil priamo — žiadny nový izolovaný účet,
+  žiadne riziko kolízie so súbežne bežiacimi spec súbormi z mutácie
+  zdieľaných dát. Pri ĎALŠOM teste, čo potrebuje "skupinu v stave X",
+  najprv skontroluj, či niektorá z existujúcich fixtúrových skupín (grep
+  `state:`/`ordered:` okolo insertov objednávok v `scripts/e2e-setup.ts`)
+  už ten stav nemá PRIRODZENE, než siahneš po mutácii cez UI.

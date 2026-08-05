@@ -111,6 +111,35 @@ it("vybraný chip nesie triedu 'active', dodávateľ bez nevybavených riadkov t
   expect(chip.className).toContain("done");
 });
 
+// issue 263: majiteľ, doslovne "'Všetci' chip keeps its neutral/selected
+// behaviour — it has no data state of its own" — na rozdiel od skutočných
+// dodávateľských čipov (`chip.done`/žiadny modifikátor = zelená/červená dátový
+// stav) čip "Všetci" dostáva VŽDY `chip-all` (nikdy `done`, aj keď sú VŠETKY
+// riadky naprieč VŠETKÝMI dodávateľmi vybavené) — farba jeho pozadia je
+// neutrálna alebo (keď je vybraný) rovnaká `active` oranžová ako každý iný čip.
+it("čip 'Všetci' nesie triedu 'chip-all' a NIKDY 'done', aj keď sú všetky riadky vybavené", () => {
+  const vsetkoHotove: readonly SupplierOpenOrders[] = [
+    { supplier: "Dodávateľ Hotový", email: null, lines: [makeLine({ lineId: "h1", state: "skladom" })] },
+  ];
+  render(
+    <OrdersToolbar
+      suppliers={vsetkoHotove}
+      selectedSupplier={null}
+      onSelectSupplier={() => {}}
+      hideResolved={false}
+      onToggleHideResolved={() => {}}
+    />,
+  );
+
+  const vsetciChip = screen.getByTestId("supplier-chip-all");
+  expect(vsetciChip.className).toContain("chip-all");
+  expect(vsetciChip.className).not.toContain("done");
+
+  const dodavatelChip = screen.getByTestId("supplier-chip-Dodávateľ Hotový");
+  expect(dodavatelChip.className).not.toContain("chip-all");
+  expect(dodavatelChip.className).toContain("done");
+});
+
 it("súhrn počíta 'Všetci' cez všetky riadky a mení sa podľa vybraného dodávateľa", () => {
   const { rerender } = render(
     <OrdersToolbar

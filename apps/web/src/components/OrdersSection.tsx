@@ -438,6 +438,7 @@ export function OrdersSection({
         <SupplierOrderGroup
           key={group.supplier}
           group={group}
+          selectedSupplier={selectedSupplier}
           hideResolved={hideResolved}
           dirtyEditorLineIds={dirtyEditorLineIds}
           onEditorActivityChange={onEditorActivityChange}

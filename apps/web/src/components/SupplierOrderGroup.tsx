@@ -49,9 +49,16 @@ export function SupplierOrderGroup({
   onOpenPreview,
   onClosePreview,
   onConfirmSend,
+  selectedSupplier,
 }: {
   readonly group: SupplierOpenOrders;
   readonly hideResolved: boolean;
+  // issue 263: predané ĎALEJ do `SupplierActionsPanel` (jeho `.toorder-
+  // supplier` hlavičky `active` stav) — `OrdersSection.tsx`'s
+  // `filteredGroups` už aj tak vykresľuje LEN vybranú skupinu, keď je
+  // niečo vybrané, takže tento prop je vždy buď `null`, alebo presne
+  // `group.supplier`.
+  readonly selectedSupplier: string | null;
   // issue 149: riadky s PRÁVE TERAZ otvorenou/rozpísanou úpravou — výnimka z
   // `hideResolved` filtra nižšie, aby vybavený riadok nezmizol spod rúk
   // manažérovi, ktorý doň ešte niečo píše (`OrdersSection.tsx`'s komentár).
@@ -130,6 +137,7 @@ export function SupplierOrderGroup({
         onOpenPreview={onOpenPreview}
         onClosePreview={onClosePreview}
         onConfirmSend={onConfirmSend}
+        selectedSupplier={selectedSupplier}
       />
       {/* issue 95: vlastný vodorovný posuvný obal — stránka (`.main-wide`)
           sa sama nikdy neposúva, posúva sa (keď treba) len táto tabuľka.

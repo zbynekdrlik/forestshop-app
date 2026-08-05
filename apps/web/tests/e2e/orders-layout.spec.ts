@@ -288,3 +288,111 @@ test("STAV je celý čitateľný a POZNÁMKY pole je dosť široké na všetkýc
 
   expect(chyby).toEqual([]);
 });
+
+// issue 263: majiteľ (po nasadení issue 259), doslovne "ja potrebujem aby to
+// bolo ako minule - že ten riadok kde su firmy - tak že tam sa menia tie
+// farby nie na tých produktoch". Farba patrí na filtračné čipy dodávateľov
+// (`.chip`, HLAVNÝ nosič) a na hlavičku skupiny v zozname (`.toorder-supplier`,
+// VEDĽAJŠÍ nosič) — NIKDY na riadky produktov (`tr.order-row`, issue 259's
+// odstránené `.line-resolved`/`.line-unresolved`). Presné hex hodnoty zo
+// starej appky (`app.css`'s `:root` komentár vysvetľuje prečo): zelená
+// `#6CAB68`=rgb(108,171,104) nespracované, červená `#D14D3B`=rgb(209,77,59)
+// vybavené, oranžová `#DDA43C`=rgb(221,164,60) práve vybraný filter (prebíja
+// oboje). Test beží pod TÝM ISTÝM `e2e-rozlozenie@forestshop.sk` účtom ako
+// test vyššie v tomto súbore (dáta objednávok sú GLOBÁLNE, nie per-účet,
+// `.claude/rules/testing.md`) — DODAVATEL-TEST-1 (`orders.spec.ts`'s
+// komentár: 1 riadok v stave "caka_sa", teda `isLineResolved` vybavený) a
+// DODAVATEL-TEST-2 (2 riadky v predvolenom "objednane", nevybavené) sú OBE
+// existujúce fixtúrové skupiny — žiadna mutácia dát, žiadne riziko kolízie
+// so súbežne bežiacimi spec súbormi.
+test("filtračné čipy dodávateľov a hlavička skupiny sú zelené/červené/oranžové podľa stavu, riadky produktov ostávajú neafarbené, konzola je čistá", async ({
+  page,
+}) => {
+  const chyby: string[] = [];
+  page.on("console", (m) => {
+    if (m.type() === "error" || m.type() === "warning") chyby.push(m.text());
+  });
+  page.on("pageerror", (e) => {
+    chyby.push(e.message);
+  });
+
+  await page.goto("/?tab=orders");
+  await page.getByLabel("E-mail").fill(E2E_ROZLOZENIE_EMAIL);
+  await page.getByLabel("Heslo").fill(E2E_HESLO);
+  await page.getByRole("button", { name: "Prihlásiť sa" }).click();
+  await expect(page.getByRole("heading", { name: "Na objednanie" })).toBeVisible();
+  await page.waitForSelector(".orders-table");
+  await page.setViewportSize({ width: 1280, height: 900 });
+
+  const pozadie = (selector: string): Promise<string | null> =>
+    page.evaluate((sel) => {
+      const el = document.querySelector(sel);
+      return el === null ? null : getComputedStyle(el).backgroundColor;
+    }, selector);
+  const pozadieHlavicky = (dodavatel: string): Promise<string | null> =>
+    page.evaluate((dod) => {
+      const kontakt = document.querySelector(`[data-testid="supplier-contact-${dod}"]`);
+      const hlavicka = kontakt?.closest(".toorder-supplier") ?? null;
+      return hlavicka === null ? null : getComputedStyle(hlavicka).backgroundColor;
+    }, dodavatel);
+
+  // Počiatočný stav: "Všetci" je vybraný (predvolené) → oranžová, NIKDY
+  // zeleno/červeno podľa súhrnného stavu ("nemá vlastný dátový stav").
+  expect(await pozadie('[data-testid="supplier-chip-all"]'), "'Všetci' pri predvolenom výbere").toBe(
+    "rgb(221, 164, 60)",
+  );
+
+  // DODAVATEL-TEST-1 (vybavené) → červená, na čipe AJ na hlavičke skupiny.
+  expect(await pozadie('[data-testid="supplier-chip-DODAVATEL-TEST-1"]'), "čip DODAVATEL-TEST-1 (vybavené)").toBe(
+    "rgb(209, 77, 59)",
+  );
+  expect(await pozadieHlavicky("DODAVATEL-TEST-1"), "hlavička DODAVATEL-TEST-1 (vybavené)").toBe("rgb(209, 77, 59)");
+
+  // DODAVATEL-TEST-2 (nespracované) → zelená, na čipe AJ na hlavičke skupiny.
+  expect(await pozadie('[data-testid="supplier-chip-DODAVATEL-TEST-2"]'), "čip DODAVATEL-TEST-2 (nespracované)").toBe(
+    "rgb(108, 171, 104)",
+  );
+  expect(await pozadieHlavicky("DODAVATEL-TEST-2"), "hlavička DODAVATEL-TEST-2 (nespracované)").toBe(
+    "rgb(108, 171, 104)",
+  );
+
+  // Výber DODAVATEL-TEST-2: jeho čip aj hlavička prejdú na oranžovú (aktívny
+  // výber prebíja zelenú), "Všetci" prestane byť oranžové a vráti sa na
+  // NEUTRÁLNU sivú (nikdy nedostane zelenú/červenú podľa súhrnu).
+  await page.getByTestId("supplier-chip-DODAVATEL-TEST-2").click();
+  await expect(page.getByTestId("supplier-chip-DODAVATEL-TEST-2")).toHaveClass(/active/);
+  expect(await pozadie('[data-testid="supplier-chip-DODAVATEL-TEST-2"]'), "vybraný čip DODAVATEL-TEST-2").toBe(
+    "rgb(221, 164, 60)",
+  );
+  expect(await pozadieHlavicky("DODAVATEL-TEST-2"), "vybraná hlavička DODAVATEL-TEST-2").toBe("rgb(221, 164, 60)");
+  expect(await pozadie('[data-testid="supplier-chip-all"]'), "'Všetci' po výbere iného dodávateľa").toBe(
+    "rgb(238, 241, 236)",
+  );
+
+  // Výber DODAVATEL-TEST-1 (vybavené, teda AJ "done" AJ "active" naraz) —
+  // majiteľ výslovne: "oranžová prebíja červenú aj zelenú". Overuje SKUTOČNE
+  // vykreslenú farbu (poradie CSS pravidiel), nie len prítomnosť oboch tried.
+  await page.getByTestId("supplier-chip-DODAVATEL-TEST-1").click();
+  expect(await pozadie('[data-testid="supplier-chip-DODAVATEL-TEST-1"]'), "vybraný 'vybavený' čip DODAVATEL-TEST-1").toBe(
+    "rgb(221, 164, 60)",
+  );
+  expect(await pozadieHlavicky("DODAVATEL-TEST-1"), "vybraná 'vybavená' hlavička DODAVATEL-TEST-1").toBe(
+    "rgb(221, 164, 60)",
+  );
+
+  // Riadky produktov (issue 259's odstránené farbenie) nesmú niesť ŽIADNU z
+  // troch stavových farieb ako pozadie — len priehľadné/biele.
+  const farbyRiadkov = await page.evaluate(() =>
+    [...document.querySelectorAll("tr.order-row")].map((r) => getComputedStyle(r).backgroundColor),
+  );
+  for (const bg of farbyRiadkov) {
+    expect(["rgb(209, 77, 59)", "rgb(108, 171, 104)", "rgb(221, 164, 60)"], `riadok má stavovú farbu: ${bg}`).not.toContain(
+      bg,
+    );
+  }
+
+  // Vrátiť výber na "Všetci" — rovnaký dôvod ako reset "skryť vybavené" vyššie.
+  await page.getByTestId("supplier-chip-all").click();
+
+  expect(chyby).toEqual([]);
+});

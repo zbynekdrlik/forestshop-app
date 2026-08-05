@@ -41,6 +41,22 @@
   --fs-danger: #b3261e;
   --fs-danger-bg: #fbeceb;
 
+  /* issue 263: tri stavové farby "Na objednanie" filtračných čipov +
+     hlavičky skupiny (`.chip`/`.toorder-supplier`) — presné hex hodnoty zo
+     starej appky (`parovanie_produktov`, `webreview/static/style.css:143-145`),
+     ktoré majiteľ už raz schválil ("presné farby od šéfa"), teraz zámerne
+     ako VLASTNÉ custom properties (nie zdieľané `--fs-danger`/`--fs-success`
+     tokeny vyššie) — issue 264 (ďalší ticket) ich sprístupní majiteľovi na
+     úpravu za behu, čo by zdieľaný token so VŠEOBECNÝM významom inde v appke
+     nedovolil. Oranžová (`active`) prebíja červenú aj zelenú v poradí
+     pravidiel nižšie — je to čistý stav VÝBERU, nie odvodený dátový stav. */
+  --chip-done-bg: #d14d3b;
+  --chip-done-text: #ffffff;
+  --chip-todo-bg: #6cab68;
+  --chip-todo-text: #173617;
+  --chip-active-bg: #dda43c;
+  --chip-active-text: #3b1d00;
+
   /* typografia */
   --fs-font: "Segoe UI", Inter, -apple-system, Roboto, sans-serif;
   --fs-text-xs: 0.75rem;
@@ -807,6 +823,15 @@ tr:last-child td {
   flex-wrap: wrap;
   gap: var(--fs-space-2);
 }
+/* issue 263: majiteľ, doslovne "tie bublinky mas farbit hlavne" + "maju byt
+   ovela viac vyraznejsie ze pozrie a vidi co ma riesit" — čip BEZ
+   modifikátora (dodávateľ s nespracovanými riadkami) je teraz VÝRAZNÁ zelená
+   (predtým slabá sivá), `.done` výrazná červená (predtým bledozelená —
+   presný opak toho, čo majiteľ chcel), `.active` výrazná oranžová (predtým
+   tmavozelená appkina brand farba). Čip "Všetci" (`.chip-all`, `OrdersToolbar
+   .tsx`) NEMÁ vlastný dátový stav — vždy zostáva na tomto neutrálnom pravidle
+   nižšie (nikdy zelený/červený), len sa prepne na `active`, presne ako
+   ktorýkoľvek iný čip. */
 .chip {
   display: inline-flex;
   align-items: center;
@@ -814,20 +839,25 @@ tr:last-child td {
   font-weight: var(--fs-weight-medium);
   padding: var(--fs-space-1) var(--fs-space-3);
   border-radius: 999px;
-  background: var(--fs-surface-alt);
-  color: var(--fs-ink);
-  border: 1px solid var(--fs-border);
+  background: var(--chip-todo-bg);
+  color: var(--chip-todo-text);
+  border: 1px solid transparent;
   cursor: pointer;
 }
+.chip.chip-all {
+  background: var(--fs-surface-alt);
+  color: var(--fs-ink);
+  border-color: var(--fs-border);
+}
 .chip.done {
-  background: var(--fs-success-bg);
-  color: var(--fs-success);
+  background: var(--chip-done-bg);
+  color: var(--chip-done-text);
   border-color: transparent;
 }
 .chip.active {
-  background: var(--fs-brand);
-  color: #fff;
-  border-color: var(--fs-brand);
+  background: var(--chip-active-bg);
+  color: var(--chip-active-text);
+  border-color: var(--chip-active-bg);
   font-weight: var(--fs-weight-bold);
 }
 .orders-toolbar-summary-row {
@@ -846,12 +876,32 @@ tr:last-child td {
   color: var(--fs-brand-strong);
   border-color: var(--fs-brand);
 }
+/* issue 263: VEDĽAJŠÍ nosič tých istých troch stavov ako `.chip` vyššie —
+   "sekundárne", majiteľov vlastný termín. Rovnaké premenné, rovnaké poradie
+   pravidiel (`.active` prebíja `.done`), aby obe miesta VŽDY zobrazovali TÚ
+   ISTÚ farbu pre TÚ ISTÚ skupinu naraz (`SupplierActionsPanel.tsx` počíta
+   `done`/`isSelected` rovnako ako `OrdersToolbar.tsx`). Text (`.tosup-label`/
+   `.tosup-contact`/`.tosup-email`) dedí farbu z pozadia namiesto vlastného
+   `--fs-ink-muted` — na výraznom farebnom pozadí by tlmená šedá stratila
+   kontrast. */
 .toorder-supplier {
   display: flex;
   align-items: center;
   gap: var(--fs-space-3);
   flex-wrap: wrap;
   margin: 0 0 var(--fs-space-3);
+  background: var(--chip-todo-bg);
+  color: var(--chip-todo-text);
+  padding: var(--fs-space-2) var(--fs-space-3);
+  border-radius: var(--fs-radius-md);
+}
+.toorder-supplier.done {
+  background: var(--chip-done-bg);
+  color: var(--chip-done-text);
+}
+.toorder-supplier.active {
+  background: var(--chip-active-bg);
+  color: var(--chip-active-text);
 }
 .tosup-label {
   font-weight: var(--fs-weight-bold);
@@ -862,10 +912,10 @@ tr:last-child td {
   align-items: center;
   gap: var(--fs-space-2);
   font-size: var(--fs-text-sm);
-  color: var(--fs-ink-muted);
+  color: inherit;
 }
 .tosup-email {
-  color: var(--fs-ink-muted);
+  color: inherit;
 }
 .tosup-emailinput {
   width: auto;
@@ -962,35 +1012,13 @@ tr:last-child td {
    `min-height`) bol pre tento účel ZBYTOČNÝ a odstránený — nemenil by nič
    mimo tejto (zamietnutej) funkcie, len by natvrdo zväčšil výšku Topbaru na
    VŠETKÝCH obrazovkách bez dôvodu. Rozhodnutie zapísané aj na ticket #95. */
-/* issue 259 — majiteľ VERBATIM: "červenou to, čo už mám urobené, zelenou to,
-   čo treba vybaviť". Binárne podľa KANONICKÉHO `isLineResolved` predikátu
-   (`ordersSummary.ts`), nie podľa jednotlivého `state` (predošlý dizajn,
-   issue 57) — ten farbil LEN caka_sa/skladom/nedostupne a nechával VÄČŠINU
-   riadkov (predvolený stav "objednane", ešte neobjednané) úplne biele, čo
-   majiteľ opísal ako "dnes sa nefarbí nič" (najčastejší, práve TEN dôležitý
-   prípad). `isLineResolved` (`ordered || state !== "objednane"`) zjednocuje
-   OBIDVA spôsoby, akými môže byť riadok "urobený" (odškrtnuté "objednané"
-   ALEBO posunutý stav) pod JEDNU farbu, presne ako to majiteľ chce vidieť.
-   Farba NIKDY nie je JEDINÝ signál — stĺpec "Stav" (`STATE_LABELS` text,
-   "Nevybavené"/"Čaká sa"/"Skladom"/"Nedostupné") a odškrtávacie políčko
-   "Objednané" ostávajú nezmenené vedľa nej, takže riadok sa dá rozlíšiť aj
-   bez farby (`.claude/rules/frontend-design.md` farbosleposť). Vlastná
-   paleta appky (--fs-danger/--fs-success token HODNOTY, nie nový hex) — len
-   použité v OPAČNOM zmysle, než ich meno naznačuje (danger-červená = "už
-   urobené", success-zelená = "treba vybaviť"), presne podľa majiteľovho
-   zadania. */
-.orders-table tr.line-resolved {
-  background: var(--fs-danger-bg);
-}
-.orders-table tr.line-resolved td:first-child {
-  box-shadow: inset 3px 0 0 var(--fs-danger);
-}
-.orders-table tr.line-unresolved {
-  background: var(--fs-success-bg);
-}
-.orders-table tr.line-unresolved td:first-child {
-  box-shadow: inset 3px 0 0 var(--fs-success);
-}
+/* issue 259 farbilo tu riadky produktov (`tr.order-row.line-resolved`/
+   `.line-unresolved`) — issue 263 ODSTRAŇUJE toto farbenie úplne (majiteľ,
+   VERBATIM: "ja potrebujem aby to bolo ako minule - že ten riadok kde su
+   firmy - tak že tam sa menia tie farby nie na tých produktoch"). Farba sa
+   presunula na filtračné čipy dodávateľov (`.chip`) a hlavičku skupiny
+   (`.toorder-supplier`) vyššie v tomto súbore — `isLineResolved` ostáva
+   kanonickým predikátom, len ho teraz čítajú TIETO dva nosiče, nie riadok. */
 /* issue 60: odškrtnuté "objednané u dodávateľa" — stlmí CELÝ riadok bez
    ohľadu na farbu vyššie (rovnaká hodnota, akú appka už používa
    pre `.btn:disabled`, nie prevzaté zo starej appky). */
