@@ -25,6 +25,8 @@ export function isLineHiddenByFilter(
   return hideResolved && isLineResolved(line) && !dirtyEditorLineIds.has(line.lineId);
 }
 
+// issue 260: každé pole je súčet `quantity` (počet KUSOV naprieč riadkami),
+// nikdy počet riadkov — pozri `summarizeOrderLines`'s komentár nižšie.
 export interface OrderLinesSummary {
   readonly total: number;
   readonly remaining: number;
@@ -35,6 +37,15 @@ export interface OrderLinesSummary {
 }
 
 /**
+ * issue 260 (majiteľ: "sú tam 2 rovnaké čelovky, ale ukazuje len jednu"):
+ * KAŽDÉ pole tu je súčet `quantity` (počet KUSOV), NIE počet riadkov.
+ * `ingest.ts` sčíta ten istý produkt v tej istej objednávke do JEDNÉHO
+ * `order_line` s `quantity > 1` (`.claude/rules/orders.md`) — počítanie
+ * riadkov (`lines.length`/`+= 1`) preto podčíta presne v tomto prípade:
+ * dva kusy na jednom riadku by vyšli ako "1". Výnimka: `OrdersSection.tsx`'s
+ * nav-odznak (issue 147) zámerne NEPOUŽÍVA túto funkciu — jeho vlastný,
+ * samostatne zdokumentovaný zámer je počet NEVYBAVENÝCH RIADKOV, nie kusov.
+ *
  * Rozpis NIE JE rozklad `total` na disjunktné časti — jeden riadok môže byť
  * súčasne `ordered` AJ v inom stave než "objednane" (rovnaký zámer ako stará
  * appka's `toOrderSummary`, ktorej komentár to hovorí výslovne: "the
@@ -42,21 +53,23 @@ export interface OrderLinesSummary {
  * priamo cez `isLineResolved`, nikdy odčítaním súčtu rozpisu od `total`.
  */
 export function summarizeOrderLines(
-  lines: readonly Pick<OrderLine, "ordered" | "state">[],
+  lines: readonly Pick<OrderLine, "ordered" | "state" | "quantity">[],
 ): OrderLinesSummary {
   let ordered = 0;
   let waiting = 0;
   let stock = 0;
   let unavailable = 0;
   let remaining = 0;
+  let total = 0;
   for (const line of lines) {
-    if (line.ordered) ordered += 1;
-    if (line.state === "caka_sa") waiting += 1;
-    if (line.state === "skladom") stock += 1;
-    if (line.state === "nedostupne") unavailable += 1;
-    if (!isLineResolved(line)) remaining += 1;
+    total += line.quantity;
+    if (line.ordered) ordered += line.quantity;
+    if (line.state === "caka_sa") waiting += line.quantity;
+    if (line.state === "skladom") stock += line.quantity;
+    if (line.state === "nedostupne") unavailable += line.quantity;
+    if (!isLineResolved(line)) remaining += line.quantity;
   }
-  return { total: lines.length, remaining, ordered, waiting, stock, unavailable };
+  return { total, remaining, ordered, waiting, stock, unavailable };
 }
 
 const BREAKDOWN_PARTS: readonly (readonly ["ordered" | "waiting" | "stock" | "unavailable", string])[] = [

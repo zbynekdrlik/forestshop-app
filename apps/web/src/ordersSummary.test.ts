@@ -14,9 +14,14 @@ import {
   summarizeOrderLines,
 } from "./ordersSummary.js";
 
-const line = (state: "objednane" | "caka_sa" | "skladom" | "nedostupne", ordered: boolean) => ({
+const line = (
+  state: "objednane" | "caka_sa" | "skladom" | "nedostupne",
+  ordered: boolean,
+  quantity = 1,
+) => ({
   state,
   ordered,
+  quantity,
 });
 
 const overviewLine = (
@@ -87,6 +92,37 @@ it("rozpis NIE JE rozklad total na disjunktné časti — riadok môže byť v O
   const summary = summarizeOrderLines([line("caka_sa", true)]);
 
   expect(summary).toEqual({ total: 1, remaining: 0, ordered: 1, waiting: 1, stock: 0, unavailable: 0 });
+});
+
+// issue 260 — majiteľ: "sú tam 2 rovnaké čelovky, ale ukazuje len jednu".
+// `ingest.ts` sčíta ten istý produkt v tej istej objednávke do JEDNÉHO
+// `order_line` s `quantity: 2` (`.claude/rules/orders.md`) — `total`/
+// `remaining` preto MUSIA sčítať `quantity`, nie počítať riadky. Pred
+// opravou by táto asercia zlyhala (`total`/`remaining` by boli 1, nie 2) —
+// dôkaz, že tento test naozaj chybu odhalí, nielen potvrdí kód.
+it("summarizeOrderLines sčíta MNOŽSTVÁ, nie počet riadkov — dva rovnaké kusy na JEDNOM riadku sa počítajú ako 2", () => {
+  const summary = summarizeOrderLines([line("objednane", false, 2)]);
+
+  expect(summary).toEqual({ total: 2, remaining: 2, ordered: 0, waiting: 0, stock: 0, unavailable: 0 });
+});
+
+// Druhý tvar toho istého bugu: dva RÔZNE riadky (rôzne objednávky) toho
+// istého produktu musia svoje množstvá tiež SČÍTAŤ, nielen spočítať riadky.
+it("summarizeOrderLines sčíta množstvá naprieč VIACERÝMI riadkami rovnakého produktu", () => {
+  const summary = summarizeOrderLines([line("objednane", false, 3), line("objednane", false, 1)]);
+
+  expect(summary.total).toBe(4);
+  expect(summary.remaining).toBe(4);
+});
+
+// `ordered`/`waiting`/`stock`/`unavailable` rozpis musí byť konzistentný s
+// `total`/`remaining` — aj TIETO bucket-y počítajú kusy, nie riadky (inak by
+// súčet rozpisu pri jednom viac-kusovom riadku pôsobil nezmyselne malý oproti
+// `total`).
+it("summarizeOrderLines — rozpis podľa stavu/odškrtnutia tiež sčíta množstvo, nie riadky", () => {
+  const summary = summarizeOrderLines([line("caka_sa", true, 5)]);
+
+  expect(summary).toEqual({ total: 5, remaining: 0, ordered: 5, waiting: 5, stock: 0, unavailable: 0 });
 });
 
 it("formatOrderSummaryText bez vybraného dodávateľa a bez rozpisu (žiadny bucket nenulový)", () => {

@@ -477,3 +477,20 @@ paths:
   v UI (nie len spolu s neutrálnou jednotkou ako `formatVariantTotalChip`'s
   "N ks"), potrebuje rovnaký trojtvarový pomocník, nikdy šablónový
   reťazec s jedným pevným tvarom podstatného mena.
+
+- **`summarizeOrderLines` (`ordersSummary.ts`) doteraz počítala RIADKY
+  (`lines.length`, `+= 1`), nie sčítanú `quantity` — ticho podčítala presne
+  vtedy, keď `ingest.ts` sčíta ten istý produkt v tej istej objednávke do
+  JEDNÉHO riadku s `quantity > 1` (issue 260, majiteľ: "sú tam 2 rovnaké
+  čelovky, ale ukazuje len jednu").** Fix: KAŽDÉ pole
+  (`total`/`remaining`/`ordered`/`waiting`/`stock`/`unavailable`) sčítava
+  `line.quantity`. **Výnimka, ktorú treba poznať pred ĎALŠOU zmenou tejto
+  funkcie:** `OrdersSection.tsx`'s nav-odznak (issue 147,
+  `OrdersRemainingCountContext`) má VLASTNÝ, samostatne testovaný zámer —
+  "počet NEVYBAVENÝCH RIADKOV" (test explicitne hovorí "nie celkový
+  počet") — preto NEJDE cez `summarizeOrderLines(...).remaining`, ale počíta
+  priamo `allLines.filter((l) => !isLineResolved(l)).length`. Test na
+  KAŽDÚ ĎALŠIU zmenu tejto funkcie: potrebuje niektoré volajúce miesto
+  POČET RIADKOV namiesto súčtu kusov? Ak áno, nech si to počíta samo cez
+  `isLineResolved`, nespoliehaj sa na to, že `summarizeOrderLines` uhádne
+  správny význam pre všetkých volajúcich naraz.

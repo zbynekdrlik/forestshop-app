@@ -114,6 +114,30 @@ it("'Súhrn o objednávaní' počíta zo suppliers bez ohľadu na to, či prehľ
   );
 });
 
+// issue 260 — majiteľ: "sú tam 2 rovnaké čelovky, ale ukazuje len jednu".
+// `ingest.ts` sčíta ten istý produkt v tej istej objednávke do JEDNÉHO
+// `order_line` s `quantity: 2` (`.claude/rules/orders.md`) — "Položiek na
+// objednanie" preto MUSÍ ukázať súčet KUSOV (4), nie počet riadkov (2). Pred
+// opravou (`summarizeOrderLines` počítala `lines.length`) by táto asercia
+// zlyhala s "2" namiesto "4".
+it("'Položiek na objednanie' sčíta MNOŽSTVÁ riadkov, nie ich počet", () => {
+  fetchOrdersOverview.mockReturnValue(new Promise(() => {}));
+  const suppliers: readonly SupplierOpenOrders[] = [
+    {
+      supplier: "Dodávateľ Alfa",
+      email: null,
+      lines: [
+        makeLine({ lineId: "b1", orderId: "ob1", quantity: 2, state: "objednane", ordered: false }),
+        makeLine({ lineId: "b2", orderId: "ob2", quantity: 2, state: "objednane", ordered: false }),
+      ],
+    },
+  ];
+
+  render(<OrdersOverviewTiles suppliers={suppliers} onSessionExpired={() => {}} />);
+
+  expect(screen.getByTestId("overview-ordering-remaining").textContent).toContain("4");
+});
+
 it("bez žiadneho nevybaveného riadku ukáže '—' namiesto dátumu najstaršej čakajúcej", () => {
   fetchOrdersOverview.mockReturnValue(new Promise(() => {}));
   render(<OrdersOverviewTiles suppliers={[]} onSessionExpired={() => {}} />);

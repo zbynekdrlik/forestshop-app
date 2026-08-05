@@ -1,7 +1,13 @@
 import { useEffect, useRef, useState, type JSX } from "react";
 import type { OrderLine } from "../ordersApi.js";
 import { STATE_LABELS } from "../orderLineStateLabels.js";
-import { formatVariantTotalChip, isStaleOrderLine, orderLineAgeDays, type VariantTotal } from "../ordersSummary.js";
+import {
+  formatVariantTotalChip,
+  isLineResolved,
+  isStaleOrderLine,
+  orderLineAgeDays,
+  type VariantTotal,
+} from "../ordersSummary.js";
 import { OrderLineStateButtons } from "./OrderLineStateButtons.js";
 
 // issue 162: počet stĺpcov "Na objednanie" tabuľky — MUSÍ sedieť s počtom
@@ -208,7 +214,10 @@ export function OrderLineRow({
   return (
     <>
       <tr
-        className={"order-row state-" + line.state + (line.ordered ? " ordered" : "")}
+        // issue 259: binárne červená/zelená podľa kanonického `isLineResolved`
+        // (`app.css`'s komentár pri `.line-resolved`/`.line-unresolved`
+        // vysvetľuje prečo nie podľa jednotlivého `state`).
+        className={"order-row " + (isLineResolved(line) ? "line-resolved" : "line-unresolved") + (line.ordered ? " ordered" : "")}
         data-testid={`order-line-${line.lineId}`}
       >
         <td>

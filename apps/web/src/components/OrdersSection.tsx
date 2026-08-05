@@ -7,7 +7,7 @@ import {
   readSelectedSupplierPreference,
 } from "../ordersDisplayPreferences.js";
 import { OrdersRemainingCountContext } from "../ordersRemainingCountContext.js";
-import { isLineHiddenByFilter, summarizeOrderLines } from "../ordersSummary.js";
+import { isLineHiddenByFilter, isLineResolved } from "../ordersSummary.js";
 import { clearWriteFailure, lineWhere, orderWhere, upsertWriteFailure, type OrderWriteFailure } from "../ordersWriteFailures.js";
 import { useDirtyEditorLineIds } from "../useDirtyEditorLineIds.js";
 import { useSelectedSupplierFallback } from "../useSelectedSupplierFallback.js";
@@ -131,15 +131,20 @@ export function OrdersSection({
 
   useEffect(load, [load]);
 
-  // issue 147: publikuje počet NEVYBAVENÝCH riadkov (naprieč VŠETKÝMI
+  // issue 147: publikuje počet NEVYBAVENÝCH RIADKOV (naprieč VŠETKÝMI
   // dodávateľmi) do ľavého menu cez `OrdersRemainingCountContext` — po KAŽDEJ
   // zmene `suppliers`, takže odznak je vždy aktuálny. Pred prvým úspešným
   // načítaním sa nevolá vôbec — Sidebar dovtedy odznak nevykreslí.
+  // issue 260: zámerne NEJDE cez `summarizeOrderLines(...).remaining` — tá
+  // odteraz sčítava KUSY (`quantity`), zatiaľ čo tento odznak má vlastný,
+  // samostatne zdokumentovaný zámer "počet riadkov" (viď test "publikuje
+  // počet nevybavených riadkov (nie celkový počet)"). Počíta sa preto priamo
+  // cez kanonický predikát `isLineResolved`.
   const { setCount: setOrdersRemainingCount } = useContext(OrdersRemainingCountContext);
   useEffect(() => {
     if (!loaded) return;
     const allLines = suppliers.flatMap((group) => group.lines);
-    setOrdersRemainingCount(summarizeOrderLines(allLines).remaining);
+    setOrdersRemainingCount(allLines.filter((l) => !isLineResolved(l)).length);
   }, [loaded, suppliers, setOrdersRemainingCount]);
 
   // issue 148 (vyňaté do `useSelectedSupplierFallback.ts`, issue 151 —

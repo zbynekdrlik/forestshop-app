@@ -725,51 +725,70 @@ tr:last-child td {
 
 /* issue 237: blok dlaždíc NAD zoznamom "Na objednanie" — dve skupiny
    ("Prehľad e-shopu" + "Súhrn o objednávaní"). Dlaždice sú PREHĽAD, nikdy
-   klikateľný filter (žiadny `cursor: pointer`/`onClick`). */
+   klikateľný filter (žiadny `cursor: pointer`/`onClick`). issue 258
+   (majiteľ: "je to strašne veľké... musím dosť rolovať dole... pre mna je to
+   len informatívna informácia") zmenšilo celý blok — pôvodné 3-riadkové
+   dlaždice (label/hodnota/vedľajší údaj, každý na vlastnom riadku, veľký
+   `--fs-text-lg` súčet + veľké odsadenie) namerané naživo
+   (`page.addStyleTag` kandidát proti produkcii, rovnaká metodika ako
+   `.claude/rules/frontend-design.md`'s `<colgroup>` merania) na 103px/79.5px
+   výšku dlaždice, celý blok 253.5px pri 1366×768. Fix: dlaždica je teraz
+   JEDEN riadok popisku + JEDEN riadok hodnoty (label si necháva vlastný
+   `flex: 1 1 100%`, aby sa vždy zalomil PRED hodnotou, nikdy vedľa nej pri
+   užšom okne), menšie písmo (`--fs-text-base` namiesto `--fs-text-lg`) aj
+   odsadenie (`--fs-space-2`/`--fs-space-3` namiesto `--fs-space-3`/
+   `--fs-space-4`) — namerané 58.5px/dlaždicu, blok 169px (−33 %), tabuľka
+   pod ním sa posunula o ~96px vyššie. Všetkých 7 čísel ostáva plne čitateľné
+   (žiadna hodnota sa neskrátila/neorezala) — len menšie, nie chýbajúce. */
 .orders-overview {
   display: flex;
   flex-direction: column;
-  gap: var(--fs-space-4);
-  margin-bottom: var(--fs-space-5);
+  gap: var(--fs-space-2);
+  margin-bottom: var(--fs-space-3);
 }
 .overview-group-title {
-  font-size: var(--fs-text-sm);
+  font-size: var(--fs-text-xs);
   font-weight: var(--fs-weight-semibold);
   color: var(--fs-ink-muted);
   text-transform: uppercase;
   letter-spacing: 0.03em;
-  margin: 0 0 var(--fs-space-2);
+  margin: 0 0 var(--fs-space-1);
 }
 .overview-tiles {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--fs-space-3);
+  gap: var(--fs-space-2);
 }
 .overview-tile {
-  flex: 1 1 10rem;
-  min-width: 10rem;
+  flex: 1 1 9rem;
+  min-width: 9rem;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  column-gap: var(--fs-space-2);
   background: var(--fs-surface);
   border: 1px solid var(--fs-border-soft);
   border-radius: var(--fs-radius-md);
   box-shadow: var(--fs-shadow-sm);
-  padding: var(--fs-space-3) var(--fs-space-4);
+  padding: var(--fs-space-2) var(--fs-space-3);
 }
 .overview-tile-label {
+  flex: 1 1 100%;
   font-size: var(--fs-text-xs);
   color: var(--fs-ink-muted);
-  margin: 0 0 var(--fs-space-1);
+  margin: 0;
 }
 .overview-tile-value {
-  font-size: var(--fs-text-lg);
+  font-size: var(--fs-text-base);
   font-weight: var(--fs-weight-bold);
   color: var(--fs-ink);
   margin: 0;
 }
 .overview-tile-sub {
-  font-size: var(--fs-text-sm);
+  font-size: var(--fs-text-xs);
   color: var(--fs-brand);
   font-weight: var(--fs-weight-medium);
-  margin: var(--fs-space-1) 0 0;
+  margin: 0;
 }
 
 /* issue 61: filtrovacie štítky dodávateľov + súhrn "ostáva vybaviť" +
@@ -943,28 +962,37 @@ tr:last-child td {
    `min-height`) bol pre tento účel ZBYTOČNÝ a odstránený — nemenil by nič
    mimo tejto (zamietnutej) funkcie, len by natvrdo zväčšil výšku Topbaru na
    VŠETKÝCH obrazovkách bez dôvodu. Rozhodnutie zapísané aj na ticket #95. */
-/* Farby stavu riadku — sémantické (čaká/skladom/nedostupné), vlastná paleta
-   tejto appky (nie prevzaté hodnoty starej appky). */
-.orders-table tr.state-caka_sa {
-  background: var(--fs-warning-bg);
-}
-.orders-table tr.state-caka_sa td:first-child {
-  box-shadow: inset 3px 0 0 var(--fs-warning);
-}
-.orders-table tr.state-skladom {
-  background: var(--fs-success-bg);
-}
-.orders-table tr.state-skladom td:first-child {
-  box-shadow: inset 3px 0 0 var(--fs-success);
-}
-.orders-table tr.state-nedostupne {
+/* issue 259 — majiteľ VERBATIM: "červenou to, čo už mám urobené, zelenou to,
+   čo treba vybaviť". Binárne podľa KANONICKÉHO `isLineResolved` predikátu
+   (`ordersSummary.ts`), nie podľa jednotlivého `state` (predošlý dizajn,
+   issue 57) — ten farbil LEN caka_sa/skladom/nedostupne a nechával VÄČŠINU
+   riadkov (predvolený stav "objednane", ešte neobjednané) úplne biele, čo
+   majiteľ opísal ako "dnes sa nefarbí nič" (najčastejší, práve TEN dôležitý
+   prípad). `isLineResolved` (`ordered || state !== "objednane"`) zjednocuje
+   OBIDVA spôsoby, akými môže byť riadok "urobený" (odškrtnuté "objednané"
+   ALEBO posunutý stav) pod JEDNU farbu, presne ako to majiteľ chce vidieť.
+   Farba NIKDY nie je JEDINÝ signál — stĺpec "Stav" (`STATE_LABELS` text,
+   "Nevybavené"/"Čaká sa"/"Skladom"/"Nedostupné") a odškrtávacie políčko
+   "Objednané" ostávajú nezmenené vedľa nej, takže riadok sa dá rozlíšiť aj
+   bez farby (`.claude/rules/frontend-design.md` farbosleposť). Vlastná
+   paleta appky (--fs-danger/--fs-success token HODNOTY, nie nový hex) — len
+   použité v OPAČNOM zmysle, než ich meno naznačuje (danger-červená = "už
+   urobené", success-zelená = "treba vybaviť"), presne podľa majiteľovho
+   zadania. */
+.orders-table tr.line-resolved {
   background: var(--fs-danger-bg);
 }
-.orders-table tr.state-nedostupne td:first-child {
+.orders-table tr.line-resolved td:first-child {
   box-shadow: inset 3px 0 0 var(--fs-danger);
 }
+.orders-table tr.line-unresolved {
+  background: var(--fs-success-bg);
+}
+.orders-table tr.line-unresolved td:first-child {
+  box-shadow: inset 3px 0 0 var(--fs-success);
+}
 /* issue 60: odškrtnuté "objednané u dodávateľa" — stlmí CELÝ riadok bez
-   ohľadu na `state-*` farbu vyššie (rovnaká hodnota, akú appka už používa
+   ohľadu na farbu vyššie (rovnaká hodnota, akú appka už používa
    pre `.btn:disabled`, nie prevzaté zo starej appky). */
 .orders-table tr.ordered {
   opacity: 0.55;
