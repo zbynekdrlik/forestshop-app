@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { and, between, eq, inArray, isNotNull, sql } from "drizzle-orm";
+import { between, eq, inArray, sql } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
 import { orderLines, orders, upozornenie, variants } from "../../db/schema.js";
 import { log } from "../../logger.js";
@@ -445,13 +445,33 @@ export async function ingestOrders(db: Database, options: OrdersIngestOptions): 
       // zistí, ktoré už majú VYRIEŠENÝ riadok — tie sa nižšie PRESKOČIA, ostatné
       // (žiadna karta zatiaľ, alebo ešte nevyriešená) sa naďalej vyrobia/obnovia
       // presne ako doteraz (prechod medzi pod-stavmi ostáva funkčný).
+      // Code review (issue 269): bez `.for("update")` by tento SELECT bol
+      // obyčajné READ COMMITTED čítanie — neblokoval by sa na súbežnom
+      // ručnom "Vybavené" (`resolveUpozornenie`, mimo tejto transakcie),
+      // ktorý by mohol commitnúť PRESNE medzi týmto dopytom a nižším
+      // `upsertUpozornenie` volaním pre TEN istý kandidát. V tom úzkom okne
+      // by kandidát vyzeral ešte nevyriešený, `upsertUpozornenie` by ho
+      // normálne obnovil/vytvoril, a hneď potom by sa stal vyriešeným —
+      // ten istý bug, len naživo zriedkavejšie. `.for("update")` zamkne
+      // KAŽDÝ existujúci riadok s niektorým z kandidátnych `dedupKey` na
+      // celý zvyšok tejto transakcie: súbežné `resolveUpozornenie` na
+      // ktoromkoľvek z nich POČKÁ, kým táto transakcia commitne (rovnaký
+      // vzor ako `orders/state.ts`/`.claude/rules/database.md`'s riadkové
+      // zámky), takže rozhodnutie "je/nie je už vyriešený" je vždy
+      // postavené na ČERSTVOM stave, nie na zastaranom snapshote spred
+      // začiatku cyklu. Bez JOINu (jedna tabuľka) nepotrebuje `of` zoznam.
       let resolvedReturnDedupKeys: ReadonlySet<string> = new Set();
       if (returnCandidates.length > 0) {
-        const resolvedRows = await tx
-          .select({ dedupKey: upozornenie.dedupKey })
+        const candidateRows = await tx
+          .select({ dedupKey: upozornenie.dedupKey, resolvedAt: upozornenie.resolvedAt })
           .from(upozornenie)
-          .where(and(inArray(upozornenie.dedupKey, returnCandidates.map((c) => c.dedupKey)), isNotNull(upozornenie.resolvedAt)));
-        resolvedReturnDedupKeys = new Set(resolvedRows.map((row) => row.dedupKey).filter((key): key is string => key !== null));
+          .where(inArray(upozornenie.dedupKey, returnCandidates.map((c) => c.dedupKey)))
+          .for("update");
+        resolvedReturnDedupKeys = new Set(
+          candidateRows
+            .filter((row): row is { dedupKey: string; resolvedAt: Date } => row.resolvedAt !== null && row.dedupKey !== null)
+            .map((row) => row.dedupKey),
+        );
       }
       for (const candidate of returnCandidates) {
         if (resolvedReturnDedupKeys.has(candidate.dedupKey)) continue;
