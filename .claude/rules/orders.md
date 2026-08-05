@@ -516,3 +516,11 @@ paths:
   `externalOrderId` je stabilné a čitateľné aj v e2e teste napísanom PRED
   behom (UUID sa dozvieš až za behu). Rovnaký zámer ako
   `NedostupneSection.tsx`'s `variantCode`-kľúčované testid.
+- **issue 277: "Zlúčenie objednávok" zdieľa `MailPreviewDialog.tsx`'s
+  editovateľné telo (`bodyText`/`onBodyTextChange`, `editedBody` na
+  `/send`) s "Nedostupné tovary" — plné odôvodnenie (prečo textarea a
+  nie rich-text, `renderEditedBody`, `toHaveValue()` namiesto
+  `toContainText()` na kontajneri s textarea vo vnútri) je zdokumentované
+  v `.claude/rules/nedostupne.md`, aby sa nemuselo písať dvakrát. `sendOrderMergeMail`'s nový voliteľný `editedBody` má rovnaký tvar
+  (`{ ...built.content, ...renderEditedBody(editedBody) }`, predmet
+  ostáva pôvodný).

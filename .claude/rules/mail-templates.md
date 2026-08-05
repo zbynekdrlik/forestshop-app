@@ -74,6 +74,14 @@ paths:
   testoch, takže vlastný izolovaný účet pre nový spec súbor je stále povinný.
   **Nový e2e test aj tak nepridávaj s vlastným prihlásením zbytočne** — dva
   scenáre v jednom teste sú lacnejšie než dve prihlásenia.
+- **issue 277: `renderEditedBody` (`render.ts`) je zámerne SAMOSTATNÁ od
+  `renderTemplate` — jednorazová ručná úprava (okno náhľadu pred
+  odoslaním, `.claude/rules/nedostupne.md`) edituje UŽ HOTOVÝ text
+  (placeholdery dosadené), takže sa nepúšťa cez `parse`/`{{pole}}`/
+  `**tučné**` engine znova (obsluha nepozná/nepotrebuje šablónovú
+  syntax). Zdieľa len `htmlEscape` (exportovaná z `render.ts` kvôli
+  tomu) — prázdny riadok = odstavec, rovnaká konvencia ako šablóny,
+  jednoduchý riadok = `<br>`.
 - **issue 238: `samples.ts`'s "náhľad na skutočných dátach" pre
   `nedostupne_alternativa`'s `zoznam_nahrad` teraz vychádza z
   `nedostupne_replacement_link` (majiteľove ručné odkazy), nie z pôvodného

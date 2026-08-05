@@ -52,3 +52,14 @@ paths:
 - **História pošty prežije zmazanie zamestnanca aj šablóny** — `actor_user_id`
   je `on delete set null`, `template_key` je obyčajný text bez FK. Zmazanie
   účtu nesmie zmazať dôkaz o tom, čo odišlo zákazníkovi.
+- **issue 277: `mail_log.body` (aditívna migrácia `0038_sad_kinsey_walden.sql`)
+  ukladá `message.text` pre KAŽDÉ odoslanie, nie len pre editovateľné cesty**
+  — `sendLoggedMail`'s obe vetvy (`sent`/`failed`) teraz posielajú `body:
+  message.text` do `insertEntry`. `recordSkippedMail` (preskočené) zámerne
+  NEDOSTÁVA `body` — appka pri preskočení žiadny text nikdy nevygenerovala,
+  takže `body` ostáva `null` (rovnaká disciplína ako `reason`/`subject`
+  vyššie: pole existuje len tam, kde má appka čo zapísať). Toto je súčasť
+  editovateľného náhľadu (`.claude/rules/nedostupne.md`'s `editedBody`) —
+  kniha teraz vie dokázať, ČO presne odišlo, nielen komu/kedy. `MailLogSection
+  .tsx` zobrazuje telo cez per-riadkové "👁 zobraziť text" tlačidlo (`row.body
+  !== null`), nie vždy — dlhý text by rozbil hustú tabuľku.
