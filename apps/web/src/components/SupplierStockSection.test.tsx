@@ -60,6 +60,11 @@ const STATUS = {
   unreadable: [
     { host: "dogtrace.com", count: 2, samples: [{ link: "https://dogtrace.com/obojok", sizeLabel: "" }] },
   ],
+  hostOverview: [
+    { host: "huntingshop.eu", total: 200, readable: 195, unknown: 3, failed: 2, lastConfirmedAt: "2026-08-03T04:20:00.000Z" },
+    { host: "shop.lasting.eu", total: 38, readable: 20, unknown: 18, failed: 0, lastConfirmedAt: "2026-08-03T04:20:00.000Z" },
+  ],
+  ownShopLinksCount: 21,
   lastRun: {
     startedAt: "2026-08-03T04:20:00.000Z",
     finishedAt: "2026-08-03T04:41:00.000Z",
@@ -111,6 +116,40 @@ it("bez nečitateľných stránok povie, že je všetko v poriadku", async () =>
   render(<SupplierStockSection role="admin" onSessionExpired={vi.fn()} />);
 
   expect((await screen.findByTestId("ss-unreadable")).textContent).toContain("Zatiaľ žiadne");
+});
+
+// issue 227: prehľad podľa domény — koľko odkazov, koľko sa číta, aby bolo
+// vidno, ktorú doménu je najviac hodno doplniť ako ďalšiu.
+it("ukáže prehľad podľa domény zoradený podľa počtu odkazov klesajúco", async () => {
+  fetchSupplierStockStatus.mockResolvedValue(STATUS);
+  render(<SupplierStockSection role="admin" onSessionExpired={vi.fn()} />);
+
+  const karta = await screen.findByTestId("ss-host-overview");
+  expect(karta.textContent).toContain("huntingshop.eu");
+  expect(karta.textContent).toContain("shop.lasting.eu");
+  const domeny = karta.querySelectorAll("tbody tr");
+  expect(domeny[0]?.textContent).toContain("huntingshop.eu");
+  expect(domeny[1]?.textContent).toContain("shop.lasting.eu");
+  expect(screen.getByTestId("ss-host-huntingshop.eu").textContent).toContain("200");
+  expect(screen.getByTestId("ss-host-huntingshop.eu").textContent).toContain("195");
+});
+
+// Vylúčenie vlastného e-shopu (issue 227) nesmie byť tiché — majiteľ vidí,
+// koľko odkazov sa NEscrapuje a prečo.
+it("ukáže počet odkazov na vlastný e-shop, vylúčených z kontroly", async () => {
+  fetchSupplierStockStatus.mockResolvedValue(STATUS);
+  render(<SupplierStockSection role="admin" onSessionExpired={vi.fn()} />);
+
+  const notice = await screen.findByTestId("ss-own-shop-links");
+  expect(notice.textContent).toContain("21");
+});
+
+it("bez odkazov na vlastný e-shop sa upozornenie nezobrazí", async () => {
+  fetchSupplierStockStatus.mockResolvedValue({ ...STATUS, ownShopLinksCount: 0 });
+  render(<SupplierStockSection role="admin" onSessionExpired={vi.fn()} />);
+
+  await screen.findByTestId("ss-total");
+  expect(screen.queryByTestId("ss-own-shop-links")).toBeNull();
 });
 
 it("„Spustiť teraz\" spustí kontrolu a znovu načíta prehľad", async () => {
