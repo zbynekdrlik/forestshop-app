@@ -92,3 +92,26 @@ paths:
   reconfirm.integration.test.ts` (ak súvisí s re-potvrdením) alebo ďalšieho
   nového `pairing-*.integration.test.ts` súboru (inak) — nie do
   jedného rastúceho monolitu.
+- **Fixtúra (`shoptet-sample.csv`) má LEN 5 viacvariantných produktových
+  skupín celkom — issue 255 zistilo, že po issue 47/254 zostáva len JEDNA
+  z nich (`01123126-3f69-11e6-8a3b-0cc47a6c92bc`, "60055/8,9,10")
+  NEDOTKNUTÁ žiadnym `pairing.spec.ts` testom, teda jediná bezpečne
+  homogénna skupina pre BUDÚCI test, ktorý potrebuje ĎALŠIU čerstvú
+  skupinu (`python3` + `csv.DictReader` zoskupené podľa `guid` je najrýchlejší
+  spôsob, ako si toto overiť namiesto hádania z komentárov).** Keď taký
+  test potrebuje DVE nezávislé homogénne skupiny naraz (napr. bulk
+  cross-row race, issue 255) a fixtúra má k dispozícii len jednu čerstvú —
+  bezpečná cesta je POZÍCIA v súbore (rovnaký princíp ako issue 61's
+  "vlož test PRED tie, čo dáta mutujú", `.claude/rules/testing.md`): nový
+  test sa vloží PRED existujúce testy, ktoré tie isté skupiny neskôr
+  rozdelia/zmutujú, a znova POUŽIJE ich (kým sú ešte pred-mutáciou
+  homogénne) — namiesto pridávania nových CSV riadkov (riskuje rozbiť
+  `catalog.spec.ts`'s pevné počty, `.claude/rules/testing.md`). Podmienka:
+  over, že novým testom vykonaná mutácia (bulk potvrdenie CELEJ skupiny
+  JEDNOU spoločnou adresou zostáva homogénne; OTVORENÝ ale NEODOSLANÝ bulk
+  editor nemutuje nič) je kompatibilná s tým, čo neskorší test v súbore
+  očakáva — issue 255's nový test preto skupinu B (editor len otvorený,
+  nikdy neuložený) nechal úplne nedotknutú a skupinu A bulk-potvrdil
+  JEDNOU adresou pre všetky veľkosti (zostáva homogénna), takže obe
+  neskoršie testy (issue 254's stale-closure/editor-close, ktoré tie isté
+  dve skupiny znova používajú) fungujú nezmenené.
