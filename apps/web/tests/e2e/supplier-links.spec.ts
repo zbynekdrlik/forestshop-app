@@ -79,20 +79,30 @@ test("produkt bez linky ponúka 'Doplniť', po uložení sa presunie do 'S linko
   await vstup.fill("https://e2e-dodavatel.example.com/parovanie-nova");
   await page.getByTestId("product-link-save-E2E-PL-CHYBA").click();
 
-  // issue 251: `save()` v `SupplierLinksSection.tsx` zavolá vo svojom
-  // `.then()` VLASTNÝ `refetch()`, ktorého uzáver má PRIVIAZANÝ filter
-  // ("Bez linky") z okamihu KLIKNUTIA na Uložiť — nie aktuálny filter. Ak
-  // test prepne filter a znova vyhľadá SKÔR, než sa PATCH zápis skutočne
-  // vráti, tento "starý" refetch sa zavolá AŽ NESKÔR (keď PATCH doletí) a
-  // keďže interné poradové číslo (`searchSeq`) sa prideľuje pri ZAVOLANÍ,
-  // nie pri odpovedi, tento neskorší-no-zastaraný refetch prepíše
-  // (zobrazí prázdny "Bez linky" výsledok) výsledok testovho VLASTNÉHO,
-  // správneho vyhľadania. Počkanie na zmiznutie edit-formulára garantuje,
-  // že `.then()` (a teda aj jeho `refetch()` volanie/poradové číslo) už
-  // prebehlo SKÔR, než test prepne filter — takže testov ĎALŠÍ dopyt má
-  // vždy VYŠŠIE poradové číslo a vyhráva bez ohľadu na to, kedy sieťovo
-  // doletí.
-  await expect(vstup).toBeHidden();
+  // issue 251: PRED opravou `save()` v `SupplierLinksSection.tsx` volal vo
+  // svojom `.then()` VLASTNÝ `refetch()`, ktorého uzáver mal PRIVIAZANÝ
+  // filter ("Bez linky") z okamihu KLIKNUTIA na Uložiť — nie aktuálny
+  // filter. Test tu ZÁMERNE prepína filter na "Všetky" a znova vyhľadáva
+  // BEZ ČAKANIA na potvrdenie zápisu (žiadne umelé oneskorenie kroku) — to
+  // je presne poradie udalostí, ktoré pôvodný bug reprodukovalo.
+  //
+  // Test je deterministický AJ BEZ tohto čakania (a teda aj bez ohľadu na
+  // to, či 400ms-oneskorená PATCH odpoveď doletí PRED alebo AŽ PO tomto
+  // prepnutí), lebo oprava odstránila samotný RACE, nie len jeho jedno
+  // konkrétne časovanie: `refetch()` teraz vždy číta AKTUÁLNY filter/dopyt
+  // (cez ref, pozri komentár pri `queryRef`/`stateRef` v komponente), nie
+  // ten zafixovaný v okamihu kliknutia na Uložiť. Ak teda `.then()`'s
+  // `refetch()` doletí AŽ PO tom, čo test prepol filter, zavolá `search`
+  // s TÝM ISTÝM ("Všetky") filtrom, aký použil aj testov vlastný dopyt —
+  // dve vyhľadania s ROVNAKÝM filtrom pretekajúce sa o `searchSeq` dávajú
+  // rovnaký (správny) výsledok bez ohľadu na to, ktoré vyhrá. Skorší tvar
+  // tohto testu mal namiesto tohto vysvetlenia `await
+  // expect(vstup).toBeHidden()` explicitné čakanie PRED prepnutím filtra —
+  // code review upozornil, že takéto čakanie zoslabuje testovaciu silu
+  // (test by prešiel, aj keby sa oprava komponentu vrátila naspäť, lebo by
+  // vždy garantovalo bezpečné poradie bez ohľadu na to, či je race v
+  // komponente skutočne opravený) — preto bolo odstránené a test teraz
+  // dokazuje SKUTOČNÚ opravu, nie len bezpečné testové časovanie.
 
   // Po uložení produkt už MÁ linku — predvolený filter "Bez linky" ho už
   // nezobrazí, treba prepnúť na "Všetky", aby bolo vidno stav.

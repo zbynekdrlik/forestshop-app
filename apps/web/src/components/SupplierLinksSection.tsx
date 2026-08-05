@@ -109,17 +109,27 @@ export function SupplierLinksSection({
   // takýto neskorý-no-zastaraný refetch by mal VYŠŠIE číslo než medzitým
   // spustené korektné vyhľadanie a jeho (prázdny/starý) výsledok by ho
   // ticho prepísal — presne toto spôsobilo `element(s) not found` na main
-  // CI hneď po mergi issue 241. Refy namiesto priameho uzáveru zaručujú, že
-  // `refetch()` (nech je zavolaná odkiaľkoľvek a kedykoľvek) vždy prečíta
-  // NAJNOVŠIE hodnoty — rovnaký princíp ako `.claude/rules/frontend-
+  // CI hneď po mergi issue 241.
+  //
+  // Ref-sync PRIAMO v tele komponentu (počas renderu), NIE cez `useEffect`:
+  // `useEffect` beží AŽ PO commite ako pasívny efekt naplánovaný na
+  // samostatný priechod (React ho môže odložiť za `paint`) — medzi
+  // commitom nového `query`/`state` a skutočným prebehnutím efektu existuje
+  // reálne okno, počas ktorého by `queryRef.current`/`stateRef.current`
+  // ešte niesli STARÚ hodnotu. Keďže `save()`'s `.then()` je mikrotaska
+  // (promise callback), môže sa spustiť presne v tomto okne a prečítať
+  // zastaraný ref — teda rovnaký race, aký táto oprava má odstrániť, len
+  // preložený o jednu vrstvu nižšie. Priama synchrónna aktualizácia (žiadny
+  // efekt, žiadne plánovanie) zaručuje, že ref nesie AKTUÁLNU hodnotu hneď
+  // v momente, keď React túto funkciu tela komponentu zavolá — teda skôr,
+  // než čokoľvek iné (vrátane akejkoľvek čakajúcej mikrotasky) môže ref
+  // prečítať. Rovnaký "latest ref" princíp ako `.claude/rules/frontend-
   // design.md`'s "derived value instead of stale local state" (issue 151),
   // len cez ref namiesto zdvihnutia do rodiča (tu žiadny rodič netreba).
   const queryRef = useRef(query);
+  queryRef.current = query;
   const stateRef = useRef(state);
-  useEffect(() => {
-    queryRef.current = query;
-    stateRef.current = state;
-  }, [query, state]);
+  stateRef.current = state;
 
   const refetch = useCallback(() => {
     search(queryRef.current, stateRef.current);
