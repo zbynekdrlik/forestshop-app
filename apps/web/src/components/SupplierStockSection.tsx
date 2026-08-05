@@ -87,7 +87,7 @@ export function SupplierStockSection({
   if (!loaded) return <p role="status">Načítavam…</p>;
   if (status === null) return <p role="alert">{error === "" ? "Nepodarilo sa načítať." : error}</p>;
 
-  const { overview, unreadable, rows, lastRun } = status;
+  const { overview, unreadable, rows, hostOverview, ownShopLinksCount, lastRun } = status;
 
   return (
     <div data-testid="supplier-stock-section">
@@ -130,6 +130,12 @@ export function SupplierStockSection({
         )}
       </div>
 
+      {ownShopLinksCount > 0 && (
+        <p data-testid="ss-own-shop-links">
+          Vlastný e-shop (nie dodávateľ): {ownShopLinksCount} odkazov vylúčených z kontroly.
+        </p>
+      )}
+
       <p data-testid="ss-last-checked">Naposledy kontrolované: {formatDateTime(overview.lastCheckedAt)}</p>
       {lastRun !== null && (
         <p data-testid="ss-last-run">
@@ -171,6 +177,41 @@ export function SupplierStockSection({
                       </div>
                     ))}
                   </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {/* issue 227: prehľad po doménach — na rozdiel od karty vyššie (len
+          domény S PROBLÉMOM) toto ukazuje VŠETKY sledované domény, aby bolo
+          vidno, ktorú sa oplatí doplniť ako ĎALŠIU. */}
+      <div className="card" data-testid="ss-host-overview">
+        <h3>Prehľad podľa domény</h3>
+        {hostOverview.length === 0 ? (
+          <p className="empty">Zatiaľ nič — kontrola ešte nebežala.</p>
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Doména</th>
+                <th scope="col">Odkazov</th>
+                <th scope="col">Číta sa</th>
+                <th scope="col">Neviem</th>
+                <th scope="col">Zlyhalo</th>
+                <th scope="col">Naposledy potvrdené</th>
+              </tr>
+            </thead>
+            <tbody>
+              {hostOverview.map((host) => (
+                <tr key={host.host} data-testid={`ss-host-${host.host}`}>
+                  <td>{host.host}</td>
+                  <td>{host.total}</td>
+                  <td>{host.readable}</td>
+                  <td>{host.unknown}</td>
+                  <td>{host.failed}</td>
+                  <td>{formatDateTime(host.lastConfirmedAt)}</td>
                 </tr>
               ))}
             </tbody>
