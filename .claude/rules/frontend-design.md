@@ -706,3 +706,25 @@ paths:
   kontrola cez `td.scrollWidth` to nezachytila — treba merať orezanie na
   samotnom odkaze). Pri ďalšom hľadaní darcu preto meraj OREZANIE obsahu darcu,
   nielen výšku riadkov.
+- **Ref, ktorý má vždy niesť AKTUÁLNU hodnotu pre kód volaný z mikrotasky
+  (`.then()` callback), sa musí syncovať SYNCHRÓNNE v tele komponentu (počas
+  renderu), NIE cez `useEffect`.** Issue 251 (`SupplierLinksSection.tsx`'s
+  `queryRef`/`stateRef`, čítané `refetch()`'om volaným zo `save()`'s
+  `.then()`): `useEffect` beží AŽ PO commite ako pasívny efekt na
+  samostatnom priechode (React ho môže odložiť za `paint`) — medzi commitom
+  nového `query`/`state` a skutočným prebehnutím efektu existuje reálne
+  okno, počas ktorého ref ešte nesie STARÚ hodnotu. Keďže `.then()` je
+  mikrotaska, môže sa spustiť presne v tomto okne a prečítať zastaraný ref —
+  teda ten istý race, aký mal "latest ref" vzor (issue 151, `.claude/rules/
+  frontend-design.md`'s "derived value instead of stale local state")
+  odstrániť, len preložený o jednu vrstvu nižšie. Fix: priama synchrónna
+  aktualizácia (`queryRef.current = query;` hneď v tele komponentu, žiadny
+  `useEffect`, žiadne pole závislostí) — React zaručuje, že táto priradenie
+  prebehne skôr, než čokoľvek iné (vrátane akejkoľvek čakajúcej mikrotasky)
+  môže ref prečítať. **Test na KAŽDÝ ĎALŠÍ "latest ref" vzor v tomto
+  kódovej báze, kde ref číta kód spúšťaný z promise `.then()`/mikrotasky:**
+  je sync v `useEffect`e, alebo priamo v tele komponentu? `useEffect` je
+  správny LEN keď nič mikrotaskového ref nečíta pred ďalším renderom;
+  sibling výskyty rovnakého (pred-opravou) tvaru nájdené a zapísané ako
+  issue 254 (`PairingSection.tsx`'s `refetch`, `CatalogPage.tsx`'s
+  `runIngest`) — over ich pri práci na tomto ticket-e.
