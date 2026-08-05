@@ -97,12 +97,21 @@ export function UpozorneniaSection({ role, onSessionExpired }: { readonly role: 
 
   const saveDraft = useCallback(() => {
     if (draft === null || draft.title.trim() === "") return;
+    const editId = draft.id;
     const input = { title: draft.title.trim(), details: draft.details.trim(), dueAt: draft.dueAt === "" ? null : draft.dueAt };
-    const action = draft.id === null ? () => createOwnNote(input) : () => updateOwnNote(draft.id ?? "", input).then(() => undefined);
-    setBusyId(draft.id ?? "new");
+    setBusyId(editId ?? "new");
     setError("");
-    action()
-      .then(() => {
+    // `updateOwnNote` vracia `false`, keď karta medzitým zmizla (zmazaná
+    // iným prihlásením) alebo prestala byť vlastnou poznámkou — obe sú
+    // legitímne (nechybové) situácie, nikdy sa NEZAVRIE formulár tak, akoby
+    // sa uloženie podarilo.
+    const action = editId === null ? createOwnNote(input).then(() => true) : updateOwnNote(editId, input);
+    action
+      .then((ok) => {
+        if (!ok) {
+          setError("Upozornenie medzitým zmizlo — obnovte zoznam a skúste to znova.");
+          return;
+        }
         setDraft(null);
         load();
       })
