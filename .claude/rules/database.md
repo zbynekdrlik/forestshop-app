@@ -228,3 +228,10 @@ paths:
   vždy `pnpm --filter @forestshop/api db:migrate` proti tej istej
   `DATABASE_URL` — a ak sa nejaký zápis "úspešne" prejde, ale zodpovedajúci
   SELECT ukáže menej riadkov, než očakávaš, over NAJPRV toto, nie logiku.
+- **Čiastočný unique index (`uniqueIndex(...).on(...).where(sql\`...\`)`,
+  drizzle-orm `^0.38.x`) je vzor pre "dedup KÝM je riadok v danom stave,
+  ale ďalší výskyt PO tom stave je legitímny nový riadok"** — plný
+  (nepodmienený) unique index by druhý výskyt po prvom vyriešení odmietol
+  ako duplicitu. Prvý reálny prípad + plné odôvodnenie: issue 267's
+  `upozornenie_dedup_key_uq` (`.claude/rules/upozornenia.md`), nájdené
+  integračným testom PRED mergom, nie odhadom.

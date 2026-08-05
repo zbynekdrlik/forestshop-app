@@ -103,3 +103,4 @@ Per-area rules live in `.claude/rules/<area>.md` with `paths:` frontmatter.
 - Kniha odoslaných e-mailov (F193 — jediná odosielacia cesta, dedup okno preskočení) → `.claude/rules/mail-log.md`
 - Párovanie produktov (#239 — samostatná od `pairing`, zdieľaný upsert s #121, live-overenie bez AI-dohady) → `.claude/rules/product-links.md`
 - Eshop → Vyhľadať (#240 — dve oddelené polia produkty/objednávky, detail produktu, zdieľaná zapisovacia cesta s #239) → `.claude/rules/search.md`
+- Eshop → Upozornenia (#267 — nástenka, čiastočný unique dedup index, počítaný stav bez cron-u, zdieľaná zapisovacia cesta pre budúce #268/#269) → `.claude/rules/upozornenia.md`
