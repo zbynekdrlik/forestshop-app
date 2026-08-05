@@ -19,11 +19,12 @@ import {
 // (zoznam) smie vidieť KAŽDÝ prihlásený zamestnanec.
 const CONTROL_ROLES: ReadonlySet<Me["role"]> = new Set(["admin", "manazer"]);
 
-// Otvorený zoznam typov — budúci automatický zdroj (#269) pridá svoj štítok
+// Otvorený zoznam typov — budúci ďalší automatický zdroj pridá svoj štítok
 // sem, keď pridá svoju `pgEnum` hodnotu.
 const TYPE_LABELS: Readonly<Record<UpozornenieRow["type"], string>> = {
   vlastna_poznamka: "Moja poznámka",
   nevyzdvihnuta_zasielka: "Nevyzdvihnutá zásielka",
+  vratenie: "Vrátenie",
 };
 
 function formatDate(iso: string): string {

@@ -4,15 +4,18 @@ import { users } from "./schema-users.js";
 
 // issue 267: "Upozornenia" — jedna nástenka vecí, ktoré majiteľ musí vybaviť.
 // `type` je OTVORENÝ zoznam — `vlastna_poznamka` (majiteľove vlastné
-// poznámky, #267) a `nevyzdvihnuta_zasielka` (prvý automatický zdroj, #268:
+// poznámky, #267), `nevyzdvihnuta_zasielka` (prvý automatický zdroj, #268:
 // `posta-uncollected/run.ts` volá `upsertUpozornenie` priamo zo svojho
-// existujúceho denného behu). Ďalší budúci automatický zdroj (#269
-// vrátenie) pridá SVOJU hodnotu vlastnou migráciou (`ALTER TYPE ... ADD
-// VALUE`, rovnaký vzor ako `nedostupneEmailType`/`.claude/rules/testing.md`'s
-// "Nová pgEnum hodnota" past). `source` je NEZÁVISLÝ, navždy 2-hodnotový enum
-// — určuje UI schopnosť (len `vlastne` karty majú Upraviť/Zmazať), `type` je
-// len farebný štítok.
-export const upozornenieType = pgEnum("upozornenie_type", ["vlastna_poznamka", "nevyzdvihnuta_zasielka"]);
+// existujúceho denného behu) a `vratenie` (druhý automatický zdroj, #269:
+// import objednávok, `orders/ingest.ts`, volá `upsertUpozornenie` priamo zo
+// svojej existujúcej DB transakcie, keď objednávka prejde do vrátkového
+// stavu). Ďalší budúci automatický zdroj pridá SVOJU hodnotu vlastnou
+// migráciou (`ALTER TYPE ... ADD VALUE`, rovnaký vzor ako
+// `nedostupneEmailType`/`.claude/rules/testing.md`'s "Nová pgEnum hodnota"
+// past). `source` je NEZÁVISLÝ, navždy 2-hodnotový enum — určuje UI
+// schopnosť (len `vlastne` karty majú Upraviť/Zmazať), `type` je len
+// farebný štítok.
+export const upozornenieType = pgEnum("upozornenie_type", ["vlastna_poznamka", "nevyzdvihnuta_zasielka", "vratenie"]);
 export const upozornenieSource = pgEnum("upozornenie_source", ["vlastne", "appka"]);
 
 export const upozornenie = pgTable(

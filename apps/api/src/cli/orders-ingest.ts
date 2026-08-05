@@ -61,6 +61,8 @@ try {
     rawDir: env.ORDERS_RAW_DIR,
     windowStart: dateFrom,
     windowEnd: dateUntil,
+    // issue 269: odkaz priamo na objednávku vo vrátkovej karte na Upozorneniach.
+    adminBaseUrl: env.SHOPTET_ADMIN_BASE_URL,
     ...(ordersXmlUrl === undefined
       ? {}
       : { fetchOrderIds: createHttpOrderIdsFetcher({ url: ordersXmlUrl, dateFrom: idsDateFrom, dateUntil }) }),
