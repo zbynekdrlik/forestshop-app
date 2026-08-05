@@ -11,6 +11,7 @@ import { fetchOrderReminderStatus } from "./orderReminderApi.js";
 import { OrdersRemainingCountContext } from "./ordersRemainingCountContext.js";
 import { fetchPostaUncollectedStatus } from "./postaUncollectedApi.js";
 import { fetchThemeColors } from "./themeColorsApi.js";
+import { fetchUpozorneniaCount } from "./upozorneniaApi.js";
 
 // Prvá záložka z URL-u (`?tab=<id>`), keď existuje a je platná — inak
 // predvolená ("Sync zo Shoptetu"). Umožňuje priamy odkaz aj na SKRYTÉ
@@ -40,10 +41,34 @@ export function App(): JSX.Element {
     () => ({ count: ordersRemainingCount, setCount: setOrdersRemainingCount }),
     [ordersRemainingCount],
   );
-  const badgeCounts = useMemo<Readonly<Record<string, number>>>(
-    () => (ordersRemainingCount !== null ? { orders: ordersRemainingCount } : {}),
-    [ordersRemainingCount],
-  );
+  // issue 267: odznak "Upozornenia" — na rozdiel od `ordersRemainingCount`
+  // vyššie (publikované OBRAZOVKOU cez context, teda známe až po jej prvom
+  // zmountovaní) musí byť toto číslo známe HNEĎ po prihlásení, ešte pred
+  // prvým otvorením záložky — preto ide rovnakým priamym vzorom ako
+  // `automationStatus` nižšie (App.tsx si volá `fetch*` sám), nie cez
+  // context.
+  const [upozorneniaCount, setUpozorneniaCount] = useState<number | null>(null);
+  useEffect(() => {
+    if (me === null) return;
+    let cancelled = false;
+    fetchUpozorneniaCount()
+      .then((count) => {
+        if (!cancelled) setUpozorneniaCount(count);
+      })
+      .catch(() => {
+        // Sieťový výpadok — odznak zostane na poslednej známej hodnote.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [me, activeTabId]);
+
+  const badgeCounts = useMemo<Readonly<Record<string, number>>>(() => {
+    const counts: Record<string, number> = {};
+    if (ordersRemainingCount !== null) counts["orders"] = ordersRemainingCount;
+    if (upozorneniaCount !== null) counts["upozornenia"] = upozorneniaCount;
+    return counts;
+  }, [ordersRemainingCount, upozorneniaCount]);
 
   // issue 185: stav zapnuté/vypnuté pre "Automatizácie" priečinok v menu.
   // Na rozdiel od `ordersRemainingCount` vyššie (publikované OBRAZOVKOU

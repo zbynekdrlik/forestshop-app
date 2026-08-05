@@ -1954,6 +1954,76 @@ tr:last-child td {
   color: var(--fs-ink-muted);
 }
 
+/* ---------------- 17. UPOZORNENIA (issue 267) ---------------- */
+.upozornenia-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--fs-space-4);
+  margin: var(--fs-space-2) 0 var(--fs-space-4);
+}
+.upozornenia-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--fs-space-4);
+}
+.upozornenie-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--fs-space-2);
+}
+/* issue 267: nevidená karta má výraznejší okraj — rovnaký princíp ako
+   issue 259's binárne farbenie riadkov "Na objednanie" (jeden jasný signál,
+   nikdy jediný — text "Nové" vedľa neho ostáva). */
+.upozornenie-nove {
+  border-left: 4px solid var(--fs-brand);
+}
+.upozornenie-head {
+  display: flex;
+  align-items: center;
+  gap: var(--fs-space-3);
+  flex-wrap: wrap;
+}
+.upozornenie-title {
+  font-size: var(--fs-text-md);
+  font-weight: var(--fs-weight-semibold);
+  margin: 0;
+}
+.upozornenie-details {
+  margin: 0;
+  color: var(--fs-ink-muted);
+  white-space: pre-wrap;
+}
+.upozornenie-meta {
+  margin: 0;
+  font-size: var(--fs-text-sm);
+  color: var(--fs-ink-faint);
+}
+.upozornenie-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--fs-space-2);
+  flex-wrap: wrap;
+  margin-top: var(--fs-space-2);
+}
+.upozornenie-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--fs-space-3);
+  margin-bottom: var(--fs-space-4);
+}
+.upozornenie-form label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--fs-space-1);
+  font-size: var(--fs-text-sm);
+  color: var(--fs-ink-muted);
+}
+.upozornenie-form-actions {
+  display: flex;
+  gap: var(--fs-space-2);
+}
+
 /* ---------------- MODÁLNY DIALÓG (issue 191) ----------------
    Náhľad e-mailu pred odoslaním sa už nerozbaľuje na spodku stránky —
    otvorí sa cez obrazovku, takže je okamžite v zornom poli. `z-index`
@@ -2357,7 +2427,7 @@ tr:last-child td {
   font-family: monospace;
   text-transform: lowercase;
 }
-/* issue 264 živé overenie: neplatný kód farby musí byť VIDIEĽNÝ na samotnom
+/* issue 264 živé overenie: neplatný kód farby musí byť VIDITEĽNÝ na samotnom
    poli, nielen v spoločnej hláške vyššie — s 6 otvorenými poľami inak nie je
    jasné, KTORÉ z nich je zlé. */
 .themecolor-hex-input[aria-invalid="true"] {
