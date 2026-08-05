@@ -25,6 +25,9 @@ const rowSchema = z.object({
   templateKey: z.string().nullable(),
   recipient: z.string(),
   subject: z.string().nullable(),
+  // issue 277: skutočne odoslaný/pokúšaný text — `null` pre "preskočené"
+  // (appka vtedy žiadny text nevygenerovala).
+  body: z.string().nullable(),
   orderCode: z.string().nullable(),
   variantCode: z.string().nullable(),
   packageNumber: z.string().nullable(),
