@@ -308,6 +308,30 @@ describe("parsePage — issue 230: trigona.sk cita farebny StockCountText stitok
     const result = parsePage(html, "https://www.trigona.sk/eshop/nieco/p-42.xhtml");
     expect(result.availability).toBe("unknown");
   });
+
+  it("issue 241: StockCountText<ID> sa NEZHODUJE s ID v URL — unknown, nikdy dohad z prveho vyskytu", () => {
+    // Simuluje situaciu z tela ticketu: nasiel sa stitok, ale patri INEMU
+    // produktu (napr. suvisiaci produkt vyssie na stranke), nie tomu, ktory
+    // scrapujeme (url hovori o produkte 1217729, stitok je pre ine cislo).
+    const html = '<span id="StockCountText9999999"><span style="color: #00b020">Na sklade</span></span>';
+    const result = parsePage(html, "https://www.trigona.sk/eshop/10x42-sahara/p-1217729.xhtml");
+    expect(result.availability).toBe("unknown");
+  });
+
+  it("issue 241: dva StockCountText stitky na stranke — vyberie sa TEN, co sedi s ID v URL, nikdy prvy v poradi", () => {
+    // Hypoteticky karuselovy/suvisiaci produkt s rovnakym markupom VYSSIE na
+    // stranke (presne scenar z tela ticketu 241) — prvy stitok patri inemu
+    // produktu (zelena/skladom), az druhy stitok sedi s ID v URL (modra/
+    // vypredane). Bez ID krizovej kontroly by prvy-v-poradi vyhral a vratil
+    // by ISTO ZLU odpoved namiesto unknown.
+    const html =
+      '<span id="StockCountText555">' +
+      '<span style="color: #00b020">Na sklade</span></span>' +
+      '<span id="StockCountText1215478">' +
+      '<span style="color: #024bbd">1 - 4 tyzdne</span></span>';
+    const result = parsePage(html, "https://www.trigona.sk/eshop/8x56-ed-savannah/p-1215478.xhtml");
+    expect(result.availability).toBe("unavailable");
+  });
 });
 
 describe("parsePage — issue 227: virginiashop.sk/tenolix.cz/luko.cz zdieľaná Shoptet šablóna (data-testid=labelAvailability)", () => {
