@@ -30,6 +30,7 @@ import { registerRestockRoutes, type RestockRunDeps } from "./restock-routes.js"
 import { shoptetImportConfigFromBaseUrl } from "../modules/shoptet-writeback/config.js";
 import { registerSchedulerRoutes } from "./scheduler-routes.js";
 import { registerSupplierRoutes } from "./supplier-routes.js";
+import { registerThemeColorRoutes } from "./theme-color-routes.js";
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -253,6 +254,8 @@ export function createApp(
 
   // issue 192: upraviteľné znenia e-mailov (obrazovka "Texty e-mailov").
   registerMailTemplateRoutes(app, db);
+  // issue 264: upraviteľné farby bublinek dodávateľov (koliesko v Topbar).
+  registerThemeColorRoutes(app, db);
   // issue 193: kniha odoslaných e-mailov (len čítanie) — zapisujú do nej samy
   // odosielacie cesty cez `mail-log/service.ts`.
   registerMailLogRoutes(app, db, options.adminBaseUrl ?? "https://www.forestshop.sk");

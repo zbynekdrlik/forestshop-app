@@ -2919,3 +2919,42 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
   (66 súborov, po `db:migrate`), e2e 44/44.
 - No PR/merge/deploy in this dispatch — supervisor owns CI/PR/merge/deploy
   for this ticket per the dispatch's HARD CONSTRAINT.
+
+## Issue 264 — Nastavenie farieb: koliesko vpravo hore, popup s paletou a živým náhľadom
+
+- Commit `5c776bb` — chore: version bump 0.3.0-dev.153.
+- Commit `38b20d8` — `[red]`: `theme-colors.integration.test.ts`,
+  `applyThemeColors.test.ts`, `ThemeColorPicker.test.tsx`, `Topbar.test.tsx`
+  (new `role`/`onSessionExpired` props), `theme-colors.spec.ts` (e2e).
+- Commit `f36dbf1` — `[green]`: new `theme_color` table (key/value/
+  updatedAt/updatedByUserId, same "row = customized, missing = code
+  default" shape as `mail_template`/issue 192); `modules/theme-colors/
+  {registry,store}.ts` + `http/theme-color-routes.ts` (GET any logged-in
+  user, PUT/reset admin+manazer, all-or-nothing hex validation, 200
+  {ok:false} never 4xx); `applyThemeColors.ts` shared CSS-var helper used
+  by both `App.tsx` (apply-on-login, every role) and `ThemeColorPicker.tsx`
+  (live preview on every keystroke/drag); circle button in `Topbar.tsx`
+  (admin/manazer only); e2e-setup.ts isolated `e2e-farby@forestshop.sk`
+  fixture + `theme_color` added to both TRUNCATE lists.
+- Commit `a77472e` — code-review fixes (two independent passes): 🔴
+  Cancel/Escape/backdrop-click during an in-flight Save/Reset reverted the
+  live CSS preview to baseline while the server had already persisted the
+  NEW colours — `close()` now no-ops while `busy` (+ `disabled={busy}` on
+  Cancel), with a regression test proving it; 🟡 missing
+  `ThemeColorsUnauthorizedError` handling on save/reset catches; 🟡 reopen
+  without resetting stale `colors`/`draft`/`baseline`; 🟡 stale-fetch guard
+  (`fetchSeqRef`) for rapid close+reopen; 🔵 strengthened a tautological
+  empty-input test in `applyThemeColors.test.ts`.
+- Design comment + STEP 0 validation comment + review comment all posted
+  to issue 264 before/after the respective steps.
+- Playbook entry added to `.claude/rules/frontend-design.md` — the
+  "async popup: `close()` must no-op while `busy`" gotcha + the
+  "reopen must reset stale state" gotcha, for any future editable-settings
+  popup with Save+Cancel in this codebase.
+- Lokálne gates (po review fixoch): `pnpm typecheck`, `pnpm lint` čisté;
+  web unit 433/433 (54 súborov), API unit 579/579 (36 súborov), API
+  integration 491/491 (67 súborov, po `db:migrate` — nová migrácia
+  `0035_sturdy_darkstar.sql`), e2e 45/45 (nový `theme-colors.spec.ts`
+  overený aj samostatne po fix commite).
+- No PR/merge/deploy in this dispatch — supervisor owns CI/PR/merge/deploy
+  for this ticket per the dispatch's HARD CONSTRAINT.

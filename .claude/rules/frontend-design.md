@@ -818,3 +818,32 @@ paths:
   najprv skontroluj, či niektorá z existujúcich fixtúrových skupín (grep
   `state:`/`ordered:` okolo insertov objednávok v `scripts/e2e-setup.ts`)
   už ten stav nemá PRIRODZENE, než siahneš po mutácii cez UI.
+- **Popup/dialóg s ASYNC Uložiť/Obnoviť A tlačidlom Zrušiť/Esc/klik-na-pozadie
+  potrebuje `close()` ako NO-OP počas `busy`, inak vzniká race medzi
+  "zavri a vráť live náhľad na baseline" a "požiadavka práve teraz úspešne
+  doběhla".** Issue 264 (`ThemeColorPicker.tsx`, code review — nájdené DRUHÝM,
+  hlbším prechodom, nie prvým): kliknutie na Zrušiť/Esc PO odoslaní Uložiť,
+  ale PRED jeho odpoveďou, okamžite prepísalo živý CSS náhľad späť na
+  hodnoty pri otvorení — a keď server medzitým úspešne uložil NOVÉ farby,
+  jeho `.then()` si nastavil `baseline`, ale NIKDY znova nezavolal
+  `applyThemeColors(draft)` (predpokladal, že náhľad je stále aktuálny).
+  Appka tak ukazovala staré farby, hoci server aj `baseline` už mali nové,
+  až do reloadu. Fix: `close()` skontroluje `busy` a nič nespraví, kým je
+  `true`; tlačidlo Zrušiť dostane aj `disabled={busy}` (viditeľná spätná
+  väzba, `close()`'ov guard je skutočná poistka, keďže Esc/backdrop-click
+  tlačidlo obchádzajú). Rovnaký test na KAŽDÝ ĎALŠÍ popup v tejto appke s
+  async zápisom + samostatným zrušením: môže užívateľ zavrieť/zrušiť PRESNE
+  v okne medzi odoslaním a odpoveďou? Ak áno, `close()` potrebuje ten istý
+  `busy`-guard, nie len zablokované tlačidlo Uložiť/Obnoviť.
+- **Reopen toho istého popupu (druhé a ďalšie otvorenie) musí vynulovať
+  predchádzajúci načítaný stav PRED novým fetchom, inak zlyhaný refetch
+  necháva STARÝ draft/baseline vykresľovať sa ako čerstvý.** Issue 264:
+  `openPicker()` teraz volá `setColors(null); setDraft({}); setBaseline({})`
+  pred `fetchThemeColors()` — bez toho by neúspešný refetch (sieťový
+  výpadok) ticho preskočil "Načítavam…" stav (keďže `colors !== null` z
+  MINULÉHO otvorenia) a užívateľ by mohol uložiť zastaraný draft bez
+  varovania. Rovnaký `fetchSeqRef`-štýl guard (inkrementovaný pri KAŽDOM
+  otvorení, `.then()` sa uplatní len ak je stále najnovší) chráni pred
+  opačným prípadom — STARŠIA odpoveď z PRED zavretého+znovu otvoreného
+  popupu prepisujúca NOVŠÍ stav (rovnaká trieda race ako issue 151/251,
+  pozri "latest ref" záznamy vyššie v tomto súbore).

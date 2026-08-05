@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type JSX } from "react";
 import { fetchMe, postLogout, type Me } from "./api.js";
+import { applyThemeColors } from "./applyThemeColors.js";
 import { ChangePasswordForm } from "./components/ChangePasswordForm.js";
 import { Footer } from "./components/Footer.js";
 import { LoginForm } from "./components/LoginForm.js";
@@ -9,6 +10,7 @@ import { DEFAULT_TAB_ID, NAV, findTab, isVisibleTabId } from "./nav.js";
 import { fetchOrderReminderStatus } from "./orderReminderApi.js";
 import { OrdersRemainingCountContext } from "./ordersRemainingCountContext.js";
 import { fetchPostaUncollectedStatus } from "./postaUncollectedApi.js";
+import { fetchThemeColors } from "./themeColorsApi.js";
 
 // Prvá záložka z URL-u (`?tab=<id>`), keď existuje a je platná — inak
 // predvolená ("Sync zo Shoptetu"). Umožňuje priamy odkaz aj na SKRYTÉ
@@ -73,6 +75,24 @@ export function App(): JSX.Element {
       cancelled = true;
     };
   }, [me, activeTabId]);
+
+  // issue 264: farby bublinek dodávateľov sa premietnu ako CSS premenné na
+  // `document.documentElement` HNEĎ po prihlásení — pre KAŽDÉHO používateľa
+  // (nielen toho, kto má popup "Farby aplikácie" otvorený), keďže čipy vidia
+  // všetci. Beží raz pri prihlásení, nie pri každom prepnutí záložky —
+  // farby sa počas relácie menia len cez ten istý popup, ktorý si aplikuje
+  // živý náhľad sám.
+  useEffect(() => {
+    if (me === null) return;
+    fetchThemeColors()
+      .then((colors) => {
+        applyThemeColors(Object.fromEntries(colors.map((c) => [c.key, c.value])));
+      })
+      .catch(() => {
+        // Sieťový výpadok — appka zostane pri predvolených farbách z
+        // `app.css`, nič kritické.
+      });
+  }, [me]);
 
   const reload = useCallback(() => {
     setMeUnreachable(false);
@@ -155,6 +175,8 @@ export function App(): JSX.Element {
           <Topbar
             title={isVisibleTabId(activeTabId) ? (tab?.label ?? null) : null}
             greeting={`Prihlásený: ${me.displayName} (${me.role})`}
+            role={me.role}
+            onSessionExpired={reload}
             onLogout={logout}
             passwordPanelOpen={passwordPanelOpen}
             onTogglePasswordPanel={() => {

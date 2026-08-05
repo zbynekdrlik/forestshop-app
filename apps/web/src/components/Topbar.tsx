@@ -1,4 +1,6 @@
 import { useState, type JSX, type ReactNode } from "react";
+import type { Me } from "../api.js";
+import { ThemeColorPicker } from "./ThemeColorPicker.js";
 
 // Horná lišta — vlastný titulok obrazovky (vľavo) + používateľské menu
 // (vpravo). `title === null` pre SKRYTÉ obrazovky (katalóg/párovanie/
@@ -15,6 +17,8 @@ import { useState, type JSX, type ReactNode } from "react";
 export function Topbar({
   title,
   greeting,
+  role,
+  onSessionExpired,
   onLogout,
   passwordPanelOpen,
   onTogglePasswordPanel,
@@ -23,6 +27,11 @@ export function Topbar({
   readonly title: string | null;
   // "Prihlásený: <meno> (<rola>)" — `data-testid="greeting"`, overované e2e testami.
   readonly greeting: string;
+  // issue 264: koliesko "Farby aplikácie" — `ThemeColorPicker` sám rozhoduje,
+  // či sa vôbec vykreslí (len admin/manazer), Topbar mu len odovzdá rolu,
+  // rovnaký vzor ako `MailTemplatesSection`'s `role` prop.
+  readonly role: Me["role"];
+  readonly onSessionExpired: () => void;
   readonly onLogout: () => void;
   readonly passwordPanelOpen: boolean;
   readonly onTogglePasswordPanel: () => void;
@@ -34,6 +43,7 @@ export function Topbar({
     <header className="topbar">
       <div className="topbar-head">{title !== null && <h1>{title}</h1>}</div>
       <div className="topbar-user">
+        <ThemeColorPicker role={role} onSessionExpired={onSessionExpired} />
         <button
           type="button"
           className="usermenu-btn"

@@ -187,6 +187,12 @@ const E2E_RACE_EMAIL = "e2e-race@forestshop.sk"; // musí sa zhodovať s hodnoto
 // `admin`/`manazer` na odoslanie, rovnaká úroveň ako "Nedostupné tovary".
 const E2E_ZLUCENIE_EMAIL = "e2e-zlucenie@forestshop.sk"; // musí sa zhodovať s hodnotou v order-merge.spec.ts
 
+// issue 264: rovnaký mechanizmus a dôvod ako `E2E_ZLUCENIE_EMAIL` vyššie —
+// nový spec súbor (`theme-colors.spec.ts` — koliesko "Farby aplikácie")
+// dostáva VLASTNÝ izolovaný účet. Rola "manazer" — zápis vyžaduje
+// `admin`/`manazer`.
+const E2E_FARBY_EMAIL = "e2e-farby@forestshop.sk"; // musí sa zhodovať s hodnotou v theme-colors.spec.ts
+
 const { db, pool } = createDb();
 // Konštantný literál bez interpolácie — obyčajný reťazec je tu rovnako bezpečný
 // ako `sql` tagovaná šablóna (tú používa ekvivalentný apps/api/tests/helpers/db.ts),
@@ -217,7 +223,7 @@ await db.execute(
   // takže CASCADE ich nikdy nestrhne. Bez nich by potvrdenia dodávateľa z
   // PREDOŠLÉHO e2e behu prežili do ďalšieho (presne past popísaná v
   // `.claude/rules/supplier-stock.md`, tam pre `tests/helpers/db.ts`).
-  'TRUNCATE TABLE ingest_issue, variant, product, catalog_snapshot, job_run, audit_events, sessions, users, order_line, "order", supplier_contact, pairing, supplier, order_open_status, posta_uncollected_settings, posta_uncollected_state, order_reminder_settings, order_reminder_state, nedostupne_state, nedostupne_replacement_link, mail_template, mail_template_history, supplier_stock, restock_settings, restock_event, shop_product_url RESTART IDENTITY CASCADE',
+  'TRUNCATE TABLE ingest_issue, variant, product, catalog_snapshot, job_run, audit_events, sessions, users, order_line, "order", supplier_contact, pairing, supplier, order_open_status, posta_uncollected_settings, posta_uncollected_state, order_reminder_settings, order_reminder_state, nedostupne_state, nedostupne_replacement_link, mail_template, mail_template_history, supplier_stock, restock_settings, restock_event, shop_product_url, theme_color RESTART IDENTITY CASCADE',
 );
 // Rovnaký dôvod ako `tests/helpers/db.ts`: bez tohto by "Na objednanie" bolo
 // v CELOM e2e behu prázdne pre KAŽDÚ objednávku (žiadny nastavený otvorený
@@ -346,6 +352,7 @@ await db.insert(users).values({
 });
 await db.insert(users).values({ email: E2E_RACE_EMAIL, passwordHash: await hashPassword(E2E_HESLO), displayName: "E2E Manažér", role: "manazer" });
 await db.insert(users).values({ email: E2E_ZLUCENIE_EMAIL, passwordHash: await hashPassword(E2E_HESLO), displayName: "E2E Manažér", role: "manazer" });
+await db.insert(users).values({ email: E2E_FARBY_EMAIL, passwordHash: await hashPassword(E2E_HESLO), displayName: "E2E Manažér", role: "manazer" });
 
 // Katalóg pre E2E: tá istá commitnutá fixtúra ako v jednotkových testoch, cez tú istú
 // službu importu — E2E tak overuje skutočnú cestu dát, nie ručne nasypané riadky.
