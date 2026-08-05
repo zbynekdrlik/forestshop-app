@@ -8,6 +8,7 @@ afterEach(() => {
 
 function renderTopbar(overrides: {
   readonly title?: string | null;
+  readonly role?: "admin" | "manazer" | "sef" | "citanie";
   readonly onLogout?: () => void;
   readonly passwordPanelOpen?: boolean;
   readonly onTogglePasswordPanel?: () => void;
@@ -16,6 +17,8 @@ function renderTopbar(overrides: {
     <Topbar
       title={overrides.title === undefined ? "Sync zo Shoptetu" : overrides.title}
       greeting="Prihlásený: E2E Manažér (manazer)"
+      role={overrides.role ?? "manazer"}
+      onSessionExpired={() => {}}
       onLogout={overrides.onLogout ?? (() => {})}
       passwordPanelOpen={overrides.passwordPanelOpen ?? false}
       onTogglePasswordPanel={overrides.onTogglePasswordPanel ?? (() => {})}
