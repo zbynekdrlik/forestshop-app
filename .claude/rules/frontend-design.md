@@ -728,3 +728,32 @@ paths:
   sibling výskyty rovnakého (pred-opravou) tvaru nájdené a zapísané ako
   issue 254 (`PairingSection.tsx`'s `refetch`, `CatalogPage.tsx`'s
   `runIngest`) — over ich pri práci na tomto ticket-e.
+- **Rovnaké "iba VLASTNÝ riadok" nedopatrenie sa dá skryť aj v busy-guarde,
+  nielen v ref-synchronizácii vyššie — `busyKey`/`disabled` musí zvážiť
+  vzťah k CUDZÍM riadkom, nie len k sebe.** Code review na issue 251's PR
+  (`SupplierLinksSection.tsx`): `busyKey` disabluje LEN tlačidlá riadku,
+  ktorého zápis prebieha — Upraviť/Doplniť na VŠETKÝCH ostatných riadkoch
+  ostáva aktívne. Keď užívateľ otvoril INÝ riadok, kým prvý ešte čakal na
+  PATCH odpoveď, jej `.then()`'s nepodmienené `setEditingKey(null)` ticho
+  zavrelo ten cudzí, práve otvorený editor. Fix — rovnaký "latest ref"
+  princíp ako záznam vyššie, len na `editingKey`: `editingKeyRef` sync
+  priamo v tele komponentu, `.then()` zavrie editor LEN ak
+  `editingKeyRef.current === productKey` (t.j. stále patrí TOMUTO zápisu).
+  Regresný dôkaz musí byť SIEŤOVO deterministický (`page.waitForResponse()`
+  na presnú POST URL), nie textová asercia stavu riadku — v zdieľanom e2e
+  súbore môže PREDCHÁDZAJÚCI test v tom istom súbore ten istý stavový text
+  ("čaká na odoslanie") už nastaviť skôr, takže by test prešiel aj keby sa
+  spoľahol na cudziu, staršiu mutáciu namiesto vlastnej akcie.
+- **`mountedRef`/unmount-guard vzor (`if (!mountedRef.current) return;` v
+  `.then()`/`.catch()`) POTREBUJE nastaviť `true` AJ v samotnom
+  `useEffect`'s TELE, nielen v `useRef(true)`'s počiatočnej hodnote.**
+  Issue 251 (finding 3, `search()`'s guard): appka beží pod `<StrictMode>`
+  (`main.tsx`) a vo VÝVOJOVOM móde (teda aj v `pnpm --filter @forestshop/web
+  e2e`, ktorá ide cez `vite dev`) React zámerne efekt spustí, zruší a znova
+  spustí — bez `mountedRef.current = true;` priamo v `useEffect`'s tele by
+  toto PRVÉ simulované zrušenie navždy nechalo ref na `false` a appka by
+  nikdy nezapísala žiadny výsledok vyhľadávania (živo namerané:
+  `expect(riadok).toBeVisible()` padalo s "element(s) not found" na úplne
+  PRVOM teste súboru). Vzor pre tento guard: `useEffect(() => {
+  mountedRef.current = true; return () => { mountedRef.current = false; };
+  }, [])` — nikdy len holý cleanup bez zodpovedajúceho "nastav true" v tele.
