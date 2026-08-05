@@ -185,3 +185,93 @@ test("neplatný odkaz sa odmietne HNEĎ, bez zápisu na server (konzola čistá)
 
   expect(chyby).toEqual([]);
 });
+
+// issue 251 (code review finding 1, nájdené AŽ po merge PR #253): `busyKey`
+// blokuje LEN tlačidlá vlastného riadku — "Upraviť"/"Doplniť" na VŠETKÝCH
+// OSTATNÝCH riadkoch ostáva aktívne. Ak počas čakania na PATCH odpoveď
+// riadku A užívateľ otvorí editor riadku B, `editingKey` sa presunie na B —
+// keď A's `.then()` napokon doletí, jeho PÔVODNÝ (pred touto opravou)
+// nepodmienený `setEditingKey(null)` ticho ZATVORÍ B's PRÁVE otvorený
+// editor a stratí, čo tam bolo rozpísané. Rovnaký oneskorovací vzor ako
+// vyššie (`window.fetch` prepichnutý cez `addInitScript`, REÁLNA odpoveď
+// len o 400ms neskôr, žiadny fake/mock).
+test("uloženie riadku A (ešte čakajúce na odpoveď) nesmie zavrieť editor riadku B otvorený medzitým", async ({
+  page,
+}) => {
+  const chyby: string[] = [];
+  page.on("console", (m) => {
+    if (m.type() === "error" || m.type() === "warning") chyby.push(m.text());
+  });
+  page.on("pageerror", (e) => {
+    chyby.push(e.message);
+  });
+
+  await page.addInitScript(() => {
+    const puvodny = window.fetch.bind(window);
+    window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      if (init?.method === "POST" && url.includes("/api/product-links/")) {
+        return new Promise((resolve) => {
+          setTimeout(() => {
+            resolve(puvodny(input, init));
+          }, 400);
+        });
+      }
+      return puvodny(input, init);
+    };
+  });
+
+  await page.goto("/?tab=supplier-links");
+  await page.getByLabel("E-mail").fill(E2E_PAROVANIE_EMAIL);
+  await page.getByLabel("Heslo").fill(E2E_HESLO);
+  await page.getByRole("button", { name: "Prihlásiť sa" }).click();
+  await expect(page.getByRole("heading", { name: "Párovanie produktov" })).toBeVisible();
+
+  // "Všetky" + spoločný dopyt "E2E-PL" nájde OBA fixtúrové riadky naraz —
+  // netreba prepínať filter medzi otvorením A a B, čo by samo osebe
+  // vyvolalo ĎALŠIE vyhľadanie a scenár skomplikovalo.
+  await page.getByLabel("Zobraziť produkty").selectOption("all");
+  await page.getByLabel("Hľadať produkt (kód alebo názov)").fill("E2E-PL");
+  await page.getByRole("button", { name: "Zobraziť" }).click();
+
+  const riadokA = page.getByTestId("product-link-row-E2E-PL-CHYBA");
+  const riadokB = page.getByTestId("product-link-row-E2E-PL-OPRAVA");
+  await expect(riadokA).toBeVisible();
+  await expect(riadokB).toBeVisible();
+
+  // A: otvoriť editor, vyplniť platnú adresu, uložiť — reálna PATCH
+  // odpoveď beží 400ms na pozadí. `waitForResponse` sa musí založiť PRED
+  // kliknutím na Uložiť, aby nezmeškal odpoveď, ktorá môže doraziť skôr,
+  // než by sme naň začali čakať.
+  const odpovedA = page.waitForResponse(
+    (res) => res.request().method() === "POST" && res.url().includes("/api/product-links/E2E-PL-CHYBA"),
+  );
+  await riadokA.getByTestId("product-link-edit-toggle-E2E-PL-CHYBA").click();
+  await page
+    .getByTestId("product-link-edit-input-E2E-PL-CHYBA")
+    .fill("https://e2e-dodavatel.example.com/parovanie-cross-row");
+  await page.getByTestId("product-link-save-E2E-PL-CHYBA").click();
+
+  // B: kým A ešte čaká na odpoveď, otvoriť JEHO editor.
+  await riadokB.getByTestId("product-link-edit-toggle-E2E-PL-OPRAVA").click();
+  const vstupB = page.getByTestId("product-link-edit-input-E2E-PL-OPRAVA");
+  await expect(vstupB).toBeVisible();
+
+  // Počkať na SKUTOČNÚ sieťovú odpoveď A-čka (deterministické, nezávislé od
+  // toho, čo so stavovým riadkom urobili PREDCHÁDZAJÚCE testy v tomto
+  // súbore — na rozdiel od kontroly textu stavu, ktorý môže byť "čaká na
+  // odoslanie" už PRED touto akciou vďaka staršej fixtúrovej mutácii).
+  // Krátka rezerva navyše necháva doriešiť React-ov `.then()`/render
+  // reťazec, ktorý nasleduje AŽ PO tom, čo odpoveď doletí.
+  await odpovedA;
+  await page.waitForTimeout(200);
+
+  // B's editor musí ostať otvorený — A's `.then()` nesmie zavrieť CUDZÍ
+  // (v tomto momente už nesúvisiaci) editor. Toto je JEDNORAZOVÁ kontrola
+  // aktuálneho stavu (nie `expect().toBeVisible()`'s auto-retry, ktoré by
+  // stačilo zachytiť VIDITEĽNÝ prvok len na okamih a prešlo by aj keby sa
+  // hneď potom skryl).
+  expect(await vstupB.isVisible()).toBe(true);
+
+  expect(chyby).toEqual([]);
+});
