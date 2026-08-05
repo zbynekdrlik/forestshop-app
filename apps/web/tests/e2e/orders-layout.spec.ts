@@ -369,6 +369,17 @@ test("filtračné čipy dodávateľov a hlavička skupiny sú zelené/červené/
     "rgb(238, 241, 236)",
   );
 
+  // Výber DODAVATEL-TEST-1 (vybavené, teda AJ "done" AJ "active" naraz) —
+  // majiteľ výslovne: "oranžová prebíja červenú aj zelenú". Overuje SKUTOČNE
+  // vykreslenú farbu (poradie CSS pravidiel), nie len prítomnosť oboch tried.
+  await page.getByTestId("supplier-chip-DODAVATEL-TEST-1").click();
+  expect(await pozadie('[data-testid="supplier-chip-DODAVATEL-TEST-1"]'), "vybraný 'vybavený' čip DODAVATEL-TEST-1").toBe(
+    "rgb(221, 164, 60)",
+  );
+  expect(await pozadieHlavicky("DODAVATEL-TEST-1"), "vybraná 'vybavená' hlavička DODAVATEL-TEST-1").toBe(
+    "rgb(221, 164, 60)",
+  );
+
   // Riadky produktov (issue 259's odstránené farbenie) nesmú niesť ŽIADNU z
   // troch stavových farieb ako pozadie — len priehľadné/biele.
   const farbyRiadkov = await page.evaluate(() =>
