@@ -1,5 +1,6 @@
 import type { JSX } from "react";
 import type { OrderMailPreview, SupplierOpenOrders } from "../ordersApi.js";
+import { summarizeOrderLines } from "../ordersSummary.js";
 import { SHOW_ORDER_MAIL_ACTIONS } from "./orderScreenFlags.js";
 
 // issue 61 — mechanicky vyňaté z `OrdersSection.tsx` (hlavička skupiny +
@@ -32,6 +33,7 @@ export function SupplierActionsPanel({
   onOpenPreview,
   onClosePreview,
   onConfirmSend,
+  selectedSupplier,
 }: {
   readonly group: SupplierOpenOrders;
   readonly canChangeState: boolean;
@@ -55,6 +57,10 @@ export function SupplierActionsPanel({
   readonly onOpenPreview: (supplier: string) => void;
   readonly onClosePreview: () => void;
   readonly onConfirmSend: (supplier: string) => void;
+  // issue 263: `.toorder-supplier` (hlavička skupiny nižšie) je VEDĽAJŠÍ
+  // nosič tých istých troch stavov ako filtračný čip (`OrdersToolbar.tsx`) —
+  // `active` presne vtedy, keď je TÁTO skupina PRÁVE TERAZ vybraný filter.
+  readonly selectedSupplier: string | null;
 }): JSX.Element {
   // Riadky, ktoré ešte treba objednať u dodávateľa (rovnaký zámer ako stará
   // appka's `outstandingOf`/`!isHandled`, #31) — východiskový stav pred tým,
@@ -64,10 +70,14 @@ export function SupplierActionsPanel({
   // odoslať/skopírovať bez ohľadu na to, či je riadok už odškrtnutý. Jediné
   // miesto, ktoré túto konštantu po extrakcii (issue 61) potrebuje.
   const outstandingState = "objednane";
+  // issue 263: rovnaký výpočet "done" ako čip (`OrdersToolbar.tsx`), aby
+  // OBIDVA nosiče vždy zhodne zobrazovali TÚ ISTÚ farbu pre TÚ ISTÚ skupinu.
+  const done = group.lines.length > 0 && summarizeOrderLines(group.lines).remaining === 0;
+  const isSelected = selectedSupplier === group.supplier;
 
   return (
     <>
-      <div className="toorder-supplier">
+      <div className={"toorder-supplier" + (done ? " done" : "") + (isSelected ? " active" : "")}>
         <span className="tosup-label">
           {group.supplier} — {group.lines.length} {group.lines.length === 1 ? "riadok" : "riadky"}
         </span>

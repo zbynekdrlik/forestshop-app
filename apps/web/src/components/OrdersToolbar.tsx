@@ -23,15 +23,18 @@ export function OrdersToolbar({
   const allLines: readonly OrderLine[] = suppliers.flatMap((group) => group.lines);
   const scopedLines =
     selectedSupplier === null ? allLines : (suppliers.find((g) => g.supplier === selectedSupplier)?.lines ?? []);
-  const allSummary = summarizeOrderLines(allLines);
-  const allDone = allLines.length > 0 && allSummary.remaining === 0;
 
   return (
     <div className="orders-toolbar" data-testid="orders-toolbar">
       <div className="chip-row">
+        {/* issue 263: majiteľ, "'Všetci' chip keeps its neutral/selected
+            behaviour — it has no data state of its own" — na rozdiel od
+            skutočného dodávateľa (súčet naprieč VŠETKÝMI dodávateľmi zriedka
+            znamená niečo akčné) nikdy nedostáva `done` (červená/zelená),
+            `.chip-all` (`app.css`) ho drží neutrálny, kým sa nevyberie. */}
         <button
           type="button"
-          className={"chip" + (selectedSupplier === null ? " active" : "") + (allDone ? " done" : "")}
+          className={"chip chip-all" + (selectedSupplier === null ? " active" : "")}
           data-testid="supplier-chip-all"
           onClick={() => {
             onSelectSupplier(null);

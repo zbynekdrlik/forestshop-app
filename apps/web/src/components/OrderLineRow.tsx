@@ -1,13 +1,7 @@
 import { useEffect, useRef, useState, type JSX } from "react";
 import type { OrderLine } from "../ordersApi.js";
 import { STATE_LABELS } from "../orderLineStateLabels.js";
-import {
-  formatVariantTotalChip,
-  isLineResolved,
-  isStaleOrderLine,
-  orderLineAgeDays,
-  type VariantTotal,
-} from "../ordersSummary.js";
+import { formatVariantTotalChip, isStaleOrderLine, orderLineAgeDays, type VariantTotal } from "../ordersSummary.js";
 import { OrderLineStateButtons } from "./OrderLineStateButtons.js";
 
 // issue 162: počet stĺpcov "Na objednanie" tabuľky — MUSÍ sedieť s počtom
@@ -214,10 +208,12 @@ export function OrderLineRow({
   return (
     <>
       <tr
-        // issue 259: binárne červená/zelená podľa kanonického `isLineResolved`
-        // (`app.css`'s komentár pri `.line-resolved`/`.line-unresolved`
-        // vysvetľuje prečo nie podľa jednotlivého `state`).
-        className={"order-row " + (isLineResolved(line) ? "line-resolved" : "line-unresolved") + (line.ordered ? " ordered" : "")}
+        // issue 263: majiteľ, "nie na tých produktoch" — issue 259's binárne
+        // farbenie riadku (`line-resolved`/`line-unresolved`) je ODSTRÁNENÉ,
+        // farba je teraz na filtračnom čipe + hlavičke skupiny (`app.css`'s
+        // `.chip`/`.toorder-supplier` komentár). `ordered` (stlmenie
+        // priehľadnosťou, issue 60) ostáva nezmenené.
+        className={"order-row" + (line.ordered ? " ordered" : "")}
         data-testid={`order-line-${line.lineId}`}
       >
         <td>
