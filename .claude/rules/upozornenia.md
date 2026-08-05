@@ -32,10 +32,15 @@ paths:
   úlohy (ticket to explicitne zakazuje) — počítaný stav je vždy správny pri
   čítaní, žiadny cron, čo ho má o polnoci preklopiť.
 - **Odznak v ľavom menu (`countActionableUpozornenia`) MUSÍ použiť rovnaký
-  predikát ako predvolený filter zoznamu** (`isActionableNow` — nevyriešené
-  A práve NEODLOŽENÉ) — inak číslo v menu a to, čo appka ukáže pri otvorení
-  záložky, nesedia. Pri ĎALŠOM filtri/odznaku v tomto module over, že obe
-  strany čítajú z TEJ ISTEJ funkcie, nikdy dve nezávislé JS podmienky.
+  predikát ako predvolený filter zoznamu** (nevyriešené A práve
+  NEODLOŽENÉ) — inak číslo v menu a to, čo appka ukáže pri otvorení
+  záložky, nesedia. Code review pred mergom (pôvodná verzia natiahla VŠETKY
+  riadky do JS a filtrovala cez samostatnú `isActionableNow` funkciu — druhá,
+  nezávisle udržiavaná implementácia tej istej podmienky, navyše zbytočný
+  celý-tabuľkový sken): oprava je zdieľaná `notPostponedCondition(now)`
+  (`queries.ts`), ktorú POUŽÍVA AJ `listUpozornenia`'s `WHERE`, AJ
+  `countActionableUpozornenia`'s `COUNT(*) WHERE` — nikdy dve nezávislé
+  implementácie tej istej podmienky (JS aj SQL), vždy JEDNA zdieľaná.
 - **Odznak počtu (na rozdiel od "Na objednanie"'s `OrdersRemainingCountContext`,
   issue 147) sa číta PRIAMO v `App.tsx`** (`fetchUpozorneniaCount`, rovnaký
   vzor ako `automationStatus`/`fetchPostaUncollectedStatus`) — číslo musí

@@ -27,6 +27,19 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("sk-SK", { day: "numeric", month: "numeric", year: "numeric" });
 }
 
+// Code review: "Odložiť do" nemalo `min` — dalo sa vybrať dátum v minulosti
+// (neškodné, `computeStatus` by ho vzalo ako "už sa vrátilo", ale mätúce
+// no-op). `<input type="date">`'s `min` očakáva `YYYY-MM-DD` v LOKÁLNOM
+// čase prehliadača, nie `toISOString()` (tá by okolo polnoci mohla ukázať
+// VČEREJŠÍ dátum v časových pásmach východne od UTC).
+function todayDateInputValue(): string {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${String(y)}-${m}-${d}`;
+}
+
 interface EditDraft {
   readonly id: string | null; // null = nový záznam
   readonly title: string;
@@ -255,6 +268,7 @@ export function UpozorneniaSection({ role, onSessionExpired }: { readonly role: 
                     </button>
                     <input
                       type="date"
+                      min={todayDateInputValue()}
                       value={postponeDraft[row.id] ?? ""}
                       onChange={(e) => {
                         const value = e.target.value;

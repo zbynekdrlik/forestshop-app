@@ -20,12 +20,3 @@ export function computeStatus(row: UpozornenieStatusInput, now: Date): Upozornen
   if (row.seenAt === null) return "nove";
   return "otvorene";
 }
-
-// Odznak v ľavom menu aj predvolený filter "len nevybavené" ukazujú TO ISTÉ
-// číslo (návrhové rozhodnutie na tickete): nevyriešené A práve NEODLOŽENÉ.
-// Odložená karta sa do tohto počtu vráti sama v deň návratu (computeStatus
-// vyššie), bez zásahu.
-export function isActionableNow(row: UpozornenieStatusInput, now: Date): boolean {
-  const status = computeStatus(row, now);
-  return status === "nove" || status === "otvorene";
-}

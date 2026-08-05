@@ -79,6 +79,21 @@ describe("GET /api/upozornenia/count", () => {
     const body = (await res.json()) as { count: number };
     expect(body.count).toBe(1);
   });
+
+  // Code review: len postponed-vylúčenie bolo overené vyššie — pridané aj
+  // pre resolved (rovnaká zdieľaná SQL podmienka `notPostponedCondition` +
+  // `isNull(resolvedAt)` v `queries.ts`, obe strany testu patria k sebe).
+  it("vyriešená karta sa do počtu nezapočítava", async () => {
+    const { app, cookie, db } = await boot("manazer");
+    const now = new Date("2026-08-05T08:00:00Z");
+    await upsertUpozornenie(db, { type: "vlastna_poznamka", source: "vlastne", title: "Aktívna", now });
+    const resolvedCreate = await upsertUpozornenie(db, { type: "vlastna_poznamka", source: "vlastne", title: "Vyriešená", now });
+    await app.request(`/api/upozornenia/${resolvedCreate.id}/resolve`, { method: "POST", headers: { cookie } });
+
+    const res = await app.request("/api/upozornenia/count", { headers: { cookie } });
+    const body = (await res.json()) as { count: number };
+    expect(body.count).toBe(1);
+  });
 });
 
 describe("POST /api/upozornenia (vlastná poznámka)", () => {
