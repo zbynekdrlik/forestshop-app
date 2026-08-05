@@ -943,28 +943,37 @@ tr:last-child td {
    `min-height`) bol pre tento účel ZBYTOČNÝ a odstránený — nemenil by nič
    mimo tejto (zamietnutej) funkcie, len by natvrdo zväčšil výšku Topbaru na
    VŠETKÝCH obrazovkách bez dôvodu. Rozhodnutie zapísané aj na ticket #95. */
-/* Farby stavu riadku — sémantické (čaká/skladom/nedostupné), vlastná paleta
-   tejto appky (nie prevzaté hodnoty starej appky). */
-.orders-table tr.state-caka_sa {
-  background: var(--fs-warning-bg);
-}
-.orders-table tr.state-caka_sa td:first-child {
-  box-shadow: inset 3px 0 0 var(--fs-warning);
-}
-.orders-table tr.state-skladom {
-  background: var(--fs-success-bg);
-}
-.orders-table tr.state-skladom td:first-child {
-  box-shadow: inset 3px 0 0 var(--fs-success);
-}
-.orders-table tr.state-nedostupne {
+/* issue 259 — majiteľ VERBATIM: "červenou to, čo už mám urobené, zelenou to,
+   čo treba vybaviť". Binárne podľa KANONICKÉHO `isLineResolved` predikátu
+   (`ordersSummary.ts`), nie podľa jednotlivého `state` (predošlý dizajn,
+   issue 57) — ten farbil LEN caka_sa/skladom/nedostupne a nechával VÄČŠINU
+   riadkov (predvolený stav "objednane", ešte neobjednané) úplne biele, čo
+   majiteľ opísal ako "dnes sa nefarbí nič" (najčastejší, práve TEN dôležitý
+   prípad). `isLineResolved` (`ordered || state !== "objednane"`) zjednocuje
+   OBIDVA spôsoby, akými môže byť riadok "urobený" (odškrtnuté "objednané"
+   ALEBO posunutý stav) pod JEDNU farbu, presne ako to majiteľ chce vidieť.
+   Farba NIKDY nie je JEDINÝ signál — stĺpec "Stav" (`STATE_LABELS` text,
+   "Nevybavené"/"Čaká sa"/"Skladom"/"Nedostupné") a odškrtávacie políčko
+   "Objednané" ostávajú nezmenené vedľa nej, takže riadok sa dá rozlíšiť aj
+   bez farby (`.claude/rules/frontend-design.md` farbosleposť). Vlastná
+   paleta appky (--fs-danger/--fs-success token HODNOTY, nie nový hex) — len
+   použité v OPAČNOM zmysle, než ich meno naznačuje (danger-červená = "už
+   urobené", success-zelená = "treba vybaviť"), presne podľa majiteľovho
+   zadania. */
+.orders-table tr.line-resolved {
   background: var(--fs-danger-bg);
 }
-.orders-table tr.state-nedostupne td:first-child {
+.orders-table tr.line-resolved td:first-child {
   box-shadow: inset 3px 0 0 var(--fs-danger);
 }
+.orders-table tr.line-unresolved {
+  background: var(--fs-success-bg);
+}
+.orders-table tr.line-unresolved td:first-child {
+  box-shadow: inset 3px 0 0 var(--fs-success);
+}
 /* issue 60: odškrtnuté "objednané u dodávateľa" — stlmí CELÝ riadok bez
-   ohľadu na `state-*` farbu vyššie (rovnaká hodnota, akú appka už používa
+   ohľadu na farbu vyššie (rovnaká hodnota, akú appka už používa
    pre `.btn:disabled`, nie prevzaté zo starej appky). */
 .orders-table tr.ordered {
   opacity: 0.55;
