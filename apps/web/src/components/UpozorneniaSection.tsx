@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState, type JSX } from "react";
+import { useCallback, useContext, useEffect, useRef, useState, type JSX } from "react";
 import type { Me } from "../api.js";
+import { UpozorneniaBadgeRefreshContext } from "../upozorneniaBadgeContext.js";
 import {
   createOwnNote,
   deleteOwnNote,
@@ -57,6 +58,11 @@ export function UpozorneniaSection({ role, onSessionExpired }: { readonly role: 
   const [draft, setDraft] = useState<EditDraft | null>(null);
   const [postponeDraft, setPostponeDraft] = useState<Record<string, string>>({});
   const canControl = CONTROL_ROLES.has(role);
+  // issue 267 (živé overenie, gap 1): odznak v ľavom menu (`App.tsx`) sa bez
+  // tohto refetchoval len pri zmene záložky — refresh() sa zavolá po KAŽDEJ
+  // úspešnej mutácii (`withBusy`/`saveDraft`), aby ostal pravdivý aj keď
+  // obsluha zostane na tejto obrazovke.
+  const { refresh: refreshBadge } = useContext(UpozorneniaBadgeRefreshContext);
 
   const load = useCallback(() => {
     fetchUpozornenia({ includeResolved })
@@ -99,14 +105,17 @@ export function UpozorneniaSection({ role, onSessionExpired }: { readonly role: 
     setBusyId(key);
     setError("");
     action()
-      .then(load)
+      .then(() => {
+        load();
+        refreshBadge();
+      })
       .catch(() => {
         setError("Akcia zlyhala — skúste to znova.");
       })
       .finally(() => {
         setBusyId("");
       });
-  }, [load]);
+  }, [load, refreshBadge]);
 
   const saveDraft = useCallback(() => {
     if (draft === null || draft.title.trim() === "") return;
@@ -127,6 +136,7 @@ export function UpozorneniaSection({ role, onSessionExpired }: { readonly role: 
         }
         setDraft(null);
         load();
+        refreshBadge();
       })
       .catch(() => {
         setError("Uloženie zlyhalo — skúste to znova.");
@@ -134,7 +144,7 @@ export function UpozorneniaSection({ role, onSessionExpired }: { readonly role: 
       .finally(() => {
         setBusyId("");
       });
-  }, [draft, load]);
+  }, [draft, load, refreshBadge]);
 
   if (error !== "" && rows === null) return <p role="alert">{error}</p>;
   if (rows === null) return <p>Načítavam…</p>;
