@@ -288,3 +288,21 @@ paths:
   starý kontajner a nasadenie je v tej chvíli už hotové — neuprataný obraz
   nesmie zhodiť úspešný deploy. Krok beží PRED overením verzie, aby miesto
   uvoľnil ešte v tom istom behu.
+
+- **Cloudflare tunel má VLASTNÝ proxy timeout (~100 s) na verejnom
+  `forestshop-novy.newlevel.media` — dlho bežiaci manuálny POST (napr.
+  supplier-stock "⚡ Spustiť teraz" nad stovkami odkazov) dostane naň
+  klientsky HTTP 524, hoci appka na `app:3000` beh POKRAČUJE ĎALEJ
+  server-side (issue 227, naživo overené).** Node/Hono handler nesleduje
+  zatvorenie klientskeho spojenia (žiadny `req.on("close")`/abort-signal na
+  tejto ceste), takže Cloudflare-ov 524 NIE JE zlyhanie behu — je to len
+  strata KLIENTSKEJ odpovede. Overenie, či beh naozaj pokračuje/dobehol, ide
+  MIMO tunela, priamo cez SSH na dev2 (`.claude/rules/database.md`'s
+  `postgres` service dopyt) — `pg_locks` filtrovaný na konkrétny advisory
+  kľúč (`SELECT count(*) FROM pg_locks WHERE locktype='advisory' AND
+  ((classid::bigint << 32) | objid::bigint) = <kľúč>;`, `1` = stále beží,
+  `0` = dobehol) je spoľahlivejší dôkaz než čokoľvek, čo prehliadač po 524
+  ukáže. Test na KAŽDÝ ďalší manuálny "Spustiť teraz"/dlho bežiaci POST cez
+  tento tunel: neber klientsku chybu/timeout ako dôkaz zlyhania behu — over
+  server-side stav (advisory zámok, `job_run`, alebo priamo cieľová
+  tabuľka) predtým, než sa čokoľvek reštartuje/opakuje.
