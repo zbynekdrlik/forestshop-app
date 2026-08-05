@@ -1,4 +1,4 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
 import { upozornenie } from "../../db/schema.js";
 import type { UpozornenieSourceValue, UpozornenieTypeValue } from "./queries.js";
@@ -38,28 +38,22 @@ export interface UpozornenieWriteResult {
 // ticket žiada ("keď nočná úloha zbehne desiatykrát, upozornenie ostane
 // JEDNO, len sa obnoví"). `postponedUntil`/`seenAt` sa pri obnove NEDOTÝKAJÚ
 // — majiteľovo rozhodnutie odložiť kartu prežije obnovu z toho istého zdroja.
+//
+// issue 272: JEDEN atomický SQL príkaz (`INSERT ... ON CONFLICT (dedup_key)
+// WHERE resolved_at IS NULL DO UPDATE ...`), nie samostatný SELECT + podľa
+// jeho výsledku podmienený UPDATE/INSERT — ten mal TOCTOU medzeru (dve
+// súbežné volania s tým istým, dosiaľ nepoužitým `dedupKey` mohli OBE vidieť
+// "žiadny riadok" a obe skončiť INSERT-om, druhé s vyhodenou chybou namiesto
+// obnovy). `targetWhere` zrkadlí PRESNE predikát `upozornenie_dedup_key_uq`
+// (`schema-upozornenia.ts`) — Postgres tak vie rozpoznať konflikt len s
+// NEVYRIEŠENÝM riadkom, presne ako predtým robil samostatný SELECT. Keď
+// `dedupKey` je `null` (vlastné poznámky), unique index sa naň NIKDY
+// nevzťahuje (Postgres nikdy nepovažuje dve NULL hodnoty za rovnaké), takže
+// ON CONFLICT sa preň jednoducho nikdy neuplatní — vlastné poznámky ostávajú
+// vždy nový riadok, presne ako predtým.
 export async function upsertUpozornenie(db: UpozornenieExecutor, input: UpsertUpozornenieInput): Promise<UpozornenieWriteResult> {
   const dedupKey = input.dedupKey ?? null;
-  if (dedupKey !== null) {
-    const [existing] = await db
-      .select({ id: upozornenie.id, resolvedAt: upozornenie.resolvedAt })
-      .from(upozornenie)
-      .where(eq(upozornenie.dedupKey, dedupKey))
-      .limit(1);
-    if (existing !== undefined && existing.resolvedAt === null) {
-      await db
-        .update(upozornenie)
-        .set({
-          title: input.title,
-          details: input.details ?? "",
-          link: input.link ?? null,
-          dueAt: input.dueAt ?? null,
-        })
-        .where(eq(upozornenie.id, existing.id));
-      return { id: existing.id };
-    }
-  }
-  const [inserted] = await db
+  const [row] = await db
     .insert(upozornenie)
     .values({
       type: input.type,
@@ -72,12 +66,23 @@ export async function upsertUpozornenie(db: UpozornenieExecutor, input: UpsertUp
       createdByUserId: input.createdByUserId ?? null,
       createdAt: input.now,
     })
+    .onConflictDoUpdate({
+      target: upozornenie.dedupKey,
+      targetWhere: sql`resolved_at IS NULL`,
+      set: {
+        title: input.title,
+        details: input.details ?? "",
+        link: input.link ?? null,
+        dueAt: input.dueAt ?? null,
+      },
+    })
     .returning({ id: upozornenie.id });
-  // `.insert().returning()` always yields exactly one row for a single
-  // `.values()` object — non-null assertion would be the alternative, but an
-  // explicit throw documents the invariant instead of silently trusting it.
-  if (inserted === undefined) throw new Error("Vloženie upozornenia zlyhalo bez chyby");
-  return { id: inserted.id };
+  // `.insert().returning()` always yields exactly one row (either the newly
+  // inserted row, or the conflicting row after the atomic update) — non-null
+  // assertion would be the alternative, but an explicit throw documents the
+  // invariant instead of silently trusting it.
+  if (row === undefined) throw new Error("Vloženie/aktualizácia upozornenia zlyhala bez chyby");
+  return { id: row.id };
 }
 
 export interface CreateOwnNoteInput {
