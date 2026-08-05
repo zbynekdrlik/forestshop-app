@@ -16,12 +16,11 @@ import {
 import { requireRole, requireUser, type AppBindings } from "./middleware.js";
 import { requireSameOrigin } from "./origin-check.js";
 
-// issue 267: dnes existuje jediná hodnota (`upozornenie_type` pgEnum má LEN
-// `vlastna_poznamka`) — `.claude/rules/testing.md`'s "Nová pgEnum hodnota"
-// past platí aj tu, preto validácia typu ide cez `z.enum` s POLOM hodnôt,
-// nie natvrdo jedným literálom, aby budúci #268/#269 pridali svoju hodnotu
-// LEN sem + do enumu, nikde inde.
-const KNOWN_TYPES: readonly [UpozornenieTypeValue, ...UpozornenieTypeValue[]] = ["vlastna_poznamka"];
+// issue 267/268: `.claude/rules/testing.md`'s "Nová pgEnum hodnota" past
+// platí aj tu, preto validácia typu ide cez `z.enum` s POLOM hodnôt, nie
+// natvrdo jedným literálom, aby budúci #269 pridalo svoju hodnotu LEN sem +
+// do enumu, nikde inde.
+const KNOWN_TYPES: readonly [UpozornenieTypeValue, ...UpozornenieTypeValue[]] = ["vlastna_poznamka", "nevyzdvihnuta_zasielka"];
 
 const listQuery = z.object({
   type: z.enum(KNOWN_TYPES).optional(),

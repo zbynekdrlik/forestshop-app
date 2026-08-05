@@ -101,3 +101,37 @@ paths:
   argumentu filtra (`UpozorneniaSection.emptyMessage.test.tsx`), tomuto
   problému nepodlieha vôbec — uprednostni ten vzor, keď test musí
   rozlišovať MEDZI viacerými súbežne možnými volaniami tej istej funkcie.
+- **`upsertUpozornenie()` mal TOCTOU medzeru (issue 272, objavené code
+  review-om pri #267, opravené pri #268 — prvom reálnom automatickom
+  volajúcom): samostatný `SELECT` a podľa jeho výsledku podmienený
+  `UPDATE`/`INSERT`, bez transakcie.** Fix je JEDEN atomický príkaz —
+  drizzle's `.insert(...).onConflictDoUpdate({ target: upozornenie.dedupKey,
+  targetWhere: sql\`resolved_at IS NULL\`, set: {...} })`. **`targetWhere`
+  MUSÍ textovo zrkadliť presne ten istý predikát, aký má samotný ČIASTOČNÝ
+  unique index** (`upozornenie_dedup_key_uq ... WHERE resolved_at IS NULL`,
+  vyššie v tomto súbore) — Postgres-ova ON CONFLICT inferencia potrebuje
+  zhodu cieľových stĺpcov AJ predikátu, inak arbiter index nerozpozná a
+  konflikt sa nevyrieši. `dedupKey: null` (vlastné poznámky) sa tohto NIKDY
+  netýka — Postgres nikdy nepovažuje dve `NULL` hodnoty v unique indexe za
+  zhodné, takže vlastné poznámky ostávajú vždy nový riadok. Prvé použitie
+  `targetWhere` v tomto repe — vzor pre KAŽDÝ ĎALŠÍ atomický upsert na
+  ČIASTOČNOM unique indexe.
+- **Test dokazujúci opravu TOCTOU race-u potrebuje PREDHRIATY connection
+  pool, inak sa "závod" v praxi nikdy nestretne.** Na studenom pripojení
+  (0 idle spojení v poole) dominuje latencia TCP handshaku (~15-20ms na
+  tomto Dockeri) nad latenciou samotného SQL dopytu (~3ms) — prvé volanie,
+  ktoré náhodou dostane pripojenie skôr, stihne CELÝ SELECT+INSERT cyklus
+  skôr, než ostatné vôbec stihnú odoslať svoj SELECT, takže test by ticho
+  prešiel AJ na chybnom (select-then-branch) kóde. Overené priamym
+  `pg.Pool` pokusom mimo vitestu (issue 272): bez predhriatia 5/5 "OK", s
+  predhriatím 2/5 "duplicate key" na starom kóde. Fix: `N` súbežných
+  `db.execute(sql\`select 1\`)` (cez `Promise.all`) PRED samotným závodom —
+  zabezpečí `N` HOTOVÝCH (idle) fyzických pripojení v poole, takže samotný
+  test už pretekáva len o rýchlosť SQL, nie o pripojenie
+  (`upozornenia-service.integration.test.ts`'s "súbežnosť" blok). Ani
+  predhriaty pool negarantuje 100 % zásah pri KAŽDOM behu — vyššia
+  `CONCURRENCY` (10, nie 2) zvyšuje šancu zásahu v jednom behu, ale
+  nezaručuje ju absolútne; to je vlastnosť testovania závodu na reálnej
+  DB, nie chyba tejto techniky. Rovnaký postup (predhriaty pool + vyšší
+  počet súbežných volaní) použi pri KAŽDOM ĎALŠOM teste, čo dokazuje opravu
+  TOCTOU/race-u cez skutočný Postgres, nie mock.

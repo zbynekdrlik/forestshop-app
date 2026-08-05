@@ -222,6 +222,16 @@ export function terminalState(apiJson: unknown): string {
   return TERMINAL_STATE_CODES.has(state) ? state : "";
 }
 
+// issue 268: stabilný dedup kľúč pre nástenku Upozornenia (`upozornenia
+// /service.ts`'s `upsertUpozornenie`/`autoResolveByDedupKey`) — číslo
+// zásielky sa v rámci jednej zásielky nemení, takže opakovaný denný beh
+// vždy trafí TEN istý riadok. Presne tvar, aký schéma (`schema-upozornenia
+// .ts`) aj existujúce testy (`upozornenia-service.integration.test.ts`)
+// dokumentujú ako príklad ("posta:EF123456789SK").
+export function postaUpozornenieDedupKey(packageNumber: string): string {
+  return `posta:${packageNumber}`;
+}
+
 export function shouldSend(count: number, lastSent: Date | null, today: Date): boolean {
   if (count >= MAX_EMAILS) return false;
   if (count === 0) return true;

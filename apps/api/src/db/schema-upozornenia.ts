@@ -3,14 +3,16 @@ import { index, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from "driz
 import { users } from "./schema-users.js";
 
 // issue 267: "Upozornenia" — jedna nástenka vecí, ktoré majiteľ musí vybaviť.
-// `type` je OTVORENÝ zoznam — dnes len `vlastna_poznamka` (majiteľove vlastné
-// poznámky, súčasť TOHTO ticketu); budúce automatické zdroje (#268
-// nevyzdvihnutá zásielka, #269 vrátenie) pridajú SVOJU hodnotu vlastnou
-// migráciou (`ALTER TYPE ... ADD VALUE`, rovnaký vzor ako
-// `nedostupneEmailType`/`.claude/rules/testing.md`'s "Nová pgEnum hodnota"
-// past). `source` je NEZÁVISLÝ, navždy 2-hodnotový enum — určuje UI schopnosť
-// (len `vlastne` karty majú Upraviť/Zmazať), `type` je len farebný štítok.
-export const upozornenieType = pgEnum("upozornenie_type", ["vlastna_poznamka"]);
+// `type` je OTVORENÝ zoznam — `vlastna_poznamka` (majiteľove vlastné
+// poznámky, #267) a `nevyzdvihnuta_zasielka` (prvý automatický zdroj, #268:
+// `posta-uncollected/run.ts` volá `upsertUpozornenie` priamo zo svojho
+// existujúceho denného behu). Ďalší budúci automatický zdroj (#269
+// vrátenie) pridá SVOJU hodnotu vlastnou migráciou (`ALTER TYPE ... ADD
+// VALUE`, rovnaký vzor ako `nedostupneEmailType`/`.claude/rules/testing.md`'s
+// "Nová pgEnum hodnota" past). `source` je NEZÁVISLÝ, navždy 2-hodnotový enum
+// — určuje UI schopnosť (len `vlastne` karty majú Upraviť/Zmazať), `type` je
+// len farebný štítok.
+export const upozornenieType = pgEnum("upozornenie_type", ["vlastna_poznamka", "nevyzdvihnuta_zasielka"]);
 export const upozornenieSource = pgEnum("upozornenie_source", ["vlastne", "appka"]);
 
 export const upozornenie = pgTable(
@@ -39,8 +41,10 @@ export const upozornenie = pgTable(
     // záložky (`POST /api/upozornenia/mark-seen`), nie per-karta kliknutím.
     seenAt: timestamp("seen_at", { withTimezone: true }),
     resolvedAt: timestamp("resolved_at", { withTimezone: true }),
-    // `null` pri vyplnenom `resolvedAt` bude neskôr znamenať "vybavené
-    // systémom" (budúci auto-close #268/#269) — dnes ho vypĺňa vždy človek.
+    // `null` pri vyplnenom `resolvedAt` znamená "vybavené systémom" — #268's
+    // `autoResolveByDedupKey` (`upozornenia/service.ts`) ho zámerne
+    // NEVYPĹŇA; človek ho vyplní len cez `resolveUpozornenie` (ručné
+    // "Vybavené").
     resolvedByUserId: uuid("resolved_by_user_id").references(() => users.id, { onDelete: "set null" }),
     createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

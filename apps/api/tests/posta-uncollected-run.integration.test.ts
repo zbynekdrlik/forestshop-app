@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import pg from "pg";
 import { afterEach, expect, it } from "vitest";
-import { orders, postaUncollectedState } from "../src/db/schema.js";
+import { orders, postaUncollectedState, upozornenie } from "../src/db/schema.js";
 import type { MailMessage } from "../src/modules/mail/transport.js";
 import { POSTA_UNCOLLECTED_RUN_LOCK_KEY, runPostaUncollected } from "../src/modules/posta-uncollected/run.js";
 import type { TrackingClient } from "../src/modules/posta-uncollected/tracking-client.js";
@@ -258,4 +258,77 @@ it("dva súbežné behy sa serializujú (advisory zámok), nikdy neprebehnú nar
   const afterRun = await checker.query<{ pg_try_advisory_lock: boolean }>("select pg_try_advisory_lock($1)", [POSTA_UNCOLLECTED_RUN_LOCK_KEY]);
   expect(afterRun.rows[0]?.pg_try_advisory_lock).toBe(true);
   await checker.query("select pg_advisory_unlock($1)", [POSTA_UNCOLLECTED_RUN_LOCK_KEY]);
+});
+
+// issue 268: nevyzdvihnutá zásielka vyrobí kartu na nástenke Upozornenia
+// (#267's zdieľaná zapisovacia cesta), opakovaný beh ju len OBNOVÍ (nikdy
+// druhú), a keď sa zásielka doručí/vráti, karta sa ZAVRIE SAMA (bez zásahu
+// majiteľa) — presne "hotovo, keď" ticketu.
+it("nevyzdvihnutá zásielka vyrobí kartu na Upozorneniach s odkazom na objednávku", async () => {
+  const db = await boot();
+  await insertOrder(db, { externalOrderId: "20500010" });
+
+  await runPostaUncollected({
+    db,
+    now: TODAY,
+    trackingClient: notifiedTrackingClient(),
+    mailTransport: undefined,
+    bccEmail: "majitel@forestshop.sk",
+    adminBaseUrl: "https://www.forestshop.sk",
+  });
+
+  const rows = await db.select().from(upozornenie).where(eq(upozornenie.dedupKey, "posta:EF123456789SK"));
+  expect(rows).toHaveLength(1);
+  expect(rows[0]?.type).toBe("nevyzdvihnuta_zasielka");
+  expect(rows[0]?.source).toBe("appka");
+  expect(rows[0]?.title).toContain("20500010");
+  expect(rows[0]?.link).toContain("20500010");
+  expect(rows[0]?.resolvedAt).toBeNull();
+});
+
+it("opakovaný beh na tú istú zásielku NEVYROBÍ druhú kartu, len ju obnoví", async () => {
+  const db = await boot();
+  await insertOrder(db, { externalOrderId: "20500011" });
+  const deps = {
+    trackingClient: notifiedTrackingClient(),
+    mailTransport: undefined,
+    bccEmail: "majitel@forestshop.sk",
+    adminBaseUrl: "https://www.forestshop.sk",
+  };
+
+  await runPostaUncollected({ db, now: TODAY, ...deps });
+  await runPostaUncollected({ db, now: new Date("2026-08-03T10:00:00Z"), ...deps });
+
+  const rows = await db.select().from(upozornenie).where(eq(upozornenie.dedupKey, "posta:EF123456789SK"));
+  expect(rows).toHaveLength(1);
+});
+
+it("doručená zásielka zavrie svoju kartu SAMA, bez zásahu majiteľa (resolvedByUserId zostáva null)", async () => {
+  const db = await boot();
+  await insertOrder(db, { externalOrderId: "20500012" });
+
+  await runPostaUncollected({
+    db,
+    now: TODAY,
+    trackingClient: notifiedTrackingClient(),
+    mailTransport: undefined,
+    bccEmail: "majitel@forestshop.sk",
+    adminBaseUrl: "https://www.forestshop.sk",
+  });
+  const midway = await db.select().from(upozornenie).where(eq(upozornenie.dedupKey, "posta:EF123456789SK"));
+  expect(midway[0]?.resolvedAt).toBeNull();
+
+  await runPostaUncollected({
+    db,
+    now: new Date("2026-08-03T10:00:00Z"),
+    trackingClient: () => Promise.resolve({ results: [{ status: "ok", events: [{ stateCode: "delivered" }] }] }),
+    mailTransport: undefined,
+    bccEmail: "majitel@forestshop.sk",
+    adminBaseUrl: "https://www.forestshop.sk",
+  });
+
+  const after = await db.select().from(upozornenie).where(eq(upozornenie.dedupKey, "posta:EF123456789SK"));
+  expect(after).toHaveLength(1);
+  expect(after[0]?.resolvedAt).not.toBeNull();
+  expect(after[0]?.resolvedByUserId).toBeNull();
 });
