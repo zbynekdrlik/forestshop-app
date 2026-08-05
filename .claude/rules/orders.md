@@ -567,3 +567,20 @@ paths:
   párové pred/po meranie (dočasná inštrumentácia spec súboru, revert pred
   commitom, presne tento vzor) a over, že žiadny riadok skutočne NEROSTIE,
   nielen že žiadny neprekročil strop.
+- **Issue 269: `ingestOrders`'s DB transakcia (po upsert-e `order` riadkov,
+  pred XML-backfill krokom) teraz NAVYŠE volá zdieľanú `upsertUpozornenie()`
+  (`.claude/rules/upozornenia.md`) pre KAŽDÚ objednávku, ktorej `statusName`
+  je jeden zo živo overených vrátkových stavov (`orders/return-status.ts`).**
+  Plné odôvodnenie (dedup na objednávku nie na pod-stav, prečo sa karta
+  nikdy nezatvára automaticky) je v `upozornenia.md`, aby sa nepísalo
+  dvakrát. Pre KAŽDÝ ĎALŠÍ nový stĺpec/pole odvodené z `order.status_name`
+  vnútri tejto transakcie: pamätaj, že `orderInfo` (a teda aj tento hák) je
+  naplnené LEN pre objednávky, čo majú aspoň JEDEN skutočný produktový
+  riadok (nie len pseudo-položky) — rovnaké obmedzenie, aké má celý
+  `order` upsert vyššie, nie nová medzera zavedená týmto tiketom.
+  Integračné testy pre CSV-riadené vrátkové stavy s diakritikou
+  (`orders-ingest-return-upozornenie.integration.test.ts`) potrebujú
+  SKUTOČNÉ cp1250 bajty (appka vždy dekóduje `decodeCp1250`) — súbor si
+  stavia kódovaciu tabuľku DYNAMICKY (dekóduje všetkých 256 bajtov cez
+  `TextDecoder("windows-1250")` a obráti mapu), namiesto ručne písanej
+  tabuľky kódových bodov alebo novej závislosti (`iconv-lite`).
