@@ -323,7 +323,8 @@ describe("parsePage — issue 230: trigona.sk cita farebny StockCountText stitok
     // stranke (presne scenar z tela ticketu 241) — prvy stitok patri inemu
     // produktu (zelena/skladom), az druhy stitok sedi s ID v URL (modra/
     // vypredane). Bez ID krizovej kontroly by prvy-v-poradi vyhral a vratil
-    // by ISTO ZLU odpoved namiesto unknown.
+    // by ZLU odpoved ("available") namiesto spravnej odpovede z druheho
+    // stitku ("unavailable").
     const html =
       '<span id="StockCountText555">' +
       '<span style="color: #00b020">Na sklade</span></span>' +
@@ -331,6 +332,28 @@ describe("parsePage — issue 230: trigona.sk cita farebny StockCountText stitok
       '<span style="color: #024bbd">1 - 4 tyzdne</span></span>';
     const result = parsePage(html, "https://www.trigona.sk/eshop/8x56-ed-savannah/p-1215478.xhtml");
     expect(result.availability).toBe("unavailable");
+  });
+
+  it("issue 241: dva zhodne-ID stitky s ROZDIELNOU farbou su nejednoznacne — unknown, nikdy hadanie podla prveho", () => {
+    // Rovnaka disciplina ako matchSizeLabel (viac nez jedna zhoda = ziadna).
+    const html =
+      '<span id="StockCountText1217729">' +
+      '<span style="color: #00b020">Na sklade</span></span>' +
+      '<span id="StockCountText1217729">' +
+      '<span style="color: #024bbd">1 - 4 tyzdne</span></span>';
+    const result = parsePage(html, "https://www.trigona.sk/eshop/10x42-sahara/p-1217729.xhtml");
+    expect(result.availability).toBe("unknown");
+  });
+
+  it("issue 241: kategoriova URL (bez p-<ID>.xhtml, realny tvar ulozenych trigona odkazov) je vzdy unknown, aj ked stranka ma platny stitok", () => {
+    // Realne ulozene trigona.sk odkazy v tomto repozitari su casto
+    // KATEGORIOVE (napr. "https://trigona.sk/smith-s/polovnicke/c199",
+    // supplier-link.test.ts), nie produktove p-<ID>.xhtml — vtedy sa ID z
+    // URL vobec nevytiahne, takze sa nikdy nesmie hadat podla prveho
+    // stitku na stranke.
+    const html = '<span id="StockCountText1217729"><span style="color: #00b020">Na sklade</span></span>';
+    const result = parsePage(html, "https://trigona.sk/smith-s/polovnicke/c199");
+    expect(result.availability).toBe("unknown");
   });
 });
 

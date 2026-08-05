@@ -223,6 +223,29 @@ paths:
   nízka aj po tejto zmene; skutočný pokrok by vyžadoval mapovanie
   číselných JS parameter-ID na konkrétnu veľkosť (podobné, ale iné, než
   `shop.lasting.eu`'s `title=""` atribút), mimo rozsahu tohto ticketu.
+- **Per-domain textový extraktor (`TextAvailabilityRule.extractRegion`,
+  `parse.ts`), ktorého markup nesie ČÍSELNÉ ID produktu (napr. trigona.sk's
+  `id="StockCountText<ID>"`), MUSÍ toto ID krížovo overiť proti ID/slugu v
+  scrapovanej `url` — nikdy sa nespoliehať LEN na empirický dôkaz "na N
+  vzorkách sa vyskytlo vždy práve raz" (issue 241, code review na issue
+  230).** `extractRegion` dostáva od issue 241 aj `url`
+  (`(html, url) => string | null`); `trigonaStockRegion` vytiahne číslo
+  produktu z `p-<ID>.xhtml` a cez `matchAll` (nie `.exec`) prejde VŠETKY
+  výskyty, vyberie ten, čo sedí — inak by súvisiaci produkt s rovnakou
+  značkou VYŠŠIE na stránke dal ISTO ZLÚ odpoveď, nie `unknown`. Dva
+  zhodné-ID výskyty s ROZDIELNOU farbou sú tiež nejednoznačné → `unknown`
+  (rovnaká disciplína ako `matchSizeLabel`). Extraktor BEZ takého ID v
+  markupe (napr. `huntingshopDetailBadges`'s CSS-triedové vylúčenie,
+  `fomeiAvailabilityRegion`'s "pred nadpisom Súvisiace") `url` nepotrebuje
+  a nemusí ho ani deklarovať vo svojej signatúre — funkcia s menej
+  parametrami je platný podtyp funkcie s viac parametrami v TypeScripte.
+  **Reálne uložené trigona.sk odkazy v tomto repozitári sú často
+  KATEGÓRIOVÉ** (`https://trigona.sk/smith-s/polovnicke/c199`,
+  `supplier-link.test.ts`), nie `p-<ID>.xhtml` — vtedy sa ID vôbec
+  nevytiahne a text fallback je vždy `unknown`, aj keď stránka nesie
+  platný štítok (zámerné, nie regresia — over pri ĎALŠOM podobnom
+  extraktore, či reálne uložené odkazy vôbec majú tvar, z ktorého sa dá
+  ID vytiahnuť).
 - **Český tvar "Momentálně nedostupné" (mäkké `ě`) je INÝ reťazec než
   slovenské "momentálne nedostupné" — `OUT_KEYWORDS` (`parse.ts`) potrebuje
   OBA, `.includes()` porovnanie nevidí medzi nimi žiadnu podobnosť** (issue

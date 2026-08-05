@@ -295,25 +295,28 @@ const TRIGONA_PRODUCT_ID_RE = /\/p-(\d+)\.xhtml/i;
  * `OutOfStock`. Farba sa prekladá na kanonické slovo, aby prešlo
  * existujúcim `availabilityFromText` zoznamom kľúčových slov.
  *
- * Nerozpoznaná farba, nerozobrateľné ID z URL, ANI chýbajúci/nezhodný
- * prvok sa NEHÁDŽE na žiadnu stranu — vracia sa `null` (`whenRegionMissing:
- * "unknown"` nižšie). Na rozdiel od huntingshop.eu, kde je naživo overené,
- * že vypredaný produkt štítok vôbec nemá, sa na trigona.sk medzi overenými
- * vzorkami nikdy nevyskytla stránka bez tohto prvku — preto tu niet dôkazu,
- * čo by chýbajúci štítok znamenal.
+ * Nerozpoznaná farba, nerozobrateľné ID z URL, chýbajúci/nezhodný prvok,
+ * ANI DVA zhodné-ID výskyty s ROZDIELNOU farbou (nejednoznačné, rovnaká
+ * disciplína ako `matchSizeLabel`: viac než jedna zhoda sa počíta ako
+ * žiadna) sa NEHÁDŽU na žiadnu stranu — vracia sa `null`
+ * (`whenRegionMissing: "unknown"` nižšie). Na rozdiel od huntingshop.eu,
+ * kde je naživo overené, že vypredaný produkt štítok vôbec nemá, sa na
+ * trigona.sk medzi overenými vzorkami nikdy nevyskytla stránka bez tohto
+ * prvku — preto tu niet dôkazu, čo by chýbajúci štítok znamenal.
  */
 function trigonaStockRegion(html: string, url: string): string | null {
   const productId = TRIGONA_PRODUCT_ID_RE.exec(url)?.[1];
   if (productId === undefined) return null;
+  const resolved = new Set<string>();
   for (const match of html.matchAll(TRIGONA_STOCK_COUNT_RE)) {
     const [, id, colorRaw] = match;
     if (id !== productId) continue;
     const color = (colorRaw ?? "").toLowerCase();
-    if (color === "#00b020") return "skladom";
-    if (color === "#024bbd") return "vypredané";
-    return null;
+    if (color === "#00b020") resolved.add("skladom");
+    else if (color === "#024bbd") resolved.add("vypredané");
   }
-  return null;
+  const values = [...resolved];
+  return values.length === 1 ? (values[0] ?? null) : null;
 }
 
 /**
