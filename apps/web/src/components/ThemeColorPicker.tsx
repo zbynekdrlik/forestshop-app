@@ -31,11 +31,13 @@ function ThemeColorField({
   id,
   label,
   value,
+  invalid,
   onChange,
 }: {
   readonly id: string;
   readonly label: string;
   readonly value: string;
+  readonly invalid: boolean;
   readonly onChange: (value: string) => void;
 }): JSX.Element {
   return (
@@ -59,6 +61,7 @@ function ThemeColorField({
           }}
           data-testid={`themecolor-hex-${id}`}
           aria-label={`${label} — kód farby`}
+          aria-invalid={invalid}
           maxLength={7}
           className="themecolor-hex-input"
         />
@@ -205,6 +208,11 @@ export function ThemeColorPicker({ role, onSessionExpired }: { readonly role: Me
 
   const allValid = Object.keys(draft).length > 0 && Object.values(draft).every((v) => HEX_RE.test(v));
   const dirty = Object.keys(baseline).some((key) => baseline[key] !== draft[key]);
+  // issue 264 živé overenie (0.3.0-dev.153): neplatný kód farby len ticho
+  // blokoval Uložiť, majiteľ sa nedozvedel prečo ani ktoré pole je zlé.
+  // Odvodené priamo z `draft` (rovnaký princíp ako `allValid`/`dirty` vyššie)
+  // — žiadny extra `useState`, zmizne samo, len čo sa hodnota opraví.
+  const invalidKeys = new Set(Object.entries(draft).filter(([, v]) => !HEX_RE.test(v)).map(([key]) => key));
 
   return (
     <>
@@ -229,6 +237,11 @@ export function ThemeColorPicker({ role, onSessionExpired }: { readonly role: Me
                 {error}
               </p>
             )}
+            {invalidKeys.size > 0 && (
+              <p role="alert" data-testid="themecolor-hex-invalid">
+                Kód farby musí byť v tvare #RRGGBB (napr. #D14D3B).
+              </p>
+            )}
             {colors === null ? (
               <p>Načítavam…</p>
             ) : (
@@ -239,8 +252,8 @@ export function ThemeColorPicker({ role, onSessionExpired }: { readonly role: Me
                     <span className="themecolor-sample" style={{ background: draft[group.bgKey], color: draft[group.textKey] }} data-testid={`themecolor-sample-${group.bgKey}`}>
                       {group.sampleLabel}
                     </span>
-                    <ThemeColorField id={group.bgKey} label="Pozadie" value={draft[group.bgKey] ?? ""} onChange={(v) => { setValue(group.bgKey, v); }} />
-                    <ThemeColorField id={group.textKey} label="Text" value={draft[group.textKey] ?? ""} onChange={(v) => { setValue(group.textKey, v); }} />
+                    <ThemeColorField id={group.bgKey} label="Pozadie" value={draft[group.bgKey] ?? ""} invalid={invalidKeys.has(group.bgKey)} onChange={(v) => { setValue(group.bgKey, v); }} />
+                    <ThemeColorField id={group.textKey} label="Text" value={draft[group.textKey] ?? ""} invalid={invalidKeys.has(group.textKey)} onChange={(v) => { setValue(group.textKey, v); }} />
                   </fieldset>
                 ))}
               </div>
