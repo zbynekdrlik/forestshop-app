@@ -60,7 +60,7 @@ it("zmena hex poľa naživo premietne farbu do CSS premennej na document.documen
   expect(cssVar("chip-done-bg")).toBe("#123456");
 });
 
-it("neplatný kód farby sa premietne do poľa, ale NEZAPÍŠE do CSS premennej, a Uložiť ostáva nedostupné", async () => {
+it("neplatný kód farby sa premietne do poľa, ale NEZAPÍŠE do CSS premennej, Uložiť ostáva nedostupné, a zobrazí sa zrozumiteľná hláška s aria-invalid — ktorá zmizne po oprave", async () => {
   fetchThemeColors.mockResolvedValue(COLORS);
   render(<ThemeColorPicker role="admin" onSessionExpired={vi.fn()} />);
   fireEvent.click(screen.getByTestId("themecolor-btn"));
@@ -68,10 +68,28 @@ it("neplatný kód farby sa premietne do poľa, ale NEZAPÍŠE do CSS premennej,
 
   const save = screen.getByTestId<HTMLButtonElement>("themecolor-save");
   expect(save.disabled).toBe(true); // nič sa nezmenilo
+  expect(screen.queryByTestId("themecolor-hex-invalid")).toBeNull();
 
-  fireEvent.change(screen.getByTestId("themecolor-hex-chip-done-bg"), { target: { value: "nieco-zle" } });
+  const hexInput = screen.getByTestId<HTMLInputElement>("themecolor-hex-chip-done-bg");
+  fireEvent.change(hexInput, { target: { value: "nieco-zle" } });
   expect(cssVar("chip-done-bg")).toBe("#d14d3b"); // pôvodná hodnota, nie garbage
   expect(save.disabled).toBe(true); // draft je síce "dirty", ale neplatný
+
+  // Majiteľ sa dozvie PREČO (issue 264, živé overenie 0.3.0-dev.153): zrozumiteľná
+  // hláška po slovensky v live regióne + označenie chybného poľa.
+  const alert = screen.getByTestId("themecolor-hex-invalid");
+  expect(alert.getAttribute("role")).toBe("alert");
+  expect(alert.textContent).toMatch(/#RRGGBB/);
+  expect(hexInput.getAttribute("aria-invalid")).toBe("true");
+
+  // Iné, stále platné pole nesmie byť označené ako neplatné.
+  const otherHexInput = screen.getByTestId<HTMLInputElement>("themecolor-hex-chip-done-text");
+  expect(otherHexInput.getAttribute("aria-invalid")).toBe("false");
+
+  // Hláška zmizne, len čo sa hodnota stane opäť platnou.
+  fireEvent.change(hexInput, { target: { value: "#123456" } });
+  expect(screen.queryByTestId("themecolor-hex-invalid")).toBeNull();
+  expect(hexInput.getAttribute("aria-invalid")).toBe("false");
 });
 
 it("Uložiť odošle celý draft a po úspechu popup zavrie", async () => {
