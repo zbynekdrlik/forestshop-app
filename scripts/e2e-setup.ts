@@ -165,6 +165,11 @@ const E2E_PREPINANIE_EMAIL = "e2e-prepinanie@forestshop.sk"; // musí sa zhodova
 // e-shopu"/"Súhrn o objednávaní") dostáva VLASTNÝ izolovaný účet.
 const E2E_PREHLAD_EMAIL = "e2e-prehlad@forestshop.sk"; // musí sa zhodovať s hodnotou v orders-overview.spec.ts
 
+// issue 227: rovnaký mechanizmus a dôvod ako `E2E_PREPINANIE_EMAIL` vyššie —
+// nový spec súbor (`supplier-stock.spec.ts` — prehľad podľa domény + vlastný
+// e-shop) dostáva VLASTNÝ izolovaný účet.
+const E2E_DOMENY_EMAIL = "e2e-domeny@forestshop.sk"; // musí sa zhodovať s hodnotou v supplier-stock.spec.ts
+
 const { db, pool } = createDb();
 // Konštantný literál bez interpolácie — obyčajný reťazec je tu rovnako bezpečný
 // ako `sql` tagovaná šablóna (tú používa ekvivalentný apps/api/tests/helpers/db.ts),
@@ -211,24 +216,9 @@ await db.insert(users).values({ email: "e2e@forestshop.sk", passwordHash: await 
 // Rovnaké počiatočné heslo a zobrazované meno ako vyššie (žiadny test naň
 // nespolieha ako na odlišujúci znak) — jediný rozdiel je e-mail, ktorý ho robí
 // SAMOSTATNÝM riadkom v `users`, izolovaným od zdieľaného účtu vyššie.
-await db.insert(users).values({
-  email: E2E_HESLO_ZMENA_EMAIL,
-  passwordHash: await hashPassword(E2E_HESLO),
-  displayName: "E2E Manažér",
-  role: "manazer",
-});
-await db.insert(users).values({
-  email: E2E_SKUPINY_EMAIL,
-  passwordHash: await hashPassword(E2E_HESLO),
-  displayName: "E2E Manažér",
-  role: "manazer",
-});
-await db.insert(users).values({
-  email: E2E_NAV_EMAIL,
-  passwordHash: await hashPassword(E2E_HESLO),
-  displayName: "E2E Manažér",
-  role: "manazer",
-});
+await db.insert(users).values({ email: E2E_HESLO_ZMENA_EMAIL, passwordHash: await hashPassword(E2E_HESLO), displayName: "E2E Manažér", role: "manazer" });
+await db.insert(users).values({ email: E2E_SKUPINY_EMAIL, passwordHash: await hashPassword(E2E_HESLO), displayName: "E2E Manažér", role: "manazer" });
+await db.insert(users).values({ email: E2E_NAV_EMAIL, passwordHash: await hashPassword(E2E_HESLO), displayName: "E2E Manažér", role: "manazer" });
 await db.insert(users).values({
   email: E2E_OTVORENE_STAVY_EMAIL,
   passwordHash: await hashPassword(E2E_HESLO),
@@ -330,6 +320,12 @@ await db.insert(users).values({
   passwordHash: await hashPassword(E2E_HESLO),
   displayName: "E2E Manažér",
   role: "manazer",
+});
+await db.insert(users).values({
+  email: E2E_DOMENY_EMAIL,
+  passwordHash: await hashPassword(E2E_HESLO),
+  displayName: "E2E Čítanie",
+  role: "citanie",
 });
 
 // Katalóg pre E2E: tá istá commitnutá fixtúra ako v jednotkových testoch, cez tú istú
@@ -716,6 +712,21 @@ await db.insert(shopProductUrl).values({
   availability: "in stock",
   fetchedAt: teraz,
 });
+
+// issue 227: dva produkty pre "Prehľad podľa domény" + vylúčenie vlastného
+// e-shopu — VLASTNÉ kódy, ktoré sa v žiadnom inom spec súbore nevyskytujú.
+// `virginiashop.sk` má DVA riadky v `supplier_stock` (jeden čitateľný, jeden
+// `unknown`), aby prehľad ukázal total=2/readable=1/unknown=1. Odkaz na
+// `forestshop.sk` sa NIKDY nezapisuje do `supplier_stock` (run.ts ho
+// vylučuje) — počíta sa živo z `internalNote`, žiadny riadok netreba.
+async function seedDomenaProdukt(key: string, name: string, internalNote: string): Promise<void> {
+  await db.insert(products).values({ key, name, internalNote, firstSeenAt: teraz, lastSeenAt: teraz, lastSeenSnapshotId: snapshotPrepinanie });
+}
+await seedDomenaProdukt("e2e-domeny-1", "E2E Nôž (virginiashop.sk)", "https://www.virginiashop.sk/e2e-domeny/noz-1/");
+await seedDomenaProdukt("e2e-domeny-2", "E2E Nôž (virginiashop.sk, druhý)", "https://www.virginiashop.sk/e2e-domeny/noz-2/");
+await seedDomenaProdukt("e2e-domeny-vlastny", "E2E Vlastný produkt (forestshop.sk)", "https://www.forestshop.sk/e2e-domeny-vlastny-produkt/");
+await db.insert(supplierStock).values({ link: "https://www.virginiashop.sk/e2e-domeny/noz-1/", host: "virginiashop.sk", availability: "available", availabilityText: "Skladom", source: "text", ok: true, httpStatus: 200, checkedAt: teraz, confirmedAt: teraz });
+await db.insert(supplierStock).values({ link: "https://www.virginiashop.sk/e2e-domeny/noz-2/", host: "virginiashop.sk", availability: "unknown", availabilityText: "", source: "none", ok: true, httpStatus: 200, checkedAt: teraz, confirmedAt: null });
 
 // issue 237: JEDNA objednávka pre "Prehľad e-shopu" (dnes/tento
 // týždeň/tento mesiac) — `placedAt: teraz` (rovnaké "teraz" ako mail_log
