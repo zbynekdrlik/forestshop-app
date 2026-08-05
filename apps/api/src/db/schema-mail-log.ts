@@ -9,11 +9,14 @@ import { users } from "./schema-users.js";
 // beh v `job_run.detail` prepíše ten ďalší. Táto tabuľka je JEDNA spoločná
 // kniha odoslaných e-mailov pre VŠETKÝCH odosielateľov appky, aby majiteľ
 // vedel, čo sa v jeho mene odoslalo.
+// issue 257: "order_merge" — e-mail zákazníkovi o zlúčení viacerých jeho
+// objednávok do jednej zásielky (`modules/orders/merge-mail.ts`).
 export const mailLogSource = pgEnum("mail_log_source", [
   "nedostupne",
   "posta_uncollected",
   "order_reminder",
   "supplier_order",
+  "order_merge",
 ]);
 
 // `skipped` = appka SKUTOČNE chcela poslať a nemohla (chýba adresa, chýba

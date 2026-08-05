@@ -53,7 +53,8 @@ it("zoznam vráti všetky druhy e-mailov s pôvodným znením, kým sa nič neup
   const res = await app.request("/api/mail-templates", { headers: { cookie } });
   expect(res.status).toBe(200);
   const payload = (await res.json()) as { templates: { key: string; subject: string; isCustomized: boolean; placeholders: unknown[] }[] };
-  expect(payload.templates).toHaveLength(8);
+  // issue 257: "order_merge" — deviaty druh e-mailu (Zlúčenie objednávky).
+  expect(payload.templates).toHaveLength(9);
   const nedostupne = payload.templates.find((t) => t.key === "nedostupne");
   expect(nedostupne?.isCustomized).toBe(false);
   expect(nedostupne?.subject).toBe(MAIL_TEMPLATE_KINDS["nedostupne"].defaultText.subject);
