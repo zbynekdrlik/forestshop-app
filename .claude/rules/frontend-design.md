@@ -847,3 +847,20 @@ paths:
   opačným prípadom — STARŠIA odpoveď z PRED zavretého+znovu otvoreného
   popupu prepisujúca NOVŠÍ stav (rovnaká trieda race ako issue 151/251,
   pozri "latest ref" záznamy vyššie v tomto súbore).
+- **"Uložiť je disabled pri neplatnom vstupe" NESTAČÍ ako celá odozva —
+  majiteľ sa musí dozvedieť PREČO a KTORÉ pole je zlé, a to sa dá odvodiť
+  priamo z existujúceho `draft`/validačného stavu bez nového `useState`.**
+  Issue 264 (živé overenie 0.3.0-dev.153, hex kód farby): `ThemeColorPicker
+  .tsx` už mal `allValid`/`dirty` ako ODVODENÉ hodnoty z `draft` — chýbajúca
+  hláška sa doplnila rovnakým princípom (`invalidKeys = new Set(Object
+  .entries(draft).filter(([,v]) => !HEX_RE.test(v)).map(([k]) => k))`
+  priamo v render tele), nie ďalším `useState` synchronizovaným v
+  `setValue()`. Spoločná hláška znovupoužila EXISTUJÚCI globálny
+  `[role="alert"]` CSS blok (`app.css`) pod VLASTNÝM `data-testid` (odlišným
+  od serverového `themecolor-error`u v tom istom komponente, aby oba mohli
+  koexistovať). Per-pole označenie ide cez `aria-invalid` prop + CSS
+  selektor `[aria-invalid="true"]` (existujúci `--fs-danger`/`--fs-danger-
+  bg` token, žiadny nový raw hex). Test na KAŽDÉ ĎALŠIE "tlačidlo je len
+  disabled" miesto v appke: dá sa dôvod odvodiť z toho, čo už komponent
+  počíta? Ak áno, pridaj hlášku + `aria-invalid` ako odvodenú hodnotu, nie
+  nový stav.

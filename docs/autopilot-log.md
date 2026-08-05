@@ -2958,3 +2958,27 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
   overený aj samostatne po fix commite).
 - No PR/merge/deploy in this dispatch — supervisor owns CI/PR/merge/deploy
   for this ticket per the dispatch's HARD CONSTRAINT.
+
+## Issue 264 follow-up — hláška pri neplatnom kóde farby
+
+- `d006f47` chore: bump version to 0.3.0-dev.154 (issue 264 follow-up)
+- `d30a942` [red] test: neplatný kód farby zobrazí hlášku + aria-invalid
+  (`ThemeColorPicker.test.tsx`) — confirmed failing before the fix.
+- `732f6f6` [green] fix: zrozumiteľná hláška + aria-invalid pri neplatnom
+  kóde farby (`ThemeColorPicker.tsx`, `app.css`) — odvodená množina
+  `invalidKeys` (rovnaký princíp ako existujúce `allValid`/`dirty`), nový
+  `role="alert"` blok (`themecolor-hex-invalid`), `aria-invalid` na
+  hex `<input>` + `[aria-invalid="true"]` CSS s `--fs-danger` tokenmi.
+- Extended `theme-colors.spec.ts` (existing e2e) with the same proof:
+  message text/visibility, `aria-invalid` set then cleared.
+- Design comment posted to issue 264 before the first code commit.
+- Playbook entry added to `.claude/rules/frontend-design.md` — "derive
+  the invalid-field message/marker from existing validation state,
+  don't add a new useState" gotcha.
+- Local gates: `pnpm typecheck`, `pnpm lint` clean; web unit 433/433 (54
+  files); API unit 579/579 (36 files); API integration 491/491 (67
+  files, after `db:migrate` — no new migration this time); e2e 45/45
+  (54.6s→55.7s, `theme-colors.spec.ts` now includes the invalid-hex
+  check).
+- No PR/merge/deploy in this dispatch — supervisor owns CI/PR/merge/deploy
+  for this follow-up per the dispatch's HARD CONSTRAINT.

@@ -63,6 +63,22 @@ test("koliesko farieb: živý náhľad, uloženie prežije reload, vrátenie pre
     .poll(() => page.evaluate(() => document.documentElement.style.getPropertyValue("--chip-done-bg")))
     .toBe("#123456");
 
+  // issue 264 živé overenie (0.3.0-dev.153): neplatný kód farby musí
+  // majiteľovi ZROZUMITEĽNE povedať prečo — nielen ticho zablokovať Uložiť.
+  await btn.click();
+  await expect(page.getByTestId("themecolor-dialog")).toBeVisible();
+  const hexDoneAgain = page.getByTestId("themecolor-hex-chip-done-bg");
+  await hexDoneAgain.fill("nezmysel");
+  await expect(page.getByTestId("themecolor-hex-invalid")).toBeVisible();
+  await expect(page.getByTestId("themecolor-hex-invalid")).toContainText("#RRGGBB");
+  await expect(hexDoneAgain).toHaveAttribute("aria-invalid", "true");
+  await expect(page.getByTestId("themecolor-save")).toBeDisabled();
+  await hexDoneAgain.fill("#654321");
+  await expect(page.getByTestId("themecolor-hex-invalid")).toBeHidden();
+  await expect(hexDoneAgain).toHaveAttribute("aria-invalid", "false");
+  await page.getByTestId("themecolor-cancel").click();
+  await expect(page.getByTestId("themecolor-dialog")).toBeHidden();
+
   // Obnoviť predvolené — persistentné hneď (rovnaký vzor ako "Texty
   // e-mailov"'s vrátenie pôvodného znenia), fixtúra tak ostáva rovnaká pre
   // ďalšie behy.
