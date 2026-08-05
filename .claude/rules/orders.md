@@ -524,3 +524,46 @@ paths:
   v `.claude/rules/nedostupne.md`, aby sa nemuselo písať dvakrát. `sendOrderMergeMail`'s nový voliteľný `editedBody` má rovnaký tvar
   (`{ ...built.content, ...renderEditedBody(editedBody) }`, predmet
   ostáva pôvodný).
+- **issue 276: kód produktu POD číslom objednávky, prelinkovaný na náš eshop
+  (`OpenOrderLine.ourUrl`), je TRETÍ spotrebiteľ toho istého vzoru, aký
+  založilo issue 238 na "Nedostupné tovary" (`nedostupne/queries.ts`'s
+  `ourProductUrl`) — LEFT JOIN `shop_product_url` podľa kódu variantu
+  (nikdy INNER — chýbajúci feed riadok nesmie vyradiť riadok zo zoznamu),
+  `<a>` len keď adresu poznáme, inak plain text. **Zámerne NEPOUŽÍVA
+  `shopLinks.ts`'s `ourProductLink()`** (vyhľadávací fallback, ktorý
+  používa `RestockSection.tsx`) — majiteľova podmienka pre TENTO obrazovka
+  je opačná: neznáma adresa = neaktívny text, nikdy odkaz na vyhľadávanie.
+  Keďže `shop_product_url` je kľúčovaná LEN kódom variantu (nie
+  objednávkou), VŠETKY riadky zdieľajúce ten istý `variantCode` naprieč
+  RÔZNYMI objednávkami dostanú TÚ ISTÚ `ourUrl` hodnotu — to sa využilo aj
+  v teste (`orders.spec.ts`): fixtúrový variant "40287" má (kvôli inému,
+  staršiemu "Nedostupné tovary" testu, issue 238) už seedovaný
+  `shop_product_url` riadok, takže objednávka 9002 nad tým istým variantom
+  dostala kód-odkaz "zadarmo", bez potreby novej fixtúry.
+- **Ceiling test PASSING (`orders-layout.spec.ts`'s 105px) after adding an
+  ALWAYS-rendered second line to a cell is NOT the same proof as "row height
+  didn't change" — code review on issue 276 caught this distinction.**
+  `.ord-code-cell` (kód produktu POD číslom objednávky) renderuje sa na
+  KAŽDOM riadku (variant kód je vždy prítomný), na rozdiel od `.ord-remark-
+  cell`'s voliteľného `remark` — takže "strop 105px prešiel" samo osebe
+  dokazuje len HORNÚ hranicu, nie že sa PRIEMERNÁ výška riadku nezvýšila (ten
+  istý strop by prešiel aj pri systematickom náraste, napr. 55px→78px).
+  **Skutočný dôkaz "nula zmena" bol PÁROVÉ meranie** (rovnaká myšlienka ako
+  živé `page.addStyleTag` kandidáty z issue 105/107/111/127/164, len BEZ
+  potreby produkcie): `page.evaluate` najprv zmeria `getBoundingClientRect
+  ().height` VŠETKÝCH `.order-row`, potom vloží `<style>.ord-code-cell{
+  display:none!important}</style>` (simuluje "pred zmenou" stav BEZ
+  akéhokoľvek redeploy/revert) a zmeria ZNOVA — obe sady čísel boli PRE
+  KAŽDÝ RIADOK bajt-na-bajt zhodné, na VŠETKÝCH 4 šírkach, na OBOCH
+  fixtúrových sadách (izolovaný `E2E_ROZLOZENIE_EMAIL` účet aj globálny
+  `E2E_FILTRE_EMAIL` s 8 riadkami DODAVATEL-TEST-1/"(bez dodávateľa)").
+  Príčina: `.ord-order-cell`'s pridaná výška (jeden `--fs-text-xs` riadok +
+  `--fs-space-1` margin, ~16-20px) ostáva pod výškou, ktorú riadku už aj tak
+  vynucujú iné bunky (stavové tlačidlá `.ord-state-btn-group`, `.ord-qty-
+  stack`) — najnižšia nameraná výška riadku dnes (85px pri 1920px) má
+  bezpečnú rezervu nad `.ord-order-cell`'s samostatnou výškou. **Test na
+  KAŽDÝ ĎALŠÍ vždy-viditeľný (nie podmienene renderovaný) druhý riadok v
+  tejto tabuľke:** nestačí, že existujúci ceiling test prešiel — spusti
+  párové pred/po meranie (dočasná inštrumentácia spec súboru, revert pred
+  commitom, presne tento vzor) a over, že žiadny riadok skutočne NEROSTIE,
+  nielen že žiadny neprekročil strop.

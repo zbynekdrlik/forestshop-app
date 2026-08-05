@@ -57,7 +57,10 @@ it("kód produktu, ktorý poznáme z feedu, je kliknuteľný odkaz na náš esho
   render(<OrdersSection role="citanie" onSessionExpired={() => {}} />);
 
   const riadok = await screen.findByTestId(`order-line-${LINE_ZNAMY.lineId}`);
-  const odkaz = within(riadok).getByRole<HTMLAnchorElement>("link", {
+  // Rovnaký obalový vzor ako `.ord-remark-cell`/`.ord-shop-remark-cell` — aj
+  // ich testid sa overuje priamo, nielen odkaz/text vo vnútri.
+  const bunka = within(riadok).getByTestId(`code-cell-${LINE_ZNAMY.lineId}`);
+  const odkaz = within(bunka).getByRole<HTMLAnchorElement>("link", {
     name: `Otvoriť produkt ${LINE_ZNAMY.variantCode} na našom eshope`,
   });
   expect(odkaz.href).toBe(LINE_ZNAMY.ourUrl);
@@ -72,7 +75,8 @@ it("kód produktu, ktorý vo feede nepoznáme, sa zobrazí ako obyčajný text (
   render(<OrdersSection role="citanie" onSessionExpired={() => {}} />);
 
   const riadok = await screen.findByTestId(`order-line-${LINE_NEZNAMY.lineId}`);
-  const text = within(riadok).getByTestId(`code-text-${LINE_NEZNAMY.lineId}`);
+  const bunka = within(riadok).getByTestId(`code-cell-${LINE_NEZNAMY.lineId}`);
+  const text = within(bunka).getByTestId(`code-text-${LINE_NEZNAMY.lineId}`);
   expect(text.textContent).toBe(LINE_NEZNAMY.variantCode);
-  expect(within(riadok).queryByRole("link", { name: `Otvoriť produkt ${LINE_NEZNAMY.variantCode} na našom eshope` })).toBeNull();
+  expect(within(bunka).queryByRole("link", { name: `Otvoriť produkt ${LINE_NEZNAMY.variantCode} na našom eshope` })).toBeNull();
 });

@@ -3030,3 +3030,51 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
   46/46, zero console errors.
 - No PR/merge/deploy in this dispatch — supervisor owns CI/PR/merge/deploy
   per the dispatch's HARD CONSTRAINT.
+
+## Issue 276 — product code under order number, linked to our shop (2026-08-05)
+
+- Version bumped to 0.3.0-dev.159 (dev==main after issue 277 merge) —
+  own commit `d68908c` before the feature commit.
+- Backend: `apps/api/src/modules/orders/queries.ts`'s
+  `listOpenOrderLinesBySupplier` gained a LEFT JOIN on `shop_product_url`
+  by variant code, new `OpenOrderLine.ourUrl: string | null` — same
+  pattern as `nedostupne/queries.ts`'s `ourProductUrl` (issue 238), never
+  `shopLinks.ts`'s search-fallback `ourProductLink` (used by `restock`
+  only).
+- Frontend: `ordersApi.ts`'s zod schema gained `ourUrl`
+  (`.regex(/^https?:\/\//).nullable()`); `OrderLineRow.tsx` renders a new
+  `.ord-code-cell` block under the order-number link — `<a>` when
+  `ourUrl !== null`, plain `<span>` otherwise, never a dead/guessed link.
+- Feature commit `272aee2` — new integration test
+  (`orders-our-url.integration.test.ts`, 2 tests: known + unknown feed
+  code), new unit test (`OrderLineRow.productCodeLink.test.tsx`, 2 tests),
+  `orders.spec.ts` updated (stale issue-117 "code never shows" comment
+  replaced + new link/plain-text e2e assertions on existing fixture rows
+  "40287"/"4859/46" — no new e2e fixture data needed), ~19 existing
+  `OrderLine`-shaped test fixtures given an explicit `ourUrl: null` field
+  (this repo's "every field explicit" convention).
+- Design comment + STEP-0 validation comment posted to issue 276 before
+  the first code commit.
+- Row-height ceiling (`orders-layout.spec.ts`, 105px) passed on the first
+  local e2e run — but a dispatched code-review subagent correctly flagged
+  that "ceiling passed" alone doesn't prove no systematic increase (the
+  new `.ord-code-cell` line, unlike `.ord-remark-cell`, is ALWAYS
+  rendered). Follow-up: temporary paired before/after instrumentation
+  (`page.evaluate` measuring all `.order-row` heights, then toggling
+  `.ord-code-cell{display:none}` and re-measuring) on both the isolated
+  layout fixture and the global `E2E_FILTRE_EMAIL` 8-row fixture, across
+  all 4 widths — every row's height was byte-identical before/after.
+  Instrumentation reverted before commit; see `.claude/rules/orders.md`
+  for the full finding + the "ceiling alone isn't proof" lesson.
+- Review: dispatched `general-purpose` code-reviewer subagent
+  (`superpowers:requesting-code-review`), diff `cb51a7a..272aee2`. Result:
+  0 Critical, 1 Important (row-height proof, addressed above with the
+  paired measurement), 2 Minor (unused `code-cell-` testid — now asserted
+  in `OrderLineRow.productCodeLink.test.tsx`; playbook entry — added).
+- Local gates (re-run after the review fixes): `pnpm typecheck`,
+  `pnpm lint` clean; web unit 461/461 (60 files, incl. updated
+  `OrderLineRow.productCodeLink.test.tsx`); API unit 589/589 (37 files);
+  API integration 527/527 (71 files, after `db:migrate`); e2e 46/46 (full
+  suite, before the review-triggered debug run), zero console errors.
+- No PR/merge/deploy in this dispatch — supervisor owns CI/PR/merge/deploy
+  per the dispatch's HARD CONSTRAINT.
