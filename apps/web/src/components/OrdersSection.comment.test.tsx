@@ -48,6 +48,7 @@ const RIADOK_1 = {
   externalCode: null,
   supplierAssignable: false,
   manualSupplierOverride: null,
+  ourUrl: null,
 };
 
 const RIADOK_2 = { ...RIADOK_1, lineId: "22222222-4444-4444-4444-444444444444", variantCode: "D-2" };

@@ -36,6 +36,7 @@ const LINE = {
   externalCode: null,
   supplierAssignable: false,
   manualSupplierOverride: null,
+  ourUrl: null,
 };
 
 it("prečíta otvorené objednávky zoskupené podľa dodávateľa, vrátane e-mailu dodávateľa", async () => {

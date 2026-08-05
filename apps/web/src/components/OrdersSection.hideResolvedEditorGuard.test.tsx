@@ -43,6 +43,7 @@ const LINE = {
   externalCode: null,
   supplierAssignable: false,
   manualSupplierOverride: null,
+  ourUrl: null,
 };
 
 beforeEach(() => {

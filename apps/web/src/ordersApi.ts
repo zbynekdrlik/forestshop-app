@@ -28,6 +28,12 @@ const orderLineSchema = z.object({
   variantCode: z.string(),
   variantName: z.string(),
   sizeLabel: z.string().nullable(),
+  // issue 276: priama adresa NÁŠHO produktu z feedu pre porovnávače (issue
+  // 220), `null` keď kód vo feede nie je — appka vtedy ukáže kód ako
+  // neaktívny text, nikdy vyhľadávací fallback (rovnaký zámer ako
+  // `nedostupne/queries.ts`'s `ourProductUrl`, issue 238). `.regex` je druhá
+  // vrstva overenia, rovnaký vzor ako `adminUrl`/`supplierUrl` vyššie.
+  ourUrl: z.string().regex(/^https?:\/\//).nullable(),
   quantity: z.number(),
   state: z.enum(["objednane", "caka_sa", "skladom", "nedostupne"]),
   // issue 60: nezávislý príznak "objednané u dodávateľa" (viď `state.ts`'s

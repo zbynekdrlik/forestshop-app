@@ -58,6 +58,7 @@ const LINE_NEVYBAVENY = {
   externalCode: null,
   supplierAssignable: false,
   manualSupplierOverride: null,
+  ourUrl: null,
 };
 
 const LINE_VYBAVENY = { ...LINE_NEVYBAVENY, lineId: "22222222-2222-2222-2222-222222222147", ordered: true };

@@ -30,6 +30,7 @@ const LINE: OrderLine = {
   externalCode: null,
   supplierAssignable: false,
   manualSupplierOverride: null,
+  ourUrl: null,
 };
 
 const SUPPLIERS: readonly SupplierOpenOrders[] = [{ supplier: "Dodávateľ Alfa", lines: [LINE], email: null }];

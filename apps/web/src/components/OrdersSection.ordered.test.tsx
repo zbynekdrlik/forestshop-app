@@ -47,6 +47,7 @@ const LINE_STARA = {
   externalCode: null,
   supplierAssignable: false,
   manualSupplierOverride: null,
+  ourUrl: null,
 };
 
 const LINE_NOVA = {
@@ -70,6 +71,7 @@ const LINE_NOVA = {
   externalCode: null,
   supplierAssignable: false,
   manualSupplierOverride: null,
+  ourUrl: null,
 };
 
 beforeEach(() => {

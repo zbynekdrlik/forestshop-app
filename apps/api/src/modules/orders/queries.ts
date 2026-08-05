@@ -6,6 +6,7 @@ import {
   productSupplierLinkOverrides,
   productSupplierOverrides,
   products,
+  shopProductUrl,
   supplierContacts,
   variants,
   type OrderLineState,
@@ -66,6 +67,15 @@ export interface OpenOrderLine {
   readonly variantCode: string;
   readonly variantName: string;
   readonly sizeLabel: string | null;
+  /**
+   * issue 276: priama adresa NÁŠHO produktu z feedu pre porovnávače (issue
+   * 220, `shop_product_url`), `null` keď kód vo feede nie je. Rovnaký zámer
+   * ako `nedostupne/queries.ts`'s `ourProductUrl` (issue 238) — majiteľova
+   * podmienka je identická: KEĎ adresu nemáme, kód sa ukáže ako neaktívny
+   * text, NIKDY vyhľadávací fallback (`shopLinks.ts`'s `ourProductLink`
+   * používa `restock`/e2e obrazovka, tu zámerne nie).
+   */
+  readonly ourUrl: string | null;
   readonly quantity: number;
   readonly state: OrderLineState;
   // issue 60: nezávislý príznak "objednané u dodávateľa" (viď komentár k
@@ -155,6 +165,7 @@ export async function listOpenOrderLinesBySupplier(
       internalNote: products.internalNote,
       supplierLinkOverride: productSupplierLinkOverrides.url,
       externalCode: variants.externalCode,
+      ourUrl: shopProductUrl.url,
     })
     .from(orderLines)
     .innerJoin(orders, eq(orders.id, orderLines.orderId))
@@ -162,6 +173,10 @@ export async function listOpenOrderLinesBySupplier(
     .innerJoin(products, eq(products.key, variants.productKey))
     .leftJoin(productSupplierOverrides, eq(productSupplierOverrides.productKey, products.key))
     .leftJoin(productSupplierLinkOverrides, eq(productSupplierLinkOverrides.productKey, products.key))
+    // issue 276: LEFT zámerne — variant bez záznamu vo feede NESMIE zo
+    // zoznamu vypadnúť (rovnaký dôvod ako `restock/queries.ts`/
+    // `nedostupne/queries.ts`), len jeho kód sa vykreslí ako neaktívny text.
+    .leftJoin(shopProductUrl, eq(shopProductUrl.code, orderLines.variantCode))
     .where(inArray(orders.statusName, [...openStatuses]))
     // Sekundárne triedenie podľa najnovšej objednávky ako prvej v rámci
     // dodávateľa — rovnaký zámer ako katalógov `desc(fetchedAt), desc(id)`
@@ -199,6 +214,7 @@ export async function listOpenOrderLinesBySupplier(
       variantCode: row.variantCode,
       variantName: row.variantName,
       sizeLabel: row.sizeLabel,
+      ourUrl: row.ourUrl,
       quantity: row.quantity,
       state: row.state,
       ordered: row.ordered,

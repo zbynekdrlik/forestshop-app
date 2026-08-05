@@ -34,6 +34,7 @@ const ZAKLAD = {
   externalCode: null,
   supplierAssignable: false,
   manualSupplierOverride: null,
+  ourUrl: null,
 };
 
 const RIADOK_BEZ_POZNAMKY = {
