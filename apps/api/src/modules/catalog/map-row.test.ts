@@ -307,6 +307,15 @@ describe("mapRow — číselné hranice stĺpcov (mimo rozsah = anomália, riado
   });
 });
 
+// issue 245: `product.related_codes` je po #238 mŕtvy kód (žiadny čitateľ) —
+// `mapRow` už nesmie vracať pole `relatedCodes` vôbec.
+describe("mapRow už nevracia relatedCodes (issue 245)", () => {
+  it("record neobsahuje kľúč relatedCodes", () => {
+    const { record } = mapRow(fixtureRow("40287"));
+    expect(record).not.toHaveProperty("relatedCodes");
+  });
+});
+
 // issue 176: náhradné produkty (`relatedProduct`/`relatedProduct2..8`).
 describe("extractRelatedCodes / relatedCodes na reálnej fixtúre", () => {
   it("na fixtúre '40287' vráti jeden priradený náhradný kód", () => {

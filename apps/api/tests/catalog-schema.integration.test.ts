@@ -289,3 +289,15 @@ it("dovolí variant bez meny, keď žiadna suma nie je vyplnená (CHECK to má p
   expect(rows[0]?.currency).toBeNull();
   expect(rows[0]?.price).toBeNull();
 });
+
+// issue 245: `product.related_codes` bol po #238 mŕtvy stĺpec (žiadny čitateľ) —
+// odstránený incremental migráciou. Regresný dôkaz na úrovni DB, nielen Drizzle
+// typov (typy by len prestali kompilovať, toto overuje SKUTOČNÚ schému).
+it("stĺpec product.related_codes už v schéme neexistuje (issue 245)", async () => {
+  const ctx = await withCleanDb();
+  close = ctx.close;
+  const result = await ctx.db.execute(
+    sql`SELECT column_name FROM information_schema.columns WHERE table_name = 'product' AND column_name = 'related_codes'`,
+  );
+  expect(result.rows).toHaveLength(0);
+});
