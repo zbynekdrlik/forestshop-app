@@ -1,0 +1,35 @@
+<!-- issue 227: viacvariantový produkt (viac veľkostí/farieb naraz) — Shoptet
+     tu NEvykresľuje `data-testid="labelAvailability"` vôbec (rozdiel oproti
+     jednoveľkostným stránkam vyššie), takže sa nesmie nič uhádnuť: zostáva
+     `unknown`, presne ako pred touto zmenou. Overené naživo 5. 8. 2026. -->
+<!doctype html>
+<html lang="sk">
+<head><title>Ploskačka s pohárikmi</title></head>
+<body>
+<div class="product-detail">
+  <table class="detail-parameters shipping-options-layout">
+    <tbody>
+      <tr>
+        <th><span class="row-header-label">Dostupnosť</span></th>
+        <td>
+          <span class="parameter-dependent no-display 5-4611">
+            <span class="availability-label" style="color: #009901">
+                                            Skladom
+                                    </span>
+          </span>
+          <span class="parameter-dependent 5-4602">
+            <span class="availability-label" style="color: #009901">
+                                            Skladom
+                                    </span>
+          </span>
+          <span class="parameter-dependent default-variant no-display">
+            <span class="availability-label">
+                Zvoľte variant            </span>
+          </span>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+</body>
+</html>

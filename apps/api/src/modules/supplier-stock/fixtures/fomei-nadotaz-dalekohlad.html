@@ -1,0 +1,18 @@
+<!-- issue 227: verné, orezané zachytenie skutočnej stránky (5. 8. 2026) —
+     "na dotaz" (nedostupné, zákazník musí kontaktovať predajcu) má triedu
+     `availability--noStock`, nikdy sa nečíta z viditeľného textu priamo
+     (ten sa medzi produktmi líši), vždy z tejto triedy. -->
+<!doctype html>
+<html lang="sk">
+<head><title>FOMEI 10x52 FOREMAN PRO XLD ďalekohľad</title></head>
+<body>
+<div class="product__offers product__offers--detail">
+  <div class="cOffersInfoWrapper">
+    <div class="product__component product__avail">
+      <span class="availability availability--noStock c-na-dotaz">na dotaz</span>
+      <link itemprop="availability" href="http://schema.org/OutOfStock" />
+    </div>
+  </div>
+</div>
+</body>
+</html>

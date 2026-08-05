@@ -1,0 +1,29 @@
+<!-- issue 227: viacveľkostný produkt (bežný prípad na luko.cz — košele s
+     veľkosťami) — BEZ `data-testid="labelAvailability"`, presne ako
+     virginiashop.sk's viacvariantový prípad. Ostáva `unknown`: mapovanie
+     číselných JS parameter-ID na konkrétnu veľkosť by vyžadovalo ďalší,
+     samostatný per-veľkostný extraktor (mimo rozsahu tohto ticketu, pozri
+     `.claude/rules/supplier-stock.md`). Overené naživo 5. 8. 2026. -->
+<!doctype html>
+<html lang="cs">
+<head><title>Bílá košile s výšivkou model 182115</title></head>
+<body>
+<div class="product-detail">
+  <div class="p-basic-info-block">
+    <span class="parameter-dependent no-display 22-181-4-1-5-59">
+      <span class="availability-label" style="color: #009901">
+                                            Skladem
+                                    </span>
+      <span class="availability-amount" data-testid="numberAvailabilityAmount">(2&nbsp;ks)</span>
+    </span>
+    <span class="parameter-dependent no-display 22-181-4-1-5-8">
+      <span class="availability-label" style="color: #009901">
+                                            Skladem
+                                    </span>
+    </span>
+    <span class="parameter-dependent default-variant">
+                        Zvolte variantu                    </span>
+  </div>
+</div>
+</body>
+</html>
