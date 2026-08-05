@@ -67,3 +67,18 @@ paths:
   Shoptet exportu. Toto NIE JE bug, len prechodný stav prvej hodiny po
   nasadení — neriešiť ako regresiu, ak sa znova objaví po podobnej
   migrácii pridávajúcej nové Shoptetove polia.
+- **Issue 268 zapojilo TENTO existujúci denný beh do nástenky Upozornenia
+  (#267) — `runPostaUncollectedLocked` volá `upsertUpozornenie`/
+  `autoResolveByDedupKey` (`.claude/rules/upozornenia.md`) PRIAMO, žiadny
+  nový poller/job.** Karta sa píše presne tam, kde `cls.uncollected` už
+  napĺňa `uncollected` pole výsledku; zatvára sa presne tam, kde
+  `terminalState(trackingJson) !== ""` (pred `continue`). `dedupKey` je
+  `posta:<packageNumber>` (`logic.ts`'s `postaUpozornenieDedupKey`) — JEDEN
+  zdieľaný helper pre OBE volania, aby zápis a zatvorenie nikdy nedostali
+  rôzny formát kľúča. **Známa medzera (code review, issue 275):** vetva
+  `cls.status === "invalid_format"` nerobí ani jedno z toho — karta
+  vytvorená pri predošlom "notified" behu ostane navždy otvorená, keď
+  tracking neskôr začne vracať neparsovateľný formát. Zriedkavé (formát sa
+  po platnom stave zvyčajne nemení), ale pri KAŽDOM ĎALŠOM novom stavu/
+  vetve pridanom do tejto funkcie over, či nepotrebuje TIEŽ napojenie na
+  write/auto-resolve cestu.

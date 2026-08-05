@@ -113,12 +113,21 @@ describe("upsertUpozornenie", () => {
 // súbežných pripojeniach vopred zabezpečí `N` HOTOVÝCH (idle) pripojení v
 // poole, takže samotný závod už pretekáva len o rýchlosť SQL, nie o
 // pripojenie.
+//
+// Code review (issue 272/268): ANI predhriaty pool nezaručuje 100 % zásah pri
+// KAŽDOM behu (namerané 2/5 na jednom behu starého kódu) — je to inherentná
+// vlastnosť testovania závodu na reálnej DB, nie chyba opravy. `CONCURRENCY`
+// je zámerne vyššie než najmenšie číslo, čo raz zafungovalo (5 → 10) — viac
+// súčasných pokusov na TEN istý dedupKey zvyšuje šancu, že sa aspoň dva
+// SELECTy naozaj prekryjú v jednom behu, takže prípadný BUDÚCI návrat k
+// select-then-branch kódu má vyššiu šancu, že ho tento test chytí hneď pri
+// prvom CI behu, nie až pri druhom/treťom.
 describe("upsertUpozornenie — súbežnosť (issue 272)", () => {
   it("dve súbežné volania s rovnakým NOVÝM dedupKey nikdy nezlyhajú a vyrobia PRESNE jeden riadok", async () => {
     const { db } = await bootDb();
     const now = new Date("2026-08-05T08:00:00Z");
     const dedupKey = "posta:EF999999999SK";
-    const CONCURRENCY = 5;
+    const CONCURRENCY = 10;
 
     await Promise.all(Array.from({ length: CONCURRENCY }, () => db.execute(sql`select 1`)));
 
