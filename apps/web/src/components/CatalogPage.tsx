@@ -122,13 +122,27 @@ export function CatalogPage({
   const stateRef = useRef(state);
   stateRef.current = state;
 
+  // issue 255 (súrodenec issue 251's finding 3 — tento súbor je HIDDEN_TABS
+  // komponent, `nav.ts`, odmountuje sa pri prepnutí záložky): rovnaký vzor
+  // ako `SupplierLinksSection.tsx`'s `mountedRef`, vrátane StrictMode pasce
+  // (`true` musí byť nastavené AJ v efekte, nielen v `useRef(true)`).
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
   const loadStats = useCallback(() => {
     fetchCatalogStats()
       .then((s) => {
+        if (!mountedRef.current) return;
         setStats(s);
         setStatsLoaded(true);
       })
       .catch((err: unknown) => {
+        if (!mountedRef.current) return;
         setStatsLoaded(true);
         if (err instanceof CatalogUnauthorizedError) {
           onSessionExpired();
@@ -144,12 +158,14 @@ export function CatalogPage({
       setSearchError("");
       searchCatalogVariants({ q, state: s, page: 1 })
         .then((result) => {
+          if (!mountedRef.current) return; // odmountované skôr, než odpoveď doletela
           if (seq !== searchSeq.current) return; // medzitým prišla novšia požiadavka
           setItems(result.items);
           setTotal(result.total);
           setSearchLoaded(true);
         })
         .catch((err: unknown) => {
+          if (!mountedRef.current) return;
           if (seq !== searchSeq.current) return;
           setSearchLoaded(true);
           if (err instanceof CatalogUnauthorizedError) {
