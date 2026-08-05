@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { parseShoptetCsv } from "./csv.js";
-import { extractRelatedCodes, mapRow, splitCode } from "./map-row.js";
+import { mapRow, splitCode } from "./map-row.js";
 
 const FIXTURE = readFileSync(
   fileURLToPath(new URL("./fixtures/shoptet-sample.csv", import.meta.url)),
@@ -307,37 +307,12 @@ describe("mapRow — číselné hranice stĺpcov (mimo rozsah = anomália, riado
   });
 });
 
-// issue 176: náhradné produkty (`relatedProduct`/`relatedProduct2..8`).
-describe("extractRelatedCodes / relatedCodes na reálnej fixtúre", () => {
-  it("na fixtúre '40287' vráti jeden priradený náhradný kód", () => {
+// issue 245: `product.related_codes` je po #238 mŕtvy kód (žiadny čitateľ) —
+// `mapRow` už nesmie vracať pole `relatedCodes` vôbec.
+describe("mapRow už nevracia relatedCodes (issue 245)", () => {
+  it("record neobsahuje kľúč relatedCodes", () => {
     const { record } = mapRow(fixtureRow("40287"));
-    expect(record?.relatedCodes).toEqual(["60297"]);
-  });
-
-  it("bez akéhokoľvek priradenia vráti prázdne pole (nikdy null/undefined)", () => {
-    expect(extractRelatedCodes(bareRow())).toEqual([]);
-  });
-
-  it("prvý stĺpec je bare 'relatedProduct' (NIE 'relatedProduct1')", () => {
-    expect(extractRelatedCodes(bareRow({ relatedProduct: "A1" }))).toEqual(["A1"]);
-  });
-
-  it("zbiera VIACERO stĺpcov v poradí exportu, preskakuje prázdne", () => {
-    const row = bareRow({ relatedProduct: "A1", relatedProduct2: "", relatedProduct3: "A3" });
-    expect(extractRelatedCodes(row)).toEqual(["A1", "A3"]);
-  });
-
-  it("orezáva na MAX_ALTERNATIVES (8), aj keby export niesol viac", () => {
-    const row = bareRow({
-      relatedProduct: "1",
-      relatedProduct2: "2",
-      relatedProduct3: "3",
-      relatedProduct4: "4",
-      relatedProduct5: "5",
-      relatedProduct6: "6",
-      relatedProduct7: "7",
-      relatedProduct8: "8",
-    });
-    expect(extractRelatedCodes(row)).toHaveLength(8);
+    expect(record).not.toHaveProperty("relatedCodes");
   });
 });
+

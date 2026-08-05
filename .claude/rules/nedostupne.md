@@ -33,10 +33,11 @@ paths:
   vyhľadávacím fallbackom, keď appka nemala skutočnú produktovú URL.**
   Majiteľ tento CELÝ mechanizmus zamietol: *"nechcem aby to uvádzalo tieto
   náhrady - je to blbosť, to sú súvisiace produkty - nie podobné, nie
-  náhrady"*. Nahradené RUČNÝMI odkazmi (bod nižšie) — `product.related_codes`
-  stĺpec + jeho import (`map-row.ts`/`ingest.ts`) ostávajú v kóde (mimo scope
-  cross-cutting zásahu do katalógového importu), ale appka ich už NIKDE
-  nečíta — follow-up na úplné odstránenie: issue 245.
+  náhrady"*. Nahradené RUČNÝMI odkazmi (bod nižšie). **issue 245 (2026-08-05)
+  dokončilo follow-up: `product.related_codes` stĺpec + celé jeho populovanie
+  (`map-row.ts`'s `extractRelatedCodes`/`RELATED_COLUMNS`/`MAX_ALTERNATIVES`,
+  `ingest.ts`'s insert/upsert) sú ÚPLNE ODSTRÁNENÉ (incremental migrácia
+  `0033_breezy_manta.sql`) — v kóde už neexistujú vôbec, nielen nečítané.
 - **issue 238: majiteľove RUČNE vložené odkazy náhrad —
   `nedostupne_replacement_link` (`variant_code` PLAIN text bez FK, rovnaká
   konvencia ako `nedostupne_state`; `url`; ŽIADNY unique index).** Kľúčované
@@ -68,6 +69,6 @@ paths:
   `.claude/rules/scheduler.md`'s registry MUSÍ byť aktualizovaný pri KAŽDOM
   novom kľúči — 005 (`order-reminder`) aj 006 (toto issue) tam predtým
   chýbali, hoci kód sám kolízii predišiel správne.
-- **`insertTestVariantForProduct` (`tests/helpers/orders.ts`) teraz podporuje
-  `relatedCodes` — nová automatizácia/test potrebujúci alternatívy nemusí
-  vkladať produkt/variant ručne, len odovzdať `{ relatedCodes: [...] }`.**
+- **`insertTestVariantForProduct` (`tests/helpers/orders.ts`) NEMÁ od issue 245
+  `relatedCodes` voľbu — odstránená spolu s celým `product.related_codes`
+  stĺpcom (žiadny existujúci test ju reálne používal).**
