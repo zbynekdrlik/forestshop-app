@@ -60,7 +60,7 @@ export async function withCleanDb(): Promise<{ db: Database; close: () => Promis
     // predošlého behu potom vyzerá ako platné potvrdenie a beh preskočí
     // VŠETKY odkazy (presne to sa tu stalo pri druhom spustení).
     await db.execute(
-      sql`TRUNCATE TABLE ingest_issue, variant, product, catalog_snapshot, job_run, audit_events, sessions, users, order_line, "order", supplier_contact, pairing, supplier, order_open_status, posta_uncollected_settings, posta_uncollected_state, order_reminder_settings, order_reminder_state, nedostupne_state, nedostupne_replacement_link, mail_template, mail_template_history, supplier_stock, restock_settings, restock_event, shop_product_url RESTART IDENTITY CASCADE`,
+      sql`TRUNCATE TABLE ingest_issue, variant, product, catalog_snapshot, job_run, audit_events, sessions, users, order_line, "order", supplier_contact, pairing, supplier, order_open_status, posta_uncollected_settings, posta_uncollected_state, order_reminder_settings, order_reminder_state, nedostupne_state, nedostupne_replacement_link, mail_template, mail_template_history, supplier_stock, restock_settings, restock_event, shop_product_url, theme_color RESTART IDENTITY CASCADE`,
     );
     // issue 59: `order_open_status` is a NEW table with real production
     // content (the migration seeds it) — TRUNCATE alone would leave every

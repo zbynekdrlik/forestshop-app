@@ -495,6 +495,12 @@ tr:last-child td {
 .topbar-user {
   position: relative;
   flex: 0 0 auto;
+  /* issue 264: koliesko "Farby aplikácie" sedí VEDĽA mena používateľa, nie
+     nad/pod ním — `.usermenu-panel` nižšie ostáva absolútne pozicovaný
+     voči tomuto (position:relative) rodičovi bez ohľadu na flex. */
+  display: flex;
+  align-items: center;
+  gap: var(--fs-space-2);
 }
 .usermenu-btn {
   display: flex;
@@ -2268,4 +2274,86 @@ tr:last-child td {
 }
 .ml-status-skipped {
   color: var(--fs-ink-muted);
+}
+
+/* ── Farby aplikácie (issue 264) ──────────────────────────────────────────
+   Koliesko vpravo hore (`.topbar-user`) otvorí popup so živým náhľadom
+   (znovupoužité `.modal`/`.modal-backdrop`/`.modal-actions`, issue 191). */
+.themecolor-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  border: 1px solid var(--fs-border);
+  background: var(--fs-surface);
+  font-size: var(--fs-text-md);
+  line-height: 1;
+  cursor: pointer;
+}
+.themecolor-btn:hover {
+  border-color: var(--fs-ink-faint);
+}
+.themecolor-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: var(--fs-space-4);
+  margin-bottom: var(--fs-space-2);
+}
+.themecolor-group {
+  border: 1px solid var(--fs-border);
+  border-radius: var(--fs-radius-md);
+  padding: var(--fs-space-3) var(--fs-space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--fs-space-2);
+}
+.themecolor-group legend {
+  font-weight: var(--fs-weight-semibold);
+  padding: 0 var(--fs-space-1);
+}
+/* Živá ukážka priamo v POPUPE — viazaná na draft hodnoty (inline `style`,
+   nie CSS premennú), takže reaguje na KAŽDÝ stlačený kláves/ťah paletou aj
+   keď užívateľ práve nepozerá na inú obrazovku appky s viditeľnými čipmi. */
+.themecolor-sample {
+  align-self: flex-start;
+  display: inline-block;
+  width: max-content;
+  max-width: 100%;
+  padding: var(--fs-space-1) var(--fs-space-3);
+  border-radius: 999px;
+  font-size: var(--fs-text-sm);
+  font-weight: var(--fs-weight-semibold);
+}
+.themecolor-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--fs-space-3);
+}
+.themecolor-field-label {
+  color: var(--fs-ink-muted);
+  font-size: var(--fs-text-sm);
+}
+.themecolor-field-inputs {
+  display: flex;
+  align-items: center;
+  gap: var(--fs-space-2);
+}
+/* Natívny prehliadačový color picker — veľký dosah prsta/myši (issue 176's
+   "veľké ovládacie prvky" princíp platí aj tu). */
+.themecolor-field-inputs input[type="color"] {
+  width: 2.5rem;
+  height: 2.5rem;
+  padding: 0;
+  border: 1px solid var(--fs-border);
+  border-radius: var(--fs-radius-sm);
+  cursor: pointer;
+}
+.themecolor-hex-input {
+  width: 6.5rem;
+  font-family: monospace;
+  text-transform: lowercase;
 }
