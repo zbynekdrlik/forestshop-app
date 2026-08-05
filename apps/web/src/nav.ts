@@ -15,6 +15,7 @@ import { SearchSection } from "./components/SearchSection.js";
 import { SupplierLinksSection } from "./components/SupplierLinksSection.js";
 import { SupplierStockSection } from "./components/SupplierStockSection.js";
 import { SyncSection } from "./components/SyncSection.js";
+import { UpozorneniaSection } from "./components/UpozorneniaSection.js";
 
 // Spoločný tvar props pre KAŽDÚ obrazovku registrovanú tu — presne to, čo dnes
 // prijíma CatalogPage/OrdersSection/PairingSection/SchedulerSection/SyncSection.
@@ -98,6 +99,11 @@ export const NAV: readonly NavFolder[] = [
       // z rovnakého dôvodu ako "Párovanie produktov"/"Vyhľadať" vyššie
       // (obsluha na nej pracuje, žiadny plán/zapnuté-vypnuté koncept).
       { id: "order-merge", label: "Zlúčenie objednávok", icon: "🔀", Component: OrderMergeSection, wide: true },
+      // issue 267: "Upozornenia" — nástenka vecí, ktoré majiteľ musí vybaviť
+      // (vlastné poznámky + budúce automatické zdroje #268/#269). Patrí sem
+      // (nie do Automatizácie) z rovnakého dôvodu ako "Na objednanie" —
+      // obsluha na nej pracuje, žiadny plán/zapnuté-vypnuté koncept.
+      { id: "upozornenia", label: "Upozornenia", icon: "🔔", Component: UpozorneniaSection, wide: true },
     ],
   },
   {

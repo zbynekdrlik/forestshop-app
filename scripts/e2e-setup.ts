@@ -193,6 +193,12 @@ const E2E_ZLUCENIE_EMAIL = "e2e-zlucenie@forestshop.sk"; // musí sa zhodovať s
 // `admin`/`manazer`.
 const E2E_FARBY_EMAIL = "e2e-farby@forestshop.sk"; // musí sa zhodovať s hodnotou v theme-colors.spec.ts
 
+// issue 267: rovnaký mechanizmus a dôvod ako `E2E_FARBY_EMAIL` vyššie — nový
+// spec súbor (`upozornenia.spec.ts` — nástenka "Upozornenia") dostáva
+// VLASTNÝ izolovaný účet. Rola "manazer" — zápis/vybavenie vyžaduje
+// `admin`/`manazer`.
+const E2E_UPOZORNENIA_EMAIL = "e2e-upozornenia@forestshop.sk"; // musí sa zhodovať s hodnotou v upozornenia.spec.ts
+
 const { db, pool } = createDb();
 // Konštantný literál bez interpolácie — obyčajný reťazec je tu rovnako bezpečný
 // ako `sql` tagovaná šablóna (tú používa ekvivalentný apps/api/tests/helpers/db.ts),
@@ -353,6 +359,7 @@ await db.insert(users).values({
 await db.insert(users).values({ email: E2E_RACE_EMAIL, passwordHash: await hashPassword(E2E_HESLO), displayName: "E2E Manažér", role: "manazer" });
 await db.insert(users).values({ email: E2E_ZLUCENIE_EMAIL, passwordHash: await hashPassword(E2E_HESLO), displayName: "E2E Manažér", role: "manazer" });
 await db.insert(users).values({ email: E2E_FARBY_EMAIL, passwordHash: await hashPassword(E2E_HESLO), displayName: "E2E Manažér", role: "manazer" });
+await db.insert(users).values({ email: E2E_UPOZORNENIA_EMAIL, passwordHash: await hashPassword(E2E_HESLO), displayName: "E2E Manažér", role: "manazer" });
 
 // Katalóg pre E2E: tá istá commitnutá fixtúra ako v jednotkových testoch, cez tú istú
 // službu importu — E2E tak overuje skutočnú cestu dát, nie ručne nasypané riadky.

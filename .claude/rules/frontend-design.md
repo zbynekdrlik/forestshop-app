@@ -864,3 +864,21 @@ paths:
   disabled" miesto v appke: dá sa dôvod odvodiť z toho, čo už komponent
   počíta? Ak áno, pridaj hlášku + `aria-invalid` ako odvodenú hodnotu, nie
   nový stav.
+- **Tento projekt NEMÁ `eslint-plugin-react-hooks` nakonfigurovaný** — písanie
+  `// eslint-disable-next-line react-hooks/exhaustive-deps` (bežný vzor v
+  iných React projektoch) tu NEZTLMÍ nič, naopak SPADNE s "Definition for
+  rule 'react-hooks/exhaustive-deps' was not found" (issue 267, nájdené
+  `pnpm lint`om pred pushom). Dôsledok je vážnejší než len chybný komentár:
+  **bez tohto pluginu ESLint nikdy neupozorní na neúplné dependency pole
+  `useCallback`/`useEffect`**, takže stale-closure bug (funkcia zachytí
+  STARÚ hodnotu premennej z prvého renderu, lebo chýba v `[]` poli) treba
+  nájsť RUČNÝM code review, nie spoľahnutím sa na lint. Presne toto sa stalo
+  v `UpozorneniaSection.tsx`'s `withBusy` — `useCallback((key, action) =>
+  {...action().then(load)...}, [])` s PRÁZDNYM poľom navždy zamrazil `load`
+  z PRVÉHO renderu, takže po prepnutí filtra "aj vybavené" (ktoré mení
+  `load`'s identitu cez jeho vlastný `useCallback([includeResolved, ...])`)
+  by `withBusy` po akcii refetchol so STARÝM filtrom. Fix: `load` patrí do
+  `withBusy`'s dependency poľa (`[load]`), presne ako susedný `saveDraft`
+  už mal správne. Test na KAŽDÝ ĎALŠÍ `useCallback`/`useEffect` v tomto
+  repe: manuálne prejsť, či telo číta niečo, čo NIE JE v dependency poli —
+  lint to tu NIKDY nezachytí.
