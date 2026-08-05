@@ -24,14 +24,23 @@ export interface UpozornenieRow {
 export interface UpozornenieFilter {
   readonly type?: UpozornenieTypeValue;
   readonly includeResolved: boolean;
+  // issue 267 (živé overenie, gap 2): NEZÁVISLÁ os od `includeResolved` —
+  // karta môže byť odložená bez toho, aby bola vybavená. Bez tohto
+  // parametra neexistovala ŽIADNA hodnota `includeResolved`, ktorá by
+  // odloženú kartu odkryla (`notPostponedCondition` sa aplikovala VŽDY).
+  readonly includePostponed?: boolean;
 }
 
-// Odložené karty ZOSTÁVAJÚ skryté, kým sa nevrátia — bez ohľadu na filter
-// "aj vybavené" (ticket: "zmizne zo zoznamu a v ten deň sa vráti späť", žiadny
-// spôsob si ich pozrieť skôr). Zdieľané so `countActionableUpozornenia`
-// nižšie (code review na PR pred mergom: dve nezávislé implementácie tej
-// istej podmienky driftujú) — JEDNA funkcia rozhoduje "nie je práve
-// odložené" pre OBOCH volajúcich.
+// Odložené karty ZOSTÁVAJÚ skryté, kým sa nevrátia SAMÉ (ticket: "zmizne zo
+// zoznamu a v ten deň sa vráti späť") — s JEDINOU výnimkou:
+// `filter.includePostponed === true` (issue 267 follow-up, gap 2: živé
+// overenie zistilo, že bez tejto výnimky sa odložená karta nedala pozrieť
+// ANI opraviť, keby sa majiteľ pomýlil v dátume). Zdieľané so
+// `countActionableUpozornenia` nižšie (code review na PR pred mergom: dve
+// nezávislé implementácie tej istej podmienky driftujú) — JEDNA funkcia
+// rozhoduje "nie je práve odložené" pre OBOCH volajúcich; odznak v menu
+// (nižšie) túto výnimku NIKDY nedostáva — je to len UI zobrazenie na
+// požiadanie, nie zmena toho, čo je "akčné".
 function notPostponedCondition(now: Date): SQL {
   return or(isNull(upozornenie.postponedUntil), lte(upozornenie.postponedUntil, now)) as SQL;
 }
@@ -44,7 +53,7 @@ function notPostponedCondition(now: Date): SQL {
 // naposledy, v rámci toho najnovšie vytvorené prvé.
 export async function listUpozornenia(db: Database, filter: UpozornenieFilter, now: Date): Promise<readonly UpozornenieRow[]> {
   const conditions = [
-    notPostponedCondition(now),
+    ...(filter.includePostponed === true ? [] : [notPostponedCondition(now)]),
     ...(filter.type === undefined ? [] : [eq(upozornenie.type, filter.type)]),
     ...(filter.includeResolved ? [] : [isNull(upozornenie.resolvedAt)]),
   ];

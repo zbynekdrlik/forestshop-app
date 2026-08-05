@@ -165,6 +165,19 @@ export async function postponeUpozornenie(db: Database, input: PostponeInput): P
   return result.length > 0;
 }
 
+export interface CancelPostponeInput {
+  readonly id: string;
+}
+
+// issue 267 (živé overenie, gap 2): jediný spôsob, ako "vrátiť" odloženú
+// kartu SKÔR, než sa vráti sama (napr. majiteľ sa pomýlil v dátume) — na
+// rozdiel od `postponeUpozornenie` sa `seenAt` NEDOTÝKA (karta bola už
+// videná v momente odloženia, viď `postponeUpozornenie` vyššie).
+export async function cancelPostpone(db: Database, input: CancelPostponeInput): Promise<boolean> {
+  const result = await db.update(upozornenie).set({ postponedUntil: null }).where(eq(upozornenie.id, input.id)).returning({ id: upozornenie.id });
+  return result.length > 0;
+}
+
 // Volané pri OTVORENÍ záložky — hromadne označí VŠETKY práve "Nové" karty
 // ako videné naraz (inbox vzor "otvoriť = prečítané"), žiadne per-kartové
 // tlačidlo "videné" navyše. Zámerne LEN `seenAt IS NULL` (nikdy nerieši

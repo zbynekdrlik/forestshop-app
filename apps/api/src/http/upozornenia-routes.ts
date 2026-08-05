@@ -5,6 +5,7 @@ import type { Database } from "../db/client.js";
 import { record } from "../modules/audit/service.js";
 import { countActionableUpozornenia, listUpozornenia, type UpozornenieTypeValue } from "../modules/upozornenia/queries.js";
 import {
+  cancelPostpone,
   createOwnNote,
   deleteOwnNote,
   markAllSeen,
@@ -25,6 +26,10 @@ const KNOWN_TYPES: readonly [UpozornenieTypeValue, ...UpozornenieTypeValue[]] = 
 const listQuery = z.object({
   type: z.enum(KNOWN_TYPES).optional(),
   includeResolved: z.enum(["true", "false"]).optional(),
+  // issue 267 (živé overenie, gap 2): nezávislá os od `includeResolved` —
+  // jediný spôsob, ako odkryť odloženú kartu (`queries.ts`'s
+  // `notPostponedCondition`).
+  includePostponed: z.enum(["true", "false"]).optional(),
 });
 
 const createBody = z.object({
@@ -43,8 +48,12 @@ export function registerUpozorneniaRoutes(app: Hono<AppBindings>, db: Database):
   // Čítanie — každý prihlásený zamestnanec (rovnaká úroveň ako
   // #172/#173/#176 — `.claude/rules/nedostupne.md`).
   app.get("/api/upozornenia", requireUser(db), zValidator("query", listQuery), async (c) => {
-    const { type, includeResolved } = c.req.valid("query");
-    const rows = await listUpozornenia(db, { ...(type === undefined ? {} : { type }), includeResolved: includeResolved === "true" }, new Date());
+    const { type, includeResolved, includePostponed } = c.req.valid("query");
+    const rows = await listUpozornenia(
+      db,
+      { ...(type === undefined ? {} : { type }), includeResolved: includeResolved === "true", includePostponed: includePostponed === "true" },
+      new Date(),
+    );
     return c.json({ rows });
   });
 
@@ -142,4 +151,18 @@ export function registerUpozorneniaRoutes(app: Hono<AppBindings>, db: Database):
       return c.json({ ok: true as const, postponed });
     },
   );
+
+  // issue 267 (živé overenie, gap 2): "vrátiť" odloženú kartu SKÔR, než sa
+  // vráti sama — rovnaká disciplína ako `/resolve`/`/postpone` (neznáme/už
+  // nedoloženo id je 200 {cancelled:false}, nikdy chyba).
+  app.post("/api/upozornenia/:id/cancel-postpone", requireSameOrigin(), requireUser(db), requireRole("admin", "manazer"), zValidator("param", idParam), async (c) => {
+    const { id } = c.req.valid("param");
+    const user = c.get("user");
+    const now = new Date();
+    const cancelled = await cancelPostpone(db, { id });
+    if (cancelled) {
+      await record(db, { at: now, actorUserId: user.userId, action: "upozornenie.postpone_cancelled", entity: "upozornenie", entityId: id, data: { id } });
+    }
+    return c.json({ ok: true as const, cancelled });
+  });
 }

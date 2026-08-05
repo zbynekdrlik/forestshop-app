@@ -12,6 +12,7 @@ import { OrdersRemainingCountContext } from "./ordersRemainingCountContext.js";
 import { fetchPostaUncollectedStatus } from "./postaUncollectedApi.js";
 import { fetchThemeColors } from "./themeColorsApi.js";
 import { fetchUpozorneniaCount } from "./upozorneniaApi.js";
+import { UpozorneniaBadgeRefreshContext } from "./upozorneniaBadgeContext.js";
 
 // Prvá záložka z URL-u (`?tab=<id>`), keď existuje a je platná — inak
 // predvolená ("Sync zo Shoptetu"). Umožňuje priamy odkaz aj na SKRYTÉ
@@ -48,6 +49,18 @@ export function App(): JSX.Element {
   // `automationStatus` nižšie (App.tsx si volá `fetch*` sám), nie cez
   // context.
   const [upozorneniaCount, setUpozorneniaCount] = useState<number | null>(null);
+  // issue 267 (živé overenie, gap 1): mutácia spravená na PRÁVE otvorenej
+  // "Upozornenia" obrazovke (vytvorenie/odloženie/vybavenie/...) nemení
+  // `activeTabId`, takže bez tohto by odznak refetchol len pri zmene
+  // záložky. `UpozorneniaSection` zavolá `refresh()` (cez
+  // `UpozorneniaBadgeRefreshContext`) po každej úspešnej mutácii, čo
+  // bumpne tento nonce a zaradí sa do dependency poľa nižšie — count
+  // pritom naďalej vlastní/fetchuje TENTO efekt, nie obrazovka.
+  const [upozorneniaRefreshNonce, setUpozorneniaRefreshNonce] = useState(0);
+  const upozorneniaBadgeRefresh = useCallback(() => {
+    setUpozorneniaRefreshNonce((n) => n + 1);
+  }, []);
+  const upozorneniaBadgeContextValue = useMemo(() => ({ refresh: upozorneniaBadgeRefresh }), [upozorneniaBadgeRefresh]);
   useEffect(() => {
     if (me === null) return;
     let cancelled = false;
@@ -61,7 +74,7 @@ export function App(): JSX.Element {
     return () => {
       cancelled = true;
     };
-  }, [me, activeTabId]);
+  }, [me, activeTabId, upozorneniaRefreshNonce]);
 
   const badgeCounts = useMemo<Readonly<Record<string, number>>>(() => {
     const counts: Record<string, number> = {};
@@ -188,34 +201,36 @@ export function App(): JSX.Element {
 
   return (
     <OrdersRemainingCountContext.Provider value={ordersRemainingCountContextValue}>
-      <div className="app-shell">
-        <Sidebar
-          folders={NAV}
-          activeTabId={activeTabId}
-          onSelectTab={selectTab}
-          badgeCounts={badgeCounts}
-          badgeStatus={automationStatus}
-        />
-        <div className="main">
-          <Topbar
-            title={isVisibleTabId(activeTabId) ? (tab?.label ?? null) : null}
-            greeting={`Prihlásený: ${me.displayName} (${me.role})`}
-            role={me.role}
-            onSessionExpired={reload}
-            onLogout={logout}
-            passwordPanelOpen={passwordPanelOpen}
-            onTogglePasswordPanel={() => {
-              setPasswordPanelOpen((open) => !open);
-            }}
-          >
-            <ChangePasswordForm email={me.email} onSessionExpired={reload} />
-          </Topbar>
-          <main className={tab?.wide === true ? "main-wide" : undefined}>
-            {logoutError !== "" && <p role="alert">{logoutError}</p>}
-            {ActiveComponent !== null && <ActiveComponent role={me.role} onSessionExpired={reload} />}
-          </main>
+      <UpozorneniaBadgeRefreshContext.Provider value={upozorneniaBadgeContextValue}>
+        <div className="app-shell">
+          <Sidebar
+            folders={NAV}
+            activeTabId={activeTabId}
+            onSelectTab={selectTab}
+            badgeCounts={badgeCounts}
+            badgeStatus={automationStatus}
+          />
+          <div className="main">
+            <Topbar
+              title={isVisibleTabId(activeTabId) ? (tab?.label ?? null) : null}
+              greeting={`Prihlásený: ${me.displayName} (${me.role})`}
+              role={me.role}
+              onSessionExpired={reload}
+              onLogout={logout}
+              passwordPanelOpen={passwordPanelOpen}
+              onTogglePasswordPanel={() => {
+                setPasswordPanelOpen((open) => !open);
+              }}
+            >
+              <ChangePasswordForm email={me.email} onSessionExpired={reload} />
+            </Topbar>
+            <main className={tab?.wide === true ? "main-wide" : undefined}>
+              {logoutError !== "" && <p role="alert">{logoutError}</p>}
+              {ActiveComponent !== null && <ActiveComponent role={me.role} onSessionExpired={reload} />}
+            </main>
+          </div>
         </div>
-      </div>
+      </UpozorneniaBadgeRefreshContext.Provider>
     </OrdersRemainingCountContext.Provider>
   );
 }

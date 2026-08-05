@@ -47,9 +47,10 @@ async function readJson(response: Response, fallback: string): Promise<unknown> 
   return await response.json();
 }
 
-export async function fetchUpozornenia(filter: { readonly includeResolved: boolean }): Promise<readonly UpozornenieRow[]> {
+export async function fetchUpozornenia(filter: { readonly includeResolved: boolean; readonly includePostponed?: boolean }): Promise<readonly UpozornenieRow[]> {
   const params = new URLSearchParams();
   if (filter.includeResolved) params.set("includeResolved", "true");
+  if (filter.includePostponed === true) params.set("includePostponed", "true");
   const qs = params.toString();
   const response = await fetch(`/api/upozornenia${qs === "" ? "" : `?${qs}`}`);
   return listSchema.parse(await readJson(response, "Upozornenia sa nepodarilo načítať")).rows;
@@ -110,4 +111,9 @@ export async function postponeUpozornenie(id: string, until: string): Promise<vo
     body: JSON.stringify({ until }),
   });
   await readJson(response, "Odloženie zlyhalo");
+}
+
+export async function cancelPostponeUpozornenie(id: string): Promise<void> {
+  const response = await fetch(`/api/upozornenia/${encodeURIComponent(id)}/cancel-postpone`, { method: "POST" });
+  await readJson(response, "Zrušenie odloženia zlyhalo");
 }

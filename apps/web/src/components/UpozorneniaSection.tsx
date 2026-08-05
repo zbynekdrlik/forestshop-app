@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useRef, useState, type JSX } from "react";
+import { useCallback, useContext, useEffect, useRef, useState, type JSX } from "react";
 import type { Me } from "../api.js";
+import { UpozorneniaBadgeRefreshContext } from "../upozorneniaBadgeContext.js";
 import {
+  cancelPostponeUpozornenie,
   createOwnNote,
   deleteOwnNote,
   fetchUpozornenia,
@@ -25,6 +27,18 @@ const TYPE_LABELS: Readonly<Record<UpozornenieRow["type"], string>> = {
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("sk-SK", { day: "numeric", month: "numeric", year: "numeric" });
+}
+
+// issue 267 (živé overenie, gap 3): prázdny zoznam tvrdil natvrdo "všetko je
+// vybavené" bez ohľadu na SKUTOČNÚ príčinu — čistá funkcia rozhodne podľa
+// NAJŠIRŠIEHO dopytu (volaného len keď je aktuálny, možno UŽŠIE filtrovaný
+// zoznam prázdny — pozri `load()`), aby hláška nikdy netvrdila niečo, čo
+// nie je pravda.
+function classifyEmptyMessage(all: readonly UpozornenieRow[]): string {
+  if (all.length === 0) return "Žiadne upozornenia — nič nie je zapísané.";
+  if (all.every((r) => r.status === "vybavene")) return "Žiadne upozornenia — všetko je vybavené.";
+  if (all.every((r) => r.status === "odlozene")) return "Žiadne upozornenia — všetko je odložené.";
+  return "Žiadne upozornenia v tomto zobrazení — zvyšné sú vybavené alebo odložené.";
 }
 
 // Code review: "Odložiť do" nemalo `min` — dalo sa vybrať dátum v minulosti
@@ -53,22 +67,61 @@ export function UpozorneniaSection({ role, onSessionExpired }: { readonly role: 
   const [rows, setRows] = useState<readonly UpozornenieRow[] | null>(null);
   const [error, setError] = useState("");
   const [includeResolved, setIncludeResolved] = useState(false);
+  // issue 267 (živé overenie, gap 2): nezávislý filter od `includeResolved`
+  // — odložená karta bola bez tohto NAVŽDY skrytá, aj s "aj vybavené".
+  const [includePostponed, setIncludePostponed] = useState(false);
   const [busyId, setBusyId] = useState("");
   const [draft, setDraft] = useState<EditDraft | null>(null);
   const [postponeDraft, setPostponeDraft] = useState<Record<string, string>>({});
+  // issue 267 (živé overenie, gap 3): pravdivá príčina prázdneho zoznamu —
+  // počíta sa v `load()` nižšie, len keď je zoznam skutočne prázdny.
+  const [emptyMessage, setEmptyMessage] = useState("Žiadne upozornenia.");
   const canControl = CONTROL_ROLES.has(role);
+  // issue 267 (živé overenie, gap 1): odznak v ľavom menu (`App.tsx`) sa bez
+  // tohto refetchoval len pri zmene záložky — refresh() sa zavolá po KAŽDEJ
+  // úspešnej mutácii (`withBusy`/`saveDraft`), aby ostal pravdivý aj keď
+  // obsluha zostane na tejto obrazovke.
+  const { refresh: refreshBadge } = useContext(UpozorneniaBadgeRefreshContext);
+  // Code review: `load()`'s doplnkový klasifikačný dopyt (nižšie) nemal
+  // žiadnu poistku proti ZASTARANEJ odpovedi — presne tá istá trieda race,
+  // akú `.claude/rules/frontend-design.md` rieši "latest ref" vzorom (issue
+  // 151/251/264: mikrotaska z PREDCHÁDZAJÚCEHO `load()` volania môže
+  // doraziť AŽ PO novšom a prepísať jeho výsledok zastaraným). `loadSeqRef`
+  // sa inkrementuje na ZAČIATKU každého `load()` volania; oba `.then()` nižšie
+  // sa uplatnia len ak je stále najnovšie.
+  const loadSeqRef = useRef(0);
 
   const load = useCallback(() => {
-    fetchUpozornenia({ includeResolved })
-      .then(setRows)
+    const seq = ++loadSeqRef.current;
+    fetchUpozornenia({ includeResolved, includePostponed })
+      .then((data) => {
+        if (loadSeqRef.current !== seq) return;
+        setRows(data);
+        if (data.length > 0) return;
+        // Zoznam je prázdny pod AKTUÁLNYMI (možno užšími) filtrami — ak sú
+        // už najširšie, `data` JE tá pravda; inak treba doplnkový najširší
+        // dopyt, aby hláška nikdy nehádala/netvrdila nesprávnu príčinu.
+        if (includeResolved && includePostponed) {
+          setEmptyMessage(classifyEmptyMessage(data));
+          return;
+        }
+        fetchUpozornenia({ includeResolved: true, includePostponed: true })
+          .then((all) => {
+            if (loadSeqRef.current === seq) setEmptyMessage(classifyEmptyMessage(all));
+          })
+          .catch(() => {
+            if (loadSeqRef.current === seq) setEmptyMessage("Žiadne upozornenia v tomto zobrazení.");
+          });
+      })
       .catch((err: unknown) => {
+        if (loadSeqRef.current !== seq) return;
         if (err instanceof UpozorneniaUnauthorizedError) {
           onSessionExpired();
           return;
         }
         setError("Upozornenia sa nepodarilo načítať.");
       });
-  }, [includeResolved, onSessionExpired]);
+  }, [includeResolved, includePostponed, onSessionExpired]);
 
   // Otvorenie záložky = "prečítané" (inbox vzor) — PRVÉ spustenie tohto
   // efektu (mountedRef ešte `false`) hromadne označí všetky práve "Nové"
@@ -99,14 +152,17 @@ export function UpozorneniaSection({ role, onSessionExpired }: { readonly role: 
     setBusyId(key);
     setError("");
     action()
-      .then(load)
+      .then(() => {
+        load();
+        refreshBadge();
+      })
       .catch(() => {
         setError("Akcia zlyhala — skúste to znova.");
       })
       .finally(() => {
         setBusyId("");
       });
-  }, [load]);
+  }, [load, refreshBadge]);
 
   const saveDraft = useCallback(() => {
     if (draft === null || draft.title.trim() === "") return;
@@ -127,6 +183,7 @@ export function UpozorneniaSection({ role, onSessionExpired }: { readonly role: 
         }
         setDraft(null);
         load();
+        refreshBadge();
       })
       .catch(() => {
         setError("Uloženie zlyhalo — skúste to znova.");
@@ -134,7 +191,7 @@ export function UpozorneniaSection({ role, onSessionExpired }: { readonly role: 
       .finally(() => {
         setBusyId("");
       });
-  }, [draft, load]);
+  }, [draft, load, refreshBadge]);
 
   if (error !== "" && rows === null) return <p role="alert">{error}</p>;
   if (rows === null) return <p>Načítavam…</p>;
@@ -155,6 +212,16 @@ export function UpozorneniaSection({ role, onSessionExpired }: { readonly role: 
             }}
           />{" "}
           aj vybavené
+        </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={includePostponed}
+            onChange={(e) => {
+              setIncludePostponed(e.target.checked);
+            }}
+          />{" "}
+          aj odložené
         </label>
         {canControl && (
           <button
@@ -227,7 +294,7 @@ export function UpozorneniaSection({ role, onSessionExpired }: { readonly role: 
       )}
 
       {rows.length === 0 ? (
-        <p data-testid="upozornenia-empty">Žiadne upozornenia — všetko je vybavené.</p>
+        <p data-testid="upozornenia-empty">{emptyMessage}</p>
       ) : (
         <div className="upozornenia-list" data-testid="upozornenia-list">
           {rows.map((row) => {
@@ -241,6 +308,11 @@ export function UpozorneniaSection({ role, onSessionExpired }: { readonly role: 
                   </span>
                   {row.status === "nove" && <strong data-testid={`upozornenie-nove-${row.id}`}>Nové</strong>}
                   {row.status === "vybavene" && <span className="pill off">Vybavené</span>}
+                  {row.status === "odlozene" && (
+                    <span className="pill" data-testid={`upozornenie-odlozene-${row.id}`}>
+                      Odložené{row.postponedUntil !== null && <> do {formatDate(row.postponedUntil)}</>}
+                    </span>
+                  )}
                 </div>
                 <p className="upozornenie-title">{row.title}</p>
                 {row.details !== "" && <p className="upozornenie-details">{row.details}</p>}
@@ -290,6 +362,22 @@ export function UpozorneniaSection({ role, onSessionExpired }: { readonly role: 
                     >
                       Odložiť
                     </button>
+                    {row.status === "odlozene" && (
+                      // issue 267 (živé overenie, gap 2): jediný spôsob, ako
+                      // vrátiť odloženú kartu SKÔR, než sa vráti sama (napr.
+                      // majiteľ sa pomýlil v dátume).
+                      <button
+                        type="button"
+                        className="btn sm ghost"
+                        disabled={rowBusy}
+                        onClick={() => {
+                          withBusy(row.id, () => cancelPostponeUpozornenie(row.id));
+                        }}
+                        data-testid={`upozornenie-cancel-postpone-${row.id}`}
+                      >
+                        Zrušiť odloženie
+                      </button>
+                    )}
                     {isOwn && (
                       <>
                         <button

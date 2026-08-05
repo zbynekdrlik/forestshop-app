@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { upozornenie, users } from "../src/db/schema.js";
 import { hashPassword } from "../src/modules/auth/passwords.js";
 import {
+  cancelPostpone,
   createOwnNote,
   deleteOwnNote,
   markAllSeen,
@@ -153,6 +154,25 @@ describe("resolveUpozornenie / postponeUpozornenie", () => {
     const [row] = await db.select().from(upozornenie);
     expect(row?.postponedUntil?.toISOString()).toBe(until.toISOString());
     expect(row?.seenAt).not.toBeNull();
+  });
+});
+
+describe("cancelPostpone", () => {
+  it("vynuluje 'postponedUntil' — karta prestane byť odložená (bez zásahu do seenAt)", async () => {
+    const { db, userId } = await bootDb();
+    const now = new Date("2026-08-05T08:00:00Z");
+    const created = await createOwnNote(db, { title: "Odložiť ma", createdByUserId: userId, now });
+    await postponeUpozornenie(db, { id: created.id, postponedUntil: new Date("2026-08-20T00:00:00Z"), now });
+
+    expect(await cancelPostpone(db, { id: created.id })).toBe(true);
+    const [row] = await db.select().from(upozornenie).where(eq(upozornenie.id, created.id));
+    expect(row?.postponedUntil).toBeNull();
+    expect(row?.seenAt).not.toBeNull();
+  });
+
+  it("neznáme id je neškodné (vracia false, nikdy nevyhodí)", async () => {
+    const { db } = await bootDb();
+    expect(await cancelPostpone(db, { id: "00000000-0000-0000-0000-000000000000" })).toBe(false);
   });
 });
 
