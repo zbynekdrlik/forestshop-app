@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
-import { between, eq, inArray, sql } from "drizzle-orm";
+import { and, between, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
-import { orderLines, orders, variants } from "../../db/schema.js";
+import { orderLines, orders, upozornenie, variants } from "../../db/schema.js";
 import { log } from "../../logger.js";
 import { storeRawSnapshot } from "../catalog/raw-store.js";
 import { upsertUpozornenie } from "../upozornenia/service.js";
@@ -421,16 +421,47 @@ export async function ingestOrders(db: Database, options: OrdersIngestOptions): 
       // volania. `shoptetOrderId` je to isté, čo sa práve zapísalo vyššie
       // (`orderIdsByCode`, best-effort XML fetch) — žiadny extra dopyt.
       const adminBaseUrl = options.adminBaseUrl ?? "https://www.forestshop.sk";
+      const returnCandidates: { externalOrderId: string; returnLabel: string; customerName: string; statusName: string; dedupKey: string }[] = [];
       for (const [externalOrderId, info] of orderInfo) {
         const returnLabel = classifyReturnStatus(info.statusName);
         if (returnLabel === null) continue;
+        returnCandidates.push({
+          externalOrderId,
+          returnLabel,
+          customerName: info.customerName,
+          statusName: info.statusName,
+          dedupKey: returnUpozornenieDedupKey(externalOrderId),
+        });
+      }
+      // Naživo overené na produkcii (0.3.0-dev.160): vybavené vrátenie je
+      // KONEČNÉ — na rozdiel od #268 (zásielka, čo sa smie znova zaseknúť o
+      // mesiac) sa už NIKDY nemá znova ohlásiť, hoci Shoptet-ov status
+      // objednávky ostáva v tom istom vrátkovom stave navždy. `upsertUpozornenie`'s
+      // ČIASTOČNÝ unique index (`WHERE resolved_at IS NULL`, `.claude/rules/
+      // upozornenia.md`) necháva VYRIEŠENÝ riadok mimo arbitra, takže bez tejto
+      // kontroly by ďalší import s tým istým `dedupKey` prešiel ako čistý
+      // INSERT — druhý riadok na tú istú objednávku. JEDEN batchovaný dopyt nad
+      // VŠETKÝMI kandidátnymi kľúčmi tohto behu naraz (nie dopyt v cykle)
+      // zistí, ktoré už majú VYRIEŠENÝ riadok — tie sa nižšie PRESKOČIA, ostatné
+      // (žiadna karta zatiaľ, alebo ešte nevyriešená) sa naďalej vyrobia/obnovia
+      // presne ako doteraz (prechod medzi pod-stavmi ostáva funkčný).
+      let resolvedReturnDedupKeys: ReadonlySet<string> = new Set();
+      if (returnCandidates.length > 0) {
+        const resolvedRows = await tx
+          .select({ dedupKey: upozornenie.dedupKey })
+          .from(upozornenie)
+          .where(and(inArray(upozornenie.dedupKey, returnCandidates.map((c) => c.dedupKey)), isNotNull(upozornenie.resolvedAt)));
+        resolvedReturnDedupKeys = new Set(resolvedRows.map((row) => row.dedupKey).filter((key): key is string => key !== null));
+      }
+      for (const candidate of returnCandidates) {
+        if (resolvedReturnDedupKeys.has(candidate.dedupKey)) continue;
         await upsertUpozornenie(tx, {
           type: "vratenie",
           source: "appka",
-          title: `Objednávka ${externalOrderId} — ${returnLabel}`,
-          details: [`Zákazník: ${info.customerName}`, `Stav objednávky: ${info.statusName}`].join("\n"),
-          link: buildShoptetAdminOrderUrl(adminBaseUrl, externalOrderId, orderIdsByCode.get(externalOrderId) ?? null),
-          dedupKey: returnUpozornenieDedupKey(externalOrderId),
+          title: `Objednávka ${candidate.externalOrderId} — ${candidate.returnLabel}`,
+          details: [`Zákazník: ${candidate.customerName}`, `Stav objednávky: ${candidate.statusName}`].join("\n"),
+          link: buildShoptetAdminOrderUrl(adminBaseUrl, candidate.externalOrderId, orderIdsByCode.get(candidate.externalOrderId) ?? null),
+          dedupKey: candidate.dedupKey,
           now: options.now,
         });
       }
