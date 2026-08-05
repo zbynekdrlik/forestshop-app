@@ -494,3 +494,25 @@ paths:
   POČET RIADKOV namiesto súčtu kusov? Ak áno, nech si to počíta samo cez
   `isLineResolved`, nespoliehaj sa na to, že `summarizeOrderLines` uhádne
   správny význam pre všetkých volajúcich naraz.
+- **"Zlúčenie objednávok" (issue 257, `modules/orders/merge-mail.ts`'s
+  `listMergeCandidateGroups`) číta VÝHRADNE tabuľku `orders` (`customer
+  IdentityKey` = e-mail orezaný/malé písmená, fallback na meno) — ŽIADEN
+  JOIN na `order_line`.** Dôsledok pre e2e fixtúry: dve otvorené objednávky
+  toho istého (fiktívneho) zákazníka sa dajú seedovať BEZ jediného
+  `order_line` riadku (`scripts/e2e-setup.ts`'s objednávky "9010"/"9011") —
+  nulové riziko rozbitia presných počtov v dodávateľských zoskupeniach,
+  ktoré `orders.spec.ts` overuje (`.claude/rules/testing.md`'s "nový
+  fixtúrový variant sa nesmie vybrať len podľa 'je nepoužitý'" pravidlo sa
+  tu vôbec netýka — žiadny variant sa nepoužíva). Test pre KAŽDÚ ĎALŠIU
+  funkciu, ktorá potrebuje len OBJEDNÁVKOVÚ (nie riadkovú) identitu: over,
+  či fixtúra skutočne potrebuje `order_line`, predtým než ho pridáš —
+  zbytočný riadok len zväčšuje riziko kolízie s existujúcimi presnými
+  počtami.
+- **Zoznam kariet kľúčovaný podľa SKUPINY (nie podľa jednej objednávky) si
+  `data-testid` vyberá z NAJNOVŠEJ objednávky skupiny, podľa jej VIDITEĽNÉHO
+  Shoptet čísla (`externalOrderId`), NIE podľa interného DB `orderId`
+  (UUID).** `OrderMergeSection.tsx`: `group.orders[0]` je po zoradení
+  najnovšia objednávka (rovnaké poradie ako `listMergeableOrders`), jej
+  `externalOrderId` je stabilné a čitateľné aj v e2e teste napísanom PRED
+  behom (UUID sa dozvieš až za behu). Rovnaký zámer ako
+  `NedostupneSection.tsx`'s `variantCode`-kľúčované testid.
