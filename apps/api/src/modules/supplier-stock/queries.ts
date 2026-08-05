@@ -141,6 +141,12 @@ export async function getSupplierStockHostOverview(db: Database): Promise<readon
     })
     .from(supplierStock)
     .groupBy(supplierStock.host)
+    // Skúšané odkazovať na `total` aliasom zo `select` vyššie (code review) —
+    // Postgres to nad TOUTO otázkou odmietol ("column total does not exist",
+    // naživo overené integračným testom): drizzle generuje `count(*)` ako
+    // samostatný `filter`-ovaný výraz vo `FILTER`-klauzule, nie ako obyčajný
+    // stĺpec dostupný v ORDER BY pod menom aliasu. Opakovaný `count(*)` je
+    // preto zámerný, nie prehliadnutý duplikát.
     .orderBy(desc(sql`count(*)`), asc(supplierStock.host));
 }
 

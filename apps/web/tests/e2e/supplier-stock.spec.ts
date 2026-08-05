@@ -29,10 +29,15 @@ test("prehľad podľa domény ukáže virginiashop.sk aj upozornenie na vlastný
 
   const karta = page.getByTestId("ss-host-overview");
   await expect(karta).toBeVisible();
+  // Stĺpce (`SupplierStockSection.tsx`): Doména/Odkazov/Číta sa/Neviem/Zlyhalo/…
+  // — zámerne overené PO BUNKÁCH (nie len `toContainText` na celom riadku),
+  // aby zhoda netrafila náhodou aj časovú pečiatku v poslednom stĺpci.
   const riadokDomeny = page.getByTestId("ss-host-virginiashop.sk");
   await expect(riadokDomeny).toBeVisible();
-  await expect(riadokDomeny).toContainText("2"); // odkazov spolu
-  await expect(riadokDomeny).toContainText("1"); // z toho čitateľných
+  const bunky = riadokDomeny.locator("td");
+  await expect(bunky.nth(1)).toHaveText("2"); // odkazov spolu
+  await expect(bunky.nth(2)).toHaveText("1"); // z toho čitateľných
+  await expect(bunky.nth(3)).toHaveText("1"); // unknown
 
   // Vlastný e-shop sa nikdy nescrapuje, ale odkaz sa ukáže ako vylúčený.
   await expect(page.getByTestId("ss-own-shop-links")).toContainText("1");
