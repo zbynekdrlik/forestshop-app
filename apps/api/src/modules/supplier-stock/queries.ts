@@ -114,6 +114,36 @@ export async function listUnreadableHosts(db: Database): Promise<readonly Unread
     .sort((a, b) => b.count - a.count || a.host.localeCompare(b.host));
 }
 
+/** Jeden riadok prehľadu podľa domény (issue 227) — koľko odkazov sledujeme,
+ * koľko z nich sa dá prečítať, koľko `unknown`/zlyhalo, kedy naposledy
+ * potvrdené. Na rozdiel od `listUnreadableHosts` (len domény S PROBLÉMOM,
+ * pre kartu "Stránky, ktoré neviem prečítať") toto zobrazuje VŠETKY domény,
+ * aby bolo vidno, ktorá sa oplatí doplniť ako ĎALŠIA (zoradené podľa počtu
+ * odkazov klesajúco — presne ako ticket žiada). */
+export interface SupplierStockHostOverviewRow {
+  readonly host: string;
+  readonly total: number;
+  readonly readable: number;
+  readonly unknown: number;
+  readonly failed: number;
+  readonly lastConfirmedAt: Date | null;
+}
+
+export async function getSupplierStockHostOverview(db: Database): Promise<readonly SupplierStockHostOverviewRow[]> {
+  return db
+    .select({
+      host: supplierStock.host,
+      total: sql<number>`count(*)::int`,
+      readable: sql<number>`count(*) filter (where ${supplierStock.ok} and ${supplierStock.availability} != 'unknown')::int`,
+      unknown: sql<number>`count(*) filter (where ${supplierStock.ok} and ${supplierStock.availability} = 'unknown')::int`,
+      failed: sql<number>`count(*) filter (where not ${supplierStock.ok})::int`,
+      lastConfirmedAt: sql<Date | null>`max(${supplierStock.confirmedAt})`,
+    })
+    .from(supplierStock)
+    .groupBy(supplierStock.host)
+    .orderBy(desc(sql`count(*)`), asc(supplierStock.host));
+}
+
 /** Najnovšie kontroly — malý zoznam pre hlavičku obrazovky. */
 export async function listRecentChecks(db: Database, limit = 10): Promise<readonly SupplierStockRow[]> {
   return db
