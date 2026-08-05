@@ -31,6 +31,7 @@ import { shoptetImportConfigFromBaseUrl } from "../modules/shoptet-writeback/con
 import { registerSchedulerRoutes } from "./scheduler-routes.js";
 import { registerSupplierRoutes } from "./supplier-routes.js";
 import { registerThemeColorRoutes } from "./theme-color-routes.js";
+import { registerUpozorneniaRoutes } from "./upozornenia-routes.js";
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -285,6 +286,12 @@ export function createApp(
       config: shoptetImportConfigFromBaseUrl(options.adminBaseUrl ?? "https://www.forestshop.sk", "", ""),
     },
   );
+
+  // issue 267: "Eshop → Upozornenia" — nástenka + vlastné poznámky + zdieľaná
+  // zapisovacia cesta, ktorú neskôr zavolajú #268/#269. Žiadny voliteľný
+  // dependency (na rozdiel od nedostupne/orderReminder vyššie) — táto
+  // obrazovka neposiela mail ani nekontaktuje tretiu stranu.
+  registerUpozorneniaRoutes(app, db);
 
   // Musí byť registrovaný AŽ PO všetkých skutočných /api/* trasách vyššie — Hono
   // vyberá presnejšiu zhodu, takže tie majú prednosť a sem sa dostane len to, čo
