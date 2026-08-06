@@ -104,6 +104,34 @@ test("vlastná poznámka — vytvorenie, 'Nové' zmizne po znovuotvorení, úpra
   // Vybavená karta nemá žiadne akčné tlačidlá (Upraviť/Zmazať/Vybavené/Odložiť).
   await expect(vybavenaKarta.getByRole("button", { name: "Zmazať" })).toHaveCount(0);
   await expect(vybavenaKarta.getByRole("button", { name: "Vybavené" })).toHaveCount(0);
+  await page.getByText("aj vybavené").click(); // vypnúť filter, aby predvolený zoznam neukazoval vybavené
+
+  // issue 283 (majiteľ, komentár na tickete): záložka "Vybavené" — história
+  // vybavených kariet + vrátenie omylom vybavenej karty späť medzi otvorené.
+  // Kolízia s ČIASTOČNÝM unique indexom (`upozornenie_dedup_key_uq`) NEJDE
+  // vyvolať cez ŽIADNU appkinu UI akciu (vlastné poznámky nikdy nenesú
+  // `dedupKey` — jedine automatický import ho vyrobí), preto ju overuje
+  // `upozornenia-resolved.integration.test.ts`/`upozornenia-resolved-http
+  // .integration.test.ts` priamo na DB úrovni (rovnaký princíp ako
+  // `e2e-real-user-testing.md`'s výnimka pre scenáre, čo skutočný používateľ
+  // klikaním nikdy nevyrobí).
+  await page.getByTestId("upozornenia-tab-vybavene").click();
+  await expect(page.getByTestId("upozornenia-tab-vybavene")).toHaveAttribute("aria-selected", "true");
+  await expect(kartaSNadpisom(page, "Schôdzka v stredu — presunutá")).toHaveCount(0); // len OTVORENÁ karta, tu nepatrí
+
+  const historickaKarta = kartaSNadpisom(page, "Vybaviť poistku");
+  await expect(historickaKarta).toBeVisible();
+  await expect(historickaKarta).toContainText("Vybavil(a) E2E Manažér");
+
+  // Vrátenie omylom vybavenej karty späť medzi otvorené.
+  await historickaKarta.getByRole("button", { name: "Vrátiť medzi otvorené" }).click();
+  await expect(kartaSNadpisom(page, "Vybaviť poistku")).toHaveCount(0);
+
+  await page.getByTestId("upozornenia-tab-otvorene").click();
+  const vratenaKarta = kartaSNadpisom(page, "Vybaviť poistku");
+  await expect(vratenaKarta).toBeVisible();
+  await expect(vratenaKarta).not.toContainText("Nové"); // bola už videná pri predchádzajúcom vybavení
+  await expect(vratenaKarta.getByRole("button", { name: "Vybavené" })).toBeVisible(); // znova akčná
 
   expect(chyby).toEqual([]);
 });

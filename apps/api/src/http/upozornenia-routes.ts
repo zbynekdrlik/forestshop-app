@@ -3,7 +3,7 @@ import type { Hono } from "hono";
 import { z } from "zod";
 import type { Database } from "../db/client.js";
 import { record } from "../modules/audit/service.js";
-import { countActionableUpozornenia, listUpozornenia, type UpozornenieTypeValue } from "../modules/upozornenia/queries.js";
+import { countActionableUpozornenia, listResolvedUpozornenia, listUpozornenia, type UpozornenieTypeValue } from "../modules/upozornenia/queries.js";
 import {
   cancelPostpone,
   createOwnNote,
@@ -11,6 +11,7 @@ import {
   markAllSeen,
   postponeUpozornenie,
   resolveUpozornenie,
+  returnUpozornenieToOpen,
   updateOwnNote,
 } from "../modules/upozornenia/service.js";
 import { requireRole, requireUser, type AppBindings } from "./middleware.js";
@@ -62,6 +63,15 @@ export function registerUpozorneniaRoutes(app: Hono<AppBindings>, db: Database):
   app.get("/api/upozornenia/count", requireUser(db), async (c) => {
     const count = await countActionableUpozornenia(db, new Date());
     return c.json({ count });
+  });
+
+  // issue 283: záložka "Vybavené" — história vybavených kariet, rovnaká
+  // čítacia úroveň oprávnenia ako hlavný zoznam vyššie. Literal-path
+  // súrodenec pred akoukoľvek budúcou `/api/upozornenia/:id` GET trasou
+  // (`.claude/rules/http-routes.md`).
+  app.get("/api/upozornenia/resolved", requireUser(db), async (c) => {
+    const rows = await listResolvedUpozornenia(db, new Date());
+    return c.json({ rows });
   });
 
   // Vytvorenie vlastnej poznámky — rovnaká rola ako zvyšok appky pre zápis.
@@ -163,5 +173,22 @@ export function registerUpozorneniaRoutes(app: Hono<AppBindings>, db: Database):
       await record(db, { at: now, actorUserId: user.userId, action: "upozornenie.postpone_cancelled", entity: "upozornenie", entityId: id, data: { id } });
     }
     return c.json({ ok: true as const, cancelled });
+  });
+
+  // issue 283 (majiteľ, komentár na tickete): vrátenie omylom vybavenej
+  // karty späť medzi otvorené, zo záložky "Vybavené". `result` je jedna z
+  // troch hodnôt (`returnUpozornenieToOpen`'s vlastný komentár) — 200 vo
+  // VŠETKÝCH prípadoch vrátane kolízie (rovnaká disciplína ako `/resolve`/
+  // `/cancel-postpone` — bežné, OČAKÁVANÉ zlyhanie nikdy nie je 4xx/5xx,
+  // `.claude/rules/testing.md`).
+  app.post("/api/upozornenia/:id/return-to-open", requireSameOrigin(), requireUser(db), requireRole("admin", "manazer"), zValidator("param", idParam), async (c) => {
+    const { id } = c.req.valid("param");
+    const user = c.get("user");
+    const now = new Date();
+    const result = await returnUpozornenieToOpen(db, { id });
+    if (result === "returned") {
+      await record(db, { at: now, actorUserId: user.userId, action: "upozornenie.returned_to_open", entity: "upozornenie", entityId: id, data: { id } });
+    }
+    return c.json({ ok: true as const, result });
   });
 }

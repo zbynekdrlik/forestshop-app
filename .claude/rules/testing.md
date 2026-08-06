@@ -571,3 +571,21 @@ paths:
   `ps aux | grep vitest`, či nebeží iný súbežný beh — najmä po tom, čo
   agent spustil viac `run_in_background` testovacích príkazov v tej istej
   relácii bez čakania na ich skutočné dokončenie.
+- **Rovnaký symptóm (`Hook timed out in 10000ms` v `restock-run
+  .integration.test.ts`, aj Playwright e2e `Test timeout of 30000ms
+  exceeded` v ÚPLNE INÝCH, nesúvisiacich spec súboroch) sa dá vyrobiť AJ
+  BEZ druhého `vitest`/e2e procesu — stačí, že `dev1` je zaťažený INÝMI
+  súbežnými Claude reláciami/procesmi.** Issue 283: `ps aux | grep vitest`
+  bol čistý (žiadny osirelý test proces), ale `uptime` ukázal load average
+  ~14-17 (5+ súbežných `claude` relácií + `pytest` behy + GitHub Actions
+  runner na tom istom boxe) — 19/19 testov v `restock-run.integration
+  .test.ts` aj viacero NESÚVISIACICH e2e testov (`orders.spec.ts`,
+  `pairing.spec.ts`, `orders-supplier-link.spec.ts`) padlo na timeout v
+  JEDNOM behu, potom prešlo 100% pri izolovanom re-behu TOHO ISTÉHO
+  súboru bez zmeny kódu. Test pred DÔVEROVANÍM červenému výsledku:
+  `ps aux | grep vitest` NESTAČÍ samo osebe — over AJ `uptime` (vysoký
+  load average bez zjavného vlastného vitest/pytest procesu) a pri
+  podozrení preveruj IZOLOVANÝM re-behom PRESNE toho zlyhaného
+  súboru/testu (`vitest run tests/<súbor>` / `playwright test
+  tests/e2e/<súbor>`), nikdy nepredpokladaj regresiu len z jedného
+  červeného plného behu na zdieľanom, vyťaženom boxe.

@@ -1,6 +1,8 @@
 import { useCallback, useContext, useEffect, useRef, useState, type JSX } from "react";
 import type { Me } from "../api.js";
 import { UpozorneniaBadgeRefreshContext } from "../upozorneniaBadgeContext.js";
+import { UpozornenieCard } from "./UpozornenieCard.js";
+import { UpozorneniaResolvedList } from "./UpozorneniaResolvedList.js";
 import {
   cancelPostponeUpozornenie,
   createOwnNote,
@@ -19,32 +21,6 @@ import {
 // (zoznam) smie vidieť KAŽDÝ prihlásený zamestnanec.
 const CONTROL_ROLES: ReadonlySet<Me["role"]> = new Set(["admin", "manazer"]);
 
-// Otvorený zoznam typov — budúci ďalší automatický zdroj pridá svoj štítok
-// sem, keď pridá svoju `pgEnum` hodnotu.
-const TYPE_LABELS: Readonly<Record<UpozornenieRow["type"], string>> = {
-  vlastna_poznamka: "Moja poznámka",
-  nevyzdvihnuta_zasielka: "Nevyzdvihnutá zásielka",
-  vratenie: "Vrátenie",
-};
-
-// Code review (issue 269, druhé kolo, finding 10): štítok odkazu sa odvodzuje
-// od TYPU karty, nikdy ako natvrdo napísaný literál na mieste vykreslenia —
-// oba dnešné automatické zdroje (#268 nevyzdvihnutá zásielka, #269 vrátenie)
-// odkazujú na Shoptet administráciu objednávky (`buildShoptetAdminOrderUrl`),
-// takže majú rovnaký štítok. `vlastna_poznamka` nikdy nenesie `link` (server
-// ho nikdy nevyplní), takže sem nepotrebuje vlastný záznam — `??` fallback
-// nižšie pokrýva AJ ňu, AJ akýkoľvek budúci typ, čo by omylom dostal odkaz
-// bez vlastného štítku, namiesto tichého predpokladu "je to vždy Shoptet".
-const LINK_LABELS: Readonly<Partial<Record<UpozornenieRow["type"], string>>> = {
-  nevyzdvihnuta_zasielka: "Otvoriť objednávku v Shoptete",
-  vratenie: "Otvoriť objednávku v Shoptete",
-};
-const DEFAULT_LINK_LABEL = "Otvoriť odkaz";
-
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("sk-SK", { day: "numeric", month: "numeric", year: "numeric" });
-}
-
 // issue 267 (živé overenie, gap 3): prázdny zoznam tvrdil natvrdo "všetko je
 // vybavené" bez ohľadu na SKUTOČNÚ príčinu — čistá funkcia rozhodne podľa
 // NAJŠIRŠIEHO dopytu (volaného len keď je aktuálny, možno UŽŠIE filtrovaný
@@ -57,19 +33,6 @@ function classifyEmptyMessage(all: readonly UpozornenieRow[]): string {
   return "Žiadne upozornenia v tomto zobrazení — zvyšné sú vybavené alebo odložené.";
 }
 
-// Code review: "Odložiť do" nemalo `min` — dalo sa vybrať dátum v minulosti
-// (neškodné, `computeStatus` by ho vzalo ako "už sa vrátilo", ale mätúce
-// no-op). `<input type="date">`'s `min` očakáva `YYYY-MM-DD` v LOKÁLNOM
-// čase prehliadača, nie `toISOString()` (tá by okolo polnoci mohla ukázať
-// VČEREJŠÍ dátum v časových pásmach východne od UTC).
-function todayDateInputValue(): string {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, "0");
-  const d = String(now.getDate()).padStart(2, "0");
-  return `${String(y)}-${m}-${d}`;
-}
-
 interface EditDraft {
   readonly id: string | null; // null = nový záznam
   readonly title: string;
@@ -80,6 +43,10 @@ interface EditDraft {
 const EMPTY_DRAFT: EditDraft = { id: null, title: "", details: "", dueAt: "" };
 
 export function UpozorneniaSection({ role, onSessionExpired }: { readonly role: Me["role"]; readonly onSessionExpired: () => void }): JSX.Element {
+  // issue 283 (majiteľ, komentár na tickete): záložka "Vybavené" — predvolená
+  // ostáva "otvorene" presne ako ticket žiada ("Keep the existing view as
+  // the default").
+  const [activeTab, setActiveTab] = useState<"otvorene" | "vybavene">("otvorene");
   const [rows, setRows] = useState<readonly UpozornenieRow[] | null>(null);
   const [error, setError] = useState("");
   const [includeResolved, setIncludeResolved] = useState(false);
@@ -209,13 +176,84 @@ export function UpozorneniaSection({ role, onSessionExpired }: { readonly role: 
       });
   }, [draft, load, refreshBadge]);
 
-  if (error !== "" && rows === null) return <p role="alert">{error}</p>;
-  if (rows === null) return <p>Načítavam…</p>;
+  // Code review (issue 283): pôvodná verzia gatovala CELÚ sekciu (vrátane
+  // samotného prepínača záložiek) na `rows === null`/`error` — teda kým
+  // "Otvorené" ešte len načítavalo (alebo sieťovo zlyhalo), obsluha sa
+  // NEDOSTALA ani k záložke "Vybavené", hoci tá je nezávislá a mohla by sa
+  // pokojne otvoriť. `intro`/`tabBar` sa preto renderujú VŽDY, nezávisle od
+  // `rows`/`error` — tie patria LEN vetve `activeTab === "otvorene"`.
+  const intro = <p>Veci, ktoré treba vybaviť — nech ich zistila appka sama, alebo si ich zapísal majiteľ. Nič odtiaľto sa neposiela e-mailom ani na Discord.</p>;
+  const tabBar = (
+    <div className="upozornenia-tabs" role="tablist">
+      <button
+        type="button"
+        role="tab"
+        aria-selected={activeTab === "otvorene"}
+        className={"upozornenia-tab" + (activeTab === "otvorene" ? " active" : "")}
+        onClick={() => {
+          setActiveTab("otvorene");
+        }}
+        data-testid="upozornenia-tab-otvorene"
+      >
+        Otvorené
+      </button>
+      <button
+        type="button"
+        role="tab"
+        aria-selected={activeTab === "vybavene"}
+        className={"upozornenia-tab" + (activeTab === "vybavene" ? " active" : "")}
+        onClick={() => {
+          setActiveTab("vybavene");
+        }}
+        data-testid="upozornenia-tab-vybavene"
+      >
+        Vybavené
+      </button>
+    </div>
+  );
+
+  if (activeTab === "vybavene") {
+    return (
+      <section>
+        {intro}
+        {tabBar}
+        <UpozorneniaResolvedList
+          canControl={canControl}
+          onSessionExpired={onSessionExpired}
+          onReturnedToOpen={() => {
+            load();
+            refreshBadge();
+          }}
+        />
+      </section>
+    );
+  }
+
+  // Odtiaľto `activeTab === "otvorene"` — `rows`/`error` (patriace LEN
+  // tomuto zoznamu) sa smú vyhodnotiť.
+  if (error !== "" && rows === null) {
+    return (
+      <section>
+        {intro}
+        {tabBar}
+        <p role="alert">{error}</p>
+      </section>
+    );
+  }
+  if (rows === null) {
+    return (
+      <section>
+        {intro}
+        {tabBar}
+        <p>Načítavam…</p>
+      </section>
+    );
+  }
 
   return (
     <section>
-      <p>Veci, ktoré treba vybaviť — nech ich zistila appka sama, alebo si ich zapísal majiteľ. Nič odtiaľto sa neposiela e-mailom ani na Discord.</p>
-
+      {intro}
+      {tabBar}
       {error !== "" && <p role="alert">{error}</p>}
 
       <div className="upozornenia-toolbar">
@@ -313,118 +351,35 @@ export function UpozorneniaSection({ role, onSessionExpired }: { readonly role: 
         <p data-testid="upozornenia-empty">{emptyMessage}</p>
       ) : (
         <div className="upozornenia-list" data-testid="upozornenia-list">
-          {rows.map((row) => {
-            const rowBusy = busyId === row.id;
-            const isOwn = row.source === "vlastne";
-            return (
-              <div className={"card upozornenie-card" + (row.status === "nove" ? " upozornenie-nove" : "")} key={row.id} data-testid={`upozornenie-${row.id}`}>
-                <div className="upozornenie-head">
-                  <span className="pill" data-testid={`upozornenie-type-${row.id}`}>
-                    {TYPE_LABELS[row.type]}
-                  </span>
-                  {row.status === "nove" && <strong data-testid={`upozornenie-nove-${row.id}`}>Nové</strong>}
-                  {row.status === "vybavene" && <span className="pill off">Vybavené</span>}
-                  {row.status === "odlozene" && (
-                    <span className="pill" data-testid={`upozornenie-odlozene-${row.id}`}>
-                      Odložené{row.postponedUntil !== null && <> do {formatDate(row.postponedUntil)}</>}
-                    </span>
-                  )}
-                </div>
-                <p className="upozornenie-title">{row.title}</p>
-                {row.details !== "" && <p className="upozornenie-details">{row.details}</p>}
-                <p className="upozornenie-meta">
-                  Vzniklo {formatDate(row.createdAt)}
-                  {row.dueAt !== null && <> · vybaviť do {formatDate(row.dueAt)}</>}
-                </p>
-                {row.link !== null && (
-                  <a href={row.link} target="_blank" rel="noreferrer" data-testid={`upozornenie-link-${row.id}`}>
-                    {LINK_LABELS[row.type] ?? DEFAULT_LINK_LABEL}
-                  </a>
-                )}
-                {canControl && row.status !== "vybavene" && (
-                  <div className="upozornenie-actions">
-                    <button
-                      type="button"
-                      className="btn sm good"
-                      disabled={rowBusy}
-                      onClick={() => {
-                        withBusy(row.id, () => resolveUpozornenie(row.id));
-                      }}
-                      data-testid={`upozornenie-resolve-${row.id}`}
-                    >
-                      ✓ Vybavené
-                    </button>
-                    <input
-                      type="date"
-                      min={todayDateInputValue()}
-                      value={postponeDraft[row.id] ?? ""}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        setPostponeDraft((d) => ({ ...d, [row.id]: value }));
-                      }}
-                      aria-label={`Odložiť do — ${row.title}`}
-                      data-testid={`upozornenie-postpone-date-${row.id}`}
-                    />
-                    <button
-                      type="button"
-                      className="btn sm ghost"
-                      disabled={rowBusy || (postponeDraft[row.id] ?? "") === ""}
-                      onClick={() => {
-                        const until = postponeDraft[row.id];
-                        if (until === undefined || until === "") return;
-                        withBusy(row.id, () => postponeUpozornenie(row.id, new Date(until).toISOString()));
-                      }}
-                      data-testid={`upozornenie-postpone-${row.id}`}
-                    >
-                      Odložiť
-                    </button>
-                    {row.status === "odlozene" && (
-                      // issue 267 (živé overenie, gap 2): jediný spôsob, ako
-                      // vrátiť odloženú kartu SKÔR, než sa vráti sama (napr.
-                      // majiteľ sa pomýlil v dátume).
-                      <button
-                        type="button"
-                        className="btn sm ghost"
-                        disabled={rowBusy}
-                        onClick={() => {
-                          withBusy(row.id, () => cancelPostponeUpozornenie(row.id));
-                        }}
-                        data-testid={`upozornenie-cancel-postpone-${row.id}`}
-                      >
-                        Zrušiť odloženie
-                      </button>
-                    )}
-                    {isOwn && (
-                      <>
-                        <button
-                          type="button"
-                          className="btn sm ghost"
-                          disabled={rowBusy}
-                          onClick={() => {
-                            setDraft({ id: row.id, title: row.title, details: row.details, dueAt: row.dueAt === null ? "" : row.dueAt.slice(0, 10) });
-                          }}
-                          data-testid={`upozornenie-edit-${row.id}`}
-                        >
-                          Upraviť
-                        </button>
-                        <button
-                          type="button"
-                          className="btn sm ghost"
-                          disabled={rowBusy}
-                          onClick={() => {
-                            withBusy(row.id, () => deleteOwnNote(row.id));
-                          }}
-                          data-testid={`upozornenie-delete-${row.id}`}
-                        >
-                          ✕ Zmazať
-                        </button>
-                      </>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+          {rows.map((row) => (
+            <UpozornenieCard
+              key={row.id}
+              row={row}
+              canControl={canControl}
+              busy={busyId === row.id}
+              postponeDraftValue={postponeDraft[row.id] ?? ""}
+              onPostponeDraftChange={(value) => {
+                setPostponeDraft((d) => ({ ...d, [row.id]: value }));
+              }}
+              onResolve={() => {
+                withBusy(row.id, () => resolveUpozornenie(row.id));
+              }}
+              onPostpone={() => {
+                const until = postponeDraft[row.id];
+                if (until === undefined || until === "") return;
+                withBusy(row.id, () => postponeUpozornenie(row.id, new Date(until).toISOString()));
+              }}
+              onCancelPostpone={() => {
+                withBusy(row.id, () => cancelPostponeUpozornenie(row.id));
+              }}
+              onEdit={() => {
+                setDraft({ id: row.id, title: row.title, details: row.details, dueAt: row.dueAt === null ? "" : row.dueAt.slice(0, 10) });
+              }}
+              onDelete={() => {
+                withBusy(row.id, () => deleteOwnNote(row.id));
+              }}
+            />
+          ))}
         </div>
       )}
     </section>

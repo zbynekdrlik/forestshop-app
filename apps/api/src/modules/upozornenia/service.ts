@@ -1,4 +1,4 @@
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
 import { upozornenie } from "../../db/schema.js";
 import type { UpozornenieSourceValue, UpozornenieTypeValue } from "./queries.js";
@@ -231,4 +231,48 @@ export async function updateIfUnresolvedByDedupKey(db: UpozornenieExecutor, dedu
 export async function markAllSeen(db: Database, now: Date): Promise<number> {
   const result = await db.update(upozornenie).set({ seenAt: now }).where(isNull(upozornenie.seenAt)).returning({ id: upozornenie.id });
   return result.length;
+}
+
+// SQLSTATE 23505 = unique_violation. Rovnaký vzor ako `catalog/ingest.ts`'s
+// `isUniqueViolation` (tam neexportovaná, jediný dovtedy konzument) —
+// duplikovaná tu zámerne malá (10 riadkov), namiesto zdieľanej abstrakcie pre
+// dvoch konzumentov, ktorí navyše žijú v úplne nesúvisiacich moduloch
+// (`.claude/rules/mvp-philosophy.md`'s "žiadna abstrakcia pre jediného/pár
+// konzumentov, ak je priama implementácia rovnako čitateľná").
+function isUniqueViolation(error: unknown, constraint: string): boolean {
+  return typeof error === "object" && error !== null && "code" in error && error.code === "23505" && "constraint" in error && error.constraint === constraint;
+}
+
+export type ReturnToOpenResult = "returned" | "no_op" | "collision";
+
+export interface ReturnToOpenInput {
+  readonly id: string;
+}
+
+// issue 283 (majiteľ, komentár na tickete): "Vybavené" záložka umožňuje
+// vrátiť omylom vybavenú kartu späť medzi otvorené. `upozornenie_dedup_key_uq`
+// je ČIASTOČNÝ unique index (`WHERE resolved_at IS NULL`,
+// `schema-upozornenia.ts`) — vyčistenie `resolvedAt` môže preto naraziť na
+// UŽ EXISTUJÚCU otvorenú kartu s rovnakým `dedupKey` (automatický zdroj,
+// napr. #269's vrátenie, ktoré je zámerne znovu-ohlásiteľné). Kolízia sa
+// ODCHYTÁVA z DB chyby jediného atomického UPDATE-u (rovnaký princíp ako
+// `upsertUpozornenie`'s `ON CONFLICT`), NIE cez samostatný SELECT-pred-UPDATE
+// pre-check — ten by znovu otvoril presne tú TOCTOU triedu chyby, akú tento
+// modul už dvakrát riešil na tom istom čiastočnom indexe (#272/#269,
+// `.claude/rules/upozornenia.md`). WHERE `resolved_at IS NOT NULL` zaručuje,
+// že karta, ktorá už NIE JE vybavená (dvojklik/medzičasom vrátená inak), sa
+// tíško no-opne — rovnaká disciplína ako `resolveUpozornenie`/`cancelPostpone`
+// vyššie (neznáme/nevhodné id nikdy nevyhodí, vždy 200).
+export async function returnUpozornenieToOpen(db: Database, input: ReturnToOpenInput): Promise<ReturnToOpenResult> {
+  try {
+    const result = await db
+      .update(upozornenie)
+      .set({ resolvedAt: null, resolvedByUserId: null })
+      .where(and(eq(upozornenie.id, input.id), isNotNull(upozornenie.resolvedAt)))
+      .returning({ id: upozornenie.id });
+    return result.length > 0 ? "returned" : "no_op";
+  } catch (error) {
+    if (isUniqueViolation(error, "upozornenie_dedup_key_uq")) return "collision";
+    throw error;
+  }
 }

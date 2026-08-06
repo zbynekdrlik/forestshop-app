@@ -2052,6 +2052,44 @@ tr:last-child td {
   gap: var(--fs-space-2);
 }
 
+/* issue 283: záložka "Vybavené" — prepínač + história vyriešených kariet. */
+.upozornenia-tabs {
+  display: flex;
+  gap: var(--fs-space-2);
+  margin-bottom: var(--fs-space-3);
+}
+.upozornenia-tab {
+  padding: var(--fs-space-2) var(--fs-space-4);
+  border: 1px solid var(--fs-border);
+  border-radius: var(--fs-radius-md);
+  background: var(--fs-surface);
+  color: var(--fs-ink-muted);
+  font-weight: var(--fs-weight-semibold);
+  cursor: pointer;
+}
+/* Rovnaký hover vzor ako sidebar `.tabs .tab:hover` (issue 190) — code
+   review: nový interaktívny prvok vedľa existujúceho vzoru by ho nemal
+   vynechať. `.active` (deklarované AŽ PO `:hover` nižšie v súbore) zostáva
+   vizuálne dominantné aj pri súčasnom hoveri vďaka poradiu pravidiel. */
+.upozornenia-tab:hover {
+  background: var(--fs-surface-alt);
+}
+.upozornenia-tab.active {
+  background: var(--fs-brand);
+  border-color: var(--fs-brand);
+  color: var(--fs-surface);
+}
+.upozornenie-resolved-meta {
+  margin: 0;
+  font-size: var(--fs-text-sm);
+  color: var(--fs-ink-faint);
+}
+.upozornenia-cap-note {
+  margin: 0 0 var(--fs-space-3);
+  font-size: var(--fs-text-sm);
+  color: var(--fs-ink-faint);
+}
+
 /* ---------------- MODÁLNY DIALÓG (issue 191) ----------------
    Náhľad e-mailu pred odoslaním sa už nerozbaľuje na spodku stránky —
    otvorí sa cez obrazovku, takže je okamžite v zornom poli. `z-index`

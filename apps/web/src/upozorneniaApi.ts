@@ -23,6 +23,16 @@ export type UpozornenieStatus = UpozornenieRow["status"];
 const listSchema = z.object({ rows: z.array(rowSchema) });
 const countSchema = z.object({ count: z.number() });
 
+// issue 283: záložka "Vybavené" — zrkadlí `ResolvedUpozornenieRow`
+// (`apps/api/src/modules/upozornenia/queries.ts`).
+const resolvedRowSchema = rowSchema.extend({ resolvedByName: z.string().nullable() });
+export type ResolvedUpozornenieRow = z.infer<typeof resolvedRowSchema>;
+const resolvedListSchema = z.object({ rows: z.array(resolvedRowSchema) });
+
+const returnToOpenResultSchema = z.enum(["returned", "no_op", "collision"]);
+export type ReturnToOpenResult = z.infer<typeof returnToOpenResultSchema>;
+const returnToOpenSchema = z.object({ result: returnToOpenResultSchema });
+
 export class UpozorneniaUnauthorizedError extends Error {
   constructor() {
     super("Neprihlásený");
@@ -116,4 +126,14 @@ export async function postponeUpozornenie(id: string, until: string): Promise<vo
 export async function cancelPostponeUpozornenie(id: string): Promise<void> {
   const response = await fetch(`/api/upozornenia/${encodeURIComponent(id)}/cancel-postpone`, { method: "POST" });
   await readJson(response, "Zrušenie odloženia zlyhalo");
+}
+
+export async function fetchResolvedUpozornenia(): Promise<readonly ResolvedUpozornenieRow[]> {
+  const response = await fetch("/api/upozornenia/resolved");
+  return resolvedListSchema.parse(await readJson(response, "Vybavené upozornenia sa nepodarilo načítať")).rows;
+}
+
+export async function returnUpozornenieToOpen(id: string): Promise<ReturnToOpenResult> {
+  const response = await fetch(`/api/upozornenia/${encodeURIComponent(id)}/return-to-open`, { method: "POST" });
+  return returnToOpenSchema.parse(await readJson(response, "Vrátenie karty zlyhalo")).result;
 }
