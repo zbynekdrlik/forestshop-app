@@ -1,4 +1,5 @@
 import { Fragment, useCallback, useEffect, useState, type JSX } from "react";
+import { formatSkDateTime } from "../formatDate.js";
 import {
   fetchMailLog,
   MailLogUnauthorizedError,
@@ -26,10 +27,6 @@ const PERIOD_LABELS: readonly { readonly value: MailLogPeriod; readonly label: s
   { value: "90", label: "posledných 90 dní" },
   { value: "all", label: "celá história" },
 ];
-
-function formatWhen(iso: string): string {
-  return new Date(iso).toLocaleString("sk-SK", { dateStyle: "short", timeStyle: "short" });
-}
 
 /** Čoho sa e-mail týkal — objednávka, tovar, zásielka. Prázdny reťazec, keď
  * odosielateľ nič z toho nemá (objednávka dodávateľovi). */
@@ -170,7 +167,7 @@ export function MailLogSection({ onSessionExpired }: { readonly onSessionExpired
                   <Fragment key={row.id}>
                     <tr data-testid={`mail-log-row-${row.id}`} className={`ml-row ml-row-${row.status}`}>
                       <td className="ml-when">
-                        {formatWhen(row.createdAt)}
+                        {formatSkDateTime(row.createdAt)}
                         <span className="ml-trigger">{row.trigger === "manual" ? (row.actorName ?? "ručne") : "plán"}</span>
                       </td>
                       <td>

@@ -24,6 +24,16 @@ ENV NODE_ENV=production
 # Same reasoning as the build stage above — never let Playwright's postinstall
 # try (and fail) to download its own bundled Chromium on Alpine.
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+# issue 293: appka (aj tento kontajner) predtým bežala bez nastaveného
+# časového pásma, teda v UTC — naplánované úlohy tak reálne behali o 1-2
+# hodiny neskôr, než majiteľ nastavil (`scheduler.ts` teraz počíta v
+# Europe/Bratislava, viď `apps/api/src/timezone.ts`, ale appka aj bez toho
+# musí BEŽAŤ v správnom pásme, aby žiadne ĎALŠIE počítanie dátumu — logy,
+# budúci kód mimo `timezone.ts` — ticho nespadlo do UTC). `docker-compose
+# .prod.yml` nastavuje TO ISTÉ `TZ` znova v `environment:` bloku (viditeľné
+# cez `docker exec ... env`, `.claude/rules/deploy.md`'s overovací vzor) —
+# tu je len baked-in predvolená hodnota v samotnom obraze.
+ENV TZ=Europe/Bratislava
 # issue 122: real, working Chromium for Alpine (musl libc) — Playwright's own
 # downloaded browser build targets glibc distros only and will not run here.
 # `playwright-import.ts`'s `resolveChromiumExecutablePath()` finds this
@@ -31,7 +41,15 @@ ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 # freetype packages are the standard set needed for headless Chromium to
 # actually render (a bare `chromium` package alone crashes on launch on
 # Alpine — documented Puppeteer/Playwright-on-Alpine requirement).
-RUN apk add --no-cache chromium nss freetype freetype-dev harfbuzz ca-certificates ttf-freefont
+# issue 293: `tzdata` added alongside — Node 24's bundled full ICU resolves
+# `TZ`/`Intl` correctly WITHOUT it (verified directly: `docker run --rm -e
+# TZ=Europe/Bratislava node:24-alpine node -e '...'` gave the right +1/+2
+# offset with zero packages installed), but Alpine's own `/usr/share/
+# zoneinfo` is otherwise ABSENT — musl-linked tools (the shell's own `date`,
+# and potentially Chromium's own non-V8 codepaths) silently fall back to UTC
+# without it (verified: `date` inside the bare image printed UTC despite TZ
+# being set, and printed the correct CEST time only after `apk add tzdata`).
+RUN apk add --no-cache chromium nss freetype freetype-dev harfbuzz ca-certificates ttf-freefont tzdata
 # Produkčné závislosti sa inštalujú znova, nekopírujú sa z build fázy: pnpm robí
 # node_modules zo symlinkov do svojho store, a tie by po skopírovaní ukazovali do
 # prázdna. Natívny modul argon2 sa tak zároveň zostaví pre runtime obraz.

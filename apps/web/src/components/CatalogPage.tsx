@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type SyntheticEvent, type JSX } from "react";
 import type { Me } from "../api.js";
+import { formatSkDate, formatSkDateTime } from "../formatDate.js";
 import {
   CatalogUnauthorizedError,
   fetchCatalogStats,
@@ -33,7 +34,7 @@ function SnapshotLine({ stats }: { readonly stats: CatalogStats }): JSX.Element 
     return <p data-testid="snapshot">Katalóg zatiaľ nebol importovaný.</p>;
   }
 
-  const fetchedAtLabel = new Date(snapshot.fetchedAt).toLocaleString("sk-SK");
+  const fetchedAtLabel = formatSkDateTime(snapshot.fetchedAt);
   const anomaliesLabel = snapshot.issueCount === null ? "—" : String(snapshot.issueCount);
   const zdrojAAnomalie = `zdroj: ${snapshot.sourceLabel}, anomálií: ${anomaliesLabel}`;
 
@@ -307,7 +308,7 @@ export function CatalogPage({
                     <>
                       {" "}
                       <strong data-testid={`missing-${item.code}`}>
-                        (chýba od {new Date(item.missingSince).toLocaleDateString("sk-SK")})
+                        (chýba od {formatSkDate(item.missingSince)})
                       </strong>
                     </>
                   )}

@@ -1,4 +1,5 @@
 import { useEffect, useState, type JSX } from "react";
+import { formatSkDate } from "../formatDate.js";
 import { fetchOrdersOverview, OrdersUnauthorizedError, type OrdersOverview, type SupplierOpenOrders } from "../ordersApi.js";
 import { countAffectedOrders, formatOrderCount, oldestWaitingPlacedAt, summarizeOrderLines } from "../ordersSummary.js";
 
@@ -69,7 +70,7 @@ export function OrdersOverviewTiles({
           <SimpleTile
             testId="overview-ordering-oldest"
             label="Najstaršia čakajúca"
-            value={oldestPlacedAt === null ? "—" : new Date(oldestPlacedAt).toLocaleDateString("sk-SK")}
+            value={formatSkDate(oldestPlacedAt)}
           />
         </div>
       </div>

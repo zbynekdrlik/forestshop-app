@@ -1,4 +1,5 @@
 import type { JSX } from "react";
+import { formatSkDate } from "../formatDate.js";
 import type { OrderReminderPendingRow, OrderReminderResolvedRow, OrderReminderRow } from "../orderReminderApi.js";
 
 // Vydelené z `OrderReminderSection.tsx` (issue 173) — rovnaký vzor ako
@@ -87,7 +88,7 @@ export function OrderReminderEmailedRow({ row }: { readonly row: OrderReminderRe
       <td>{row.name}</td>
       <td>{row.email}</td>
       <td>{row.itemLabel !== "" ? row.itemLabel : "—"}</td>
-      <td>{row.resolvedAt.slice(0, 10)}</td>
+      <td>{formatSkDate(row.resolvedAt)}</td>
     </tr>
   );
 }

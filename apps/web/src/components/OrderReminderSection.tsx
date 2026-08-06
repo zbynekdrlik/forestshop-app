@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type JSX } from "react";
 import type { Me } from "../api.js";
+import { formatSkDateTime } from "../formatDate.js";
 import {
   fetchOrderReminderPreview,
   fetchOrderReminderStatus,
@@ -161,7 +162,7 @@ export function OrderReminderSection({
 
       {status.lastRun !== null && (
         <p className="order-reminder-last-run">
-          Posledný beh: {new Date(status.lastRun.startedAt).toLocaleString("sk-SK")} —{" "}
+          Posledný beh: {formatSkDateTime(status.lastRun.startedAt)} —{" "}
           {status.lastRun.status === "failure" ? "❌ chyba" : status.lastRun.skippedReason !== null ? `⏸ ${status.lastRun.skippedReason}` : "✅ OK"}
         </p>
       )}

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type JSX } from "react";
 import type { Me } from "../api.js";
+import { formatSkDateTime } from "../formatDate.js";
 import {
   fetchSupplierStockStatus,
   runSupplierStockNow,
@@ -19,12 +20,6 @@ const AVAILABILITY_LABEL: Readonly<Record<SupplierAvailability, string>> = {
   unavailable: "Vypredané",
   unknown: "Neviem",
 };
-
-function formatDateTime(iso: string | null): string {
-  if (iso === null) return "—";
-  const date = new Date(iso);
-  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString("sk-SK");
-}
 
 export function SupplierStockSection({
   role,
@@ -136,10 +131,10 @@ export function SupplierStockSection({
         </p>
       )}
 
-      <p data-testid="ss-last-checked">Naposledy kontrolované: {formatDateTime(overview.lastCheckedAt)}</p>
+      <p data-testid="ss-last-checked">Naposledy kontrolované: {formatSkDateTime(overview.lastCheckedAt)}</p>
       {lastRun !== null && (
         <p data-testid="ss-last-run">
-          Posledný beh: {formatDateTime(lastRun.startedAt)} —{" "}
+          Posledný beh: {formatSkDateTime(lastRun.startedAt)} —{" "}
           {lastRun.status === "failure" ? "❌ chyba" : lastRun.status === "running" ? "⏳ beží" : "✅ OK"}
           {lastRun.errorMessage !== null && ` (${lastRun.errorMessage})`}
         </p>
@@ -211,7 +206,7 @@ export function SupplierStockSection({
                   <td>{host.readable}</td>
                   <td>{host.unknown}</td>
                   <td>{host.failed}</td>
-                  <td>{formatDateTime(host.lastConfirmedAt)}</td>
+                  <td>{formatSkDateTime(host.lastConfirmedAt)}</td>
                 </tr>
               ))}
             </tbody>
@@ -252,7 +247,7 @@ export function SupplierStockSection({
                     {row.availabilityText !== "" && ` (${row.availabilityText})`}
                   </td>
                   <td>{row.price === null ? "—" : `${row.price} €`}</td>
-                  <td>{formatDateTime(row.checkedAt)}</td>
+                  <td>{formatSkDateTime(row.checkedAt)}</td>
                 </tr>
               ))}
             </tbody>

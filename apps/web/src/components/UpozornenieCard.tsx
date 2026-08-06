@@ -1,4 +1,5 @@
 import type { JSX } from "react";
+import { formatSkDate } from "../formatDate.js";
 import type { UpozornenieRow } from "../upozorneniaApi.js";
 
 // issue 283 (code review — súbor `UpozorneniaSection.tsx` prerástol eslint
@@ -31,10 +32,6 @@ const LINK_LABELS: Readonly<Partial<Record<UpozornenieRow["type"], string>>> = {
   vratenie: "Otvoriť objednávku v Shoptete",
 };
 const DEFAULT_LINK_LABEL = "Otvoriť odkaz";
-
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("sk-SK", { day: "numeric", month: "numeric", year: "numeric" });
-}
 
 // Code review: "Odložiť do" nemalo `min` — dalo sa vybrať dátum v minulosti
 // (neškodné, `computeStatus` by ho vzalo ako "už sa vrátilo", ale mätúce
@@ -84,15 +81,15 @@ export function UpozornenieCard({
         {row.status === "nove" && <strong data-testid={`upozornenie-nove-${row.id}`}>Nové</strong>}
         {row.status === "odlozene" && (
           <span className="pill" data-testid={`upozornenie-odlozene-${row.id}`}>
-            Odložené{row.postponedUntil !== null && <> do {formatDate(row.postponedUntil)}</>}
+            Odložené{row.postponedUntil !== null && <> do {formatSkDate(row.postponedUntil)}</>}
           </span>
         )}
       </div>
       <p className="upozornenie-title">{row.title}</p>
       {row.details !== "" && <p className="upozornenie-details">{row.details}</p>}
       <p className="upozornenie-meta">
-        Vzniklo {formatDate(row.createdAt)}
-        {row.dueAt !== null && <> · vybaviť do {formatDate(row.dueAt)}</>}
+        Vzniklo {formatSkDate(row.createdAt)}
+        {row.dueAt !== null && <> · vybaviť do {formatSkDate(row.dueAt)}</>}
       </p>
       {row.link !== null && (
         <a href={row.link} target="_blank" rel="noreferrer" data-testid={`upozornenie-link-${row.id}`}>

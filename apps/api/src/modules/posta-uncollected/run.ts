@@ -1,5 +1,6 @@
 import type { Database } from "../../db/client.js";
 import { log } from "../../logger.js";
+import { zonedDateKey } from "../../timezone.js";
 import type { MailTransport } from "../mail/transport.js";
 import { recordSkippedMail, sendLoggedMail, type MailLogContext } from "../mail-log/service.js";
 import { buildShoptetAdminOrderUrl } from "../orders/queries.js";
@@ -349,7 +350,9 @@ async function runPostaUncollectedLocked(options: RunPostaUncollectedOptions): P
         notifiedSince: cls.notifiedSince,
         daysAtPost: cls.daysAtPost,
         count: effectiveCount,
-        lastSentAt: effectiveLastSent === null ? "" : effectiveLastSent.toISOString().slice(0, 10),
+        // issue 293: SLOVENSKÝ deň behu, nie UTC — rovnaký dôvod ako
+        // `state.ts`'s `upsertPostaUncollectedState`.
+        lastSentAt: effectiveLastSent === null ? "" : zonedDateKey(effectiveLastSent),
         callNeeded: effectiveCount >= 4,
         trackingLink: trackingLink(packageNumber),
         adminLink: adminOrderUrl(shipment),

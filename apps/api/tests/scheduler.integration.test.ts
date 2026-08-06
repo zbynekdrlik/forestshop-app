@@ -12,14 +12,18 @@ afterEach(async () => {
   close = undefined;
 });
 
-const NOW = new Date("2026-07-29T01:00:00Z");
-const PRED_HODINOU = new Date("2026-07-29T00:00:00Z");
-const NASLEDUJUCI_DEN = new Date("2026-07-30T01:00:00Z");
+// issue 293: `hourLocal`/`minuteLocal` sú Europe/Bratislava miestny čas
+// (predtým `hourUtc`/`minuteUtc`, doslova UTC) — literály nižšie sú UTC
+// okamihy zodpovedajúce miestnemu "01:00"/"00:00" na dátume 2026-07-29
+// (letný čas, offset +2).
+const NOW = new Date("2026-07-28T23:00:00Z"); // 2026-07-29 01:00 Europe/Bratislava
+const PRED_HODINOU = new Date("2026-07-28T22:00:00Z"); // 2026-07-29 00:00 Europe/Bratislava
+const NASLEDUJUCI_DEN = new Date("2026-07-29T23:00:00Z"); // 2026-07-30 01:00 Europe/Bratislava
 
 function fakeJob(overrides: Partial<ScheduledJob> = {}): ScheduledJob {
   return {
     name: "fake-job",
-    schedule: { kind: "daily", hourUtc: 1, minuteUtc: 0 },
+    schedule: { kind: "daily", hourLocal: 1, minuteLocal: 0 },
     run: () => Promise.resolve({ detail: { ok: true } }),
     ...overrides,
   };
@@ -75,7 +79,7 @@ it("druhý tick v ten istý deň úlohu nezopakuje", async () => {
   expect(all).toHaveLength(1);
 });
 
-it("ďalší UTC kalendárny deň úlohu znova spustí", async () => {
+it("ďalší SLOVENSKÝ kalendárny deň úlohu znova spustí", async () => {
   const ctx = await withCleanDb();
   close = ctx.close;
   const job = fakeJob();

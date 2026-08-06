@@ -21,12 +21,23 @@ paths:
   `executeJob` ich odchytí a zapíše ako `job_run.status = "failure"`.
 - **Rozvrh je diskriminovaná únia `Schedule = DailySchedule | HourlySchedule`
   (`kind: "daily" | "hourly"`, `types.ts`), žiadny cron výraz.** `isDue()`
-  (`scheduler.ts`) je čistá funkcia — periodizuje podľa `kind` (`daily`: UTC
-  kalendárny deň, `hourly`: UTC deň+hodina, #115). Nová `daily` úloha dostáva
-  vlastný `{ kind: "daily", hourUtc, minuteUtc }`; zvoľ ho aspoň 15 min od
-  existujúcich `daily` úloh, aby sa neprekrývali zbytočne (nie je to tvrdá
-  závislosť, len aby operátor v logoch/`job_run` vedel odlíšiť poradie). Nová
-  `hourly` úloha dostáva `{ kind: "hourly", minuteUtc }` — nemá `hourUtc`,
+  (`scheduler.ts`) je čistá funkcia — periodizuje podľa `kind`. **`daily`:
+  MIESTNY (Europe/Bratislava) kalendárny deň + miestna hodina/minúta (issue
+  293 — predtým doslovné UTC, appka aj kontajner bežali bez nastaveného
+  pásma, takže úloha nastavená na 7:00 reálne behala až o 9:00/8:00
+  slovenského času; `hourUtc`/`minuteUtc` sú odvtedy premenované na
+  `hourLocal`/`minuteLocal`, aby meno sedelo s tým, ako sa hodnota
+  interpretuje).** `hourly`: ZOSTÁVA podľa UTC dňa+hodiny (#115), ZÁMERNE
+  nelokalizované — hodinový job nemá cieľovú hodinu (beží každú hodinu),
+  lokalizácia by v deň prechodu na zimný čas (opakovaná miestna hodina
+  02:00-03:00) spôsobila falošné preskočenie skutočného behu; minúta v
+  rámci hodiny je pre tento časový pás (vždy celohodinový offset) rovnaká v
+  UTC aj v miestnom čase, netreba ju prepočítavať. Nová `daily` úloha
+  dostáva vlastný `{ kind: "daily", hourLocal, minuteLocal }` (SLOVENSKÝ
+  čas, nie UTC); zvoľ ho aspoň 15 min od existujúcich `daily` úloh, aby sa
+  neprekrývali zbytočne (nie je to tvrdá závislosť, len aby operátor v
+  logoch/`job_run` vedel odlíšiť poradie). Nová `hourly` úloha dostáva
+  `{ kind: "hourly", minuteUtc }` — nemá `hourLocal`/`hourUtc`,
   beží v KAŽDEJ UTC hodine. Dnes zaregistrované: **:20 KAŽDÚ hodinu import
   katalógu** (`catalogImportJob`, `hourly` od issue 184, pôvodne `daily`
   01:00 — zmerané trvanie behu 19.5-22.9 s, zanedbateľné), 01:15 mazanie
@@ -77,8 +88,8 @@ paths:
   sieťových volaní na posta.sk (per zásielka), a držať jednu DB transakciu
   otvorenú počas nich by zbytočne zaťažovalo connection pool. Bez tohto
   zámku by dva prekrývajúce sa behy (dvaja manažéri klikli "Spustiť teraz"
-  súčasne, alebo ručný klik sa prekryl s 07:00 UTC naplánovaným behom) mohli
-  OBA prečítať ten istý predošlý `notifyCount` pred zápisom a poslať
+  súčasne, alebo ručný klik sa prekryl s 09:00 Europe/Bratislava naplánovaným
+  behom) mohli OBA prečítať ten istý predošlý `notifyCount` pred zápisom a poslať
   DUPLICITNÝ eskalačný e-mail zákazníkovi (review na PR 177 — nájdené pred
   mergom, nie testom).
 - **`tick()`'s zámok chráni LEN kontrolu splatnosti + vloženie "running"

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type JSX } from "react";
+import { formatSkDate } from "../formatDate.js";
 import type { OrderLine } from "../ordersApi.js";
 import { STATE_LABELS } from "../orderLineStateLabels.js";
 import { formatVariantTotalChip, isStaleOrderLine, orderLineAgeDays, type VariantTotal } from "../ordersSummary.js";
@@ -453,7 +454,7 @@ export function OrderLineRow({
           )}
         </td>
         <td className="ord-date-cell">
-          {new Date(line.placedAt).toLocaleDateString("sk-SK")}
+          {formatSkDate(line.placedAt)}
           {/* issue 65: upozornenie na starú nevybavenú objednávku — priamy
               náprotivok starej appky's ⚠️ badge (`ordersSummary.ts`'s
               `isStaleOrderLine`, hranica 14 dní). issue 127: viditeľný text

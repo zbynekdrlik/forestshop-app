@@ -86,7 +86,7 @@ export function catalogImportJob(runIngest: RunIngest | undefined): ScheduledJob
 export function pruneRawExportsJob(keepDays = 14): ScheduledJob {
   return {
     name: PRUNE_RAW_EXPORTS_JOB_NAME,
-    schedule: { kind: "daily", hourUtc: 1, minuteUtc: 15 },
+    schedule: { kind: "daily", hourLocal: 1, minuteLocal: 15 },
     async run(db, now) {
       const result = await pruneRawSnapshots(db, { keepDays, now });
       return { detail: result };
@@ -98,7 +98,7 @@ export function pruneRawExportsJob(keepDays = 14): ScheduledJob {
 export function sessionCleanupJob(): ScheduledJob {
   return {
     name: SESSION_CLEANUP_JOB_NAME,
-    schedule: { kind: "daily", hourUtc: 1, minuteUtc: 30 },
+    schedule: { kind: "daily", hourLocal: 1, minuteLocal: 30 },
     async run(db, now) {
       const result = await cleanupExpiredSessions(db, now);
       return { detail: result };
@@ -147,7 +147,7 @@ export function pruneRawOrdersJob(rawDir: string, keepDays = 30): ScheduledJob {
     // prekrývať KAŽDÝ deň (nie len raz), nie iba pri tomto jednom sedení —
     // neprekáža, `pruneRawOrders` nemá žiadny DB advisory zámok (viď komentár
     // vyššie), takže si nekonkuruje.
-    schedule: { kind: "daily", hourUtc: 2, minuteUtc: 0 },
+    schedule: { kind: "daily", hourLocal: 2, minuteLocal: 0 },
     async run(_db, now) {
       const result = await pruneRawOrders(rawDir, { keepDays, now });
       return { detail: result };
@@ -223,9 +223,14 @@ export type RunPostaUncollected = (db: Database, now: Date) => Promise<PostaUnco
 
 /**
  * "Nevyzdvihnuté zásielky" (issue 172) — denne o 09:00 Europe/Bratislava
- * (07:00 UTC — CEST v lete/CET v zime posunie skutočný čas behu o hodinu,
- * rovnaká DST-nevedomá disciplína ako ostatné `daily` joby v tomto súbore;
- * presnosť na hodinu nie je pre túto úlohu kritická). Na rozdiel od
+ * (issue 293: `hourLocal`/`minuteLocal` sú teraz SKUTOČNE miestny čas —
+ * appka aj kontajner predtým bežali v UTC bez nastaveného pásma, takže
+ * literál `hourLocal: 7` sa PRED opravou interpretoval ako 7:00 UTC =
+ * 09:00 slovenského letného času (08:00 v zime) — to bol zámer odjakživa.
+ * Samotná oprava časového pásma (issue 293) tento literál nechala
+ * nedotknutý, čo by ho zmenilo na 07:00 SKUTOČNE miestneho — o dve hodiny
+ * skôr, než malo — preto ho tento následný tiket vrátil na 9, aby zostal
+ * skutočný cieľový čas 09:00 Europe/Bratislava). Na rozdiel od
  * `catalogImportJob`/`ordersImportJob` NIE JE `run` nikdy `undefined` — táto
  * automatizácia číta priamo z už importovaných objednávok (žiadna
  * samostatná URL na nakonfigurovanie), a chýbajúce SMTP/BCC rieši
@@ -238,7 +243,7 @@ export type RunPostaUncollected = (db: Database, now: Date) => Promise<PostaUnco
 export function postaUncollectedJob(run: RunPostaUncollected): ScheduledJob {
   return {
     name: POSTA_UNCOLLECTED_JOB_NAME,
-    schedule: { kind: "daily", hourUtc: 7, minuteUtc: 0 },
+    schedule: { kind: "daily", hourLocal: 9, minuteLocal: 0 },
     async run(db, now) {
       const enabled = await isPostaUncollectedEnabled(db);
       if (!enabled) {
@@ -256,9 +261,12 @@ export type RunOrderReminder = (db: Database, now: Date) => Promise<OrderReminde
 
 /**
  * "Pripomienky objednávok" (issue 173) — denne o 08:00 Europe/Bratislava
- * (06:00 UTC — CEST v lete/CET v zime posunie skutočný čas behu o hodinu,
- * rovnaká DST-nevedomá disciplína ako `postaUncollectedJob`/ostatné `daily`
- * joby vyššie; presnosť na hodinu nie je pre túto úlohu kritická). Rovnaký
+ * (issue 293: `hourLocal`/`minuteLocal` sú teraz SKUTOČNE miestny čas —
+ * rovnaký dôvod ako `postaUncollectedJob` vyššie: literál `hourLocal: 6` sa
+ * PRED opravou interpretoval ako 6:00 UTC = 08:00 slovenského letného času
+ * (07:00 v zime), čo bol zámer odjakživa. Samotná oprava časového pásma ho
+ * nechala nedotknutý, čo by ho zmenilo na 06:00 SKUTOČNE miestneho — o dve
+ * hodiny skôr — preto ho tento následný tiket vrátil na 8). Rovnaký
  * vzor ako `postaUncollectedJob`: `run` nie je nikdy `undefined` (číta priamo
  * z už importovaných objednávok), chýbajúce OPENAI_API_KEY/MAIL_HOST/BCC rieši
  * `runOrderReminder` SAMA (per-objednávka, viditeľne v `job_run.detail`),
@@ -270,7 +278,7 @@ export type RunOrderReminder = (db: Database, now: Date) => Promise<OrderReminde
 export function orderReminderJob(run: RunOrderReminder): ScheduledJob {
   return {
     name: ORDER_REMINDER_JOB_NAME,
-    schedule: { kind: "daily", hourUtc: 6, minuteUtc: 0 },
+    schedule: { kind: "daily", hourLocal: 8, minuteLocal: 0 },
     async run(db, now) {
       const enabled = await isOrderReminderEnabled(db);
       if (!enabled) {
@@ -285,7 +293,10 @@ export function orderReminderJob(run: RunOrderReminder): ScheduledJob {
 export type RunSupplierStock = (db: Database, now: Date) => Promise<SupplierStockRunResult>;
 
 /**
- * "Dodávateľský sklad" (issue 212) — denne o 04:20 UTC, teda dostatočne PRED
+ * "Dodávateľský sklad" (issue 212) — denne o 04:20 Europe/Bratislava (issue
+ * 293: predtým sa `hourLocal`/`minuteLocal` reálne interpretovali ako UTC,
+ * appka teraz behá o 1-2 hodiny SKÔR, než predtým — poradie a rozostup
+ * medzi nočnými jobmi nižšie ostávajú NEZMENENÉ), teda dostatočne PRED
  * automatizáciou prepínania (issue 213), aby tá pracovala s čerstvými dátami
  * z tejto noci, a zároveň mimo `pruneRawExportsJob` (01:15) /
  * `sessionCleanupJob` (01:30) / `pruneRawOrdersJob` (02:00).
@@ -297,7 +308,7 @@ export type RunSupplierStock = (db: Database, now: Date) => Promise<SupplierStoc
 export function supplierStockJob(run: RunSupplierStock): ScheduledJob {
   return {
     name: SUPPLIER_STOCK_JOB_NAME,
-    schedule: { kind: "daily", hourUtc: 4, minuteUtc: 20 },
+    schedule: { kind: "daily", hourLocal: 4, minuteLocal: 20 },
     async run(db, now) {
       return { detail: await run(db, now) };
     },
@@ -307,7 +318,8 @@ export function supplierStockJob(run: RunSupplierStock): ScheduledJob {
 export type RunRestock = (db: Database, now: Date) => Promise<RestockRunResult>;
 
 /**
- * "Vypredané → Skladom" (issue 213) — denne o 04:50 UTC, teda 30 minút PO
+ * "Vypredané → Skladom" (issue 213) — denne o 04:50 Europe/Bratislava (issue
+ * 293 — pozri poznámku na `supplierStockJob` vyššie), teda 30 minút PO
  * `supplierStockJob` (04:20), aby pracovalo s potvrdeniami z tejto noci.
  *
  * Na rozdiel od scrapera MÁ `enabled` prepínač: toto je jediná automatizácia,
@@ -318,7 +330,7 @@ export type RunRestock = (db: Database, now: Date) => Promise<RestockRunResult>;
 export function restockJob(run: RunRestock | undefined): ScheduledJob {
   return {
     name: RESTOCK_JOB_NAME,
-    schedule: { kind: "daily", hourUtc: 4, minuteUtc: 50 },
+    schedule: { kind: "daily", hourLocal: 4, minuteLocal: 50 },
     async run(db, now) {
       const enabled = await isRestockEnabled(db);
       if (!enabled) {
@@ -336,7 +348,8 @@ export type RunShopFeed = (db: Database, now: Date) => Promise<ShopFeedRunResult
 
 /**
  * Obnovenie mapy „kód variantu → adresa detailu" z feedu pre porovnávače
- * (issue 220) — denne o 03:50 UTC, teda PRED `supplierStockJob` (04:20) aj
+ * (issue 220) — denne o 03:50 Europe/Bratislava (issue 293 — pozri poznámku
+ * na `supplierStockJob` vyššie), teda PRED `supplierStockJob` (04:20) aj
  * `restockJob` (04:50), aby overovací zoznam ráno ukazoval čerstvé adresy.
  *
  * Vlastný advisory zámok NEMÁ: na rozdiel od `postaUncollectedJob` či
@@ -349,7 +362,7 @@ export type RunShopFeed = (db: Database, now: Date) => Promise<ShopFeedRunResult
 export function shopFeedJob(run: RunShopFeed): ScheduledJob {
   return {
     name: SHOP_FEED_JOB_NAME,
-    schedule: { kind: "daily", hourUtc: 3, minuteUtc: 50 },
+    schedule: { kind: "daily", hourLocal: 3, minuteLocal: 50 },
     async run(db, now) {
       return { detail: await run(db, now) };
     },

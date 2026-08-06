@@ -387,3 +387,31 @@ it("zásielka BEZ existujúcej karty, ktorej prvá klasifikácia je invalid_form
   const rows = await db.select().from(upozornenie).where(eq(upozornenie.dedupKey, "posta:12345678901234"));
   expect(rows).toHaveLength(0);
 });
+
+// issue 293: `lastSentAt` sa predtým odvodzovalo cez `toISOString().slice(0, 10)`
+// (VŽDY UTC kalendárny deň) — beh tesne po SLOVENSKEJ polnoci (ale ešte pred
+// UTC polnocou) tak zapísal VČEREJŠÍ deň namiesto dnešného.
+it("issue 293: lastSentAt sa uloží podľa SLOVENSKÉHO dňa behu, nie UTC — aj tesne po miestnej polnoci", async () => {
+  const db = await boot();
+  await insertOrder(db, { externalOrderId: "20500015" });
+  const sent: MailMessage[] = [];
+
+  // 2026-08-05T22:10:00Z = 2026-08-06 00:10 Europe/Bratislava (letný čas) —
+  // slovenský deň je UŽ 6.8., UTC deň je ešte 5.8.
+  const justAfterLocalMidnight = new Date("2026-08-05T22:10:00Z");
+
+  const result = await runPostaUncollected({
+    db,
+    now: justAfterLocalMidnight,
+    trackingClient: notifiedTrackingClient(),
+    mailTransport: (m) => {
+      sent.push(m);
+      return Promise.resolve();
+    },
+    bccEmail: "majitel@forestshop.sk",
+    adminBaseUrl: "https://www.forestshop.sk",
+  });
+
+  expect(sent).toHaveLength(1);
+  expect(result.uncollected[0]?.lastSentAt).toBe("2026-08-06");
+});
