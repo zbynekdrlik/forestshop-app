@@ -589,3 +589,18 @@ paths:
   súboru/testu (`vitest run tests/<súbor>` / `playwright test
   tests/e2e/<súbor>`), nikdy nepredpokladaj regresiu len z jedného
   červeného plného behu na zdieľanom, vyťaženom boxe.
+- **Rovnaká trieda vyššie (preťažený zdieľaný box) má aj tichší tvar bez
+  akéhokoľvek testovacieho výstupu** — `pnpm --filter @forestshop/web e2e`
+  spadlo hneď na `Error: Timed out waiting 60000ms from config.webServer.`
+  (issues 287/288), teda PRED spustením čo i len jedného testu; oba
+  `webServer` procesy (`e2e-setup.ts` + `tsx src/index.ts`) sa nestihli
+  zdvihnúť do 60 s po ~9-minútovom integračnom behu na tom istom
+  vyťaženom boxe. Manuálne spustenie `pnpm exec tsx scripts/e2e-setup.ts`
+  z KOREŇA repa (nie z `apps/web` s relatívnou cestou `../../scripts/...`)
+  potvrdilo, že skript sám funguje (0 exit, reálne logy) — problém bol
+  čisto o čase na vyťaženom boxe, nie o rozbitom skripte/ceste. Fix: ŽIADNA
+  zmena kódu, len opakovanie `pnpm --filter @forestshop/web e2e` prešlo
+  načisto (46/46). Pri `Timed out waiting Nms from config.webServer` bez
+  akéhokoľvek ďalšieho výstupu skús izolovaný re-beh AKO PRVÉ, nie
+  predlžovanie timeoutu (`no-timeout-band-aids.md`) ani hľadanie bugu v
+  `e2e-setup.ts`/`playwright.config.ts`.
