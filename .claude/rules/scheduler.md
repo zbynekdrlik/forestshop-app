@@ -45,8 +45,9 @@ paths:
   issue 184 — hodinový import produkuje viac snapshotov, box je na 98 %
   disku), 01:30 mazanie relácií (`daily`), :45 KAŽDÚ hodinu import
   objednávok (`ordersImportJob`, `hourly` od #115, pôvodne `daily` #22),
-  02:00 mazanie surových exportov objednávok (`pruneRawOrdersJob`, `daily`,
-  #28), :50 KAŽDÚ hodinu spätný zápis odkazov na dodávateľa do Shoptetu
+  02:10 mazanie surových exportov objednávok (`pruneRawOrdersJob`, `daily`,
+  #28 — NIE 02:00, pozri poznámku o jarnom prechode nižšie), :50 KAŽDÚ
+  hodinu spätný zápis odkazov na dodávateľa do Shoptetu
   (`shoptetWritebackJob`, `hourly`, issue 122 — mimo kolízie s `:45`), :55
   KAŽDÚ hodinu spätný zápis poznámky objednávky do Shoptetu
   (`orderNoteWritebackJob`, `hourly`, issue 123 — mimo kolízie s `:45`/`:50`).
@@ -54,6 +55,18 @@ paths:
   `:45`/`:55` predošlej hodiny, 30 min k `:50`). Pridanie ďalšieho `kind` (napr.
   "weekly") by znamenalo rozšíriť `periodKey()` (`scheduler.ts`) o ďalšiu
   vetvu — rovnaký vzor ako `hourly`.
+- **Nová `daily` úloha sa NIKDY nesmie naplánovať PRESNE na jarný prechod na
+  letný čas v Europe/Bratislava — miestne `hourLocal: 2, minuteLocal: 0`
+  (posledná marcová nedeľa) je okamih, keď 02:00 v tú noc VÔBEC
+  NEEXISTUJE (hodiny skočia z 01:59 rovno na 03:00).** Nie je to bug — job
+  sa spustí korektne hneď, ako miestny čas dosiahne 03:00 (`isDue()`) — ale
+  ten JEDEN deň v roku beh ticho omešká asi o hodinu, bez akéhokoľvek
+  signálu operátorovi. Zistené code review na issue 293 (`pruneRawOrdersJob`
+  bolo pôvodne presne na `hourLocal: 2, minuteLocal: 0`) — fix bol posunúť
+  minútu mimo hranice (`minuteLocal: 10`), nie hodinu. Pri KAŽDEJ ďalšej
+  `daily` úlohe naplánovanej na 02:00-02:59 (alebo na hraničný čas v inom
+  pásme, ak appka niekedy pridá druhé pásmo): vyhni sa `minuteLocal: 0`
+  presne na tejto hodine, alebo zvoľ inú hodinu úplne.
 - **Job NEPOTREBUJE vlastný advisory zámok, keď buď (a) volaná business
   funkcia už berie svoj vlastný vnútri seba** (`catalogImportJob`/
   `ordersImportJob` → `ingestCatalog`/`ingestOrders`), **alebo (b) sa vôbec
