@@ -1,5 +1,21 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { MAIL_TEMPLATE_KINDS } from "../mail-templates/registry.js";
+
+// issue 293 review finding: `buildEmail`'s `retainedTillDisplay` je jediné
+// miesto v tomto module, čo si dátum na Y/M/D rozoberá SAMO (`getUTCDate()`
+// atď.) namiesto zdieľaného `timezone.ts`'s `getZonedDateParts` — tento spy
+// dokazuje, že po oprave naň skutočne ide. Priamy `vi.spyOn` na natívny ESM
+// modul zlyhá ("Module namespace is not configurable in ESM") — `vi.mock` s
+// `importOriginal` je jediný spôsob, ako v ESM prostredí nahradiť JEDEN
+// export a ostatné (`zonedDateKey`) nechať skutočné (rovnaký vzor ako
+// `modules/orders/raw-prune.test.ts`).
+const { getZonedDateParts: spiedGetZonedDateParts } = vi.hoisted(() => ({ getZonedDateParts: vi.fn() }));
+vi.mock("../../timezone.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../timezone.js")>();
+  spiedGetZonedDateParts.mockImplementation(actual.getZonedDateParts);
+  return { ...actual, getZonedDateParts: spiedGetZonedDateParts };
+});
+
 import {
   buildEmail,
   postaTemplateKey,
@@ -183,6 +199,13 @@ describe("buildEmail", () => {
     expect(built.html).toContain("Ján Novák");
     expect(built.html).toContain("10. 8. 2026"); // 2026-08-10 vs today 2026-08-02 → future, teda zobrazí sa
     expect(built.html).not.toContain("<script>");
+  });
+
+  it("retainedTillDisplay ide cez zdieľaný getZonedDateParts (timezone.ts), nie cez vlastné getUTC* volania — a vykreslený deň ostáva rovnaký", () => {
+    spiedGetZonedDateParts.mockClear();
+    const built = buildEmail(MAIL_TEMPLATE_KINDS[postaTemplateKey(1)].defaultText, "Ján Novák", "EF123456789SK", "Pošta 1", "Hlavná 1, Žilina", "2026-08-10", TODAY);
+    expect(spiedGetZonedDateParts).toHaveBeenCalled();
+    expect(built.html).toContain("10. 8. 2026");
   });
 
   it("4. e-mail žiada priamy kontakt na eshop@forestshop.sk", () => {
