@@ -82,7 +82,6 @@ export function UpozornenieCard({
           {TYPE_LABELS[row.type]}
         </span>
         {row.status === "nove" && <strong data-testid={`upozornenie-nove-${row.id}`}>Nové</strong>}
-        {row.status === "vybavene" && <span className="pill off">Vybavené</span>}
         {row.status === "odlozene" && (
           <span className="pill" data-testid={`upozornenie-odlozene-${row.id}`}>
             Odložené{row.postponedUntil !== null && <> do {formatDate(row.postponedUntil)}</>}
