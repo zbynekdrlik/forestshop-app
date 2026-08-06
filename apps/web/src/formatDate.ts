@@ -35,7 +35,7 @@ export function formatSkDateInZone(value: string | Date | null | undefined, zone
   if (typeof value === "string" && BARE_DATE_RE.test(value)) {
     if (toValidDate(value) === null) return "—";
     const [y, m, day] = value.split("-");
-    return `${Number(day)}. ${Number(m)}. ${Number(y)}`;
+    return `${String(Number(day))}. ${String(Number(m))}. ${String(Number(y))}`;
   }
   const d = toValidDate(value);
   if (d === null) return "—";
