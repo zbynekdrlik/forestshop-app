@@ -69,3 +69,68 @@ it("hourly: je znova splatná pri prechode cez polnoc (nová UTC hodina 00 nasle
     true,
   );
 });
+
+// issue 293: rozvrh musí počítať naplánovanú hodinu v Europe/Bratislava, nie
+// v UTC — inak úloha nastavená na 7:00 skutočne bežala až o 9:00 (v zime
+// 8:00) slovenského času. `DAILY_LOCAL` používa presne tie isté číselné
+// hodnoty (7:00) ako `postaUncollectedJob` v `jobs.ts`.
+const DAILY_LOCAL = { kind: "daily" as const, hourUtc: 7, minuteUtc: 0 };
+
+it("issue 293: denná úloha na 7:00 je splatná o 7:00 SLOVENSKÉHO času v LETE (UTC+2)", () => {
+  // 2026-08-06 07:00 Europe/Bratislava (letný čas, offset +2) = 05:00 UTC.
+  expect(isDue(DAILY_LOCAL, new Date("2026-08-06T05:00:00Z"), null)).toBe(true);
+  // O minútu skôr (04:59 slovenského času) ešte nie je splatná.
+  expect(isDue(DAILY_LOCAL, new Date("2026-08-06T04:59:00Z"), null)).toBe(false);
+});
+
+it("issue 293: denná úloha na 7:00 je splatná o 7:00 SLOVENSKÉHO času v ZIME (UTC+1)", () => {
+  // 2026-01-06 07:00 Europe/Bratislava (zimný čas, offset +1) = 06:00 UTC.
+  expect(isDue(DAILY_LOCAL, new Date("2026-01-06T06:00:00Z"), null)).toBe(true);
+  expect(isDue(DAILY_LOCAL, new Date("2026-01-06T05:59:00Z"), null)).toBe(false);
+});
+
+it("issue 293: denná úloha sa NEOPAKUJE dvakrát v ten istý SLOVENSKÝ deň, aj keď posledný beh bol tesne po miestnej polnoci (iný UTC kalendárny deň)", () => {
+  // Posledný beh: 2026-08-06 00:10 Europe/Bratislava = 2026-08-05T22:10:00Z
+  // (INÝ UTC kalendárny deň, ten istý slovenský deň). "Teraz": 2026-08-06
+  // 14:00 Europe/Bratislava = 2026-08-06T12:00:00Z. Periodizačný kľúč MUSÍ
+  // byť odvodený zo slovenského dňa, inak by tento druhý tick (UTC deň sa
+  // medzitým zmenil) vyhodnotil úlohu ako znova splatnú a spustil ju
+  // DRUHÝKRÁT v ten istý slovenský deň.
+  const dailyEarly = { kind: "daily" as const, hourUtc: 0, minuteUtc: 5 };
+  expect(
+    isDue(dailyEarly, new Date("2026-08-06T12:00:00Z"), { startedAt: new Date("2026-08-05T22:10:00Z") }),
+  ).toBe(false);
+});
+
+it("issue 293: denná úloha nie je PRESKOČENÁ v deň prechodu na LETNÝ čas (2026-03-29) oproti predošlému dňu", () => {
+  // Posledný beh: 2026-03-28 07:00 (deň PRED prechodom) = 2026-03-28T06:00:00Z.
+  // Teraz: 2026-03-29 07:00 (samotný deň prechodu, PO skoku 02:00→03:00) =
+  // 2026-03-29T05:00:00Z. Nový slovenský deň → má byť znova splatná.
+  expect(
+    isDue(DAILY_LOCAL, new Date("2026-03-29T05:00:00Z"), { startedAt: new Date("2026-03-28T06:00:00Z") }),
+  ).toBe(true);
+});
+
+it("issue 293: denná úloha sa NESPUSTÍ DVAKRÁT v samotný deň prechodu na letný čas, aj keď sa offset uprostred dňa zmenil", () => {
+  // Posledný beh aj "teraz" sú OBA 2026-03-29 (deň prechodu), len rôzna
+  // hodina — kľúč je čisto dátumový, offset zmena uprostred dňa nesmie
+  // spôsobiť falošné "iný deň".
+  expect(
+    isDue(DAILY_LOCAL, new Date("2026-03-29T18:00:00Z"), { startedAt: new Date("2026-03-29T05:00:00Z") }),
+  ).toBe(false);
+});
+
+it("issue 293: denná úloha nie je PRESKOČENÁ v deň prechodu na ZIMNÝ čas (2026-10-25) oproti predošlému dňu", () => {
+  // Posledný beh: 2026-10-24 07:00 (deň PRED prechodom) = 2026-10-24T05:00:00Z.
+  // Teraz: 2026-10-25 07:00 (samotný deň prechodu, PO skoku 03:00→02:00) =
+  // 2026-10-25T06:00:00Z. Nový slovenský deň → má byť znova splatná.
+  expect(
+    isDue(DAILY_LOCAL, new Date("2026-10-25T06:00:00Z"), { startedAt: new Date("2026-10-24T05:00:00Z") }),
+  ).toBe(true);
+});
+
+it("issue 293: denná úloha sa NESPUSTÍ DVAKRÁT v samotný deň prechodu na zimný čas, aj keď sa offset uprostred dňa zmenil", () => {
+  expect(
+    isDue(DAILY_LOCAL, new Date("2026-10-25T19:00:00Z"), { startedAt: new Date("2026-10-25T06:00:00Z") }),
+  ).toBe(false);
+});
