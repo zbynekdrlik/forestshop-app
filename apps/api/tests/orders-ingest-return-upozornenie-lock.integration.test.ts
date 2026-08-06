@@ -100,7 +100,17 @@ it("dávkový pre-check čaká na súbežný riadkový zámok — vidí ČERSTV�
       }
       await new Promise((resolve) => setTimeout(resolve, 20));
     }
-    expect(blockedByRawClient).toBe(true); // dôkaz, že `.for("update")` skutočne zaseklo druhý import PRÁVE na tomto zámku
+    // Code review (issue 269, druhé kolo, finding 7): TÁTO poll asercia
+    // NEROZLIŠUJE opravený/neopravený kód (pozri komentár vyššie — Postgres
+    // čaká na uvoľnenie riadkového zámku aj cez `INSERT ... ON CONFLICT` bez
+    // `.for("update")`), takže ju nemá zmysel držať ako TVRDÚ asserciu — na
+    // preťaženom CI runneri (pomalší poll interval než 5s deadline) môže
+    // spuriózne zlyhať bez toho, aby to čokoľvek vypovedalo o SKUTOČNEJ
+    // oprave. Demotnuté na varovanie — skutočný dôkaz opravy je AŽ finálna
+    // asercia počtu riadkov nižšie (`after`).
+    if (!blockedByRawClient) {
+      console.warn("dávkový pre-check sa v 5s okne nezasekol na rawClient's zámku (len diagnostika, nie dôkaz opravy)");
+    }
 
     // Simuluje súbežné ručné "Vybavené", ktoré stihlo commitnúť MEDZITÝM —
     // presne v momente, keď je druhý import zaseknutý na zámku.

@@ -281,6 +281,13 @@
       "when": 1785965276820,
       "tag": "0039_demonic_wallop",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1785975493179,
+      "tag": "0040_skinny_nekra",
+      "breakpoints": true
     }
   ]
 }

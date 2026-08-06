@@ -1,0 +1,1 @@
+CREATE INDEX "upozornenie_dedup_key_idx" ON "upozornenie" USING btree ("dedup_key");
