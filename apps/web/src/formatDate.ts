@@ -16,10 +16,27 @@ function toValidDate(value: string | Date | null | undefined): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
+const BARE_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
 /** Jadro `formatSkDate` s explicitným pásmom (testovateľné samostatne —
  * `TIME_ZONE` nižšie je zámerne kladný posun, takže bug pri bare
- * `YYYY-MM-DD` vstupe cez ňu nejde vidieť). */
+ * `YYYY-MM-DD` vstupe cez ňu nejde vidieť).
+ *
+ * Bare `YYYY-MM-DD` (žiadna časová zložka) sa formátuje PRIAMO zo svojich
+ * Y/M/D znakov, nikdy cez inštanciu (`new Date(...)`) prehnanú cez `zone` —
+ * `new Date("YYYY-MM-DD")` parsuje ako UTC POLNOC a jej prevod do pásma so
+ * ZÁPORNÝM posunom vráti PREDCHÁDZAJÚCI kalendárny deň (pozri red test
+ * vyššie). `Date` sa tu použije LEN na validáciu (odmietnutie neplatného
+ * kalendárneho dátumu, napr. "2026-13-45"), nikdy na výpočet zobrazeného
+ * dňa. Plný ISO okamih s časovou zložkou ide ĎALEJ cez pôvodnú,
+ * inštanciovú vetvu — tá je correct, lebo vtedy naozaj ide o okamih, nie o
+ * čistý kalendárny deň. */
 export function formatSkDateInZone(value: string | Date | null | undefined, zone: string): string {
+  if (typeof value === "string" && BARE_DATE_RE.test(value)) {
+    if (toValidDate(value) === null) return "—";
+    const [y, m, day] = value.split("-");
+    return `${Number(day)}. ${Number(m)}. ${Number(y)}`;
+  }
   const d = toValidDate(value);
   if (d === null) return "—";
   return d.toLocaleDateString("sk-SK", { timeZone: zone });
