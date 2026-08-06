@@ -59,23 +59,13 @@ export interface NavFolder {
 // App.tsx/Sidebar.tsx.
 export const NAV: readonly NavFolder[] = [
   {
-    id: "system",
-    label: "Systém",
-    // issue 192: "Texty e-mailov" patrí sem — je to nastavenie appky, ktoré sa
-    // dotýka VŠETKÝCH automatizácií naraz, nie práca s konkrétnymi
-    // objednávkami (tá je v Eshope) ani jedna konkrétna automatizácia.
-    tabs: [
-      { id: "sync", label: "Sync zo Shoptetu", icon: "🔄", Component: SyncSection },
-      { id: "mail-templates", label: "Texty e-mailov", icon: "✉️", Component: MailTemplatesSection, wide: true },
-      // issue 212: scraper dostupnosti u dodávateľa — patrí do Systému
-      // (majiteľ: "scrapera ktoreho chcem v zalozke system"), nie medzi
-      // Automatizácie: nič neprepína, len zbiera údaje pre issue 213.
-      { id: "supplier-stock", label: "Dodávateľský sklad", icon: "🏭", Component: SupplierStockSection, wide: true },
-    ],
-  },
-  {
     id: "eshop",
     label: "Eshop",
+    // issue 287: majiteľ, "adresár Eshop dať uplne ako prvý... Eshop je to,
+    // čo šéf používa najčastejšie, tak nech je hore" — priečinok je preto
+    // PRVÝ v poli (poradie prvkov = poradie vykreslenia, `Sidebar.tsx`
+    // neprida žiadne vlastné triedenie). Položky vnútri ostávajú nezmenené.
+    //
     // issue 195: "Nedostupné tovary" patrí SEM, nie medzi Automatizácie —
     // nemá naplánovanú úlohu ani prepínač zapnuté/vypnuté, je to obrazovka,
     // na ktorej obsluha pracuje, presne ako "Na objednanie". `wide: true` pri
@@ -104,6 +94,21 @@ export const NAV: readonly NavFolder[] = [
       // (nie do Automatizácie) z rovnakého dôvodu ako "Na objednanie" —
       // obsluha na nej pracuje, žiadny plán/zapnuté-vypnuté koncept.
       { id: "upozornenia", label: "Upozornenia", icon: "🔔", Component: UpozorneniaSection, wide: true },
+    ],
+  },
+  {
+    id: "system",
+    label: "Systém",
+    // issue 192: "Texty e-mailov" patrí sem — je to nastavenie appky, ktoré sa
+    // dotýka VŠETKÝCH automatizácií naraz, nie práca s konkrétnymi
+    // objednávkami (tá je v Eshope) ani jedna konkrétna automatizácia.
+    tabs: [
+      { id: "sync", label: "Sync zo Shoptetu", icon: "🔄", Component: SyncSection },
+      { id: "mail-templates", label: "Texty e-mailov", icon: "✉️", Component: MailTemplatesSection, wide: true },
+      // issue 212: scraper dostupnosti u dodávateľa — patrí do Systému
+      // (majiteľ: "scrapera ktoreho chcem v zalozke system"), nie medzi
+      // Automatizácie: nič neprepína, len zbiera údaje pre issue 213.
+      { id: "supplier-stock", label: "Dodávateľský sklad", icon: "🏭", Component: SupplierStockSection, wide: true },
     ],
   },
   {
@@ -141,7 +146,13 @@ export const HIDDEN_TABS: Readonly<Record<string, NavTab>> = {
   scheduler: { id: "scheduler", label: "Plánovač", icon: "🗓️", Component: SchedulerSection },
 };
 
-export const DEFAULT_TAB_ID: string = NAV[0]?.tabs[0]?.id ?? "sync";
+// issue 287: priečinky v `NAV` sa preusporiadali (Eshop je teraz prvý), ale
+// predvolená obrazovka PO PRIHLÁSENÍ sa zámerne NEMENÍ — zadanie žiadalo len
+// vizuálne poradie priečinkov v menu, nie zmenu landing obrazovky. Preto sa
+// `DEFAULT_TAB_ID` už neodvodzuje od `NAV[0]` (to by ticho prepnutím
+// priečinkov zmenilo predvolenú obrazovku na "Na objednanie"), ale pevne
+// ukazuje na "sync" — presne rovnaké správanie ako pred touto zmenou.
+export const DEFAULT_TAB_ID: string = "sync";
 
 /** Nájde záložku podľa id — najprv medzi viditeľnými (NAV), potom v skrytých. */
 export function findTab(id: string): NavTab | undefined {

@@ -908,3 +908,14 @@ paths:
   nezávislú záložku: patrí existujúca loading/error gate LEN jednej
   záložke? Ak áno, presuň ju AŽ ZA vetvu tej druhej, nikdy ju nenechaj
   gatovať spoločný prepínač.
+- **`DEFAULT_TAB_ID` (predvolená obrazovka PO PRIHLÁSENÍ, `nav.ts`) bolo
+  odvodené od `NAV[0]?.tabs[0]?.id` — akékoľvek PREUSPORIADANIE priečinkov
+  v `NAV` teda ticho zmení aj landing obrazovku, hoci o tom zadanie vôbec
+  nehovorí.** Issue 287 (majiteľ chcel "Eshop" ako prvý priečinok — čisto
+  vizuálne poradie v menu) by bez zásahu presunulo predvolenú obrazovku zo
+  "Sync zo Shoptetu" na "Na objednanie" — nezadaná vedľajšia zmena správania
+  ("scope creep" cez náhodnú väzbu v kóde, nie cez úmysel). Fix:
+  `DEFAULT_TAB_ID` je teraz PEVNÝ literál `"sync"`, nezávislý od poradia v
+  `NAV`. Pri KAŽDOM ĎALŠOM preusporiadaní `NAV` (pridanie/presun priečinka,
+  zmena poradia skupín) skontroluj, či sa `DEFAULT_TAB_ID` nezmenil ticho —
+  ak zadanie nežiada zmenu landing obrazovky, drž ju pevnú.

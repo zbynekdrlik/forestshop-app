@@ -12,18 +12,18 @@ import { DEFAULT_TAB_ID, HIDDEN_TABS, NAV, findTab, isVisibleTabId } from "./nav
 // pridalo "Zlúčenie objednávok" pod "Eshop" z rovnakého dôvodu (majiteľ:
 // vlastná záložka, nie tlačidlo pri objednávke). Issue 267 pridalo
 // "Upozornenia" pod "Eshop" z rovnakého dôvodu (pracovná obrazovka bez
-// plánu/zapnuté-vypnuté konceptu).
+// plánu/zapnuté-vypnuté konceptu). Issue 287 preusporiadalo poradie SAMOTNÝCH
+// priečinkov (majiteľ: "Eshop dať uplne ako prvý... šéf ho používa
+// najčastejšie") — Eshop je teraz prvý, Systém druhý, Automatizácie tretie;
+// položky vnútri každého priečinka ostali nezmenené.
 // Tento test je najbližšie k tomu, čo strojovo overiť dá (registrácia, nie DOM).
-it("NAV má tri priečinky (Systém/Eshop/Automatizácie), s 3/6/4 záložkami v poradí podľa dôležitosti", () => {
+it("NAV má tri priečinky (Eshop/Systém/Automatizácie), s 6/3/4 záložkami v poradí podľa dôležitosti", () => {
   expect(NAV).toHaveLength(3);
-  expect(NAV.map((f) => f.label)).toEqual(["Systém", "Eshop", "Automatizácie"]);
-  expect(NAV[0]?.tabs).toHaveLength(3);
-  expect(NAV[1]?.tabs).toHaveLength(6);
+  expect(NAV.map((f) => f.label)).toEqual(["Eshop", "Systém", "Automatizácie"]);
+  expect(NAV[0]?.tabs).toHaveLength(6);
+  expect(NAV[1]?.tabs).toHaveLength(3);
   expect(NAV[2]?.tabs).toHaveLength(4);
-  // issue 212: "Dodávateľský sklad" — scraper dostupnosti u dodávateľa;
-  // patrí do Systému (zadanie majiteľa), nie medzi Automatizácie.
-  expect(NAV[0]?.tabs.map((t) => t.label)).toEqual(["Sync zo Shoptetu", "Texty e-mailov", "Dodávateľský sklad"]);
-  expect(NAV[1]?.tabs.map((t) => t.label)).toEqual([
+  expect(NAV[0]?.tabs.map((t) => t.label)).toEqual([
     "Na objednanie",
     "Nedostupné tovary",
     "Párovanie produktov",
@@ -31,6 +31,9 @@ it("NAV má tri priečinky (Systém/Eshop/Automatizácie), s 3/6/4 záložkami v
     "Zlúčenie objednávok",
     "Upozornenia",
   ]);
+  // issue 212: "Dodávateľský sklad" — scraper dostupnosti u dodávateľa;
+  // patrí do Systému (zadanie majiteľa), nie medzi Automatizácie.
+  expect(NAV[1]?.tabs.map((t) => t.label)).toEqual(["Sync zo Shoptetu", "Texty e-mailov", "Dodávateľský sklad"]);
   // issue 193: "Odoslané e-maily" — prehľad toho, čo automatizácie poslali.
   expect(NAV[2]?.tabs.map((t) => t.label)).toEqual([
     // issue 213: prepínanie vypredaných produktov späť na skladom.
@@ -41,7 +44,10 @@ it("NAV má tri priečinky (Systém/Eshop/Automatizácie), s 3/6/4 záložkami v
   ]);
 });
 
-it("DEFAULT_TAB_ID je prvá viditeľná záložka ('sync')", () => {
+// issue 287: DEFAULT_TAB_ID sa už NEODVODZUJE od NAV[0] (to je teraz "eshop")
+// — zámerne pevne "sync", aby sa poradie priečinkov v menu nedotklo
+// predvolenej obrazovky po prihlásení (nezadané, mimo rozsahu ticketu).
+it("DEFAULT_TAB_ID je pevne 'sync' — nezávisí od poradia priečinkov v NAV", () => {
   expect(DEFAULT_TAB_ID).toBe("sync");
 });
 
