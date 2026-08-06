@@ -222,11 +222,15 @@ export const POSTA_UNCOLLECTED_JOB_NAME = "posta-uncollected";
 export type RunPostaUncollected = (db: Database, now: Date) => Promise<PostaUncollectedRunResult>;
 
 /**
- * "Nevyzdvihnuté zásielky" (issue 172) — denne o 07:00 Europe/Bratislava
+ * "Nevyzdvihnuté zásielky" (issue 172) — denne o 09:00 Europe/Bratislava
  * (issue 293: `hourLocal`/`minuteLocal` sú teraz SKUTOČNE miestny čas —
- * appka aj kontajner predtým bežali v UTC, takže táto úloha reálne behala
- * až o 09:00 slovenského času, v zime o 08:00; komentár tu predtým TENTO
- * posun mylne opisoval ako zámer namiesto ho pomenovať ako chybu). Na rozdiel od
+ * appka aj kontajner predtým bežali v UTC bez nastaveného pásma, takže
+ * literál `hourLocal: 7` sa PRED opravou interpretoval ako 7:00 UTC =
+ * 09:00 slovenského letného času (08:00 v zime) — to bol zámer odjakživa.
+ * Samotná oprava časového pásma (issue 293) tento literál nechala
+ * nedotknutý, čo by ho zmenilo na 07:00 SKUTOČNE miestneho — o dve hodiny
+ * skôr, než malo — preto ho tento následný tiket vrátil na 9, aby zostal
+ * skutočný cieľový čas 09:00 Europe/Bratislava). Na rozdiel od
  * `catalogImportJob`/`ordersImportJob` NIE JE `run` nikdy `undefined` — táto
  * automatizácia číta priamo z už importovaných objednávok (žiadna
  * samostatná URL na nakonfigurovanie), a chýbajúce SMTP/BCC rieši
@@ -239,7 +243,7 @@ export type RunPostaUncollected = (db: Database, now: Date) => Promise<PostaUnco
 export function postaUncollectedJob(run: RunPostaUncollected): ScheduledJob {
   return {
     name: POSTA_UNCOLLECTED_JOB_NAME,
-    schedule: { kind: "daily", hourLocal: 7, minuteLocal: 0 },
+    schedule: { kind: "daily", hourLocal: 9, minuteLocal: 0 },
     async run(db, now) {
       const enabled = await isPostaUncollectedEnabled(db);
       if (!enabled) {
@@ -256,10 +260,13 @@ export const ORDER_REMINDER_JOB_NAME = "order-reminder";
 export type RunOrderReminder = (db: Database, now: Date) => Promise<OrderReminderRunResult>;
 
 /**
- * "Pripomienky objednávok" (issue 173) — denne o 06:00 Europe/Bratislava
+ * "Pripomienky objednávok" (issue 173) — denne o 08:00 Europe/Bratislava
  * (issue 293: `hourLocal`/`minuteLocal` sú teraz SKUTOČNE miestny čas —
- * predtým reálne behala až o 08:00 slovenského času, v zime o 07:00, rovnaký
- * dôvod ako `postaUncollectedJob` vyššie). Rovnaký
+ * rovnaký dôvod ako `postaUncollectedJob` vyššie: literál `hourLocal: 6` sa
+ * PRED opravou interpretoval ako 6:00 UTC = 08:00 slovenského letného času
+ * (07:00 v zime), čo bol zámer odjakživa. Samotná oprava časového pásma ho
+ * nechala nedotknutý, čo by ho zmenilo na 06:00 SKUTOČNE miestneho — o dve
+ * hodiny skôr — preto ho tento následný tiket vrátil na 8). Rovnaký
  * vzor ako `postaUncollectedJob`: `run` nie je nikdy `undefined` (číta priamo
  * z už importovaných objednávok), chýbajúce OPENAI_API_KEY/MAIL_HOST/BCC rieši
  * `runOrderReminder` SAMA (per-objednávka, viditeľne v `job_run.detail`),
@@ -271,7 +278,7 @@ export type RunOrderReminder = (db: Database, now: Date) => Promise<OrderReminde
 export function orderReminderJob(run: RunOrderReminder): ScheduledJob {
   return {
     name: ORDER_REMINDER_JOB_NAME,
-    schedule: { kind: "daily", hourLocal: 6, minuteLocal: 0 },
+    schedule: { kind: "daily", hourLocal: 8, minuteLocal: 0 },
     async run(db, now) {
       const enabled = await isOrderReminderEnabled(db);
       if (!enabled) {

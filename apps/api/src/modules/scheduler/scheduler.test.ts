@@ -76,8 +76,10 @@ it("hourly: je znova splatná pri prechode cez polnoc (nová UTC hodina 00 nasle
 
 // issue 293: rozvrh musí počítať naplánovanú hodinu v Europe/Bratislava, nie
 // v UTC — inak úloha nastavená na 7:00 skutočne bežala až o 9:00 (v zime
-// 8:00) slovenského času. `DAILY_LOCAL` používa presne tie isté číselné
-// hodnoty (7:00) ako `postaUncollectedJob` v `jobs.ts`.
+// 8:00) slovenského času. `DAILY_LOCAL`'s hodnota (7:00) je len ilustračná
+// pre tento generický test `isDue()` — NEZODPOVEDÁ už aktuálnej hodnote
+// `postaUncollectedJob` v `jobs.ts` (tá je od nasledujúceho tiketu 9:00, aby
+// zostal zachovaný pôvodný zámer po oprave časového pásma).
 const DAILY_LOCAL = { kind: "daily" as const, hourLocal: 7, minuteLocal: 0 };
 
 it("issue 293: denná úloha na 7:00 je splatná o 7:00 SLOVENSKÉHO času v LETE (UTC+2)", () => {

@@ -88,8 +88,8 @@ paths:
   sieťových volaní na posta.sk (per zásielka), a držať jednu DB transakciu
   otvorenú počas nich by zbytočne zaťažovalo connection pool. Bez tohto
   zámku by dva prekrývajúce sa behy (dvaja manažéri klikli "Spustiť teraz"
-  súčasne, alebo ručný klik sa prekryl s 07:00 UTC naplánovaným behom) mohli
-  OBA prečítať ten istý predošlý `notifyCount` pred zápisom a poslať
+  súčasne, alebo ručný klik sa prekryl s 09:00 Europe/Bratislava naplánovaným
+  behom) mohli OBA prečítať ten istý predošlý `notifyCount` pred zápisom a poslať
   DUPLICITNÝ eskalačný e-mail zákazníkovi (review na PR 177 — nájdené pred
   mergom, nie testom).
 - **`tick()`'s zámok chráni LEN kontrolu splatnosti + vloženie "running"
