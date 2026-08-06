@@ -8,12 +8,37 @@ import { Footer } from "./Footer.js";
 // prefixovaný názvom appky, na doméne bežia aj iné projekty.
 const RAIL_KEY = "forestshop:sidebar-rail";
 
-function readRail(): boolean {
+// issue 291: pod touto šírkou sa panel PRVOTNE zbalí sám (telefón) — nad ňou
+// (tablet/počítač) zostáva pôvodné správanie (rozbalený). Toto je len
+// PRVOTNÝ (na mount) predvolený stav; nejde o živú reakciu na zmenu šírky
+// okna počas behu appky (mimo dohodnutého rozsahu ticketu).
+const NARROW_VIEWPORT_MAX_WIDTH = 640;
+
+function readStoredRail(): boolean | null {
   try {
-    return window.localStorage.getItem(RAIL_KEY) === "1";
+    const v = window.localStorage.getItem(RAIL_KEY);
+    if (v === "1") return true;
+    if (v === "0") return false;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function isNarrowViewport(): boolean {
+  try {
+    return window.innerWidth <= NARROW_VIEWPORT_MAX_WIDTH;
   } catch {
     return false;
   }
+}
+
+// issue 291: ak už appka na tomto zariadení niekedy uložila výslovnú voľbu
+// (užívateľ panel ručne prepol), tá VŽDY vyhráva — širka obrazovky sa berie
+// do úvahy LEN keď žiadna uložená voľba ešte neexistuje.
+function initialRail(): boolean {
+  const stored = readStoredRail();
+  return stored ?? isNarrowViewport();
 }
 
 // Ľavé menu — vlastný dizajn appky (issue 57): značka hore, priečinky so
@@ -47,7 +72,7 @@ export function Sidebar({
   readonly badgeStatus?: Readonly<Record<string, "on" | "off">>;
 }): JSX.Element {
   const [collapsed, setCollapsed] = useState<Readonly<Record<string, boolean>>>({});
-  const [rail, setRail] = useState<boolean>(readRail);
+  const [rail, setRail] = useState<boolean>(initialRail);
 
   useEffect(() => {
     try {

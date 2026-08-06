@@ -919,3 +919,71 @@ paths:
   `NAV`. Pri KAŽDOM ĎALŠOM preusporiadaní `NAV` (pridanie/presun priečinka,
   zmena poradia skupín) skontroluj, či sa `DEFAULT_TAB_ID` nezmenil ticho —
   ak zadanie nežiada zmenu landing obrazovky, drž ju pevnú.
+- **Zdieľaný obal na vodorovné rolovanie tabuľky (issue 291 — 19 obyčajných
+  tabuliek dostalo VLASTNÝ posuvný obal namiesto rolovania celej stránky):
+  nová trieda `.fs-table-wrap { overflow-x: auto; }` (`app.css`, hneď za
+  generickým `table` resetom) je pre KAŽDÚ jednoduchú tabuľku, ktorá
+  nepotrebuje vlastné rozloženie — `<table>` sa len obalí `<div
+  className="fs-table-wrap">`, žiadna zmena vnútri tabuľky.
+  `.orders-table-wrap`/`.ml-table-wrap` (existujúce PRED týmto tiketom)
+  ostávajú SAMOSTATNÉ triedy — majú svoj vlastný `min-width`/
+  `table-layout`, tie sa nezjednocovali. Test na KAŽDÚ ĎALŠIU novú
+  `<table>` v appke: obal ju rovno `.fs-table-wrap`-om, nikdy nenechávaj
+  tabuľku bez vlastného posuvného obalu (`.main > main` — bežná, nie
+  `wide: true`, obrazovka — nemá `overflow-x: hidden`, takže neobalená
+  tabuľka posunie celú STRÁNKU, presne akceptačný prípad tiketu — "Sync zo
+  Shoptetu" mala 4085px `scrollWidth` pri 375px okne).
+- **Sidebar (`Sidebar.tsx`, issue 190's rail mechanizmus) dostal PRVOTNÝ
+  (mount-time) predvolený stav podľa šírky okna (issue 291) — uložená
+  voľba v `localStorage` VŽDY vyhráva, šírka rozhoduje LEN keď žiadna
+  voľba ešte neexistuje.** `readStoredRail(): boolean | null` (`null` =
+  nič uložené, na rozdiel od pôvodného `readRail(): boolean`, ktoré
+  chýbajúci kľúč nerozlíšilo od výslovného "rozbaliť") + `isNarrowViewport()`
+  (`window.innerWidth <= 640`) → `initialRail()` = `stored ?? narrow`. Toto
+  je ČISTO mount-time predvoľba, ŽIADNY `resize` listener — appka sa na
+  zmenu šírky OKNA počas behu nereaguje (mimo dohodnutého minimálneho
+  rozsahu tiketu). Existujúci `useEffect` (zápis do `localStorage` pri
+  KAŽDEJ zmene `rail`) ostal nezmenený — aj auto-predvoľba sa teda hneď
+  "zapíše" ako keby ju užívateľ zvolil; to je zámerné (rovnaké zariadenie
+  nabudúce dostane rovnaký predvolený stav bez opätovného prepočtu
+  šírky), nie chyba. Test pre `window.innerWidth` v jsdom: `Object
+  .defineProperty(window, "innerWidth", {writable:true, configurable:true,
+  value: N})` PRED `render()` — priama `window.innerWidth = N` v jsdom
+  nesedí spoľahlivo na getter/setter, treba `defineProperty`; a treba ju
+  po teste VRÁTIŤ (`afterEach`) presne z rovnakého dôvodu ako existujúci
+  `localStorage.clear()` o pár riadkov vyššie v tom istom súbore.
+- **`flex: 0 0 auto` na flex položke, ktorá sa MÔŽE ocitnúť SAMA na
+  vlastnom zalomenom riadku (`flex-wrap: wrap` na rodičovi), zabráni jej
+  zmenšiť sa aj keď na ten riadok nemá dosť miesta — položka potom
+  jednoducho PRETRŠÍ mimo rodiča/viewport, nie je to vidno v CSS, len pri
+  reálnom vykreslení na úzkej šírke.** Issue 291 (topbar sa mal zalomiť,
+  aby meno prihláseného nezmizlo): `.topbar` dostalo `flex-wrap: wrap`, ale
+  `.topbar-user` (koliesko "Farby aplikácie" + meno prihláseného) malo
+  ZDEDENÉ `flex: 0 0 auto` (issue 264) — na 375px zalomilo na VLASTNÝ
+  riadok správne, ale `flex-shrink: 0` mu bránilo zmenšiť sa POD svoju
+  obsahovú šírku (298px) do dostupných 239px, takže blok ticho pretŕčal
+  27px mimo viditeľnú šírku (`document.documentElement.scrollWidth` 402px
+  namiesto 375px) — objavené AŽ živým Playwright meraním
+  `getBoundingClientRect()` pri 375px, nie čítaním CSS (jsdom by to vôbec
+  nezachytilo, žiadny reálny layout). Fix: `.topbar-user` → `flex: 0 1
+  auto; min-width: 0;` (dovolí zmenšenie CELÉHO bloku) + `.usermenu-btn`
+  (meno prihláseného, existujúce orezanie textu `overflow:hidden;
+  text-overflow:ellipsis`) → `flex: 1 1 auto; min-width: 0;` (zmenšenie
+  ide PRVOTNE na toto tlačidlo, nie na `.themecolor-btn`'s pevné 36px
+  koliesko vedľa neho, ktoré si drží svoje PÔVODNÉ `flex: 0 0 auto`).
+  Test na KAŽDÚ ĎALŠIU `flex-wrap: wrap` zmenu v appke: má NEJAKÁ položka,
+  čo môže skončiť SAMA na zalomenom riadku, `flex-shrink: 0` (explicitne
+  alebo cez `flex: 0 0 auto`)? Ak áno, over REÁLNYM Playwright meraním pri
+  najužšej cieľovej šírke (nie len vizuálne na širokom monitore), či sa
+  nezmenší namiesto zalomenia — over `element.getBoundingClientRect
+  ().right <= window.innerWidth`, nie len že "vyzerá to zalomené".
+- **Playwright's `Timed out waiting 60000ms from config.webServer` (žiadny
+  ďalší výstup) je ZNÁMY jav na tomto zdieľanom, vyťaženom boxe (issues
+  287/288, `.claude/rules/testing.md`) — potvrdené znova pri issue 291
+  (`uptime` ukázal load average 33 tesne po behu integračných testov).**
+  Žiadna zmena kódu, len počkanie na pokles záťaže (load average pod ~10)
+  a čistý opakovaný beh — 46/47 prešlo hneď, jediné zvyšné zlyhanie
+  (nesúvisiaci `upozornenia.spec.ts`) bol ĎALŠÍ prípad TEJ ISTEJ triedy
+  (izolovaný re-beh prešiel čisto). Pred hľadaním regresie v diffe: over
+  `uptime`/`ps aux | grep vitest` PRED panikou, over izolovaným re-behom
+  PRESNE zlyhaného súboru.

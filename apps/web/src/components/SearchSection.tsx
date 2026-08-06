@@ -284,44 +284,46 @@ export function SearchSection({
               </div>
               {actionError !== "" && <p role="alert">{actionError}</p>}
 
-              <table>
-                <thead>
-                  <tr>
-                    <th>Veľkosť</th>
-                    <th>Kód</th>
-                    <th>Cena</th>
-                    <th>Sklad</th>
-                    <th>Stav u nás</th>
-                    <th>Dostupnosť u dodávateľa</th>
-                    <th>Adresa u nás</th>
-                    <th>Kód u dodávateľa</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {detail.variants.map((v) => (
-                    <tr key={v.code} data-testid={`search-detail-variant-${v.code}`}>
-                      <td>{v.sizeLabel ?? "—"}</td>
-                      <td>{v.code}</td>
-                      <td>{v.price !== null ? `${v.price} ${v.currency ?? ""}` : "—"}</td>
-                      <td>{v.stock}</td>
-                      <td>
-                        {STATE_LABELS[v.state]} ({v.availabilityText})
-                      </td>
-                      <td data-testid={`search-detail-supplier-stock-${v.code}`}>{supplierAvailabilityLabel(v)}</td>
-                      <td>
-                        {v.ourShopUrl !== null ? (
-                          <a href={v.ourShopUrl} target="_blank" rel="noreferrer noopener" data-testid={`search-detail-shop-link-${v.code}`}>
-                            Otvoriť
-                          </a>
-                        ) : (
-                          "—"
-                        )}
-                      </td>
-                      <td>{v.externalCode ?? "—"}</td>
+              <div className="fs-table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Veľkosť</th>
+                      <th>Kód</th>
+                      <th>Cena</th>
+                      <th>Sklad</th>
+                      <th>Stav u nás</th>
+                      <th>Dostupnosť u dodávateľa</th>
+                      <th>Adresa u nás</th>
+                      <th>Kód u dodávateľa</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {detail.variants.map((v) => (
+                      <tr key={v.code} data-testid={`search-detail-variant-${v.code}`}>
+                        <td>{v.sizeLabel ?? "—"}</td>
+                        <td>{v.code}</td>
+                        <td>{v.price !== null ? `${v.price} ${v.currency ?? ""}` : "—"}</td>
+                        <td>{v.stock}</td>
+                        <td>
+                          {STATE_LABELS[v.state]} ({v.availabilityText})
+                        </td>
+                        <td data-testid={`search-detail-supplier-stock-${v.code}`}>{supplierAvailabilityLabel(v)}</td>
+                        <td>
+                          {v.ourShopUrl !== null ? (
+                            <a href={v.ourShopUrl} target="_blank" rel="noreferrer noopener" data-testid={`search-detail-shop-link-${v.code}`}>
+                              Otvoriť
+                            </a>
+                          ) : (
+                            "—"
+                          )}
+                        </td>
+                        <td>{v.externalCode ?? "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </>
           )}
         </section>
@@ -364,41 +366,43 @@ export function SearchSection({
         {result.length > 0 && (
           <div data-testid="search-products">
             <h3>Produkty</h3>
-            <table>
-              <thead>
-                <tr>
-                  <th>Kód</th>
-                  <th>Názov</th>
-                  <th>Dodávateľ</th>
-                  <th>Kód u dodávateľa</th>
-                  <th>Stav</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {result.map((p) => (
-                  <tr key={p.variantCode} data-testid={`search-product-${p.variantCode}`}>
-                    <td>{p.variantCode}</td>
-                    <td>{p.productName}</td>
-                    <td>{p.supplier ?? "(bez dodávateľa)"}</td>
-                    <td>{p.externalCode ?? "—"}</td>
-                    <td>{STATE_LABELS[p.state]}</td>
-                    <td>
-                      <button
-                        type="button"
-                        className="btn sm ghost"
-                        data-testid={`search-product-open-${p.variantCode}`}
-                        onClick={() => {
-                          openDetail(p.productKey);
-                        }}
-                      >
-                        Otvoriť
-                      </button>
-                    </td>
+            <div className="fs-table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Kód</th>
+                    <th>Názov</th>
+                    <th>Dodávateľ</th>
+                    <th>Kód u dodávateľa</th>
+                    <th>Stav</th>
+                    <th />
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {result.map((p) => (
+                    <tr key={p.variantCode} data-testid={`search-product-${p.variantCode}`}>
+                      <td>{p.variantCode}</td>
+                      <td>{p.productName}</td>
+                      <td>{p.supplier ?? "(bez dodávateľa)"}</td>
+                      <td>{p.externalCode ?? "—"}</td>
+                      <td>{STATE_LABELS[p.state]}</td>
+                      <td>
+                        <button
+                          type="button"
+                          className="btn sm ghost"
+                          data-testid={`search-product-open-${p.variantCode}`}
+                          onClick={() => {
+                            openDetail(p.productKey);
+                          }}
+                        >
+                          Otvoriť
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </section>

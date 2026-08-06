@@ -15,12 +15,17 @@ const FOLDERS = [
   },
 ];
 
+const ORIGINAL_INNER_WIDTH = window.innerWidth;
+
 afterEach(() => {
   cleanup();
   // issue 190: zbalenie panela sa pamätá v `localStorage` — jsdom ho medzi
   // testami NEVYNULUJE, takže bez tohto by jeden test prepol stav všetkým
   // nasledujúcim.
   window.localStorage.clear();
+  // issue 291: rovnaký dôvod pre `window.innerWidth` — testy nižšie ju menia
+  // pred vykreslením, treba ju vrátiť na pôvodnú hodnotu pre ďalšie testy.
+  Object.defineProperty(window, "innerWidth", { writable: true, configurable: true, value: ORIGINAL_INNER_WIDTH });
 });
 
 it("vykreslí presne dva priečinky s jednou záložkou každý a označí aktívnu", () => {
@@ -159,4 +164,40 @@ it("priečinok zbalený pred zbalením panela nechá svoje ikony v lište vidite
   fireEvent.click(screen.getByTestId("sidebar-rail-toggle"));
 
   expect(screen.getByRole("button", { name: "Sync zo Shoptetu" })).toBeTruthy();
+});
+
+// issue 291: na úzkej (telefónnej) obrazovke sa panel PRVOTNE (pri prvom
+// vykreslení, bez akéhokoľvek uloženého stavu) zbalí sám — na širokej
+// (počítačovej) ostáva pôvodné rozbalené správanie. Nastavenie
+// `window.innerWidth` pred vykreslením je jediný spôsob, ako v jsdom overiť
+// "prvotný stav podľa šírky", keďže jsdom skutočný CSS layout nevykresľuje.
+function setWindowInnerWidth(width: number): void {
+  Object.defineProperty(window, "innerWidth", { writable: true, configurable: true, value: width });
+}
+
+it("na úzkej obrazovke (375px) sa panel bez uloženej voľby prvotne zbalí", () => {
+  setWindowInnerWidth(375);
+
+  render(<Sidebar folders={FOLDERS} activeTabId="sync" onSelectTab={() => {}} />);
+
+  expect(screen.getByTestId("sidebar-rail-toggle").getAttribute("aria-expanded")).toBe("false");
+  expect(screen.queryByRole("button", { name: "Systém" })).toBeNull();
+});
+
+it("na širokej (počítačovej) obrazovke (1280px) sa panel bez uloženej voľby prvotne rozbalí", () => {
+  setWindowInnerWidth(1280);
+
+  render(<Sidebar folders={FOLDERS} activeTabId="sync" onSelectTab={() => {}} />);
+
+  expect(screen.getByTestId("sidebar-rail-toggle").getAttribute("aria-expanded")).toBe("true");
+  expect(screen.getByRole("button", { name: "Systém" })).toBeTruthy();
+});
+
+it("uložená voľba (užívateľ predtým panel ručne rozbalil) vyhráva aj na úzkej obrazovke", () => {
+  window.localStorage.setItem("forestshop:sidebar-rail", "0");
+  setWindowInnerWidth(375);
+
+  render(<Sidebar folders={FOLDERS} activeTabId="sync" onSelectTab={() => {}} />);
+
+  expect(screen.getByTestId("sidebar-rail-toggle").getAttribute("aria-expanded")).toBe("true");
 });

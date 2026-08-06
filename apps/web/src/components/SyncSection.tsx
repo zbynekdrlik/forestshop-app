@@ -220,28 +220,30 @@ export function SyncSection({
           {runs.length === 0 ? (
             <p className="empty" data-testid="sync-history-empty">Žiadny beh zatiaľ nie je zaznamenaný.</p>
           ) : (
-            <table>
-              <thead>
-                <tr>
-                  <th>Úloha</th>
-                  <th>Naposledy spustená</th>
-                  <th>Stav</th>
-                  <th>Dokončená</th>
-                  <th>Detail</th>
-                </tr>
-              </thead>
-              <tbody>
-                {runs.map((run) => (
-                  <tr key={run.jobName} data-testid={`sync-job-${run.jobName}`}>
-                    <td>{jobLabel(run.jobName)}</td>
-                    <td>{formatSkDateTime(run.startedAt)}</td>
-                    <td>{STATUS_LABELS[run.status]}</td>
-                    <td>{formatSkDateTime(run.finishedAt)}</td>
-                    <td>{detailText(run)}</td>
+            <div className="fs-table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Úloha</th>
+                    <th>Naposledy spustená</th>
+                    <th>Stav</th>
+                    <th>Dokončená</th>
+                    <th>Detail</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {runs.map((run) => (
+                    <tr key={run.jobName} data-testid={`sync-job-${run.jobName}`}>
+                      <td>{jobLabel(run.jobName)}</td>
+                      <td>{formatSkDateTime(run.startedAt)}</td>
+                      <td>{STATUS_LABELS[run.status]}</td>
+                      <td>{formatSkDateTime(run.finishedAt)}</td>
+                      <td>{detailText(run)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </>
       )}

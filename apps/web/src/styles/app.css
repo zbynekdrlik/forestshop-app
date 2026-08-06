@@ -169,6 +169,15 @@ table {
   overflow: hidden;
   font-size: var(--fs-text-sm);
 }
+/* issue 291: KAŽDÁ obyčajná tabuľka v appke dostáva svoj VLASTNÝ vodorovný
+   posuvný obal namiesto posúvania celej stránky — rovnaký princíp ako
+   `.orders-table-wrap`/`.ml-table-wrap` (tie dve už mali vlastný obal pred
+   týmto ticketom, preto zostávajú samostatné triedy so svojím vlastným
+   `min-width`/`table-layout`; táto zdieľaná trieda je pre všetky OSTATNÉ
+   jednoduché tabuľky, ktoré žiadne osobitné rozloženie nepotrebujú). */
+.fs-table-wrap {
+  overflow-x: auto;
+}
 th {
   text-align: left;
   font-size: var(--fs-text-xs);
@@ -493,17 +502,38 @@ tr:last-child td {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
+  /* issue 291: na úzkej obrazovke sa lišta ZALOMÍ namiesto orezania
+     používateľského menu — dovtedy tu `flex-wrap` chýbal úplne, takže sa
+     "Prihlásený: …" na telefóne strácalo mimo viditeľnú oblasť. */
+  flex-wrap: wrap;
   gap: var(--fs-space-4);
   background: var(--fs-canvas);
   border-bottom: 1px solid var(--fs-border);
   padding: var(--fs-space-5) var(--fs-space-6) var(--fs-space-4);
 }
+.topbar-head {
+  min-width: 0;
+  flex: 1 1 auto;
+}
 .topbar-head h1 {
   margin: 0;
+  overflow-wrap: break-word;
 }
 .topbar-user {
   position: relative;
-  flex: 0 0 auto;
+  /* issue 291: PREDTÝM `flex: 0 0 auto` — na úzkej obrazovke, keď `.topbar`
+     zalomí tento blok na VLASTNÝ riadok (nad `flex-wrap: wrap` pridaným
+     vyššie), `flex-shrink: 0` mu bránilo zmenšiť sa aj keď na svojom
+     riadku nemal dosť miesta — celý blok (koliesko + meno) tak pretŕčal
+     mimo viditeľnú šírku (naživo namerané: 298px blok v 239px dostupnom
+     mieste pri 375px okne). `min-width: 0` dovolí zmenšenie AJ POD
+     obsahovú šírku detí (rovnaký dôvod ako `.topbar-head` nižšie) —
+     samotné zmenšenie potom prevezme `.usermenu-btn`'s existujúce
+     orezanie mena (`overflow:hidden;text-overflow:ellipsis`).
+     `.usermenu-btn` samo dostáva `flex: 1 1 auto` nižšie, aby zmenšenie
+     prednostne obralo JEHO, nie `.themecolor-btn`'s pevné koliesko. */
+  flex: 0 1 auto;
+  min-width: 0;
   /* issue 264: koliesko "Farby aplikácie" sedí VEDĽA mena používateľa, nie
      nad/pod ním — `.usermenu-panel` nižšie ostáva absolútne pozicovaný
      voči tomuto (position:relative) rodičovi bez ohľadu na flex. */
@@ -523,6 +553,12 @@ tr:last-child td {
   color: var(--fs-ink);
   cursor: pointer;
   max-width: 260px;
+  /* issue 291: nechá zmenšenie `.topbar-user` (vyššie) prednostne obrať
+     TOTO tlačidlo, nie pevné `.themecolor-btn` koliesko vedľa neho — bez
+     `min-width: 0` by prvok nešiel zmenšiť pod svoju obsahovú (meno +
+     šípka) šírku, aj keby mal na to priestor v rodičovi. */
+  flex: 1 1 auto;
+  min-width: 0;
 }
 .usermenu-btn:hover {
   border-color: var(--fs-ink-faint);

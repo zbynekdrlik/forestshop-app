@@ -82,38 +82,40 @@ export function OrderSearchPanel({
       {result.length > 0 && (
         <div data-testid="search-orders">
           <h3>Objednávky</h3>
-          <table>
-            <thead>
-              <tr>
-                <th>Číslo</th>
-                <th>Zákazník</th>
-                <th>Stav</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {result.map((o) => (
-                <tr key={o.orderId} data-testid={`search-order-${o.externalOrderId}`}>
-                  <td>{o.externalOrderId}</td>
-                  <td>
-                    {o.customerName}
-                    {o.email !== null && ` (${o.email})`}
-                  </td>
-                  <td>{o.statusName}</td>
-                  <td>
-                    <a
-                      href={o.adminUrl}
-                      target="_blank"
-                      rel="noreferrer noopener"
-                      data-testid={`search-order-admin-link-${o.externalOrderId}`}
-                    >
-                      Otvoriť v Shoptete
-                    </a>
-                  </td>
+          <div className="fs-table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Číslo</th>
+                  <th>Zákazník</th>
+                  <th>Stav</th>
+                  <th />
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {result.map((o) => (
+                  <tr key={o.orderId} data-testid={`search-order-${o.externalOrderId}`}>
+                    <td>{o.externalOrderId}</td>
+                    <td>
+                      {o.customerName}
+                      {o.email !== null && ` (${o.email})`}
+                    </td>
+                    <td>{o.statusName}</td>
+                    <td>
+                      <a
+                        href={o.adminUrl}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                        data-testid={`search-order-admin-link-${o.externalOrderId}`}
+                      >
+                        Otvoriť v Shoptete
+                      </a>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>
