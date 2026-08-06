@@ -882,3 +882,29 @@ paths:
   už mal správne. Test na KAŽDÝ ĎALŠÍ `useCallback`/`useEffect` v tomto
   repe: manuálne prejsť, či telo číta niečo, čo NIE JE v dependency poli —
   lint to tu NIKDY nezachytí.
+- **Pridanie DRUHEJ nezávislej pod-obrazovky (záložka/tab) do existujúcej
+  sekcie NESMIE zdediť pôvodnej loading/error "gate" tej PRVEJ pod-
+  obrazovky na CELÝ návratový JSX.** Issue 283 (code review pred mergom,
+  nie test): `UpozorneniaSection.tsx` mal pôvodne `if (rows === null)
+  return <p>Načítavam…</p>;` PRED vykreslením čohokoľvek — keď pribudla
+  nezávislá záložka "Vybavené" (vlastný fetch, vlastný komponent
+  `UpozorneniaResolvedList`), táto stará gata (patriaca LEN "Otvorené"
+  zoznamu) blokovala aj samotný PREPÍNAČ záložiek, takže obsluha sa
+  nedostala k "Vybavené" kým "Otvorené" ešte len načítavalo (alebo
+  sieťovo zlyhalo — v tom prípade NAVŽDY, kým nezobrazí len chybu bez
+  akcie). Fix: `intro`/`tabBar` JSX sa počíta VŽDY (pred akýmkoľvek
+  early-return), samostatná vetva `if (activeTab === "druhá-záložka")
+  return (...)` sa vráti PRED gate patriacou prvej záložke, a gate samotná
+  sa vzťahuje LEN na zvyšný "prvá záložka" flow. TypeScript-ova
+  narrow-cez-ternár past: `activeTab === "X" ? A : B` NEVIE skombinovať
+  narrowing so SAMOSTATNÝM skorším `if (cond && rows === null) return`
+  (dva oddelené kontrolné toky) — preto to musí byť postupnosť
+  PLOCHÝCH `if (...) return (...)` vetiev v JEDNOM rovnom toku, nie
+  ternár za skorším podmieneným returnom. Regresný test (`UpozorneniaSection
+  .resolvedTab.test.tsx`): mockni prvej záložky fetch tak, aby sa NIKDY
+  nevyriešil (`new Promise(() => {})`) aj tak, aby zlyhal, a over v OBOCH
+  prípadoch, že prepínač záložiek (`data-testid="...-tab-druhá"`) je
+  napriek tomu v DOM-e. Test pre KAŽDÚ ĎALŠIU sekciu, čo dostane DRUHÚ
+  nezávislú záložku: patrí existujúca loading/error gate LEN jednej
+  záložke? Ak áno, presuň ju AŽ ZA vetvu tej druhej, nikdy ju nenechaj
+  gatovať spoločný prepínač.
