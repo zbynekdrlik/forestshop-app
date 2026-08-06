@@ -27,6 +27,20 @@ const TYPE_LABELS: Readonly<Record<UpozornenieRow["type"], string>> = {
   vratenie: "Vrátenie",
 };
 
+// Code review (issue 269, druhé kolo, finding 10): štítok odkazu sa odvodzuje
+// od TYPU karty, nikdy ako natvrdo napísaný literál na mieste vykreslenia —
+// oba dnešné automatické zdroje (#268 nevyzdvihnutá zásielka, #269 vrátenie)
+// odkazujú na Shoptet administráciu objednávky (`buildShoptetAdminOrderUrl`),
+// takže majú rovnaký štítok. `vlastna_poznamka` nikdy nenesie `link` (server
+// ho nikdy nevyplní), takže sem nepotrebuje vlastný záznam — `??` fallback
+// nižšie pokrýva AJ ňu, AJ akýkoľvek budúci typ, čo by omylom dostal odkaz
+// bez vlastného štítku, namiesto tichého predpokladu "je to vždy Shoptet".
+const LINK_LABELS: Readonly<Partial<Record<UpozornenieRow["type"], string>>> = {
+  nevyzdvihnuta_zasielka: "Otvoriť objednávku v Shoptete",
+  vratenie: "Otvoriť objednávku v Shoptete",
+};
+const DEFAULT_LINK_LABEL = "Otvoriť odkaz";
+
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("sk-SK", { day: "numeric", month: "numeric", year: "numeric" });
 }
@@ -323,8 +337,8 @@ export function UpozorneniaSection({ role, onSessionExpired }: { readonly role: 
                   {row.dueAt !== null && <> · vybaviť do {formatDate(row.dueAt)}</>}
                 </p>
                 {row.link !== null && (
-                  <a href={row.link} data-testid={`upozornenie-link-${row.id}`}>
-                    Otvoriť objednávku v Shoptete
+                  <a href={row.link} target="_blank" rel="noreferrer" data-testid={`upozornenie-link-${row.id}`}>
+                    {LINK_LABELS[row.type] ?? DEFAULT_LINK_LABEL}
                   </a>
                 )}
                 {canControl && row.status !== "vybavene" && (

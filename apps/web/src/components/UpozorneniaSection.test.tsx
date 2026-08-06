@@ -34,9 +34,40 @@ const VLASTNA_KARTA = {
   status: "nove" as const,
 };
 
+// issue 269 (code review, findings 8/9/10): karta z automatického zdroja s
+// odkazom na Shoptet — samostatná fixtúra od `VLASTNA_KARTA` (tá má
+// `link: null`, nikdy neponúka odkaz vôbec).
+const VRATENIE_KARTA = {
+  id: "vratenie-1",
+  type: "vratenie" as const,
+  source: "appka" as const,
+  title: "Objednávka 20600001 — vrátený tovar",
+  details: "Zákazník: Ján Novák\nStav objednávky: Vratený tovar",
+  link: "https://www.forestshop.sk/admin/vyhladavanie/?string=20600001&src=orders",
+  dueAt: null,
+  postponedUntil: null,
+  seenAt: "2026-08-05T08:00:00.000Z",
+  resolvedAt: null,
+  createdAt: "2026-08-05T08:00:00.000Z",
+  status: "otvorene" as const,
+};
+
 afterEach(() => {
   cleanup();
   vi.resetAllMocks();
+});
+
+it("karta s odkazom (automatický zdroj) zobrazí štítok 'Otvoriť objednávku v Shoptete' a otvára sa v novom okne", async () => {
+  markUpozorneniaSeen.mockResolvedValue(undefined);
+  fetchUpozornenia.mockResolvedValue([VRATENIE_KARTA]);
+  render(<UpozorneniaSection role="manazer" onSessionExpired={vi.fn()} />);
+  await screen.findByTestId("upozornenie-vratenie-1");
+
+  const link = screen.getByTestId<HTMLAnchorElement>("upozornenie-link-vratenie-1");
+  expect(link.textContent).toBe("Otvoriť objednávku v Shoptete");
+  expect(link.getAttribute("href")).toBe(VRATENIE_KARTA.link);
+  expect(link.getAttribute("target")).toBe("_blank");
+  expect(link.getAttribute("rel")).toBe("noreferrer");
 });
 
 it("prázdny zoznam zobrazí informačnú vetu (po označení videných)", async () => {

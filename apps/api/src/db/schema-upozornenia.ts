@@ -62,5 +62,12 @@ export const upozornenie = pgTable(
     // integračným testom PRED mergom, nie odhadom.
     uniqueIndex("upozornenie_dedup_key_uq").on(t.dedupKey).where(sql`resolved_at IS NULL`),
     index("upozornenie_resolved_at_idx").on(t.resolvedAt),
+    // Code review (issue 269): `upozornenie_dedup_key_uq` je ČIASTOČNÝ index
+    // (`WHERE resolved_at IS NULL`), takže ho nemôže použiť dopyt, ktorý
+    // naopak potrebuje VYRIEŠENÉ riadky (`orders/ingest.ts`'s dávkový
+    // pre-check pre "vratenie" kandidátov, `.claude/rules/upozornenia.md`) —
+    // ten by bez tohto plného (nepodmieneného) indexu na KAŽDOM behu importu
+    // spravil sekvenčný sken celej (monotónne rastúcej) tabuľky.
+    index("upozornenie_dedup_key_idx").on(t.dedupKey),
   ],
 );
