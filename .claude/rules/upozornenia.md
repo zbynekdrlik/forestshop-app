@@ -235,3 +235,34 @@ paths:
   všetko".** Upsert prepíše byte-identické hodnoty, takže asercie prejdú aj
   pri pokazenej logike. Dávkový test musí druhému (neovplyvnenému) kandidátovi
   ZMENIŤ pod-stav a overiť, že sa titulok SKUTOČNE zmenil.
+- **Issue 283 (majiteľ, komentár na tickete): "vrátenie vyriešenej karty späť
+  medzi otvorené" (záložka "Vybavené", `returnUpozornenieToOpen`,
+  `service.ts`) odchytáva kolíziu s `upozornenie_dedup_key_uq` PRIAMO z DB
+  chyby JEDNÉHO atomického `UPDATE`u (SQLSTATE 23505, `constraint ===
+  "upozornenie_dedup_key_uq"`), NIE cez samostatný SELECT-pred-UPDATE
+  pre-check.** Ten istý vzor ako `catalog/ingest.ts`'s (neexportovaná)
+  `isUniqueViolation` — duplikovaná v `upozornenia/service.ts` zámerne malá
+  (mvp-philosophy: žiadna zdieľaná abstrakcia pre dvoch konzumentov v
+  nesúvisiacich moduloch). Pre-check by znovu otvoril PRESNE tú TOCTOU triedu
+  chyby, akú tento modul už dvakrát riešil na tom istom čiastočnom indexe
+  (#272/#269, vyššie v tomto súbore) — atomický UPDATE + odchytenie chyby je
+  race-proof z podstaty. Test na KAŽDÚ ĎALŠIU akciu na tomto module, ktorá
+  môže naraziť na ČIASTOČNÝ unique index: over najprv, či existuje atomický
+  SQL príkaz + chybu-odchytávajúci vzor, predtým než siahneš po
+  SELECT-pred-zápisom pre-checku.
+- **`GET /api/upozornenia/resolved` (história vybavených) je NOVÁ trasa, nie
+  ďalší filter na existujúcej `GET /api/upozornenia`** — zámerne INÝ tvar
+  výstupu (`resolvedByName` cez `LEFT JOIN users`) aj INÉ triedenie
+  (`resolvedAt DESC`, nie `dueAt ASC`/`createdAt DESC`). Cap namiesto
+  stránkovania (`RESOLVED_LIST_LIMIT = 200`) je rovnaký vzor ako `mail-log/
+  queries.ts`'s pevný `limit: 200` — appka nikde inde nemá stránkovaciu UI.
+- **Kolízia vrátenia (dva riadky s ROVNAKÝM `dedupKey`, jeden vyriešený a
+  jeden otvorený) sa NEDÁ vyrobiť cez ŽIADNU appkinu UI akciu** — vlastné
+  poznámky nikdy nenesú `dedupKey` (nikdy nekolidujú), a kartu s ním vyrába
+  LEN automatický import (mimo dosahu bežného klikania). Preto ju overuje
+  LEN service+HTTP integračný test (`upozornenia-resolved.integration
+  .test.ts`/`upozornenia-resolved-http.integration.test.ts`), NIE Playwright
+  e2e — rovnaký princíp ako `e2e-real-user-testing.md`'s výnimka pre backend
+  scenáre, ktoré skutočný používateľ klikaním nikdy nevyrobí. E2E
+  (`upozornenia.spec.ts`) namiesto toho overuje LEN to, čo je reálne
+  dosiahnuteľné klikaním: záložka "Vybavené" + úspešné vrátenie karty späť.

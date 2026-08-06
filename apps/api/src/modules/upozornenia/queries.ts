@@ -1,6 +1,6 @@
-import { and, asc, count, desc, eq, isNull, lte, or, type SQL } from "drizzle-orm";
+import { and, asc, count, desc, eq, isNotNull, isNull, lte, or, type SQL } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
-import { upozornenie, type upozornenieType } from "../../db/schema.js";
+import { upozornenie, users, type upozornenieType } from "../../db/schema.js";
 import { computeStatus, type UpozornenieStatus } from "./status.js";
 
 export type UpozornenieTypeValue = (typeof upozornenieType.enumValues)[number];
@@ -81,4 +81,51 @@ export async function countActionableUpozornenia(db: Database, now: Date): Promi
     .from(upozornenie)
     .where(and(isNull(upozornenie.resolvedAt), notPostponedCondition(now)));
   return row?.total ?? 0;
+}
+
+// issue 283: majiteľ rozhodol na tickete — záložka "Vybavené" na nástenke,
+// história vybavených kariet zoradená OD NAJNOVŠIE VYBAVENÝCH, s menom+časom
+// toho, kto vybavil. Rovnaký cap-namiesto-stránkovania vzor ako `mail-log/
+// queries.ts`'s pevný `limit: 200` — appka nikde inde nemá stránkovaciu UI, a
+// tabuľka rastie monotónne (vybavené vrátkové karty sa nikdy nemažú, viď
+// `.claude/rules/upozornenia.md`), takže cap je nutný.
+export const RESOLVED_LIST_LIMIT = 200;
+
+export interface ResolvedUpozornenieRow extends UpozornenieRow {
+  // `null` = vybavené AUTOMATICKY systémom (#268's `autoResolveByDedupKey`
+  // nikdy nevypĺňa `resolvedByUserId` — schéma to explicitne predpovedá,
+  // `schema-upozornenia.ts`). Frontend zobrazí zástupný text "automaticky".
+  // Code review: `resolvedByUserId` má `onDelete: "set null"` — ak sa neskôr
+  // zmaže účet zamestnanca, čo predtým RUČNE vybavil kartu, `resolvedByName`
+  // sa stane `null` a tá karta sa zobrazí nerozoznateľne od naozaj
+  // automaticky vybavenej. Prijaté zámerne (predpríprava opačnej výnimky by
+  // vyžadovala nový stĺpec/audit záznam mimo rozsahu tohto ticketu) — ak sa
+  // niekedy ukáže ako problém, riešenie je čítať `audit_events` (`entity:
+  // "upozornenie"`, `action: "upozornenie.resolved"`) namiesto tejto FK.
+  readonly resolvedByName: string | null;
+}
+
+export async function listResolvedUpozornenia(db: Database, now: Date): Promise<readonly ResolvedUpozornenieRow[]> {
+  const rows = await db
+    .select({
+      id: upozornenie.id,
+      type: upozornenie.type,
+      source: upozornenie.source,
+      title: upozornenie.title,
+      details: upozornenie.details,
+      link: upozornenie.link,
+      dueAt: upozornenie.dueAt,
+      postponedUntil: upozornenie.postponedUntil,
+      seenAt: upozornenie.seenAt,
+      resolvedAt: upozornenie.resolvedAt,
+      createdAt: upozornenie.createdAt,
+      resolvedByName: users.displayName,
+    })
+    .from(upozornenie)
+    .leftJoin(users, eq(upozornenie.resolvedByUserId, users.id))
+    .where(isNotNull(upozornenie.resolvedAt))
+    .orderBy(desc(upozornenie.resolvedAt))
+    .limit(RESOLVED_LIST_LIMIT);
+
+  return rows.map((r) => ({ ...r, status: computeStatus(r, now) }));
 }
