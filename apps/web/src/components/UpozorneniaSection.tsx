@@ -49,9 +49,8 @@ export function UpozorneniaSection({ role, onSessionExpired }: { readonly role: 
   const [activeTab, setActiveTab] = useState<"otvorene" | "vybavene">("otvorene");
   const [rows, setRows] = useState<readonly UpozornenieRow[] | null>(null);
   const [error, setError] = useState("");
-  const [includeResolved, setIncludeResolved] = useState(false);
-  // issue 267 (živé overenie, gap 2): nezávislý filter od `includeResolved`
-  // — odložená karta bola bez tohto NAVŽDY skrytá, aj s "aj vybavené".
+  // issue 267 (živé overenie, gap 2): nezávislý filter od vyriešených kariet
+  // — odložená karta bola bez tohto NAVŽDY skrytá.
   const [includePostponed, setIncludePostponed] = useState(false);
   const [busyId, setBusyId] = useState("");
   const [draft, setDraft] = useState<EditDraft | null>(null);
@@ -76,18 +75,18 @@ export function UpozorneniaSection({ role, onSessionExpired }: { readonly role: 
 
   const load = useCallback(() => {
     const seq = ++loadSeqRef.current;
-    fetchUpozornenia({ includeResolved, includePostponed })
+    // issue 283 (Vybavené záložka nahradila checkbox "aj vybavené"): tento
+    // zoznam už NIKDY nesmie ukázať vyriešenú kartu — `includeResolved` je
+    // preto vždy `false`, nie ovládané žiadnym filtrom.
+    fetchUpozornenia({ includeResolved: false, includePostponed })
       .then((data) => {
         if (loadSeqRef.current !== seq) return;
         setRows(data);
         if (data.length > 0) return;
-        // Zoznam je prázdny pod AKTUÁLNYMI (možno užšími) filtrami — ak sú
-        // už najširšie, `data` JE tá pravda; inak treba doplnkový najširší
-        // dopyt, aby hláška nikdy nehádala/netvrdila nesprávnu príčinu.
-        if (includeResolved && includePostponed) {
-          setEmptyMessage(classifyEmptyMessage(data));
-          return;
-        }
+        // Zoznam je prázdny pod AKTUÁLNYMI (možno užšími) filtrami — treba
+        // doplnkový najširší dopyt, aby hláška nikdy nehádala/netvrdila
+        // nesprávnu príčinu (napr. "všetko je vybavené", hoci je len
+        // odložené).
         fetchUpozornenia({ includeResolved: true, includePostponed: true })
           .then((all) => {
             if (loadSeqRef.current === seq) setEmptyMessage(classifyEmptyMessage(all));
@@ -104,13 +103,13 @@ export function UpozorneniaSection({ role, onSessionExpired }: { readonly role: 
         }
         setError("Upozornenia sa nepodarilo načítať.");
       });
-  }, [includeResolved, includePostponed, onSessionExpired]);
+  }, [includePostponed, onSessionExpired]);
 
   // Otvorenie záložky = "prečítané" (inbox vzor) — PRVÉ spustenie tohto
   // efektu (mountedRef ešte `false`) hromadne označí všetky práve "Nové"
   // karty ako videné a AŽ POTOM načíta zoznam (žiadny dvojitý fetch na
   // mount) — žiadne per-kartové tlačidlo "videné" navyše. Každé ĎALŠIE
-  // spustenie (zmena `includeResolved`, teda nová identita `load`) už len
+  // spustenie (zmena `includePostponed`, teda nová identita `load`) už len
   // refetchne, mark-seen sa nezopakuje. `mountedRef` sa nastavuje SYNCHRÓNNE
   // v tele efektu (nie len v `useRef`'s počiatočnej hodnote) — `<StrictMode>`
   // (`main.tsx`) efekt vo vývoji spustí, zruší a znova spustí, presne vzor z
@@ -257,16 +256,6 @@ export function UpozorneniaSection({ role, onSessionExpired }: { readonly role: 
       {error !== "" && <p role="alert">{error}</p>}
 
       <div className="upozornenia-toolbar">
-        <label>
-          <input
-            type="checkbox"
-            checked={includeResolved}
-            onChange={(e) => {
-              setIncludeResolved(e.target.checked);
-            }}
-          />{" "}
-          aj vybavené
-        </label>
         <label>
           <input
             type="checkbox"

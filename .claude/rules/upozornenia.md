@@ -266,3 +266,17 @@ paths:
   scenáre, ktoré skutočný používateľ klikaním nikdy nevyrobí. E2E
   (`upozornenia.spec.ts`) namiesto toho overuje LEN to, čo je reálne
   dosiahnuteľné klikaním: záložka "Vybavené" + úspešné vrátenie karty späť.
+- **Vyriešené karty žijú VÝHRADNE v záložke "Vybavené" (`UpozorneniaResolvedList`,
+  `GET /api/upozornenia/resolved`) — záložka "Otvorené" ich NIKDY neukazuje.**
+  Checkbox "aj vybavené" (pôvodný inline náhľad vyriešených kariet priamo v
+  "Otvorené", predchodca záložky "Vybavené") bol issue 283-follow-up
+  odstránený ako duplicitná zobrazovacia cesta pre tie isté dáta —
+  `UpozorneniaSection.tsx`'s `load()` volá `fetchUpozornenia` s
+  `includeResolved` NAPEVNO `false` (nie ovládané žiadnym UI filtrom).
+  `includeResolved: true` na strane API OSTÁVA (`upozornenia-http
+  .integration.test.ts` ho stále overuje) — používa ho VÝHRADNE
+  `classifyEmptyMessage`'s doplnkový najširší dopyt (rozlíšenie "všetko je
+  vybavené" od "všetko je odložené" v prázdnom zozname), nikdy priame
+  zobrazenie karty. Nová "druhá" cesta na zobrazenie vyriešenej karty v
+  "Otvorené" (checkbox, filter, čokoľvek) by túto duplicitu vrátila späť —
+  nepridávaj ju.

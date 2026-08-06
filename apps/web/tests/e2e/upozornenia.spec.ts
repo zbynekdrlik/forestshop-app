@@ -71,14 +71,8 @@ test("vlastná poznámka — vytvorenie, 'Nové' zmizne po znovuotvorení, úpra
   await upravenaKarta.getByRole("button", { name: "Odložiť", exact: true }).click();
   await expect(kartaSNadpisom(page, "Schôdzka v stredu — presunutá")).toHaveCount(0);
 
-  // "aj vybavené" NEVRÁTI odloženú kartu (ostáva skrytá, kým sa nevráti sama).
-  await page.getByText("aj vybavené").click();
-  await expect(kartaSNadpisom(page, "Schôdzka v stredu — presunutá")).toHaveCount(0);
-  await page.getByText("aj vybavené").click();
-
-  // issue 267 follow-up gap 2: "aj odložené" (NEZÁVISLÝ filter od "aj
-  // vybavené" vyššie) JU odkryje, a "Zrušiť odloženie" ju vráti naspäť skôr,
-  // než sa vráti sama.
+  // issue 267 follow-up gap 2: "aj odložené" JU odkryje, a "Zrušiť odloženie"
+  // ju vráti naspäť skôr, než sa vráti sama.
   await page.getByText("aj odložené").click();
   const odlozenaKarta = kartaSNadpisom(page, "Schôdzka v stredu — presunutá");
   await expect(odlozenaKarta).toBeVisible();
@@ -96,15 +90,12 @@ test("vlastná poznámka — vytvorenie, 'Nové' zmizne po znovuotvorení, úpra
   await poistkaKarta.getByRole("button", { name: "Vybavené" }).click();
   await expect(kartaSNadpisom(page, "Vybaviť poistku")).toHaveCount(0);
 
-  // "aj vybavené" ju teraz ukáže (na rozdiel od odloženej vyššie).
-  await page.getByText("aj vybavené").click();
-  const vybavenaKarta = kartaSNadpisom(page, "Vybaviť poistku");
-  await expect(vybavenaKarta).toBeVisible();
-  await expect(vybavenaKarta).toContainText("Vybavené");
-  // Vybavená karta nemá žiadne akčné tlačidlá (Upraviť/Zmazať/Vybavené/Odložiť).
-  await expect(vybavenaKarta.getByRole("button", { name: "Zmazať" })).toHaveCount(0);
-  await expect(vybavenaKarta.getByRole("button", { name: "Vybavené" })).toHaveCount(0);
-  await page.getByText("aj vybavené").click(); // vypnúť filter, aby predvolený zoznam neukazoval vybavené
+  // issue 283 follow-up: vybavené karty žijú LEN v záložke "Vybavené" —
+  // "Otvorené" ich už NIKDY neukáže (checkbox "aj vybavené" bol odstránený
+  // spolu s touto duplicitnou zobrazovacou cestou, `.claude/rules/
+  // upozornenia.md`), žiadnym prepínačom ju nejde znova odkryť tu.
+  await expect(page.getByText("aj vybavené")).toHaveCount(0);
+  await expect(kartaSNadpisom(page, "Vybaviť poistku")).toHaveCount(0);
 
   // issue 283 (majiteľ, komentár na tickete): záložka "Vybavené" — história
   // vybavených kariet + vrátenie omylom vybavenej karty späť medzi otvorené.
