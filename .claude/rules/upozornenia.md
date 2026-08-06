@@ -210,3 +210,28 @@ paths:
   (dočasne odstrániť opravu → test spadne presne na tomto mieste, vrátiť →
   zelený), presne ako `.claude/rules/regression-test-first.md` vyžaduje pre
   RED/GREEN, aj keď ide o code-review-dodaný test mimo pôvodného páru.
+- **Dopyt, ktorý potrebuje VYRIEŠENÉ riadky, nemôže použiť `upozornenie_dedup_key_uq`
+  — ten je ČIASTOČNÝ (`WHERE resolved_at IS NULL`).** Pre-check vrátkových
+  kandidátov preto bez samostatného PLNÉHO btree indexu na `dedup_key`
+  (`upozornenie_dedup_key_idx`, migrácia `0040`) seq-skenoval celú tabuľku na
+  KAŽDOM behu importu — a tá tabuľka odteraz rastie monotónne, lebo vyriešené
+  vrátkové karty sa už nikdy nemažú. Vždy, keď pridávaš dopyt nad `dedup_key`
+  mimo predikátu `resolved_at IS NULL`, over si, či existuje index, ktorý ho
+  vie obslúžiť.
+- **Skip podľa "existuje vyriešený riadok" musí zohľadniť aj OTVORENÉHO
+  súrodenca.** Kľúč môže mať SÚČASNE vyriešený aj otvorený riadok (presne stav,
+  ktorý pôvodný bug stihol vyrobiť) — ak sa skipne celý kľúč, otvorená karta
+  navždy zamrzne na starom titulku/pod-stave. Správne: skip len keď pre kľúč
+  NEEXISTUJE žiadny nevyriešený riadok (`hasUnresolvedByKey`), plus regresný
+  test, ktorý taký zmiešaný stav priamo nasadí.
+- **Blok, čo berie `.for("update")` zámky, patrí čo NAJNESKÔR v transakcii.**
+  Zámky sa držia po jej zvyšok, takže keď pre-check bežal hneď po upserte
+  objednávok, klik majiteľa na "Vybavené" čakal na dobehnutie CELÉHO zvyšku
+  importu (validácia variantov + dávkové vkladanie `order_line`). Presunutím
+  bloku tesne pred commit sa okno skráti na pár SQL príkazov. Podmienka
+  presunu: blok číta len dáta pripravené mimo transakcie a nič po ňom od neho
+  nezávisí.
+- **Test, kde oba behy dostanú ROVNAKÝ vstup, nedokáže odhaliť "preskočilo sa
+  všetko".** Upsert prepíše byte-identické hodnoty, takže asercie prejdú aj
+  pri pokazenej logike. Dávkový test musí druhému (neovplyvnenému) kandidátovi
+  ZMENIŤ pod-stav a overiť, že sa titulok SKUTOČNE zmenil.
