@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type JSX } from "react";
 import type { Me } from "../api.js";
+import { formatSkDateTime } from "../formatDate.js";
 import {
   fetchRestockStatus,
   fetchRestockWaiting,
@@ -25,11 +26,6 @@ const STATE_LABEL: Readonly<Record<"sellable" | "out_of_stock" | "discontinued",
   out_of_stock: "vypredané",
   discontinued: "ukončený predaj",
 };
-
-function formatDateTime(iso: string): string {
-  const date = new Date(iso);
-  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString("sk-SK");
-}
 
 export function RestockSection({
   role,
@@ -178,7 +174,7 @@ export function RestockSection({
 
       {lastRun !== null && (
         <p data-testid="restock-last-run">
-          Posledný beh: {formatDateTime(lastRun.startedAt)} —{" "}
+          Posledný beh: {formatSkDateTime(lastRun.startedAt)} —{" "}
           {lastRun.status === "failure"
             ? "❌ chyba"
             : lastRun.skippedReason !== null
@@ -250,7 +246,7 @@ export function RestockSection({
             <tbody>
               {events.map((event) => (
                 <tr key={event.id} data-testid={`restock-event-${event.variantCode}`}>
-                  <td>{formatDateTime(event.at)}</td>
+                  <td>{formatSkDateTime(event.at)}</td>
                   <td>{event.variantCode}</td>
                   <td>{event.productName}</td>
                   <td>{event.supplier ?? "—"}</td>

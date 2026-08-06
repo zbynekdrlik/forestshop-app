@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type SyntheticEvent, type JSX } from "react";
 import type { Me } from "../api.js";
+import { formatSkDateTime } from "../formatDate.js";
 import { validateSupplierLinkUrl } from "../ordersApi.js";
 import {
   saveProductLink,
@@ -17,12 +18,6 @@ import {
 // odošle do Shoptetu — táto obrazovka doň nezapisuje žiadnou NOVOU cestou.
 const CAN_EDIT_ROLES: ReadonlySet<Me["role"]> = new Set(["admin", "manazer"]);
 
-function formatDateTime(iso: string | null): string {
-  if (iso === null) return "—";
-  const date = new Date(iso);
-  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString("sk-SK");
-}
-
 /**
  * Stav "uložené vs. odoslané do Shoptetu" (ticketova akceptačná podmienka) sa
  * dá vyvodiť LEN z `updatedAt`/`syncedAt` — `updatedAt === null` znamená
@@ -34,7 +29,7 @@ function formatDateTime(iso: string | null): string {
 function statusLabel(item: ProductLinkItem): string {
   if (item.updatedAt === null) return item.url === null ? "—" : "zo Shoptetu";
   const pending = item.syncedAt === null || item.syncedAt < item.updatedAt;
-  return pending ? "⏳ Uložené, čaká na odoslanie" : `✅ Odoslané do Shoptetu (${formatDateTime(item.syncedAt)})`;
+  return pending ? "⏳ Uložené, čaká na odoslanie" : `✅ Odoslané do Shoptetu (${formatSkDateTime(item.syncedAt)})`;
 }
 
 export function SupplierLinksSection({

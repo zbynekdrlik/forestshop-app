@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type JSX } from "react";
+import { formatSkDateTime } from "../formatDate.js";
 import { fetchResolvedUpozornenia, returnUpozornenieToOpen, UpozorneniaUnauthorizedError, type ResolvedUpozornenieRow } from "../upozorneniaApi.js";
 
 // issue 283 (majiteľ, komentár na tickete): záložka "Vybavené" na nástenke
@@ -13,10 +14,6 @@ const TYPE_LABELS: Readonly<Record<ResolvedUpozornenieRow["type"], string>> = {
   nevyzdvihnuta_zasielka: "Nevyzdvihnutá zásielka",
   vratenie: "Vrátenie",
 };
-
-function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString("sk-SK", { dateStyle: "short", timeStyle: "short" });
-}
 
 export function UpozorneniaResolvedList({
   canControl,
@@ -111,10 +108,10 @@ export function UpozorneniaResolvedList({
                 </div>
                 <p className="upozornenie-title">{row.title}</p>
                 {row.details !== "" && <p className="upozornenie-details">{row.details}</p>}
-                <p className="upozornenie-meta">Vzniklo {formatDateTime(row.createdAt)}</p>
+                <p className="upozornenie-meta">Vzniklo {formatSkDateTime(row.createdAt)}</p>
                 <p className="upozornenie-resolved-meta" data-testid={`upozornenie-resolved-meta-${row.id}`}>
                   Vybavil(a) {row.resolvedByName ?? "automaticky"}
-                  {row.resolvedAt !== null && <> · {formatDateTime(row.resolvedAt)}</>}
+                  {row.resolvedAt !== null && <> · {formatSkDateTime(row.resolvedAt)}</>}
                 </p>
                 {canControl && (
                   <div className="upozornenie-actions">

@@ -1,4 +1,5 @@
 import type { JSX } from "react";
+import { formatSkDate } from "../formatDate.js";
 import { groupConfirmation, isGroupFullyConfirmed, type ProductGroup } from "../pairingGroups.js";
 
 const STATE_LABELS = { navrhnute: "Navrhnuté", potvrdene: "Potvrdené" } as const;
@@ -86,7 +87,7 @@ export function PairingGroupRow({
       <td>
         {confirmed.confirmedByName === null
           ? "—"
-          : `${confirmed.confirmedByName} (${new Date(confirmed.confirmedAt ?? "").toLocaleDateString("sk-SK")})`}
+          : `${confirmed.confirmedByName} (${formatSkDate(confirmed.confirmedAt)})`}
       </td>
       {canConfirm && (
         <td>

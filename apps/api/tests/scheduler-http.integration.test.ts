@@ -9,7 +9,9 @@ import type { ScheduledJob } from "../src/modules/scheduler/types.js";
 import { withCleanDb } from "./helpers/db.js";
 
 const HESLO = "test-heslo-abc"; // testovacie údaje, nie tajomstvo
-const NOW = new Date("2026-07-29T01:00:00Z");
+// issue 293: `hourLocal`/`minuteLocal` sú Europe/Bratislava miestny čas —
+// 2026-07-28T23:00:00Z = 2026-07-29 01:00 Europe/Bratislava (letný čas).
+const NOW = new Date("2026-07-28T23:00:00Z");
 
 let close: (() => Promise<void>) | undefined;
 afterEach(async () => {
@@ -66,7 +68,7 @@ it("manazer vidí posledný beh každej úlohy", async () => {
 
   const job: ScheduledJob = {
     name: "test-job",
-    schedule: { kind: "daily", hourUtc: 1, minuteUtc: 0 },
+    schedule: { kind: "daily", hourLocal: 1, minuteLocal: 0 },
     run: () => Promise.resolve({ detail: { removed: 3 } }),
   };
   await tick(db, [job], NOW);

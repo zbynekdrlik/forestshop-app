@@ -1,6 +1,7 @@
 import { inArray, notInArray, sql } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
 import { postaUncollectedState } from "../../db/schema.js";
+import { zonedDateKey } from "../../timezone.js";
 
 export interface PostaUncollectedStateRow {
   readonly orderCode: string;
@@ -52,8 +53,12 @@ export async function upsertPostaUncollectedState(
   update: PostaUncollectedStateUpdate,
   now: Date,
 ): Promise<void> {
-  const lastSentAt = update.lastSentAt === null ? null : update.lastSentAt.toISOString().slice(0, 10);
-  const terminalAt = update.terminalAt === null ? null : update.terminalAt.toISOString().slice(0, 10);
+  // issue 293: SLOVENSKÝ kalendárny deň, nie UTC — `toISOString().slice(0, 10)`
+  // by pre beh tesne po miestnej polnoci (ale ešte pred UTC polnocou) uložilo
+  // VČEREJŠÍ deň, čo posunulo eskalačnú kadenciu (`shouldSend`'s "dní od
+  // posledného poslania") o deň.
+  const lastSentAt = update.lastSentAt === null ? null : zonedDateKey(update.lastSentAt);
+  const terminalAt = update.terminalAt === null ? null : zonedDateKey(update.terminalAt);
   await db
     .insert(postaUncollectedState)
     .values({

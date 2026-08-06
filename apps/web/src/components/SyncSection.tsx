@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type JSX } from "react";
 import type { Me } from "../api.js";
 import { CatalogUnauthorizedError, triggerCatalogIngest, type CatalogIngestOutcome } from "../catalogApi.js";
+import { formatSkDateTime } from "../formatDate.js";
 import { OrdersUnauthorizedError, triggerOrdersIngest, type OrdersIngestOutcome } from "../ordersApi.js";
 import { fetchJobRuns, SchedulerUnauthorizedError, type JobRun } from "../schedulerApi.js";
 import { detailText, jobLabel, STATUS_LABELS } from "../schedulerLabels.js";
@@ -53,7 +54,7 @@ function describeOrdersOutcome(result: OrdersIngestOutcome): Notice {
 
 function lastRunLine(run: JobRun | undefined): string {
   if (run === undefined) return "Posledný beh: zatiaľ nikdy";
-  const cas = new Date(run.startedAt).toLocaleString("sk-SK");
+  const cas = formatSkDateTime(run.startedAt);
   const verdikt = run.status === "running" ? "⏳ beží…" : run.status === "success" ? "✅ OK" : "❌ CHYBA";
   return `Posledný beh: ${cas} — ${verdikt}`;
 }
@@ -233,9 +234,9 @@ export function SyncSection({
                 {runs.map((run) => (
                   <tr key={run.jobName} data-testid={`sync-job-${run.jobName}`}>
                     <td>{jobLabel(run.jobName)}</td>
-                    <td>{new Date(run.startedAt).toLocaleString("sk-SK")}</td>
+                    <td>{formatSkDateTime(run.startedAt)}</td>
                     <td>{STATUS_LABELS[run.status]}</td>
-                    <td>{run.finishedAt === null ? "—" : new Date(run.finishedAt).toLocaleString("sk-SK")}</td>
+                    <td>{formatSkDateTime(run.finishedAt)}</td>
                     <td>{detailText(run)}</td>
                   </tr>
                 ))}

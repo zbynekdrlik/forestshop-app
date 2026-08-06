@@ -1,6 +1,7 @@
 import { globalContext, textValue } from "../mail-templates/context.js";
 import type { MailTemplateKey } from "../mail-templates/registry.js";
 import { renderTemplate, type MailTemplateText, type RenderedEmail } from "../mail-templates/render.js";
+import { zonedDateKey } from "../../timezone.js";
 import {
   CANCELLED_STATUSES,
   daysNeededForNextEmail,
@@ -205,7 +206,13 @@ export function classifyTracking(apiJson: unknown, today: Date): TrackingClassif
     const rawTill = p.retainedTill ?? events.find((e) => e.retainedTill !== undefined)?.retainedTill;
     if (rawTill !== undefined && rawTill !== null && rawTill !== "") {
       const d = parseIsoDatePrefix(rawTill);
-      out.retainedTill = d !== null ? d.toISOString().slice(0, 10) : "";
+      // issue 293: `zonedDateKey` namiesto `toISOString().slice(0, 10)` —
+      // konzistentné s `state.ts`/`run.ts`. `d` je tu vždy UTC polnoc
+      // (`parseIsoDatePrefix` posta.sk-ovho ČISTO kalendárneho dátumu bez
+      // časovej zložky), takže prevod na Europe/Bratislava NIKDY neposunie
+      // deň (miestna polnoc + 1-2h offset ostáva v TEN istý kalendárny
+      // deň) — ide o zjednotenie ciest, nie o opravu pozorovateľného chýbania.
+      out.retainedTill = d !== null ? zonedDateKey(d) : "";
     }
   }
   return out;

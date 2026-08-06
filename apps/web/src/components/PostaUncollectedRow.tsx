@@ -1,4 +1,5 @@
 import type { JSX } from "react";
+import { formatSkDate } from "../formatDate.js";
 import type { PostaUncollectedShipment } from "../postaUncollectedApi.js";
 
 // Vydelené z `PostaUncollectedSection.tsx` (issue 172) — rovnaký vzor ako
@@ -30,7 +31,7 @@ export function PostaUncollectedRow({
         {shipment.phone !== "" && <div className="posta-phone">{shipment.phone}</div>}
       </td>
       <td>{shipment.daysAtPost}</td>
-      <td>{shipment.retainedTill !== "" ? shipment.retainedTill : "čo najskôr"}</td>
+      <td>{shipment.retainedTill !== "" ? formatSkDate(shipment.retainedTill) : "čo najskôr"}</td>
       <td>
         {shipment.count}/4{" "}
         {shipment.callNeeded && (
@@ -39,7 +40,7 @@ export function PostaUncollectedRow({
           </span>
         )}
       </td>
-      <td>{shipment.lastSentAt !== "" ? shipment.lastSentAt : "—"}</td>
+      <td>{formatSkDate(shipment.lastSentAt)}</td>
       <td>
         <button
           type="button"

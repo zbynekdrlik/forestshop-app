@@ -2,6 +2,7 @@ import { desc, eq, sql } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
 import { jobRuns } from "../../db/schema.js";
 import { log } from "../../logger.js";
+import { getZonedDateParts, zonedDateKey } from "../../timezone.js";
 import type { Schedule, ScheduledJob } from "./types.js";
 
 // Zámok naplánovaných úloh — VLASTNÝ, samostatný kľúč (advisory zámky zdieľajú
@@ -14,13 +15,21 @@ function utcDateKey(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
-// Kľúč periódy podľa druhu rozvrhu — `daily` periodizuje podľa UTC
-// kalendárneho dňa (nezmenené), `hourly` (#115) podľa UTC dňa+hodiny, aby sa
-// tá istá hodina neopakovala dvakrát. Rovnaký beh v RÔZNYCH periódach (napr.
-// 23:00 včera vs. 01:00 dnes pri `daily`, alebo 10:xx vs. 11:xx pri `hourly`)
-// má rôzny kľúč → znova splatná.
+// Kľúč periódy podľa druhu rozvrhu — issue 293: `daily` periodizuje podľa
+// MIESTNEHO (Europe/Bratislava) kalendárneho dňa (predtým UTC deň — beh
+// tesne po slovenskej polnoci, ale ešte pred UTC polnocou, dostal VČEREJŠÍ
+// kľúč a úloha sa mohla spustiť DRUHÝKRÁT v ten istý slovenský deň).
+// `hourly` (#115) ZOSTÁVA podľa UTC dňa+hodiny, ZÁMERNE nelokalizované —
+// hodinový job nemá cieľovú hodinu (beží KAŽDÚ hodinu), lokalizácia kľúča by
+// v deň prechodu na ZIMNÝ čas (miestna hodina 02:00-03:00 sa v UTC termínoch
+// vyskytne DVAKRÁT) spôsobila, že druhý skutočný beh sa nesprávne považuje
+// za duplicitný tej istej periódy. UTC hodina je jednoznačná a monotónna,
+// presne to hodinový job potrebuje — `zonedDateKey` (nová, lokalizovaná
+// cesta) sa preto používa LEN pre `daily`.
+// Rovnaký beh v RÔZNYCH periódach (napr. 23:00 včera vs. 01:00 dnes pri
+// `daily`, alebo 10:xx vs. 11:xx pri `hourly`) má rôzny kľúč → znova splatná.
 function periodKey(schedule: Schedule, d: Date): string {
-  if (schedule.kind === "daily") return utcDateKey(d);
+  if (schedule.kind === "daily") return zonedDateKey(d);
   return `${utcDateKey(d)}T${String(d.getUTCHours()).padStart(2, "0")}`;
 }
 
@@ -38,10 +47,18 @@ export function isDue(
 ): boolean {
   if (lastRun !== null && periodKey(schedule, lastRun.startedAt) === periodKey(schedule, now)) return false;
   if (schedule.kind === "daily") {
-    const targetMinuteOfDay = schedule.hourUtc * 60 + schedule.minuteUtc;
-    const nowMinuteOfDay = now.getUTCHours() * 60 + now.getUTCMinutes();
+    // issue 293: cieľová aj aktuálna hodina/minúta sa porovnávajú v
+    // MIESTNOM (Europe/Bratislava) čase, nie v UTC — `hourLocal`/
+    // `minuteLocal` (types.ts) sú teraz slovenský čas, presne to, čo
+    // majiteľ v `jobs.ts` nastavuje.
+    const targetMinuteOfDay = schedule.hourLocal * 60 + schedule.minuteLocal;
+    const { hour, minute } = getZonedDateParts(now);
+    const nowMinuteOfDay = hour * 60 + minute;
     return nowMinuteOfDay >= targetMinuteOfDay;
   }
+  // Minúta v rámci hodiny je pre Europe/Bratislava (celohodinový offset)
+  // časovo-pásmovo NEZÁVISLÁ — UTC minúta == miestna minúta, netreba
+  // lokalizovať (viď komentár na `HourlySchedule.minuteUtc` v types.ts).
   return now.getUTCMinutes() >= schedule.minuteUtc;
 }
 

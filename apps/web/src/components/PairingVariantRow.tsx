@@ -1,4 +1,5 @@
 import type { JSX } from "react";
+import { formatSkDate } from "../formatDate.js";
 import type { PairingItem } from "../pairingApi.js";
 
 const STATE_LABELS: Record<PairingItem["state"], string> = {
@@ -83,7 +84,7 @@ export function PairingVariantRow({
       <td>
         {item.confirmedByName === null
           ? "—"
-          : `${item.confirmedByName} (${new Date(item.confirmedAt ?? "").toLocaleDateString("sk-SK")})`}
+          : `${item.confirmedByName} (${formatSkDate(item.confirmedAt)})`}
       </td>
       {canConfirm && (
         <td>

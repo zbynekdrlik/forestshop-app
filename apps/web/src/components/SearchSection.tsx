@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState, type SyntheticEvent, type JSX } from "react";
 import type { Me } from "../api.js";
+import { formatSkDateTime } from "../formatDate.js";
 import { validateSupplierLinkUrl } from "../ordersApi.js";
 import {
   fetchProductDetail,
@@ -32,12 +33,6 @@ const SUPPLIER_AVAILABILITY_LABELS: Record<"available" | "unavailable" | "unknow
   unknown: "Nezistené",
 };
 
-function formatDateTime(iso: string | null): string {
-  if (iso === null) return "—";
-  const date = new Date(iso);
-  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString("sk-SK");
-}
-
 /** Rovnaká "uložené vs. odoslané do Shoptetu" logika ako `SupplierLinksSection.tsx`'s
  * `statusLabel` — vyvodená len z `supplierLinkUpdatedAt`/`supplierLinkSyncedAt`. */
 function linkStatusLabel(detail: ProductDetail): string {
@@ -45,7 +40,7 @@ function linkStatusLabel(detail: ProductDetail): string {
   const pending = detail.supplierLinkSyncedAt === null || detail.supplierLinkSyncedAt < detail.supplierLinkUpdatedAt;
   return pending
     ? "⏳ Uložené, čaká na odoslanie"
-    : `✅ Odoslané do Shoptetu (${formatDateTime(detail.supplierLinkSyncedAt)})`;
+    : `✅ Odoslané do Shoptetu (${formatSkDateTime(detail.supplierLinkSyncedAt)})`;
 }
 
 function supplierAvailabilityLabel(variant: ProductDetailVariant): string {

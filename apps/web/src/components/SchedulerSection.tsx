@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type JSX } from "react";
 import type { Me } from "../api.js";
+import { formatSkDateTime } from "../formatDate.js";
 import { detailText, jobLabel, STATUS_LABELS } from "../schedulerLabels.js";
 import { fetchJobRuns, SchedulerUnauthorizedError, type JobRun } from "../schedulerApi.js";
 
@@ -67,10 +68,10 @@ export function SchedulerSection({
             {runs.map((run) => (
               <tr key={run.jobName} data-testid={`job-${run.jobName}`}>
                 <td>{jobLabel(run.jobName)}</td>
-                <td>{new Date(run.startedAt).toLocaleString("sk-SK")}</td>
+                <td>{formatSkDateTime(run.startedAt)}</td>
                 <td>{STATUS_LABELS[run.status]}</td>
                 <td>
-                  {run.finishedAt === null ? "—" : new Date(run.finishedAt).toLocaleString("sk-SK")}
+                  {formatSkDateTime(run.finishedAt)}
                 </td>
                 <td>{detailText(run)}</td>
               </tr>
