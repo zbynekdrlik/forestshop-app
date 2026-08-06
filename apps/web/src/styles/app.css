@@ -307,7 +307,11 @@ tr:last-child td {
   align-items: center;
   gap: var(--fs-space-3);
   width: 100%;
-  padding: var(--fs-space-2) var(--fs-space-3);
+  /* issue 288: rozostupy ľavého menu stiahnuté o jeden krok existujúcej
+     tokenovej škály (8px → 4px vertikálne) — s pribúdajúcimi záložkami
+     (dnes 13) sa pôvodné rozostupy sčítali na zbytočné rolovanie. Horizontálne
+     odsadenie (klikacia šírka) sa nemení. */
+  padding: var(--fs-space-1) var(--fs-space-3);
   border: 0;
   background: none;
   cursor: pointer;
@@ -336,8 +340,11 @@ tr:last-child td {
 .nav-folder.collapsed .folder-head .folder-chev {
   transform: rotate(-90deg);
 }
+/* issue 288: medzera PO skupine (pred ďalšou hlavičkou priečinka) stiahnutá
+   z --fs-space-3 (12px) na --fs-space-2 (8px), rovnaký dôvod ako
+   `.folder-head`/`.tabs .tab` vyššie. */
 .folder-body {
-  margin: var(--fs-space-1) 0 var(--fs-space-3);
+  margin: var(--fs-space-1) 0 var(--fs-space-2);
 }
 .nav-folder.collapsed .folder-body {
   display: none;
@@ -351,7 +358,9 @@ tr:last-child td {
   display: flex;
   align-items: center;
   gap: var(--fs-space-3);
-  padding: var(--fs-space-2) var(--fs-space-3);
+  /* issue 288: rovnaké stiahnutie ako `.folder-head` vyššie (8px → 4px
+     vertikálne) — pri 13 záložkách toto samo prináša najväčšiu úsporu. */
+  padding: var(--fs-space-1) var(--fs-space-3);
   border-radius: var(--fs-radius-sm);
   color: var(--fs-ink);
   font-size: var(--fs-text-base);
