@@ -38,8 +38,10 @@ paths:
   (per zásielka), a xact-scoped zámok by znamenal držať jednu DB transakciu
   otvorenú počas nich (zbytočná záťaž na connection pool). Nájdené code
   review na PR 177 — bez zámku by dva prekrývajúce sa behy (dvaja manažéri
-  "Spustiť teraz" súčasne, alebo ručný klik prekrývajúci sa s 07:00 UTC
-  scheduled behom) mohli OBA prečítať ten istý `notifyCount` pred zápisom a
+  "Spustiť teraz" súčasne, alebo ručný klik prekrývajúci sa s 07:00
+  Europe/Bratislava scheduled behom — issue 293: predtým doslovné 07:00
+  UTC, appka reálne behala až o 09:00 slovenského času) mohli OBA prečítať
+  ten istý `notifyCount` pred zápisom a
   poslať duplicitný e-mail zákazníkovi. Regresný test (deterministický,
   `pg_try_advisory_lock` z druhého pripojenia — rovnaká technika ako
   `db-isolation-lock.integration.test.ts`):

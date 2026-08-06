@@ -10,6 +10,27 @@ paths:
 
 # Deployment (dev2)
 
+- **Kontajner beží v `TZ=Europe/Bratislava` (issue 293) — nastavené DVAKRÁT,
+  zámerne.** `Dockerfile`'s `ENV TZ=Europe/Bratislava` (runtime štádium) je
+  baked-in predvolená hodnota v samotnom obraze; `docker-compose.prod.yml`'s
+  `TZ: Europe/Bratislava` v `app`'s `environment:` bloku ju robí
+  explicitnou/prepísateľnou na úrovni nasadenia, rovnaká disciplína ako
+  každá iná premenná nižšie. Predtým appka aj kontajner bežali BEZ
+  nastaveného pásma (teda v UTC) — naplánované úlohy (`.claude/rules/
+  scheduler.md`) tak reálne behali o 1-2 hodiny neskôr, než majiteľ
+  nastavil. Node 24's plné ICU rozlíši `TZ` SPRÁVNE aj bez `tzdata`
+  balíka (overené priamo: `docker run --rm -e TZ=Europe/Bratislava
+  node:24-alpine node -e '...'` dal správny +1/+2 offset s nula
+  nainštalovanými balíkmi) — `tzdata` (v `Dockerfile`'s `apk add`) je tu
+  napriek tomu, lebo Alpine's `/usr/share/zoneinfo` inak vôbec neexistuje a
+  musl-linkované nástroje MIMO Node/V8 (napr. shellov vlastný `date`)
+  bez neho ticho spadnú späť do UTC — overené priamo (`date` v holom
+  obraze ukázal UTC aj s `TZ` nastaveným, správny CEST čas až po `apk add
+  tzdata`). Postgres-ova VLASTNÁ session `timezone` ostáva zámerne UTC
+  (`timestamptz` stĺpce sa VŽDY ukladajú v UTC bez ohľadu na session
+  pásmo — to je odporúčaná prax, nie chyba) — appka prevádza na slovenský
+  čas AŽ pri čítaní/plánovaní (`apps/api/src/timezone.ts`), nikdy sa
+  nespolieha na to, že DB samotná vráti lokálny čas.
 - **Nová premenná v `env.ts` MUSÍ dostať svoj riadok v `environment:` bloku
   `docker-compose.prod.yml` — inak sa do kontajnera NIKDY nedostane, aj keby
   bola korektne nastavená v `/srv/forestshop/.env`.** Compose neprenáša `.env`

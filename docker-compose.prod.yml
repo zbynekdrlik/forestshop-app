@@ -49,6 +49,13 @@ services:
       DATABASE_URL: postgres://forestshop:${POSTGRES_PASSWORD}@postgres:5432/forestshop
       PORT: 3000
       SESSION_COOKIE_SECURE: "true"
+      # issue 293: kontajner predtým bežal bez nastaveného pásma (teda v
+      # UTC), takže naplánované úlohy behali o 1-2 hodiny neskôr, než
+      # majiteľ nastavil. `Dockerfile` má TÚ ISTÚ hodnotu ako baked-in
+      # predvolenú (`ENV TZ=Europe/Bratislava`) — tento riadok ju len robí
+      # explicitnou/prepísateľnou tu, rovnaká disciplína ako každá iná
+      # premenná v tomto bloku.
+      TZ: Europe/Bratislava
       # Zámerne BEZ `:?` (na rozdiel od POSTGRES_PASSWORD/CF_TUNNEL_TOKEN nižšie) —
       # `env.ts` (F0) má SHOPTET_EXPORT_URL ako `.optional()`, appka bez neho beží,
       # len ručný import vráti 503. Bare kľúč preberá hodnotu z `/srv/forestshop/.env`,
