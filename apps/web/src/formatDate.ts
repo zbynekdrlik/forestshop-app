@@ -16,12 +16,19 @@ function toValidDate(value: string | Date | null | undefined): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
+/** Jadro `formatSkDate` s explicitným pásmom (testovateľné samostatne —
+ * `TIME_ZONE` nižšie je zámerne kladný posun, takže bug pri bare
+ * `YYYY-MM-DD` vstupe cez ňu nejde vidieť). */
+export function formatSkDateInZone(value: string | Date | null | undefined, zone: string): string {
+  const d = toValidDate(value);
+  if (d === null) return "—";
+  return d.toLocaleDateString("sk-SK", { timeZone: zone });
+}
+
 /** Slovenský tvar dátumu, napr. "6. 8. 2026". Prázdny/nerozpoznateľný
  * vstup → "—". */
 export function formatSkDate(value: string | Date | null | undefined): string {
-  const d = toValidDate(value);
-  if (d === null) return "—";
-  return d.toLocaleDateString("sk-SK", { timeZone: TIME_ZONE });
+  return formatSkDateInZone(value, TIME_ZONE);
 }
 
 /** Slovenský tvar dátumu + času (bez sekúnd), napr. "6. 8. 2026 14:40".
