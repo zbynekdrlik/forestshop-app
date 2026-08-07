@@ -3128,3 +3128,55 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
   via `secret request` repeatedly overnight, 600s URL TTL expired
   unused each time — owner was asleep). First real shipment must be
   clicked by the owner himself once the form is live-mapped.
+
+## Issue 319 — Vypredané → Skladom: 'Spustiť teraz' restock deps wiring (2026-08-08)
+
+- Commits: `742af17` (version bump 0.3.0-dev.184) → `6571eda` [red]
+  static-source regression test → `ec4eb5d` [green] fix → `c53b937`
+  (playbook `.claude/rules/supplier-stock.md`).
+- Validated FIRST: another worker's own prior live observation
+  (2026-08-07, click returned `nothing_to_do`) looked like it contradicted
+  the ticket. Traced `runRestockLocked` — it returns `nothing_to_do`
+  BEFORE ever touching Shoptet login when there are 0 candidates, so the
+  observation didn't rule anything out. Cross-referenced production
+  `job_run`/`audit_events`: a `failure` row at 2026-08-06 12:37:16 carried
+  the exact predicted "prihlasovací formulár stále viditeľný" error, right
+  after a manual `restock.enabled.set` toggle, with no matching
+  `restock.run_now` audit row (the HTTP handler's `record()` is skipped on
+  the exception path) — confirmed the ticket was genuinely valid, posted
+  as its own `gh issue comment`.
+- Design: root cause traced to `index.ts`'s `createApp(db, {...})` never
+  passing a `restock` key (only gap of its shape — checked all `options.*`
+  in `http/app.ts` against the call site). Chose the ticket's own
+  one-line fix over making `restock` a required `AppOptions` field
+  (rejected — would force editing ~35 existing test files calling
+  `createApp` without `restock`, for no behavioral gain since `http/
+  app.ts`'s fail-closed fallback is itself the documented intended
+  design).
+- RED/GREEN: `index.ts` can't be safely imported in a test (module-top-level
+  DB migration + `serve()`), so the regression test statically reads the
+  source and regex-checks the `createApp(...)` call block references the
+  real `shoptetAdminUser ?? ""`/`shoptetAdminPassword ?? ""` variables —
+  independently re-verified by the deep-review subagent, which re-ran the
+  test against the pre-fix source and confirmed RED.
+- Review: `/review` inline (0/0/0) + dispatched `general-purpose` deep
+  reviewer with precisely-crafted context (BASE `1067197`/HEAD `ec4eb5d`,
+  no session history) — 0 Critical/Important/Minor, confirmed `restock`
+  was the only wiring gap and the fix preserves the fail-closed default
+  when env vars are absent.
+- Local gates: `pnpm typecheck`/`pnpm lint` clean; API unit 653/653 (46
+  files); API integration 608/608 (81 files); web unit 522/522 (71
+  files); e2e 51/51 (52 spec files), zero console errors.
+- PR #321 merged (`f336e38`) to `main`; main CI + Deploy both green.
+  Post-deploy verification: DOM version `v0.3.0-dev.184`; directly
+  `docker exec`'d into the running container and confirmed
+  `dist/index.js` carries the fix verbatim (not just that CI passed);
+  clicked "⚡ Spustiť teraz" live — succeeded, 0 console errors,
+  `job_run` `success {"status":"nothing_to_do"}` (0 candidates waiting at
+  the time, so this specific click never reached the Shoptet-login step).
+  Closed the ticket on the strength of: the deployed code now calls the
+  IDENTICAL `shoptetImportConfigFromBaseUrl(...)` with the IDENTICAL
+  credentials that the scheduled `restockJob` (2026-08-07 18:10, "ok,
+  switched 1") and the hourly `shoptet-writeback` job repeatedly prove
+  valid — documented explicitly on the closing comment, with an
+  invitation to reopen if a real candidate somehow still fails.
