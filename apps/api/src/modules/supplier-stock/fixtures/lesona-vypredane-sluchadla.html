@@ -1,0 +1,31 @@
+<!-- issue 307: lesona.sk — SKUTOČNÝ produkt (3M Peltor SportTac slúchadlá,
+     id 58), naživo overené 7. 8. 2026. Stránkové schema.org mikrodáta
+     tvrdia `InStock` (`<link itemprop="availability"
+     href="https://schema.org/InStock"/>`, o kus vyššie v tomto istom
+     dokumente), ale VIDITEĽNÝ `<span id="product-…">` (id product-availability) aj
+     zablokované tlačidlo "Vložiť do košíka" (`disabled`) hovoria opak —
+     mikrodáta na tejto doméne KLAMÚ, presne ako odimon.sk (issue 225).
+     Preto sa dostupnosť na lesona.sk číta VÝHRADNE z tohto viditeľného
+     `<span>`, nikdy z mikrodát. -->
+<!doctype html>
+<html lang="sk">
+<head><title>Slúchadlá 3M Peltor SportTac s výmennými oranžovými mušľami</title></head>
+<body>
+<div class="product-price" itemprop="offers" itemscope itemtype="https://schema.org/Offer">
+  <link itemprop="availability" href="https://schema.org/InStock"/>
+</div>
+<div class="product-add-to-cart">
+  <div class="product-quantity">
+    <div class="add">
+      <button class="btn btn-primary add-to-cart" data-button-action="add-to-cart" type="submit" disabled>
+        Vložiť do košíka
+      </button>
+      <span id="product-availability">
+        <i class="material-icons product-unavailable">&#xE14B;</i>
+        Vypredané
+      </span>
+    </div>
+  </div>
+</div>
+</body>
+</html>

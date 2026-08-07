@@ -36,6 +36,9 @@ const LUKO_VIACVELKOSTNA = fixture("luko-viacvelkostna-bez-testid.html");
 const FOMEI_SKLADOM = fixture("fomei-skladom-puskohlad.html");
 const FOMEI_NA_DOTAZ = fixture("fomei-nadotaz-dalekohlad.html");
 const CHIRUCA_VELKOSTI = fixture("chiruca-velkosti-cameros.html");
+// zubicek.cz/lesona.sk/rappa.cz/rosler.sk (issue 307) testy su v
+// parse-issue307.test.ts — vydelene, aby ani jeden zo suborov neprerastol
+// eslint max-lines: 400.
 
 describe("hostOf / isTrustedTextHost", () => {
   it("odreze www a zmensi pismena", () => {

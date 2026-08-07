@@ -362,3 +362,19 @@ paths:
   súbore, len tu bez potreby zámku (kategória je znova-ohlásiteľná, takže
   TOCTOU na INSERTe nehrozí — zámok by tu riešil problém, čo v tejto
   kategórii vôbec neexistuje).
+- **Issue 308 (založený 7.8.2026, deň PO #283) žiadal presne to, čo #283 už
+  dodalo a naživo overilo deň predtým — zatvorené ako OBSOLETE bez jedného
+  riadku kódu.** Ticketov telo citovalo majiteľov Discord komentár ("nedá sa
+  vrátiť vybavené späť"), no `returnUpozornenieToOpen`/záložka Vybavené/
+  tlačidlo "↩ Vrátiť medzi otvorené" už existovali a boli nasadené (PR #285,
+  merge `579cff2`, live-overenie 6.8.2026 11:22) — #308 vzniklo AŽ 7.8.2026
+  11:57, teda s viac než dennným oneskorením oproti tomu, čo appka už
+  reálne robila. **Poučenie pre KAŽDÝ ĎALŠÍ ticket na tomto module, čo znie
+  ako "X sa nedá spraviť":** over si NAJPRV, či #283/#297 (alebo novší
+  komentár na tickete) už presne toto nedodalo — `.claude/rules/
+  upozornenia.md`'s vlastná história je hustá práve preto, že táto oblasť
+  sa mení rýchlo a ticket môže byť podaný neskoro, nie preto, že funkcia
+  chýba. STEP 0 (`verify-issue-still-valid`) živé Playwright overenie proti
+  produkcii (vlastná testovacia poznámka: vytvoriť → vybaviť → záložka
+  Vybavené → vrátiť → späť v Otvorené → zmazať, 0 chýb v konzole) toto
+  potvrdilo za pár minút, namiesto zbytočnej re-implementácie.

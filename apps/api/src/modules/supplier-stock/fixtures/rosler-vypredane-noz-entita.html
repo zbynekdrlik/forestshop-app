@@ -1,0 +1,20 @@
+<!-- issue 307 (code review nález): rosler.sk kóduje KAŽDÚ diakritiku
+     číselnou HTML entitou (naživo overené na produkčnej stránke —
+     "dn&#xED;" = "dní", "ma&#xE1;" = "malá", "no&#x17E;e" = "nože"), nikdy
+     priamym UTF-8 znakom. Genuinný vypredaný text sa naživo NENAŠIEL
+     (viď rosler-do-14-dni-noz.html), takže TENTO fixture nie je naživo
+     overená vzorka — je to REGRESNÝ test mechanizmu dekódovania: keby
+     rosler.sk niekedy zobrazil "vypredan&#xE9;" (entitovo zakódované
+     "vypredané"), extraktor ho MUSÍ rozpoznať ako unavailable, nikdy
+     nesmie ticho spadnúť na unknown len preto, že diakritiku
+     nesprávne vyprázdnil namiesto dekódovania. -->
+<!doctype html>
+<html lang="sk">
+<head><title>Testovací produkt (entitovo kódovaná diakritika)</title></head>
+<body>
+<div class="product-detail-priceBox">
+  <div class="product-detail-price">Cena: 45,00&nbsp;€</div>
+  <div class=product-detail-stock> Vypredan&#xE9; </div>
+</div>
+</body>
+</html>
