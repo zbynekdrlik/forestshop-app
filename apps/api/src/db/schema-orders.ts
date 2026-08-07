@@ -141,6 +141,20 @@ export const orders = pgTable(
     // Používa sa VÝHRADNE na dashboardovú tržbu (`orders/overview.ts`) —
     // appka doteraz žiadnu peňažnú sumu neukladala vôbec.
     totalPriceWithVat: numeric("total_price_with_vat", { precision: 12, scale: 2 }),
+    // issue 290: appkina VLASTNÁ reklamácia-značka — Shoptet nemá pre
+    // reklamácie žiadny použiteľný stav ani políčko v produkčných dátach
+    // (jeho číselníkový stav "REKLAMACIA" nikdy nedostane priradenú žiadnu
+    // objednávku, overené naživo proti produkcii), takže appka si ju musí
+    // viesť sama. `null` = neoznačená (bežná objednávka). Vyplnené =
+    // obsluha ju ručne označila cez "Eshop → Reklamácie" — jediný zápis
+    // do tohto poľa, `modules/orders/order-flags.ts`'s `markOrderClaim`/
+    // `clearOrderClaim`. NIKDY sa neodvodzuje z `statusName`/`comment`/AI
+    // dohadu (rozhodnuté na tickete — žiadne AI dohady o reklamácii).
+    claimMarkedAt: timestamp("claim_marked_at", { withTimezone: true }),
+    // Nepovinná krátka poznámka obsluhy k reklamácii (napr. "chybný zips,
+    // čaká sa na vrátenie") — vypĺňa sa/maže spolu s `claimMarkedAt` vyššie,
+    // nikdy samostatne.
+    claimNote: text("claim_note"),
   },
   (t) => [index("order_placed_at_idx").on(t.placedAt)],
 );
