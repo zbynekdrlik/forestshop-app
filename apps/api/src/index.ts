@@ -228,6 +228,14 @@ const dpdDeps = {
   config: dpdUser === undefined || dpdPassword === undefined ? undefined : dpdPortalConfigFromBaseUrl(env.DPD_PORTAL_BASE_URL, dpdUser, dpdPassword),
 };
 
+// issue 319: chýbajúci kľúč tu (na rozdiel od `postaUncollected`/
+// `orderReminder`/`nedostupne`/`orderMerge`/`dpd` nižšie) nechával
+// `registerRestockRoutes` (`http/app.ts`) vždy padnúť na jeho fail-closed
+// fallback (prázdne prihlasovacie údaje) — manuálne "Spustiť teraz" tak v
+// produkcii vždy zlyhalo na prihlásení do Shoptetu, hoci `runRestockFn`
+// vyššie (pre naplánovaný nočný beh) má tie isté reálne premenné správne
+// zostavené. `?? ""` mimo prítomnosti premenných zachováva presne to isté
+// fail-closed správanie, aké `app.ts`'s fallback mal dovtedy sám.
 const app = createApp(db, {
   cookieSecure: env.SESSION_COOKIE_SECURE,
   ...(runIngest === undefined ? {} : { runIngest }),
@@ -239,6 +247,7 @@ const app = createApp(db, {
   nedostupne: nedostupneDeps,
   orderMerge: orderMergeDeps,
   fetchSupplierPage,
+  restock: { config: shoptetImportConfigFromBaseUrl(env.SHOPTET_ADMIN_BASE_URL, shoptetAdminUser ?? "", shoptetAdminPassword ?? "") },
   dpd: dpdDeps,
 });
 

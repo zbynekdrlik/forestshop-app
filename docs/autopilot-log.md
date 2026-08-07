@@ -3078,3 +3078,53 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
   suite, before the review-triggered debug run), zero console errors.
 - No PR/merge/deploy in this dispatch — supervisor owns CI/PR/merge/deploy
   per the dispatch's HARD CONSTRAINT.
+
+## Issue 292 — DPD: objednať prepravu jedným tlačidlom (2026-08-08)
+
+- Commits: `463279e` (version bump 0.3.0-dev.183) → `1d6a627` (backend:
+  schema/ingest/preview/routes) → `6761e8a` (frontend: "Eshop → Preprava
+  DPD") → `c9985b0` (e2e coverage + fixtures, nav tab-count updates) →
+  `b205a90` (playbook `.claude/rules/dpd.md`) → `dc3a66d` (review fixes).
+- Design: `gh issue comment` on #292 BEFORE first commit — root cause
+  (appka never stored delivery address/weight/payment method, though the
+  Shoptet export already carries them), chosen approach (per-shipment
+  Playwright robot, since Importné profily bulk-import was empty on the
+  account and mapping its format requires a WRITE the ticket's safety
+  rule forbids), rejected alternatives (official DPD Shipper API — owner
+  explicitly reversed that decision on the ticket; deriving
+  "ready to ship" from Shoptet `status_name` — no reliable vocabulary for
+  it, own `dpd_shipment` record used instead).
+- No RED/GREEN pair — new feature, not a bug fix. Tests: unit
+  (`parser-order-extra.test.ts`, `preview.test.ts`, `DpdSection.test.tsx`),
+  integration (`dpd-http.integration.test.ts`, injected fake Playwright
+  runners — never spawns real Chromium/touches the real account),
+  e2e (`dpd.spec.ts` — proves the deployed shape is fail-closed without
+  DPD credentials; the actual send-flow interaction is covered only by
+  the mocked-API component test, e2e correctly has NO real DPD
+  credentials by design).
+- Review: dispatched `general-purpose` code-reviewer subagent, diff
+  `d15c58d..b205a90`. Result: 0 Critical, 2 Important (weight-override
+  map sent unfiltered to the server — could 400 a valid selection because
+  of a stale draft on an unrelated row; `addressComplete` missed house
+  number), 1 Minor (`POST /api/dpd/preview` missing `requireSameOrigin()`
+  for consistency) — all three fixed in `dc3a66d`.
+- Local gates: `pnpm typecheck`/`pnpm lint` clean; API unit 652/652 (46
+  files); API integration 608/608 (81 files); web unit 522/522 (71
+  files); e2e 51/51 (52 spec files incl. new `dpd.spec.ts`), zero console
+  errors.
+- PR #320 merged (`59d6623`) to `main`; main CI + Deploy both green.
+  Post-deploy Playwright verification on
+  `https://forestshop-novy.newlevel.media/?tab=dpd`: version `v0.3.0-dev.183`
+  read from DOM, "Preprava DPD" tab renders, 258 real orders listed (all
+  showing "Chýba adresa" — expected, delivery-address columns are `null`
+  until the next nightly Shoptet re-import backfills them via COALESCE),
+  default weight `1.00` applied correctly, both send/pickup buttons
+  correctly `disabled` (DPD not configured on prod — credentials never
+  arrived this session), 0 console errors.
+- **Issue 292 LEFT OPEN** (never `Closes` in PR/commits) — the actual
+  `/shipments/0` form-fill and pickup-form-fill are intentionally
+  unmapped (fail loudly with a clear message instead of guessing
+  selectors) pending `DPD_PORTAL_USER`/`DPD_PORTAL_PASSWORD` (requested
+  via `secret request` repeatedly overnight, 600s URL TTL expired
+  unused each time — owner was asleep). First real shipment must be
+  clicked by the owner himself once the form is live-mapped.
