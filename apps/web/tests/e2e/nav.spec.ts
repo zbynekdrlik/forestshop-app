@@ -26,8 +26,10 @@ const E2E_NAV_EMAIL = "e2e-nav@forestshop.sk";
 // samostatnom `order-flags.spec.ts`, rovnaký vzor). Issue 311 (2026-08-07)
 // pridáva "Vypredané → Skladom: návrhy odkazov" HNEĎ ZA "Vypredané →
 // Skladom" — sedemnásta záložka celkovo (funkčný test v samostatnom
-// `restock-links.spec.ts`, rovnaký vzor).
-test("ľavé menu má tri priečinky (Systém/Eshop/Automatizácie) so sedemnástimi záložkami, klik prepne obrazovku, panel sa zbalí do lišty a stav si pamätá, konzola je čistá", async ({
+// `restock-links.spec.ts`, rovnaký vzor). Issue 292 (2026-08-08) pridáva
+// "Preprava DPD" NA KONIEC priečinka "Eshop" — osemnásta záložka celkovo
+// (funkčný test v samostatnom `dpd.spec.ts`, rovnaký vzor).
+test("ľavé menu má tri priečinky (Systém/Eshop/Automatizácie) s osemnástimi záložkami, klik prepne obrazovku, panel sa zbalí do lišty a stav si pamätá, konzola je čistá", async ({
   page,
 }) => {
   const chyby: string[] = [];
@@ -48,8 +50,8 @@ test("ľavé menu má tri priečinky (Systém/Eshop/Automatizácie) so sedemnás
   await expect(page.getByRole("button", { name: "Eshop" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Automatizácie" })).toBeVisible();
 
-  // Presne sedemnásť záložiek v CELOM menu.
-  await expect(page.locator(".side-nav .tab")).toHaveCount(17);
+  // Presne osemnásť záložiek v CELOM menu.
+  await expect(page.locator(".side-nav .tab")).toHaveCount(18);
   await expect(page.getByRole("button", { name: "Sync zo Shoptetu" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Texty e-mailov" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Na objednanie" })).toBeVisible();
@@ -63,6 +65,7 @@ test("ľavé menu má tri priečinky (Systém/Eshop/Automatizácie) so sedemnás
   await expect(page.getByRole("button", { name: "Vyhľadať" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Zlúčenie objednávok" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Upozornenia" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Preprava DPD" })).toBeVisible();
 
   // issue 302: predvolená obrazovka (bez kliknutia) je odvtedy "Na
   // objednanie", nie "Sync zo Shoptetu". `scripts/e2e-setup.ts` vždy seeduje
@@ -181,7 +184,7 @@ test("ľavé menu má tri priečinky (Systém/Eshop/Automatizácie) so sedemnás
 
   // Hlavičky priečinkov zmiznú, ikony všetkých modulov ostanú.
   await expect(page.getByRole("button", { name: "Systém" })).toHaveCount(0);
-  await expect(page.locator(".side-nav .tab")).toHaveCount(17);
+  await expect(page.locator(".side-nav .tab")).toHaveCount(18);
   // Názov sa v lište ukáže bublinou pri prejdení myšou.
   await expect(page.getByRole("button", { name: "Na objednanie" })).toHaveAttribute(
     "title",
