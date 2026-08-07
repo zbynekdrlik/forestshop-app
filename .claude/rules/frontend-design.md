@@ -987,3 +987,41 @@ paths:
   (izolovaný re-beh prešiel čisto). Pred hľadaním regresie v diffe: over
   `uptime`/`ps aux | grep vitest` PRED panikou, over izolovaným re-behom
   PRESNE zlyhaného súboru.
+- **"Zmenši medzery/objekty naprieč CELOU appkou" (issue 303, majiteľ:
+  "vsetko zabera priatelia miesta ... uz mam okuliare, vidim celkom
+  dobre") sa rieši VÝHRADNE zmenou `:root`'s `--fs-space-*`/`--fs-text-*`
+  ČÍSEL v `app.css`, nikdy súbor-po-súbore — appka je od issue 57 postavená
+  tak, že KAŽDÁ obrazovka/tabuľka/dialóg čerpá odsadenie/písmo z týchto
+  tokenov, takže jedna centrálna zmena čísel sa prejaví VŠADE naraz.
+  Zvolená škála (jeden krok hustejšie): `--fs-space-1` ostáva 4px
+  (najmenšia atomická jednotka), `-2..-7` 8/12/16/24/32/48px →
+  6/8/12/16/24/32px; `--fs-text-xs/-sm` (12/13px, tabuľky + drobné
+  popisky — dnešná čitateľnosti podlaha) ostávajú NA MIESTE, `-base/-md/
+  -lg/-xl` (15/17/21/26px → 14/15/18/22px) klesajú o jeden krok; `body`
+  `line-height` 1.5 → 1.4. Klikacie plochy s VLASTNÝM pevným
+  `min-width`/`min-height` (36×36px "veľké tlačidlá", `.rail-toggle`'s
+  40px) NIE sú odvodené z tejto škály, takže sa nezmenšili — zámerne,
+  zadanie žiada zachovať rýchlu prácu myšou. Keďže ide o čisto vizuálnu
+  zmenu bez zmeny správania, nemá zmysel red/green pár — namiesto toho
+  over, že VŠETKY existujúce testy (unit + integration + e2e) prejdú
+  bezo zmeny (kontrolujú HORNÉ hranice výšky riadku / šírky stĺpca, nie
+  presné pixely, takže zmenšenie ich neprelomí) a urob živé Playwright
+  overenie proti lokálnemu dev serveru. Pri ĎALŠOM "appka je príliš X"
+  tickete over NAJPRV, či sa dá vyriešiť len posunom týchto tokenov, než
+  siahneš po úprave jednotlivej obrazovky.
+- **`pnpm exec tsx scripts/e2e-setup.ts` spustený SÚBEŽNE s bežiacim
+  `pnpm --filter @forestshop/api test:integration` na TEJ ISTEJ
+  `DATABASE_URL` spôsobí SKUTOČNÉ, nesúvisiace zlyhanie integračného
+  testu** — `e2e-setup.ts`'s vlastný `TRUNCATE` zoznam (`.claude/rules/
+  testing.md`) nie je chránený `withCleanDb()`'s advisory zámkom, takže
+  jeho TRUNCATE `sessions`/`users` môže padnúť presne do okna bežiaceho
+  testu a zneplatniť jeho session (issue 303: `supplier-mail.integration
+  .test.ts` dostalo 401 namiesto očakávaného 503 — vyzeralo to ako
+  regresia, bol to len súbežný beh). Fix nie je v kóde: NIKDY nespúšťaj
+  `e2e-setup.ts` (ani manuálne pre živé Playwright overenie), kým beží
+  `test:integration` na tej istej DB — počkaj na jeho koniec
+  (`ps aux | grep vitest`), až POTOM seeduj/over naživo. Pri
+  podozrivom, na prvý pohľad nesúvisiacom zlyhaní integračného testu
+  (najmä auth-kódy 401/403 tam, kde sa to nečaká) skontroluj najprv, či
+  medzitým nebežal iný proces mutujúci zdieľané tabuľky, a over
+  IZOLOVANÝM opakovaným behom, než hľadáš regresiu v diffe.
