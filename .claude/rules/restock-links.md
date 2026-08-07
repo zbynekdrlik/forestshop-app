@@ -71,3 +71,21 @@ paths:
   (`{ exact: true }`), nikdy premenovaním novej záložky. Test pri KAŽDEJ
   ďalšej záložke pridanej HNEĎ VEDĽA existujúcej s podobným menom: `grep -rn
   'name: "<časť existujúceho mena>"' apps/web/tests/e2e/` bez `exact: true`.
+- **Naživo overiť "návrh → potvrdiť" na produkcii bez ponechania testovacích
+  dát: over `synced_at IS NULL` PRED zmazaním, potvrď skutočný kandidát,
+  potom RIADOK ZMAŽ (nie prepíš na prázdno — `supplierLinkUrlBody` vyžaduje
+  platnú URL, prázdny reťazec sa uložiť nedá).** Post-deploy overenie issue
+  311 (7. 8. 2026): klik na skutočný (appkou navrhnutý) kandidát pre
+  "Batéria OLIGHT 18650 nabíjateľná 2600 mAh 3,7V" (ODIMON) → uložené →
+  `Nájdených: 35→34` → potvrdené aj na "Párovanie produktov" (rovnaký
+  zápis). `product_supplier_link_override.synced_at` bol `NULL`
+  (`shoptet-writeback` job odkaz ešte neposlal — beží nočne/na ručný
+  spustenie, nie hneď po uložení) → bezpečné `DELETE FROM
+  product_supplier_link_override WHERE product_key = '...' AND synced_at IS
+  NULL` priamo cez `docker compose exec postgres psql` na dev2 (rovnaký
+  prístup ako `.claude/rules/product-links.md`'s "shoptet-writeback" časť) —
+  vrátilo produkt do pôvodného stavu (`Nájdených: 35`) bez toho, aby
+  vymyslená/testovacia hodnota niekedy dorazila do reálneho Shoptetu. Test
+  na KAŽDÉ ĎALŠIE naživo overenie "pridaj odkaz" flow na produkte, čo dovtedy
+  ŽIADEN odkaz nemal: `synced_at IS NULL` je podmienka bezpečného zmazania,
+  NIE predpoklad — over ju dopytom PRED zmazaním, nikdy nepredpokladaj.
