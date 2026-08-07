@@ -326,3 +326,38 @@ paths:
   `posta-vratena:<číslo>`) sú SAMOSTATNÉ mená priestorov nad tou istou
   zásielkou, aby mohli koexistovať/prepínať sa bez kolízie na čiastočnom
   unique indexe.
+- **Issue 301: PIATA pgEnum hodnota `objednavka_visi` — objednávka, ktorá dlho
+  visí v NEVYBAVENOM stave** (`orders/stuck-status.ts`/`orders/stuck-
+  upozornenia.ts`, napojené na TEN ISTÝ denný beh ako `vratenie` — import
+  objednávok, `orders/ingest.ts`). Nevybavené stavy ("Vybavuje sa"/
+  "Nevybavená") sú ZÁMERNE VLASTNÝ, nezávislý zoznam od admin-nastaviteľného
+  `order_open_status` (`open-statuses.ts`) — presne tá istá úvaha ako
+  `return-status.ts`'s vlastný vrátkový zoznam: keby šéf zajtra zmenil, čo sa
+  ukazuje na "Na objednanie", TOTO upozornenie sa nesmie ticho spolu s ním
+  prehodnotiť. `ORDER_STUCK_THRESHOLD_DAYS = 14` je zámerne ODLIŠNÝ (dlhší)
+  prah než `order-reminder/constants.ts`'s `MIN_DAYS = 4` — ten rieši
+  KRATŠIU, zákaznícky orientovanú vec (pripomenúť ZÁKAZNÍKOVI jeho
+  objednávku), toto rieši ŠÉFOVI, že objednávka niekde v procese zamrzla;
+  zdieľať jeden prah medzi oboma by bolo nesprávne, aj keby čísla náhodou
+  vyšli rovnaké.
+  **Kategorizačné rozhodnutie (`.claude/rules/upozornenia.md`'s vlastné
+  poučenie z #269 vyššie — "rozhodni sa VOPRED, do ktorej z dvoch kategórií
+  patrí"): `objednavka_visi` je ZNOVA-OHLÁSITEĽNÁ** (rodina #268's zásielky),
+  NIE KONEČNÁ (rodina #269's `vratenie`) — objednávka, čo sa vráti späť do
+  nevybaveného stavu a znova visí dosť dlho, má dostať NOVÚ kartu. Preto tu
+  NIE JE potrebný žiadny `.for("update")` "je už KONEČNE vybavené" pre-check
+  na `INSERT`-e — len jednoduchý `upsertUpozornenie`/`autoResolveByDedupKey`
+  pár.
+  **Auto-resolve VÝKONOVÁ past, ktorú by inak vyrobila práve TÁTO
+  znova-ohlásiteľná voľba:** na rozdiel od `vratenie`'s malej množiny
+  "HOTOVÝCH" kandidátov (`finishedReturnDedupKeys`) je "nie je nevybavené" pre
+  túto kartu skoro KAŽDÁ objednávka v 90-dňovom okne — naivný `for`-cyklus,
+  čo pre KAŽDÚ z nich zavolá `autoResolveByDedupKey` (bezpečný no-op bez
+  existujúcej karty), by spravil stovky zbytočných `UPDATE`ov na KAŽDOM behu
+  importu. `stuck-upozornenia.ts` preto NAJPRV dávkovo prečíta VŠETKY
+  otvorené `objednavka_visi` dedup kľúče JEDNÝM dopytom a auto-resolve
+  cyklus obmedzí LEN na tie — rovnaký "batch pre-check namiesto dopytu v
+  cykle" princíp ako `#269`'s `.for("update")` pre-check vyššie v tomto
+  súbore, len tu bez potreby zámku (kategória je znova-ohlásiteľná, takže
+  TOCTOU na INSERTe nehrozí — zámok by tu riešil problém, čo v tejto
+  kategórii vôbec neexistuje).
