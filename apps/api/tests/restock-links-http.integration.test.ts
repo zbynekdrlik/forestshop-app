@@ -1,5 +1,5 @@
 import { afterEach, expect, it } from "vitest";
-import { products, users, variants } from "../src/db/schema.js";
+import { productSupplierLinkOverrides, products, users, variants } from "../src/db/schema.js";
 import { createApp } from "../src/http/app.js";
 import { resetLoginRateLimit } from "../src/http/login-rate-limit.js";
 import { hashPassword } from "../src/modules/auth/passwords.js";
@@ -134,7 +134,7 @@ it("vypredaný viditeľný produkt bez linky sa zobrazí, s odvodeným kandidát
   });
 });
 
-it("produkt s efektívnou linkou (aj cez override) sa v zozname nezobrazí", async () => {
+it("produkt s efektívnou linkou z internalNote sa v zozname nezobrazí", async () => {
   const { app, cookie, db } = await boot("citanie");
   const snapshotId = await insertTestSnapshot(db);
   await seedVariant(db, snapshotId, "RL-HASLINK", "RL-HASLINK/1", {
@@ -145,6 +145,26 @@ it("produkt s efektívnou linkou (aj cez override) sa v zozname nezobrazí", asy
 
   const telo = (await (await app.request("/api/restock-links?q=RL-HASLINK", { headers: { cookie } })).json()) as Telo;
   expect(telo.items.some((i) => i.productKey === "RL-HASLINK")).toBe(false);
+});
+
+// Code review (issue 311): pôvodný test vyššie mal v názve "aj cez
+// override", ale žiadny override riadok nikdy nevkladal — nový kód
+// (`resolveEffectiveSupplierLink`'s override vetva, `queries.ts`) tak
+// zostal touto sadou testov neotestovaný. Produkt tu NEMÁ `internalNote`
+// vôbec (`null`), efektívna linka pochádza VÝHRADNE z override riadku.
+it("produkt s efektívnou linkou LEN z override (bez internalNote) sa v zozname nezobrazí", async () => {
+  const { app, cookie, db } = await boot("citanie");
+  const snapshotId = await insertTestSnapshot(db);
+  await seedVariant(db, snapshotId, "RL-OVERRIDE", "RL-OVERRIDE/1", {
+    name: "Vypredaná bunda s override linkou",
+    state: "out_of_stock",
+  });
+  await db
+    .insert(productSupplierLinkOverrides)
+    .values({ productKey: "RL-OVERRIDE", url: "https://dodavatel.example.com/z-override", updatedAt: new Date() });
+
+  const telo = (await (await app.request("/api/restock-links?q=RL-OVERRIDE", { headers: { cookie } })).json()) as Telo;
+  expect(telo.items.some((i) => i.productKey === "RL-OVERRIDE")).toBe(false);
 });
 
 it("predajný (nie vypredaný) produkt bez linky sa v zozname nezobrazí", async () => {
@@ -180,4 +200,63 @@ it("vypredaný produkt, ktorý už zmizol z exportu (missingSince), sa v zozname
 
   const telo = (await (await app.request("/api/restock-links?q=RL-MISSINGSINCE", { headers: { cookie } })).json()) as Telo;
   expect(telo.items).toHaveLength(0);
+});
+
+// Code review (issue 311): pridané, lebo `SAME_SUPPLIER_BONUS` — jediná
+// netriviálna obchodná logika tejto zmeny — dovtedy nemala ŽIADEN priamy
+// test. Kandidát s ROVNAKÝM dodávateľom, ale NIŽŠÍM prekryvom slov mena
+// (1 slovo), musí vyhrať nad kandidátom s CUDZÍM dodávateľom a VYŠŠÍM
+// prekryvom (2 slová) — bonus (100) musí prebiť akýkoľvek rozdiel v
+// samotnom textovom skóre.
+it("kandidát s ROVNAKÝM dodávateľom vyhrá nad kandidátom s vyšším prekryvom mena z CUDZIEHO dodávateľa", async () => {
+  const { app, cookie, db } = await boot("citanie");
+  const snapshotId = await insertTestSnapshot(db);
+  await seedVariant(db, snapshotId, "RL-SKORE-CHYBA", "RL-SKORE-CHYBA/1", {
+    name: "Bunda Alfa Zimná",
+    supplier: "DODAVATEL-RL-SKORE",
+    state: "out_of_stock",
+  });
+  // Rovnaký dodávateľ, zdieľa LEN jedno slovo ("bunda") — skóre 1 + bonus 100.
+  await seedVariant(db, snapshotId, "RL-SKORE-VYHRA", "RL-SKORE-VYHRA/1", {
+    name: "Bunda Iná",
+    supplier: "DODAVATEL-RL-SKORE",
+    internalNote: "https://dodavatel.example.com/rovnaky-dodavatel",
+  });
+  // Cudzí dodávateľ, zdieľa DVE slová ("bunda", "alfa") — skóre 2, bez bonusu.
+  await seedVariant(db, snapshotId, "RL-SKORE-PREHRA", "RL-SKORE-PREHRA/1", {
+    name: "Bunda Alfa Extra",
+    supplier: "INY-DODAVATEL-RL-SKORE",
+    internalNote: "https://iny.example.com/cudzi-dodavatel",
+  });
+
+  const telo = (await (await app.request("/api/restock-links?q=RL-SKORE-CHYBA", { headers: { cookie } })).json()) as Telo;
+  const item = telo.items.find((i) => i.productKey === "RL-SKORE-CHYBA");
+  expect(item?.candidates.map((c) => c.productKey)).toEqual(["RL-SKORE-VYHRA", "RL-SKORE-PREHRA"]);
+});
+
+// Code review (issue 311): `CANDIDATE_LIMIT = 3` (queries.ts) tiež nemal
+// žiadny priamy test — 4 rovnako skórované kandidáti (rovnaký dodávateľ,
+// rovnaký jedno-slovný prekryv) musia vrátiť LEN 3, zoradené abecedne pri
+// zhodnom skóre (tie-break v `suggestCandidates`).
+it("vráti najviac 3 kandidátov aj keď rovnako skórovaných vyhovuje viac", async () => {
+  const { app, cookie, db } = await boot("citanie");
+  const snapshotId = await insertTestSnapshot(db);
+  await seedVariant(db, snapshotId, "RL-STROP-CHYBA", "RL-STROP-CHYBA/1", {
+    name: "Bunda Alfa Zimná",
+    supplier: "DODAVATEL-RL-STROP",
+    state: "out_of_stock",
+  });
+  for (const suffix of ["D4", "C3", "B2", "A1"]) {
+    await seedVariant(db, snapshotId, `RL-STROP-${suffix}`, `RL-STROP-${suffix}/1`, {
+      name: `Bunda ${suffix}`,
+      supplier: "DODAVATEL-RL-STROP",
+      internalNote: `https://dodavatel.example.com/strop-${suffix.toLowerCase()}`,
+    });
+  }
+
+  const telo = (await (await app.request("/api/restock-links?q=RL-STROP-CHYBA", { headers: { cookie } })).json()) as Telo;
+  const item = telo.items.find((i) => i.productKey === "RL-STROP-CHYBA");
+  expect(item?.candidates).toHaveLength(3);
+  // Rovnaké skóre pre všetky 4 → tie-break podľa mena, abecedne.
+  expect(item?.candidates.map((c) => c.productKey)).toEqual(["RL-STROP-A1", "RL-STROP-B2", "RL-STROP-C3"]);
 });

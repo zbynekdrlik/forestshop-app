@@ -78,7 +78,6 @@ it("rola citanie nevidí stĺpec Akcie ani tlačidlo 'Použiť návrh'", async (
 });
 
 it("rola manazer klikne na návrh — vyplní vstup, NEULOŽÍ automaticky, potom potvrdí uložením", async () => {
-  const S_NAVRHOM_PO_ULOZENI = { ...S_NAVRHOM, candidates: [] };
   searchRestockLinkSuggestions.mockResolvedValueOnce({ total: 1, items: [S_NAVRHOM] });
   searchRestockLinkSuggestions.mockResolvedValueOnce({ total: 0, items: [] });
   saveProductLink.mockResolvedValue(undefined);
@@ -97,7 +96,6 @@ it("rola manazer klikne na návrh — vyplní vstup, NEULOŽÍ automaticky, poto
     expect(saveProductLink).toHaveBeenCalledWith("RL-2", "https://dodavatel.example.com/rl-cand");
   });
   expect(searchRestockLinkSuggestions).toHaveBeenCalledTimes(2);
-  void S_NAVRHOM_PO_ULOZENI;
 });
 
 it("rola manazer doplní VLASTNÝ odkaz (bez návrhu) cez tlačidlo Doplniť", async () => {
