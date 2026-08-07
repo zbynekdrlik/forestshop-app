@@ -52,6 +52,26 @@ const VRATENIE_KARTA = {
   status: "otvorene" as const,
 };
 
+// issue 298: karta z automatického zdroja "Nevyzdvihnutá zásielka" — preklik
+// vedie PRIAMO na sledovanie na Pošte SK (predtým Shoptet admin objednávka,
+// rovnaký odkaz ako `VRATENIE_KARTA` mala). Samostatná fixtúra, aby test
+// mohol overiť INÝ štítok (`LINK_LABELS` v `UpozornenieCard.tsx` je teraz
+// per-typ rôzny, nie zdieľaný).
+const NEVYZDVIHNUTA_KARTA = {
+  id: "posta-1",
+  type: "nevyzdvihnuta_zasielka" as const,
+  source: "appka" as const,
+  title: "Zásielka pre objednávku 20500010 sa nevyzdvihla — 5 dní na pošte",
+  details: "Zákazník: Ján Novák\nČíslo zásielky: EF123456789SK\nDopravca: Slovenská pošta\nČaká: 5 dní na pošte\nVyzdvihnutie do: 2026-08-15",
+  link: "https://www.posta.sk/sledovanie-zasielok#parcel=EF123456789SK",
+  dueAt: null,
+  postponedUntil: null,
+  seenAt: "2026-08-05T08:00:00.000Z",
+  resolvedAt: null,
+  createdAt: "2026-08-05T08:00:00.000Z",
+  status: "otvorene" as const,
+};
+
 afterEach(() => {
   cleanup();
   vi.resetAllMocks();
@@ -68,6 +88,20 @@ it("karta s odkazom (automatický zdroj) zobrazí štítok 'Otvoriť objednávku
   expect(link.getAttribute("href")).toBe(VRATENIE_KARTA.link);
   expect(link.getAttribute("target")).toBe("_blank");
   expect(link.getAttribute("rel")).toBe("noreferrer");
+});
+
+it("issue 298: karta 'Nevyzdvihnutá zásielka' zobrazí štítok 'Sledovať zásielku na Pošte' s odkazom na Poštu SK, aj termín vyzdvihnutia v details", async () => {
+  markUpozorneniaSeen.mockResolvedValue(undefined);
+  fetchUpozornenia.mockResolvedValue([NEVYZDVIHNUTA_KARTA]);
+  render(<UpozorneniaSection role="manazer" onSessionExpired={vi.fn()} />);
+  await screen.findByTestId("upozornenie-posta-1");
+
+  const link = screen.getByTestId<HTMLAnchorElement>("upozornenie-link-posta-1");
+  expect(link.textContent).toBe("Sledovať zásielku na Pošte");
+  expect(link.getAttribute("href")).toBe(NEVYZDVIHNUTA_KARTA.link);
+  expect(link.getAttribute("target")).toBe("_blank");
+  expect(link.getAttribute("rel")).toBe("noreferrer");
+  expect(screen.getByText(/Vyzdvihnutie do: 2026-08-15/)).toBeTruthy();
 });
 
 it("prázdny zoznam zobrazí informačnú vetu (po označení videných)", async () => {

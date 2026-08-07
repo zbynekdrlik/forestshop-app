@@ -98,3 +98,48 @@ paths:
   write/auto-resolve/update-in-place cestu — a ak ide o zdroj, čo môže
   STRATIŤ SCHOPNOSŤ rozhodnúť (nie o skutočnú zmenu stavu), zváž
   `updateIfUnresolvedByDedupKey`, nie automatické zatvorenie.
+- **Issue 298 (šéf, cez majiteľa): karta na Upozorneniach preklikáva PRIAMO
+  na sledovanie zásielky na Pošte SK (`trackingLink`, `constants.ts` — ten
+  istý helper, aký "Nevyzdvihnuté zásielky"'s výsledková tabuľka už používa,
+  `PostaUncollectedRow.tsx`), NIE na Shoptet admin objednávku (predošlé
+  správanie).** `run.ts`'s `upsertUpozornenie` volanie: `link:
+  trackingLink(packageNumber)` namiesto `adminOrderUrl(shipment)` — číslo
+  objednávky ostáva čitateľné v TITULKU karty, len prestalo byť samotným
+  klikateľným odkazom (appka nemá druhé pole na "druhý odkaz", `link` je
+  JEDEN stĺpec). `details` NAVYŠE pridáva `Vyzdvihnutie do: <dátum>` riadok
+  KEĎ `cls.retainedTill` nie je prázdne (rovnaká hodnota, akú `classifyTracking`
+  UŽ vypočítal pre e-mailovú šablónu — žiadne nové sieťové volanie); keď
+  Pošta SK termín nevráti, riadok sa VYNECHÁ celý (nie prázdny "Vyzdvihnutie
+  do: "). **Zisťovanie o "preklik do vyfiltrovaného zoznamu oznámených
+  zásielok" (šéfova druhá časť žiadosti):** Pošta SK nemá zdokumentovaný/
+  potvrdený verejný filtrovaný-zoznam URL formát — appka pozná len (a) tento
+  per-zásielkový `trackingLink` (`https://www.posta.sk/sledovanie-zasielok#parcel=<číslo>`)
+  a (b) samotné `TRACKING_API_URL_TEMPLATE` (JSON API, nie stránka pre
+  človeka). Kým sa nenájde/nepotvrdí live taký zoznamový odkaz, appka
+  odkazuje LEN na konkrétnu zásielku — nevymýšľaj URL vzor, ktorý nebol
+  overený naživo (`.claude/rules/investigate-existing-first.md`'s princíp).
+- **LINK_LABELS (`UpozornenieCard.tsx`) pre `nevyzdvihnuta_zasielka` je
+  odteraz "Sledovať zásielku na Pošte" (predtým "Otvoriť objednávku v
+  Shoptete", zdieľané s `vratenie` — tá si svoj pôvodný štítok zachováva).**
+  **Pokus o E2E fixtúru bol ZAMIETNUTÝ, poučenie pre budúce podobné
+  prípady:** predbežná verzia issue 298 pridala do `scripts/e2e-setup.ts`
+  jednu PEVNE seedovanú `upozornenie` kartu (UŽ odloženú, aby sa vyhla
+  predvolenej "Otvorené" záložke) — ale `upozornenie` je GLOBÁLNA, nie
+  per-užívateľská tabuľka, takže akýkoľvek trvalo seedovaný riadok mení
+  VÝSLEDOK `classifyEmptyMessage`'s doplnkového dopytu (`includeResolved:
+  true, includePostponed: true`) pre KAŽDÝ účet vrátane samotného
+  `upozornenia.spec.ts`'s — živo spadlo na jeho ÚPLNE PRVEJ asercii
+  ("Žiadne upozornenia — nič nie je zapísané." sa zmenilo na "…— všetko je
+  odložené.", presne to gap-3 regresné overenie z issue 267 follow-up).
+  Riešenie NIE je zmeniť tú asserciu (zmenilo by zmysel testu, čo overuje
+  "naozaj nič nie je zapísané") — namiesto toho karta zostáva pokrytá
+  VÝHRADNE (a) integračným testom obsahu/linky
+  (`posta-uncollected-run.integration.test.ts`) a (b) vitest komponentovým
+  testom rendrovania štítku (`UpozorneniaSection.test.tsx`'s
+  `NEVYZDVIHNUTA_KARTA` fixtúra — rovnaký vzor ako existujúci `VRATENIE_KARTA`
+  link test). **Test pre KAŽDÚ ĎALŠIU myšlienku "seedni fixnú kartu do
+  `upozornenie` v `e2e-setup.ts`":** táto tabuľka je zdieľaná GLOBÁLNE
+  naprieč VŠETKÝMI e2e účtami/spec súbormi — akýkoľvek trvalý riadok mení
+  `classifyEmptyMessage`'s výsledok pre každého; over najprv, či niektorý
+  INÝ spec súbor (najmä `upozornenia.spec.ts` samo) nespolieha na skutočne
+  prázdnu tabuľku, než pridáš seed.
