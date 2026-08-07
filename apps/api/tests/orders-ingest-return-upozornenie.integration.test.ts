@@ -101,7 +101,7 @@ it("objednávka vo vrátkovom stave vyrobí kartu s odkazom na objednávku, nikd
 it("opakovaný import tej istej objednávky v tom istom vrátkovom stave NEVYROBÍ druhú kartu, len ju obnoví", async () => {
   const { db, dir } = await boot();
   await insertTestVariant(db, "40237/XL");
-  const csv = buildCsv(HEADER, [rowOf("20600003", "Vybavená výmena")]);
+  const csv = buildCsv(HEADER, [rowOf("20600003", "Vratený tovar")]);
 
   await ingestOrders(db, { fetchExport: fetcherOf(csv), now: NOW, rawDir: dir, windowStart: WINDOW_START, windowEnd: WINDOW_END });
   await ingestOrders(db, {
@@ -116,7 +116,13 @@ it("opakovaný import tej istej objednávky v tom istom vrátkovom stave NEVYROB
   expect(rows).toHaveLength(1);
 });
 
-it("prechod z jedného vrátkového stavu do druhého (Vratený tovar -> Vybavený Dobropis) OBNOVÍ tú istú kartu, nikdy druhú", async () => {
+// issue 297 (šéf, cez majiteľa): "Vybavená výmena"/"Vybavený Dobropis" sú
+// HOTOVÉ stavy — majiteľ nepotrebuje upozornenie na prácu, ktorú niekto už
+// spravil. Prechod objednávky z AKTÍVNEHO ("Vratený tovar") do HOTOVÉHO
+// stavu preto existujúcu otvorenú kartu AUTOMATICKY ZATVORÍ (rovnaký princíp
+// ako #268's doručená zásielka), NIKDY neobnoví jej titulok na nový pod-stav
+// (predošlé správanie pred #297).
+it("prechod z AKTÍVNEHO stavu do HOTOVÉHO (Vratený tovar -> Vybavený Dobropis) AUTOMATICKY ZATVORÍ existujúcu kartu", async () => {
   const { db, dir } = await boot();
   await insertTestVariant(db, "40237/XL");
 
@@ -130,6 +136,7 @@ it("prechod z jedného vrátkového stavu do druhého (Vratený tovar -> Vybaven
   const before = await db.select().from(upozornenie).where(eq(upozornenie.dedupKey, "vratenie:20600004"));
   expect(before).toHaveLength(1);
   expect(before[0]?.title).toContain("vrátený tovar");
+  expect(before[0]?.resolvedAt).toBeNull();
 
   await ingestOrders(db, {
     fetchExport: fetcherOf(buildCsv(HEADER, [rowOf("20600004", "Vybavený Dobropis")])),
@@ -139,9 +146,31 @@ it("prechod z jedného vrátkového stavu do druhého (Vratený tovar -> Vybaven
     windowEnd: WINDOW_END,
   });
   const after = await db.select().from(upozornenie).where(eq(upozornenie.dedupKey, "vratenie:20600004"));
-  expect(after).toHaveLength(1); // stále JEDNA karta na objednávku, nikdy druhá pre nový pod-stav
-  expect(after[0]?.id).toBe(before[0]?.id);
-  expect(after[0]?.title).toContain("vybavený dobropis");
+  expect(after).toHaveLength(1); // stále JEDNA karta na objednávku, žiadna druhá
+  expect(after[0]?.id).toBe(before[0]?.id); // TÁ istá karta — zatvorená, nie nová
+  expect(after[0]?.resolvedAt).not.toBeNull(); // AUTOMATICKY zatvorená
+  expect(after[0]?.resolvedByUserId).toBeNull(); // "vybavené systémom", nie ručne
+  expect(after[0]?.title).toBe(before[0]?.title); // titulok sa NIKDY neobnoví na nový pod-stav
+});
+
+// issue 297: objednávka, ktorej PRVÝ zistený stav je už HOTOVÝ (nikdy predtým
+// nebola "Vratený tovar", teda nikdy nedostala kartu) NEVYROBÍ žiadnu — na
+// rozdiel od `classifyReturnStatus`'s aktívnych stavov, `autoResolveByDedupKey`
+// je bezpečný no-op, keď žiadna nevyriešená karta pre `dedupKey` neexistuje.
+it("objednávka, ktorej PRVÝ import je už HOTOVÝ vrátkový stav, NEVYROBÍ žiadnu kartu", async () => {
+  const { db, dir } = await boot();
+  await insertTestVariant(db, "40237/XL");
+
+  await ingestOrders(db, {
+    fetchExport: fetcherOf(buildCsv(HEADER, [rowOf("20600010", "Vybavená výmena")])),
+    now: NOW,
+    rawDir: dir,
+    windowStart: WINDOW_START,
+    windowEnd: WINDOW_END,
+  });
+
+  const rows = await db.select().from(upozornenie).where(eq(upozornenie.dedupKey, "vratenie:20600010"));
+  expect(rows).toHaveLength(0);
 });
 
 // issue 269 (naživo overenie na 0.3.0-dev.160): vybavené vrátenie je
@@ -195,24 +224,25 @@ it("po vybavení karty (Vybavené) opakovaný import UŽ NEVYROBÍ druhú kartu 
 // druhý kandidát bol OMYLOM preskočený spolu s prvým — jeho karta by
 // jednoducho zostala na SVOJICH pôvodných hodnotách, ktoré sú zhodné s tým,
 // čo by upsert aj tak zapísal). Fix: druhý import posiela otvorenej
-// objednávke INÝ vrátkový pod-stav ("Vybavený Dobropis" namiesto "Vybavená
-// výmena", mechanizmus prechodu medzi pod-stavmi má už vlastný test
-// vyššie), takže test genuinely OVERUJE, že jej titulok sa SKUTOČNE ZMENIL —
+// objednávke INÉ meno zákazníka (issue 297 nechalo len JEDEN AKTÍVNY
+// vrátkový stav — "Vybavená výmena"/"Vybavený Dobropis" boli predtým druhý
+// pod-stav použitý na ten istý dôkaz, dnes už HOTOVÉ a mimo `returnCandidates`
+// úplne), takže test genuinely OVERUJE, že jej `details` sa SKUTOČNE ZMENILI —
 // dôkaz, že bola upsertnutá, nie preskočená. Overené AJ opačným smerom
 // (`regression-test-first.md`): dočasná úprava kódu na "preskoč VŠETKÝCH
 // kandidátov v dávke, ak je čo i len JEDEN vyriešený" spadla presne na
-// asercii titulku otvorenej karty nižšie, návrat opravy prešiel znova.
+// asercii `details` otvorenej karty nižšie, návrat opravy prešiel znova.
 it("v jednom importe s viacerými vrátkovými objednávkami ovplyvní vybavenie LEN tú svoju kartu", async () => {
   const { db, dir } = await boot();
   await insertTestVariant(db, "40237/XL");
-  const csv = buildCsv(HEADER, [rowOf("20600008", "Vratený tovar"), rowOf("20600009", "Vybavená výmena")]);
+  const csv = buildCsv(HEADER, [rowOf("20600008", "Vratený tovar"), rowOf("20600009", "Vratený tovar")]);
 
   await ingestOrders(db, { fetchExport: fetcherOf(csv), now: NOW, rawDir: dir, windowStart: WINDOW_START, windowEnd: WINDOW_END });
   const beforeResolved = await db.select().from(upozornenie).where(eq(upozornenie.dedupKey, "vratenie:20600008"));
   const beforeOpen = await db.select().from(upozornenie).where(eq(upozornenie.dedupKey, "vratenie:20600009"));
   expect(beforeResolved).toHaveLength(1);
   expect(beforeOpen).toHaveLength(1);
-  expect(beforeOpen[0]?.title).toContain("vybavená výmena");
+  expect(beforeOpen[0]?.details).toContain("Ján Novák");
   const resolvedCardId = beforeResolved[0]?.id;
   const openCardId = beforeOpen[0]?.id;
   if (resolvedCardId === undefined || openCardId === undefined) throw new Error("karty sa nevyrobili");
@@ -225,8 +255,8 @@ it("v jednom importe s viacerými vrátkovými objednávkami ovplyvní vybavenie
   expect(await resolveUpozornenie(db, { id: resolvedCardId, resolvedByUserId: user.id, now: new Date("2026-07-31T09:00:00Z") })).toBe(true);
 
   // Druhý import — vybavená objednávka ostáva v tom istom stave (irelevantné,
-  // je preskočená), otvorená objednávka prejde do INÉHO vrátkového pod-stavu.
-  const csvSecondImport = buildCsv(HEADER, [rowOf("20600008", "Vratený tovar"), rowOf("20600009", "Vybavený Dobropis")]);
+  // je preskočená), otvorená objednávka dostane INÉ meno zákazníka.
+  const csvSecondImport = buildCsv(HEADER, [rowOf("20600008", "Vratený tovar"), rowOf("20600009", "Vratený tovar", "Eva Kováčová")]);
   await ingestOrders(db, {
     fetchExport: fetcherOf(csvSecondImport),
     now: new Date("2026-08-01T10:00:00Z"),
@@ -239,25 +269,23 @@ it("v jednom importe s viacerými vrátkovými objednávkami ovplyvní vybavenie
   expect(afterResolved).toHaveLength(1); // vybavená ostáva vybavená, žiadna nová
   expect(afterResolved[0]?.id).toBe(resolvedCardId);
   expect(afterResolved[0]?.resolvedAt).not.toBeNull();
-  expect(afterResolved[0]?.title).toContain("vrátený tovar"); // nedotknutá — stále pôvodný titulok, nikdy neupsertnutá
+  expect(afterResolved[0]?.details).toContain("Ján Novák"); // nedotknutá — stále pôvodné meno, nikdy neupsertnutá
 
   const afterOpen = await db.select().from(upozornenie).where(eq(upozornenie.dedupKey, "vratenie:20600009"));
   expect(afterOpen).toHaveLength(1); // stále JEDNA karta, ale STÁLE OBNOVENÁ — nikdy sa nedotkla druhého kandidáta
   expect(afterOpen[0]?.id).toBe(openCardId);
   expect(afterOpen[0]?.resolvedAt).toBeNull();
-  expect(afterOpen[0]?.title).toContain("vybavený dobropis"); // SKUTOČNE ZMENENÝ titulok — dôkaz upsertu, nie preskočenia
+  expect(afterOpen[0]?.details).toContain("Eva Kováčová"); // SKUTOČNE ZMENENÉ meno — dôkaz upsertu, nie preskočenia
 });
 
-// Code review (druhé kolo, finding 1): kľúč, ktorý má SÚČASNE vyriešený AJ
-// otvorený riadok (presne stav, aký pôvodný bug na 0.3.0-dev.160 vyrobil,
-// kým sa importovalo druhýkrát ešte PRED touto opravou) musí naďalej
-// obnoviť svoj OTVORENÝ riadok pri ďalšom importe — pôvodná (jednoduchšia)
-// pre-check logika ho namiesto toho navždy zamrazila, lebo videla "existuje
-// vyriešený riadok pre tento kľúč" a celý kandidát preskočila. Scenár sa
-// simuluje priamym vložením OBOCH riadkov (nie cez appku — appka dnes
-// (post-fix) takýto stav sama nevyrobí), presne ako by ho zanechal
-// historický bug/manuálny zásah.
-it("otvorený súrodenec vedľa vyriešeného (stav pôvodného bugu) sa naďalej obnoví, nikdy sa nezamrzne", async () => {
+// issue 297: kľúč, ktorý má SÚČASNE vyriešený AJ otvorený riadok (presne
+// stav, aký pôvodný bug na 0.3.0-dev.160 vyrobil) — keď objednávka prejde do
+// HOTOVÉHO stavu, `autoResolveByDedupKey`'s `WHERE resolved_at IS NULL`
+// zatvorí LEN otvorený súrodenec, nikdy sa nedotkne už vyriešeného (a
+// nevyrobí tretí riadok). Scenár sa simuluje priamym vložením OBOCH riadkov
+// (nie cez appku — appka takýto stav sama nevyrobí), presne ako by ho
+// zanechal historický bug/manuálny zásah.
+it("otvorený súrodenec vedľa vyriešeného sa PRI PRECHODE DO HOTOVÉHO STAVU tiež ZATVORÍ, nikdy nezostane navždy otvorený", async () => {
   const { db, dir } = await boot();
   await insertTestVariant(db, "40237/XL");
   const dedupKey = "vratenie:20600200";
@@ -304,6 +332,7 @@ it("otvorený súrodenec vedľa vyriešeného (stav pôvodného bugu) sa naďale
   expect(resolvedAfter?.title).toBe("Objednávka 20600200 — vrátený tovar (staršia, už vybavená)"); // nedotknutý
 
   const openAfter = rows.find((r) => r.id === openRow.id);
-  expect(openAfter?.resolvedAt).toBeNull();
-  expect(openAfter?.title).toContain("vybavená výmena"); // OBNOVENÝ — nezamrzol na starom titulku
+  expect(openAfter?.resolvedAt).not.toBeNull(); // ZATVORENÝ — nezostal navždy otvorený
+  expect(openAfter?.resolvedByUserId).toBeNull(); // "vybavené systémom", nie ručne
+  expect(openAfter?.title).toBe("Objednávka 20600200 — vrátený tovar"); // titulok sa NIKDY neupraví, len sa zatvorí
 });

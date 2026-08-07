@@ -280,3 +280,35 @@ paths:
   zobrazenie karty. Nová "druhá" cesta na zobrazenie vyriešenej karty v
   "Otvorené" (checkbox, filter, čokoľvek) by túto duplicitu vrátila späť —
   nepridávaj ju.
+- **AKTUALIZÁCIA (issue 297, 2026-08-06): "Karta sa NIKDY nezatvára
+  automaticky" (bod vyššie o `vratenie`) UŽ NEPLATÍ pre CELÝ typ — platí len
+  pre `Vratený tovar`.** Šéf (cez majiteľa): nástenka nemá upozorňovať na už
+  HOTOVÉ veci. `orders/return-status.ts` sa preto rozdelilo na DVE nezávislé
+  mapy: `classifyReturnStatus` (AKTÍVNY stav, dnes len "Vratený tovar" —
+  zakladá/obnoví kartu, presne ako predtým) a `classifyFinishedReturnStatus`
+  (HOTOVÉ stavy "Vybavená výmena"/"Vybavený Dobropis" — NIKDY nezakladajú
+  kartu; namiesto toho AUTOMATICKY ZATVORIA existujúcu otvorenú kartu pre
+  ten istý `dedupKey`, `resolvedByUserId` ostáva `null` — rovnaký princíp ako
+  #268's doručená zásielka). **Objednávka, ktorá prešla z AKTÍVNEHO do
+  HOTOVÉHO stavu, teda UŽ NEOBNOVÍ titulok karty na nový pod-stav (predošlé
+  správanie) — namiesto toho kartu ZATVORÍ.** Celá logika (candidates loop +
+  `.for("update")` pre-check + upsert + auto-resolve) je vyčlenená z
+  `ingest.ts` do `apps/api/src/modules/orders/return-upozornenia.ts`
+  (`applyReturnUpozornenia`) — `ingest.ts` narazilo na eslint `max-lines: 400`
+  po pridaní finished-stavovej vetvy (`.claude/rules/testing.md`). Nový
+  súbor duplikuje `ingest.ts`'s malý `chunk()` helper LOKÁLNE (import odtiaľ
+  by vyrobil cyklickú závislosť — `ingest.ts` volá `applyReturnUpozornenia`),
+  rovnaký princíp ako `service.ts`'s `isUniqueViolation`. **Existujúce
+  otvorené karty pre HOTOVÉ stavy (12 na produkcii v čase ticketu) sa
+  zatvoria NAŽIVO cez ĎALŠÍ naplánovaný `ordersImportJob` beh (hodinový,
+  `:45`) — ŽIADNA jednorazová migrácia** (rovnaký mechanizmus, aký #269 už
+  používa na OBNOVU existujúcich kariet): keďže objednávkový export nesie
+  AKTUÁLNY Shoptet stav pri KAŽDOM importe, ďalší beh znova klasifikuje tú
+  istú objednávku a nájde ju HOTOVÚ. Podmienka: objednávka musí ešte
+  spadať do `DEFAULT_ORDERS_IMPORT_WINDOW_DAYS`-dňového posuvného okna
+  exportu (`orders.md`) — vrátkové objednávky vznikajú krátko po nákupe,
+  takže to v praxi vždy platí, ale je to PREDPOKLAD, nie záruka do
+  nekonečna. Test na KAŽDÝ ĎALŠÍ prípad "táto karta sa má prestať zakladať a
+  existujúce otvorené sa majú zatvoriť": over najprv, či nasledujúci
+  naplánovaný beh prirodzene dorieši existujúce riadky (žiadna migrácia
+  potrebná), predtým než sa píše jednorazový skript.

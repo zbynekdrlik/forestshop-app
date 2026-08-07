@@ -1,10 +1,9 @@
 import { createHash } from "node:crypto";
-import { and, between, eq, inArray, sql } from "drizzle-orm";
+import { between, eq, inArray, sql } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
-import { orderLines, orders, upozornenie, variants } from "../../db/schema.js";
+import { orderLines, orders, variants } from "../../db/schema.js";
 import { log } from "../../logger.js";
 import { storeRawSnapshot } from "../catalog/raw-store.js";
-import { upsertUpozornenie } from "../upozornenia/service.js";
 import { redactSourceLabel, type OrderIdsFetcher } from "./fetcher.js";
 import {
   decodeCp1250,
@@ -18,8 +17,7 @@ import {
   type OrderLineCandidate,
   type OrderRowIssue,
 } from "./parser.js";
-import { buildShoptetAdminOrderUrl } from "./queries.js";
-import { classifyReturnStatus, returnUpozornenieDedupKey } from "./return-status.js";
+import { applyReturnUpozornenia } from "./return-upozornenia.js";
 
 // Zámok je JEDEN pevný kľúč, NIE odvodený z obsahu — rovnaký dôvod ako
 // katalógov `INGEST_ADVISORY_LOCK_KEY` (`catalog/ingest.ts`): serializuje
@@ -484,127 +482,21 @@ export async function ingestOrders(db: Database, options: OrdersIngestOptions): 
         insertedLineCount += batch.length;
       }
 
-      // issue 269: druhý automatický zdroj pre nástenku Upozornenia (#267) —
-      // objednávka, ktorej `statusName` je jeden zo živo overených vrátkových
-      // stavov (`return-status.ts`), dostane/obnoví kartu cez ZDIEĽANÚ
-      // zapisovaciu cestu (`upsertUpozornenie`, #267/#272). `dedupKey` je na
-      // OBJEDNÁVKU (nie na pod-stav) — opakovaný import tej istej objednávky
-      // v tom istom vrátkovom stave, alebo jej prechod medzi dvomi vrátkovými
-      // stavmi, len OBNOVÍ tú istú kartu. Karta sa NIKDY nezatvára automaticky
-      // (ticket to explicitne žiada — majiteľ ju zavrie ručne cez
-      // "Vybavené"), preto tu na rozdiel od #268 niet `autoResolveByDedupKey`
-      // volania. `shoptetOrderId` je to isté, čo sa práve zapísalo vyššie
-      // (`orderIdsByCode`, best-effort XML fetch) — žiadny extra dopyt.
-      //
-      // Code review (issue 269, ďalšie kolo): tento blok beží ZÁMERNE AŽ TU,
-      // tesne PRED commitom — nie hneď po upsert-e `order` riadkov, ako
-      // pôvodne. Jeho `.for("update")` pre-check (nižšie) drží riadkové
-      // zámky na EXISTUJÚCICH kartách po ZVYŠOK tejto transakcie, takže čím
-      // neskôr v transakcii beží, tým kratšie sú tie zámky držané — inak by
-      // majiteľ kliknúť "Vybavené" na karte čakal, kým dobehne CELÝ zvyšok
-      // (variantová validácia + dávkové vloženie `order_line`), nie len
-      // zvyšný pár SQL príkazov. Blok číta len `orderInfo`/`orderIdsByCode`
-      // (oboje pripravené MIMO transakcie) a nič PO ňom nezávisí od jeho
-      // výsledku — smie teda sedieť takto neskoro bez zmeny správania.
+      // issue 269/297: druhý automatický zdroj pre nástenku Upozornenia
+      // (#267) — plná logika (AKTÍVNY vrátkový stav zakladá/obnoví kartu,
+      // HOTOVÝ ju automaticky zatvorí) vyčlenená do `return-upozornenia.ts`
+      // (eslint `max-lines: 400`, `.claude/rules/testing.md`) — čítaj JEJ
+      // vlastné komentáre pre plné odôvodnenie (dedup na objednávku,
+      // `.for("update")` pre-check, prečo beží až TESNE PRED commitom).
       const adminBaseUrl = options.adminBaseUrl ?? "https://www.forestshop.sk";
-      const returnCandidates: { externalOrderId: string; returnLabel: string; customerName: string; statusName: string; dedupKey: string }[] = [];
-      for (const [externalOrderId, info] of orderInfo) {
-        const returnLabel = classifyReturnStatus(info.statusName);
-        if (returnLabel === null) continue;
-        returnCandidates.push({
-          externalOrderId,
-          returnLabel,
-          customerName: info.customerName,
-          statusName: info.statusName,
-          dedupKey: returnUpozornenieDedupKey(externalOrderId),
-        });
-      }
-      // Naživo overené na produkcii (0.3.0-dev.160): vybavené vrátenie je
-      // KONEČNÉ — na rozdiel od #268 (zásielka, čo sa smie znova zaseknúť o
-      // mesiac) sa už NIKDY nemá znova ohlásiť, hoci Shoptet-ov status
-      // objednávky ostáva v tom istom vrátkovom stave navždy. `upsertUpozornenie`'s
-      // ČIASTOČNÝ unique index (`WHERE resolved_at IS NULL`, `.claude/rules/
-      // upozornenia.md`) necháva VYRIEŠENÝ riadok mimo arbitra, takže bez tejto
-      // kontroly by ďalší import s tým istým `dedupKey` prešiel ako čistý
-      // INSERT — druhý riadok na tú istú objednávku.
-      //
-      // Code review (issue 269, druhé kolo — finding 1): skip sa smie
-      // uplatniť LEN keď pre `dedupKey` NEEXISTUJE žiadny NEVYRIEŠENÝ
-      // súrodenec. Kľúč, ktorý má SÚČASNE vyriešený AJ otvorený riadok
-      // (presne stav, aký pôvodný bug na 0.3.0-dev.160 vyrobil, kým sa
-      // ešte volalo druhýkrát) musí naďalej obnoviť/refreshnúť svoj
-      // OTVORENÝ riadok — inak by ten otvorený navždy zamrzol na starom
-      // titulku/pod-stave. Preto sa najprv PO KĽÚČI zisťuje, či existuje
-      // aspoň jeden NEVYRIEŠENÝ riadok (`hasUnresolvedByKey`), a do skip
-      // množiny idú len kľúče, kde je odpoveď "nie" — pozri regresný test
-      // "otvorený súrodenec vedľa vyriešeného...".
-      //
-      // Dávka kandidátov ide cez rovnaký `chunk(..., ORDERS_INGEST_BATCH_SIZE)`
-      // vzor ako každý iný `IN (...)` dopyt v tomto súbore (parametrový
-      // limit Postgresu, `ORDERS_INGEST_BATCH_SIZE`'s vlastný komentár
-      // vyššie). `type = 'vratenie'` vo WHERE (finding 2) robí zámer
-      // explicitný a zaručuje, že `.for("update")` nikdy nezamkne CUDZÍ
-      // riadok, ktorý by náhodou zdieľal rovnaký `dedupKey` s iným typom
-      // karty (dnes sa to stať nemôže — jediný ďalší automatický zdroj,
-      // #268, má odlišný `postaUpozornenieDedupKey` formát — ale WHERE tu
-      // dokumentuje zámer, nespolieha sa na to ticho).
-      //
-      // `.for("update")` je POVINNÉ, nie voliteľné vylepšenie — bez neho je
-      // to obyčajné READ COMMITTED čítanie, ktoré sa NIKDY nezablokuje na
-      // súbežnom ručnom "Vybavené" (`resolveUpozornenie`, mimo tejto
-      // transakcie), ten by mohol commitnúť PRESNE medzi pre-checkom a
-      // neskorším `upsertUpozornenie` volaním PRE TEN ISTÝ kandidát. V tom
-      // úzkom okne by kandidát vyzeral ešte nevyriešený, `upsertUpozornenie`
-      // by ho normálne obnovil, a hneď potom by sa stal vyriešeným — ten
-      // istý bug, len naživo zriedkavejšie. `.for("update")` zamkne KAŽDÝ
-      // existujúci kandidátny riadok na zvyšok tejto transakcie (rovnaký
-      // vzor ako `orders/state.ts`/`.claude/rules/database.md`'s riadkové
-      // zámky), takže rozhodnutie je vždy postavené na ČERSTVOM stave. Bez
-      // JOINu (jedna tabuľka) nepotrebuje `of` zoznam.
-      const resolvedReturnDedupKeys = new Set<string>();
-      if (returnCandidates.length > 0) {
-        for (const batch of chunk(returnCandidates.map((c) => c.dedupKey), ORDERS_INGEST_BATCH_SIZE)) {
-          const candidateRows = await tx
-            .select({ dedupKey: upozornenie.dedupKey, resolvedAt: upozornenie.resolvedAt })
-            .from(upozornenie)
-            .where(and(eq(upozornenie.type, "vratenie"), inArray(upozornenie.dedupKey, batch)))
-            .for("update");
-          // finding 12: `row.dedupKey` je nullable v type, ale `inArray`
-          // NIKDY nezhodí NULL (Postgres `IN` sémantika) — jediný praktický
-          // dôvod `continue` nižšie je TS-narrowing na `string`, nikdy
-          // skutočná runtime vetva. Predikát preto NEKOMBINUJE dve
-          // podmienky do jedného type-guardu ako predtým — `resolvedAt` je
-          // JEDINÁ skutočná obchodná podmienka.
-          const hasUnresolvedByKey = new Map<string, boolean>();
-          for (const row of candidateRows) {
-            const dedupKey = row.dedupKey;
-            if (dedupKey === null) continue;
-            const already = hasUnresolvedByKey.get(dedupKey) ?? false;
-            hasUnresolvedByKey.set(dedupKey, already || row.resolvedAt === null);
-          }
-          for (const [dedupKey, hasUnresolved] of hasUnresolvedByKey) {
-            if (!hasUnresolved) resolvedReturnDedupKeys.add(dedupKey);
-          }
-        }
-      }
-      // finding 11: počet KONEČNE vybavených vrátení preskočených v tomto
-      // behu — rovnaké pomenovanie ako susedný `skippedItemCount` vyššie.
-      let skippedResolvedReturnCount = 0;
-      for (const candidate of returnCandidates) {
-        if (resolvedReturnDedupKeys.has(candidate.dedupKey)) {
-          skippedResolvedReturnCount += 1;
-          continue;
-        }
-        await upsertUpozornenie(tx, {
-          type: "vratenie",
-          source: "appka",
-          title: `Objednávka ${candidate.externalOrderId} — ${candidate.returnLabel}`,
-          details: [`Zákazník: ${candidate.customerName}`, `Stav objednávky: ${candidate.statusName}`].join("\n"),
-          link: buildShoptetAdminOrderUrl(adminBaseUrl, candidate.externalOrderId, orderIdsByCode.get(candidate.externalOrderId) ?? null),
-          dedupKey: candidate.dedupKey,
-          now: options.now,
-        });
-      }
+      const { skippedResolvedReturnCount, autoResolvedFinishedReturnCount } = await applyReturnUpozornenia({
+        tx,
+        orderInfo,
+        orderIdsByCode,
+        adminBaseUrl,
+        now: options.now,
+        batchSize: ORDERS_INGEST_BATCH_SIZE,
+      });
 
       log.info(
         {
@@ -614,6 +506,7 @@ export async function ingestOrders(db: Database, options: OrdersIngestOptions): 
           pseudoItemCount,
           issueCount: issues.length,
           skippedResolvedReturnCount,
+          autoResolvedFinishedReturnCount,
         },
         "objednávky naimportované",
       );
