@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { runOrderNoteWriteback } from "../src/modules/shoptet-writeback/order-note-playwright.js";
+import { runOrderNoteWriteback, runOrderNoteWritebackIsolated } from "../src/modules/shoptet-writeback/order-note-playwright.js";
 import { startOrderDetailFixture, type OrderDetailFixture } from "./helpers/shoptet-order-detail-fixture.js";
 
 // Reálny Chromium proti LOKÁLNEJ fixture appke (nikdy proti skutočnému
@@ -152,6 +152,50 @@ describe("runOrderNoteWriteback (proti fixture, nikdy proti reálnemu Shoptetu)"
 
       await expect(
         runOrderNoteWriteback({
+          config: { loginUrl: `${fixture.baseUrl}/admin/`, adminBaseUrl: fixture.baseUrl, user: "manager", password: "ZLE-heslo" },
+          orders: [{ orderId: "order-1", externalOrderId: "20261273", shoptetOrderId: 59783, comment: "x" }],
+        }),
+      ).rejects.toThrow(/prihlásenie/i);
+    },
+    TEST_TIMEOUT_MS,
+  );
+});
+
+// Issue 313: rovnaký dieťa-proces izolačný vzor ako `runShoptetImportIsolated`
+// (`shoptet-writeback-playwright.integration.test.ts`) — `loginToShoptetAdmin`
+// je zdieľaná, appka's vlastný bežiaci proces spúšťal Chromium PRIAMO v
+// sebe pre TÚTO automatizáciu rovnako ako pre CSV import.
+describe("runOrderNoteWritebackIsolated (dieťa proces, issue 313)", () => {
+  let fixture: OrderDetailFixture | undefined;
+
+  afterEach(async () => {
+    await fixture?.close();
+    fixture = undefined;
+  });
+
+  it(
+    "appends our block to an EMPTY shopRemark, run in an isolated child process",
+    async () => {
+      fixture = await startOrderDetailFixture({ user: "manager", password: "tajneheslo" });
+
+      const results = await runOrderNoteWritebackIsolated({
+        config: { loginUrl: `${fixture.baseUrl}/admin/`, adminBaseUrl: fixture.baseUrl, user: "manager", password: "tajneheslo" },
+        orders: [{ orderId: "order-1", externalOrderId: "20261273", shoptetOrderId: 59783, comment: "Zavolať zajtra" }],
+      });
+
+      expect(results).toEqual([{ orderId: "order-1", externalOrderId: "20261273", ok: true, errorDetail: null }]);
+      expect(fixture.getShopRemark(59783)).toBe("--- poznámka z appky ---\nZavolať zajtra\n--- koniec ---");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "propagates a login failure back through the child process as a rejected promise",
+    async () => {
+      fixture = await startOrderDetailFixture({ user: "manager", password: "tajneheslo" });
+
+      await expect(
+        runOrderNoteWritebackIsolated({
           config: { loginUrl: `${fixture.baseUrl}/admin/`, adminBaseUrl: fixture.baseUrl, user: "manager", password: "ZLE-heslo" },
           orders: [{ orderId: "order-1", externalOrderId: "20261273", shoptetOrderId: 59783, comment: "x" }],
         }),
