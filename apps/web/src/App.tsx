@@ -125,7 +125,13 @@ export function App(): JSX.Element {
       if (orderFlagCounts.claims > 0) counts["claims"] = orderFlagCounts.claims;
     }
     return counts;
-  }, [ordersRemainingCount, upozorneniaCount]);
+    // Code review (pred mergom, issue 290): `orderFlagCounts` sa v tele číta,
+    // ale chýbal v dependency poli — appka tu NEMÁ `eslint-plugin-react-hooks`
+    // (`.claude/rules/frontend-design.md`'s zdokumentovaná past, presne ten
+    // istý tvar bugu ako `UpozorneniaSection.tsx`'s `withBusy`), takže lint
+    // to nezachytí a stará hodnota (chýbajúce odznaky hneď po prihlásení,
+    // kým sa nespustí NEJAKÝ INÝ trigger) prežije bez varovania.
+  }, [ordersRemainingCount, upozorneniaCount, orderFlagCounts]);
 
   // issue 185: stav zapnuté/vypnuté pre "Automatizácie" priečinok v menu.
   // Na rozdiel od `ordersRemainingCount` vyššie (publikované OBRAZOVKOU
