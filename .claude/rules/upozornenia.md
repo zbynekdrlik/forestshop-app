@@ -5,6 +5,7 @@ paths:
   - "apps/api/src/db/schema-upozornenia.ts"
   - "apps/web/src/upozorneniaApi.ts"
   - "apps/web/src/components/Upozornenia*.tsx"
+  - "apps/web/src/components/UpozornenieCard.tsx"
   - "apps/web/tests/e2e/upozornenia.spec.ts"
 ---
 
