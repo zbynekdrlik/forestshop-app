@@ -163,7 +163,7 @@ describe("terminalState", () => {
     expect(terminalState({ results: [{ status: "ok", events: [{ stateCode: "notified" }] }] })).toBe("");
   });
 
-  it("nerozpoznaný kód (napr. hypotetické 'returned') sa NEDÔVERUJE — nikdy terminálny", () => {
+  it("nerozpoznaný kód (napr. 'returned' — zámerne mimo TERMINAL_STATE_CODES, viď constants.ts) nikdy nie je terminálny", () => {
     expect(terminalState({ results: [{ status: "ok", events: [{ stateCode: "returned" }] }] })).toBe("");
   });
 

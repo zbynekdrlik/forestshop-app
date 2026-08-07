@@ -177,7 +177,7 @@ async function runPostaUncollectedLocked(options: RunPostaUncollectedOptions): P
     }
 
     // issue 299: šéf chce upozornenie na zásielku VRÁTENÚ ODOSIELATEĽOVI.
-    // `isReturnedToSender` je zámerne NEPOTVRDENÁ klasifikácia (`logic.ts`/
+    // `isReturnedToSender` je klasifikácia POTVRDENÁ naživo (`logic.ts`/
     // `constants.ts`) — nikdy sa necachuje ako trvalá, overuje sa ZNOVA pri
     // KAŽDOM behu. Preto beží PRED terminal-state cache vetvou nižšie (tá by
     // inak nikdy nedostala šancu — obe čítajú z toho istého práve
@@ -205,9 +205,9 @@ async function runPostaUncollectedLocked(options: RunPostaUncollectedOptions): P
       });
       continue;
     }
-    // Zásielka NIE JE (alebo UŽ NIE JE) vrátená — ak predošlý beh omylom
-    // rozpoznal vrátenie (nepotvrdená klasifikácia, viď vyššie) a založil
-    // kartu, táto vetva ju SAMA zavrie, len čo tracking prestane hlásiť
+    // Zásielka NIE JE (alebo UŽ NIE JE) vrátená — ak predošlý beh
+    // rozpoznal vrátenie (klasifikácia sa NIKDY necachuje, viď vyššie) a
+    // založil kartu, táto vetva ju SAMA zavrie, len čo tracking prestane hlásiť
     // tento kód. Bezpečný no-op, keď žiadna nevyriešená karta neexistuje —
     // beží preto na KAŽDEJ zásielke, nielen na tých, čo kedy boli vrátené.
     await autoResolveByDedupKey(db, returnedDedupKey, now);

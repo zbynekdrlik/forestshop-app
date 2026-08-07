@@ -230,8 +230,8 @@ export function terminalState(apiJson: unknown): string {
   return TERMINAL_STATE_CODES.has(state) ? state : "";
 }
 
-// issue 299: zásielka VRÁTENÁ ODOSIELATEĽOVI — NEPOTVRDENÁ klasifikácia
-// (plné odôvodnenie a bezpečnostné dôsledky v `constants.ts`'s
+// issue 299: zásielka VRÁTENÁ ODOSIELATEĽOVI — klasifikácia POTVRDENÁ naživo
+// 2026-08-07 (plné odôvodnenie a bezpečnostné dôsledky v `constants.ts`'s
 // `RETURNED_STATE_CODES` komentári). Zámerne SAMOSTATNÁ od `terminalState`
 // (nezdieľa `TERMINAL_STATE_CODES`, nikdy sa necachuje ako trvalá) — volajúci
 // (`run.ts`) preto túto funkciu overuje ZNOVA pri každom behu.
