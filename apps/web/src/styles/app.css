@@ -57,26 +57,41 @@
   --chip-active-bg: #dda43c;
   --chip-active-text: #3b1d00;
 
-  /* typografia */
+  /* typografia
+     issue 303 (majiteľ: "všetko zaberá miesta... potreboval by som to
+     hustejšie... už mám okuliare, vidím celkom dobre"): --fs-text-xs/-sm
+     (12px/13px, tabuľky + drobné popisky) ostávajú NA MIESTE — to je dnešná
+     podlaha čitateľnosti a tabuľky ňou už bežia. Zvyšné tri stupne (base/md/
+     lg/xl — bežný text, tlačidlá, nadpisy) idú o JEDEN krok dole (~1-2px);
+     nadpisy klesajú citeľnejšie než súvislý text, presne ako pri predošlom
+     dláždicovom zmenšení (issue 258). */
   --fs-font: "Segoe UI", Inter, -apple-system, Roboto, sans-serif;
   --fs-text-xs: 0.75rem;
   --fs-text-sm: 0.8125rem;
-  --fs-text-base: 0.9375rem;
-  --fs-text-md: 1.0625rem;
-  --fs-text-lg: 1.3125rem;
-  --fs-text-xl: 1.625rem;
+  --fs-text-base: 0.875rem;
+  --fs-text-md: 0.9375rem;
+  --fs-text-lg: 1.125rem;
+  --fs-text-xl: 1.375rem;
   --fs-weight-medium: 500;
   --fs-weight-semibold: 600;
   --fs-weight-bold: 700;
 
-  /* rozostupy (4px základ) */
+  /* rozostupy (4px základ)
+     issue 303: celá škála posunutá o jeden krok hustejšie (--fs-space-1
+     ostáva 4px — je to už najmenšia atomická jednotka, ňou odsadené miesta
+     sú dnes tesné) — každý ĎALŠÍ token je centrálne zmenšený, takže sa to
+     prejaví naprieč VŠETKÝMI obrazovkami/tabuľkami/formulármi naraz (tie
+     používajú tokeny, nie vlastné px hodnoty — `.claude/rules/
+     frontend-design.md`). Klikacie plochy s VLASTNÝM pevným `min-width`/
+     `min-height` (36×36px "veľké tlačidlá", `.rail-toggle`'s 40px, …) tento
+     posun NEZMENŠUJE — tie rozmery nie sú odvodené z tejto škály. */
   --fs-space-1: 0.25rem;
-  --fs-space-2: 0.5rem;
-  --fs-space-3: 0.75rem;
-  --fs-space-4: 1rem;
-  --fs-space-5: 1.5rem;
-  --fs-space-6: 2rem;
-  --fs-space-7: 3rem;
+  --fs-space-2: 0.375rem;
+  --fs-space-3: 0.5rem;
+  --fs-space-4: 0.75rem;
+  --fs-space-5: 1rem;
+  --fs-space-6: 1.5rem;
+  --fs-space-7: 2rem;
 
   --fs-radius-sm: 6px;
   --fs-radius-md: 10px;
@@ -106,7 +121,10 @@ body {
   color: var(--fs-ink);
   font-family: var(--fs-font);
   font-size: var(--fs-text-base);
-  line-height: 1.5;
+  /* issue 303: 1.5 → 1.4 — o niečo tesnejšie riadkovanie pre ĽUBOVOĽNÝ
+     zalomený viacriadkový text (poznámky, mená produktov, …), stále
+     pohodlné na celodenné čítanie (netrhá sa nič pod 1.4). */
+  line-height: 1.4;
   -webkit-font-smoothing: antialiased;
 }
 
