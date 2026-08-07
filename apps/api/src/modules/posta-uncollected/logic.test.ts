@@ -22,6 +22,8 @@ import {
   classifyTracking,
   isEligibleOrder,
   isNonPostaCarrier,
+  isReturnedToSender,
+  postaReturnedUpozornenieDedupKey,
   shouldSend,
   sourceCoverage,
   terminalState,
@@ -167,6 +169,35 @@ describe("terminalState", () => {
 
   it("invalid_format nemá terminálny stav", () => {
     expect(terminalState({ results: [{ status: "invalid_format" }] })).toBe("");
+  });
+});
+
+describe("isReturnedToSender (issue 299)", () => {
+  it("posledná udalosť 'returned' → true (nepotvrdená hypotéza, viď constants.ts)", () => {
+    expect(isReturnedToSender({ results: [{ status: "ok", events: [{ stateCode: "returned" }] }] })).toBe(true);
+  });
+
+  it("case-insensitive zhoda", () => {
+    expect(isReturnedToSender({ results: [{ status: "ok", events: [{ stateCode: "RETURNED" }] }] })).toBe(true);
+  });
+
+  it("'notified'/'delivered'/'transit' nie sú vrátenie", () => {
+    expect(isReturnedToSender({ results: [{ status: "ok", events: [{ stateCode: "notified" }] }] })).toBe(false);
+    expect(isReturnedToSender({ results: [{ status: "ok", events: [{ stateCode: "delivered" }] }] })).toBe(false);
+    expect(isReturnedToSender({ results: [{ status: "ok", events: [{ stateCode: "transit" }] }] })).toBe(false);
+  });
+
+  it("invalid_format/no_events/no_results nikdy nie je vrátenie", () => {
+    expect(isReturnedToSender({ results: [{ status: "invalid_format" }] })).toBe(false);
+    expect(isReturnedToSender({ results: [{ status: "ok", events: [] }] })).toBe(false);
+    expect(isReturnedToSender({ results: [] })).toBe(false);
+    expect(isReturnedToSender(null)).toBe(false);
+  });
+});
+
+describe("postaReturnedUpozornenieDedupKey", () => {
+  it("iný menný priestor než uncollected dedupKey — jedna zásielka nikdy nekoliduje sama so sebou", () => {
+    expect(postaReturnedUpozornenieDedupKey("EF123456789SK")).toBe("posta-vratena:EF123456789SK");
   });
 });
 
