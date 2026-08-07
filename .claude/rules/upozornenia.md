@@ -315,8 +315,9 @@ paths:
 - **Issue 299: ŠTVRTÁ pgEnum hodnota `vratena_zasielka` (zásielka vrátená
   ODOSIELATEĽOVI podľa Pošta SK trackingu — nezamieňať s `vratenie`, tovar
   vrátený zákazníkom podľa STAVU OBJEDNÁVKY) — plné odôvodnenie vrátane
-  KRITICKEJ poznámky "presný stateCode nebol nikdy naživo pozorovaný, preto
-  sa NIKDY necachuje ako trvalý" je v `.claude/rules/posta-uncollected.md`
+  KRITICKEJ poznámky "stateCode je odteraz potvrdený naživo (2026-08-07:
+  returning/returned), no aj tak sa NIKDY necachuje ako trvalý" je v
+  `.claude/rules/posta-uncollected.md`
   (rovnaký denný beh ako #268/`nevyzdvihnuta_zasielka`, aby sa neduplikovalo
   dvakrát). Migrácia `0041` (`ALTER TYPE ... ADD VALUE`), rovnaký vzor ako
   `vratenie`. **Prvý prípad DVOCH RÔZNYCH automatických zdrojov karty

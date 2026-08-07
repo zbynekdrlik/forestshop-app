@@ -153,26 +153,30 @@ paths:
   preto ZÁMERNE zúžil rozsah na to, čo appka UŽ VIE z existujúcich dát:
   Pošta SK-ho tracking, ktorý táto automatizácia už denne sťahuje pre
   "Nevyzdvihnuté zásielky".
-- **KRITICKÉ pre KAŽDÚ budúcu zmenu klasifikácie vrátenia: presný
-  `stateCode`, ktorým api.posta.sk hlási zásielku vrátenú odosielateľovi,
-  NEBOL NIKDY naživo pozorovaný.** Živý probe (2026-07-25, dokumentovaný v
-  `constants.ts`'s `TERMINAL_STATE_CODES` komentári aj v starej appke's
-  `posta_uncollected.py` #226) vrátil presne štyri kódy — received/
-  transit/notified/delivered. `"returned"` je preto HYPOTÉZA (rovnaký
-  reťazec, aký starý #226 aj TOHOTO modulu vlastný `terminalState` test
-  dávnejšie zvažovali ako najpravdepodobnejší, no nikdy nepotvrdili) —
-  `logic.ts`'s `isReturnedToSender` beží na tejto NEPOTVRDENEJ hodnote
+- **KRITICKÉ pre KAŽDÚ budúcu zmenu klasifikácie vrátenia: presné
+  `stateCode` hodnoty, ktorými api.posta.sk hlási zásielku vrátenú
+  odosielateľovi, boli POTVRDENÉ naživo 2026-08-07 na reálnej produkčnej
+  zásielke (číslo zámerne nezapísané v repe, viď `.claude/rules/
+  sensitive-values.md`).** Pôvodný probe (2026-07-25) videl len štyri kódy
+  — received/transit/notified/delivered — a `"returned"` bol vtedy len
+  HYPOTÉZA. Skutočná vrátená zásielka odhalila DVA stavy naraz:
+  `"returning"` (detailCode `P-NOL` "Neprevzatá v odbernej lehote -
+  odoslaná späť", `VDOIO`/`VDOVR` "V preprave"/"Prevzatá na doručenie
+  odosielateľovi" — zásielka je UŽ na ceste späť, nikdy nedorazí k
+  zákazníkovi, preto je akčná HNEĎ) a `"returned"` (detailCode `ZVRA`
+  "Vrátená" — finálny stav). **Potvrdený stateCode slovník api.posta.sk je
+  teda: received / transit / notified / delivered / returning / returned.**
+  `logic.ts`'s `isReturnedToSender` beží na OBIDVOCH potvrdených hodnotách
   (`constants.ts`'s `RETURNED_STATE_CODES`). **Zámerne NEPRIDANÉ do
-  `TERMINAL_STATE_CODES`** (staré #226 obava: keby "returned" v skutočnosti
-  znamenalo "vrátená na dodaciu poštu", teda STÁLE vyzdvihnuteľná, trvalé
+  `TERMINAL_STATE_CODES`** (pôvodná #226 obava zo starej appky ostáva
+  platná pre BUDÚCE nerozpoznané kódy: keby niektorý z nich niekedy
+  znamenal "vrátená na dodaciu poštu", teda STÁLE vyzdvihnuteľná, trvalé
   cachovanie by ju ticho vyradilo z eskalácie) — klasifikácia sa preto
   NIKDY necachuje a overuje sa ZNOVA pri KAŽDOM behu, kým zásielka zostáva
   v 30-dňovom okne. Toto je aj sebaopravný mechanizmus: karta
-  `vratena_zasielka` sa AUTO-ZAVRIE, len čo tracking prestane hlásiť tento
-  kód (`run.ts` volá `autoResolveByDedupKey` na `returnedDedupKey` na
-  KAŽDOM "nie je vrátené" priechode, nielen raz). Prvá SKUTOČNÁ vrátená
-  zásielka na produkcii je príležitosť potvrdiť/opraviť `"returned"` na
-  skutočný pozorovaný kód.
+  `vratena_zasielka` sa AUTO-ZAVRIE, len čo tracking prestane hlásiť
+  jeden z týchto kódov (`run.ts` volá `autoResolveByDedupKey` na
+  `returnedDedupKey` na KAŽDOM "nie je vrátené" priechode, nielen raz).
 - **`postaReturnedUpozornenieDedupKey` (`posta-vratena:<číslo>`) je
   SAMOSTATNÝ menný priestor od `postaUpozornenieDedupKey` (`posta:<číslo>`)
   — tá istá zásielka môže mať OBIDVE karty súčasne (napr. deň, keď sa

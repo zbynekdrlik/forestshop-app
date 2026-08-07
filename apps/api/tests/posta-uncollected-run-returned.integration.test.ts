@@ -8,10 +8,10 @@ import { withCleanDb } from "./helpers/db.js";
 // issue 299: šéf chce upozornenie na zásielku VRÁTENÚ ODOSIELATEĽOVI —
 // TRETÍ automatický zdroj (`vratena_zasielka`, DRUHÝ tvar z toho istého
 // denného behu ako `nevyzdvihnuta_zasielka`, ale iný VÝZNAM). Klasifikácia
-// (`isReturnedToSender`) je zámerne NEPOTVRDENÁ hypotéza (`constants.ts`),
-// preto tieto testy nechávajú falošný tracking klient vracať `stateCode:
-// "returned"` — presne ten istý reťazec, ktorý `logic.test.ts`'s
-// `terminalState` test už dlho cituje ako "hypotetické 'returned'".
+// (`isReturnedToSender`) beží na dvoch stateCodoch POTVRDENÝCH naživo
+// 2026-08-07 (`constants.ts`'s `RETURNED_STATE_CODES` komentár —
+// "returning"/"returned"), preto tieto testy nechávajú falošný tracking
+// klient vracať `stateCode: "returned"` (finálny potvrdený stav).
 //
 // VYČLENENÉ do vlastného súboru (ten istý dôvod ako
 // `orders-http.integration.test.ts`/`orders-http-state.integration.test.ts`
