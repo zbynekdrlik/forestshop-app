@@ -25,8 +25,11 @@
 // neprepne produkt (issue 213).
 
 import { textAvailabilityRuleFor, visibleAvailabilityFor } from "./availability-domain-rules.js";
+import { availabilityFromText, hostOf, type SupplierAvailability } from "./availability-primitives.js";
 
-export type SupplierAvailability = "available" | "unavailable" | "unknown";
+export type { SupplierAvailability };
+export { availabilityFromText, hostOf };
+
 export type SupplierStockSource = "json_ld" | "meta" | "text" | "size_list" | "none";
 
 export interface ParsedPage {
@@ -34,17 +37,6 @@ export interface ParsedPage {
   readonly availabilityText: string;
   readonly price: number | null;
   readonly source: SupplierStockSource;
-}
-
-/** Doména bez `www.`, malými písmenami. Neplatná URL → prázdny reťazec. */
-export function hostOf(url: string): string {
-  let host = "";
-  try {
-    host = new URL(url).hostname.toLowerCase();
-  } catch {
-    return "";
-  }
-  return host.startsWith("www.") ? host.slice(4) : host;
 }
 
 /** `true`, keď má doména (alebo jej poddoména) overené pravidlo na voľný text. */
@@ -73,66 +65,6 @@ export function availabilityFromSchemaToken(token: string): SupplierAvailability
   if (SCHEMA_AVAILABLE.has(normalized)) return "available";
   if (SCHEMA_UNAVAILABLE.has(normalized)) return "unavailable";
   return "unknown";
-}
-
-// Vypredané sa kontroluje PRVÉ — stránka, ktorá povie "Vypredané", je
-// rozhodná aj keď sa inde na nej vyskytne slovo "skladom" (napr. v odporúčaných
-// produktoch). Slovenské, české aj anglické tvary, s diakritikou aj bez nej.
-const OUT_KEYWORDS: readonly string[] = Object.freeze([
-  "vypredané",
-  "vypredane",
-  "vypredaný",
-  "vypredany",
-  "vyprodáno",
-  "vyprodano",
-  "nedostupné",
-  "nedostupne",
-  "nedostupný",
-  "nedostupny",
-  "nie je skladom",
-  "není skladem",
-  "neni skladem",
-  "momentálne nedostupné",
-  "momentalne nedostupne",
-  // Český tvar s mäkkým "ě" (issue 227, tenolix.cz) — INÝ reťazec než
-  // slovenské "momentálne" vyššie, obe sa musia kontrolovať samostatne.
-  "momentálně nedostupné",
-  "dočasne nedostupné",
-  "docasne nedostupne",
-  "predaj skončil",
-  "predaj skoncil",
-  "out of stock",
-  "sold out",
-]);
-
-const IN_KEYWORDS: readonly string[] = Object.freeze([
-  "skladom",
-  "na sklade",
-  "skladem",
-  "ihneď k odberu",
-  "ihned k odberu",
-  "posledné kusy",
-  "posledne kusy",
-  "posledný kus",
-  "posledny kus",
-  "in stock",
-]);
-
-/**
- * Dostupnosť z voľného textu. Vypredané vyhráva nad skladom (rozhodný zápor).
- * Vracia aj to, KTORÉ slovo rozhodlo — ide do `availabilityText`, aby bolo
- * v appke vidieť, na základe čoho sa rozhodlo.
- */
-export function availabilityFromText(text: string): {
-  readonly availability: SupplierAvailability;
-  readonly matched: string;
-} {
-  const lower = text.toLowerCase();
-  const out = OUT_KEYWORDS.find((keyword) => lower.includes(keyword));
-  if (out !== undefined) return { availability: "unavailable", matched: out };
-  const inStock = IN_KEYWORDS.find((keyword) => lower.includes(keyword));
-  if (inStock !== undefined) return { availability: "available", matched: inStock };
-  return { availability: "unknown", matched: "" };
 }
 
 /**

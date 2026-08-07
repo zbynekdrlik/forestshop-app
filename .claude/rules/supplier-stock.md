@@ -275,3 +275,62 @@ paths:
   sú u `chiruca.sk` holé čísla ("37".."47"), zhodujú sa priamo s
   dodávateľovým "Veľkosť: NN" bez potreby `matchSizeLabel`'s tolerantného
   porovnávania.
+- **Per-doménové pravidlá (`TEXT_AVAILABILITY_RULES`/
+  `VISIBLE_AVAILABILITY_RULES`) a ich extraktory od issue 307 žijú v
+  `availability-domain-rules.ts`, NIE v `parse.ts`** — vyčlenené, lebo
+  pridanie ďalších domén posunulo oba súbory (aj `parse.ts`, aj
+  `parse.test.ts`) cez eslint `max-lines: 400` (`.claude/rules/testing.md`).
+  `parse.ts` nesie generický algoritmus (`parsePage`, `fromJsonLd`,
+  `fromMetaTags`, `availabilityFromText`, veľkostné pravidlá);
+  `availability-domain-rules.ts` nesie per-doménovú znalosť. Súbory sa
+  navzájom importujú (parse.ts → `textAvailabilityRuleFor`/
+  `visibleAvailabilityFor`; availability-domain-rules.ts →
+  `availabilityFromText`/`SupplierAvailability` typ späť z parse.ts) —
+  ZÁMERNE cyklický import na úrovni FUNKCIÍ (nikdy sa nič nevyhodnocuje na
+  module-top-level v konfliktnom poradí), overené `tsc -b` aj celou testovou
+  sadou. Nová doména pribúda do `availability-domain-rules.ts`, testy pre ňu
+  do `parse-issue307.test.ts` (alebo ďalšieho tematicky vyčleneného súboru,
+  ak by aj tento prerástol limit) — nikdy naspäť do `parse.ts`.
+- **Testovacia fixtúra, ktorej VLASTNÝ opisný HTML komentár cituje presne tú
+  istú atribútovú syntax, akú hľadá jej vlastný regex, môže OMYLOM zhodiť
+  test na SEBE SAMEJ — regex nájde zhodu vo VLASTNOM komentári fixtúry, nie
+  v reálnom markupe nižšie.** Zistené issue 307 pri písaní `lesona-*.html`
+  fixtúr: komentár opisujúci `<span id="product-availability">` obsahoval
+  presne ten istý reťazec `id="product-availability"`, aký hľadal
+  `LESONA_AVAILABILITY_RE` — regex sa zhodol s komentárom, nie s testovaným
+  `<span>` nižšie (rovnaký jav postihol aj rozpísaný `<dt>Dostupnosť</dt>
+  <dd><span class="in-stock|out-of-stock">` v `rappa-*.html` komentári a
+  `<div class=product-detail-stock>` v `rosler-*.html` komentári). Fix:
+  komentáre k fixtúram OPISUJÚ markup slovami alebo s pomlčkou/tromi
+  bodkami rozbitou syntaxou (`id="product-…"` namiesto `id="product-
+  availability"`), NIKDY necitujú presnú reťazcovú podobu, akú extraktor
+  hľadá. Test pri KAŽDEJ ďalšej per-domain fixtúre: over, že jej vlastný
+  komentár neobsahuje literálny reťazec zhodný s regexom, ktorý má
+  fixtúra testovať — najjednoduchšie priamym `node -e` behom extraktora
+  proti danej fixtúre PRED spustením vitestu, presne ako sa to tu odhalilo.
+- **`lesona.sk` (PrestaShop) je ĎALŠÍ dôkaz, že schema.org mikrodáta VEDIA
+  KLAMAŤ NAPRIEČ PLATFORMAMI, nielen na Shoptete (`odimon.sk`, issue 225).**
+  Naživo overené na reálnom vypredanom produkte (slúchadlá 3M Peltor, id 58):
+  `<link itemprop="availability" href="https://schema.org/InStock"/>` tvrdí
+  dostupné, ale viditeľný `<span id="product-availability">` s ikonkou
+  `product-unavailable` hovorí "Vypredané" a tlačidlo "Vložiť do košíka" je
+  `disabled`. Táto appka `itemprop=` mikrodátovú formu (na rozdiel od
+  `<script type="application/ld+json">`, ktorý číta `fromJsonLd`) VÔBEC
+  neparsuje — preto sa NEROZŠIROVAL parser o jej čítanie, len sa pridalo
+  `VISIBLE_AVAILABILITY_RULES` pravidlo čítajúce výhradne viditeľný prvok.
+  Test na KAŽDÚ ďalšiu doménu s `itemprop="availability"` mikrodátami:
+  NIKDY sa neberú ako posledné slovo bez porovnania s viditeľným stavom pri
+  produkte — mikrodáta klamú nezávisle od platformy (Shoptet aj PrestaShop
+  overené), pravdepodobne to platí širšie.
+- **`rappa.cz`** (issue 307): `<dt>Dostupnosť</dt><dd><span class="in-stock|
+  out-of-stock">…</span></dd>` v tabuľke parametrov, jediný výskyt na
+  stránke, obe polarity naživo overené. Rozhoduje TRIEDA, nikdy text (text
+  nesie aj počet kusov, "skladom (50 a viac ks)").
+- **`rosler.sk`** (issue 307): `<div class=product-detail-stock>…</div>`
+  (bez úvodzoviek v reálnom markupe), odlišná trieda od karuselu
+  (`product-thumb-stock`). Text ide cez existujúci `availabilityFromText`.
+  Naživo overené texty: "Skladom N ks" (available) a "Do 14 dní" (dodanie na
+  objednávku — nie skladom teraz, correctně padá na `unknown`). Genuinný
+  vypredaný text sa NENAŠIEL napriek prehľadaniu 20 uložených odkazov + 3
+  kategórií — presne ako `wetland.sk` (issue 230): pravidlo sa NEHÁDA,
+  žiadne vlastné mapovanie "Do N dní" → unavailable sa nepridalo.

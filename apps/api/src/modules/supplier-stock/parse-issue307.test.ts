@@ -22,6 +22,7 @@ const RAPPA_SKLADOM = fixture("rappa-skladom-plysovy-pes.html");
 const RAPPA_VYPREDANE = fixture("rappa-vypredane-plysova-ovce.html");
 const ROSLER_SKLADOM = fixture("rosler-skladom-bruska.html");
 const ROSLER_DO_14_DNI = fixture("rosler-do-14-dni-noz.html");
+const ROSLER_VYPREDANE_ENTITA = fixture("rosler-vypredane-noz-entita.html");
 
 describe("parsePage — issue 307: zubicek.cz zdiela byte-zhodnu Shoptet sablonu s issue 227", () => {
   it("jednovelkostny produkt 'Skladem' je available", () => {
@@ -45,7 +46,7 @@ describe("parsePage — issue 307: lesona.sk mikrodata vedia klamat, cita sa vid
     expect(result.availability).toBe("available");
   });
 
-  it("ikonka product-unavailable + 'Vypredane' je unavailable, aj ked mikrodata na tej istej stranke tvrdia InStock", () => {
+  it("ikonka product-unavailable + 'Vypredane' je unavailable (stránkové mikrodáta v tomto fixture sa vôbec neparsujú, takže nemôžu prekabátiť)", () => {
     const result = parsePage(
       LESONA_VYPREDANE,
       "https://lesona.sk/vybavenie/58-344-sluchadla-3m-peltor-sporttac.html",
@@ -92,5 +93,10 @@ describe("parsePage — issue 307: rosler.sk product-detail-stock div (odlisna t
       "https://www.rosler.sk/produkty/vreckove-noze/delemont/130mm/victorinox-rangergrip-57-hunter",
     );
     expect(result.availability).toBe("unknown");
+  });
+
+  it("regresny test (code review): entitovo kodovana diakritika 'Vypredan&#xE9;' sa DEKODUJE, nikdy len nevyprazdni", () => {
+    const result = parsePage(ROSLER_VYPREDANE_ENTITA, "https://www.rosler.sk/produkty/testovaci-produkt");
+    expect(result.availability).toBe("unavailable");
   });
 });

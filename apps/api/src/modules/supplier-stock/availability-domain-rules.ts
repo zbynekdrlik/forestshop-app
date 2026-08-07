@@ -5,8 +5,13 @@
 // stránky) a tento súbor (znalosť KONKRÉTNYCH dodávateľských domén) sú
 // zámerne oddelené — nová doména sem pribudne bez toho, aby sa dotkla
 // `parsePage`u samotného.
+//
+// Závisí LEN na `availability-primitives.ts` (nikdy na `parse.ts` priamo) —
+// code review na issue 307 odhalil, že pôvodný import späť z `parse.ts` bol
+// funkčne bezpečný, ale zbytočne cyklický import; `availability-
+// primitives.ts` je spoločný jednosmerný základ pre oba súbory.
 
-import { availabilityFromText, hostOf, type SupplierAvailability } from "./parse.js";
+import { availabilityFromText, decodeNumericEntities, hostOf, type SupplierAvailability } from "./availability-primitives.js";
 
 interface TextAvailabilityRule {
   readonly host: string;
@@ -146,6 +151,12 @@ const RAPPA_STOCK_RE = /<dt>Dostupnos.<\/dt>\s*<dd>\s*<span\b[^>]*class="([^"]*)
  * slovo ("skladom"/"vypredané") a ide cez existujúci `availabilityFromText`,
  * rovnaký vzor ako `trigonaStockRegion`. Obe polarity naživo overené
  * (7. 8. 2026, reálne produkty).
+ *
+ * Na rozdiel od `trigonaStockRegion` (prechádza VŠETKY výskyty, odmieta
+ * nejednoznačnosť) tu žiadna obrana proti viacnásobnej zhode nie je — regex
+ * berie PRVÝ (jediný, naživo overený) výskyt. Zámerné: pri ~20 naživo
+ * overených produktoch sa opakovaný karuselový blok s rovnakým `<dt>
+ * Dostupnosť</dt>` NENAŠIEL (code review na issue 307).
  */
 function rappaStockRegion(html: string): string | null {
   const match = RAPPA_STOCK_RE.exec(html);
@@ -162,21 +173,31 @@ const ROSLER_STOCK_DIV_RE = /<div\s+class=["']?product-detail-stock["']?>([\s\S]
  * rosler.sk (issue 307): dostupnosť PRI produkte je `<div
  * class=product-detail-stock>…</div>` (bez úvodzoviek v reálnom markupe) —
  * ODLIŠNÁ trieda od karuselových/súvisiacich položiek
- * (`product-thumb-stock`), žiadna kolízia. Text sa vracia AKO JE a ide cez
- * existujúci `availabilityFromText`. Naživo overené texty: "Skladom N ks"
- * (available) a "Do 14 dní" (dodanie na objednávku, nie skladom teraz) —
- * druhý nezodpovedá žiadnemu slovu v `IN_KEYWORDS`/`OUT_KEYWORDS`, preto
- * correctně padá na `unknown`. Genuinný vypredaný ("0 ks") text sa naživo
- * NENAŠIEL napriek prehľadaniu 20 uložených odkazov + 3 kategórií — presne
- * ako wetland.sk (issue 230): pravidlo sa NEHÁDA, žiadne vlastné mapovanie
- * "Do N dní" → unavailable sa nepridáva.
+ * (`product-thumb-stock`), žiadna kolízia; žiadna obrana proti viacnásobnej
+ * zhode navyše nie je (rovnaká situácia ako `rappaStockRegion` — pri 20
+ * naživo overených produktoch sa druhý výskyt tejto triedy nenašiel). Text
+ * sa vracia AKO JE a ide cez existujúci `availabilityFromText`.
+ *
+ * `&#xHH;` číselné entity sa DEKÓDUJÚ (`decodeNumericEntities`), NIKDY sa
+ * len nevyprázdňujú — code review na issue 307 odhalil, že táto doména
+ * kóduje KAŽDÚ diakritiku takto ("dn&#xED;" = "dní", "ma&#xE1;" = "malá"),
+ * takže vyprázdnenie by "vypredan&#xE9;" tichy zmenilo na "vypredan " a
+ * extraktor by spadol na `unknown` namiesto `unavailable`.
+ *
+ * Naživo overené texty: "Skladom N ks" (available) a "Do 14 dní" (dodanie
+ * na objednávku, nie skladom teraz) — druhý nezodpovedá žiadnemu slovu v
+ * `IN_KEYWORDS`/`OUT_KEYWORDS`, preto correctně padá na `unknown`. Genuinný
+ * vypredaný ("0 ks") text sa naživo NENAŠIEL napriek prehľadaniu 20
+ * uložených odkazov + 3 kategórií — presne ako wetland.sk (issue 230):
+ * pravidlo sa NEHÁDA, žiadne vlastné mapovanie "Do N dní" → unavailable sa
+ * nepridáva (regresný fixtúrový test `rosler-vypredane-noz-entita.html`
+ * overuje, že entitovo kódovaná diakritika v BUDÚCOM skutočnom vypredanom
+ * texte teraz správne rozhoduje `unavailable`).
  */
 function roslerStockRegion(html: string): string | null {
   const match = ROSLER_STOCK_DIV_RE.exec(html);
   if (match === null) return null;
-  const text = (match[1] ?? "")
-    .replace(/&gt;/gi, ">")
-    .replace(/&#x[0-9a-fA-F]+;/gi, " ")
+  const text = decodeNumericEntities((match[1] ?? "").replace(/&gt;/gi, ">"))
     .replace(/\s+/g, " ")
     .trim();
   return text === "" ? null : text;
@@ -248,24 +269,28 @@ const LESONA_AVAILABILITY_RE = /<span\b[^>]*\bid="product-availability"[^>]*>([\
  * `disabled`. Táto appka mikrodáta vôbec neparsuje (`fromJsonLd` hľadá len
  * `<script type="application/ld+json">`, `fromMetaTags` len `<meta
  * property="og:…"/"product:…">` — ani jedno túto `itemprop=` mikrodátovú
- * formu nezachytí), takže sa NEROZŠIRUJE parser o jej čítanie — namiesto
- * toho sa dostupnosť číta VÝHRADNE z tohto viditeľného `<span>`.
+ * formu nezachytí, takže pre lesona.sk je `jsonLd` v `parsePage` VŽDY
+ * `null` — nejde teda o AKTÍVNE krížové overenie proti JSON-LD ako pri
+ * odimon.sk, len o to, že sa mikrodátam nikdy nedôveruje), namiesto toho sa
+ * dostupnosť číta VÝHRADNE z tohto viditeľného `<span>`.
  *
  * Naživo overené TRI stavy: prázdny span (nič v ňom, plne skladom), ikonka
  * `product-unavailable` + text "Vypredané" (nedostupné), ikonka
  * `product-last-items` + "Posledné kusy v sklade" (skladom, málo kusov — už
- * v `IN_KEYWORDS`). Nerozpoznaný NEPRÁZDNY text sa vracia ako `"unknown"`
- * (nie `null`) — keby sa niekedy pridalo skutočné JSON-LD, `null` by nechalo
- * (možno klamúce) JSON-LD rozhodnúť namiesto tohto overeného viditeľného
- * zdroja; `"unknown"` to zaručene nedovolí (`parsePage`'s konfliktová
- * kontrola).
+ * v `IN_KEYWORDS`). `decodeNumericEntities` odstraňuje ikonkové Material-
+ * Icons kódové body (Private Use Area, napr. `&#xE14B;`) rovnakou funkciou
+ * ako `roslerStockRegion` dekóduje diakritiku — dekódovaný PUA znak sa
+ * nezhoduje so žiadnym slovom v `IN_KEYWORDS`/`OUT_KEYWORDS`, rovnaký
+ * výsledný efekt ako predošlé vyprázdnenie. Nerozpoznaný NEPRÁZDNY text sa
+ * vracia ako `"unknown"` (nie `null`) — keby sa niekedy pridalo skutočné
+ * JSON-LD, `null` by nechalo (možno klamúce) JSON-LD rozhodnúť namiesto
+ * tohto overeného viditeľného zdroja; `"unknown"` to zaručene nedovolí
+ * (`parsePage`'s konfliktová kontrola).
  */
 function lesonaVisibleAvailability(html: string): VisibleAvailabilityHit | null {
   const match = LESONA_AVAILABILITY_RE.exec(html);
   if (match === null) return null;
-  const text = (match[1] ?? "")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&#x[0-9a-fA-F]+;/gi, " ")
+  const text = decodeNumericEntities((match[1] ?? "").replace(/<[^>]+>/g, " "))
     .replace(/\s+/g, " ")
     .trim();
   if (text === "") return { availability: "available", text: "" };
