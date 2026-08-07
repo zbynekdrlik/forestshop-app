@@ -17,6 +17,7 @@ import { registerOrderReminderRoutes, type OrderReminderRunDeps } from "./order-
 import { registerMailLogRoutes } from "./mail-log-routes.js";
 import { registerMailTemplateRoutes } from "./mail-template-routes.js";
 import { registerNedostupneRoutes, type NedostupneRunDeps } from "./nedostupne-routes.js";
+import { registerOrderFlagsRoutes } from "./order-flags-routes.js";
 import { registerOrderMergeRoutes, type OrderMergeRunDeps } from "./order-merge-routes.js";
 import { requireSameOrigin } from "./origin-check.js";
 import { registerPairingRoutes } from "./pairing-routes.js";
@@ -292,6 +293,10 @@ export function createApp(
   // dependency (na rozdiel od nedostupne/orderReminder vyššie) — táto
   // obrazovka neposiela mail ani nekontaktuje tretiu stranu.
   registerUpozorneniaRoutes(app, db);
+  // issue 290: "Eshop → Výmena tovaru / Vrátený tovar / Reklamácie" — tri
+  // READ-ONLY pohľady + appkina vlastná reklamácia-značka. Žiadny voliteľný
+  // dependency (rovnaký dôvod ako `upozornenia` vyššie).
+  registerOrderFlagsRoutes(app, db, options.adminBaseUrl ?? "https://www.forestshop.sk");
 
   // Musí byť registrovaný AŽ PO všetkých skutočných /api/* trasách vyššie — Hono
   // vyberá presnejšiu zhodu, takže tie majú prednosť a sem sa dostane len to, čo

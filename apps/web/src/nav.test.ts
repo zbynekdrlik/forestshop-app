@@ -16,16 +16,22 @@ import { DEFAULT_TAB_ID, HIDDEN_TABS, NAV, findTab, isVisibleTabId } from "./nav
 // priečinkov (majiteľ: "Eshop dať uplne ako prvý... šéf ho používa
 // najčastejšie") — Eshop je teraz prvý, Systém druhý, Automatizácie tretie;
 // položky vnútri každého priečinka ostali nezmenené.
+// Issue 290 pridalo TRI ďalšie položky ("Výmena tovaru"/"Vrátený
+// tovar"/"Reklamácie") HNEĎ POD "Nedostupné tovary" (šéfovo zadanie:
+// "pridať dalšie polička - pod nedostupné tovarý").
 // Tento test je najbližšie k tomu, čo strojovo overiť dá (registrácia, nie DOM).
-it("NAV má tri priečinky (Eshop/Systém/Automatizácie), s 6/3/4 záložkami v poradí podľa dôležitosti", () => {
+it("NAV má tri priečinky (Eshop/Systém/Automatizácie), s 9/3/4 záložkami v poradí podľa dôležitosti", () => {
   expect(NAV).toHaveLength(3);
   expect(NAV.map((f) => f.label)).toEqual(["Eshop", "Systém", "Automatizácie"]);
-  expect(NAV[0]?.tabs).toHaveLength(6);
+  expect(NAV[0]?.tabs).toHaveLength(9);
   expect(NAV[1]?.tabs).toHaveLength(3);
   expect(NAV[2]?.tabs).toHaveLength(4);
   expect(NAV[0]?.tabs.map((t) => t.label)).toEqual([
     "Na objednanie",
     "Nedostupné tovary",
+    "Výmena tovaru",
+    "Vrátený tovar",
+    "Reklamácie",
     "Párovanie produktov",
     "Vyhľadať",
     "Zlúčenie objednávok",
@@ -62,6 +68,9 @@ it("findTab nájde viditeľnú aj skrytú záložku podľa id, neznáme id vrát
   expect(findTab("posta-uncollected")?.label).toBe("Nevyzdvihnuté zásielky");
   expect(findTab("order-reminder")?.label).toBe("Pripomienky objednávok");
   expect(findTab("search")?.label).toBe("Vyhľadať");
+  expect(findTab("exchange")?.label).toBe("Výmena tovaru");
+  expect(findTab("returned")?.label).toBe("Vrátený tovar");
+  expect(findTab("claims")?.label).toBe("Reklamácie");
   expect(findTab("neexistuje")).toBeUndefined();
 });
 
@@ -74,6 +83,10 @@ it("isVisibleTabId rozlíši viditeľné (NAV) od skrytých (HIDDEN_TABS)", () =
   expect(isVisibleTabId("nedostupne")).toBe(true);
   // issue 240: nová viditeľná záložka "Vyhľadať".
   expect(isVisibleTabId("search")).toBe(true);
+  // issue 290: tri nové viditeľné záložky pod "Nedostupné tovary".
+  expect(isVisibleTabId("exchange")).toBe(true);
+  expect(isVisibleTabId("returned")).toBe(true);
+  expect(isVisibleTabId("claims")).toBe(true);
   for (const hiddenId of Object.keys(HIDDEN_TABS)) {
     expect(isVisibleTabId(hiddenId)).toBe(false);
   }
