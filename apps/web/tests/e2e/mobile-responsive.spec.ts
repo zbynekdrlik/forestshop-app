@@ -14,6 +14,13 @@ const E2E_MOBIL_EMAIL = "e2e-mobil@forestshop.sk";
 // celej stránky. Akceptačný prípad z tiketu: "Sync zo Shoptetu" mala pri
 // 375px okne `document.documentElement.scrollWidth` 4085px — jej história
 // behov nemala vlastný posuvný obal.
+//
+// issue 302: predvolená obrazovka po prihlásení sa zmenila zo "Sync zo
+// Shoptetu" na "Na objednanie" (`nav.ts`'s `DEFAULT_TAB_ID`) — test teraz
+// najprv overí PREDVOLENÚ obrazovku ("Na objednanie", aj tak najhustejšiu
+// tabuľku v appke), potom klikne na "Sync zo Shoptetu" a overí AJ tú, presne
+// v opačnom poradí ako predtým. Obe obrazovky ostávajú overené, len sa
+// zmenilo, ktorá je predvolená.
 test("na telefónnej šírke (375px) sa stránka nikdy neposúva vodorovne, panel sa zbalí sám, konzola je čistá", async ({
   page,
 }) => {
@@ -31,9 +38,10 @@ test("na telefónnej šírke (375px) sa stránka nikdy neposúva vodorovne, pane
   await page.getByLabel("Heslo").fill(E2E_HESLO);
   await page.getByRole("button", { name: "Prihlásiť sa" }).click();
 
-  // Predvolená obrazovka po prihlásení je "Sync zo Shoptetu" — presne tá,
-  // ktorú majiteľ nahlásil ako neúnosnú.
-  await expect(page.getByRole("heading", { name: "Sync zo Shoptetu" })).toBeVisible();
+  // issue 302: predvolená obrazovka po prihlásení je odvtedy "Na
+  // objednanie" — tabuľkovo najhustejšia obrazovka v appke (`orders-table-
+  // wrap`, mala už VLASTNÝ posuvný obal aj pred issue 291).
+  await expect(page.getByRole("heading", { name: "Na objednanie" })).toBeVisible();
 
   // Bod 1 dohodnutého rozsahu: panel sa na úzkej obrazovke bez uloženej
   // voľby zbalí sám (priamy dôkaz `Sidebar.tsx`'s `initialRail`).
@@ -52,27 +60,27 @@ test("na telefónnej šírke (375px) sa stránka nikdy neposúva vodorovne, pane
   }
 
   // Bod 3 + akceptačná kontrola tiketu: žiadne vodorovné posúvanie STRÁNKY.
-  const syncSirky = await page.evaluate(() => ({
-    scrollWidth: document.documentElement.scrollWidth,
-    innerWidth: window.innerWidth,
-  }));
-  expect(syncSirky.scrollWidth, "Sync zo Shoptetu: scrollWidth vs innerWidth pri 375px").toBeLessThanOrEqual(
-    syncSirky.innerWidth,
-  );
-
-  // Druhá, tabuľkovo najhustejšia obrazovka — "Na objednanie" (`orders-
-  // table-wrap`, mala už VLASTNÝ posuvný obal aj pred týmto tiketom — tu sa
-  // overuje, že aj s VŠETKÝMI ostatnými novo-obalenými tabuľkami zostáva
-  // stránka samotná bez vodorovného posúvania). Záložka je dosiahnuteľná aj
-  // v zbalenej lište (prístupný názov prežije, `Sidebar.tsx`'s `railLabel`).
-  await page.getByRole("button", { name: "Na objednanie" }).click();
-  await expect(page.getByRole("heading", { name: "Na objednanie" })).toBeVisible();
   const ordersSirky = await page.evaluate(() => ({
     scrollWidth: document.documentElement.scrollWidth,
     innerWidth: window.innerWidth,
   }));
   expect(ordersSirky.scrollWidth, "Na objednanie: scrollWidth vs innerWidth pri 375px").toBeLessThanOrEqual(
     ordersSirky.innerWidth,
+  );
+
+  // Druhá overená obrazovka — "Sync zo Shoptetu" (akceptačný prípad z
+  // tiketu 291: mala pri 375px `document.documentElement.scrollWidth`
+  // 4085px — jej história behov nemala vlastný posuvný obal). Záložka je
+  // dosiahnuteľná aj v zbalenej lište (prístupný názov prežije,
+  // `Sidebar.tsx`'s `railLabel`).
+  await page.getByRole("button", { name: "Sync zo Shoptetu" }).click();
+  await expect(page.getByRole("heading", { name: "Sync zo Shoptetu" })).toBeVisible();
+  const syncSirky = await page.evaluate(() => ({
+    scrollWidth: document.documentElement.scrollWidth,
+    innerWidth: window.innerWidth,
+  }));
+  expect(syncSirky.scrollWidth, "Sync zo Shoptetu: scrollWidth vs innerWidth pri 375px").toBeLessThanOrEqual(
+    syncSirky.innerWidth,
   );
 
   expect(chyby).toEqual([]);

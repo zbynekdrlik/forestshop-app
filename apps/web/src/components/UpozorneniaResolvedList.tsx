@@ -16,6 +16,8 @@ const TYPE_LABELS: Readonly<Record<ResolvedUpozornenieRow["type"], string>> = {
   // issue 299: zásielka vrátená ODOSIELATEĽOVI (Pošta SK) — nezamieňať s
   // `vratenie` vyššie (vrátený TOVAR, stav objednávky).
   vratena_zasielka: "Vrátená zásielka",
+  // issue 301: objednávka dlho visiaca v nevybavenom stave.
+  objednavka_visi: "Objednávka visí",
 };
 
 export function UpozorneniaResolvedList({

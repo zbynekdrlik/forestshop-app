@@ -584,3 +584,14 @@ paths:
   stavia kódovaciu tabuľku DYNAMICKY (dekóduje všetkých 256 bajtov cez
   `TextDecoder("windows-1250")` a obráti mapu), namiesto ručne písanej
   tabuľky kódových bodov alebo novej závislosti (`iconv-lite`).
+- **Issue 301: TA ISTÁ transakcia navyše volá `applyStuckUpozornenia`
+  (`orders/stuck-upozornenia.ts`) hneď VEDĽA `applyReturnUpozornenia` — karta
+  na objednávku, čo dlho visí v nevybavenom stave ("Vybavuje sa"/
+  "Nevybavená", `orders/stuck-status.ts`).** Plné odôvodnenie (prah 14 dní
+  vs. `order-reminder`'s 4-dňový, prečo je táto kategória ZNOVA-OHLÁSITEĽNÁ
+  na rozdiel od `vratenie`'s KONEČNEJ, dávkovaný auto-resolve pre-check bez
+  `.for("update")`) je v `.claude/rules/upozornenia.md`, aby sa nepísalo
+  dvakrát. Testovací vzor (vlastný `rowOf` s nastaviteľným `date` stĺpcom,
+  cp1250 cez zdieľané `helpers/orders-return-csv.ts`) je v
+  `orders-ingest-stuck-upozornenie.integration.test.ts` — rovnaký dôvod na
+  cp1250 ako vyššie (stav "Nevybavená" nesie diakritiku).

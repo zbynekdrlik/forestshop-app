@@ -44,11 +44,13 @@ it("NAV má tri priečinky (Eshop/Systém/Automatizácie), s 6/3/4 záložkami v
   ]);
 });
 
-// issue 287: DEFAULT_TAB_ID sa už NEODVODZUJE od NAV[0] (to je teraz "eshop")
-// — zámerne pevne "sync", aby sa poradie priečinkov v menu nedotklo
-// predvolenej obrazovky po prihlásení (nezadané, mimo rozsahu ticketu).
-it("DEFAULT_TAB_ID je pevne 'sync' — nezávisí od poradia priečinkov v NAV", () => {
-  expect(DEFAULT_TAB_ID).toBe("sync");
+// issue 287: DEFAULT_TAB_ID sa NEODVODZUJE od NAV[0] (to je "eshop", priečinok,
+// nie záložka) — je to PEVNÝ literál, nezávislý od poradia priečinkov v NAV.
+// issue 302 (šéf, cez Discord): "keď štartnem appku, nešlo by to na Na
+// objednanie namiesto Sync zo Shoptetu?" — literál sa zmenil zo "sync" na
+// "orders", priame odkazy na ostatné obrazovky (`?tab=<id>`) sa nedotkli.
+it("DEFAULT_TAB_ID je pevne 'orders' — nezávisí od poradia priečinkov v NAV", () => {
+  expect(DEFAULT_TAB_ID).toBe("orders");
 });
 
 it("findTab nájde viditeľnú aj skrytú záložku podľa id, neznáme id vráti undefined", () => {

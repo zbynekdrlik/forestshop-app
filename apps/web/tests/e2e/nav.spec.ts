@@ -55,14 +55,11 @@ test("ľavé menu má tri priečinky (Systém/Eshop/Automatizácie) s trinástim
   await expect(page.getByRole("button", { name: "Zlúčenie objednávok" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Upozornenia" })).toBeVisible();
 
-  // Predvolená obrazovka (bez kliknutia) je "Sync zo Shoptetu".
-  await expect(page.getByRole("heading", { name: "Sync zo Shoptetu" })).toBeVisible();
-
-  // Klik na "Na objednanie" prepne titulok aj obsah. `scripts/e2e-setup.ts`
-  // vždy seeduje dve otvorené objednávky (`orders.spec.ts`'s prvý test) — táto
-  // obrazovka teda NIKDY nie je prázdna v E2E prostredí, overujeme preto
-  // skutočne prítomnú skupinu dodávateľa, nie prázdny stav.
-  await page.getByRole("button", { name: "Na objednanie" }).click();
+  // issue 302: predvolená obrazovka (bez kliknutia) je odvtedy "Na
+  // objednanie", nie "Sync zo Shoptetu". `scripts/e2e-setup.ts` vždy seeduje
+  // dve otvorené objednávky (`orders.spec.ts`'s prvý test) — táto obrazovka
+  // teda NIKDY nie je prázdna v E2E prostredí, overujeme preto skutočne
+  // prítomnú skupinu dodávateľa, nie prázdny stav.
   await expect(page.getByRole("heading", { name: "Na objednanie" })).toBeVisible();
   await expect(page.getByTestId("supplier-DODAVATEL-TEST-1")).toBeVisible();
 
@@ -201,6 +198,12 @@ test("Sync zo Shoptetu ukazuje stav katalógu aj objednávok a tlačidlo 'Stiahn
   await page.getByLabel("E-mail").fill(E2E_NAV_EMAIL);
   await page.getByLabel("Heslo").fill(E2E_HESLO);
   await page.getByRole("button", { name: "Prihlásiť sa" }).click();
+
+  // issue 302: predvolená obrazovka po prihlásení je odvtedy "Na
+  // objednanie", nie "Sync zo Shoptetu" — tento test overuje práve obrazovku
+  // "Sync zo Shoptetu", takže tam teraz musí prejsť explicitným klikom.
+  await page.getByRole("button", { name: "Sync zo Shoptetu" }).click();
+  await expect(page.getByRole("heading", { name: "Sync zo Shoptetu" })).toBeVisible();
 
   // #115: katalóg má seedovaný, roky starý úspešný beh — pill NESMIE ukázať
   // "✅ OK", musí ukázať zastaraný/varovný stav so slovenským vysvetlením

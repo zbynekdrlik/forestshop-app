@@ -105,11 +105,13 @@ test("zmena hesla: zlé staré heslo/nezhoda odmietnuté, úspešná zmena zruš
   await page.getByLabel("Nové heslo", { exact: true }).fill(NOVE_HESLO);
   await page.getByLabel("Nové heslo znova").fill(NOVE_HESLO);
   await page.getByRole("button", { name: "Zmeniť heslo" }).click();
-  // #115: bare `getByRole("alert")` je odteraz nejednoznačný — na predvolenej
-  // obrazovke "Sync zo Shoptetu" pod týmto panelom svieti aj `role="alert"`
-  // staleness upozornenie (`sync-stale-Katalóg`). Rovnaký vzor ako
-  // `.claude/rules/testing.md`'s existujúca kolízna poznámka pri
-  // `getByLabel`u: oprava na strane KOLÍDUJÚCEHO (existujúceho) locatora
+  // #115: bare `getByRole("alert")` bol na tomto mieste nejednoznačný, kým
+  // bola predvolená obrazovka "Sync zo Shoptetu" (pod týmto panelom vtedy
+  // svietil aj `role="alert"` staleness upozornenie, `sync-stale-Katalóg`).
+  // Issue 302 zmenilo predvolenú obrazovku na "Na objednanie" — filter tu
+  // ostáva zámerne (robustné bez ohľadu na to, čo je práve predvolené),
+  // rovnaký vzor ako `.claude/rules/testing.md`'s existujúca kolízna
+  // poznámka pri `getByLabel`u: oprava na strane KOLÍDUJÚCEHO locatora
   // (`.filter({ hasText })`), nie odobratím `role="alert"` novému prvku.
   await expect(page.getByRole("alert").filter({ hasText: "Nesprávne staré heslo" })).toHaveText(
     "Nesprávne staré heslo",
