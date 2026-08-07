@@ -2,6 +2,7 @@ import { chromium, type Browser, type Page } from "playwright";
 import { log } from "../../logger.js";
 import { buildShoptetAdminOrderUrl } from "../orders/queries.js";
 import { loginToShoptetAdmin } from "./admin-login.js";
+import { runInChildProcess } from "./child-runner.js";
 import type { OrderNoteWritebackConfig } from "./config.js";
 import { mergeShopRemark } from "./note-block.js";
 import type { OrderNoteToSync } from "./order-note-select.js";
@@ -61,6 +62,21 @@ export async function runOrderNoteWriteback(
     await browser?.close();
   }
   return results;
+}
+
+/**
+ * Issue 313: rovnaké API/výsledok ako `runOrderNoteWriteback`, ale beh sa
+ * deleguje do izolovaného dieťa procesu (`child-runner.ts`, rovnaký dôvod
+ * ako `playwright-import.ts`'s `runShoptetImportIsolated`). Toto je
+ * funkcia, ktorú má volať `run-order-note-writeback.ts`;
+ * `runOrderNoteWriteback` samotné zostáva exportované pre testy proti
+ * fixture (aj pre `order-note-worker.ts`, ktorý ho spúšťa VNÚTRI dieťa
+ * procesu).
+ */
+export function runOrderNoteWritebackIsolated(
+  options: RunOrderNoteWritebackOptions,
+): Promise<readonly OrderNoteWriteResult[]> {
+  return runInChildProcess(new URL("./order-note-worker.js", import.meta.url), options);
 }
 
 async function writeOneOrderNote(

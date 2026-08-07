@@ -2,7 +2,7 @@ import type { Database } from "../../db/client.js";
 import { buildWritebackCsv } from "./csv.js";
 import type { ShoptetImportConfig } from "./config.js";
 import { markSuppliersLinksSynced } from "./mark-synced.js";
-import { runShoptetImport } from "./playwright-import.js";
+import { runShoptetImportIsolated } from "./playwright-import.js";
 import { selectChangedSupplierLinks } from "./select-changes.js";
 
 export type WritebackRunResult =
@@ -34,7 +34,7 @@ export async function runShoptetWriteback(
   if (rows.length === 0) return { status: "nothing_changed" };
 
   const csv = buildWritebackCsv(rows);
-  const outcome = await runShoptetImport({ config, csv, expectedRows: rows.length });
+  const outcome = await runShoptetImportIsolated({ config, csv, expectedRows: rows.length });
 
   if (!outcome.ok) {
     return {

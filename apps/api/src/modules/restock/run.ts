@@ -9,7 +9,7 @@ import type { Database } from "../../db/client.js";
 import { restockEvents, restockSettings } from "../../db/schema.js";
 import type { ShoptetImportConfig } from "../shoptet-writeback/config.js";
 import { buildRestockCsv } from "../shoptet-writeback/csv.js";
-import { runShoptetImport } from "../shoptet-writeback/playwright-import.js";
+import { runShoptetImportIsolated } from "../shoptet-writeback/playwright-import.js";
 import {
   AVAILABILITY_IN_STOCK_TEXT,
   MAX_PER_RUN,
@@ -38,7 +38,7 @@ export interface RunRestockOptions {
   readonly now: Date;
   readonly config: ShoptetImportConfig;
   /** Iba pre testy — nahradí skutočný Playwright zápis do Shoptetu. */
-  readonly importToShoptet?: typeof runShoptetImport;
+  readonly importToShoptet?: typeof runShoptetImportIsolated;
   readonly limit?: number;
 }
 
@@ -56,7 +56,7 @@ export async function runRestock(options: RunRestockOptions): Promise<RestockRun
 
 async function runRestockLocked(options: RunRestockOptions): Promise<RestockRunResult> {
   const { db, now, config } = options;
-  const importToShoptet = options.importToShoptet ?? runShoptetImport;
+  const importToShoptet = options.importToShoptet ?? runShoptetImportIsolated;
   const limit = options.limit ?? MAX_PER_RUN;
 
   const { picked, overLimit } = await selectRestockCandidates(db, now, limit);

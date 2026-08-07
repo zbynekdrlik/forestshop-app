@@ -37,6 +37,20 @@ services:
   app:
     image: ghcr.io/zbynekdrlik/forestshop-app:${IMAGE_TAG:-latest}
     restart: unless-stopped
+    # issue 313 (vedľajší nález, nie hlavná oprava tiketu): appka bez tohto
+    # bola PID 1 vo vlastnom kontajneri, bez skutočného init procesu —
+    # `apps/api/src/shutdown.ts`'s SIGTERM handler (issue 78) to rieši pre
+    # appku samotnú, ale osirelé Playwright/Chromium potomkovia (zombie `Z`
+    # procesy po KAŽDOM `browser.close()`) sa bez init procesu nikdy
+    # nezožnú — naživo overené na produkcii (desiatky nazbieraných zombie
+    # procesov pod appka PID 1). `init: true` necháva Docker vložiť
+    # zabudovaný `tini` ako PID 1 namiesto appky (appka je odvtedy PID 2+,
+    # nič iné sa nemení) — štandardná, dokumentovaná Docker oprava presne
+    # pre túto triedu problému. Naživo overené ako neškodné (appka nabehla
+    # aj po tejto zmene identicky) — NEBOLO to však samo osebe dosť na
+    # opravu tohto tiketu (skutočná príčina a oprava: `.claude/rules/
+    # shoptet-writeback.md`'s izolovaný dieťa proces).
+    init: true
     # Doplnok k appka's vlastnému SIGTERM handleru (apps/api/src/shutdown.ts,
     # issue 78) — appka sa dnes ukončí za pár ms, ale 15s dáva rezervu pre
     # prípad pomalšieho zatvárania DB spojení pod záťažou. Toto NIE JE

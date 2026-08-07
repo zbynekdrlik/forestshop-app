@@ -1,7 +1,7 @@
 import type { Database } from "../../db/client.js";
 import type { OrderNoteWritebackConfig } from "./config.js";
 import { markOrderNoteSynced } from "./order-note-mark-synced.js";
-import { runOrderNoteWriteback } from "./order-note-playwright.js";
+import { runOrderNoteWritebackIsolated } from "./order-note-playwright.js";
 import { selectChangedOrderNotes } from "./order-note-select.js";
 
 export type OrderNoteWritebackRunResult =
@@ -33,7 +33,7 @@ export async function runOrderNoteWritebackJob(
     return { status: "nothing_changed", skippedCount };
   }
 
-  const results = await runOrderNoteWriteback({ config, orders: toSync });
+  const results = await runOrderNoteWritebackIsolated({ config, orders: toSync });
 
   let succeeded = 0;
   for (const result of results) {
