@@ -236,6 +236,31 @@ paths:
   Chromium/crashpad procesy (osirelé po KAŽDOM `browser.close()`, keďže nič
   ich predtým nereapovalo) — appka je odvtedy PID 2+, appka's vlastný
   SIGTERM handler (issue 78) sa nemení.
+- **Ako naživo overiť izolovaný child-process login/import beh (issue 313's
+  post-deploy overenie) BEZ dotknutia sa reálnych dát:** volaj priamo
+  `runShoptetImportIsolated` (compiled `dist/modules/shoptet-writeback/
+  playwright-import.js`), NIE `runRestock`/`runShoptetWriteback` (tie
+  wrappery jediné zapisujú do DB — `recordEvents`/`markSuppliersLinksSynced`
+  — priame volanie `runShoptetImportIsolated` teda nezanechá ŽIADNU stopu v
+  `job_run` ani inej tabuľke). Postav CSV cez skutočný `buildRestockCsv`
+  (compiled `dist/modules/shoptet-writeback/csv.js`) s JEDNÝM riadkom, ktorý
+  má ZJAVNE vymyslený, neexistujúci `code` (napr. `TESTOVACI-KOD-
+  NEEXISTUJE-<timestamp>-<n>`) — Shoptet ho nevie napárovať na žiadny reálny
+  produkt (nahlási `failed: 1`, čo je OČAKÁVANÝ, neškodný výsledok), ale
+  celý ostatný beh (prihlásenie, baseline, upload, bezpečné nastavenia,
+  submit, čítanie Logu) prebehne PRESNE rovnako ako pri skutočnom behu —
+  vrátane cvičenia `child-runner.ts`'s `resolveWorker` v produkčnom obraze
+  (over VOPRED, že `tsx` nikde v obraze neexistuje, teda vetva "chýbajúci
+  build" nemohla byť tichou náhradou). Spusti to N-krát za sebou (loop v
+  `.mjs` skripte, `docker cp` do `/app/apps/api/` presne ako pri manuálnom
+  spustení joba, pozri bod nižšie) — jediný beh nič nedokáže o
+  INTERMITENTNEJ chybe, N opakovaní (10 stačilo pri #313) áno. Po behu
+  zmaž skript (`docker exec -u root ... rm`) a over `docker exec ... ps aux`
+  na nulu osirelých Chromium procesov. `buildRestockCsv`/`buildWritebackCsv`
+  ODMIETNU prázdne (0-riadkové) pole — jeden vymyslený riadok namiesto
+  úplne prázdneho súboru obchádza tento guard bez toho, aby sa oň muselo
+  zasahovať, a je aj bližšie realistickej ceste, akou by appka skutočný
+  import poslala.
 - **PÔVODNÝ (mylný) nález, ponechaný pre históriu — pozri opravu vyššie:**
   Ručný ("Spustiť teraz") beh Playwright login flow-u DO Shoptet
   administrácie cez DEŇ vie zlyhať s "prihlasovací formulár stále
