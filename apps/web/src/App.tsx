@@ -7,6 +7,8 @@ import { LoginForm } from "./components/LoginForm.js";
 import { Sidebar } from "./components/Sidebar.js";
 import { Topbar } from "./components/Topbar.js";
 import { DEFAULT_TAB_ID, NAV, findTab, isVisibleTabId } from "./nav.js";
+import { fetchOrderFlagCounts } from "./orderFlagsApi.js";
+import { OrderFlagsBadgeRefreshContext } from "./orderFlagsBadgeContext.js";
 import { fetchOrderReminderStatus } from "./orderReminderApi.js";
 import { OrdersRemainingCountContext } from "./ordersRemainingCountContext.js";
 import { fetchPostaUncollectedStatus } from "./postaUncollectedApi.js";
@@ -76,10 +78,52 @@ export function App(): JSX.Element {
     };
   }, [me, activeTabId, upozorneniaRefreshNonce]);
 
+  // issue 290: odznaky "Výmena tovaru"/"Vrátený tovar"/"Reklamácie" — rovnaký
+  // priamy vzor ako `upozorneniaCount` vyššie (JEDEN endpoint, `App.tsx` si
+  // ho volá sám, počty musia byť známe hneď po prihlásení). Na rozdiel od
+  // Upozornení má JEDEN spoločný refresh-spúšťač namiesto troch, lebo
+  // mutuje ich len JEDNA z troch obrazoviek (`ClaimOrdersSection`), ale
+  // odznak potrebujú refetchovať všetky tri naraz (mark/clear môže zmeniť
+  // len `claims`, no netreba to rozlišovať — samostatný refetch pre jedno
+  // číslo by bol zbytočná zložitosť navyše pre appku tejto veľkosti).
+  const [orderFlagCounts, setOrderFlagCounts] = useState<{ readonly exchange: number; readonly returned: number; readonly claims: number } | null>(
+    null,
+  );
+  const [orderFlagsRefreshNonce, setOrderFlagsRefreshNonce] = useState(0);
+  const orderFlagsBadgeRefresh = useCallback(() => {
+    setOrderFlagsRefreshNonce((n) => n + 1);
+  }, []);
+  const orderFlagsBadgeContextValue = useMemo(() => ({ refresh: orderFlagsBadgeRefresh }), [orderFlagsBadgeRefresh]);
+  useEffect(() => {
+    if (me === null) return;
+    let cancelled = false;
+    fetchOrderFlagCounts()
+      .then((counts) => {
+        if (!cancelled) setOrderFlagCounts(counts);
+      })
+      .catch(() => {
+        // `fetchOrderFlagCounts` už interne zachytáva všetky chyby a vždy
+        // vráti nuly (`orderFlagsApi.ts`) — tento catch je len poistka pre
+        // eslint `no-floating-promises`, nikdy by sa reálne nemal spustiť.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [me, activeTabId, orderFlagsRefreshNonce]);
+
   const badgeCounts = useMemo<Readonly<Record<string, number>>>(() => {
     const counts: Record<string, number> = {};
     if (ordersRemainingCount !== null) counts["orders"] = ordersRemainingCount;
     if (upozorneniaCount !== null) counts["upozornenia"] = upozorneniaCount;
+    // issue 290: na rozdiel od "orders"/"upozornenia" vyššie (odznak sa
+    // ukazuje AJ pri nule — appka tým hovorí "toto číslo poznám, je 0")
+    // tieto tri odznaky sa VÔBEC nezobrazujú pri nule (ticket: "shown only
+    // when >0") — chýbajúci kľúč v `badgeCounts`, nie "0" hodnota.
+    if (orderFlagCounts !== null) {
+      if (orderFlagCounts.exchange > 0) counts["exchange"] = orderFlagCounts.exchange;
+      if (orderFlagCounts.returned > 0) counts["returned"] = orderFlagCounts.returned;
+      if (orderFlagCounts.claims > 0) counts["claims"] = orderFlagCounts.claims;
+    }
     return counts;
   }, [ordersRemainingCount, upozorneniaCount]);
 
@@ -202,6 +246,7 @@ export function App(): JSX.Element {
   return (
     <OrdersRemainingCountContext.Provider value={ordersRemainingCountContextValue}>
       <UpozorneniaBadgeRefreshContext.Provider value={upozorneniaBadgeContextValue}>
+        <OrderFlagsBadgeRefreshContext.Provider value={orderFlagsBadgeContextValue}>
         <div className="app-shell">
           <Sidebar
             folders={NAV}
@@ -230,6 +275,7 @@ export function App(): JSX.Element {
             </main>
           </div>
         </div>
+        </OrderFlagsBadgeRefreshContext.Provider>
       </UpozorneniaBadgeRefreshContext.Provider>
     </OrdersRemainingCountContext.Provider>
   );

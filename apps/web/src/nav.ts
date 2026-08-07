@@ -1,6 +1,8 @@
 import type { ComponentType } from "react";
 import type { Me } from "./api.js";
 import { CatalogPage } from "./components/CatalogPage.js";
+import { ClaimOrdersSection } from "./components/ClaimOrdersSection.js";
+import { ExchangeOrdersSection } from "./components/ExchangeOrdersSection.js";
 import { MailLogSection } from "./components/MailLogSection.js";
 import { MailTemplatesSection } from "./components/MailTemplatesSection.js";
 import { NedostupneSection } from "./components/NedostupneSection.js";
@@ -10,6 +12,7 @@ import { OrdersSection } from "./components/OrdersSection.js";
 import { PairingSection } from "./components/PairingSection.js";
 import { PostaUncollectedSection } from "./components/PostaUncollectedSection.js";
 import { RestockSection } from "./components/RestockSection.js";
+import { ReturnedOrdersSection } from "./components/ReturnedOrdersSection.js";
 import { SchedulerSection } from "./components/SchedulerSection.js";
 import { SearchSection } from "./components/SearchSection.js";
 import { SupplierLinksSection } from "./components/SupplierLinksSection.js";
@@ -74,6 +77,15 @@ export const NAV: readonly NavFolder[] = [
     tabs: [
       { id: "orders", label: "Na objednanie", icon: "📦", Component: OrdersSection, wide: true },
       { id: "nedostupne", label: "Nedostupné tovary", icon: "🚫", Component: NedostupneSection, wide: true },
+      // issue 290: šéfovo zadanie (Discord, 6.8.2026) — tri nové položky
+      // "hneď pod Nedostupné tovary". READ-ONLY pohľady nad `order.status_
+      // name` (Výmena/Vrátený tovar) + appkina vlastná reklamácia-značka
+      // (Reklamácie) — žiadna z nich nezakladá novú kartu na Upozorneniach,
+      // rozhodnuté na tickete (`.claude/rules/upozornenia.md`,
+      // `order-flags.ts`).
+      { id: "exchange", label: "Výmena tovaru", icon: "🔃", Component: ExchangeOrdersSection, wide: true },
+      { id: "returned", label: "Vrátený tovar", icon: "↩️", Component: ReturnedOrdersSection, wide: true },
+      { id: "claims", label: "Reklamácie", icon: "⚠️", Component: ClaimOrdersSection, wide: true },
       // issue 239: majiteľ, "vypisovat produkty ktore nemaju dodavatelsku
       // linku, dat moznost ju tam rovno vlozit, a poslat do Shoptetu" — patrí
       // sem (nie do Automatizácie), je to obrazovka, na ktorej obsluha
