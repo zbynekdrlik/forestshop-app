@@ -1,0 +1,24 @@
+<!-- issue 307: lesona.sk — nízka zásoba (`product-last-items` ikonka), stále
+     KÚPITEĽNÉ (tlačidlo "Vložiť do košíka" nie je zablokované). Text
+     "Posledné kusy v sklade" je už v globálnom `IN_KEYWORDS` zozname
+     (`parse.ts`), preto to prechádza existujúcim `availabilityFromText`
+     bez novej logiky. Overené naživo 7. 8. 2026. -->
+<!doctype html>
+<html lang="sk">
+<head><title>Šiltovka Alaska 1795 BlindMax HD</title></head>
+<body>
+<div class="product-add-to-cart">
+  <div class="product-quantity">
+    <div class="add">
+      <button class="btn btn-primary add-to-cart" data-button-action="add-to-cart" type="submit">
+        Vložiť do košíka
+      </button>
+      <span id="product-availability">
+        <i class="material-icons product-last-items">&#xE002;</i>
+        Posledné kusy v sklade
+      </span>
+    </div>
+  </div>
+</div>
+</body>
+</html>

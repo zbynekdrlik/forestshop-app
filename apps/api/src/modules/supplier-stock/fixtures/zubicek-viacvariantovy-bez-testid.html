@@ -1,0 +1,30 @@
+<!-- issue 307: viacvariantový produkt na zubicek.cz (napr. remeň vo viacerých
+     veľkostiach) — BEZ `data-testid="labelAvailability"`, presne rovnaký jav
+     ako luko.cz (issue 227): JS prepína dostupnosť podľa zvolenej veľkosti
+     cez `parameter-dependent no-display <id>` obaľovače, hlavný
+     `data-testid` sa vôbec nevykreslí. Ostáva `unknown` — mapovanie
+     číselných parameter-ID na konkrétnu veľkosť je mimo rozsahu tohto
+     ticketu (rovnaká poznámka ako luko.cz v `.claude/rules/supplier-
+     stock.md`). Overené naživo 7. 8. 2026. -->
+<!doctype html>
+<html lang="cs">
+<head><title>Kožený opasek se šířkou 4 cm</title></head>
+<body>
+<div class="product-detail">
+  <div class="p-basic-info-block">
+    <span class="parameter-dependent no-display 49-554">
+      <span class="availability-label" style="color: #009901">
+                                            Skladem
+                                    </span>
+    </span>
+    <span class="parameter-dependent no-display 49-557">
+      <span class="availability-label" style="color: #009901">
+                                            Skladem
+                                    </span>
+    </span>
+    <span class="parameter-dependent default-variant">
+                        Zvolte variantu                    </span>
+  </div>
+</div>
+</body>
+</html>

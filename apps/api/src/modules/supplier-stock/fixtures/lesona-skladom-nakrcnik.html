@@ -1,0 +1,24 @@
+<!-- issue 307: lesona.sk (PrestaShop) — dostupnosť PRI produkte nesie
+     `<span id="product-…">` (id product-availability). Keď je produkt plne skladom, span je
+     PRÁZDNY (žiadna ikonka, žiadny text) — schema.org `itemprop="availability"`
+     mikrodáta O KUS VYŠŠIE na stránke (`<link itemprop="availability"
+     href="https://schema.org/InStock"/>`) tu súhlasia, ale NEČÍTAME ich (viď
+     lesona-vypredane-sluchadla.html — tá istá mikrodáta na tej istej doméne
+     VIE KLAMAŤ, presne ako odimon.sk, issue 225). Overené naživo 7. 8. 2026. -->
+<!doctype html>
+<html lang="sk">
+<head><title>Nákrčník Alaska 1795 BlindTech Invisible</title></head>
+<body>
+<div class="product-add-to-cart">
+  <div class="product-quantity">
+    <div class="add">
+      <button class="btn btn-primary add-to-cart" data-button-action="add-to-cart" type="submit">
+        Vložiť do košíka
+      </button>
+      <span id="product-availability">
+      </span>
+    </div>
+  </div>
+</div>
+</body>
+</html>
