@@ -56,7 +56,14 @@ function isWorkerMessage<TOutput>(value: unknown): value is WorkerMessage<TOutpu
 const REPO_ROOT = fileURLToPath(new URL("../../../../../", import.meta.url));
 const TSX_BIN = join(REPO_ROOT, "node_modules/.bin/tsx");
 
-function resolveWorker(workerScriptUrl: URL): { readonly modulePath: string; readonly execOptions: ForkOptions } {
+/** Exportované LEN pre `resolve-worker.test.ts` — over VETVENIE (kompilovaný
+ * `.js` vs `.ts`+tsx záložka) priamo, bez nutnosti skutočne forkovať proces
+ * (code review PR 315, finding 4: produkčná `.js` vetva nemá vlastný test —
+ * spustiť skutočný skompilovaný worker by potrebovalo `tsc -b` PRED testom,
+ * čo by rozbilo "žiadny build pred testom" vzor tohto repa; test LOGIKY
+ * vetvenia bez skutočného forku je lacnejší, rovnako dôkazný pre samotné
+ * rozhodovanie). */
+export function resolveWorker(workerScriptUrl: URL): { readonly modulePath: string; readonly execOptions: ForkOptions } {
   const jsPath = fileURLToPath(workerScriptUrl);
   if (existsSync(jsPath)) {
     return { modulePath: jsPath, execOptions: {} };
@@ -71,7 +78,7 @@ function resolveWorker(workerScriptUrl: URL): { readonly modulePath: string; rea
 // ~30 s (`.claude/rules/supplier-stock.md`'s poznámka o meraní trvania
 // celého supplier-stock behu je iný beh; TENTO strop je pre JEDEN Playwright
 // login+import/zápis, nie pre celý nočný sweep) — 5 minút je bohatá rezerva.
-const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000;
+export const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000;
 
 export function runInChildProcess<TOutput>(
   workerScriptUrl: URL,
@@ -81,34 +88,58 @@ export function runInChildProcess<TOutput>(
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const { modulePath, execOptions } = resolveWorker(workerScriptUrl);
   return new Promise<TOutput>((resolve, reject) => {
+    // `detached: true` dáva dieťaťu VLASTNÚ skupinu procesov (PGID == PID) —
+    // pri timeoute zabíjame `-child.pid` (celú skupinu), nie len samotný
+    // fork()nutý node/tsx proces. Bez toho by SIGKILL nechal Chromium
+    // (VNÚTORNÉ dieťa workera, nie priame dieťa tohto fork()) osirelé —
+    // presne tá istá trieda problému ako zombie nález, čo `init: true`
+    // rieši pre bežnú cestu, ale NIE pre násilné ukončenie na timeout
+    // (code review PR 315, finding 3).
     const child = fork(modulePath, [], {
       ...execOptions,
+      detached: true,
       serialization: "advanced",
       stdio: ["ignore", "inherit", "inherit", "ipc"],
     });
     let settled = false;
 
+    function killChildGroup(signal: NodeJS.Signals): void {
+      if (child.pid === undefined) return;
+      try {
+        process.kill(-child.pid, signal);
+      } catch {
+        // skupina už neexistuje (dieťa aj jeho potomkovia už skončili) — nič
+        // nerob, toto je bežný, nie chybový stav.
+      }
+    }
+
     const timer = setTimeout(() => {
       if (settled) return;
       settled = true;
-      child.kill("SIGKILL");
+      killChildGroup("SIGKILL");
       reject(new Error(`Dieťa proces (${modulePath}) neodpovedal do ${String(timeoutMs)} ms`));
     }, timeoutMs);
 
+    let pendingResult: { readonly ok: boolean; readonly result?: TOutput; readonly error?: string } | undefined;
+
     child.once("message", (raw: unknown) => {
       if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      child.kill();
       if (!isWorkerMessage<TOutput>(raw)) {
+        settled = true;
+        clearTimeout(timer);
+        killChildGroup("SIGTERM");
         reject(new Error("Dieťa proces poslal neplatnú správu"));
         return;
       }
-      if (raw.ok) {
-        resolve(raw.result as TOutput);
-      } else {
-        reject(new Error(raw.error ?? "Dieťa proces zlyhal bez popisu"));
-      }
+      // NEuzatváraj promise tu — `'message'` len ZACHYTÍ výsledok. Node
+      // NEZARUČUJE, že `'message'` doručí PRED `'exit'`(IPC zápis je
+      // asynchrónny) — naživo overené (code review PR 315, finding 1):
+      // súbežné behy pod záťažou stratili doručenú správu 100 % prípadov,
+      // keď sa promise uzatvárala tu. Skutočné rozhodnutie sa robí až v
+      // `'close'` nižšie, ktoré Node GARANTUJE až PO doručení/spracovaní
+      // všetkých IPC správ.
+      pendingResult = raw;
+      killChildGroup("SIGTERM");
     });
 
     child.once("error", (error) => {
@@ -118,11 +149,24 @@ export function runInChildProcess<TOutput>(
       reject(error);
     });
 
-    child.once("exit", (code) => {
+    // `'close'` (nie `'exit'`) — fires AŽ PO tom, čo sa STDIO prúdy (vrátane
+    // IPC kanála) skutočne zatvoria, čo garantuje, že KAŽDÁ už doručená
+    // `'message'` bola spracovaná skôr, než sa sem dostaneme (code review
+    // PR 315, finding 1 — over verifikované 200/200 pod záťažou po tejto
+    // oprave, predtým až 100 % strata).
+    child.once("close", (code) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      reject(new Error(`Dieťa proces skončil bez výsledku (exit code ${String(code)})`));
+      if (pendingResult === undefined) {
+        reject(new Error(`Dieťa proces skončil bez výsledku (exit code ${String(code)})`));
+        return;
+      }
+      if (pendingResult.ok) {
+        resolve(pendingResult.result as TOutput);
+      } else {
+        reject(new Error(pendingResult.error ?? "Dieťa proces zlyhal bez popisu"));
+      }
     });
 
     child.send(input);
