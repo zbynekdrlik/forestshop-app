@@ -179,3 +179,13 @@ paths:
   `WritebackRow`/`buildWritebackCsv` je automaticky chránená, pokiaľ ide
   cez `dataRowToLine` — nová cesta k zápisu Shoptet CSV musí VŽDY ísť cez
   `buildWritebackCsv`, nikdy cez vlastné skladanie stĺpcov mimo neho.
+- **Ručný ("Spustiť teraz") beh Playwright login flow-u DO Shoptet
+  administrácie cez DEŇ vie zlyhať s "prihlasovací formulár stále
+  viditeľný" — nočný naplánovaný beh (okolo 4:50) funguje spoľahlivo**
+  (issue 313, zistené pri post-deploy overovaní issue 307). `job_run`
+  história ukázala jasný vzor: noc = úspech, ručný denný pokus = zlyhanie
+  (aj DVAKRÁT po sebe). Príčina zatiaľ NEPRESKÚMANÁ (možný rozdiel v
+  Shoptet-ovej záťaži/rate-limite/session cez deň vs v noci) — pri
+  ĎALŠOM podobnom "funguje v noci, zlyháva pri ručnom denné teste" jave v
+  tomto module najprv skontroluj `job_run` históriu podľa `started_at`
+  hodiny dňa, než začneš hľadať bug v kóde samotnom.

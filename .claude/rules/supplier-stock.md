@@ -281,16 +281,42 @@ paths:
   pridanie ďalších domén posunulo oba súbory (aj `parse.ts`, aj
   `parse.test.ts`) cez eslint `max-lines: 400` (`.claude/rules/testing.md`).
   `parse.ts` nesie generický algoritmus (`parsePage`, `fromJsonLd`,
-  `fromMetaTags`, `availabilityFromText`, veľkostné pravidlá);
-  `availability-domain-rules.ts` nesie per-doménovú znalosť. Súbory sa
-  navzájom importujú (parse.ts → `textAvailabilityRuleFor`/
-  `visibleAvailabilityFor`; availability-domain-rules.ts →
-  `availabilityFromText`/`SupplierAvailability` typ späť z parse.ts) —
-  ZÁMERNE cyklický import na úrovni FUNKCIÍ (nikdy sa nič nevyhodnocuje na
-  module-top-level v konfliktnom poradí), overené `tsc -b` aj celou testovou
-  sadou. Nová doména pribúda do `availability-domain-rules.ts`, testy pre ňu
-  do `parse-issue307.test.ts` (alebo ďalšieho tematicky vyčleneného súboru,
-  ak by aj tento prerástol limit) — nikdy naspäť do `parse.ts`.
+  `fromMetaTags`, veľkostné pravidlá); `availability-domain-rules.ts` nesie
+  per-doménovú znalosť. **Prvá verzia mala tieto dva súbory navzájom
+  importované** (parse.ts → `textAvailabilityRuleFor`/`visibleAvailabilityFor`;
+  availability-domain-rules.ts → `availabilityFromText`/`SupplierAvailability`
+  späť z parse.ts) — funkčne bezpečný cyklický import (nič sa nevyhodnocuje na
+  module-top-level v konfliktnom poradí), ale code review na issue 307 ho
+  označil za krehký (budúci top-level kód v ktoromkoľvek súbore by ho mohol
+  ticho rozbiť) a odporučil radšej mechanickú extrakciu. **Fix: tretí súbor
+  `availability-primitives.ts`** nesie `SupplierAvailability` typ, `hostOf`,
+  `availabilityFromText` a `decodeNumericEntities` — oba ostatné súbory naň
+  závisia JEDNÝM smerom, žiadny cyklus. Nová doména pribúda do
+  `availability-domain-rules.ts` (import z `availability-primitives.ts`,
+  NIKDY z `parse.ts`), testy pre ňu do `parse-issue307.test.ts` (alebo
+  ďalšieho tematicky vyčleneného súboru, ak by aj tento prerástol limit) —
+  nikdy naspäť do `parse.ts`.
+- **Číselné HTML entity (`&#xHH;`/`&#DDD;`) sa v extraktore dostupnosti
+  MUSIA DEKÓDOVAŤ na skutočný znak (`decodeNumericEntities` v
+  `availability-primitives.ts`), NIKDY len nevyprázdniť.** Code review na
+  issue 307 odhalilo, že `roslerStockRegion`'s pôvodné vyprázdnenie
+  (skopírované z ikonkového vyprázdnenia v `lesonaVisibleAvailability`, kde
+  je SPRÁVNE — ide o Material-Icons kódové body v Private Use Area, nie o
+  skutočný text) na `rosler.sk` ticho rozbíjalo diakritiku: doména kóduje
+  KAŽDÚ diakritiku takto (naživo overené — "dn&#xED;" = "dní", "ma&#xE1;" =
+  "malá", "no&#x17E;e" = "nože"), takže "vypredan&#xE9;" by sa vyprázdnením
+  zmenilo na "vypredan " — nezhoduje sa so ŽIADNYM slovom v
+  `OUT_KEYWORDS`, extraktor by ticho spadol na `unknown` namiesto
+  `unavailable`. Skutočné dekódovanie funguje rovnako správne pre OBA
+  prípady (diakritika → skutočný znak, ikonkový bod → neviditeľný PUA
+  znak, ktorý sa nezhoduje so žiadnym slovom) — jedna zdieľaná funkcia,
+  žiadna špeciálna vetva pre "tento typ entity vyprázdni, tamten dekóduj".
+  Regresný test: `rosler-vypredane-noz-entita.html` (mechanizmus, nie
+  naživo overená vzorka — genuinný vypredaný text sa na rosler.sk naživo
+  nenašiel). Test pri KAŽDOM ďalšom extraktore, ktorý číta text z domény s
+  neznámou entity-kódovacou konvenciou: over PRIAMO na živom `curl`u, či sa
+  diakritika posiela ako entita alebo priamy UTF-8 znak (`grep -o
+  '&#x[0-9A-Fa-f]*;' subor.html`), skôr než sa entita jednoducho vyprázdni.
 - **Testovacia fixtúra, ktorej VLASTNÝ opisný HTML komentár cituje presne tú
   istú atribútovú syntax, akú hľadá jej vlastný regex, môže OMYLOM zhodiť
   test na SEBE SAMEJ — regex nájde zhodu vo VLASTNOM komentári fixtúry, nie
@@ -334,3 +360,12 @@ paths:
   vypredaný text sa NENAŠIEL napriek prehľadaniu 20 uložených odkazov + 3
   kategórií — presne ako `wetland.sk` (issue 230): pravidlo sa NEHÁDA,
   žiadne vlastné mapovanie "Do N dní" → unavailable sa nepridalo.
+- **Celý beh (~2160 odkazov, sériový, `PER_HOST_DELAY_MS` medzi rovnakým
+  hostom) trvá reálne ~72 minút** (zmerané z `job_run.started_at`/
+  `finished_at`, viacero po sebe idúcich nočných behov). Post-deploy
+  overenie zmeny v parseri preto NEČAKAJ na jeden krátky `curl`/API test —
+  ručné "Spustiť teraz" treba naozaj počkať celé (foreground, nie
+  background — subagent by inak zomrel), alebo overiť užšie priamo cez
+  `docker compose exec postgres psql` dopyt na `supplier_stock` po
+  konkrétnej doméne PO dokončení behu (`SELECT status FROM job_run WHERE
+  id=...`).
