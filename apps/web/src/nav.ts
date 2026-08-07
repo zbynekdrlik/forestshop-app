@@ -146,13 +146,19 @@ export const HIDDEN_TABS: Readonly<Record<string, NavTab>> = {
   scheduler: { id: "scheduler", label: "Plánovač", icon: "🗓️", Component: SchedulerSection },
 };
 
-// issue 287: priečinky v `NAV` sa preusporiadali (Eshop je teraz prvý), ale
-// predvolená obrazovka PO PRIHLÁSENÍ sa zámerne NEMENÍ — zadanie žiadalo len
-// vizuálne poradie priečinkov v menu, nie zmenu landing obrazovky. Preto sa
-// `DEFAULT_TAB_ID` už neodvodzuje od `NAV[0]` (to by ticho prepnutím
-// priečinkov zmenilo predvolenú obrazovku na "Na objednanie"), ale pevne
-// ukazuje na "sync" — presne rovnaké správanie ako pred touto zmenou.
-export const DEFAULT_TAB_ID: string = "sync";
+// issue 287: `DEFAULT_TAB_ID` sa NEODVODZUJE od `NAV[0]` (to je priečinok
+// "eshop", nie záložka) — je to pevný literál, nezávislý od poradia
+// priečinkov v menu, aby prípadné budúce preusporiadanie `NAV` nikdy ticho
+// nezmenilo landing obrazovku.
+//
+// issue 302 (šéf, cez Discord, 7. 8. 2026): "keď štartnem appku — nešlo by
+// to do tejto obrazovky (Sync zo Shoptetu) — ale to na objednanie?" — po
+// prihlásení appka predtým otvárala "Sync zo Shoptetu", šéf s ňou reálne
+// nepracuje. Literál sa preto zmenil zo "sync" na "orders" — priame odkazy
+// na OSTATNÉ obrazovky (`?tab=<id>`, vrátane `HIDDEN_TABS`) sa touto zmenou
+// vôbec nedotknú, mení sa len to, kam appka ide, keď žiadna obrazovka nie
+// je v URL určená (`App.tsx`'s `initialTabId`).
+export const DEFAULT_TAB_ID: string = "orders";
 
 /** Nájde záložku podľa id — najprv medzi viditeľnými (NAV), potom v skrytých. */
 export function findTab(id: string): NavTab | undefined {
