@@ -72,6 +72,25 @@ const NEVYZDVIHNUTA_KARTA = {
   status: "otvorene" as const,
 };
 
+// issue 299: TRETÍ automatický zdroj — zásielka VRÁTENÁ ODOSIELATEĽOVI,
+// nezamieňať s `vratenie` (vrátený TOVAR, stav objednávky). Preklik ide na
+// TEN ISTÝ `trackingLink` helper ako `nevyzdvihnuta_zasielka` (obe sú
+// Pošta SK zásielkové odkazy) — preto zdieľa jej `LINK_LABELS` štítok.
+const VRATENA_ZASIELKA_KARTA = {
+  id: "posta-vratena-1",
+  type: "vratena_zasielka" as const,
+  source: "appka" as const,
+  title: "Zásielka pre objednávku 20500018 sa vrátila odosielateľovi",
+  details: "Zákazník: Ján Novák\nČíslo zásielky: EF123456789SK\nPošta SK hlási zásielku ako vrátenú odosielateľovi.",
+  link: "https://www.posta.sk/sledovanie-zasielok#parcel=EF123456789SK",
+  dueAt: null,
+  postponedUntil: null,
+  seenAt: "2026-08-07T08:00:00.000Z",
+  resolvedAt: null,
+  createdAt: "2026-08-07T08:00:00.000Z",
+  status: "otvorene" as const,
+};
+
 afterEach(() => {
   cleanup();
   vi.resetAllMocks();
@@ -102,6 +121,20 @@ it("issue 298: karta 'Nevyzdvihnutá zásielka' zobrazí štítok 'Sledovať zá
   expect(link.getAttribute("target")).toBe("_blank");
   expect(link.getAttribute("rel")).toBe("noreferrer");
   expect(screen.getByText(/Vyzdvihnutie do: 2026-08-15/)).toBeTruthy();
+});
+
+it("issue 299: karta 'Vrátená zásielka' zobrazí vlastný typový štítok a odkaz na Poštu SK (zdieľaný s nevyzdvihnutou)", async () => {
+  markUpozorneniaSeen.mockResolvedValue(undefined);
+  fetchUpozornenia.mockResolvedValue([VRATENA_ZASIELKA_KARTA]);
+  render(<UpozorneniaSection role="manazer" onSessionExpired={vi.fn()} />);
+  await screen.findByTestId("upozornenie-posta-vratena-1");
+
+  expect(screen.getByTestId("upozornenie-type-posta-vratena-1").textContent).toBe("Vrátená zásielka");
+  const link = screen.getByTestId<HTMLAnchorElement>("upozornenie-link-posta-vratena-1");
+  expect(link.textContent).toBe("Sledovať zásielku na Pošte");
+  expect(link.getAttribute("href")).toBe(VRATENA_ZASIELKA_KARTA.link);
+  expect(link.getAttribute("target")).toBe("_blank");
+  expect(link.getAttribute("rel")).toBe("noreferrer");
 });
 
 it("prázdny zoznam zobrazí informačnú vetu (po označení videných)", async () => {

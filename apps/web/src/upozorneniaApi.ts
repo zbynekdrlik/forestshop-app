@@ -5,7 +5,7 @@ import { z } from "zod";
 
 const rowSchema = z.object({
   id: z.string(),
-  type: z.enum(["vlastna_poznamka", "nevyzdvihnuta_zasielka", "vratenie"]),
+  type: z.enum(["vlastna_poznamka", "nevyzdvihnuta_zasielka", "vratenie", "vratena_zasielka"]),
   source: z.enum(["vlastne", "appka"]),
   title: z.string(),
   details: z.string(),

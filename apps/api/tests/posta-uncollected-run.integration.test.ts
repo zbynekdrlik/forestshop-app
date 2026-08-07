@@ -342,6 +342,13 @@ it("bez termínu vrátenia karta NEUKÁŽE riadok 'Vyzdvihnutie do'", async () =
   expect(rows[0]?.details).not.toContain("Vyzdvihnutie do");
 });
 
+// issue 299: karty pre zásielku VRÁTENÚ ODOSIELATEĽOVI (`vratena_zasielka`)
+// sú vyčlenené do vlastného súboru
+// (`posta-uncollected-run-returned.integration.test.ts`) — pridanie tejto
+// skupiny testov priamo sem by posunulo súbor nad eslint `max-lines: 400`
+// (rovnaký dôvod ako `orders-http.integration.test.ts`/`orders-http-state
+// .integration.test.ts` split, `.claude/rules/frontend-design.md`).
+
 it("opakovaný beh na tú istú zásielku NEVYROBÍ druhú kartu, len ju obnoví", async () => {
   const db = await boot();
   await insertOrder(db, { externalOrderId: "20500011" });

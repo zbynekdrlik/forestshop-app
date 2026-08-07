@@ -10,7 +10,9 @@ import { autoResolveByDedupKey, updateIfUnresolvedByDedupKey, upsertUpozornenie 
 import {
   buildEmail,
   classifyTracking,
+  isReturnedToSender,
   postaTemplateKey,
+  postaReturnedUpozornenieDedupKey,
   postaUpozornenieDedupKey,
   shouldSend,
   sourceCoverage,
@@ -173,6 +175,42 @@ async function runPostaUncollectedLocked(options: RunPostaUncollectedOptions): P
       });
       continue;
     }
+
+    // issue 299: šéf chce upozornenie na zásielku VRÁTENÚ ODOSIELATEĽOVI.
+    // `isReturnedToSender` je klasifikácia POTVRDENÁ naživo (`logic.ts`/
+    // `constants.ts`) — nikdy sa necachuje ako trvalá, overuje sa ZNOVA pri
+    // KAŽDOM behu. Preto beží PRED terminal-state cache vetvou nižšie (tá by
+    // inak nikdy nedostala šancu — obe čítajú z toho istého práve
+    // stiahnutého `trackingJson`, poradie medzi nimi je zámerné, nie
+    // náhodné, viď rozhodovací komentár nižšie pri `else`).
+    const returnedDedupKey = postaReturnedUpozornenieDedupKey(packageNumber);
+    if (isReturnedToSender(trackingJson)) {
+      // Vrátená zásielka už nie je "čaká na vyzdvihnutie" — existujúca
+      // nevyzdvihnutá_zasielka karta (ak vôbec vznikla) sa zavrie SAMA,
+      // presne ako pri doručení nižšie. Bezpečný no-op, keď žiadna
+      // nevyriešená karta pre tento dedupKey neexistuje.
+      await autoResolveByDedupKey(db, postaUpozornenieDedupKey(packageNumber), now);
+      await upsertUpozornenie(db, {
+        type: "vratena_zasielka",
+        source: "appka",
+        title: `Zásielka pre objednávku ${shipment.externalOrderId} sa vrátila odosielateľovi`,
+        details: [
+          `Zákazník: ${shipment.customerName}`,
+          `Číslo zásielky: ${packageNumber}`,
+          "Pošta SK hlási zásielku ako vrátenú odosielateľovi.",
+        ].join("\n"),
+        link: trackingLink(packageNumber),
+        dedupKey: returnedDedupKey,
+        now,
+      });
+      continue;
+    }
+    // Zásielka NIE JE (alebo UŽ NIE JE) vrátená — ak predošlý beh
+    // rozpoznal vrátenie (klasifikácia sa NIKDY necachuje, viď vyššie) a
+    // založil kartu, táto vetva ju SAMA zavrie, len čo tracking prestane hlásiť
+    // tento kód. Bezpečný no-op, keď žiadna nevyriešená karta neexistuje —
+    // beží preto na KAŽDEJ zásielke, nielen na tých, čo kedy boli vrátené.
+    await autoResolveByDedupKey(db, returnedDedupKey, now);
 
     const final = terminalState(trackingJson);
     if (final !== "") {

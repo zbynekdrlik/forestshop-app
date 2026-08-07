@@ -1,0 +1,1 @@
+ALTER TYPE "public"."upozornenie_type" ADD VALUE 'vratena_zasielka';
