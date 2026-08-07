@@ -18,6 +18,7 @@ import {
   type OrderRowIssue,
 } from "./parser.js";
 import { applyReturnUpozornenia } from "./return-upozornenia.js";
+import { applyStuckUpozornenia } from "./stuck-upozornenia.js";
 
 // Zámok je JEDEN pevný kľúč, NIE odvodený z obsahu — rovnaký dôvod ako
 // katalógov `INGEST_ADVISORY_LOCK_KEY` (`catalog/ingest.ts`): serializuje
@@ -498,6 +499,17 @@ export async function ingestOrders(db: Database, options: OrdersIngestOptions): 
         batchSize: ORDERS_INGEST_BATCH_SIZE,
       });
 
+      // issue 301: štvrtý automatický zdroj pre Upozornenia — objednávka, čo
+      // dlho visí v nevybavenom stave (`stuck-upozornenia.ts`'s vlastné
+      // komentáre nesú plné odôvodnenie).
+      const { stuckOrderCount, autoResolvedStuckOrderCount } = await applyStuckUpozornenia({
+        tx,
+        orderInfo,
+        orderIdsByCode,
+        adminBaseUrl,
+        now: options.now,
+      });
+
       log.info(
         {
           orderCount: orderInfo.size,
@@ -507,6 +519,8 @@ export async function ingestOrders(db: Database, options: OrdersIngestOptions): 
           issueCount: issues.length,
           skippedResolvedReturnCount,
           autoResolvedFinishedReturnCount,
+          stuckOrderCount,
+          autoResolvedStuckOrderCount,
         },
         "objednávky naimportované",
       );
