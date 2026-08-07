@@ -12,17 +12,22 @@ import { users } from "./schema-users.js";
 // stavu) a `vratena_zasielka` (tretí automatický zdroj, #299: TEN ISTÝ denný
 // beh ako `nevyzdvihnuta_zasielka`, ale iný VÝZNAM — zásielka, ktorú Pošta SK
 // hlási ako vrátenú ODOSIELATEĽOVI, nikdy nezamieňať s `vratenie`, ktorá
-// sleduje vrátenie TOVARU zákazníkom cez stav objednávky). Ďalší budúci
-// automatický zdroj pridá SVOJU hodnotu vlastnou migráciou (`ALTER TYPE ...
-// ADD VALUE`, rovnaký vzor ako `nedostupneEmailType`/`.claude/rules/
-// testing.md`'s "Nová pgEnum hodnota" past). `source` je NEZÁVISLÝ, navždy
-// 2-hodnotový enum — určuje UI schopnosť (len `vlastne` karty majú
-// Upraviť/Zmazať), `type` je len farebný štítok.
+// sleduje vrátenie TOVARU zákazníkom cez stav objednávky) a `objednavka_visi`
+// (štvrtý automatický zdroj, #301: TEN ISTÝ denný beh ako `vratenie` —
+// import objednávok, `orders/ingest.ts` — ale iný VÝZNAM: objednávka, ktorá
+// dlho visí v NEVYBAVENOM stave, nezávisle od toho, či je/nie je vo
+// vrátkovom stave). Ďalší budúci automatický zdroj pridá SVOJU hodnotu
+// vlastnou migráciou (`ALTER TYPE ... ADD VALUE`, rovnaký vzor ako
+// `nedostupneEmailType`/`.claude/rules/testing.md`'s "Nová pgEnum hodnota"
+// past). `source` je NEZÁVISLÝ, navždy 2-hodnotový enum — určuje UI
+// schopnosť (len `vlastne` karty majú Upraviť/Zmazať), `type` je len farebný
+// štítok.
 export const upozornenieType = pgEnum("upozornenie_type", [
   "vlastna_poznamka",
   "nevyzdvihnuta_zasielka",
   "vratenie",
   "vratena_zasielka",
+  "objednavka_visi",
 ]);
 export const upozornenieSource = pgEnum("upozornenie_source", ["vlastne", "appka"]);
 
