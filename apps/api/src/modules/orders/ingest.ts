@@ -358,6 +358,16 @@ export async function ingestOrders(db: Database, options: OrdersIngestOptions): 
                 phone: extra.phone,
                 packageNumber: extra.packageNumber,
                 shippingCarrierName: extra.shippingCarrierName,
+                deliveryFullName: extra.deliveryFullName,
+                deliveryCompany: extra.deliveryCompany,
+                deliveryStreet: extra.deliveryStreet,
+                deliveryHouseNumber: extra.deliveryHouseNumber,
+                deliveryCity: extra.deliveryCity,
+                deliveryZip: extra.deliveryZip,
+                deliveryCountryName: extra.deliveryCountryName,
+                weight: extra.weight,
+                paymentMethodName: extra.paymentMethodName,
+                priceToPay: extra.priceToPay,
               };
             }),
           )
@@ -405,6 +415,20 @@ export async function ingestOrders(db: Database, options: OrdersIngestOptions): 
               phone: sql`coalesce(excluded.phone, "order"."phone")`,
               packageNumber: sql`coalesce(excluded.package_number, "order"."package_number")`,
               shippingCarrierName: sql`coalesce(excluded.shipping_carrier_name, "order"."shipping_carrier_name")`,
+              // issue 292: rovnaká rodina/dôvod ako `email`/`phone`/
+              // `package_number`/`shipping_carrier_name` vyššie — COALESCE
+              // chráni už zistenú doručovaciu adresu/hmotnosť/spôsob platby
+              // pred tichým vynulovaním jedným pokazeným importovým cyklom.
+              deliveryFullName: sql`coalesce(excluded.delivery_full_name, "order"."delivery_full_name")`,
+              deliveryCompany: sql`coalesce(excluded.delivery_company, "order"."delivery_company")`,
+              deliveryStreet: sql`coalesce(excluded.delivery_street, "order"."delivery_street")`,
+              deliveryHouseNumber: sql`coalesce(excluded.delivery_house_number, "order"."delivery_house_number")`,
+              deliveryCity: sql`coalesce(excluded.delivery_city, "order"."delivery_city")`,
+              deliveryZip: sql`coalesce(excluded.delivery_zip, "order"."delivery_zip")`,
+              deliveryCountryName: sql`coalesce(excluded.delivery_country_name, "order"."delivery_country_name")`,
+              weight: sql`coalesce(excluded.weight, "order"."weight")`,
+              paymentMethodName: sql`coalesce(excluded.payment_method_name, "order"."payment_method_name")`,
+              priceToPay: sql`coalesce(excluded.price_to_pay, "order"."price_to_pay")`,
             },
           })
           .returning({ id: orders.id, externalOrderId: orders.externalOrderId });

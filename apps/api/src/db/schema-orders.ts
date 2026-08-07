@@ -155,6 +155,38 @@ export const orders = pgTable(
     // čaká sa na vrátenie") — vypĺňa sa/maže spolu s `claimMarkedAt` vyššie,
     // nikdy samostatne.
     claimNote: text("claim_note"),
+    // issue 292: doručovacia adresa + hmotnosť + spôsob platby — appka ich
+    // predtým vôbec neukladala (potreba DPD prepravy). Rovnaká rodina ako
+    // `email`/`phone`/`packageNumber`/`shippingCarrierName` (issue 172) —
+    // VŽDY Shoptetovo pole, `ingest.ts` ho pri re-importe OSVIEŽÍ, nikdy
+    // appkou/manažérom vlastnené. Nullable, chýbajúca hodnota = `null`.
+    deliveryFullName: text("delivery_full_name"),
+    deliveryCompany: text("delivery_company"),
+    deliveryStreet: text("delivery_street"),
+    deliveryHouseNumber: text("delivery_house_number"),
+    deliveryCity: text("delivery_city"),
+    deliveryZip: text("delivery_zip"),
+    deliveryCountryName: text("delivery_country_name"),
+    // issue 292: export's `weight` stĺpec (kg), Shoptet-ova desatinná
+    // čiarka — parsuje sa rovnakým `parseDecimalComma` ako `totalPriceWithVat`
+    // vyššie (preto rovnaká `scale: 2` presnosť — `parseDecimalComma` sama
+    // zaokrúhľuje na 2 desatinné miesta, `money.ts`'s `roundToTwoDecimals`).
+    // Väčšina reálnych objednávok má `0` (obchod hmotnosť dôsledne
+    // nezapisuje) — appka preto pri DPD náhľade dopĺňa rozumný predvolený
+    // odhad, keď je `0`/`null` (`modules/dpd/preview.ts`), toto pole nesie
+    // SUROVÚ (možno nulovú) hodnotu z exportu, nikdy dopočítaný odhad.
+    weight: numeric("weight", { precision: 10, scale: 2 }),
+    // issue 292: spôsob platby — Shoptet ho NEMÁ ako samostatný stĺpec
+    // objednávky, ale ako `itemName` na `BILLING*` pseudo-riadku (rovnaký
+    // trik ako `shippingCarrierName` z `SHIPPING*` pseudo-riadku vyššie).
+    // Naživo overené (7.8.2026, 90-dňový export): "Dobierka (hotovosť) +
+    // karta (len SR)" a "V hotovosti" — appka rozpozná dobierku podľa toho,
+    // či reťazec obsahuje "dobierka" (bez ohľadu na veľkosť písmen).
+    paymentMethodName: text("payment_method_name"),
+    // issue 292: export's `priceToPay` stĺpec — suma, ktorú má zákazník
+    // ešte zaplatiť (dobierková suma, keď `paymentMethodName` je dobierka).
+    // Rovnaký `parseDecimalComma` parser ako `totalPriceWithVat`/`weight`.
+    priceToPay: numeric("price_to_pay", { precision: 12, scale: 2 }),
   },
   (t) => [index("order_placed_at_idx").on(t.placedAt)],
 );

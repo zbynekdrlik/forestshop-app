@@ -13,3 +13,4 @@ export * from "./schema-restock.js";
 export * from "./schema-shop-feed.js";
 export * from "./schema-theme-colors.js";
 export * from "./schema-upozornenia.js";
+export * from "./schema-dpd.js";

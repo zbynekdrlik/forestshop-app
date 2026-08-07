@@ -21,12 +21,13 @@ import { DEFAULT_TAB_ID, HIDDEN_TABS, NAV, findTab, isVisibleTabId } from "./nav
 // "pridať dalšie polička - pod nedostupné tovarý"). Issue 311 pridalo
 // "Vypredané → Skladom: návrhy odkazov" hneď za "Vypredané → Skladom" v
 // Automatizáciách (rovnaká automatizácia, doplnenie chýbajúcich odkazov,
-// ktoré ju živia).
+// ktoré ju živia). Issue 292 pridalo "Preprava DPD" na koniec priečinka
+// "Eshop" (majiteľovo zadanie, jedno tlačidlo na objednanie prepravy).
 // Tento test je najbližšie k tomu, čo strojovo overiť dá (registrácia, nie DOM).
-it("NAV má tri priečinky (Eshop/Systém/Automatizácie), s 9/3/5 záložkami v poradí podľa dôležitosti", () => {
+it("NAV má tri priečinky (Eshop/Systém/Automatizácie), s 10/3/5 záložkami v poradí podľa dôležitosti", () => {
   expect(NAV).toHaveLength(3);
   expect(NAV.map((f) => f.label)).toEqual(["Eshop", "Systém", "Automatizácie"]);
-  expect(NAV[0]?.tabs).toHaveLength(9);
+  expect(NAV[0]?.tabs).toHaveLength(10);
   expect(NAV[1]?.tabs).toHaveLength(3);
   expect(NAV[2]?.tabs).toHaveLength(5);
   expect(NAV[0]?.tabs.map((t) => t.label)).toEqual([
@@ -39,6 +40,7 @@ it("NAV má tri priečinky (Eshop/Systém/Automatizácie), s 9/3/5 záložkami v
     "Vyhľadať",
     "Zlúčenie objednávok",
     "Upozornenia",
+    "Preprava DPD",
   ]);
   // issue 212: "Dodávateľský sklad" — scraper dostupnosti u dodávateľa;
   // patrí do Systému (zadanie majiteľa), nie medzi Automatizácie.

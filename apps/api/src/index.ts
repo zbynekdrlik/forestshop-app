@@ -39,6 +39,7 @@ import { runSupplierStock } from "./modules/supplier-stock/run.js";
 import { runRestock } from "./modules/restock/run.js";
 import { startScheduler } from "./modules/scheduler/scheduler.js";
 import { orderNoteWritebackConfigFromBaseUrl, shoptetImportConfigFromBaseUrl } from "./modules/shoptet-writeback/config.js";
+import { dpdPortalConfigFromBaseUrl } from "./modules/dpd/config.js";
 import { runOrderNoteWritebackJob } from "./modules/shoptet-writeback/run-order-note-writeback.js";
 import { runShoptetWriteback } from "./modules/shoptet-writeback/run-writeback.js";
 import { createShutdownHandler } from "./shutdown.js";
@@ -217,6 +218,16 @@ const orderMergeDeps = {
   bccEmail: env.ORDER_MERGE_BCC_EMAIL,
 };
 
+// issue 292: "Eshop → Preprava DPD" — vlastné prihlasovacie údaje
+// (`DPD_PORTAL_USER`/`PASSWORD`), nezdieľané so Shoptet-om.
+// `config: undefined` = appka beží ďalej, akcie odosielajúce do DPD vrátia
+// 503 "nenakonfigurované" (fail-closed, `http/dpd-routes.ts`).
+const dpdUser = env.DPD_PORTAL_USER;
+const dpdPassword = env.DPD_PORTAL_PASSWORD;
+const dpdDeps = {
+  config: dpdUser === undefined || dpdPassword === undefined ? undefined : dpdPortalConfigFromBaseUrl(env.DPD_PORTAL_BASE_URL, dpdUser, dpdPassword),
+};
+
 const app = createApp(db, {
   cookieSecure: env.SESSION_COOKIE_SECURE,
   ...(runIngest === undefined ? {} : { runIngest }),
@@ -228,6 +239,7 @@ const app = createApp(db, {
   nedostupne: nedostupneDeps,
   orderMerge: orderMergeDeps,
   fetchSupplierPage,
+  dpd: dpdDeps,
 });
 
 // F2 (#12/#3) + F3 (#22/#28): nočný import katalógu/objednávok, mazanie

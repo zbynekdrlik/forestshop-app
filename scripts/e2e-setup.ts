@@ -17,6 +17,7 @@ import { DEFAULT_SNAPSHOT_LIMITS } from "../apps/api/src/modules/catalog/validat
 import { DEFAULT_ORDER_OPEN_STATUS } from "../apps/api/src/modules/orders/open-statuses.js";
 import { POSTA_UNCOLLECTED_SETTINGS_ID } from "../apps/api/src/modules/posta-uncollected/settings.js";
 import { ORDER_REMINDER_SETTINGS_ID } from "../apps/api/src/modules/order-reminder/settings.js";
+import { seedDpdFixtures } from "./e2e-fixtures-dpd.js";
 import { seedOrderFlagsFixtures } from "./e2e-fixtures-order-flags.js";
 import { seedProductLinksFixtures } from "./e2e-fixtures-product-links.js";
 import { seedRestockLinksFixtures } from "./e2e-fixtures-restock-links.js";
@@ -236,7 +237,10 @@ await db.execute(
   // takže CASCADE ich nikdy nestrhne. Bez nich by potvrdenia dodávateľa z
   // PREDOŠLÉHO e2e behu prežili do ďalšieho (presne past popísaná v
   // `.claude/rules/supplier-stock.md`, tam pre `tests/helpers/db.ts`).
-  'TRUNCATE TABLE ingest_issue, variant, product, catalog_snapshot, job_run, audit_events, sessions, users, order_line, "order", supplier_contact, pairing, supplier, order_open_status, posta_uncollected_settings, posta_uncollected_state, order_reminder_settings, order_reminder_state, nedostupne_state, nedostupne_replacement_link, mail_template, mail_template_history, supplier_stock, restock_settings, restock_event, shop_product_url, theme_color RESTART IDENTITY CASCADE',
+  // "dpd_pickup_request" (issue 292) je rovnaký prípad znova — bez FK,
+  // pridané ručne (`tests/helpers/db.ts` má rovnaký riadok navyše).
+  // "dpd_shipment" NETREBA — FK do "order" ho CASCADE strhne automaticky.
+  'TRUNCATE TABLE ingest_issue, variant, product, catalog_snapshot, job_run, audit_events, sessions, users, order_line, "order", supplier_contact, pairing, supplier, order_open_status, posta_uncollected_settings, posta_uncollected_state, order_reminder_settings, order_reminder_state, nedostupne_state, nedostupne_replacement_link, mail_template, mail_template_history, supplier_stock, restock_settings, restock_event, shop_product_url, theme_color, dpd_pickup_request RESTART IDENTITY CASCADE',
 );
 // Rovnaký dôvod ako `tests/helpers/db.ts`: bez tohto by "Na objednanie" bolo
 // v CELOM e2e behu prázdne pre KAŽDÚ objednávku (žiadny nastavený otvorený
@@ -793,5 +797,8 @@ await seedOrderFlagsFixtures(db, E2E_HESLO);
 
 // issue 311: fixtúra vyčlenená do vlastného súboru, rovnaký dôvod ako vyššie.
 await seedRestockLinksFixtures(db, teraz, snapshotPrepinanie, E2E_HESLO);
+
+// issue 292: fixtúra vyčlenená do vlastného súboru, rovnaký dôvod ako vyššie.
+await seedDpdFixtures(db, E2E_HESLO);
 
 await pool.end();

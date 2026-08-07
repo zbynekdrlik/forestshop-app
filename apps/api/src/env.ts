@@ -90,6 +90,18 @@ const envSchema = z.object({
   // zdieľané všeobecné `MAIL_BCC`). Chýbajúca = automatizácia NEPOŠLE ani
   // jeden e-mail zákazníkovi (fail-closed).
   ORDER_MERGE_BCC_EMAIL: z.string().email().optional(),
+  // issue 292: prihlasovacie údaje do portálu `dpdshipper.sk` (Playwright
+  // robot na objednávanie prepravy/zvozu) — rovnaké pravidlo ako
+  // `SHOPTET_ADMIN_USER`/`PASSWORD` vyššie, nikdy do repa/commit
+  // správy/logu. Nepovinné: bez nich appka beží ďalej, "Preprava DPD"
+  // obrazovka len ukáže "nenakonfigurované" namiesto tlačidiel na
+  // odoslanie/zvoz.
+  DPD_PORTAL_USER: z.string().min(1).optional(),
+  DPD_PORTAL_PASSWORD: z.string().min(1).optional(),
+  // Prihlasovacia URL portálu — nenesie žiadny tajný `hash`/token, ale
+  // ostáva konfigurovateľná (rovnaký princíp ako `SHOPTET_ADMIN_BASE_URL`),
+  // pre prípad zmeny adresy alebo testovacieho prostredia DPD.
+  DPD_PORTAL_BASE_URL: z.string().url().default("https://www.dpdshipper.sk"),
 });
 
 export type Env = z.infer<typeof envSchema>;

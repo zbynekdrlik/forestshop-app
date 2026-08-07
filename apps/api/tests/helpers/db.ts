@@ -59,8 +59,16 @@ export async function withCleanDb(): Promise<{ db: Database; close: () => Promis
     // nielen medzi testami, ale aj medzi CELÝMI behmi: čerstvý zápis z
     // predošlého behu potom vyzerá ako platné potvrdenie a beh preskočí
     // VŠETKY odkazy (presne to sa tu stalo pri druhom spustení).
+    // issue 292: "dpd_pickup_request" is the SAME situation as
+    // "order_open_status"/"supplier_contact" above — no FK in either
+    // direction (its `pickup_date` is a free-standing date, not tied to any
+    // order), so TRUNCATE CASCADE from any listed table never reaches it.
+    // "dpd_shipment" does NOT need listing here — it has a real FK into
+    // "order" (`onDelete: cascade`), so `TRUNCATE "order" CASCADE` already
+    // reaches it automatically (same reasoning as "order_line" via
+    // "variant" above).
     await db.execute(
-      sql`TRUNCATE TABLE ingest_issue, variant, product, catalog_snapshot, job_run, audit_events, sessions, users, order_line, "order", supplier_contact, pairing, supplier, order_open_status, posta_uncollected_settings, posta_uncollected_state, order_reminder_settings, order_reminder_state, nedostupne_state, nedostupne_replacement_link, mail_template, mail_template_history, supplier_stock, restock_settings, restock_event, shop_product_url, theme_color RESTART IDENTITY CASCADE`,
+      sql`TRUNCATE TABLE ingest_issue, variant, product, catalog_snapshot, job_run, audit_events, sessions, users, order_line, "order", supplier_contact, pairing, supplier, order_open_status, posta_uncollected_settings, posta_uncollected_state, order_reminder_settings, order_reminder_state, nedostupne_state, nedostupne_replacement_link, mail_template, mail_template_history, supplier_stock, restock_settings, restock_event, shop_product_url, theme_color, dpd_pickup_request RESTART IDENTITY CASCADE`,
     );
     // issue 59: `order_open_status` is a NEW table with real production
     // content (the migration seeds it) — TRUNCATE alone would leave every
