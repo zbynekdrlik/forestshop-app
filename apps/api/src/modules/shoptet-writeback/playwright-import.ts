@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { chromium, type Browser, type Page } from "playwright";
 import { log } from "../../logger.js";
 import { loginToShoptetAdmin } from "./admin-login.js";
+import { runInChildProcess } from "./child-runner.js";
 import type { ShoptetImportConfig } from "./config.js";
 import { entryKey, hasLogEntries, parseImportLog, pickResultRow, resultExitCode } from "./log-attribution.js";
 
@@ -203,4 +204,28 @@ export async function runShoptetImport(options: RunShoptetImportOptions): Promis
     await browser?.close();
     await rm(tmpDir, { recursive: true, force: true });
   }
+}
+
+/** Cez IPC ide `csv` ako base64 reťazec (`ImportWorkerInput`), nikdy priamo
+ * ako `Buffer` — naživo overené (issue 313), že Node's `fork()` "advanced"
+ * serializácia posiela `Buffer` na druhú stranu ako obyčajný `Object`, nie
+ * ako skutočnú `Buffer` inštanciu, čo `writeFile(csvPath, csv)` vnútri
+ * `runShoptetImport` odmietne ("data argument must be ... Buffer"). Base64
+ * reťazec je jednoznačný a prenosný nezávisle od serializačných detailov. */
+export interface ImportWorkerInput extends Omit<RunShoptetImportOptions, "csv"> {
+  readonly csvBase64: string;
+}
+
+/**
+ * Issue 313: rovnaké API/výsledok ako `runShoptetImport`, ale beh sa
+ * deleguje do izolovaného dieťa procesu (`child-runner.ts`) — appka's
+ * vlastný bežiaci proces už Chromium sám nespúšťa. Toto je funkcia, ktorú
+ * majú volať PRODUKČNÍ volajúci (`run-writeback.ts`, `restock/run.ts`);
+ * `runShoptetImport` samotné zostáva exportované pre testy proti fixture
+ * (aj pre `import-worker.ts`, ktorý ho spúšťa VNÚTRI dieťa procesu).
+ */
+export function runShoptetImportIsolated(options: RunShoptetImportOptions): Promise<ShoptetImportOutcome> {
+  const { csv, ...rest } = options;
+  const input: ImportWorkerInput = { ...rest, csvBase64: csv.toString("base64") };
+  return runInChildProcess(new URL("./import-worker.js", import.meta.url), input);
 }

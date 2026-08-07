@@ -179,13 +179,70 @@ paths:
   `WritebackRow`/`buildWritebackCsv` je automaticky chránená, pokiaľ ide
   cez `dataRowToLine` — nová cesta k zápisu Shoptet CSV musí VŽDY ísť cez
   `buildWritebackCsv`, nikdy cez vlastné skladanie stĺpcov mimo neho.
-- **Ručný ("Spustiť teraz") beh Playwright login flow-u DO Shoptet
+- **OPRAVA k nižšie ponechanému pôvodnému nálezu — "cez deň zlyháva, v noci
+  funguje" NEBOLA skutočná príčina, len zhoda okolností (issue 313, vyriešené).**
+  Skutočný vzor, zistený desiatkami A/B testov priamo na produkcii: `.fill()`
+  na prihlasovacie polia (`admin-login.ts`) spoľahlivo NEDRŽÍ vyplnenú
+  hodnotu, keď `loginToShoptetAdmin`/`chromium.launch()` beží PRIAMO v
+  appka's vlastnom dlho bežiacom procese (potvrdené cez HTTP aj scheduler
+  spúšťací kanál, aj hneď po čerstvom reštarte kontajnera) — ÚPLNE TEN ISTÝ
+  skompilovaný kód spustený ako čerstvý SAMOSTATNÝ proces (`docker exec ...
+  node ...`) funguje spoľahlivo, opakovane, striedavo s in-process
+  zlyhaniami v tom istom časovom okne. Presný nízko-úrovňový mechanizmus
+  (Node/V8/Chromium interakcia v takomto procese) sa NEPODARILO
+  jednoznačne vystopovať napriek rozsiahlej diagnostike (elementFromPoint,
+  document.activeElement, `document.querySelector(...).value` čítané ihneď
+  po `.fill()`, skutočné klávesové písanie namiesto `.fill()`, 1,5s pauza
+  pred kliknutím, `init: true`/`tini` namiesto appky ako PID 1 — nič z
+  tohto problém nezmenilo). **Oprava: `runShoptetImport`
+  (`playwright-import.ts`) aj `runOrderNoteWriteback`
+  (`order-note-playwright.ts`) majú od issue 313 IZOLOVANÝ variant
+  (`runShoptetImportIsolated`/`runOrderNoteWritebackIsolated`), ktorý CELÝ
+  Chromium beh deleguje do krátko žijúceho DIEŤA procesu cez `child-
+  runner.ts`'s `runInChildProcess` (`node:child_process`'s `fork()`) —
+  appka's vlastný proces už Chromium sám nespúšťa vôbec. VŠETCI produkční
+  volajúci (`run-writeback.ts`, `restock/run.ts`,
+  `run-order-note-writeback.ts`) musia volať IZOLOVANÝ variant, nikdy
+  priamo `runShoptetImport`/`runOrderNoteWriteback` — tie zostávajú
+  exportované LEN pre testy proti fixture a pre samotné `import-worker.ts`/
+  `order-note-worker.ts` (vstupné body dieťa procesu).**
+  **Vzor pre KAŽDÚ ĎALŠIU Playwright automatizáciu pridanú do tohto
+  modulu:** nová funkcia, čo sama volá `chromium.launch()`, potrebuje
+  VLASTNÝ dieťa-proces worker (rovnaký vzor ako `import-worker.ts`/
+  `order-note-worker.ts`) a volania cez `runInChildProcess` — NIKDY priamy
+  in-process `chromium.launch()` z produkčného volajúceho kódu, aj keby
+  lokálne/v teste fungoval spoľahlivo (presne to je klamlivé — fungoval aj
+  tu, kým appka nebežala dosť dlho/za reálnych podmienok).
+  **Worker skript (`.js` v `dist/`) sa v testoch/lokálnom vývoji (vitest,
+  žiadny `tsc -b` build) NENÁJDE** — `child-runner.ts`'s `resolveWorker`
+  preto s existenciou skompilovaného `.js` súboru počíta ako s VOLITEĽNOU:
+  keď chýba, spustí SESTERSKÝ `.ts` súbor cez `node_modules/.bin/tsx`
+  namiesto plain node (rovnaký `TSX_BIN` vzor ako
+  `e2e-setup-user-isolation.integration.test.ts`) — tsx je len devDependency,
+  nikdy v produkčnom obraze, preto je to VÝHRADNE záložka pre chýbajúci
+  build, nikdy predvolená cesta.
+  **`Buffer` cez `fork()`'s `serialization: "advanced"` (V8 structured
+  clone) NEPRICHÁDZA na druhej strane ako skutočná `Buffer` inštancia —
+  príde ako obyčajný `Object`, čo `writeFile(cesta, csv)` odmietne
+  ("data argument must be ... Buffer").** Test na KAŽDÝ ďalší dieťa-proces
+  vstup nesúci binárny obsah: pošli ho ako base64 REŤAZEC
+  (`ImportWorkerInput`'s `csvBase64`), dekóduj `Buffer.from(str, "base64")`
+  AŽ VNÚTRI workera — nikdy sa nespoliehaj na to, že "advanced" serializácia
+  Buffer prenesie bezo zmeny typu.
+  **Vedľajší nález, nesúvisiaci s hlavnou príčinou, ale opravený v tom istom
+  PR:** appka bola PID 1 vo vlastnom kontajneri bez skutočného init procesu
+  — `docker-compose.prod.yml`'s `app` service dostala `init: true`
+  (zabudovaný Docker `tini`), čo naživo overene rieši nazbierané zombie
+  Chromium/crashpad procesy (osirelé po KAŽDOM `browser.close()`, keďže nič
+  ich predtým nereapovalo) — appka je odvtedy PID 2+, appka's vlastný
+  SIGTERM handler (issue 78) sa nemení.
+- **PÔVODNÝ (mylný) nález, ponechaný pre históriu — pozri opravu vyššie:**
+  Ručný ("Spustiť teraz") beh Playwright login flow-u DO Shoptet
   administrácie cez DEŇ vie zlyhať s "prihlasovací formulár stále
-  viditeľný" — nočný naplánovaný beh (okolo 4:50) funguje spoľahlivo**
+  viditeľný" — nočný naplánovaný beh (okolo 4:50) funguje spoľahlivo
   (issue 313, zistené pri post-deploy overovaní issue 307). `job_run`
   história ukázala jasný vzor: noc = úspech, ručný denný pokus = zlyhanie
-  (aj DVAKRÁT po sebe). Príčina zatiaľ NEPRESKÚMANÁ (možný rozdiel v
-  Shoptet-ovej záťaži/rate-limite/session cez deň vs v noci) — pri
-  ĎALŠOM podobnom "funguje v noci, zlyháva pri ručnom denné teste" jave v
-  tomto module najprv skontroluj `job_run` históriu podľa `started_at`
-  hodiny dňa, než začneš hľadať bug v kóde samotnom.
+  (aj DVAKRÁT po sebe). Skutočná príčina a oprava sú v bode vyššie — vzor
+  "noc funguje, deň nefunguje" bol len zhoda okolností (kontajner bol
+  reštartovaný v ten deň krátko pred zlyhaniami), nie skutočná časová
+  závislosť.

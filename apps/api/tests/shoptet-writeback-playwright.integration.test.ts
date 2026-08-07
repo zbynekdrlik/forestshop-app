@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { buildWritebackCsv } from "../src/modules/shoptet-writeback/csv.js";
-import { runShoptetImport } from "../src/modules/shoptet-writeback/playwright-import.js";
+import { runShoptetImport, runShoptetImportIsolated } from "../src/modules/shoptet-writeback/playwright-import.js";
 import { startShoptetFixture, type ShoptetFixture } from "./helpers/shoptet-fixture.js";
 
 // Reálny Chromium proti LOKÁLNEJ fixture appke (nikdy proti skutočnému
@@ -155,6 +155,77 @@ describe("runShoptetImport (proti fixture, nikdy proti reálnemu Shoptetu)", () 
       expect(outcome.ok).toBe(false);
       expect(outcome.processed).toBe(2);
       expect(outcome.failed).toBe(1);
+    },
+    TEST_TIMEOUT_MS,
+  );
+});
+
+// Issue 313: appka's vlastný bežiaci proces spúšťal Chromium PRIAMO v sebe —
+// naživo overené (desiatky ráz, striedavo s funkčnými samostatnými pokusmi na
+// TOM ISTOM kontajneri), že `.fill()` na prihlasovacie polia v TOMTO
+// konkrétnom (dlho bežiacom appka) procese nedrží vyplnenú hodnotu, hoci
+// úplne ten istý kód spustený ako čerstvý samostatný proces funguje
+// spoľahlivo. `runShoptetImportIsolated` deleguje CELÝ beh (login → import →
+// výsledok) do krátko žijúceho DIEŤA procesu (`.claude/rules/shoptet-
+// writeback.md`) — tento test dokazuje, že samotná IPC/dieťa-proces
+// mechanika funguje end-to-end proti fixture (nikdy proti reálnemu
+// Shoptetu), nielen že sa dá príčina obísť na produkcii.
+describe("runShoptetImportIsolated (dieťa proces, issue 313)", () => {
+  let fixture: ShoptetFixture | undefined;
+
+  afterEach(async () => {
+    await fixture?.close();
+    fixture = undefined;
+  });
+
+  it(
+    "prihlási sa, nahrá CSV a potvrdí úspech — rovnaký výsledok ako in-process runShoptetImport, len spustený v dieťa procese",
+    async () => {
+      fixture = await startShoptetFixture({ user: "manager", password: "tajneheslo" });
+      fixture.seedPastEntry();
+      const csv = buildWritebackCsv([{ code: "A/S", pairCode: "1", internalNote: "https://dodavatel.example/a" }]);
+
+      const outcome = await runShoptetImportIsolated({
+        config: {
+          loginUrl: `${fixture.baseUrl}/admin/`,
+          importUrl: `${fixture.baseUrl}/admin/import-produktov/`,
+          logUrl: `${fixture.baseUrl}/admin/import-produktov/log/`,
+          user: "manager",
+          password: "tajneheslo",
+        },
+        csv,
+        expectedRows: 1,
+        resultPollRetries: 3,
+        resultPollWaitMs: 100,
+      });
+
+      expect(outcome.ok).toBe(true);
+      expect(outcome.processed).toBe(1);
+      expect(outcome.errorDetail).toBeNull();
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "propaguje zlyhanie (zlé heslo) späť cez dieťa proces ako odmietnutý promise, nikdy tiché ok:true",
+    async () => {
+      fixture = await startShoptetFixture({ user: "manager", password: "tajneheslo" });
+      fixture.seedPastEntry();
+      const csv = buildWritebackCsv([{ code: "A", pairCode: "", internalNote: "https://x.example/a" }]);
+
+      await expect(
+        runShoptetImportIsolated({
+          config: {
+            loginUrl: `${fixture.baseUrl}/admin/`,
+            importUrl: `${fixture.baseUrl}/admin/import-produktov/`,
+            logUrl: `${fixture.baseUrl}/admin/import-produktov/log/`,
+            user: "manager",
+            password: "ZLE-heslo",
+          },
+          csv,
+          expectedRows: 1,
+        }),
+      ).rejects.toThrow(/prihlásenie/i);
     },
     TEST_TIMEOUT_MS,
   );

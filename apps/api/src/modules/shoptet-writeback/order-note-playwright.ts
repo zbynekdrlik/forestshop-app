@@ -2,6 +2,7 @@ import { chromium, type Browser, type Page } from "playwright";
 import { log } from "../../logger.js";
 import { buildShoptetAdminOrderUrl } from "../orders/queries.js";
 import { loginToShoptetAdmin } from "./admin-login.js";
+import { DEFAULT_TIMEOUT_MS, runInChildProcess } from "./child-runner.js";
 import type { OrderNoteWritebackConfig } from "./config.js";
 import { mergeShopRemark } from "./note-block.js";
 import type { OrderNoteToSync } from "./order-note-select.js";
@@ -61,6 +62,40 @@ export async function runOrderNoteWriteback(
     await browser?.close();
   }
   return results;
+}
+
+// `child-runner.ts`'s DEFAULT_TIMEOUT_MS (5 min) je odvodený z JEDNÉHO CSV
+// importu (~30s) — tento beh je NAMIESTO toho SLUČKA cez `options.orders`
+// (2 navigácie + fill + save NA OBJEDNÁVKU), takže pri väčšom počte
+// čakajúcich poznámok by pevný 5-min strop vedel zabiť beh v polovici a
+// stratiť VŠETKY výsledky vrátane už úspešne zapísaných (code review PR
+// 315, finding 2 — `run-order-note-writeback.ts`'s `selectChangedOrderNotes`
+// nemá žiadny strop na počet, na rozdiel od `restock`'s `MAX_PER_RUN`).
+// 20s/objednávku (naživo nameraných ~2-3s proti fixture, štedrá rezerva pre
+// reálny Shoptet) + 60s základ (prihlásenie + réžia), nikdy menej než
+// zdieľaný default.
+const PER_ORDER_TIMEOUT_MS = 20_000;
+const BASE_TIMEOUT_MS = 60_000;
+
+function orderNoteTimeoutMs(orderCount: number): number {
+  return Math.max(DEFAULT_TIMEOUT_MS, BASE_TIMEOUT_MS + orderCount * PER_ORDER_TIMEOUT_MS);
+}
+
+/**
+ * Issue 313: rovnaké API/výsledok ako `runOrderNoteWriteback`, ale beh sa
+ * deleguje do izolovaného dieťa procesu (`child-runner.ts`, rovnaký dôvod
+ * ako `playwright-import.ts`'s `runShoptetImportIsolated`). Toto je
+ * funkcia, ktorú má volať `run-order-note-writeback.ts`;
+ * `runOrderNoteWriteback` samotné zostáva exportované pre testy proti
+ * fixture (aj pre `order-note-worker.ts`, ktorý ho spúšťa VNÚTRI dieťa
+ * procesu).
+ */
+export function runOrderNoteWritebackIsolated(
+  options: RunOrderNoteWritebackOptions,
+): Promise<readonly OrderNoteWriteResult[]> {
+  return runInChildProcess(new URL("./order-note-worker.js", import.meta.url), options, {
+    timeoutMs: orderNoteTimeoutMs(options.orders.length),
+  });
 }
 
 async function writeOneOrderNote(
