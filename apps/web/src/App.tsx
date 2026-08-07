@@ -247,34 +247,34 @@ export function App(): JSX.Element {
     <OrdersRemainingCountContext.Provider value={ordersRemainingCountContextValue}>
       <UpozorneniaBadgeRefreshContext.Provider value={upozorneniaBadgeContextValue}>
         <OrderFlagsBadgeRefreshContext.Provider value={orderFlagsBadgeContextValue}>
-        <div className="app-shell">
-          <Sidebar
-            folders={NAV}
-            activeTabId={activeTabId}
-            onSelectTab={selectTab}
-            badgeCounts={badgeCounts}
-            badgeStatus={automationStatus}
-          />
-          <div className="main">
-            <Topbar
-              title={isVisibleTabId(activeTabId) ? (tab?.label ?? null) : null}
-              greeting={`Prihlásený: ${me.displayName} (${me.role})`}
-              role={me.role}
-              onSessionExpired={reload}
-              onLogout={logout}
-              passwordPanelOpen={passwordPanelOpen}
-              onTogglePasswordPanel={() => {
-                setPasswordPanelOpen((open) => !open);
-              }}
-            >
-              <ChangePasswordForm email={me.email} onSessionExpired={reload} />
-            </Topbar>
-            <main className={tab?.wide === true ? "main-wide" : undefined}>
-              {logoutError !== "" && <p role="alert">{logoutError}</p>}
-              {ActiveComponent !== null && <ActiveComponent role={me.role} onSessionExpired={reload} />}
-            </main>
+          <div className="app-shell">
+            <Sidebar
+              folders={NAV}
+              activeTabId={activeTabId}
+              onSelectTab={selectTab}
+              badgeCounts={badgeCounts}
+              badgeStatus={automationStatus}
+            />
+            <div className="main">
+              <Topbar
+                title={isVisibleTabId(activeTabId) ? (tab?.label ?? null) : null}
+                greeting={`Prihlásený: ${me.displayName} (${me.role})`}
+                role={me.role}
+                onSessionExpired={reload}
+                onLogout={logout}
+                passwordPanelOpen={passwordPanelOpen}
+                onTogglePasswordPanel={() => {
+                  setPasswordPanelOpen((open) => !open);
+                }}
+              >
+                <ChangePasswordForm email={me.email} onSessionExpired={reload} />
+              </Topbar>
+              <main className={tab?.wide === true ? "main-wide" : undefined}>
+                {logoutError !== "" && <p role="alert">{logoutError}</p>}
+                {ActiveComponent !== null && <ActiveComponent role={me.role} onSessionExpired={reload} />}
+              </main>
+            </div>
           </div>
-        </div>
         </OrderFlagsBadgeRefreshContext.Provider>
       </UpozorneniaBadgeRefreshContext.Provider>
     </OrdersRemainingCountContext.Provider>
