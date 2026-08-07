@@ -74,8 +74,15 @@ export function buildDpdShipmentPreview(order: DpdOrderSource, weightKgOverride?
   const isCod = order.paymentMethodName !== null && COD_PAYMENT_NAME_RE.test(order.paymentMethodName);
   const codAmount = isCod ? (order.priceToPay ?? order.totalPriceWithVat) : null;
   const weightKg = weightKgOverride ?? (isUsableWeight(order.weight) ? (order.weight as string) : DEFAULT_PARCEL_WEIGHT_KG);
+  // issue 292 review finding: súpisné/orientačné číslo je súčasťou adresy,
+  // ktorú DPD potrebuje presne rovnako ako ulicu — objednávka bez neho nie
+  // je "úplná adresa", aj keď ulica/mesto/PSČ/krajina sú vyplnené.
   const addressComplete =
-    nonEmpty(order.deliveryStreet) && nonEmpty(order.deliveryCity) && nonEmpty(order.deliveryZip) && nonEmpty(order.deliveryCountryName);
+    nonEmpty(order.deliveryStreet) &&
+    nonEmpty(order.deliveryHouseNumber) &&
+    nonEmpty(order.deliveryCity) &&
+    nonEmpty(order.deliveryZip) &&
+    nonEmpty(order.deliveryCountryName);
 
   return {
     orderId: order.id,

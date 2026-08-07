@@ -93,13 +93,24 @@ export function DpdSection({ role, onSessionExpired }: { readonly role: Me["role
     return weightDrafts[orderKey(order)] ?? order.preview.weightKg;
   }
 
+  // issue 292 review finding: posielať CELÝ `weightDrafts` (aj koncepty pre
+  // objednávky MIMO tejto požiadavky) by mohlo poslať rozpísanú/neplatnú
+  // hodnotu iného riadku (napr. "1." počas písania) a serverova validácia
+  // (`z.record` so spoločným regexom) by tým 400-kla CELÚ požiadavku, aj
+  // keď sa vybraných objednávok vôbec netýka. Odošli len prekryv s
+  // aktuálne posielanými `orderIds`.
+  function weightOverridesFor(orderIds: readonly string[]): Readonly<Record<string, string>> {
+    const ids = new Set(orderIds);
+    return Object.fromEntries(Object.entries(weightDrafts).filter(([id]) => ids.has(id)));
+  }
+
   function openPreview(): void {
     const orderIds = [...selected];
     if (orderIds.length === 0) return;
     setPreviewError("");
     setSendResults(null);
     setPreviewBusy(true);
-    fetchDpdPreview(orderIds, weightDrafts)
+    fetchDpdPreview(orderIds, weightOverridesFor(orderIds))
       .then((items) => {
         setPreviewItems(items);
       })
@@ -124,7 +135,7 @@ export function DpdSection({ role, onSessionExpired }: { readonly role: Me["role
     if (previewItems === null) return;
     const orderIds = previewItems.map((p) => p.orderId);
     setSendBusy(true);
-    sendDpdShipments(orderIds, weightDrafts)
+    sendDpdShipments(orderIds, weightOverridesFor(orderIds))
       .then((results) => {
         setSendResults(results);
         setPreviewItems(null);

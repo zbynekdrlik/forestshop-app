@@ -76,6 +76,7 @@ describe("buildDpdShipmentPreview", () => {
 
   it("addressComplete je false, keď chýba ktorékoľvek z povinných adresných polí", () => {
     expect(buildDpdShipmentPreview(order({ deliveryStreet: null })).addressComplete).toBe(false);
+    expect(buildDpdShipmentPreview(order({ deliveryHouseNumber: null })).addressComplete).toBe(false);
     expect(buildDpdShipmentPreview(order({ deliveryCity: "" })).addressComplete).toBe(false);
     expect(buildDpdShipmentPreview(order({ deliveryZip: null })).addressComplete).toBe(false);
     expect(buildDpdShipmentPreview(order({ deliveryCountryName: null })).addressComplete).toBe(false);

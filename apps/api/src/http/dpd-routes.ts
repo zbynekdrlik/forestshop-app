@@ -51,7 +51,7 @@ export function registerDpdRoutes(app: Hono<AppBindings>, db: Database, deps: Dp
     return c.json({ configured: deps.config !== undefined, orders });
   });
 
-  app.post("/api/dpd/preview", requireUser(db), zValidator("json", orderIdsBody), async (c) => {
+  app.post("/api/dpd/preview", requireSameOrigin(), requireUser(db), zValidator("json", orderIdsBody), async (c) => {
     const { orderIds, weightOverrides } = c.req.valid("json");
     const previews = await getDpdShipmentPreviews(db, orderIds, toWeightOverrides(weightOverrides));
     return c.json({ previews });
