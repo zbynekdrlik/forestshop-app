@@ -20,8 +20,11 @@ const E2E_NAV_EMAIL = "e2e-nav@forestshop.sk";
 // samostatnom `order-merge.spec.ts`, rovnaký vzor ako "Vyhľadať"/
 // `search.spec.ts`). Issue 267 (2026-08-05) pridáva "Upozornenia" pod
 // "Eshop" — trinásta záložka (funkčný test v samostatnom
-// `upozornenia.spec.ts`, rovnaký vzor).
-test("ľavé menu má tri priečinky (Systém/Eshop/Automatizácie) s trinástimi záložkami, klik prepne obrazovku, panel sa zbalí do lišty a stav si pamätá, konzola je čistá", async ({
+// `upozornenia.spec.ts`, rovnaký vzor). Issue 290 (2026-08-07) pridáva TRI
+// ďalšie záložky HNEĎ POD "Nedostupné tovary" — "Výmena tovaru"/"Vrátený
+// tovar"/"Reklamácie" — šestnásta záložka celkovo (funkčný test v
+// samostatnom `order-flags.spec.ts`, rovnaký vzor).
+test("ľavé menu má tri priečinky (Systém/Eshop/Automatizácie) so šestnástimi záložkami, klik prepne obrazovku, panel sa zbalí do lišty a stav si pamätá, konzola je čistá", async ({
   page,
 }) => {
   const chyby: string[] = [];
@@ -42,14 +45,17 @@ test("ľavé menu má tri priečinky (Systém/Eshop/Automatizácie) s trinástim
   await expect(page.getByRole("button", { name: "Eshop" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Automatizácie" })).toBeVisible();
 
-  // Presne trinásť záložiek v CELOM menu.
-  await expect(page.locator(".side-nav .tab")).toHaveCount(13);
+  // Presne šestnásť záložiek v CELOM menu.
+  await expect(page.locator(".side-nav .tab")).toHaveCount(16);
   await expect(page.getByRole("button", { name: "Sync zo Shoptetu" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Texty e-mailov" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Na objednanie" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Nevyzdvihnuté zásielky" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Pripomienky objednávok" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Nedostupné tovary" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Výmena tovaru" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Vrátený tovar" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Reklamácie" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Párovanie produktov" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Vyhľadať" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Zlúčenie objednávok" })).toBeVisible();
@@ -110,6 +116,21 @@ test("ľavé menu má tri priečinky (Systém/Eshop/Automatizácie) s trinástim
   // požiadanie) — žiadny stavový odznak v menu, ani "Zastavené".
   await expect(page.getByTestId("nav-status-nedostupne")).toHaveCount(0);
 
+  // issue 290: rovnaký dôvod ako "Nedostupné tovary" vyššie — žiadny
+  // plán/zapnuté-vypnuté koncept, teda žiadny stavový odznak v menu (majú
+  // však odznak POČTU nevybavených, funkčne overený v `order-flags.spec.ts`).
+  await page.getByRole("button", { name: "Výmena tovaru" }).click();
+  await expect(page.getByRole("heading", { name: "Výmena tovaru" })).toBeVisible();
+  await expect(page.getByTestId("nav-status-exchange")).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Vrátený tovar" }).click();
+  await expect(page.getByRole("heading", { name: "Vrátený tovar" })).toBeVisible();
+  await expect(page.getByTestId("nav-status-returned")).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Reklamácie" }).click();
+  await expect(page.getByRole("heading", { name: "Reklamácie" })).toBeVisible();
+  await expect(page.getByTestId("nav-status-claims")).toHaveCount(0);
+
   // issue 239: rovnaký dôvod ako "Nedostupné tovary" vyššie — žiadny
   // plán/zapnuté-vypnuté koncept, teda žiadny stavový odznak v menu.
   await page.getByRole("button", { name: "Párovanie produktov" }).click();
@@ -157,7 +178,7 @@ test("ľavé menu má tri priečinky (Systém/Eshop/Automatizácie) s trinástim
 
   // Hlavičky priečinkov zmiznú, ikony všetkých modulov ostanú.
   await expect(page.getByRole("button", { name: "Systém" })).toHaveCount(0);
-  await expect(page.locator(".side-nav .tab")).toHaveCount(13);
+  await expect(page.locator(".side-nav .tab")).toHaveCount(16);
   // Názov sa v lište ukáže bublinou pri prejdení myšou.
   await expect(page.getByRole("button", { name: "Na objednanie" })).toHaveAttribute(
     "title",

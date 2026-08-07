@@ -17,6 +17,7 @@ import { DEFAULT_SNAPSHOT_LIMITS } from "../apps/api/src/modules/catalog/validat
 import { DEFAULT_ORDER_OPEN_STATUS } from "../apps/api/src/modules/orders/open-statuses.js";
 import { POSTA_UNCOLLECTED_SETTINGS_ID } from "../apps/api/src/modules/posta-uncollected/settings.js";
 import { ORDER_REMINDER_SETTINGS_ID } from "../apps/api/src/modules/order-reminder/settings.js";
+import { seedOrderFlagsFixtures } from "./e2e-fixtures-order-flags.js";
 import { seedProductLinksFixtures } from "./e2e-fixtures-product-links.js";
 import { seedSearchFixtures } from "./e2e-fixtures-search.js";
 
@@ -785,5 +786,8 @@ await seedProductLinksFixtures(db, teraz, snapshotPrepinanie, E2E_HESLO);
 
 // issue 240: fixtúra vyčlenená do vlastného súboru, rovnaký dôvod ako vyššie.
 await seedSearchFixtures(db, teraz, snapshotPrepinanie, E2E_HESLO);
+
+// issue 290: fixtúra vyčlenená do vlastného súboru, rovnaký dôvod ako vyššie.
+await seedOrderFlagsFixtures(db, E2E_HESLO);
 
 await pool.end();
