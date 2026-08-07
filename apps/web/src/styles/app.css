@@ -2097,6 +2097,21 @@ tr:last-child td {
   flex-wrap: wrap;
   margin-top: var(--fs-space-2);
 }
+/* issue 303: the global `input:not([type="hidden"]) { width: 100% }` reset
+   (app.css §1) stretched the "odložiť do" date field to the FULL width of
+   this flex row (measured live: 1491px at 1600px desktop) — same trap as
+   issue 105's flex-basis-from-width, just via `width: 100%` instead of a
+   fixed `width` — which forced the row to wrap onto three lines (104px tall)
+   even though the three controls need ~470px combined. `width: auto` lets
+   Chromium's own intrinsic date-input size through (measured: 136px at this
+   viewport); `min-width` is a floor for a wider locale/OS date format, never
+   a fixed size. `flex: 0 0 auto` keeps it from being stretched again by the
+   row's own flex layout — a date field never needs to grow. */
+.upozornenie-actions input[type="date"] {
+  width: auto;
+  min-width: 9.5rem;
+  flex: 0 0 auto;
+}
 .upozornenie-form {
   display: flex;
   flex-direction: column;
