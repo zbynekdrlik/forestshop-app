@@ -231,25 +231,44 @@ export function extractOrderIdsFromXml(xml: string): Map<string, number> {
 // nie celú rodinu (BILLING/DISCOUNT/…).
 const SHIPPING_ITEM_CODE_RE = /^SHIPPING/i;
 
+// issue 292: rovnaký trik ako `SHIPPING_ITEM_CODE_RE` vyššie, ale pre
+// PLATBU — Shoptet nemá samostatný stĺpec "spôsob platby" na objednávke,
+// zapisuje ho ako `itemName` na `BILLING*` pseudo-riadku (naživo overené na
+// reálnom exporte 7.8.2026: "Dobierka (hotovosť) + karta (len SR)"/"V
+// hotovosti").
+const BILLING_ITEM_CODE_RE = /^BILLING/i;
+
 function trimOrNull(value: string | undefined): string | null {
   const trimmed = (value ?? "").trim();
   return trimmed === "" ? null : trimmed;
 }
 
-// issue 172: "Nevyzdvihnuté zásielky" potrebuje `email`/`phone`/
-// `packageNumber` (objednávkové polia, opakované na KAŽDOM riadku exportu
-// vrátane pseudo-položiek) a meno dopravcu (LEN na SHIPPING pseudo-riadku).
-// Zámerne SAMOSTATNÁ funkcia od `mapOrderRow` vyššie — tá zahadzuje CELÝ
-// pseudo-riadok (nemá zmysel ako POLOŽKA objednávky), ale tieto štyri polia
-// sú OBJEDNÁVKOVÉ, nie položkové, a existujú aj na riadkoch, ktoré
-// `mapOrderRow` zahodí. Nikdy nevyhadzuje/neoznamuje issue — chýbajúca
-// hodnota je legitímny, bežný stav (nie každá objednávka má vyplnené
-// telefónne číslo), mapuje sa jednoducho na `null`.
+// issue 172/292: "Nevyzdvihnuté zásielky" a "DPD preprava" potrebujú
+// `email`/`phone`/`packageNumber`/doručovaciu adresu/hmotnosť/spôsob platby
+// — objednávkové polia, opakované na KAŽDOM riadku exportu vrátane
+// pseudo-položiek (doručovacia adresa/hmotnosť/priceToPay), plus meno
+// dopravcu (LEN na SHIPPING pseudo-riadku) a spôsob platby (LEN na BILLING
+// pseudo-riadku). Zámerne SAMOSTATNÁ funkcia od `mapOrderRow` vyššie — tá
+// zahadzuje CELÝ pseudo-riadok (nemá zmysel ako POLOŽKA objednávky), ale
+// tieto polia sú OBJEDNÁVKOVÉ, nie položkové, a existujú aj na riadkoch,
+// ktoré `mapOrderRow` zahodí. Nikdy nevyhadzuje/neoznamuje issue —
+// chýbajúca hodnota je legitímny, bežný stav, mapuje sa jednoducho na
+// `null`.
 export interface OrderLevelExtra {
   readonly email: string | null;
   readonly phone: string | null;
   readonly packageNumber: string | null;
   readonly shippingCarrierName: string | null;
+  readonly deliveryFullName: string | null;
+  readonly deliveryCompany: string | null;
+  readonly deliveryStreet: string | null;
+  readonly deliveryHouseNumber: string | null;
+  readonly deliveryCity: string | null;
+  readonly deliveryZip: string | null;
+  readonly deliveryCountryName: string | null;
+  readonly weight: string | null;
+  readonly paymentMethodName: string | null;
+  readonly priceToPay: string | null;
 }
 
 export function extractOrderLevelExtra(row: Readonly<Record<string, string>>): OrderLevelExtra {
@@ -259,21 +278,42 @@ export function extractOrderLevelExtra(row: Readonly<Record<string, string>>): O
     phone: trimOrNull(row["phone"]),
     packageNumber: trimOrNull(row["packageNumber"]),
     shippingCarrierName: SHIPPING_ITEM_CODE_RE.test(itemCode) ? trimOrNull(row["itemName"]) : null,
+    deliveryFullName: trimOrNull(row["deliveryFullName"]),
+    deliveryCompany: trimOrNull(row["deliveryCompany"]),
+    deliveryStreet: trimOrNull(row["deliveryStreet"]),
+    deliveryHouseNumber: trimOrNull(row["deliveryHouseNumber"]),
+    deliveryCity: trimOrNull(row["deliveryCity"]),
+    deliveryZip: trimOrNull(row["deliveryZip"]),
+    deliveryCountryName: trimOrNull(row["deliveryCountryName"]),
+    weight: parseDecimalComma(row["weight"] ?? ""),
+    paymentMethodName: BILLING_ITEM_CODE_RE.test(itemCode) ? trimOrNull(row["itemName"]) : null,
+    priceToPay: parseDecimalComma(row["priceToPay"] ?? ""),
   };
 }
 
 // Skladá viac riadkov TEJ ISTEJ objednávky do jedného `OrderLevelExtra` —
 // PRVÁ nájdená neprázdna hodnota KAŽDÉHO POĽA vyhráva nezávisle (nie "prvý
 // riadok vyhráva celý objekt", ako `orderInfo` v `ingest.ts` robí pre
-// customerName/placedAt/…) — `shippingCarrierName` je totiž takmer vždy
-// PRÁZDNE na bežných produktových riadkoch a NEPRÁZDNE len na jednom
-// konkrétnom SHIPPING riadku, ktorý môže byť ktorýkoľvek v poradí.
+// customerName/placedAt/…) — `shippingCarrierName`/`paymentMethodName` sú
+// totiž takmer vždy PRÁZDNE na bežných produktových riadkoch a NEPRÁZDNE len
+// na jednom konkrétnom SHIPPING/BILLING riadku, ktorý môže byť ktorýkoľvek
+// v poradí.
 export function mergeOrderLevelExtra(existing: OrderLevelExtra, incoming: OrderLevelExtra): OrderLevelExtra {
   return {
     email: existing.email ?? incoming.email,
     phone: existing.phone ?? incoming.phone,
     packageNumber: existing.packageNumber ?? incoming.packageNumber,
     shippingCarrierName: existing.shippingCarrierName ?? incoming.shippingCarrierName,
+    deliveryFullName: existing.deliveryFullName ?? incoming.deliveryFullName,
+    deliveryCompany: existing.deliveryCompany ?? incoming.deliveryCompany,
+    deliveryStreet: existing.deliveryStreet ?? incoming.deliveryStreet,
+    deliveryHouseNumber: existing.deliveryHouseNumber ?? incoming.deliveryHouseNumber,
+    deliveryCity: existing.deliveryCity ?? incoming.deliveryCity,
+    deliveryZip: existing.deliveryZip ?? incoming.deliveryZip,
+    deliveryCountryName: existing.deliveryCountryName ?? incoming.deliveryCountryName,
+    weight: existing.weight ?? incoming.weight,
+    paymentMethodName: existing.paymentMethodName ?? incoming.paymentMethodName,
+    priceToPay: existing.priceToPay ?? incoming.priceToPay,
   };
 }
 
@@ -282,6 +322,16 @@ export const EMPTY_ORDER_LEVEL_EXTRA: OrderLevelExtra = Object.freeze({
   phone: null,
   packageNumber: null,
   shippingCarrierName: null,
+  deliveryFullName: null,
+  deliveryCompany: null,
+  deliveryStreet: null,
+  deliveryHouseNumber: null,
+  deliveryCity: null,
+  deliveryZip: null,
+  deliveryCountryName: null,
+  weight: null,
+  paymentMethodName: null,
+  priceToPay: null,
 });
 
 export type OrderRowIssueKind =

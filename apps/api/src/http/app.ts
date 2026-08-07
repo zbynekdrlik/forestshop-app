@@ -10,6 +10,7 @@ import { login, logout, resolveSession } from "../modules/auth/service.js";
 import type { MailTransport } from "../modules/mail/transport.js";
 import { appVersion } from "../version.js";
 import { registerCatalogRoutes, type RunIngest } from "./catalog-routes.js";
+import { registerDpdRoutes, type DpdRunDeps } from "./dpd-routes.js";
 import { checkLoginRateLimit, clientIp } from "./login-rate-limit.js";
 import { SESSION_COOKIE, requireUser, type AppBindings } from "./middleware.js";
 import { registerOrdersRoutes, type RunOrdersIngest } from "./orders-routes.js";
@@ -85,6 +86,12 @@ export function createApp(
     // administrácie. Voliteľné z rovnakého dôvodu ako ostatné; testy
     // dodajú vlastný zápis a NIKDY sa nedotknú skutočného Shoptetu.
     readonly restock?: RestockRunDeps;
+    // issue 292: "Eshop → Preprava DPD" — prihlasovacie údaje do
+    // `dpdshipper.sk`. Voliteľné z rovnakého dôvodu ako `nedostupne`
+    // vyššie; `config: undefined` (predvolené nižšie) = appka beží ďalej,
+    // len akcie odosielajúce do DPD vrátia 503 "nenakonfigurované" namiesto
+    // tichého zápisu s prázdnymi prihlasovacími údajmi.
+    readonly dpd?: DpdRunDeps;
   },
 ): Hono<AppBindings> {
   const app = new Hono<AppBindings>();
@@ -302,6 +309,10 @@ export function createApp(
   // READ-ONLY pohľady + appkina vlastná reklamácia-značka. Žiadny voliteľný
   // dependency (rovnaký dôvod ako `upozornenia` vyššie).
   registerOrderFlagsRoutes(app, db, options.adminBaseUrl ?? "https://www.forestshop.sk");
+  // issue 292: "Eshop → Preprava DPD" — bez dodanej konfigurácie sa do DPD
+  // NEODOSIELA vôbec (fail-closed, rovnaký princíp ako `restock`/
+  // `nedostupne` vyššie): akcie vrátia 503 "nenakonfigurované".
+  registerDpdRoutes(app, db, options.dpd ?? { config: undefined });
 
   // Musí byť registrovaný AŽ PO všetkých skutočných /api/* trasách vyššie — Hono
   // vyberá presnejšiu zhodu, takže tie majú prednosť a sem sa dostane len to, čo
