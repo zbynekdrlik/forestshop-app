@@ -62,6 +62,27 @@ export const TERMINAL_STATE_CODES: ReadonlySet<string> = new Set(["delivered"]);
 // (stará appka #222 — výkon, nesledovanie už doručených zásielok).
 export const TERMINAL_CACHE_DAYS = 7;
 
+// issue 299: šéf chce upozornenie na zásielku VRÁTENÚ ODOSIELATEĽOVI. Na
+// rozdiel od `TERMINAL_STATE_CODES` vyššie toto NIE JE dôveryhodný, naživo
+// potvrdený zoznam — presný stateCode, ktorým api.posta.sk hlási zásielku
+// vrátenú odosielateľovi, NEBOL NIKDY naživo pozorovaný (živý probe 2026-07-25
+// vrátil presne štyri kódy: received/transit/notified/delivered — "returned"
+// medzi nimi nebol). "returned" je preto HYPOTÉZA, nie potvrdená hodnota —
+// presne ten istý reťazec, aký stará appka (`posta_uncollected.py`, #226) aj
+// TENTO modul's vlastný `terminalState` test ("hypotetické 'returned'")
+// dávnejšie zvažovali ako najpravdepodobnejší tvar, no ani jeden ho nikdy
+// nevidel v reálnej odpovedi. Zámerne NEPRIDANÉ do `TERMINAL_STATE_CODES`
+// (`isReturnedToSender` v `logic.ts` je preto SAMOSTATNÁ funkcia, nie
+// rozšírenie `terminalState`) — táto klasifikácia sa preto NIKDY necachuje
+// ako trvalá (`state.ts`'s `terminalState` stĺpec ju nikdy nedostane) a
+// overuje sa ZNOVA pri KAŽDOM behu, kým zásielka zostáva v 30-dňovom okne:
+// keby "returned" v skutočnosti znamenalo niečo INÉ (napr. "vrátená na
+// dodaciu poštu", teda STÁLE vyzdvihnuteľná — presne obava pôvodného #226
+// komentára), omylom vzniknutá karta sa pri ĎALŠOM behu sama zavrie, len čo
+// tracking prestane hlásiť tento kód (`run.ts`). Potvrď/oprav túto hodnotu
+// naživo hneď, ako sa objaví prvá SKUTOČNÁ vrátená zásielka.
+export const RETURNED_STATE_CODES: ReadonlySet<string> = new Set(["returned"]);
+
 // Cadence e-mailov (deň 0 → +3 → +3 → +7).
 export function daysNeededForNextEmail(sentCount: number): number {
   return sentCount < 3 ? 3 : 7;

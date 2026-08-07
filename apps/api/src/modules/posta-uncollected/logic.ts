@@ -12,6 +12,7 @@ import {
   MIN_ELIGIBLE_FOR_BLIND_SPOT,
   MIN_PACKAGE_COVERAGE,
   NON_POSTA_CARRIER_KEYWORDS,
+  RETURNED_STATE_CODES,
   TERMINAL_STATE_CODES,
   trackingLink,
 } from "./constants.js";
@@ -229,6 +230,22 @@ export function terminalState(apiJson: unknown): string {
   return TERMINAL_STATE_CODES.has(state) ? state : "";
 }
 
+// issue 299: zásielka VRÁTENÁ ODOSIELATEĽOVI — NEPOTVRDENÁ klasifikácia
+// (plné odôvodnenie a bezpečnostné dôsledky v `constants.ts`'s
+// `RETURNED_STATE_CODES` komentári). Zámerne SAMOSTATNÁ od `terminalState`
+// (nezdieľa `TERMINAL_STATE_CODES`, nikdy sa necachuje ako trvalá) — volajúci
+// (`run.ts`) preto túto funkciu overuje ZNOVA pri každom behu.
+export function isReturnedToSender(apiJson: unknown): boolean {
+  const results = (apiJson as TrackingApiResponse | null)?.results ?? [];
+  const p = results[0];
+  if (p === undefined || (typeof p.status === "string" ? p.status : "") !== "ok") return false;
+  const events = p.events ?? [];
+  const last = events[events.length - 1];
+  if (last === undefined) return false;
+  const state = asString(last.stateCode).trim().toLowerCase();
+  return RETURNED_STATE_CODES.has(state);
+}
+
 // issue 268: stabilný dedup kľúč pre nástenku Upozornenia (`upozornenia
 // /service.ts`'s `upsertUpozornenie`/`autoResolveByDedupKey`) — číslo
 // zásielky sa v rámci jednej zásielky nemení, takže opakovaný denný beh
@@ -237,6 +254,14 @@ export function terminalState(apiJson: unknown): string {
 // dokumentujú ako príklad ("posta:EF123456789SK").
 export function postaUpozornenieDedupKey(packageNumber: string): string {
   return `posta:${packageNumber}`;
+}
+
+// issue 299: DRUHÝ, SAMOSTATNÝ menný priestor pre "vrátená odosielateľovi" —
+// zámerne INÝ prefix než `postaUpozornenieDedupKey` vyššie, aby jedna
+// zásielka nikdy nekolidovala sama so sebou naprieč dvoma rôznymi
+// významami (`.claude/rules/upozornenia.md`).
+export function postaReturnedUpozornenieDedupKey(packageNumber: string): string {
+  return `posta-vratena:${packageNumber}`;
 }
 
 export function shouldSend(count: number, lastSent: Date | null, today: Date): boolean {
