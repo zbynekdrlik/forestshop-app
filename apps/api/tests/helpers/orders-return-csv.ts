@@ -31,12 +31,17 @@ export function buildReturnStatusCsv(header: readonly string[], rows: readonly R
 
 export const RETURN_STATUS_CSV_HEADER = ["code", "date", "statusName", "billFullName", "itemName", "itemAmount", "itemCode"] as const;
 
-export function returnStatusRowOf(code: string, statusName: string): Record<string, string> {
+// `billFullName` je voliteľný (predvolene "Ján Novák") — issue 297's testy
+// preukazujúce OBNOVU (nie preskočenie) po tom, čo zostal len JEDEN AKTÍVNY
+// vrátkový stav ("Vratený tovar"), potrebujú zmeniť NIEČO medzi dvomi
+// importmi TOHO ISTÉHO stavu, aby dôkaz obnovy nezávisel od zmeny titulku
+// (predtým to robila zmena pod-stavu, dnes už neexistuje druhý AKTÍVNY).
+export function returnStatusRowOf(code: string, statusName: string, billFullName = "Ján Novák"): Record<string, string> {
   return {
     code,
     date: "2026-06-15 10:30:00",
     statusName,
-    billFullName: "Ján Novák",
+    billFullName,
     itemName: "Nohavice",
     itemAmount: "1",
     itemCode: "40237/XL",

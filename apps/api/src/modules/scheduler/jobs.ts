@@ -147,7 +147,15 @@ export function pruneRawOrdersJob(rawDir: string, keepDays = 30): ScheduledJob {
     // prekrývať KAŽDÝ deň (nie len raz), nie iba pri tomto jednom sedení —
     // neprekáža, `pruneRawOrders` nemá žiadny DB advisory zámok (viď komentár
     // vyššie), takže si nekonkuruje.
-    schedule: { kind: "daily", hourLocal: 2, minuteLocal: 0 },
+    // issue 293 review finding: `hourLocal: 2, minuteLocal: 0` je PRESNE
+    // okamih jarného prechodu na letný čas v Europe/Bratislava (miestne
+    // 02:00 v tú noc VÔBEC NEEXISTUJE — hodiny skočia z 01:59 rovno na
+    // 03:00). Nie je to bug — `isDue()` job spustí správne hneď, ako
+    // miestny čas dosiahne 03:00 — ale ten JEDEN deň v roku beh ticho
+    // omešká asi o hodinu. `minuteLocal: 10` (namiesto 0) je zámerne mimo
+    // presnej hranice prechodu, aby k tomuto miniatúrnemu ročnému
+    // omeškaniu vôbec nedochádzalo.
+    schedule: { kind: "daily", hourLocal: 2, minuteLocal: 10 },
     async run(_db, now) {
       const result = await pruneRawOrders(rawDir, { keepDays, now });
       return { detail: result };
@@ -299,7 +307,7 @@ export type RunSupplierStock = (db: Database, now: Date) => Promise<SupplierStoc
  * medzi nočnými jobmi nižšie ostávajú NEZMENENÉ), teda dostatočne PRED
  * automatizáciou prepínania (issue 213), aby tá pracovala s čerstvými dátami
  * z tejto noci, a zároveň mimo `pruneRawExportsJob` (01:15) /
- * `sessionCleanupJob` (01:30) / `pruneRawOrdersJob` (02:00).
+ * `sessionCleanupJob` (01:30) / `pruneRawOrdersJob` (02:10).
  *
  * Žiadny `enabled` prepínač (na rozdiel od `postaUncollectedJob`/
  * `orderReminderJob`): scraper nikam nezapisuje, len číta stránky

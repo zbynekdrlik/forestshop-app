@@ -324,17 +324,31 @@ async function runPostaUncollectedLocked(options: RunPostaUncollectedOptions): P
       // beh na TÚ ISTÚ zásielku len OBNOVÍ existujúcu kartu (rovnaký
       // `dedupKey`), nikdy nevyrobí druhú.
       const daysWord = pluralWord(cls.daysAtPost, "deň", "dni", "dní");
+      // issue 298 (šéf, cez majiteľa): karta má ukázať, čo treba riešiť
+      // ("dokedy leží na pošte") a preklikom viesť PRIAMO na Poštu SK — nie
+      // nová sieťová výzva, `cls.retainedTill` je HODNOTA, ktorú tento istý
+      // beh UŽ vypočítal z tej istej odpovede trackingu (`classifyTracking`,
+      // `logic.ts`), pridáva sa LEN keď ju Pošta SK pre danú zásielku vrátila
+      // (bežne chýba, keď zásielka ešte nemá stanovený termín vrátenia).
+      const detailLines = [
+        `Zákazník: ${shipment.customerName}`,
+        `Číslo zásielky: ${packageNumber}`,
+        `Dopravca: ${shipment.shippingCarrierName ?? ""}`,
+        `Čaká: ${String(cls.daysAtPost)} ${daysWord} na pošte`,
+      ];
+      if (cls.retainedTill !== "") detailLines.push(`Vyzdvihnutie do: ${cls.retainedTill}`);
       await upsertUpozornenie(db, {
         type: "nevyzdvihnuta_zasielka",
         source: "appka",
         title: `Zásielka pre objednávku ${shipment.externalOrderId} sa nevyzdvihla — ${String(cls.daysAtPost)} ${daysWord} na pošte`,
-        details: [
-          `Zákazník: ${shipment.customerName}`,
-          `Číslo zásielky: ${packageNumber}`,
-          `Dopravca: ${shipment.shippingCarrierName ?? ""}`,
-          `Čaká: ${String(cls.daysAtPost)} ${daysWord} na pošte`,
-        ].join("\n"),
-        link: adminOrderUrl(shipment),
+        details: detailLines.join("\n"),
+        // Preklik VEDIE PRIAMO na Poštu SK (šéfova žiadosť "možno s preklikom
+        // do pošty") — nahrádza predošlý odkaz na Shoptet admin objednávku
+        // (ten zostáva čitateľný v titulku/`Zákazník`/`Číslo zásielky` vyššie,
+        // len prestal byť KLIKATEĽNÝM odkazom karty). Rovnaký `trackingLink`
+        // helper, aký už používa "Nevyzdvihnuté zásielky"'s výsledková
+        // tabuľka (`PostaUncollectedRow.tsx`) — žiadna nová sieťová/URL logika.
+        link: trackingLink(packageNumber),
         dedupKey: postaUpozornenieDedupKey(packageNumber),
         now,
       });

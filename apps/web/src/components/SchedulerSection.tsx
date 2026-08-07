@@ -54,30 +54,32 @@ export function SchedulerSection({
         <p data-testid="scheduler-empty">Žiadny beh zatiaľ nie je zaznamenaný.</p>
       )}
       {runs.length > 0 && (
-        <table>
-          <thead>
-            <tr>
-              <th>Úloha</th>
-              <th>Naposledy spustená</th>
-              <th>Stav</th>
-              <th>Dokončená</th>
-              <th>Detail</th>
-            </tr>
-          </thead>
-          <tbody>
-            {runs.map((run) => (
-              <tr key={run.jobName} data-testid={`job-${run.jobName}`}>
-                <td>{jobLabel(run.jobName)}</td>
-                <td>{formatSkDateTime(run.startedAt)}</td>
-                <td>{STATUS_LABELS[run.status]}</td>
-                <td>
-                  {formatSkDateTime(run.finishedAt)}
-                </td>
-                <td>{detailText(run)}</td>
+        <div className="fs-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Úloha</th>
+                <th>Naposledy spustená</th>
+                <th>Stav</th>
+                <th>Dokončená</th>
+                <th>Detail</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {runs.map((run) => (
+                <tr key={run.jobName} data-testid={`job-${run.jobName}`}>
+                  <td>{jobLabel(run.jobName)}</td>
+                  <td>{formatSkDateTime(run.startedAt)}</td>
+                  <td>{STATUS_LABELS[run.status]}</td>
+                  <td>
+                    {formatSkDateTime(run.finishedAt)}
+                  </td>
+                  <td>{detailText(run)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </section>
   );

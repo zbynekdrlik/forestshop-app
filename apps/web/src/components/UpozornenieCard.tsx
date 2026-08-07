@@ -20,15 +20,17 @@ const TYPE_LABELS: Readonly<Record<UpozornenieRow["type"], string>> = {
 };
 
 // Code review (issue 269, druhé kolo, finding 10): štítok odkazu sa odvodzuje
-// od TYPU karty, nikdy ako natvrdo napísaný literál na mieste vykreslenia —
-// oba dnešné automatické zdroje (#268 nevyzdvihnutá zásielka, #269 vrátenie)
-// odkazujú na Shoptet administráciu objednávky (`buildShoptetAdminOrderUrl`),
-// takže majú rovnaký štítok. `vlastna_poznamka` nikdy nenesie `link` (server
-// ho nikdy nevyplní), takže sem nepotrebuje vlastný záznam — `??` fallback
-// nižšie pokrýva AJ ňu, AJ akýkoľvek budúci typ, čo by omylom dostal odkaz
-// bez vlastného štítku, namiesto tichého predpokladu "je to vždy Shoptet".
+// od TYPU karty, nikdy ako natvrdo napísaný literál na mieste vykreslenia.
+// `vratenie` odkazuje na Shoptet administráciu objednávky
+// (`buildShoptetAdminOrderUrl`). issue 298: `nevyzdvihnuta_zasielka` odkazuje
+// PRIAMO na sledovanie zásielky na Pošte SK (`trackingLink`,
+// `posta-uncollected/constants.ts`) — šéfova žiadosť "preklik do pošty",
+// namiesto predošlého odkazu na Shoptet admin objednávku. `vlastna_poznamka`
+// nikdy nenesie `link` (server ho nikdy nevyplní), takže sem nepotrebuje
+// vlastný záznam — `??` fallback nižšie pokrýva AJ ňu, AJ akýkoľvek budúci
+// typ, čo by omylom dostal odkaz bez vlastného štítku.
 const LINK_LABELS: Readonly<Partial<Record<UpozornenieRow["type"], string>>> = {
-  nevyzdvihnuta_zasielka: "Otvoriť objednávku v Shoptete",
+  nevyzdvihnuta_zasielka: "Sledovať zásielku na Pošte",
   vratenie: "Otvoriť objednávku v Shoptete",
 };
 const DEFAULT_LINK_LABEL = "Otvoriť odkaz";

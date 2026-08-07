@@ -70,9 +70,12 @@ const DETAIL_BEZ_LINKY = {
   ],
 };
 
-function submitSearch(query: string): void {
-  fireEvent.change(screen.getByLabelText("Hľadať"), { target: { value: query } });
-  fireEvent.click(screen.getByRole("button", { name: "Hľadať" }));
+// issue 289: dve NEZÁVISLÉ polia — "Produkt" (tento súbor) a "Objednávka"
+// (`OrderSearchPanel.test.tsx`). Obe volajú tú istú `globalSearch(q)`, každé
+// si berie len svoju polovicu odpovede.
+function submitProductSearch(query: string): void {
+  fireEvent.change(screen.getByLabelText("Produkt"), { target: { value: query } });
+  fireEvent.click(screen.getByRole("button", { name: "Hľadať produkt" }));
 }
 
 afterEach(() => {
@@ -80,37 +83,37 @@ afterEach(() => {
   vi.resetAllMocks();
 });
 
-it("prázdny výsledok zobrazí informačnú vetu namiesto tabuliek", async () => {
+it("prázdny výsledok produktu zobrazí informačnú vetu namiesto tabuľky", async () => {
   globalSearch.mockResolvedValue({ products: [], orders: [] });
 
   render(<SearchSection role="citanie" onSessionExpired={() => {}} />);
-  submitSearch("nieco-co-nikde-nie-je");
+  submitProductSearch("nieco-co-nikde-nie-je");
 
-  await screen.findByTestId("search-empty");
+  await screen.findByTestId("search-product-empty");
   expect(screen.queryByTestId("search-products")).toBeNull();
+});
+
+it("obe polia (Produkt aj Objednávka) sú vždy prítomné a nezávislé — hľadanie produktu nevolá do poľa objednávky", async () => {
+  globalSearch.mockResolvedValue({ products: [PRODUKT], orders: [] });
+
+  render(<SearchSection role="citanie" onSessionExpired={() => {}} />);
+  expect(screen.getByLabelText("Produkt")).toBeTruthy();
+  expect(screen.getByLabelText("Objednávka")).toBeTruthy();
+
+  submitProductSearch("spolocne");
+
+  const produkty = await screen.findByTestId("search-products");
+  expect(produkty.textContent).toContain("Test produkt PD-1");
+  // Pole "Objednávka" hľadanie produktu vôbec nezasiahlo — žiadny jeho blok.
   expect(screen.queryByTestId("search-orders")).toBeNull();
 });
 
-it("produkty aj objednávky sa zobrazia ako dva oddelené bloky, produkty prvé", async () => {
-  globalSearch.mockResolvedValue({ products: [PRODUKT], orders: [OBJEDNAVKA] });
-
-  render(<SearchSection role="citanie" onSessionExpired={() => {}} />);
-  submitSearch("spolocne");
-
-  const produkty = await screen.findByTestId("search-products");
-  const objednavky = await screen.findByTestId("search-orders");
-  expect(produkty.textContent).toContain("Test produkt PD-1");
-  expect(objednavky.textContent).toContain("Zákazník Alfa");
-  // Produkty sa vykresľujú PRED objednávkami v DOM poradí.
-  expect(produkty.compareDocumentPosition(objednavky) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-});
-
-it("pri 401 pri hľadaní zavolá onSessionExpired", async () => {
+it("pri 401 pri hľadaní produktu zavolá onSessionExpired", async () => {
   globalSearch.mockRejectedValue(new SearchUnauthorizedError());
   const onSessionExpired = vi.fn();
 
   render(<SearchSection role="citanie" onSessionExpired={onSessionExpired} />);
-  submitSearch("hocico");
+  submitProductSearch("hocico");
 
   await waitFor(() => {
     expect(onSessionExpired).toHaveBeenCalledTimes(1);
@@ -122,7 +125,7 @@ it("klik na 'Otvoriť' pri produkte otvorí detail so všetkými variantmi", asy
   fetchProductDetail.mockResolvedValue(DETAIL_BEZ_LINKY);
 
   render(<SearchSection role="citanie" onSessionExpired={() => {}} />);
-  submitSearch("PD-1");
+  submitProductSearch("PD-1");
 
   fireEvent.click(await screen.findByTestId("search-product-open-PD-1"));
 
@@ -133,12 +136,24 @@ it("klik na 'Otvoriť' pri produkte otvorí detail so všetkými variantmi", asy
   expect(screen.getByTestId("search-detail-shop-link-PD-1")).toHaveProperty("href", "https://www.forestshop.sk/pd-1/");
 });
 
+it("detail produktu neschová pole Objednávka — zostáva namontované vedľa", async () => {
+  globalSearch.mockResolvedValue({ products: [PRODUKT], orders: [] });
+  fetchProductDetail.mockResolvedValue(DETAIL_BEZ_LINKY);
+
+  render(<SearchSection role="citanie" onSessionExpired={() => {}} />);
+  submitProductSearch("PD-1");
+  fireEvent.click(await screen.findByTestId("search-product-open-PD-1"));
+
+  await screen.findByTestId("search-detail-section");
+  expect(screen.getByLabelText("Objednávka")).toBeTruthy();
+});
+
 it("späť z detailu vráti na hľadanie", async () => {
   globalSearch.mockResolvedValue({ products: [PRODUKT], orders: [] });
   fetchProductDetail.mockResolvedValue(DETAIL_BEZ_LINKY);
 
   render(<SearchSection role="citanie" onSessionExpired={() => {}} />);
-  submitSearch("PD-1");
+  submitProductSearch("PD-1");
   fireEvent.click(await screen.findByTestId("search-product-open-PD-1"));
   await screen.findByTestId("search-detail-section");
 
@@ -151,7 +166,7 @@ it("rola citanie nevidí tlačidlo na úpravu linky", async () => {
   fetchProductDetail.mockResolvedValue(DETAIL_BEZ_LINKY);
 
   render(<SearchSection role="citanie" onSessionExpired={() => {}} />);
-  submitSearch("PD-1");
+  submitProductSearch("PD-1");
   fireEvent.click(await screen.findByTestId("search-product-open-PD-1"));
 
   await screen.findByTestId("search-detail-section");
@@ -169,7 +184,7 @@ it("rola manazer doplní dodávateľskú linku, uloženie ju pošle na server a 
   saveProductLink.mockResolvedValue(undefined);
 
   render(<SearchSection role="manazer" onSessionExpired={() => {}} />);
-  submitSearch("PD-1");
+  submitProductSearch("PD-1");
   fireEvent.click(await screen.findByTestId("search-product-open-PD-1"));
   await screen.findByTestId("search-detail-section");
 
@@ -193,7 +208,7 @@ it("neplatná URL sa odmietne OKAMŽITE, bez volania saveProductLink", async () 
   fetchProductDetail.mockResolvedValue(DETAIL_BEZ_LINKY);
 
   render(<SearchSection role="manazer" onSessionExpired={() => {}} />);
-  submitSearch("PD-1");
+  submitProductSearch("PD-1");
   fireEvent.click(await screen.findByTestId("search-product-open-PD-1"));
   await screen.findByTestId("search-detail-section");
 
@@ -212,7 +227,7 @@ it("pri 401 pri načítaní detailu zavolá onSessionExpired", async () => {
   const onSessionExpired = vi.fn();
 
   render(<SearchSection role="citanie" onSessionExpired={onSessionExpired} />);
-  submitSearch("PD-1");
+  submitProductSearch("PD-1");
   fireEvent.click(await screen.findByTestId("search-product-open-PD-1"));
 
   await waitFor(() => {
@@ -227,7 +242,7 @@ it("pri 401 pri ukladaní linky zavolá onSessionExpired", async () => {
   const onSessionExpired = vi.fn();
 
   render(<SearchSection role="manazer" onSessionExpired={onSessionExpired} />);
-  submitSearch("PD-1");
+  submitProductSearch("PD-1");
   fireEvent.click(await screen.findByTestId("search-product-open-PD-1"));
   await screen.findByTestId("search-detail-section");
 
@@ -240,4 +255,18 @@ it("pri 401 pri ukladaní linky zavolá onSessionExpired", async () => {
   await waitFor(() => {
     expect(onSessionExpired).toHaveBeenCalledTimes(1);
   });
+});
+
+// Objednávka OBJEDNAVKA je tu len ako potvrdenie, že `globalSearch`'s
+// `.orders` polovica pri hľadaní PRODUKTU (Produkt pole) neovplyvní jeho
+// vlastný výsledok — plné pokrytie hľadania objednávky je v
+// `OrderSearchPanel.test.tsx`.
+it("hľadanie produktu ignoruje .orders polovicu odpovede", async () => {
+  globalSearch.mockResolvedValue({ products: [PRODUKT], orders: [OBJEDNAVKA] });
+
+  render(<SearchSection role="citanie" onSessionExpired={() => {}} />);
+  submitProductSearch("spolocne");
+
+  await screen.findByTestId("search-products");
+  expect(screen.queryByTestId("search-orders")).toBeNull();
 });

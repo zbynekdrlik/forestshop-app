@@ -193,122 +193,130 @@ export function OrderReminderSection({
           {result.noNote.length === 0 ? (
             <p data-testid="order-reminder-no-note-empty">Žiadna objednávka bez poznámky.</p>
           ) : (
-            <table>
-              <thead>
-                <tr>
-                  <th>Objednávka</th>
-                  <th>Zákazník</th>
-                  <th>Telefón</th>
-                  <th>E-mail</th>
-                  <th>Položka</th>
-                  <th>Dní nečinnosti</th>
-                  <th>Akcia</th>
-                </tr>
-              </thead>
-              <tbody>
-                {result.noNote.map((row) => (
-                  <OrderReminderNoteRow
-                    key={row.orderCode}
-                    row={row}
-                    busy={busyOrderCode === row.orderCode}
-                    onSend={(code) => {
-                      runAction(code, "send");
-                    }}
-                    onContact={(code) => {
-                      runAction(code, "contact");
-                    }}
-                  />
-                ))}
-              </tbody>
-            </table>
-          )}
-
-          {result.noEmail.length > 0 && (
-            <div className="card order-reminder-box" data-testid="order-reminder-no-email-box">
-              <h3>✉️ Bez e-mailovej adresy ({result.noEmail.length})</h3>
+            <div className="fs-table-wrap">
               <table>
                 <thead>
                   <tr>
                     <th>Objednávka</th>
                     <th>Zákazník</th>
                     <th>Telefón</th>
+                    <th>E-mail</th>
                     <th>Položka</th>
                     <th>Dní nečinnosti</th>
+                    <th>Akcia</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {result.noEmail.map((row) => (
-                    <OrderReminderNoEmailRow key={row.orderCode} row={row} />
+                  {result.noNote.map((row) => (
+                    <OrderReminderNoteRow
+                      key={row.orderCode}
+                      row={row}
+                      busy={busyOrderCode === row.orderCode}
+                      onSend={(code) => {
+                        runAction(code, "send");
+                      }}
+                      onContact={(code) => {
+                        runAction(code, "contact");
+                      }}
+                    />
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {result.noEmail.length > 0 && (
+            <div className="card order-reminder-box" data-testid="order-reminder-no-email-box">
+              <h3>✉️ Bez e-mailovej adresy ({result.noEmail.length})</h3>
+              <div className="fs-table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Objednávka</th>
+                      <th>Zákazník</th>
+                      <th>Telefón</th>
+                      <th>Položka</th>
+                      <th>Dní nečinnosti</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {result.noEmail.map((row) => (
+                      <OrderReminderNoEmailRow key={row.orderCode} row={row} />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
 
           {result.emailed.length > 0 && (
             <div className="card order-reminder-box" data-testid="order-reminder-emailed-box">
               <h3>🟠 Pripomienka odoslaná ({result.emailed.length})</h3>
-              <table>
-                <thead>
-                  <tr>
-                    <th>Objednávka</th>
-                    <th>Zákazník</th>
-                    <th>E-mail</th>
-                    <th>Položka</th>
-                    <th>Odoslané</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {result.emailed.map((row) => (
-                    <OrderReminderEmailedRow key={row.orderCode} row={row} />
-                  ))}
-                </tbody>
-              </table>
+              <div className="fs-table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Objednávka</th>
+                      <th>Zákazník</th>
+                      <th>E-mail</th>
+                      <th>Položka</th>
+                      <th>Odoslané</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {result.emailed.map((row) => (
+                      <OrderReminderEmailedRow key={row.orderCode} row={row} />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
 
           {(result.contacted.length > 0 || result.pending.length > 0) && (
             <div className="card order-reminder-box" data-testid="order-reminder-skipped-box">
               <h3>Preskočené ({result.contacted.length + result.pending.length})</h3>
-              <table>
-                <thead>
-                  <tr>
-                    <th>Objednávka</th>
-                    <th>Zákazník</th>
-                    <th>Dôvod</th>
-                    <th>Dní nečinnosti</th>
-                    <th>Akcia</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {result.contacted.map((row) => (
-                    <OrderReminderSkippedRow
-                      key={row.orderCode}
-                      row={row}
-                      icon={row.resolvedBy === "manual" ? "✋" : "⚪"}
-                      reason={row.resolvedBy === "manual" ? "vybavil ručne človek" : "AI usúdila, že zákazník je už kontaktovaný"}
-                      busy={busyOrderCode === row.orderCode}
-                      onPreview={openPreview}
-                      onSend={(code) => {
-                        runAction(code, "send");
-                      }}
-                    />
-                  ))}
-                  {result.pending.map((row) => (
-                    <OrderReminderSkippedRow
-                      key={row.orderCode}
-                      row={row}
-                      icon="⚠️"
-                      reason={row.reason}
-                      busy={busyOrderCode === row.orderCode}
-                      onPreview={openPreview}
-                      onSend={(code) => {
-                        runAction(code, "send");
-                      }}
-                    />
-                  ))}
-                </tbody>
-              </table>
+              <div className="fs-table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Objednávka</th>
+                      <th>Zákazník</th>
+                      <th>Dôvod</th>
+                      <th>Dní nečinnosti</th>
+                      <th>Akcia</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {result.contacted.map((row) => (
+                      <OrderReminderSkippedRow
+                        key={row.orderCode}
+                        row={row}
+                        icon={row.resolvedBy === "manual" ? "✋" : "⚪"}
+                        reason={row.resolvedBy === "manual" ? "vybavil ručne človek" : "AI usúdila, že zákazník je už kontaktovaný"}
+                        busy={busyOrderCode === row.orderCode}
+                        onPreview={openPreview}
+                        onSend={(code) => {
+                          runAction(code, "send");
+                        }}
+                      />
+                    ))}
+                    {result.pending.map((row) => (
+                      <OrderReminderSkippedRow
+                        key={row.orderCode}
+                        row={row}
+                        icon="⚠️"
+                        reason={row.reason}
+                        busy={busyOrderCode === row.orderCode}
+                        onPreview={openPreview}
+                        onSend={(code) => {
+                          runAction(code, "send");
+                        }}
+                      />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </>

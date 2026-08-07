@@ -264,7 +264,12 @@ it("dva súbežné behy sa serializujú (advisory zámok), nikdy neprebehnú nar
 // (#267's zdieľaná zapisovacia cesta), opakovaný beh ju len OBNOVÍ (nikdy
 // druhú), a keď sa zásielka doručí/vráti, karta sa ZAVRIE SAMA (bez zásahu
 // majiteľa) — presne "hotovo, keď" ticketu.
-it("nevyzdvihnutá zásielka vyrobí kartu na Upozorneniach s odkazom na objednávku", async () => {
+//
+// issue 298: preklik karty vedie PRIAMO na sledovanie zásielky na Pošte SK
+// (`trackingLink`), nie na Shoptet admin objednávku (predošlé správanie) —
+// číslo objednávky ostáva čitateľné v titulku/`details`, len prestalo byť
+// samotným klikateľným odkazom.
+it("nevyzdvihnutá zásielka vyrobí kartu na Upozorneniach s preklikom na sledovanie na Pošte SK", async () => {
   const db = await boot();
   await insertOrder(db, { externalOrderId: "20500010" });
 
@@ -281,9 +286,60 @@ it("nevyzdvihnutá zásielka vyrobí kartu na Upozorneniach s odkazom na objedn�
   expect(rows).toHaveLength(1);
   expect(rows[0]?.type).toBe("nevyzdvihnuta_zasielka");
   expect(rows[0]?.source).toBe("appka");
-  expect(rows[0]?.title).toContain("20500010");
-  expect(rows[0]?.link).toContain("20500010");
+  expect(rows[0]?.title).toContain("20500010"); // číslo objednávky ostáva v titulku, aj bez odkazu naň
+  expect(rows[0]?.link).toBe("https://www.posta.sk/sledovanie-zasielok#parcel=EF123456789SK");
   expect(rows[0]?.resolvedAt).toBeNull();
+});
+
+// issue 298: keď Pošta SK pre zásielku vráti termín vrátenia odosielateľovi
+// (`retainedTill`, `classifyTracking`'s už vypočítaná hodnota — žiadne nové
+// sieťové volanie), karta ho ukáže priamo v `details` ("dokedy leží na
+// pošte").
+it("keď Pošta SK vráti termín vrátenia, karta ho ukáže v details ('Vyzdvihnutie do')", async () => {
+  const db = await boot();
+  await insertOrder(db, { externalOrderId: "20500016" });
+
+  await runPostaUncollected({
+    db,
+    now: TODAY,
+    trackingClient: () =>
+      Promise.resolve({
+        results: [
+          {
+            status: "ok",
+            events: [{ stateCode: "notified", detailCode: "ZNP1AN", localDate: "2026-07-30", postOffice: { name: "Pošta 1" } }],
+            retainedTill: "2026-08-10",
+          },
+        ],
+      }),
+    mailTransport: undefined,
+    bccEmail: "majitel@forestshop.sk",
+    adminBaseUrl: "https://www.forestshop.sk",
+  });
+
+  const rows = await db.select().from(upozornenie).where(eq(upozornenie.dedupKey, "posta:EF123456789SK"));
+  expect(rows).toHaveLength(1);
+  expect(rows[0]?.details).toContain("Vyzdvihnutie do: 2026-08-10");
+});
+
+// issue 298: keď Pošta SK termín NEVRÁTI (bežný prípad), karta o tom mlčí —
+// žiadny prázdny/zavádzajúci riadok "Vyzdvihnutie do: ".
+it("bez termínu vrátenia karta NEUKÁŽE riadok 'Vyzdvihnutie do'", async () => {
+  const db = await boot();
+  await insertOrder(db, { externalOrderId: "20500017" });
+
+  await runPostaUncollected({
+    db,
+    now: TODAY,
+    trackingClient: notifiedTrackingClient(),
+    mailTransport: undefined,
+    bccEmail: "majitel@forestshop.sk",
+    adminBaseUrl: "https://www.forestshop.sk",
+  });
+
+  const rows = await db.select().from(upozornenie).where(eq(upozornenie.dedupKey, "posta:EF123456789SK"));
+  expect(rows).toHaveLength(1);
+  expect(rows[0]?.details).not.toContain("Vyzdvihnutie do");
 });
 
 it("opakovaný beh na tú istú zásielku NEVYROBÍ druhú kartu, len ju obnoví", async () => {

@@ -149,33 +149,35 @@ export function SupplierStockSection({
         {unreadable.length === 0 ? (
           <p className="empty">Zatiaľ žiadne — všetky sledované odkazy sa darí prečítať.</p>
         ) : (
-          <table>
-            <thead>
-              <tr>
-                <th scope="col">Dodávateľ</th>
-                <th scope="col">Odkazov</th>
-                <th scope="col">Ukážky</th>
-              </tr>
-            </thead>
-            <tbody>
-              {unreadable.map((host) => (
-                <tr key={host.host} data-testid={`ss-unreadable-${host.host}`}>
-                  <td>{host.host}</td>
-                  <td>{host.count}</td>
-                  <td>
-                    {host.samples.map((sample) => (
-                      <div key={`${sample.link}|${sample.sizeLabel}`}>
-                        <a href={sample.link} target="_blank" rel="noreferrer noopener">
-                          {sample.link}
-                        </a>
-                        {sample.sizeLabel !== "" && ` [${sample.sizeLabel}]`}
-                      </div>
-                    ))}
-                  </td>
+          <div className="fs-table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Dodávateľ</th>
+                  <th scope="col">Odkazov</th>
+                  <th scope="col">Ukážky</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {unreadable.map((host) => (
+                  <tr key={host.host} data-testid={`ss-unreadable-${host.host}`}>
+                    <td>{host.host}</td>
+                    <td>{host.count}</td>
+                    <td>
+                      {host.samples.map((sample) => (
+                        <div key={`${sample.link}|${sample.sizeLabel}`}>
+                          <a href={sample.link} target="_blank" rel="noreferrer noopener">
+                            {sample.link}
+                          </a>
+                          {sample.sizeLabel !== "" && ` [${sample.sizeLabel}]`}
+                        </div>
+                      ))}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
@@ -187,30 +189,32 @@ export function SupplierStockSection({
         {hostOverview.length === 0 ? (
           <p className="empty">Zatiaľ nič — kontrola ešte nebežala.</p>
         ) : (
-          <table>
-            <thead>
-              <tr>
-                <th scope="col">Doména</th>
-                <th scope="col">Odkazov</th>
-                <th scope="col">Číta sa</th>
-                <th scope="col">Neviem</th>
-                <th scope="col">Zlyhalo</th>
-                <th scope="col">Naposledy potvrdené</th>
-              </tr>
-            </thead>
-            <tbody>
-              {hostOverview.map((host) => (
-                <tr key={host.host} data-testid={`ss-host-${host.host}`}>
-                  <td>{host.host}</td>
-                  <td>{host.total}</td>
-                  <td>{host.readable}</td>
-                  <td>{host.unknown}</td>
-                  <td>{host.failed}</td>
-                  <td>{formatSkDateTime(host.lastConfirmedAt)}</td>
+          <div className="fs-table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Doména</th>
+                  <th scope="col">Odkazov</th>
+                  <th scope="col">Číta sa</th>
+                  <th scope="col">Neviem</th>
+                  <th scope="col">Zlyhalo</th>
+                  <th scope="col">Naposledy potvrdené</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {hostOverview.map((host) => (
+                  <tr key={host.host} data-testid={`ss-host-${host.host}`}>
+                    <td>{host.host}</td>
+                    <td>{host.total}</td>
+                    <td>{host.readable}</td>
+                    <td>{host.unknown}</td>
+                    <td>{host.failed}</td>
+                    <td>{formatSkDateTime(host.lastConfirmedAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
@@ -219,39 +223,41 @@ export function SupplierStockSection({
         {rows.length === 0 ? (
           <p className="empty">Zatiaľ nič — kontrola ešte nebežala.</p>
         ) : (
-          <table>
-            <thead>
-              <tr>
-                <th scope="col">Dodávateľ</th>
-                <th scope="col">Odkaz</th>
-                <th scope="col">Veľkosť</th>
-                <th scope="col">Dostupnosť</th>
-                <th scope="col">Cena</th>
-                <th scope="col">Kontrolované</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                // Kľúč MUSÍ niesť aj veľkosť — odkaz s pravidlom na veľkosti
-                // (issue 224) má pre TÚ ISTÚ linku viac riadkov naraz.
-                <tr key={`${row.link}|${row.sizeLabel}`} data-testid={`ss-row-${row.link}-${row.sizeLabel}`}>
-                  <td>{row.host}</td>
-                  <td>
-                    <a href={row.link} target="_blank" rel="noreferrer noopener">
-                      {row.link}
-                    </a>
-                  </td>
-                  <td>{row.sizeLabel === "" ? "—" : row.sizeLabel}</td>
-                  <td>
-                    {row.ok ? AVAILABILITY_LABEL[row.availability] : "Kontrola zlyhala"}
-                    {row.availabilityText !== "" && ` (${row.availabilityText})`}
-                  </td>
-                  <td>{row.price === null ? "—" : `${row.price} €`}</td>
-                  <td>{formatSkDateTime(row.checkedAt)}</td>
+          <div className="fs-table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Dodávateľ</th>
+                  <th scope="col">Odkaz</th>
+                  <th scope="col">Veľkosť</th>
+                  <th scope="col">Dostupnosť</th>
+                  <th scope="col">Cena</th>
+                  <th scope="col">Kontrolované</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  // Kľúč MUSÍ niesť aj veľkosť — odkaz s pravidlom na veľkosti
+                  // (issue 224) má pre TÚ ISTÚ linku viac riadkov naraz.
+                  <tr key={`${row.link}|${row.sizeLabel}`} data-testid={`ss-row-${row.link}-${row.sizeLabel}`}>
+                    <td>{row.host}</td>
+                    <td>
+                      <a href={row.link} target="_blank" rel="noreferrer noopener">
+                        {row.link}
+                      </a>
+                    </td>
+                    <td>{row.sizeLabel === "" ? "—" : row.sizeLabel}</td>
+                    <td>
+                      {row.ok ? AVAILABILITY_LABEL[row.availability] : "Kontrola zlyhala"}
+                      {row.availabilityText !== "" && ` (${row.availabilityText})`}
+                    </td>
+                    <td>{row.price === null ? "—" : `${row.price} €`}</td>
+                    <td>{formatSkDateTime(row.checkedAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>

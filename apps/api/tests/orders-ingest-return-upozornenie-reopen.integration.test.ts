@@ -76,10 +76,13 @@ it("karta vrátená späť medzi otvorené sa ĎALŠÍM importom ZNOVA obnoví �
   expect(afterReturn[0]?.resolvedAt).toBeNull();
 
   // Ďalší import (napr. nasledujúcu noc) — karta je teraz NEVYRIEŠENÁ, takže
-  // pre-check ju NEPRESKOČÍ; ten istý pod-stav sa upsertne (obnoví) ako
-  // ktorákoľvek iná otvorená vrátková karta.
+  // pre-check ju NEPRESKOČÍ; ten istý AKTÍVNY stav ("Vratený tovar", issue
+  // 297 nechalo len JEDEN — "Vybavená výmena" použitá tu predtým je dnes
+  // HOTOVÝ stav, ktorý by kartu namiesto obnovy ZATVORIL, viď dedikovaný
+  // test v `orders-ingest-return-upozornenie.integration.test.ts`) sa s INÝM
+  // menom zákazníka upsertne (obnoví) ako ktorákoľvek iná otvorená karta.
   await ingestOrders(db, {
-    fetchExport: fetcherOf(buildReturnStatusCsv(RETURN_STATUS_CSV_HEADER, [returnStatusRowOf("20700010", "Vybavená výmena")])),
+    fetchExport: fetcherOf(buildReturnStatusCsv(RETURN_STATUS_CSV_HEADER, [returnStatusRowOf("20700010", "Vratený tovar", "Eva Kováčová")])),
     now: new Date("2026-08-07T10:00:00Z"),
     rawDir: dir,
     windowStart: WINDOW_START,
@@ -90,5 +93,5 @@ it("karta vrátená späť medzi otvorené sa ĎALŠÍM importom ZNOVA obnoví �
   expect(after).toHaveLength(1); // stále presne jedna karta, žiadna duplicita
   expect(after[0]?.id).toBe(cardId); // TÁ ISTÁ karta — obnovená, nie nová
   expect(after[0]?.resolvedAt).toBeNull(); // ostáva otvorená
-  expect(after[0]?.title).toContain("vybavená výmena"); // OBNOVENÁ — dôkaz že import ju vôbec nepreskočil
+  expect(after[0]?.details).toContain("Eva Kováčová"); // OBNOVENÁ — dôkaz že import ju vôbec nepreskočil
 });

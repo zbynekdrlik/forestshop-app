@@ -1,7 +1,7 @@
 import { globalContext, textValue } from "../mail-templates/context.js";
 import type { MailTemplateKey } from "../mail-templates/registry.js";
 import { renderTemplate, type MailTemplateText, type RenderedEmail } from "../mail-templates/render.js";
-import { zonedDateKey } from "../../timezone.js";
+import { getZonedDateParts, zonedDateKey } from "../../timezone.js";
 import {
   CANCELLED_STATUSES,
   daysNeededForNextEmail,
@@ -274,8 +274,18 @@ export function buildEmail(
   today: Date,
 ): BuiltEmail {
   const d = retainedTill !== "" ? parseIsoDatePrefix(retainedTill) : null;
+  // issue 293 review finding: `d` je VŽDY UTC-polnočný kalendárny dátum
+  // (`parseIsoDatePrefix` vyššie), takže "UTC" pásmo tu dá identický
+  // výsledok ako predošlé vlastné `getUTC*` volania — jediný rozdiel je, že
+  // teraz ide cez ROVNAKÝ zdieľaný helper ako zvyšok modulu (`zonedDateKey`
+  // nižšie), namiesto vlastnej duplicitnej Y/M/D extrakcie.
   const retainedTillDisplay =
-    d !== null && d >= today ? `${String(d.getUTCDate())}. ${String(d.getUTCMonth() + 1)}. ${String(d.getUTCFullYear())}` : "";
+    d !== null && d >= today
+      ? (() => {
+          const parts = getZonedDateParts(d, "UTC");
+          return `${String(parts.day)}. ${String(parts.month)}. ${String(parts.year)}`;
+        })()
+      : "";
   const link = trackingLink(trackNum);
   return renderTemplate(template, {
     ...globalContext(),

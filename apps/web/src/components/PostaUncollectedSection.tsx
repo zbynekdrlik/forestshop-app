@@ -172,26 +172,28 @@ export function PostaUncollectedSection({
       )}
 
       {result !== null && result.uncollected.length > 0 && (
-        <table>
-          <thead>
-            <tr>
-              <th>Zásielka</th>
-              <th>Pošta</th>
-              <th>Objednávka</th>
-              <th>Zákazník</th>
-              <th>Dní čaká</th>
-              <th>Vyzdvihnúť do</th>
-              <th>E-maily</th>
-              <th>Posledný e-mail</th>
-              <th>Náhľad</th>
-            </tr>
-          </thead>
-          <tbody>
-            {result.uncollected.map((shipment) => (
-              <PostaUncollectedRow key={shipment.packageNumber} shipment={shipment} onPreview={openPreview} />
-            ))}
-          </tbody>
-        </table>
+        <div className="fs-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Zásielka</th>
+                <th>Pošta</th>
+                <th>Objednávka</th>
+                <th>Zákazník</th>
+                <th>Dní čaká</th>
+                <th>Vyzdvihnúť do</th>
+                <th>E-maily</th>
+                <th>Posledný e-mail</th>
+                <th>Náhľad</th>
+              </tr>
+            </thead>
+            <tbody>
+              {result.uncollected.map((shipment) => (
+                <PostaUncollectedRow key={shipment.packageNumber} shipment={shipment} onPreview={openPreview} />
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
 
       {result !== null && result.invalid.length > 0 && (

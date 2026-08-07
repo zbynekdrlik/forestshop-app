@@ -451,23 +451,25 @@ export function PairingSection({
       {searchLoaded && total === 0 ? (
         <p data-testid="pairing-empty">Hľadaniu nezodpovedá žiadny variant.</p>
       ) : (
-        <table>
-          <thead>
-            <tr>
-              <th>Kód</th>
-              <th>Produkt</th>
-              <th>Veľkosť</th>
-              <th>Dodávateľ</th>
-              <th>Adresa u dodávateľa</th>
-              <th>Stav</th>
-              <th>Potvrdil</th>
-              {canConfirm && <th>Akcie</th>}
-            </tr>
-          </thead>
-          <tbody>
-            {groups.flatMap((group) => renderGroup(group))}
-          </tbody>
-        </table>
+        <div className="fs-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Kód</th>
+                <th>Produkt</th>
+                <th>Veľkosť</th>
+                <th>Dodávateľ</th>
+                <th>Adresa u dodávateľa</th>
+                <th>Stav</th>
+                <th>Potvrdil</th>
+                {canConfirm && <th>Akcie</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {groups.flatMap((group) => renderGroup(group))}
+            </tbody>
+          </table>
+        </div>
       )}
     </section>
   );

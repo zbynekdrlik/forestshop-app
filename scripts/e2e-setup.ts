@@ -199,6 +199,11 @@ const E2E_FARBY_EMAIL = "e2e-farby@forestshop.sk"; // musí sa zhodovať s hodno
 // `admin`/`manazer`.
 const E2E_UPOZORNENIA_EMAIL = "e2e-upozornenia@forestshop.sk"; // musí sa zhodovať s hodnotou v upozornenia.spec.ts
 
+// issue 291: rovnaký mechanizmus a dôvod ako `E2E_UPOZORNENIA_EMAIL` vyššie —
+// nový spec súbor (`mobile-responsive.spec.ts` — kontrola vodorovného
+// posúvania stránky na telefónnej šírke) dostáva VLASTNÝ izolovaný účet.
+const E2E_MOBIL_EMAIL = "e2e-mobil@forestshop.sk"; // musí sa zhodovať s hodnotou v mobile-responsive.spec.ts
+
 const { db, pool } = createDb();
 // Konštantný literál bez interpolácie — obyčajný reťazec je tu rovnako bezpečný
 // ako `sql` tagovaná šablóna (tú používa ekvivalentný apps/api/tests/helpers/db.ts),
@@ -360,6 +365,7 @@ await db.insert(users).values({ email: E2E_RACE_EMAIL, passwordHash: await hashP
 await db.insert(users).values({ email: E2E_ZLUCENIE_EMAIL, passwordHash: await hashPassword(E2E_HESLO), displayName: "E2E Manažér", role: "manazer" });
 await db.insert(users).values({ email: E2E_FARBY_EMAIL, passwordHash: await hashPassword(E2E_HESLO), displayName: "E2E Manažér", role: "manazer" });
 await db.insert(users).values({ email: E2E_UPOZORNENIA_EMAIL, passwordHash: await hashPassword(E2E_HESLO), displayName: "E2E Manažér", role: "manazer" });
+await db.insert(users).values({ email: E2E_MOBIL_EMAIL, passwordHash: await hashPassword(E2E_HESLO), displayName: "E2E Manažér", role: "manazer" });
 
 // Katalóg pre E2E: tá istá commitnutá fixtúra ako v jednotkových testoch, cez tú istú
 // službu importu — E2E tak overuje skutočnú cestu dát, nie ručne nasypané riadky.

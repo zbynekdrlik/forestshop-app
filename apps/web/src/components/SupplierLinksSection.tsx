@@ -267,6 +267,7 @@ export function SupplierLinksSection({
       {searchLoaded && total === 0 ? (
         <p data-testid="product-links-empty">Hľadaniu nezodpovedá žiadny produkt.</p>
       ) : (
+        <div className="fs-table-wrap">
         <table>
           <thead>
             <tr>
@@ -379,6 +380,7 @@ export function SupplierLinksSection({
             })}
           </tbody>
         </table>
+        </div>
       )}
     </section>
   );

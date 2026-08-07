@@ -284,42 +284,44 @@ export function CatalogPage({
       {searchLoaded && total === 0 ? (
         <p data-testid="empty-results">Hľadaniu nezodpovedá žiadny variant.</p>
       ) : (
-        <table>
-          <thead>
-            <tr>
-              <th>Kód</th>
-              <th>Názov</th>
-              <th>Veľkosť</th>
-              <th>Stav</th>
-              <th>Sklad</th>
-              <th>Cena</th>
-              <th>Dostupnosť podľa Shoptetu</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((item) => (
-              <tr key={item.code} data-testid={`variant-${item.code}`}>
-                <td>{item.code}</td>
-                <td>{item.name}</td>
-                <td>{item.sizeLabel ?? "—"}</td>
-                <td>
-                  {STATE_LABELS[item.state]}
-                  {item.missingSince !== null && (
-                    <>
-                      {" "}
-                      <strong data-testid={`missing-${item.code}`}>
-                        (chýba od {formatSkDate(item.missingSince)})
-                      </strong>
-                    </>
-                  )}
-                </td>
-                <td>{item.stock}</td>
-                <td>{item.price === null ? "—" : `${item.price} ${item.currency ?? ""}`}</td>
-                <td>{item.availabilityText === "" ? "—" : item.availabilityText}</td>
+        <div className="fs-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Kód</th>
+                <th>Názov</th>
+                <th>Veľkosť</th>
+                <th>Stav</th>
+                <th>Sklad</th>
+                <th>Cena</th>
+                <th>Dostupnosť podľa Shoptetu</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {items.map((item) => (
+                <tr key={item.code} data-testid={`variant-${item.code}`}>
+                  <td>{item.code}</td>
+                  <td>{item.name}</td>
+                  <td>{item.sizeLabel ?? "—"}</td>
+                  <td>
+                    {STATE_LABELS[item.state]}
+                    {item.missingSince !== null && (
+                      <>
+                        {" "}
+                        <strong data-testid={`missing-${item.code}`}>
+                          (chýba od {formatSkDate(item.missingSince)})
+                        </strong>
+                      </>
+                    )}
+                  </td>
+                  <td>{item.stock}</td>
+                  <td>{item.price === null ? "—" : `${item.price} ${item.currency ?? ""}`}</td>
+                  <td>{item.availabilityText === "" ? "—" : item.availabilityText}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </section>
   );

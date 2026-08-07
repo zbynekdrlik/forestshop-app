@@ -198,32 +198,34 @@ export function RestockSection({
               Feed pre porovnávače hovorí niečo iné než my — tieto varianty sa nestanú kandidátmi na
               prepnutie, kým sa rozpor nevysvetlí.
             </p>
-            <table>
-              <thead>
-                <tr>
-                  <th scope="col">Kód</th>
-                  <th scope="col">Názov</th>
-                  <th scope="col">Náš stav</th>
-                  <th scope="col">Feed hovorí</th>
-                  <th scope="col">Náš produkt</th>
-                </tr>
-              </thead>
-              <tbody>
-                {feedConflicts.rows.map((row) => (
-                  <tr key={row.variantCode} data-testid={`restock-feed-conflict-${row.variantCode}`}>
-                    <td>{row.variantCode}</td>
-                    <td>{row.productName}</td>
-                    <td>{STATE_LABEL[row.ourState]}</td>
-                    <td>{row.feedAvailability}</td>
-                    <td>
-                      <a href={row.ourUrl} target="_blank" rel="noreferrer noopener">
-                        náš ↗
-                      </a>
-                    </td>
+            <div className="fs-table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">Kód</th>
+                    <th scope="col">Názov</th>
+                    <th scope="col">Náš stav</th>
+                    <th scope="col">Feed hovorí</th>
+                    <th scope="col">Náš produkt</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {feedConflicts.rows.map((row) => (
+                    <tr key={row.variantCode} data-testid={`restock-feed-conflict-${row.variantCode}`}>
+                      <td>{row.variantCode}</td>
+                      <td>{row.productName}</td>
+                      <td>{STATE_LABEL[row.ourState]}</td>
+                      <td>{row.feedAvailability}</td>
+                      <td>
+                        <a href={row.ourUrl} target="_blank" rel="noreferrer noopener">
+                          náš ↗
+                        </a>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </>
         )}
       </div>
@@ -233,32 +235,34 @@ export function RestockSection({
         {events.length === 0 ? (
           <p className="empty">Zatiaľ nič — automatizácia ešte nič neprepla.</p>
         ) : (
-          <table>
-            <thead>
-              <tr>
-                <th scope="col">Kedy</th>
-                <th scope="col">Kód</th>
-                <th scope="col">Názov</th>
-                <th scope="col">Dodávateľ</th>
-                <th scope="col">Čo dodávateľ hlásil</th>
-              </tr>
-            </thead>
-            <tbody>
-              {events.map((event) => (
-                <tr key={event.id} data-testid={`restock-event-${event.variantCode}`}>
-                  <td>{formatSkDateTime(event.at)}</td>
-                  <td>{event.variantCode}</td>
-                  <td>{event.productName}</td>
-                  <td>{event.supplier ?? "—"}</td>
-                  <td>
-                    <a href={event.supplierLink} target="_blank" rel="noreferrer noopener">
-                      {event.supplierAvailabilityText === "" ? "skladom" : event.supplierAvailabilityText}
-                    </a>
-                  </td>
+          <div className="fs-table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Kedy</th>
+                  <th scope="col">Kód</th>
+                  <th scope="col">Názov</th>
+                  <th scope="col">Dodávateľ</th>
+                  <th scope="col">Čo dodávateľ hlásil</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {events.map((event) => (
+                  <tr key={event.id} data-testid={`restock-event-${event.variantCode}`}>
+                    <td>{formatSkDateTime(event.at)}</td>
+                    <td>{event.variantCode}</td>
+                    <td>{event.productName}</td>
+                    <td>{event.supplier ?? "—"}</td>
+                    <td>
+                      <a href={event.supplierLink} target="_blank" rel="noreferrer noopener">
+                        {event.supplierAvailabilityText === "" ? "skladom" : event.supplierAvailabilityText}
+                      </a>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
@@ -322,41 +326,43 @@ export function RestockSection({
         ) : waitingList.rows.length === 0 ? (
           <p className="empty">Nič nečaká — žiadny vypredaný produkt nemá čerstvé potvrdenie od dodávateľa.</p>
         ) : (
-          <table>
-            <thead>
-              <tr>
-                <th scope="col">Kód</th>
-                <th scope="col">Názov</th>
-                <th scope="col">Dodávateľ</th>
-                <th scope="col">Náš produkt</th>
-                <th scope="col">U dodávateľa</th>
-                <th scope="col">Čo hlási</th>
-              </tr>
-            </thead>
-            <tbody>
-              {waitingList.rows.map((row) => (
-                <tr key={row.variantCode} data-testid={`restock-waiting-${row.variantCode}`}>
-                  <td>{row.variantCode}</td>
-                  <td>{row.productName}</td>
-                  <td>{row.supplier ?? "—"}</td>
-                  <td>
-                    <a href={ourProductLink(row.variantCode, row.ourUrl)} target="_blank" rel="noreferrer noopener">
-                      náš ↗
-                    </a>
-                  </td>
-                  <td>
-                    <a href={row.supplierLink} target="_blank" rel="noreferrer noopener">
-                      dodávateľ ↗
-                    </a>
-                  </td>
-                  <td>
-                    {row.supplierAvailabilityText === "" ? "skladom" : row.supplierAvailabilityText}
-                    {row.supplierPrice !== null && ` · ${row.supplierPrice}`}
-                  </td>
+          <div className="fs-table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Kód</th>
+                  <th scope="col">Názov</th>
+                  <th scope="col">Dodávateľ</th>
+                  <th scope="col">Náš produkt</th>
+                  <th scope="col">U dodávateľa</th>
+                  <th scope="col">Čo hlási</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {waitingList.rows.map((row) => (
+                  <tr key={row.variantCode} data-testid={`restock-waiting-${row.variantCode}`}>
+                    <td>{row.variantCode}</td>
+                    <td>{row.productName}</td>
+                    <td>{row.supplier ?? "—"}</td>
+                    <td>
+                      <a href={ourProductLink(row.variantCode, row.ourUrl)} target="_blank" rel="noreferrer noopener">
+                        náš ↗
+                      </a>
+                    </td>
+                    <td>
+                      <a href={row.supplierLink} target="_blank" rel="noreferrer noopener">
+                        dodávateľ ↗
+                      </a>
+                    </td>
+                    <td>
+                      {row.supplierAvailabilityText === "" ? "skladom" : row.supplierAvailabilityText}
+                      {row.supplierPrice !== null && ` · ${row.supplierPrice}`}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>
