@@ -5,9 +5,11 @@ import type { Database } from "../db/client.js";
 import { log } from "../logger.js";
 import { record } from "../modules/audit/service.js";
 import type { DpdPortalConfig } from "../modules/dpd/config.js";
+import type { OrderDpdPickupOutcome, RunOrderDpdPickupOptions } from "../modules/dpd/pickup-playwright.js";
 import { runOrderDpdPickupIsolated } from "../modules/dpd/pickup-playwright.js";
 import { getDpdShipmentPreviews, listDpdShippableOrders } from "../modules/dpd/queries.js";
 import { recordDpdPickupRequest, recordDpdShipmentFailure, recordDpdShipmentSuccess } from "../modules/dpd/record.js";
+import type { CreateDpdShipmentOutcome, RunCreateDpdShipmentOptions } from "../modules/dpd/shipment-playwright.js";
 import { runCreateDpdShipmentIsolated } from "../modules/dpd/shipment-playwright.js";
 import { requireRole, requireUser, type AppBindings } from "./middleware.js";
 import { requireSameOrigin } from "./origin-check.js";
@@ -15,9 +17,15 @@ import { requireSameOrigin } from "./origin-check.js";
 // HTTP vrstva dodá `db`; prihlasovacie údaje do DPD portálu zostavuje
 // `index.ts` raz pri štarte (rovnaký vzor ako `restock-routes.ts`'s
 // `RestockRunDeps`) — `config: undefined` = appka beží ďalej, len akcie
-// odosielajúce do DPD vrátia 503 "nenakonfigurované".
+// odosielajúce do DPD vrátia 503 "nenakonfigurované". `createShipment`/
+// `orderPickup` sú INJEKTOVANÉ (predvolene skutočný izolovaný Playwright
+// robot) presne z rovnakého dôvodu ako `postaUncollected.trackingClient`/
+// `nedostupne.mailTransport` — testy nahradia falošnou implementáciou a
+// NIKDY sa nedotknú reálneho DPD účtu ani nespustia skutočný Chromium.
 export interface DpdRunDeps {
   readonly config: DpdPortalConfig | undefined;
+  readonly createShipment?: (options: RunCreateDpdShipmentOptions) => Promise<CreateDpdShipmentOutcome>;
+  readonly orderPickup?: (options: RunOrderDpdPickupOptions) => Promise<OrderDpdPickupOutcome>;
 }
 
 const orderIdsBody = z.object({
@@ -36,6 +44,8 @@ function toWeightOverrides(raw: Record<string, string> | undefined): Map<string,
 const NOT_CONFIGURED_MESSAGE = "DPD preprava nie je nakonfigurovaná (chýba DPD_PORTAL_USER/DPD_PORTAL_PASSWORD)";
 
 export function registerDpdRoutes(app: Hono<AppBindings>, db: Database, deps: DpdRunDeps): void {
+  const createShipment = deps.createShipment ?? runCreateDpdShipmentIsolated;
+  const orderPickup = deps.orderPickup ?? runOrderDpdPickupIsolated;
   app.get("/api/dpd/orders", requireUser(db), async (c) => {
     const orders = await listDpdShippableOrders(db);
     return c.json({ configured: deps.config !== undefined, orders });
@@ -73,7 +83,7 @@ export function registerDpdRoutes(app: Hono<AppBindings>, db: Database, deps: Dp
             return { orderId: shipment.orderId, ok: false as const, error: "Chýba doručovacia adresa" };
           }
           try {
-            const outcome = await runCreateDpdShipmentIsolated({ config, shipment });
+            const outcome = await createShipment({ config, shipment });
             const attempt = { orderId: shipment.orderId, weightKg: shipment.weightKg, codAmount: shipment.codAmount };
             if (outcome.ok && outcome.parcelNumber !== null) {
               await recordDpdShipmentSuccess(db, attempt, outcome.parcelNumber);
@@ -116,7 +126,7 @@ export function registerDpdRoutes(app: Hono<AppBindings>, db: Database, deps: Dp
       const user = c.get("user");
       let outcome: { readonly ok: boolean; readonly errorDetail: string | null };
       try {
-        outcome = await runOrderDpdPickupIsolated({ config, pickupDate });
+        outcome = await orderPickup({ config, pickupDate });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         outcome = { ok: false, errorDetail: message };

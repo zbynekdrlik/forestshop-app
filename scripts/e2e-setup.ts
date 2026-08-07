@@ -236,7 +236,10 @@ await db.execute(
   // takže CASCADE ich nikdy nestrhne. Bez nich by potvrdenia dodávateľa z
   // PREDOŠLÉHO e2e behu prežili do ďalšieho (presne past popísaná v
   // `.claude/rules/supplier-stock.md`, tam pre `tests/helpers/db.ts`).
-  'TRUNCATE TABLE ingest_issue, variant, product, catalog_snapshot, job_run, audit_events, sessions, users, order_line, "order", supplier_contact, pairing, supplier, order_open_status, posta_uncollected_settings, posta_uncollected_state, order_reminder_settings, order_reminder_state, nedostupne_state, nedostupne_replacement_link, mail_template, mail_template_history, supplier_stock, restock_settings, restock_event, shop_product_url, theme_color RESTART IDENTITY CASCADE',
+  // "dpd_pickup_request" (issue 292) je rovnaký prípad znova — bez FK,
+  // pridané ručne (`tests/helpers/db.ts` má rovnaký riadok navyše).
+  // "dpd_shipment" NETREBA — FK do "order" ho CASCADE strhne automaticky.
+  'TRUNCATE TABLE ingest_issue, variant, product, catalog_snapshot, job_run, audit_events, sessions, users, order_line, "order", supplier_contact, pairing, supplier, order_open_status, posta_uncollected_settings, posta_uncollected_state, order_reminder_settings, order_reminder_state, nedostupne_state, nedostupne_replacement_link, mail_template, mail_template_history, supplier_stock, restock_settings, restock_event, shop_product_url, theme_color, dpd_pickup_request RESTART IDENTITY CASCADE',
 );
 // Rovnaký dôvod ako `tests/helpers/db.ts`: bez tohto by "Na objednanie" bolo
 // v CELOM e2e behu prázdne pre KAŽDÚ objednávku (žiadny nastavený otvorený

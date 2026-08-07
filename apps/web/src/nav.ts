@@ -2,6 +2,7 @@ import type { ComponentType } from "react";
 import type { Me } from "./api.js";
 import { CatalogPage } from "./components/CatalogPage.js";
 import { ClaimOrdersSection } from "./components/ClaimOrdersSection.js";
+import { DpdSection } from "./components/DpdSection.js";
 import { ExchangeOrdersSection } from "./components/ExchangeOrdersSection.js";
 import { MailLogSection } from "./components/MailLogSection.js";
 import { MailTemplatesSection } from "./components/MailTemplatesSection.js";
@@ -107,6 +108,12 @@ export const NAV: readonly NavFolder[] = [
       // (nie do Automatizácie) z rovnakého dôvodu ako "Na objednanie" —
       // obsluha na nej pracuje, žiadny plán/zapnuté-vypnuté koncept.
       { id: "upozornenia", label: "Upozornenia", icon: "🔔", Component: UpozorneniaSection, wide: true },
+      // issue 292: majiteľ (Discord, 6.8.2026) — jedno tlačidlo na objednanie
+      // prepravy DPD. Patrí sem (nie do Automatizácie) z rovnakého dôvodu ako
+      // "Na objednanie"/"Zlúčenie objednávok" — obsluha na nej pracuje ručne
+      // (vyberá objednávky, potvrdzuje náhľad), žiadny plán/zapnuté-vypnuté
+      // koncept.
+      { id: "dpd", label: "Preprava DPD", icon: "🚚", Component: DpdSection, wide: true },
     ],
   },
   {
