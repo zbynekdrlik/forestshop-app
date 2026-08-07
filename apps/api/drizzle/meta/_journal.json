@@ -288,6 +288,13 @@
       "when": 1785975493179,
       "tag": "0040_skinny_nekra",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1786084381095,
+      "tag": "0041_tiny_puma",
+      "breakpoints": true
     }
   ]
 }
