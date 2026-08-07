@@ -360,6 +360,32 @@ paths:
   vypredaný text sa NENAŠIEL napriek prehľadaniu 20 uložených odkazov + 3
   kategórií — presne ako `wetland.sk` (issue 230): pravidlo sa NEHÁDA,
   žiadne vlastné mapovanie "Do N dní" → unavailable sa nepridalo.
+- **`index.ts`'s `createApp(db, {...})` volanie MUSÍ reálne odovzdať KAŽDÝ
+  voliteľný HTTP dep kľúč, na ktorý sa `http/app.ts` odvoláva — chýbajúci
+  kľúč sa NEPREJAVÍ pri `tsc`/lint (`AppOptions`'s pole je `?:`, teda platne
+  chýbajúce), len ticho spadne na fail-closed fallback.** Issue 319: `restock`
+  kľúč v `createApp(...)` chýbal úplne (na rozdiel od `postaUncollected`/
+  `orderReminder`/`nedostupne`/`orderMerge`/`dpd`, ktoré tam všetky sú),
+  hoci `runRestockFn` (o pár riadkov vyššie, pre scheduler) má REÁLNE
+  `shoptetAdminUser`/`shoptetAdminPassword` premenné správne zostavené.
+  Dôsledok: manuálne "Spustiť teraz" (`POST /api/restock/run-now`) v
+  produkcii VŽDY zlyhalo na prihlásení do Shoptetu (prázdne prihlasovacie
+  údaje z `http/app.ts`'s fallbacku), zatiaľ čo naplánovaný nočný beh
+  fungoval normálne — appka teda "z väčšiny funguje", takže sa to
+  neprejavilo ako zjavná regresia. Nájdené AŽ živým dôkazom proti produkčnej
+  `job_run`/`audit_events` tabuľke (job_run `failure` riadok s presne
+  predpovedanou chybovou hláškou, tesne po ručnom "Spustiť teraz" kliku, s
+  chýbajúcim zodpovedajúcim `audit_events` záznamom — HTTP handler
+  `record()` sa volá LEN pri úspechu). **Test pri KAŽDEJ ĎALŠEJ novej
+  automatizácii pridávajúcej svoj vlastný voliteľný dep do `AppOptions`
+  (`http/app.ts`):** over PRIAMO, že `index.ts`'s `createApp(db, {...})`
+  volanie ten kľúč SKUTOČNE odovzdáva — `grep -n "options\." apps/api/src/
+  http/app.ts` (čo trasa POTREBUJE) vs. `createApp(db, {` blok v `index.ts`
+  (čo REÁLNE dostáva) sa musia zhodovať. `index.ts` beží celý na
+  module-top-level (migrácia + `serve()`), takže sa nedá bezpečne
+  importovať v teste — regresný test preto overuje ZDROJOVÝ TEXT staticky
+  (`apps/api/src/index-wiring.test.ts`), regexom na skutočné premenné, nie
+  len na prítomnosť reťazca s menom kľúča.
 - **Celý beh (~2160 odkazov, sériový, `PER_HOST_DELAY_MS` medzi rovnakým
   hostom) trvá reálne ~72 minút** (zmerané z `job_run.started_at`/
   `finished_at`, viacero po sebe idúcich nočných behov). Post-deploy
