@@ -19,8 +19,14 @@ import { fileURLToPath } from "node:url";
  * (poznámka objednávky), obe spúšťajú Chromium cez tú istú
  * `loginToShoptetAdmin`.
  *
- * `serialization: "advanced"` (V8 structured clone, nie JSON) — `input`
- * môže niesť `Buffer` (CSV obsah) priamo, bez ručného base64 kódovania.
+ * `serialization: "advanced"` (V8 structured clone, nie JSON) — POZOR:
+ * naživo overené, že ani TOTO neprenesie `Buffer` ako skutočnú `Buffer`
+ * inštanciu (príde na druhej strane ako obyčajný `Object`) — volajúci s
+ * binárnym obsahom (napr. `playwright-import.ts`'s `runShoptetImportIsolated`)
+ * ho preto MUSIA poslať ako base64 reťazec a dekódovať späť VNÚTRI workera,
+ * nikdy sa nespoliehať na to, že "advanced" mode Buffer prenesie bezo zmeny
+ * typu. `serialization: "advanced"` tu ostáva pre ostatné JS typy (Map, Set,
+ * `undefined` polia a pod.), ktoré JSON serializácia stráca/skresľuje.
  */
 export interface RunInChildProcessOptions {
   readonly timeoutMs?: number;
