@@ -91,6 +91,25 @@ const VRATENA_ZASIELKA_KARTA = {
   status: "otvorene" as const,
 };
 
+// issue 301: štvrtý automatický zdroj — objednávka, ktorá dlho visí v
+// nevybavenom stave. Preklik ide na TEN ISTÝ Shoptet-admin odkaz ako
+// `VRATENIE_KARTA` (obe sú "otvoriť objednávku v administrácii"), preto
+// zdieľa jej `LINK_LABELS` štítok.
+const OBJEDNAVKA_VISI_KARTA = {
+  id: "visi-1",
+  type: "objednavka_visi" as const,
+  source: "appka" as const,
+  title: "Objednávka 20700002 visí 20 dní v stave „Vybavuje sa“",
+  details: "Zákazník: Ján Novák",
+  link: "https://www.forestshop.sk/admin/vyhladavanie/?string=20700002&src=orders",
+  dueAt: null,
+  postponedUntil: null,
+  seenAt: "2026-08-07T08:00:00.000Z",
+  resolvedAt: null,
+  createdAt: "2026-08-07T08:00:00.000Z",
+  status: "otvorene" as const,
+};
+
 afterEach(() => {
   cleanup();
   vi.resetAllMocks();
@@ -135,6 +154,18 @@ it("issue 299: karta 'Vrátená zásielka' zobrazí vlastný typový štítok a 
   expect(link.getAttribute("href")).toBe(VRATENA_ZASIELKA_KARTA.link);
   expect(link.getAttribute("target")).toBe("_blank");
   expect(link.getAttribute("rel")).toBe("noreferrer");
+});
+
+it("issue 301: karta 'Objednávka visí' zobrazí vlastný typový štítok a odkaz do Shoptet administrácie", async () => {
+  markUpozorneniaSeen.mockResolvedValue(undefined);
+  fetchUpozornenia.mockResolvedValue([OBJEDNAVKA_VISI_KARTA]);
+  render(<UpozorneniaSection role="manazer" onSessionExpired={vi.fn()} />);
+  await screen.findByTestId("upozornenie-visi-1");
+
+  expect(screen.getByTestId("upozornenie-type-visi-1").textContent).toBe("Objednávka visí");
+  const link = screen.getByTestId<HTMLAnchorElement>("upozornenie-link-visi-1");
+  expect(link.textContent).toBe("Otvoriť objednávku v Shoptete");
+  expect(link.getAttribute("href")).toBe(OBJEDNAVKA_VISI_KARTA.link);
 });
 
 it("prázdny zoznam zobrazí informačnú vetu (po označení videných)", async () => {
