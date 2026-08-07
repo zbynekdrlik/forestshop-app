@@ -17,6 +17,9 @@ const TYPE_LABELS: Readonly<Record<UpozornenieRow["type"], string>> = {
   vlastna_poznamka: "Moja poznámka",
   nevyzdvihnuta_zasielka: "Nevyzdvihnutá zásielka",
   vratenie: "Vrátenie",
+  // issue 299: zásielka vrátená ODOSIELATEĽOVI (Pošta SK) — nezamieňať s
+  // `vratenie` vyššie (vrátený TOVAR, stav objednávky).
+  vratena_zasielka: "Vrátená zásielka",
 };
 
 // Code review (issue 269, druhé kolo, finding 10): štítok odkazu sa odvodzuje
@@ -32,6 +35,9 @@ const TYPE_LABELS: Readonly<Record<UpozornenieRow["type"], string>> = {
 const LINK_LABELS: Readonly<Partial<Record<UpozornenieRow["type"], string>>> = {
   nevyzdvihnuta_zasielka: "Sledovať zásielku na Pošte",
   vratenie: "Otvoriť objednávku v Shoptete",
+  // issue 299: rovnaký `trackingLink` helper ako `nevyzdvihnuta_zasielka`
+  // (obe sú Pošta SK zásielkové odkazy), preto rovnaký štítok.
+  vratena_zasielka: "Sledovať zásielku na Pošte",
 };
 const DEFAULT_LINK_LABEL = "Otvoriť odkaz";
 
