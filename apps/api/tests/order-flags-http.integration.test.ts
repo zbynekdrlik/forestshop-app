@@ -1,0 +1,275 @@
+import { eq } from "drizzle-orm";
+import { afterEach, describe, expect, it } from "vitest";
+import { auditEvents, orders, users } from "../src/db/schema.js";
+import { createApp } from "../src/http/app.js";
+import { resetLoginRateLimit } from "../src/http/login-rate-limit.js";
+import { hashPassword } from "../src/modules/auth/passwords.js";
+import type { UserRole } from "../src/modules/auth/service.js";
+import { returnUpozornenieDedupKey } from "../src/modules/orders/return-status.js";
+import { resolveUpozornenie, upsertUpozornenie } from "../src/modules/upozornenia/service.js";
+import { withCleanDb } from "./helpers/db.js";
+
+// issue 290: HTTP vrstva pre "Eshop → Výmena tovaru / Vrátený tovar /
+// Reklamácie". Vlastný súbor (rovnaký dôvod ako `upozornenia-http
+// .integration.test.ts`, eslint `max-lines: 400`).
+const HESLO = "test-heslo-abc"; // testovacie údaje, nie tajomstvo
+
+let close: (() => Promise<void>) | undefined;
+afterEach(async () => {
+  await close?.();
+  close = undefined;
+  resetLoginRateLimit();
+});
+
+async function boot(role: UserRole) {
+  const ctx = await withCleanDb();
+  close = ctx.close;
+  const [pouzivatel] = await ctx.db
+    .insert(users)
+    .values({ email: "pouzivatel@forestshop.sk", passwordHash: await hashPassword(HESLO), displayName: "Test", role })
+    .returning({ id: users.id });
+  if (pouzivatel === undefined) throw new Error("testovací používateľ sa nepodarilo vložiť");
+  const app = createApp(ctx.db, { cookieSecure: false });
+  const login = await app.request("/api/login", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ email: "pouzivatel@forestshop.sk", password: HESLO }),
+  });
+  const cookie = (login.headers.get("set-cookie") ?? "").split(";")[0] ?? "";
+  return { app, cookie, db: ctx.db, userId: pouzivatel.id };
+}
+
+let poradie = 0;
+async function insertOrder(
+  db: Awaited<ReturnType<typeof boot>>["db"],
+  statusName: string,
+  options: { readonly comment?: string | null } = {},
+): Promise<{ id: string; externalOrderId: string }> {
+  poradie += 1;
+  const externalOrderId = `9${String(poradie).padStart(5, "0")}`;
+  const [order] = await db
+    .insert(orders)
+    .values({
+      externalOrderId,
+      customerName: "Zákazník testovaný",
+      statusName,
+      comment: options.comment ?? null,
+      placedAt: new Date("2026-07-20T00:00:00Z"),
+      totalPriceWithVat: "42.00",
+    })
+    .returning({ id: orders.id, externalOrderId: orders.externalOrderId });
+  if (order === undefined) throw new Error("insert objednávky zlyhal");
+  return order;
+}
+
+describe("GET /api/order-flags/exchange", () => {
+  it("vráti len objednávky v stave 'Vybavená výmena', s nevybavenosťou podľa otvorenej vratenie karty", async () => {
+    const { app, cookie, db } = await boot("citanie");
+    const vymena = await insertOrder(db, "Vybavená výmena", { comment: "poznámka k výmene" });
+    await insertOrder(db, "Vybavená"); // iný stav — nesmie sa objaviť
+    await insertOrder(db, "Vratený tovar"); // iný stav — nesmie sa objaviť
+    await upsertUpozornenie(db, {
+      type: "vratenie",
+      source: "appka",
+      title: "test",
+      dedupKey: returnUpozornenieDedupKey(vymena.externalOrderId),
+      now: new Date("2026-07-21T00:00:00Z"),
+    });
+
+    const res = await app.request("/api/order-flags/exchange", { headers: { cookie } });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { orders: readonly Record<string, unknown>[] };
+    expect(body.orders).toHaveLength(1);
+    expect(body.orders[0]?.["externalOrderId"]).toBe(vymena.externalOrderId);
+    expect(body.orders[0]?.["statusName"]).toBe("Vybavená výmena");
+    expect(body.orders[0]?.["comment"]).toBe("poznámka k výmene");
+    expect(body.orders[0]?.["unresolved"]).toBe(true);
+  });
+
+  it("objednávka bez otvorenej vratenie karty je unresolved: false", async () => {
+    const { app, cookie, db } = await boot("citanie");
+    await insertOrder(db, "Vybavená výmena");
+
+    const res = await app.request("/api/order-flags/exchange", { headers: { cookie } });
+    const body = (await res.json()) as { orders: readonly Record<string, unknown>[] };
+    expect(body.orders).toHaveLength(1);
+    expect(body.orders[0]?.["unresolved"]).toBe(false);
+  });
+
+  it("VYRIEŠENÁ vratenie karta neznamená unresolved — len otvorená karta počíta", async () => {
+    const { app, cookie, db, userId } = await boot("citanie");
+    const vymena = await insertOrder(db, "Vybavená výmena");
+    const card = await upsertUpozornenie(db, {
+      type: "vratenie",
+      source: "appka",
+      title: "test",
+      dedupKey: returnUpozornenieDedupKey(vymena.externalOrderId),
+      now: new Date("2026-07-21T00:00:00Z"),
+    });
+    await resolveUpozornenie(db, { id: card.id, resolvedByUserId: userId, now: new Date("2026-07-22T00:00:00Z") });
+
+    const res = await app.request("/api/order-flags/exchange", { headers: { cookie } });
+    const body = (await res.json()) as { orders: readonly Record<string, unknown>[] };
+    expect(body.orders[0]?.["unresolved"]).toBe(false);
+  });
+
+  it("bez prihlásenia vráti 401", async () => {
+    const { app } = await boot("manazer");
+    const res = await app.request("/api/order-flags/exchange");
+    expect(res.status).toBe(401);
+  });
+});
+
+describe("GET /api/order-flags/returned", () => {
+  it("vráti objednávky v OBOCH stavoch — 'Vratený tovar' aj 'Vybavený Dobropis'", async () => {
+    const { app, cookie, db } = await boot("citanie");
+    const vrateny = await insertOrder(db, "Vratený tovar");
+    const dobropis = await insertOrder(db, "Vybavený Dobropis");
+    await insertOrder(db, "Vybavená výmena"); // iná stránka — nesmie sa objaviť
+
+    const res = await app.request("/api/order-flags/returned", { headers: { cookie } });
+    const body = (await res.json()) as { orders: readonly Record<string, unknown>[] };
+    const ids = body.orders.map((o) => o["externalOrderId"]);
+    expect(ids).toHaveLength(2);
+    expect(ids).toContain(vrateny.externalOrderId);
+    expect(ids).toContain(dobropis.externalOrderId);
+  });
+});
+
+describe("GET /api/order-flags/claims", () => {
+  it("prázdny zoznam, kým nikto nič neoznačil", async () => {
+    const { app, cookie, db } = await boot("citanie");
+    await insertOrder(db, "Vybavená");
+    const res = await app.request("/api/order-flags/claims", { headers: { cookie } });
+    const body = (await res.json()) as { orders: readonly unknown[] };
+    expect(body.orders).toEqual([]);
+  });
+
+  it("po označení sa objednávka objaví so svojou poznámkou, unresolved vždy true", async () => {
+    const { app, cookie, db } = await boot("manazer");
+    const objednavka = await insertOrder(db, "Vybavená");
+
+    const mark = await app.request("/api/order-flags/claims", {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({ orderCode: objednavka.externalOrderId, note: "chybný zips" }),
+    });
+    expect(mark.status).toBe(200);
+    expect(((await mark.json()) as { ok: boolean }).ok).toBe(true);
+
+    const res = await app.request("/api/order-flags/claims", { headers: { cookie } });
+    const body = (await res.json()) as { orders: readonly Record<string, unknown>[] };
+    expect(body.orders).toHaveLength(1);
+    expect(body.orders[0]?.["claimNote"]).toBe("chybný zips");
+    expect(body.orders[0]?.["unresolved"]).toBe(true);
+  });
+});
+
+describe("POST /api/order-flags/claims", () => {
+  it("čítanie ('citanie') nemôže označiť reklamáciu — 403", async () => {
+    const { app, cookie, db } = await boot("citanie");
+    const objednavka = await insertOrder(db, "Vybavená");
+    const res = await app.request("/api/order-flags/claims", {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({ orderCode: objednavka.externalOrderId }),
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it("neexistujúce číslo objednávky vráti ok:false s hláškou, nič neuloží", async () => {
+    const { app, cookie } = await boot("manazer");
+    const res = await app.request("/api/order-flags/claims", {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({ orderCode: "neexistuje-123" }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { ok: boolean; error?: string };
+    expect(body.ok).toBe(false);
+    expect(body.error).toBeTruthy();
+  });
+
+  it("označenie zapíše audit záznam s kým a poznámkou", async () => {
+    const { app, cookie, db, userId } = await boot("manazer");
+    const objednavka = await insertOrder(db, "Vybavená");
+    await app.request("/api/order-flags/claims", {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({ orderCode: objednavka.externalOrderId, note: "poznámka" }),
+    });
+
+    const [event] = await db.select().from(auditEvents).where(eq(auditEvents.action, "order.claim.marked"));
+    expect(event?.actorUserId).toBe(userId);
+    expect(event?.entityId).toBe(objednavka.id);
+  });
+});
+
+describe("POST /api/order-flags/claims/:id/clear", () => {
+  it("zruší označenie — objednávka zmizne zo zoznamu reklamácií", async () => {
+    const { app, cookie, db } = await boot("manazer");
+    const objednavka = await insertOrder(db, "Vybavená");
+    await app.request("/api/order-flags/claims", {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({ orderCode: objednavka.externalOrderId }),
+    });
+
+    const clear = await app.request(`/api/order-flags/claims/${objednavka.id}/clear`, {
+      method: "POST",
+      headers: { cookie },
+    });
+    expect(clear.status).toBe(200);
+    expect(((await clear.json()) as { ok: boolean }).ok).toBe(true);
+
+    const res = await app.request("/api/order-flags/claims", { headers: { cookie } });
+    const body = (await res.json()) as { orders: readonly unknown[] };
+    expect(body.orders).toEqual([]);
+  });
+
+  it("zrušenie NEOZNAČENEJ objednávky (nič neoznačené) je no-op ok:true — nikdy nespadne", async () => {
+    const { app, cookie, db } = await boot("manazer");
+    const objednavka = await insertOrder(db, "Vybavená");
+    const res = await app.request(`/api/order-flags/claims/${objednavka.id}/clear`, {
+      method: "POST",
+      headers: { cookie },
+    });
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { ok: boolean }).ok).toBe(true);
+  });
+
+  it("neexistujúce id objednávky vráti ok:false", async () => {
+    const { app, cookie } = await boot("manazer");
+    const res = await app.request("/api/order-flags/claims/00000000-0000-0000-0000-000000000000/clear", {
+      method: "POST",
+      headers: { cookie },
+    });
+    const body = (await res.json()) as { ok: boolean };
+    expect(body.ok).toBe(false);
+  });
+});
+
+describe("GET /api/order-flags/counts", () => {
+  it("spočíta nevybavené výmeny/vrátenia + aktuálne označené reklamácie", async () => {
+    const { app, cookie, db } = await boot("manazer");
+    const vymena = await insertOrder(db, "Vybavená výmena");
+    await upsertUpozornenie(db, {
+      type: "vratenie",
+      source: "appka",
+      title: "t",
+      dedupKey: returnUpozornenieDedupKey(vymena.externalOrderId),
+      now: new Date("2026-07-21T00:00:00Z"),
+    });
+    await insertOrder(db, "Vratený tovar"); // bez karty → 0 do returned count
+    const reklamacia = await insertOrder(db, "Vybavená");
+    await app.request("/api/order-flags/claims", {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({ orderCode: reklamacia.externalOrderId }),
+    });
+
+    const res = await app.request("/api/order-flags/counts", { headers: { cookie } });
+    const body = (await res.json()) as { exchange: number; returned: number; claims: number };
+    expect(body).toEqual({ exchange: 1, returned: 0, claims: 1 });
+  });
+});
