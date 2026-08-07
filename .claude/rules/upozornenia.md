@@ -312,3 +312,16 @@ paths:
   existujúce otvorené sa majú zatvoriť": over najprv, či nasledujúci
   naplánovaný beh prirodzene dorieši existujúce riadky (žiadna migrácia
   potrebná), predtým než sa píše jednorazový skript.
+- **Issue 299: ŠTVRTÁ pgEnum hodnota `vratena_zasielka` (zásielka vrátená
+  ODOSIELATEĽOVI podľa Pošta SK trackingu — nezamieňať s `vratenie`, tovar
+  vrátený zákazníkom podľa STAVU OBJEDNÁVKY) — plné odôvodnenie vrátane
+  KRITICKEJ poznámky "presný stateCode nebol nikdy naživo pozorovaný, preto
+  sa NIKDY necachuje ako trvalý" je v `.claude/rules/posta-uncollected.md`
+  (rovnaký denný beh ako #268/`nevyzdvihnuta_zasielka`, aby sa neduplikovalo
+  dvakrát). Migrácia `0041` (`ALTER TYPE ... ADD VALUE`), rovnaký vzor ako
+  `vratenie`. **Prvý prípad DVOCH RÔZNYCH automatických zdrojov karty
+  BEŽIACICH V TOM ISTOM `run.ts` priechode naraz** — `nevyzdvihnuta_zasielka`
+  (dedupKey `posta:<číslo>`) a `vratena_zasielka` (dedupKey
+  `posta-vratena:<číslo>`) sú SAMOSTATNÉ mená priestorov nad tou istou
+  zásielkou, aby mohli koexistovať/prepínať sa bez kolízie na čiastočnom
+  unique indexe.

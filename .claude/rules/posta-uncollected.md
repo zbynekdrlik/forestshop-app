@@ -143,3 +143,52 @@ paths:
   `classifyEmptyMessage`'s výsledok pre každého; over najprv, či niektorý
   INÝ spec súbor (najmä `upozornenia.spec.ts` samo) nespolieha na skutočne
   prázdnu tabuľku, než pridáš seed.
+- **Issue 299 (šéf, cez majiteľa): zásielka VRÁTENÁ ODOSIELATEĽOVI je
+  TRETÍ automatický zdroj karty na Upozorneniach (`vratena_zasielka`) —
+  DRUHÝ tvar z TOHO ISTÉHO denného behu ako `nevyzdvihnuta_zasielka`, ale
+  s ÚPLNE INÝM významom (nezamieňať s `vratenie`, ktorá sleduje vrátenie
+  TOVARU podľa STAVU OBJEDNÁVKY — táto sleduje vrátenie SAMOTNEJ ZÁSIELKY
+  podľa TRACKINGU). Šéf pôvodne priložil snímku e-mailovej schránky
+  (čítanie schránky je nová schopnosť, appka zatiaľ len odosiela) — ticket
+  preto ZÁMERNE zúžil rozsah na to, čo appka UŽ VIE z existujúcich dát:
+  Pošta SK-ho tracking, ktorý táto automatizácia už denne sťahuje pre
+  "Nevyzdvihnuté zásielky".
+- **KRITICKÉ pre KAŽDÚ budúcu zmenu klasifikácie vrátenia: presný
+  `stateCode`, ktorým api.posta.sk hlási zásielku vrátenú odosielateľovi,
+  NEBOL NIKDY naživo pozorovaný.** Živý probe (2026-07-25, dokumentovaný v
+  `constants.ts`'s `TERMINAL_STATE_CODES` komentári aj v starej appke's
+  `posta_uncollected.py` #226) vrátil presne štyri kódy — received/
+  transit/notified/delivered. `"returned"` je preto HYPOTÉZA (rovnaký
+  reťazec, aký starý #226 aj TOHOTO modulu vlastný `terminalState` test
+  dávnejšie zvažovali ako najpravdepodobnejší, no nikdy nepotvrdili) —
+  `logic.ts`'s `isReturnedToSender` beží na tejto NEPOTVRDENEJ hodnote
+  (`constants.ts`'s `RETURNED_STATE_CODES`). **Zámerne NEPRIDANÉ do
+  `TERMINAL_STATE_CODES`** (staré #226 obava: keby "returned" v skutočnosti
+  znamenalo "vrátená na dodaciu poštu", teda STÁLE vyzdvihnuteľná, trvalé
+  cachovanie by ju ticho vyradilo z eskalácie) — klasifikácia sa preto
+  NIKDY necachuje a overuje sa ZNOVA pri KAŽDOM behu, kým zásielka zostáva
+  v 30-dňovom okne. Toto je aj sebaopravný mechanizmus: karta
+  `vratena_zasielka` sa AUTO-ZAVRIE, len čo tracking prestane hlásiť tento
+  kód (`run.ts` volá `autoResolveByDedupKey` na `returnedDedupKey` na
+  KAŽDOM "nie je vrátené" priechode, nielen raz). Prvá SKUTOČNÁ vrátená
+  zásielka na produkcii je príležitosť potvrdiť/opraviť `"returned"` na
+  skutočný pozorovaný kód.
+- **`postaReturnedUpozornenieDedupKey` (`posta-vratena:<číslo>`) je
+  SAMOSTATNÝ menný priestor od `postaUpozornenieDedupKey` (`posta:<číslo>`)
+  — tá istá zásielka môže mať OBIDVE karty súčasne (napr. deň, keď sa
+  vrátenie prvý raz zaznamená, `run.ts` v JEDNOM priechode zavrie
+  `nevyzdvihnuta_zasielka` A založí `vratena_zasielka`) bez kolízie na
+  čiastočnom unique indexe.** Pri KAŽDOM ĎALŠOM novom "tvare" z TOHO
+  ISTÉHO denného behu, čo potrebuje VLASTNÚ kartu s iným významom: nový
+  prefix, nikdy zdieľaný dedupKey s existujúcim zdrojom.
+- **UI (`UpozornenieCard.tsx`) zdieľa `LINK_LABELS`'s "Sledovať zásielku na
+  Pošte" s `nevyzdvihnuta_zasielka`** (rovnaký `trackingLink` helper, obe
+  sú Pošta SK zásielkové odkazy) — ale má VLASTNÝ `TYPE_LABELS` štítok
+  ("Vrátená zásielka"), aby sa dala odlíšiť od "Nevyzdvihnutá zásielka" v
+  zozname. **Rovnaký pattern ako issue 298: žiadna nová E2E fixtúra**
+  (dôvod vyššie stále platí — `upozornenie` je globálna tabuľka) — pokrytie
+  je integračný test (`posta-uncollected-run-returned.integration
+  .test.ts`, VLASTNÝ súbor od `posta-uncollected-run.integration.test.ts`,
+  aby ho pridanie tejto skupiny neposunulo nad eslint `max-lines: 400`) +
+  vitest komponentový test (`UpozorneniaSection.test.tsx`'s
+  `VRATENA_ZASIELKA_KARTA` fixtúra).
