@@ -13,6 +13,9 @@ const TYPE_LABELS: Readonly<Record<ResolvedUpozornenieRow["type"], string>> = {
   vlastna_poznamka: "Moja poznámka",
   nevyzdvihnuta_zasielka: "Nevyzdvihnutá zásielka",
   vratenie: "Vrátenie",
+  // issue 299: zásielka vrátená ODOSIELATEĽOVI (Pošta SK) — nezamieňať s
+  // `vratenie` vyššie (vrátený TOVAR, stav objednávky).
+  vratena_zasielka: "Vrátená zásielka",
 };
 
 export function UpozorneniaResolvedList({
