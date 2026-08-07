@@ -18,14 +18,17 @@ import { DEFAULT_TAB_ID, HIDDEN_TABS, NAV, findTab, isVisibleTabId } from "./nav
 // položky vnútri každého priečinka ostali nezmenené.
 // Issue 290 pridalo TRI ďalšie položky ("Výmena tovaru"/"Vrátený
 // tovar"/"Reklamácie") HNEĎ POD "Nedostupné tovary" (šéfovo zadanie:
-// "pridať dalšie polička - pod nedostupné tovarý").
+// "pridať dalšie polička - pod nedostupné tovarý"). Issue 311 pridalo
+// "Vypredané → Skladom: návrhy odkazov" hneď za "Vypredané → Skladom" v
+// Automatizáciách (rovnaká automatizácia, doplnenie chýbajúcich odkazov,
+// ktoré ju živia).
 // Tento test je najbližšie k tomu, čo strojovo overiť dá (registrácia, nie DOM).
-it("NAV má tri priečinky (Eshop/Systém/Automatizácie), s 9/3/4 záložkami v poradí podľa dôležitosti", () => {
+it("NAV má tri priečinky (Eshop/Systém/Automatizácie), s 9/3/5 záložkami v poradí podľa dôležitosti", () => {
   expect(NAV).toHaveLength(3);
   expect(NAV.map((f) => f.label)).toEqual(["Eshop", "Systém", "Automatizácie"]);
   expect(NAV[0]?.tabs).toHaveLength(9);
   expect(NAV[1]?.tabs).toHaveLength(3);
-  expect(NAV[2]?.tabs).toHaveLength(4);
+  expect(NAV[2]?.tabs).toHaveLength(5);
   expect(NAV[0]?.tabs.map((t) => t.label)).toEqual([
     "Na objednanie",
     "Nedostupné tovary",
@@ -44,6 +47,8 @@ it("NAV má tri priečinky (Eshop/Systém/Automatizácie), s 9/3/4 záložkami v
   expect(NAV[2]?.tabs.map((t) => t.label)).toEqual([
     // issue 213: prepínanie vypredaných produktov späť na skladom.
     "Vypredané → Skladom",
+    // issue 311: návrh dodávateľského odkazu pre vypredané produkty bez neho.
+    "Vypredané → Skladom: návrhy odkazov",
     "Nevyzdvihnuté zásielky",
     "Pripomienky objednávok",
     "Odoslané e-maily",
@@ -71,6 +76,7 @@ it("findTab nájde viditeľnú aj skrytú záložku podľa id, neznáme id vrát
   expect(findTab("exchange")?.label).toBe("Výmena tovaru");
   expect(findTab("returned")?.label).toBe("Vrátený tovar");
   expect(findTab("claims")?.label).toBe("Reklamácie");
+  expect(findTab("restock-links")?.label).toBe("Vypredané → Skladom: návrhy odkazov");
   expect(findTab("neexistuje")).toBeUndefined();
 });
 
@@ -87,6 +93,8 @@ it("isVisibleTabId rozlíši viditeľné (NAV) od skrytých (HIDDEN_TABS)", () =
   expect(isVisibleTabId("exchange")).toBe(true);
   expect(isVisibleTabId("returned")).toBe(true);
   expect(isVisibleTabId("claims")).toBe(true);
+  // issue 311: nová viditeľná záložka "Vypredané → Skladom: návrhy odkazov".
+  expect(isVisibleTabId("restock-links")).toBe(true);
   for (const hiddenId of Object.keys(HIDDEN_TABS)) {
     expect(isVisibleTabId(hiddenId)).toBe(false);
   }

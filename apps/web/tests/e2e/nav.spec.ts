@@ -23,8 +23,11 @@ const E2E_NAV_EMAIL = "e2e-nav@forestshop.sk";
 // `upozornenia.spec.ts`, rovnaký vzor). Issue 290 (2026-08-07) pridáva TRI
 // ďalšie záložky HNEĎ POD "Nedostupné tovary" — "Výmena tovaru"/"Vrátený
 // tovar"/"Reklamácie" — šestnásta záložka celkovo (funkčný test v
-// samostatnom `order-flags.spec.ts`, rovnaký vzor).
-test("ľavé menu má tri priečinky (Systém/Eshop/Automatizácie) so šestnástimi záložkami, klik prepne obrazovku, panel sa zbalí do lišty a stav si pamätá, konzola je čistá", async ({
+// samostatnom `order-flags.spec.ts`, rovnaký vzor). Issue 311 (2026-08-07)
+// pridáva "Vypredané → Skladom: návrhy odkazov" HNEĎ ZA "Vypredané →
+// Skladom" — sedemnásta záložka celkovo (funkčný test v samostatnom
+// `restock-links.spec.ts`, rovnaký vzor).
+test("ľavé menu má tri priečinky (Systém/Eshop/Automatizácie) so sedemnástimi záložkami, klik prepne obrazovku, panel sa zbalí do lišty a stav si pamätá, konzola je čistá", async ({
   page,
 }) => {
   const chyby: string[] = [];
@@ -45,8 +48,8 @@ test("ľavé menu má tri priečinky (Systém/Eshop/Automatizácie) so šestnás
   await expect(page.getByRole("button", { name: "Eshop" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Automatizácie" })).toBeVisible();
 
-  // Presne šestnásť záložiek v CELOM menu.
-  await expect(page.locator(".side-nav .tab")).toHaveCount(16);
+  // Presne sedemnásť záložiek v CELOM menu.
+  await expect(page.locator(".side-nav .tab")).toHaveCount(17);
   await expect(page.getByRole("button", { name: "Sync zo Shoptetu" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Texty e-mailov" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Na objednanie" })).toBeVisible();
@@ -178,7 +181,7 @@ test("ľavé menu má tri priečinky (Systém/Eshop/Automatizácie) so šestnás
 
   // Hlavičky priečinkov zmiznú, ikony všetkých modulov ostanú.
   await expect(page.getByRole("button", { name: "Systém" })).toHaveCount(0);
-  await expect(page.locator(".side-nav .tab")).toHaveCount(16);
+  await expect(page.locator(".side-nav .tab")).toHaveCount(17);
   // Názov sa v lište ukáže bublinou pri prejdení myšou.
   await expect(page.getByRole("button", { name: "Na objednanie" })).toHaveAttribute(
     "title",

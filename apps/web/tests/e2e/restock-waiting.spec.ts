@@ -23,7 +23,7 @@ test("zoznam pripravených na prepnutie ponúkne odkaz na náš produkt aj k dod
   await page.getByRole("button", { name: "Prihlásiť sa" }).click();
 
   // Obrazovka je dostupná z ľavého menu pod "Automatizácie".
-  await page.getByRole("button", { name: "Vypredané → Skladom" }).click();
+  await page.getByRole("button", { name: "Vypredané → Skladom", exact: true }).click();
   await expect(page.getByTestId("restock-waiting-list")).toBeVisible();
 
   // Seedovaný kandidát (`scripts/e2e-setup.ts`) — vypredaný, viditeľný,
@@ -68,7 +68,7 @@ test("rozpor nášho stavu s feedom sa ukáže ako varovanie a kandidáta vylú�
   await page.getByLabel("Heslo").fill(E2E_HESLO);
   await page.getByRole("button", { name: "Prihlásiť sa" }).click();
 
-  await page.getByRole("button", { name: "Vypredané → Skladom" }).click();
+  await page.getByRole("button", { name: "Vypredané → Skladom", exact: true }).click();
   await expect(page.getByTestId("restock-waiting-list")).toBeVisible();
 
   const karta = page.getByTestId("restock-feed-conflicts");

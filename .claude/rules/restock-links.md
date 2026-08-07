@@ -1,0 +1,73 @@
+---
+paths:
+  - "apps/api/src/modules/restock-links/**"
+  - "apps/api/src/http/restock-links-routes.ts"
+  - "apps/api/tests/restock-links-http.integration.test.ts"
+  - "apps/web/src/restockLinksApi.ts"
+  - "apps/web/src/components/RestockLinkSuggestionsSection.tsx"
+  - "scripts/e2e-fixtures-restock-links.ts"
+---
+
+# Vypredané → Skladom: návrhy odkazov (issue 311)
+
+- **Populácia je presne "restock kandidát bez linky", nie "produkt bez
+  linky" vo všeobecnosti.** Diagnostika #307: automatika "Vypredané →
+  Skladom" (`restock/queries.ts`'s `allRestockCandidates`) nikdy neposúdi
+  produkt, ktorého efektívna linka je `null` — 91 zo 130 vypredaných
+  produktov také bolo. Táto obrazovka preto berie PRESNE tú istú populáciu
+  ako `allRestockCandidates` (`variant.state = 'out_of_stock'` +
+  `product_visibility = 'visible'` + `missing_since IS NULL`), len BEZ
+  podmienok o potvrdení dodávateľa (tie sem nepatria — produkt bez linky
+  nemá čo potvrdiť) A s efektívnou linkou `null`. **Zámerne odlišná od**
+  "Párovanie produktov" (#239, `product-links/queries.ts`'s
+  `listProductLinks`), ktorá vypisuje VŠETKY produkty katalógu bez linky,
+  bez ohľadu na to, či sú vypredané — dve rôzne, prekrývajúce sa množiny.
+- **Kandidát sa hľadá DETERMINISTICKY (nikdy AI), porovnaním významných slov
+  názvu (3+ znaky, diakritika normalizovaná) medzi produktom bez linky a
+  produktmi, čo UŽ linku majú** — `suggestCandidates`
+  (`restock-links/queries.ts`). Zhodný `product.supplier` pridáva veľký
+  bonus (100), aby VŽDY vyhral nad čisto textovou zhodou naprieč cudzími
+  dodávateľmi. Toto JE "vyhľadanie podľa názvu cez existujúci mechanizmus",
+  ktorý ticket žiadal — rovnaký princíp ako `search/queries.ts`'s
+  `globalSearch`, len nad VLASTNÝM katalógom (appka nemá a NEBUDE mať
+  nástroj na vyhľadávanie na internete). Kandidáti sa počítajú ŽIVO pri
+  KAŽDOM načítaní (rovnaký princíp ako `feed-cross-check.ts` — nikdy
+  perzistovaná odvodená hodnota, tá by zastarala pri ďalšom katalógovom
+  importe).
+- **Návrh sa NIKDY neuloží sám — klik na kandidáta len PREDVYPLNÍ vstup.**
+  `RestockLinkSuggestionsSection.tsx`'s "💡 Použiť" tlačidlo nastaví
+  `urlDraft`, skutočné uloženie ide AŽ cez explicitný klik na 💾 (rovnaká
+  podmienka ako ticket žiadal: "ČLOVEK potvrdí, nikdy automaticky
+  nepriradiť"). Regresný e2e dôkaz (`restock-links.spec.ts`) klikne na
+  návrh a OVERÍ, že `saveProductLink` sa ešte NEZAVOLALO, až potom klikne
+  Uložiť.
+- **Žiadna nová zapisovacia trasa ani nová tabuľka.** Potvrdený odkaz ide
+  cez UŽ EXISTUJÚCU `POST /api/product-links/:productKey` (#239,
+  `setProductSupplierLinkForProduct`, `product_supplier_link_override`) —
+  `restockLinksApi.ts` má len ČÍTACIU `searchRestockLinkSuggestions`,
+  komponent priamo importuje `saveProductLink` z `supplierLinksApi.ts`.
+  Dôsledok: obe obrazovky ("Vypredané → Skladom: návrhy odkazov" aj
+  "Párovanie produktov") ukazujú TÚ ISTÚ hodnotu okamžite po uložení —
+  overené e2e testom naprieč OBOMA obrazovkami naraz.
+- **Nová obrazovka je SAMOSTATNÁ od "Vypredané → Skladom" (#213,
+  `RestockSection.tsx`), nie ďalšia karta v nej** — `RestockSection.tsx` je
+  už na 370 riadkoch (eslint `max-lines: 400`, `.claude/rules/testing.md`)
+  a rieši úplne iný problém (PREPÍNANIE už-linkovaných produktov). Zdieľajú
+  len susedné miesto v menu (`nav.ts`, priečinok Automatizácie, hneď za
+  sebou) a rovnaký cieľ (viac kandidátov pre prepínanie).
+- **E2E fixtúra (`scripts/e2e-fixtures-restock-links.ts`) potrebuje TRI
+  produkty naraz na jeden zmysluplný test:** vypredaný bez linky
+  ("E2E-RL-CHYBA"), kandidát s ROVNAKÝM dodávateľom + prekrývajúcim sa
+  menom, čo UŽ linku má ("E2E-RL-NAVRH"), a CUDZÍ dodávateľ bez prekryvu
+  mena ("E2E-RL-CUDZI") — dokazuje, že sa nikdy nenavrhne bez zhody. Vlastný
+  izolovaný e2e účet (`E2E_NAVRHY_ODKAZOV_EMAIL`, rovnaký mechanizmus a
+  dôvod ako `E2E_PAROVANIE_EMAIL` — zdieľaný `e2e@forestshop.sk` je na
+  hranici `MAX_ATTEMPTS`).
+- **Nová viditeľná záložka "Vypredané → Skladom: návrhy odkazov" substring-om
+  KOLIDOVALA s existujúcim `restock-waiting.spec.ts`'s
+  `getByRole("button", {name: "Vypredané → Skladom"})`** (rovnaká trieda
+  chyby ako issue 240's "Vyhľadať"/"Hľadať" kolízia, `.claude/rules/
+  testing.md`) — opravené na strane KOLÍDUJÚCEHO existujúceho locatora
+  (`{ exact: true }`), nikdy premenovaním novej záložky. Test pri KAŽDEJ
+  ďalšej záložke pridanej HNEĎ VEDĽA existujúcej s podobným menom: `grep -rn
+  'name: "<časť existujúceho mena>"' apps/web/tests/e2e/` bez `exact: true`.
