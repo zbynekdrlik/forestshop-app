@@ -126,3 +126,46 @@ test("vlastná poznámka — vytvorenie, 'Nové' zmizne po znovuotvorení, úpra
 
   expect(chyby).toEqual([]);
 });
+
+// issue 303 (majiteľ: "menšie objekty" — celá appka hustejšia). Naživo na
+// nasadenej appke bol pás akcií karty (`.upozornenie-actions`) 104px vysoký
+// a karta 269px, hoci obsah bol len 5 krátkych riadkov textu — príčina bolo
+// globálne `input:not([type="hidden"]) {width:100%}` (app.css §1), ktoré
+// dátumové pole "odložiť do" naťahovalo na CELÚ šírku pásu (naživo namerané:
+// 1491px pri 1600px okne), takže tri ovládacie prvky (✓ Vybavené / dátum /
+// Odložiť) sa zalomili na tri samostatné riadky namiesto jedného.
+test("desktop (1600px): pás akcií karty je jednoriadkový, nie zalomený na viac riadkov (issue 303)", async ({ page }) => {
+  const chyby: string[] = [];
+  page.on("console", (m) => {
+    if (m.type() === "error" || m.type() === "warning") chyby.push(m.text());
+  });
+  page.on("pageerror", (e) => {
+    chyby.push(e.message);
+  });
+
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto("/?tab=upozornenia");
+  await page.getByLabel("E-mail").fill(E2E_UPOZORNENIA_EMAIL);
+  await page.getByLabel("Heslo").fill(E2E_HESLO);
+  await page.getByRole("button", { name: "Prihlásiť sa" }).click();
+  await expect(page.getByRole("heading", { name: "Upozornenia" })).toBeVisible();
+
+  await page.getByTestId("upozornenie-new").click();
+  await page.getByTestId("upozornenie-form-title").fill("Hustota — pás akcií na jednom riadku");
+  await page.getByTestId("upozornenie-form-save").click();
+  await expect(page.getByTestId("upozornenie-form")).toBeHidden();
+
+  const card = kartaSNadpisom(page, "Hustota — pás akcií na jednom riadku");
+  await expect(card).toBeVisible();
+
+  // Strop 50px necháva malú rezervu nad nameraným jednoriadkovým 35.59px
+  // (dátumové pole je vyššie než tlačidlá, takže ono určuje výšku riadku) bez
+  // toho, aby maskoval skutočné zalomenie späť na viac riadkov (namerané
+  // zalomené: 104px — ďaleko nad 50px stropom).
+  const actionsHeight = await card.evaluate((el) => el.querySelector(".upozornenie-actions")?.getBoundingClientRect().height ?? 0);
+  expect(actionsHeight, "pás akcií karty musí byť jednoriadkový (<=50px), nie zalomený na viac riadkov").toBeLessThanOrEqual(50);
+
+  await card.getByRole("button", { name: "Zmazať", exact: false }).click(); // upratanie po teste
+
+  expect(chyby).toEqual([]);
+});

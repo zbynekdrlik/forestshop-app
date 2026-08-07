@@ -1025,3 +1025,37 @@ paths:
   (najmä auth-kódy 401/403 tam, kde sa to nečaká) skontroluj najprv, či
   medzitým nebežal iný proces mutujúci zdieľané tabuľky, a over
   IZOLOVANÝM opakovaným behom, než hľadáš regresiu v diffe.
+- **Issue 303 follow-up (majiteľ: "menšie objekty"): globálne
+  `input:not([type="hidden"]) {width:100%}` (app.css §1) je PIATY tvar
+  issue 105's flex-basis-z-width pasce — tentoraz cez `width: 100%`, nie
+  fixný `width`.** `.upozornenie-actions` (`UpozornenieCard.tsx`, karta
+  nástenky Upozornenia) má `display:flex` bez `flex` na svojich deťoch —
+  dátumové pole "odložiť do" tak dostalo `flex-basis` z `width:100%`, teda
+  CELÚ šírku riadku (naživo namerané: 1491px pri 1600px okne), a tri
+  ovládacie prvky sa zalomili na tri riadky (104px vysoký pás, karta 269px
+  namiesto ~150px pre rovnaký obsah). Fix: `.upozornenie-actions
+  input[type="date"] { width:auto; min-width:9.5rem; flex:0 0 auto; }` —
+  `width:auto` necháva prehliadačovu VLASTNÚ intrinzickú šírku dátumového
+  poľa (namerané Chromium/sk-SK: 136px), `min-width` je len poistka pre
+  širší formát iného jazyka/OS, `flex:0 0 auto` bráni ROVNAKÉMU riadku
+  znova ho naťahovať. Overovacia technika (rovnaká ako issue 105/107/…):
+  `page.addStyleTag` s kandidátnymi šírkami proti LOKÁLNEMU dev serveru
+  (`.upozornenie-form label input[type=date]` je INÝ prípad — stĺpcový
+  `<label>`, tam je `width:100%` správne, zámerné, netreba opravovať).
+  KAŽDÝ ĎALŠÍ bare `<input>`/`<select>` priamo v `display:flex` riadku BEZ
+  vlastnej width-obmedzujúcej CSS triedy (na rozdiel od zavedených
+  `.ord-supplier-assign-input`/`.ord-comment-input`/`.tosup-emailinput`)
+  zdedí rovnakú pascu z tohto globálneho resetu — grep `apps/web/src/
+  styles/app.css` na existujúcu triedu PRED tým, než sa pridá nový bare
+  `<input>` do flex riadku.
+- **RED/GREEN overenie ČISTO-CSS opravy bez existujúceho testu: `git
+  stash push --keep-index -- <css-súbor>` dočasne vráti CSS do
+  PRED-opravového stavu (bez straty už napísaného, staged testu), beží sa
+  proti live Vite HMR (žiadny rebuild potrebný), `git stash pop` opravu
+  vráti späť.** Použité tu, lebo issue 303's fix bol objavený/zmeraný
+  PRED napísaním regresného testu (živé meranie cez Playwright MCP proti
+  `pnpm --filter @forestshop/web dev`) — namiesto prepisovania CSS ručne
+  vzad a vpred stačí jeden `git stash` cyklus okolo `playwright test -g
+  "<názov testu>"` na dôkaz RED, potom `stash pop` + rovnaký beh na dôkaz
+  GREEN. Rýchlejšie než plný `pnpm --filter @forestshop/web e2e` cyklus
+  pri overovaní JEDNÉHO testu.
