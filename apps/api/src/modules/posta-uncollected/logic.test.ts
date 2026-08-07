@@ -173,8 +173,12 @@ describe("terminalState", () => {
 });
 
 describe("isReturnedToSender (issue 299)", () => {
-  it("posledná udalosť 'returned' → true (nepotvrdená hypotéza, viď constants.ts)", () => {
+  it("posledná udalosť 'returned' → true (potvrdené naživo 2026-08-07, viď constants.ts)", () => {
     expect(isReturnedToSender({ results: [{ status: "ok", events: [{ stateCode: "returned" }] }] })).toBe(true);
+  });
+
+  it("posledná udalosť 'returning' → true (zásielka je UŽ na ceste späť, potvrdené naživo 2026-08-07)", () => {
+    expect(isReturnedToSender({ results: [{ status: "ok", events: [{ stateCode: "returning" }] }] })).toBe(true);
   });
 
   it("case-insensitive zhoda", () => {
