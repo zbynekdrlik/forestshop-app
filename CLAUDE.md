@@ -106,3 +106,4 @@ Per-area rules live in `.claude/rules/<area>.md` with `paths:` frontmatter.
 - Eshop → Upozornenia (#267 — nástenka, čiastočný unique dedup index, počítaný stav bez cron-u, zdieľaná zapisovacia cesta pre budúce #268/#269) → `.claude/rules/upozornenia.md`
 - Vypredané → Skladom: návrhy odkazov (#311 — deterministický návrh podľa zhody mena+dodávateľa, zdieľaná zapisovacia cesta s #239, žiadne AI dohady) → `.claude/rules/restock-links.md`
 - Preprava DPD (#292 — per-zásielkový Playwright robot na dpdshipper.sk, appka-vlastný `dpd_shipment`/`dpd_pickup_request` záznam, náhľad pred odoslaním, fail-loud nedomapovaný formulár) → `.claude/rules/dpd.md`
+- Google kalendár — najbližšia udalosť (#309 — samostatný modul od `upozornenia` (žiadny dedupKey/resolve), krátkodobá in-memory cache namiesto scheduler jobu, node-ical proces-TZ past pri celodenných udalostiach) → `.claude/rules/calendar.md`

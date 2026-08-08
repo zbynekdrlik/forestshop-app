@@ -3180,3 +3180,76 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
   switched 1") and the hourly `shoptet-writeback` job repeatedly prove
   valid — documented explicitly on the closing comment, with an
   invitation to reopen if a real candidate somehow still fails.
+
+## Issue 309 — Upozornenia: najbližšia udalosť z Google kalendára (2026-08-08)
+
+- Commits: `84876f8` (version bump 0.3.0-dev.185) → `f12b7cc` (backend:
+  `modules/calendar/` + `GOOGLE_CALENDAR_ICS_URL` wiring) → `49bde35`
+  (frontend: `NextCalendarEventCard`) → `9a41fc0` (e2e race fix from
+  deep-review finding) → PR #322 merge `398f52c`.
+- Design (posted BEFORE first code commit, `gh issue comment 309`):
+  ticket's own recorded owner-Discord comment already settled the access
+  method (secret iCal URL, option 1) — treated as a technical decision,
+  never re-asked. Architectural choice: independent `modules/calendar/`
+  module, NOT the DB-backed `upozornenie` dedupKey/resolve pattern (no
+  "vybaviť" semantics apply to a live read-through calendar view) —
+  short-lived in-memory cache (15 min ok / 2 min error) instead of a new
+  scheduler job + DB table, since nothing needs to persist or survive a
+  restart meaningfully. `node-ical` chosen over hand-rolled RRULE parsing
+  (`investigate-existing-first`) — RFC 5545 recurrence is a known minefield
+  (DST, EXDATE, RECURRENCE-ID overrides).
+- Real correctness pitfall found + fixed BEFORE any test was written:
+  `node-ical` interprets floating `VALUE=DATE` (all-day) values using the
+  RUNNING PROCESS's timezone — verified empirically (`TZ=UTC` vs
+  `TZ=Europe/Prague` give different absolute instants for the identical
+  ICS text). Since CI runs UTC and production runs `TZ=Europe/Bratislava`
+  (issue 293), a naive instant comparison would silently disagree between
+  environments. Fix: reuse the project's own `timezone.ts`'s
+  `zonedDateKey` to compare CALENDAR DAYS in Europe/Bratislava for all-day
+  events (proven safe regardless of which offset node-ical used
+  internally, since Bratislava is always 0–2h ahead of UTC) — documented
+  in the new `.claude/rules/calendar.md`.
+- Security: the Google secret ICS URL carries its token in the PATH, not
+  a query parameter (unlike every existing Shoptet integration in this
+  repo) — the existing `redactUrl` helper (query-param-only) would leak
+  it. `calendar/fetcher.ts` never interpolates the URL into any thrown
+  error/log line at all; `fetcher.test.ts` asserts this directly.
+- Tests: unit (`next-event.test.ts` 13 cases against the REAL `node-ical`
+  library — all-day, timed, ongoing, RRULE, EXDATE, CANCELLED;
+  `fetcher.test.ts` 3 cases — timeout/size-cap/no-URL-in-error;
+  `service.test.ts` 6 cases — TTL cache, error TTL, concurrent dedup),
+  integration (`calendar-http.integration.test.ts` 4 cases — not
+  configured/success/fetch-failure/401), web unit (`calendarApi.test.ts`
+  5, `NextCalendarEventCard.test.tsx` 5 incl. StrictMode unmount-race
+  guard), e2e (extended `upozornenia.spec.ts` — card absent when
+  unconfigured, real `waitForResponse` proof, not a timing coincidence).
+  No test ever contacts the real Google.
+- Review: manual `/review` on the PR diff (0/0/0) + dispatched
+  `general-purpose` deep reviewer with precisely-crafted context (BASE
+  `f336e38`/HEAD `5a4a3e5`, no session history) — verdict "ready to
+  merge", one legitimate Important finding (E2E `waitForResponse` race —
+  fixed in `9a41fc0`) and one Important finding correctly identified as
+  out-of-scope (the "owner hasn't confirmed the access method" concern —
+  already explicitly settled per the dispatch's own instruction, not a
+  code issue).
+- Local gates: `pnpm typecheck`/`pnpm lint` clean; API unit 675/675 (49
+  files, incl. new calendar tests); API integration 612+/612+ (82+
+  files); web unit 532/532 (73 files); e2e 51/51 (52 spec files), zero
+  console errors, one unrelated known-flaky test (`.claude/rules/
+  testing.md`'s documented shared-box load pattern) reproduced green on
+  isolated re-run.
+- PR #322 merged (`398f52c`) to `main`; main CI + Deploy both green.
+  Post-deploy verification (Playwright, logged-in as the real owner
+  `vychod@varos.sk`): DOM version `v0.3.0-dev.185`, "Upozornenia" tab
+  loads with ZERO console errors, no calendar card renders (matches
+  `configured:false` — production has no `GOOGLE_CALENDAR_ICS_URL` set
+  yet), direct `fetch("/api/upozornenia/next-event")` from the live page
+  confirmed `{"configured":false,"event":null,"error":false}`.
+  **UNVERIFIED: the real-event rendering path** (a genuine calendar
+  event's date/title actually appearing) — the owner has not yet pasted
+  his calendar's secret iCal URL into `/srv/forestshop/.env` on dev2.
+  Issue 309 deliberately left OPEN (`needs-answer` label kept) with a
+  comment explaining the only remaining step is that one paste — no
+  `Closes #309` anywhere in the PR body or any commit message (this repo
+  merges via merge commits, so commit messages reach `main` intact and
+  would auto-close too).

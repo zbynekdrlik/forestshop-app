@@ -378,3 +378,12 @@ paths:
   produkcii (vlastná testovacia poznámka: vytvoriť → vybaviť → záložka
   Vybavené → vrátiť → späť v Otvorené → zmazať, 0 chýb v konzole) toto
   potvrdilo za pár minút, namiesto zbytočnej re-implementácie.
+- **Issue 309 (najbližšia udalosť z Google kalendára) sedí na TEJTO istej
+  nástenke, ale je to ZÁMERNE samostatný modul** (`.claude/rules/
+  calendar.md`) — žiadny dedupKey/resolve/postpone, live read-through
+  pohľad namiesto DB-backed riadku. `upsertUpozornenie` je pre položky,
+  čo treba VYBAVIŤ — pri KAŽDOM ĎALŠOM "karta na tejto nástenke" tickete
+  over najprv, či nová vec má takú "treba vybaviť" povahu, alebo je to
+  len live status glance (rovnaká úvaha ako `posta-uncollected`'s
+  "Spustiť teraz" vzor) — ak druhé, patrí do vlastného modulu, nie do
+  `upozornenie` tabuľky.
