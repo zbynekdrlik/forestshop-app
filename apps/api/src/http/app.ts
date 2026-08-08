@@ -9,6 +9,8 @@ import { MIN_NEW_PASSWORD_LENGTH } from "../modules/auth/passwords.js";
 import { login, logout, resolveSession } from "../modules/auth/service.js";
 import type { MailTransport } from "../modules/mail/transport.js";
 import { appVersion } from "../version.js";
+import { registerCalendarRoutes } from "./calendar-routes.js";
+import type { NextEventService } from "../modules/calendar/service.js";
 import { registerCatalogRoutes, type RunIngest } from "./catalog-routes.js";
 import { registerDpdRoutes, type DpdRunDeps } from "./dpd-routes.js";
 import { checkLoginRateLimit, clientIp } from "./login-rate-limit.js";
@@ -92,6 +94,12 @@ export function createApp(
     // len akcie odosielajúce do DPD vrátia 503 "nenakonfigurované" namiesto
     // tichého zápisu s prázdnymi prihlasovacími údajmi.
     readonly dpd?: DpdRunDeps;
+    // issue 309: "Eshop → Upozornenia" — najbližšia udalosť z Google
+    // kalendára. `undefined` (predvolené) = appka beží ďalej, karta na
+    // nástenke sa jednoducho nezobrazí (rovnaký "configured" vzor ako `dpd`
+    // vyššie) — `index.ts` ju v produkcii nahradí LEN keď je nastavená
+    // `GOOGLE_CALENDAR_ICS_URL` (`env.ts`).
+    readonly nextEvent?: NextEventService;
   },
 ): Hono<AppBindings> {
   const app = new Hono<AppBindings>();
@@ -305,6 +313,9 @@ export function createApp(
   // dependency (na rozdiel od nedostupne/orderReminder vyššie) — táto
   // obrazovka neposiela mail ani nekontaktuje tretiu stranu.
   registerUpozorneniaRoutes(app, db);
+  // issue 309: rovnaká nástenka, ale NEZÁVISLÝ modul (žiadny dedupKey/
+  // resolve/postpone — `upozornenia.md`'s návrhový komentár na tickete).
+  registerCalendarRoutes(app, db, options.nextEvent);
   // issue 290: "Eshop → Výmena tovaru / Vrátený tovar / Reklamácie" — tri
   // READ-ONLY pohľady + appkina vlastná reklamácia-značka. Žiadny voliteľný
   // dependency (rovnaký dôvod ako `upozornenia` vyššie).
