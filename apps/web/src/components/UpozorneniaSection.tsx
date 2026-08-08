@@ -1,6 +1,7 @@
 import { useCallback, useContext, useEffect, useRef, useState, type JSX } from "react";
 import type { Me } from "../api.js";
 import { UpozorneniaBadgeRefreshContext } from "../upozorneniaBadgeContext.js";
+import { NextCalendarEventCard } from "./NextCalendarEventCard.js";
 import { UpozornenieCard } from "./UpozornenieCard.js";
 import { UpozorneniaResolvedList } from "./UpozorneniaResolvedList.js";
 import {
@@ -182,6 +183,9 @@ export function UpozorneniaSection({ role, onSessionExpired }: { readonly role: 
   // pokojne otvoriť. `intro`/`tabBar` sa preto renderujú VŽDY, nezávisle od
   // `rows`/`error` — tie patria LEN vetve `activeTab === "otvorene"`.
   const intro = <p>Veci, ktoré treba vybaviť — nech ich zistila appka sama, alebo si ich zapísal majiteľ. Nič odtiaľto sa neposiela e-mailom ani na Discord.</p>;
+  // issue 309: nezávislá od `activeTab`, rovnaký dôvod ako `intro`/`tabBar`
+  // vyššie — je to doplnkový glance, nie položka DB-backed zoznamu nižšie.
+  const nextEventCard = <NextCalendarEventCard />;
   const tabBar = (
     <div className="upozornenia-tabs" role="tablist">
       <button
@@ -215,6 +219,7 @@ export function UpozorneniaSection({ role, onSessionExpired }: { readonly role: 
     return (
       <section>
         {intro}
+        {nextEventCard}
         {tabBar}
         <UpozorneniaResolvedList
           canControl={canControl}
@@ -234,6 +239,7 @@ export function UpozorneniaSection({ role, onSessionExpired }: { readonly role: 
     return (
       <section>
         {intro}
+        {nextEventCard}
         {tabBar}
         <p role="alert">{error}</p>
       </section>
@@ -243,6 +249,7 @@ export function UpozorneniaSection({ role, onSessionExpired }: { readonly role: 
     return (
       <section>
         {intro}
+        {nextEventCard}
         {tabBar}
         <p>Načítavam…</p>
       </section>
@@ -252,6 +259,7 @@ export function UpozorneniaSection({ role, onSessionExpired }: { readonly role: 
   return (
     <section>
       {intro}
+      {nextEventCard}
       {tabBar}
       {error !== "" && <p role="alert">{error}</p>}
 

@@ -7,6 +7,8 @@ import { createDb } from "./db/client.js";
 import { loadEnv } from "./env.js";
 import { createApp } from "./http/app.js";
 import { log } from "./logger.js";
+import { createHttpIcsFetcher } from "./modules/calendar/fetcher.js";
+import { createNextEventService } from "./modules/calendar/service.js";
 import { createHttpExportFetcher } from "./modules/catalog/fetcher.js";
 import { ingestCatalog } from "./modules/catalog/ingest.js";
 import { createSmtpMailTransport } from "./modules/mail/transport.js";
@@ -228,6 +230,13 @@ const dpdDeps = {
   config: dpdUser === undefined || dpdPassword === undefined ? undefined : dpdPortalConfigFromBaseUrl(env.DPD_PORTAL_BASE_URL, dpdUser, dpdPassword),
 };
 
+// issue 309: "Eshop → Upozornenia" — najbližšia udalosť z majiteľovho Google
+// kalendára. `GOOGLE_CALENDAR_ICS_URL` je nepovinná (env.ts) — bez nej appka
+// beží ďalej, karta na nástenke sa jednoducho nezobrazí (`http/app.ts`'s
+// `nextEvent === undefined` vetva).
+const googleCalendarIcsUrl = env.GOOGLE_CALENDAR_ICS_URL;
+const nextEventService = googleCalendarIcsUrl === undefined ? undefined : createNextEventService(createHttpIcsFetcher(googleCalendarIcsUrl));
+
 // issue 319: chýbajúci kľúč tu (na rozdiel od `postaUncollected`/
 // `orderReminder`/`nedostupne`/`orderMerge`/`dpd` nižšie) nechával
 // `registerRestockRoutes` (`http/app.ts`) vždy padnúť na jeho fail-closed
@@ -249,6 +258,7 @@ const app = createApp(db, {
   fetchSupplierPage,
   restock: { config: shoptetImportConfigFromBaseUrl(env.SHOPTET_ADMIN_BASE_URL, shoptetAdminUser ?? "", shoptetAdminPassword ?? "") },
   dpd: dpdDeps,
+  ...(nextEventService === undefined ? {} : { nextEvent: nextEventService }),
 });
 
 // F2 (#12/#3) + F3 (#22/#28): nočný import katalógu/objednávok, mazanie

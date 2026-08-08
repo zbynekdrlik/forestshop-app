@@ -152,6 +152,14 @@ services:
       # vyššie). Chýbajúca = automatizácia NEPOŠLE ani jeden e-mail
       # zákazníkovi (fail-closed).
       ORDER_MERGE_BCC_EMAIL:
+      # issue 309: "Eshop → Upozornenia" — najbližšia udalosť z majiteľovho
+      # Google kalendára. Rovnaká úvaha ako SHOPTET_EXPORT_URL vyššie:
+      # `.optional()` v `env.ts`, bare kľúč preberá `/srv/forestshop/.env`,
+      # keď tam je; keď nie je, appka beží ďalej, karta na nástenke sa
+      # jednoducho nezobrazí. Adresa je CELÁ tajomstvo (tajný token je
+      # priamo v CESTE, nie len v query parametri) — sem patrí LEN bare
+      # kľúč, nikdy skutočná hodnota.
+      GOOGLE_CALENDAR_ICS_URL:
     volumes:
       - catalog-raw:/data/catalog-raw
       - orders-raw:/data/orders-raw

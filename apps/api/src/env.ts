@@ -102,6 +102,14 @@ const envSchema = z.object({
   // ostáva konfigurovateľná (rovnaký princíp ako `SHOPTET_ADMIN_BASE_URL`),
   // pre prípad zmeny adresy alebo testovacieho prostredia DPD.
   DPD_PORTAL_BASE_URL: z.string().url().default("https://www.dpdshipper.sk"),
+  // issue 309: "Eshop → Upozornenia" — najbližšia udalosť z majiteľovho
+  // Google kalendára. Tajná iCal adresa (nie API kľúč/OAuth token — pozri
+  // návrhový komentár na tickete): NESIE tajný token PRIAMO V CESTE (na
+  // rozdiel od SHOPTET_EXPORT_URL, kde je tajomstvom len `hash` query
+  // parameter), nikdy do repa/commit správy/logu. Nepovinná: bez nej appka
+  // beží ďalej, karta sa na nástenke jednoducho nezobrazí (rovnaký fail-
+  // graceful princíp ako SHOPTET_EXPORT_URL).
+  GOOGLE_CALENDAR_ICS_URL: z.string().url().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

@@ -30,8 +30,22 @@ test("vlastná poznámka — vytvorenie, 'Nové' zmizne po znovuotvorení, úpra
   await page.goto("/?tab=upozornenia");
   await page.getByLabel("E-mail").fill(E2E_UPOZORNENIA_EMAIL);
   await page.getByLabel("Heslo").fill(E2E_HESLO);
+  // issue 309: `waitForResponse` MUSÍ byť zaregistrovaný PRED akciou, ktorá
+  // request spustí (Playwright ho inak nezachytí, keby request medzitým už
+  // doletel) — prihlásenie namountuje "Upozornenia", čo namountuje
+  // `NextCalendarEventCard`, ktorá HNEĎ zavolá tento endpoint.
+  const dalsiaUdalostOdpoved = page.waitForResponse((r) => r.url().includes("/api/upozornenia/next-event"));
   await page.getByRole("button", { name: "Prihlásiť sa" }).click();
   await expect(page.getByRole("heading", { name: "Upozornenia" })).toBeVisible();
+  await dalsiaUdalostOdpoved;
+  // Deep-review nález (PR 322): `toHaveCount(0)` HNEĎ po prihlásení by
+  // prešlo aj VŽDY (karta je `null` aj počas načítavania AJ pri
+  // `configured:false`) — počkaním na SKUTOČNÚ odpoveď vyššie test dokáže
+  // reálne správanie ("nenakonfigurované sa nezobrazí"), nie len časovanie
+  // pred fetchom. E2E beh nemá nastavenú `GOOGLE_CALENDAR_ICS_URL` (rovnako
+  // ako produkcia dnes) — karta sa preto NESMIE zobraziť vôbec (dispatch:
+  // "must NOT appear as broken/error card"), nie ako prázdna/chybová karta.
+  await expect(page.getByTestId("next-calendar-event")).toHaveCount(0);
   // issue 267 follow-up gap 3: skutočne nič nie je zapísané — hláška to
   // musí povedať pravdivo, nie natvrdo "všetko je vybavené".
   await expect(page.getByTestId("upozornenia-empty")).toHaveText("Žiadne upozornenia — nič nie je zapísané.");
