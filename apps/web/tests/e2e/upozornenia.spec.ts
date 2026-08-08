@@ -32,6 +32,11 @@ test("vlastná poznámka — vytvorenie, 'Nové' zmizne po znovuotvorení, úpra
   await page.getByLabel("Heslo").fill(E2E_HESLO);
   await page.getByRole("button", { name: "Prihlásiť sa" }).click();
   await expect(page.getByRole("heading", { name: "Upozornenia" })).toBeVisible();
+  // issue 309: e2e beh nemá nastavenú `GOOGLE_CALENDAR_ICS_URL` (rovnako ako
+  // produkcia dnes) — karta najbližšej udalosti sa preto NESMIE zobraziť
+  // vôbec (dispatch: "must NOT appear as broken/error card"), nie ako
+  // prázdna/chybová karta.
+  await expect(page.getByTestId("next-calendar-event")).toHaveCount(0);
   // issue 267 follow-up gap 3: skutočne nič nie je zapísané — hláška to
   // musí povedať pravdivo, nie natvrdo "všetko je vybavené".
   await expect(page.getByTestId("upozornenia-empty")).toHaveText("Žiadne upozornenia — nič nie je zapísané.");

@@ -706,6 +706,12 @@ tr:last-child td {
   padding: var(--fs-space-4);
 }
 
+/* issue 309: "Eshop → Upozornenia" — najbližšia udalosť z Google kalendára,
+   nad prepínačom záložiek. */
+.next-calendar-event-card {
+  margin-bottom: var(--fs-space-4);
+}
+
 /* ---------------- 5. PRIHLASOVACIA OBRAZOVKA ---------------- */
 .auth-page {
   display: flex;
