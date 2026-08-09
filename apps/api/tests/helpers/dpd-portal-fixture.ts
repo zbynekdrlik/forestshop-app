@@ -25,6 +25,12 @@ export interface DpdFixtureOptions {
   readonly stuckDisabled?: boolean;
   /** Krok 2 objednávky zvozu po Uložení ukáže chybu namiesto úspechu. */
   readonly pickupSaveFails?: boolean;
+  /** Po uložení zásielky NEUKÁŽE toast — núti appku ísť záložnou cestou
+   * (zoznam Zásielky filtrovaný podľa referencie), na overenie, že táto
+   * cesta naozaj nájde SKUTOČNÉ číslo zásielky, nie appka's vlastnú
+   * referenciu, ktorá je v tom istom riadku (code review, issue 292,
+   * PR 324). */
+  readonly shipmentSkipToast?: boolean;
 }
 
 export interface DpdShipmentSubmission {
@@ -60,7 +66,7 @@ function loginPage(): string {
   </body></html>`;
 }
 
-function shipmentFormPage(stuckDisabled: boolean): string {
+function shipmentFormPage(stuckDisabled: boolean, skipToast: boolean): string {
   const disabledAttr = "disabled";
   const enableScript = stuckDisabled
     ? ""
@@ -68,6 +74,12 @@ function shipmentFormPage(stuckDisabled: boolean): string {
         document.getElementById('product_Home').removeAttribute('disabled');
         document.getElementById('service-COD').removeAttribute('disabled');
       }, 200);</script>`;
+  // `.then()` po uložení: buď ukáž toast (bežná cesta), alebo NIČ (núti
+  // appku ísť záložnou cestou cez zoznam Zásielky — `skipToast`, code
+  // review issue 292 PR 324).
+  const afterSaveScript = skipToast
+    ? ""
+    : `document.body.insertAdjacentHTML('beforeend', '<div id="toast-container"><div>Zásielka uložená, číslo 99900000123</div></div>');`;
   return `<!doctype html><html><body>
     <input type="radio" id="product_Home" ${disabledAttr} />
     <input type="text" id="referential-info1" />
@@ -83,6 +95,7 @@ function shipmentFormPage(stuckDisabled: boolean): string {
     <ng2-completer id="shipment_order_recipient-recipient-city"><div class="completer-holder"><input type="search" /></div></ng2-completer>
     <input type="text" name="number" />
     <div class="additional-service">
+      <input type="hidden" id="cod-decoy" value="uz-existujuci-vstup-nie-suma" />
       <input type="checkbox" id="service-COD" ${disabledAttr} />
       <label for="service-COD">Dobierka</label>
     </div>
@@ -118,11 +131,23 @@ function shipmentFormPage(stuckDisabled: boolean): string {
         };
         fetch('/test/shipment-submit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
           .then(function () {
-            document.body.insertAdjacentHTML('beforeend', '<div id="toast-container"><div>Zásielka uložená, číslo 99900000123</div></div>');
+            ${afterSaveScript}
           });
       });
     </script>
   </body></html>`;
+}
+
+// Naschvál v poradí referencia PRED skutočným číslom zásielky v tom istom
+// riadku — presne tam, kde sa dala predošlá (opravená) chyba prejaviť:
+// appka hľadá riadok PODĽA referencie, takže referencia je v ňom vždy
+// prítomná, a naivný regex by ju mohol vrátiť namiesto 14-miestneho čísla
+// zásielky (code review, issue 292, PR 324).
+export const FAKE_LIST_PARCEL_NUMBER = "12345678901234";
+
+function shipmentsListPage(reference: string | null): string {
+  const row = reference !== null ? `<tr><td>${reference}</td><td>Ján Testovací</td><td>${FAKE_LIST_PARCEL_NUMBER}</td></tr>` : "";
+  return `<!doctype html><html><body><table>${row}</table></body></html>`;
 }
 
 function pickupFormPage(): string {
@@ -165,9 +190,13 @@ export async function startDpdFixture(options: DpdFixtureOptions): Promise<DpdFi
     return c.redirect("/login", 303);
   });
 
-  app.get("/shipments", (c) => (getCookie(c, COOKIE_NAME) === "ok" ? c.html("<!doctype html><html><body>Zásielky</body></html>") : c.html(loginPage())));
+  app.get("/shipments", (c) =>
+    getCookie(c, COOKIE_NAME) === "ok" ? c.html(shipmentsListPage(lastShipment?.reference ?? null)) : c.html(loginPage()),
+  );
 
-  app.get("/shipments/0", (c) => (getCookie(c, COOKIE_NAME) === "ok" ? c.html(shipmentFormPage(options.stuckDisabled ?? false)) : c.html(loginPage())));
+  app.get("/shipments/0", (c) =>
+    getCookie(c, COOKIE_NAME) === "ok" ? c.html(shipmentFormPage(options.stuckDisabled ?? false, options.shipmentSkipToast ?? false)) : c.html(loginPage()),
+  );
 
   app.post("/test/shipment-submit", async (c) => {
     lastShipment = await c.req.json<DpdShipmentSubmission>();

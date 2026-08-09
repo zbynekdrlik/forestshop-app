@@ -21,6 +21,19 @@ describe("normalizePhoneForDpd", () => {
   it("throws loudly on a number it cannot recognize as Slovak, never guesses", () => {
     expect(() => normalizePhoneForDpd("+1-555-0100")).toThrow(/slovenské/i);
   });
+
+  // Code review (issue 292, PR 324): pôvodná verzia validovala dĺžku LEN
+  // vo vetve "bez rozpoznaného prefixu" — po odstránení prefixu sa už
+  // výsledok nekontroloval, takže tieto dva prípady (zle zadaná domáca
+  // nula namiesto medzinárodnej predvoľby / nadbytočná číslica) by ticho
+  // prešli ako nezmyselné 10/12-miestne "národné" číslo.
+  it("throws loudly on 00903123456 (mistaken domestic zero instead of the international prefix) instead of accepting a 10-digit result", () => {
+    expect(() => normalizePhoneForDpd("00903123456")).toThrow(/slovenské/i);
+  });
+
+  it("throws loudly on 0421903123456 (an extra digit) instead of accepting a 12-digit result", () => {
+    expect(() => normalizePhoneForDpd("0421903123456")).toThrow(/slovenské/i);
+  });
 });
 
 describe("assertSlovakDeliveryCountry", () => {

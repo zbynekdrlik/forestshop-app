@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { dpdPortalConfigFromBaseUrl } from "../src/modules/dpd/config.js";
 import { runCreateDpdShipment, runCreateDpdShipmentIsolated } from "../src/modules/dpd/shipment-playwright.js";
 import type { DpdShipmentPreview } from "../src/modules/dpd/preview.js";
-import { startDpdFixture, type DpdFixture } from "./helpers/dpd-portal-fixture.js";
+import { FAKE_LIST_PARCEL_NUMBER, startDpdFixture, type DpdFixture } from "./helpers/dpd-portal-fixture.js";
 
 // Reálny Chromium proti LOKÁLNEJ fixture appke (nikdy proti skutočnému
 // dpdshipper.sk — issue 292's bezpečnostné pravidlo, `.claude/rules/dpd.md`).
@@ -116,6 +116,44 @@ describe("runCreateDpdShipment (proti fixture, nikdy proti reálnemu DPD)", () =
       expect(outcome.ok).toBe(false);
       expect(outcome.errorDetail).toMatch(/slovensk/i);
       expect(fixture.lastShipmentSubmission()).toBeNull();
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // Code review (issue 292, PR 324): predtým appka TICHO odoslala dobierkovú
+  // objednávku BEZ dobierky, keď sa suma nedala určiť — kuriér by peniaze
+  // od zákazníka nevybral.
+  it(
+    "zlyhá NAHLAS na dobierkovej objednávke bez zistiteľnej sumy namiesto tichého odoslania bez dobierky",
+    async () => {
+      fixture = await startDpdFixture({ user: USER, password: PASSWORD });
+      const outcome = await runCreateDpdShipment({
+        config: dpdPortalConfigFromBaseUrl(fixture.baseUrl, USER, PASSWORD),
+        shipment: preview({ isCod: true, codAmount: null }),
+      });
+
+      expect(outcome.ok).toBe(false);
+      expect(outcome.errorDetail).toMatch(/dobierka/i);
+      expect(fixture.lastShipmentSubmission()).toBeNull();
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // Code review (issue 292, PR 324): predtým by tento zálohový vetva (bez
+  // toastu, hľadanie v zozname) mohla vrátiť appka's vlastnú referenciu
+  // namiesto skutočného čísla zásielky — obe sú v tom istom riadku.
+  it(
+    "keď sa notifikácia neukáže, nájde skutočné číslo zásielky v zozname — nikdy vlastnú referenciu",
+    async () => {
+      fixture = await startDpdFixture({ user: USER, password: PASSWORD, shipmentSkipToast: true });
+      const outcome = await runCreateDpdShipment({
+        config: dpdPortalConfigFromBaseUrl(fixture.baseUrl, USER, PASSWORD),
+        shipment: preview(),
+      });
+
+      expect(outcome.ok).toBe(true);
+      expect(outcome.parcelNumber).toBe(FAKE_LIST_PARCEL_NUMBER);
+      expect(outcome.parcelNumber).not.toBe(preview().externalOrderId);
     },
     TEST_TIMEOUT_MS,
   );

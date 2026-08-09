@@ -1,4 +1,7 @@
-import type { Page } from "playwright";
+import { chromium, type Browser, type Locator, type Page } from "playwright";
+import { resolveChromiumExecutablePath } from "../shoptet-writeback/playwright-import.js";
+import { loginToDpdPortal } from "./login.js";
+import type { DpdPortalConfig } from "./config.js";
 
 /**
  * issue 292: zdieľané nízkoúrovňové pomôcky na vypĺňanie formulárov na
@@ -18,9 +21,15 @@ import type { Page } from "playwright";
  * Angular/wijmo binding, tam o Node/Chromium interakcii v dlho bežiacom
  * procese), ale rovnaká disciplína: over čítaním hodnoty SPÄŤ, nikdy sa
  * nespoliehaj na to, že `.fill()`/klik "prešiel".
+ *
+ * **Prijíma AJ už-vyriešený `Locator`, nielen selektor** (code review
+ * issue 292, PR 324) — `fillCodAmount` v `shipment-playwright.ts` potrebuje
+ * vyplniť pole, ktoré si sám našiel porovnaním DOM PRED/PO (nemá preň
+ * jednoduchý statický selektor), a musí ísť rovnakou cestou ako každé iné
+ * pole na tomto portáli namiesto vlastného kopírovania tej istej sekvencie.
  */
-export async function typeInto(page: Page, selector: string, text: string): Promise<void> {
-  const loc = page.locator(selector).first();
+export async function typeInto(page: Page, target: string | Locator, text: string): Promise<void> {
+  const loc = typeof target === "string" ? page.locator(target).first() : target;
   await loc.click({ clickCount: 3, timeout: 10_000 });
   await page.keyboard.press("Control+A");
   await page.keyboard.type(text, { delay: 20 });
@@ -56,12 +65,25 @@ export async function waitUntilEnabled(page: Page, selector: string, timeoutMs: 
 // rozsah ako krajina nižšie) — iný tvar zlyhá nahlas namiesto tichého
 // odoslania niečoho, čo portál buď odmietne, alebo (horšie) ticho prijme
 // ako nezmyselné číslo.
+//
+// Code review (issue 292, PR 324): pôvodná verzia validovala DĹŽKU výsledku
+// LEN vo vetve "už je to holé 9-miestne číslo" — po odstránení uznaného
+// prefixu sa výsledok už nekontroloval vôbec, takže napr. "00903123456"
+// (zle zadaná domáca nula namiesto medzinárodnej predvoľby) prešlo ako
+// "0903123456" (10 číslic, nezmysel) namiesto zlyhania nahlas. Kontrola
+// DĹŽKY je teraz JEDNOTNÁ pre všetky vetvy — platí AŽ PO odstránení prefixu.
+const SK_NATIONAL_NUMBER_LENGTH = 9;
+
 export function normalizePhoneForDpd(rawPhone: string): string {
   const digitsOnly = rawPhone.replace(/[^\d]/g, "");
-  if (digitsOnly.startsWith("00421")) return digitsOnly.slice(5);
-  if (digitsOnly.startsWith("421")) return digitsOnly.slice(3);
-  if (digitsOnly.startsWith("0")) return digitsOnly.slice(1);
-  if (digitsOnly.length === 9) return digitsOnly;
+  const national = digitsOnly.startsWith("00421")
+    ? digitsOnly.slice(5)
+    : digitsOnly.startsWith("421")
+      ? digitsOnly.slice(3)
+      : digitsOnly.startsWith("0")
+        ? digitsOnly.slice(1)
+        : digitsOnly;
+  if (national.length === SK_NATIONAL_NUMBER_LENGTH) return national;
   throw new Error(`DPD formulár: telefónne číslo "${rawPhone}" nevyzerá ako slovenské číslo — over ho ručne, appka odosiela len SK čísla`);
 }
 
@@ -80,5 +102,40 @@ export function assertSlovakDeliveryCountry(countryName: string): void {
       `DPD formulár: doručovacia krajina "${countryName}" nie je slovenská — appka zatiaľ podporuje len SK zásielky (portál by inak odoslal so ` +
         "svojou predvolenou krajinou, nie so skutočnou adresou príjemcu)",
     );
+  }
+}
+
+export interface RunOnDpdPortalPageOptions {
+  readonly headless?: boolean;
+  readonly executablePath?: string;
+}
+
+/**
+ * Zdieľaný životný cyklus prehliadača (launch → context → page → prihlásenie
+ * → `action` → vždy zatvoriť) — code review (issue 292, PR 324) našiel, že
+ * `runCreateDpdShipment`/`runOrderDpdPickup` mali TOTOŽNÝ blok skopírovaný,
+ * líšiaci sa len návratovým tvarom a vnútorným volaním vypĺňania. Navigáciu
+ * na konkrétny formulár (rôzna URL pre zásielku/zvoz) robí `action` sám —
+ * tento helper vie len prihlásiť a upratať po sebe.
+ */
+export async function runOnDpdPortalPage<T>(
+  config: DpdPortalConfig,
+  options: RunOnDpdPortalPageOptions,
+  action: (page: Page) => Promise<T>,
+): Promise<T> {
+  const executablePath = options.executablePath ?? resolveChromiumExecutablePath();
+  let browser: Browser | undefined;
+  try {
+    browser = await chromium.launch({
+      headless: options.headless ?? true,
+      ...(executablePath === undefined ? {} : { executablePath }),
+      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
+    });
+    const context = await browser.newContext({ acceptDownloads: false });
+    const page = await context.newPage();
+    await loginToDpdPortal(page, config);
+    return await action(page);
+  } finally {
+    await browser?.close();
   }
 }
