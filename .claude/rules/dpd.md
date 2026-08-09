@@ -31,20 +31,65 @@ paths:
   Importné profily zostáva rýchlejšia/spoľahlivejšia alternatíva k
   per-objednávkovému formuláru — over najprv, či medzitým nevznikol profil,
   než sa znova rieši per-formulárová cesta.
-- **Presné selektory formulára `/shipments/0` NIE SÚ domapované** — appka
-  (`modules/dpd/shipment-playwright.ts`'s `fillShipmentFields`,
-  `pickup-playwright.ts`'s `fillPickupForm`) zámerne zlyhá NAHLAS s presným
-  popisom namiesto TICHÉHO odoslania vymyslených polí. Dôvod: dopĺňanie
-  chýbajúceho DPD prihlásenia (`secret request`) cez noc nikdy neprišlo —
-  žiaden ďalší pokus nesmie NAHRADIŤ tento fail-loud vzor odhadnutými
-  selektormi, aj keby "vyzerali rozumne" (DPD Shipper vocabular nie je
-  overený, hádanie by tichým zlyhaním vyzeralo ako úspech alebo poslalo zlé
-  dáta). **Prvé ďalšie použitie tohto modulu MUSÍ najprv urobiť READ-ONLY
-  naživo mapovanie** (rovnaký `readOnly` route-guard vzor ako
-  `dpd-mapuj.mjs`/`dpd-formulare.mjs` v scratchpad histórii issue 292 —
-  `let readOnly=false; ctx.route("**/*", …); readOnly=true;` hneď po
-  prihlásení) PRED doplnením skutočných selektorov do `fillShipmentFields`/
-  `fillPickupForm` — nikdy priamo skúšať naostro.
+- **Formulár `/shipments/0` aj objednávka zvozu `/pickup-orders/0` SÚ naživo
+  domapované (9.8.2026, read-only route guard — každý zápis po prihlásení
+  tvrdo blokovaný, nič sa neobjednalo/neuložilo)** —
+  `modules/dpd/shipment-playwright.ts`'s `fillShipmentFields`/
+  `pickup-playwright.ts`'s `fillPickupForm` teraz skutočne vypĺňajú a
+  odosielajú. Kľúčové zistenia:
+  - **Formulár `/shipments/0` má POVINNÉ rozmery balíka** (`parcelWidth`/
+    `Height`/`Length`, cm) — appka ich nikde neukladá (Shoptet export ich
+    nemá), preto `preview.ts`'s `DEFAULT_PARCEL_WIDTH_CM`/`HEIGHT_CM`/
+    `LENGTH_CM` (appka-vlastné rozumné defaulty, rovnaký vzor ako
+    `DEFAULT_PARCEL_WEIGHT_KG`, NIKDY editovateľné v UI).
+  - **`.fill()` NEDRŽÍ hodnotu na wijmo widgetoch** (`wj-input-date`,
+    `wj-input-number`, appka's vlastný `shp-universal-number-input`) — inak
+    vyzerá nastavená (DOM `.value` sedí), ale po prechode kroku wizardu sa
+    stratí (Angular model ju neprevzal). Funkčná náhrada, overená naživo
+    (hodnota PRETRVALA, DOM trieda `ng-valid`): klik (trojklik) → `Control+A`
+    → `keyboard.type()` → `Tab`. Zdieľaný helper `portal-fill.ts`'s
+    `typeInto` — použi ho pre KAŽDÉ ďalšie pole na tomto portáli, nikdy
+    holé `.fill()` na wijmo/Angular-completer prvok.
+  - **Produktový typ (`#product_Home`) aj "Dobierka" (`#service-COD`) sú v
+    DOM `disabled`, kým portál sám nedokončí svoj vlastný `/api/products`
+    POST po prihlásení** — appka preto čaká (`portal-fill.ts`'s
+    `waitUntilEnabled`, timeout) a pri pretrvávajúcom `disabled` zlyhá
+    NAHLAS namiesto tichého preskočenia.
+  - **Pole na sumu dobierky sa NEDALO naživo bezpečne domapovať** (jeho DOM
+    sa vykreslí AŽ po reálnom zaškrtnutí, ktoré v read-only sandboxe zostáva
+    trvalo disabled) — `fillCodAmount` preto po zaškrtnutí COD počká na
+    NOVO objavený `input` v tom istom `.additional-service` kontajneri;
+    ak sa neobjaví, zlyhá nahlas s presným popisom. **Prvé reálne overenie
+    tejto konkrétnej vetvy (COD zásielka) príde AŽ pri prvom skutočnom
+    COD odoslaní majiteľom** — over jej správanie vtedy, neber ju za
+    naživo overenú predtým.
+  - **Appka podporuje LEN slovenské doručovacie adresy** — krajina sa
+    NEVYBERÁ aktívne (portálový default je už "Slovensko", appka nemá
+    spoľahlivé mapovanie Shoptet textu na DPD interné číselné ID pre iné
+    krajiny), `portal-fill.ts`'s `assertSlovakDeliveryCountry` zlyhá nahlas
+    na inej krajine namiesto tichého odoslania so zlou predvolenou.
+  - **Telefón**: appka posiela LEN národné číslo (`portal-fill.ts`'s
+    `normalizePhoneForDpd` odstráni `+421`/`00421`/vedúcu nulu) — predvoľba
+    `+421` je v portáli SAMOSTATNÉ pole, appka ho nemení.
+  - **Číslo zásielky po uložení sa NEDALO naživo overiť skutočným kliknutím**
+    (bezpečnostné pravidlo — prvý reálny klik patrí majiteľovi) —
+    `readParcelNumberAfterSave` skúša najprv toast/notifikáciu, potom
+    zoznam Zásielky filtrovaný podľa referencie (appka posiela
+    `externalOrderId` do "Referencia 1", `#referential-info1`). **Toto je
+    jediná časť flow-u, ktorá zostáva UNVERIFIED až do prvého skutočného
+    odoslania majiteľom** — ak sa pri ňom ukáže iný tvar výsledku, uprav
+    LEN túto funkciu.
+  - **Testy** (`tests/helpers/dpd-portal-fixture.ts`) imitujú LEN tvar,
+    ktorý appka skutočne ovláda (ID/vnorenie/atribúty naživo domapovaných
+    prvkov) — NIKDY sa nedotknú `dpdshipper.sk`. **Fixture login formulár
+    MUSÍ mať `name` atribút na poliach** (nie len `id`) — inak skutočný
+    `<form method=post>` submit pošle prázdne telo a appka's vlastné
+    prihlásenie sa nedá naozaj overiť (zistené pri prvom behu tejto sady
+    testov: `body["loginName"]` bolo `undefined`, login "zlyhával" aj so
+    správnym heslom — nie appka bug, fixture bug; rovnaká trieda chyby ako
+    `shoptet-fixture.ts`'s file-chooser gotcha, over VŽDY, že fixture
+    formulár posiela dáta presne tak, ako by ich poslal skutočný
+    prehliadač).
 - **`secret request` má LEN 600s (10 min) platnosť URL na zadanie hodnoty —
   fired-and-forget nefunguje cez noc.** Pri opakovanom čakaní na
   `DPD_PORTAL_USER`/`PASSWORD` (majiteľ spal) sa muselo volať znova zakaždým,
