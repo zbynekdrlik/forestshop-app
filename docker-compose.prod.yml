@@ -105,6 +105,20 @@ services:
       # údaje — nikdy natvrdo, nikdy do repa.
       SHOPTET_ADMIN_USER:
       SHOPTET_ADMIN_PASSWORD:
+      # issue 292: DPD portál (dpdshipper.sk) prihlásenie — rovnaká úvaha ako
+      # SHOPTET_ADMIN_USER/PASSWORD vyššie: `.optional()` v `env.ts`, bare
+      # kľúč preberá `/srv/forestshop/.env`, keď tam je; keď nie je, appka
+      # beží ďalej, "Preprava DPD" hlási nenakonfigurované namiesto pádu.
+      # Nájdené AŽ pri post-deploy overení PR 324 — tento riadok chýbal od
+      # F1 (schéma/UI bez neho nasadené skôr), rovnaká trieda medzery ako
+      # `.claude/rules/deploy.md`'s zdokumentovaný issue 198 nález
+      # (MAIL_BCC/NEDOSTUPNE_BCC_EMAIL).
+      DPD_PORTAL_USER:
+      DPD_PORTAL_PASSWORD:
+      # `env.ts` má rozumný `.default(...)` — bare kľúč tu je len na to, aby
+      # sa dala adresa portálu zmeniť BEZ nového deploy/buildu (rovnaký
+      # dôvod ako SHOPTET_ADMIN_BASE_URL vyššie).
+      DPD_PORTAL_BASE_URL:
       # Alpine (base image) nemá Playwright's vlastný stiahnutý Chromium —
       # `Dockerfile` inštaluje systémový `apk add chromium` a
       # `playwright-import.ts`'s `resolveChromiumExecutablePath` ho nájde
