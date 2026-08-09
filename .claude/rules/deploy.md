@@ -47,6 +47,22 @@ paths:
   ssh newlevel@dev2 'docker exec forestshop-app-1 sh -c "env | grep -E \"<PREMENNA>\""'
   ```
   Prázdny výstup = chýbajúci riadok v compose, nie chyba v appke.
+  **Zopakovalo sa presne to isté (issue 292, PR 324/9.8.2026):**
+  `DPD_PORTAL_USER`/`DPD_PORTAL_PASSWORD`/`DPD_PORTAL_BASE_URL` boli v
+  `env.ts` `.optional()` už od F1 (schéma/UI nasadené skôr, kód čakal na
+  prihlasovacie údaje), ale riadok v `docker-compose.prod.yml` NIKDY
+  nepribudol — appka na `/srv/forestshop/.env`'s hodnoty čakala TÝŽDNE,
+  no do kontajnera sa nikdy nedostali. Odhalené AŽ pri prvom skutočnom
+  post-deploy overení ("Preprava DPD" stále hlásila nenakonfigurované, hoci
+  `.env` mal obe hodnoty). **Ponaučenie: `env.ts`'s `.optional()` premenná
+  bez sprievodnej `docker-compose.prod.yml` riadky je TICHÁ medzera, ktorá
+  môže prežiť VEĽA nasadení bez povšimnutia — kontrola vyššie patrí do
+  KAŽDÉHO PR-u, čo pridáva novú `env.ts` premennú, nie len do toho, čo ju
+  prvýkrát POUŽÍVA v kóde.** Táto konkrétna trieda YAML-konfiguračnej
+  medzery (žiadna appka logika, žiadny testovateľný kód) nemá v tomto repe
+  automatizovaný testovací postih — kontrola vyššie (`docker exec ... env |
+  grep`) JE regresným testom, robeným ručne pri KAŽDOM ďalšom pridaní
+  premennej.
 - **Nepovinná premenná v `environment:` bloku patrí bez `:?`, ako holý kľúč
   (`SHOPTET_EXPORT_URL:`, žiadna hodnota) — NIE `${VAR:?chyba}`.** Bare kľúč
   preberá hodnotu z `/srv/forestshop/.env`, keď tam je, a keď nie je, premenná
