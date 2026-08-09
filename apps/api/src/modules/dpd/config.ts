@@ -5,6 +5,7 @@
 export interface DpdPortalConfig {
   readonly loginUrl: string;
   readonly newShipmentUrl: string;
+  readonly newPickupOrderUrl: string;
   readonly user: string;
   readonly password: string;
 }
@@ -19,6 +20,10 @@ export function dpdPortalConfigFromBaseUrl(baseUrl: string, user: string, passwo
     // presný formát sa nedal zistiť bez zápisu, ktorý bezpečnostné pravidlo
     // tiketu zakazuje).
     newShipmentUrl: `${base}/shipments/0`,
+    // issue 292 (9.8.2026 naživo domapovanie): klik na "+" pri "Jednorazové
+    // zvozy" na `/pickup-orders` navigoval presne sem — priama adresa je
+    // spoľahlivejšia než hľadanie "+" tlačidla podľa okolitého textu.
+    newPickupOrderUrl: `${base}/pickup-orders/0`,
     user,
     password,
   };
