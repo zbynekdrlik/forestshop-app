@@ -1,24 +1,53 @@
-import { chromium, type Browser } from "playwright";
+import { chromium, type Browser, type Page } from "playwright";
 import { log } from "../../logger.js";
 import { resolveChromiumExecutablePath } from "../shoptet-writeback/playwright-import.js";
 import { runInChildProcess } from "../shoptet-writeback/child-runner.js";
 import { loginToDpdPortal } from "./login.js";
 import type { DpdPortalConfig } from "./config.js";
+import { typeInto } from "./portal-fill.js";
 
 // issue 292: "Objednávky zvozu" (`/pickup-orders`) — naživo overené
-// (7.8.2026): stránka má "Pravidelný zvoz" + "Jednorazové zvozy" so `+`
-// tlačidlom na pridanie NOVÉHO jednorazového zvozu. Samotný formulár, ktorý
-// sa po kliku na `+` otvorí, NIE JE naživo domapovaný (rovnaký dôvod ako
-// `shipment-playwright.ts`'s `fillShipmentFields` — čaká sa na
-// `DPD_PORTAL_USER`/`PASSWORD`). Rovnaká disciplína: zlyhaj NAHLAS, nikdy
-// tichy odošli vymyslené polia.
-const PICKUP_ORDERS_PATH = "/pickup-orders";
+// (7.8.2026 menu, 9.8.2026 formulár): klik "+" pri "Jednorazové zvozy"
+// navigoval na `/pickup-orders/0` (`config.ts`'s `newPickupOrderUrl`), teda
+// priama navigácia je spoľahlivejšia než hľadanie tlačidla. Formulár je
+// DVOJKROKOVÝ — krok 1 (zvozová adresa/kontakt/dátum, predvyplnené z účtu,
+// appka mení LEN dátum) → "Pokračovať" → krok 2 (rovnaká URL, appka's
+// vlastný SPA prechod) → skutočné "Uložiť".
+const PICKUP_DATE_SELECTOR = '#pickup-date input[wj-part="input"]';
+const CONTINUE_BUTTON_SELECTOR = "#button-confirmation";
 
-function fillPickupForm(): never {
-  throw new Error(
-    "DPD formulár jednorazového zvozu (/pickup-orders) ešte nie je naživo domapovaný (čaká sa na DPD_PORTAL_USER/PASSWORD) — " +
-      "zvoz sa neobjednal. Pozri issue 292, fillPickupForm v pickup-playwright.ts.",
-  );
+/** DPD portál čaká slovenský tvar dátumu bez vedúcich núl ("10. 8. 2026"),
+ * naživo overené (9.8.2026) — appka dostáva ISO `YYYY-MM-DD`
+ * (`http/dpd-routes.ts`'s `pickupBody` validácia). */
+function toDpdDateFormat(isoDate: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(isoDate);
+  if (match === null) throw new Error(`DPD zvoz: neplatný dátum "${isoDate}" (očakávané YYYY-MM-DD)`);
+  const year = match[1] ?? "";
+  const month = match[2] ?? "";
+  const day = match[3] ?? "";
+  return `${String(Number(day))}. ${String(Number(month))}. ${year}`;
+}
+
+async function fillPickupForm(page: Page, pickupDate: string): Promise<void> {
+  await typeInto(page, PICKUP_DATE_SELECTOR, toDpdDateFormat(pickupDate));
+  await page.locator(CONTINUE_BUTTON_SELECTOR).click();
+  await page.waitForTimeout(1000);
+
+  const saveButton = page.getByRole("button", { name: "Uložiť", exact: true });
+  await saveButton.click();
+  await page.waitForTimeout(1000);
+
+  // Presný úspešný signál sa nedal naživo overiť (prvý reálny klik patrí
+  // majiteľovi, issue 292) — appka preto aspoň overí, že sa NEOBJAVILA
+  // viditeľná chybová správa, namiesto tichého predpokladu úspechu.
+  const errorText = await page
+    .locator('.toast-error, .alert-danger, [class*="error"]:visible')
+    .first()
+    .textContent({ timeout: 2000 })
+    .catch(() => null);
+  if (errorText !== null && errorText.trim() !== "") {
+    throw new Error(`DPD portál nahlásil chybu pri objednaní zvozu: ${errorText.trim()}`);
+  }
 }
 
 export interface RunOrderDpdPickupOptions {
@@ -46,12 +75,11 @@ export async function runOrderDpdPickup(options: RunOrderDpdPickupOptions): Prom
     const page = await context.newPage();
 
     await loginToDpdPortal(page, options.config);
-    await page.goto(`${new URL(options.config.loginUrl).origin}${PICKUP_ORDERS_PATH}`, { waitUntil: "domcontentloaded" });
+    await page.goto(options.config.newPickupOrderUrl, { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle");
 
-    fillPickupForm();
-
-    return { ok: false, errorDetail: "unreachable" };
+    await fillPickupForm(page, options.pickupDate);
+    return { ok: true, errorDetail: null };
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     log.error({ err: message, pickupDate: options.pickupDate }, "DPD zvoz: pokus zlyhal");

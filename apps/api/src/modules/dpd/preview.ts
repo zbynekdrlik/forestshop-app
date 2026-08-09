@@ -12,6 +12,19 @@
 // prepísať (`ShipmentConfirmInput.weightKgOverride`).
 export const DEFAULT_PARCEL_WEIGHT_KG = "1.00";
 
+// issue 292: formulár `/shipments/0` má rozmery balíka (šírka/výška/dĺžka,
+// cm) ako POVINNÉ polia — zistené AŽ pri naživo domapovaní (9.8.2026),
+// appka ich nikde neukladá (Shoptet export ich nemá) a nemá teda odkiaľ
+// vziať skutočnú hodnotu. Rovnaký princíp ako hmotnosť vyššie — appka
+// NIKDY nehádaje reálne rozmery konkrétneho balíka, len ponúka rozumný
+// štartovací bod (malá/stredná krabica); obsluha ho pri potrebe upraví
+// priamo v DPD portáli po uložení zásielky (appka tieto polia v UI
+// needitovateľné, na rozdiel od hmotnosti — nie sú súčasťou náhľadu, ktorý
+// obsluha bežne kontroluje pred odoslaním).
+export const DEFAULT_PARCEL_WIDTH_CM = "30";
+export const DEFAULT_PARCEL_HEIGHT_CM = "20";
+export const DEFAULT_PARCEL_LENGTH_CM = "20";
+
 // Naživo overené (7.8.2026, 90-dňový export): obe reálne používané spôsoby
 // platby ("Dobierka (hotovosť) + karta (len SR)", "V hotovosti") obsahujú
 // "hotovosť"/"dobierka" — appka rozpozná dobierku podľa toho, či názov
