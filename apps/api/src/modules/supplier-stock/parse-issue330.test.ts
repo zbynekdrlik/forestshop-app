@@ -9,6 +9,7 @@
 // eslint max-lines: 400 (`.claude/rules/testing.md`) — rovnaký vzor ako
 // existujúci parse-issue307.test.ts split.
 import { describe, expect, it } from "vitest";
+import { hasKnownAvailabilityRule } from "./availability-domain-rules.js";
 import { parsePage } from "./parse.js";
 
 const ROY_JSON_LD_INSTOCK = `<html><head>
@@ -18,6 +19,30 @@ const ROY_JSON_LD_INSTOCK = `<html><head>
  "availability":"https://schema.org/InStock"}}
 </script>
 </head><body><p>Popis produktu.</p></body></html>`;
+
+describe("hasKnownAvailabilityRule — issue 330", () => {
+  it("doména BEZ textového ani viditeľného pravidla nemá známe pravidlo", () => {
+    expect(hasKnownAvailabilityRule("https://www.roy.sk/p-3238/wachman-alfa")).toBe(false);
+    expect(hasKnownAvailabilityRule("https://www.grube.de/nieco")).toBe(false);
+  });
+
+  it("doména s textovým pravidlom (huntingshop.eu) MÁ známe pravidlo, aj jej poddoména", () => {
+    expect(hasKnownAvailabilityRule("https://www.huntingshop.eu/p/1")).toBe(true);
+    expect(hasKnownAvailabilityRule("https://shop.huntingshop.eu/p/1")).toBe(true);
+  });
+
+  it("doména s viditeľným pravidlom (odimon.sk) MÁ známe pravidlo", () => {
+    expect(hasKnownAvailabilityRule("https://www.odimon.sk/p/1")).toBe(true);
+  });
+
+  it("cudzia doména s rovnakým koncom sa nezhoduje (huntingshop.eu vs. nothuntingshop.eu)", () => {
+    expect(hasKnownAvailabilityRule("https://nothuntingshop.eu/p/1")).toBe(false);
+  });
+
+  it("neplatná URL nemá známe pravidlo", () => {
+    expect(hasKnownAvailabilityRule("toto nie je url")).toBe(false);
+  });
+});
 
 describe("parsePage — issue 330: doména bez akéhokoľvek pravidla nikdy neprepne na 'available' zo samotného JSON-LD", () => {
   it("roy.sk s JSON-LD 'InStock' je unknown, NIKDY available (žiadna druhá kontrola pre túto doménu neexistuje)", () => {
