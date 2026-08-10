@@ -24,3 +24,14 @@ export function ourProductUrl(code: string): string {
 export function ourProductLink(code: string, feedUrl: string | null): string {
   return feedUrl === null || feedUrl === "" ? ourProductUrl(code) : feedUrl;
 }
+
+/**
+ * Odkaz na náš produkt VÝHRADNE z feedu, bez dohadu (issue 329 — história
+ * "Prepnuté produkty"). Na rozdiel od `ourProductLink` vyššie (padá na
+ * vyhľadávanie podľa kódu) tu sa pri chýbajúcej adrese odkaz jednoducho
+ * NEZOBRAZÍ — presne to majiteľ pre tento zoznam žiadal ("odkaz sa proste
+ * nezobrazí"), nikdy náhradný/mŕtvy odkaz.
+ */
+export function feedOnlyProductLink(feedUrl: string | null): string | null {
+  return feedUrl === null || feedUrl === "" ? null : feedUrl;
+}
