@@ -12,6 +12,8 @@ import { OrderFlagsBadgeRefreshContext } from "./orderFlagsBadgeContext.js";
 import { fetchOrderReminderStatus } from "./orderReminderApi.js";
 import { OrdersRemainingCountContext } from "./ordersRemainingCountContext.js";
 import { fetchPostaUncollectedStatus } from "./postaUncollectedApi.js";
+import { fetchRestockLinksMissingCount } from "./restockLinksApi.js";
+import { RestockLinksBadgeRefreshContext } from "./restockLinksBadgeContext.js";
 import { fetchThemeColors } from "./themeColorsApi.js";
 import { fetchUpozorneniaCount } from "./upozorneniaApi.js";
 import { UpozorneniaBadgeRefreshContext } from "./upozorneniaBadgeContext.js";
@@ -78,6 +80,34 @@ export function App(): JSX.Element {
     };
   }, [me, activeTabId, upozorneniaRefreshNonce]);
 
+  // issue 331: odznak "Vypredané → Skladom: návrhy odkazov" — TEN ISTÝ
+  // priamy vzor ako `upozorneniaCount` vyššie (musí byť známy hneď po
+  // prihlásení, nikdy len po prvom otvorení záložky). Diagnostika #331
+  // zistila, že táto obrazovka síce ukazuje "Nájdených: N", ale majiteľ sa
+  // na ňu nikdy sám od seba nedostane — odznak v menu (priečinok
+  // "Automatizácie" je predvolene rozbalený) rieši presne to, bez toho,
+  // aby na záložku vôbec klikol.
+  const [restockLinksMissingCount, setRestockLinksMissingCount] = useState<number | null>(null);
+  const [restockLinksRefreshNonce, setRestockLinksRefreshNonce] = useState(0);
+  const restockLinksBadgeRefresh = useCallback(() => {
+    setRestockLinksRefreshNonce((n) => n + 1);
+  }, []);
+  const restockLinksBadgeContextValue = useMemo(() => ({ refresh: restockLinksBadgeRefresh }), [restockLinksBadgeRefresh]);
+  useEffect(() => {
+    if (me === null) return;
+    let cancelled = false;
+    fetchRestockLinksMissingCount()
+      .then((count) => {
+        if (!cancelled) setRestockLinksMissingCount(count);
+      })
+      .catch(() => {
+        // Sieťový výpadok — odznak zostane na poslednej známej hodnote.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [me, activeTabId, restockLinksRefreshNonce]);
+
   // issue 290: odznaky "Výmena tovaru"/"Vrátený tovar"/"Reklamácie" — rovnaký
   // priamy vzor ako `upozorneniaCount` vyššie (JEDEN endpoint, `App.tsx` si
   // ho volá sám, počty musia byť známe hneď po prihlásení). Na rozdiel od
@@ -115,6 +145,11 @@ export function App(): JSX.Element {
     const counts: Record<string, number> = {};
     if (ordersRemainingCount !== null) counts["orders"] = ordersRemainingCount;
     if (upozorneniaCount !== null) counts["upozornenia"] = upozorneniaCount;
+    // issue 331: rovnaký princíp ako "orders"/"upozornenia" vyššie — odznak
+    // sa ukazuje AJ pri nule (appka tým hovorí "toto číslo poznám, je 0" —
+    // presne to majiteľovi chýbalo, keď číslo poznal len z ručného SQL
+    // dopytu).
+    if (restockLinksMissingCount !== null) counts["restock-links"] = restockLinksMissingCount;
     // issue 290: na rozdiel od "orders"/"upozornenia" vyššie (odznak sa
     // ukazuje AJ pri nule — appka tým hovorí "toto číslo poznám, je 0")
     // tieto tri odznaky sa VÔBEC nezobrazujú pri nule (ticket: "shown only
@@ -131,7 +166,7 @@ export function App(): JSX.Element {
     // istý tvar bugu ako `UpozorneniaSection.tsx`'s `withBusy`), takže lint
     // to nezachytí a stará hodnota (chýbajúce odznaky hneď po prihlásení,
     // kým sa nespustí NEJAKÝ INÝ trigger) prežije bez varovania.
-  }, [ordersRemainingCount, upozorneniaCount, orderFlagCounts]);
+  }, [ordersRemainingCount, upozorneniaCount, restockLinksMissingCount, orderFlagCounts]);
 
   // issue 185: stav zapnuté/vypnuté pre "Automatizácie" priečinok v menu.
   // Na rozdiel od `ordersRemainingCount` vyššie (publikované OBRAZOVKOU
@@ -252,36 +287,38 @@ export function App(): JSX.Element {
   return (
     <OrdersRemainingCountContext.Provider value={ordersRemainingCountContextValue}>
       <UpozorneniaBadgeRefreshContext.Provider value={upozorneniaBadgeContextValue}>
-        <OrderFlagsBadgeRefreshContext.Provider value={orderFlagsBadgeContextValue}>
-          <div className="app-shell">
-            <Sidebar
-              folders={NAV}
-              activeTabId={activeTabId}
-              onSelectTab={selectTab}
-              badgeCounts={badgeCounts}
-              badgeStatus={automationStatus}
-            />
-            <div className="main">
-              <Topbar
-                title={isVisibleTabId(activeTabId) ? (tab?.label ?? null) : null}
-                greeting={`Prihlásený: ${me.displayName} (${me.role})`}
-                role={me.role}
-                onSessionExpired={reload}
-                onLogout={logout}
-                passwordPanelOpen={passwordPanelOpen}
-                onTogglePasswordPanel={() => {
-                  setPasswordPanelOpen((open) => !open);
-                }}
-              >
-                <ChangePasswordForm email={me.email} onSessionExpired={reload} />
-              </Topbar>
-              <main className={tab?.wide === true ? "main-wide" : undefined}>
-                {logoutError !== "" && <p role="alert">{logoutError}</p>}
-                {ActiveComponent !== null && <ActiveComponent role={me.role} onSessionExpired={reload} />}
-              </main>
+        <RestockLinksBadgeRefreshContext.Provider value={restockLinksBadgeContextValue}>
+          <OrderFlagsBadgeRefreshContext.Provider value={orderFlagsBadgeContextValue}>
+            <div className="app-shell">
+              <Sidebar
+                folders={NAV}
+                activeTabId={activeTabId}
+                onSelectTab={selectTab}
+                badgeCounts={badgeCounts}
+                badgeStatus={automationStatus}
+              />
+              <div className="main">
+                <Topbar
+                  title={isVisibleTabId(activeTabId) ? (tab?.label ?? null) : null}
+                  greeting={`Prihlásený: ${me.displayName} (${me.role})`}
+                  role={me.role}
+                  onSessionExpired={reload}
+                  onLogout={logout}
+                  passwordPanelOpen={passwordPanelOpen}
+                  onTogglePasswordPanel={() => {
+                    setPasswordPanelOpen((open) => !open);
+                  }}
+                >
+                  <ChangePasswordForm email={me.email} onSessionExpired={reload} />
+                </Topbar>
+                <main className={tab?.wide === true ? "main-wide" : undefined}>
+                  {logoutError !== "" && <p role="alert">{logoutError}</p>}
+                  {ActiveComponent !== null && <ActiveComponent role={me.role} onSessionExpired={reload} />}
+                </main>
+              </div>
             </div>
-          </div>
-        </OrderFlagsBadgeRefreshContext.Provider>
+          </OrderFlagsBadgeRefreshContext.Provider>
+        </RestockLinksBadgeRefreshContext.Provider>
       </UpozorneniaBadgeRefreshContext.Provider>
     </OrdersRemainingCountContext.Provider>
   );

@@ -16,8 +16,40 @@ const E2E_NAVRHY_ODKAZOV_EMAIL = "e2e-navrhy-odkazov@forestshop.sk";
 // zhody). Potvrdenie ide cez ROVNAKÚ `product_supplier_link_override`
 // tabuľku ako "Párovanie produktov" (#239) — druhá polovica testu to
 // overuje NA TEJ DRUHEJ obrazovke, dôkaz zdieľanej zápisovej cesty.
+// issue 331: klik na návrh odteraz UKLADÁ PRIAMO (jeden klik, nie
+// predvyplň-a-potom-Uložiť) — a odznak v ľavom menu (rovnaký generický
+// mechanizmus ako issue 147/267) je vidno HNEĎ po prihlásení, bez toho, aby
+// sa na túto záložku vôbec kliklo.
 
-test("vypredaný produkt bez linky ponúkne návrh podľa zhody mena + dodávateľa, potvrdenie sa zapíše a zdieľa sa s Párovaním produktov; konzola je čistá", async ({
+test("odznak v menu ukazuje počet chýbajúcich odkazov HNEĎ po prihlásení, bez otvorenia záložky; konzola je čistá", async ({
+  page,
+}) => {
+  const chyby: string[] = [];
+  page.on("console", (m) => {
+    if (m.type() === "error" || m.type() === "warning") chyby.push(m.text());
+  });
+  page.on("pageerror", (e) => {
+    chyby.push(e.message);
+  });
+
+  await page.goto("/");
+  await page.getByLabel("E-mail").fill(E2E_NAVRHY_ODKAZOV_EMAIL);
+  await page.getByLabel("Heslo").fill(E2E_HESLO);
+  await page.getByRole("button", { name: "Prihlásiť sa" }).click();
+
+  // Predvolená landing obrazovka je "Na objednanie" (issue 302) — odznak
+  // musí byť vidno TU, bez toho, aby sa na "Vypredané → Skladom: návrhy
+  // odkazov" vôbec kliklo. Presné číslo je zdieľaný fixtúrový stav (iné
+  // spec súbory môžu bežať súbežne) — over PLATNÝ tvar, nie presnú
+  // hodnotu, rovnaký princíp ako `nav.spec.ts`'s `nav-badge-orders`.
+  const odznak = page.getByTestId("nav-badge-restock-links");
+  await expect(odznak).toBeVisible();
+  await expect(odznak).toHaveText(/^\d+$/);
+
+  expect(chyby).toEqual([]);
+});
+
+test("vypredaný produkt bez linky ponúkne návrh podľa zhody mena + dodávateľa, jeden klik ho rovno potvrdí a zdieľa sa s Párovaním produktov; konzola je čistá", async ({
   page,
 }) => {
   const chyby: string[] = [];
@@ -44,23 +76,27 @@ test("vypredaný produkt bez linky ponúkne návrh podľa zhody mena + dodávate
   await expect(riadok).toContainText("E2E Bunda Alfa Vypredaná");
 
   // Návrh (kandidát z rovnakého dodávateľa + prekrývajúceho sa mena) je
-  // VIDITEĽNÝ, ale NIČ sa nikdy neuloží samo — len klik na "Použiť" ho
-  // predvyplní do vstupu.
-  const navrhTlacidlo = riadok.getByTestId("restock-link-use-candidate-E2E-RL-CHYBA-E2E-RL-NAVRH");
-  await expect(navrhTlacidlo).toContainText("https://e2e-dodavatel.example.com/bunda-alfa-navrh");
+  // VIDITEĽNÝ, meno aj adresa sú na tlačidle vidno PRED kliknutím — ale
+  // NIČ sa nikdy neuloží samo, len explicitný klik na "✅ Potvrdiť" uloží
+  // TOHTO KONKRÉTNEHO kandidáta.
+  const potvrdTlacidlo = riadok.getByTestId("restock-link-confirm-E2E-RL-CHYBA-E2E-RL-NAVRH");
+  await expect(potvrdTlacidlo).toContainText("https://e2e-dodavatel.example.com/bunda-alfa-navrh");
   // Nesúvisiaci produkt sa v návrhu NIKDY neobjaví.
   await expect(riadok).not.toContainText("E2E Šál Zeta Cudzí");
 
-  await navrhTlacidlo.click();
-  const vstup = page.getByTestId("restock-link-edit-input-E2E-RL-CHYBA");
-  await expect(vstup).toHaveValue("https://e2e-dodavatel.example.com/bunda-alfa-navrh");
-
-  await page.getByTestId("restock-link-save-E2E-RL-CHYBA").click();
+  await potvrdTlacidlo.click();
 
   // Produkt teraz MÁ linku — táto obrazovka zobrazuje LEN produkty BEZ nej,
   // takže po uložení riadok zmizne (skutočný, nie len optimistický dôkaz
   // uloženia — refetch to potvrdzuje).
   await expect(page.getByTestId("restock-links-empty")).toBeVisible();
+
+  // Odznak v menu sa po potvrdení sám prepočíta — číslo je ZDIEĽANÝ globálny
+  // stav (počíta VŠETKY vypredané produkty v celej e2e DB, nielen tie z
+  // tohto účtu), iné súbežne bežiace spec súbory ho môžu meniť naraz, preto
+  // sa overuje len PLATNÝ TVAR (rovnaký princíp ako `nav.spec.ts`'s
+  // `nav-badge-orders`), nikdy presná hodnota.
+  await expect(page.getByTestId("nav-badge-restock-links")).toHaveText(/^\d+$/);
 
   // Zdieľaná zápisová cesta (#239's `product_supplier_link_override`) — tá
   // istá hodnota je vidno aj na "Párovanie produktov", úplne INEJ

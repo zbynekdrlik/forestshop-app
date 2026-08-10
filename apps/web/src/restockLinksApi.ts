@@ -58,3 +58,23 @@ export async function searchRestockLinkSuggestions(input: {
   const response = await fetch(`/api/restock-links?${query.toString()}`);
   return searchSchema.parse(await readJson(response, "Zoznam vypredaných produktov bez linky sa nepodarilo načítať"));
 }
+
+const countSchema = z.object({ total: z.number() });
+
+// issue 331: odznak v ľavom menu (`App.tsx`, rovnaký vzor ako
+// `fetchUpozorneniaCount`) — musí byť známy HNEĎ po prihlásení, nikdy až
+// po otvorení tejto záložky. Znovupoužíva TEN ISTÝ `GET /api/restock-links`
+// endpoint s `pageSize: 1` — `total` sa v `listRestockLinkSuggestions`
+// počíta nad CELOU odfiltrovanou množinou nezávisle od `pageSize` (len
+// samotní `candidates` sa počítajú iba pre vrátenú stranu), takže je to
+// lacný dopyt, žiadna nová trasa. Chyba (401/sieť) sa nikdy nehádže —
+// odznak jednoducho ostane na poslednej známej hodnote, rovnaký vzor ako
+// `fetchUpozorneniaCount`.
+export async function fetchRestockLinksMissingCount(): Promise<number> {
+  const query = new URLSearchParams({ q: "", page: "1", pageSize: "1" });
+  const response = await fetch(`/api/restock-links?${query.toString()}`);
+  if (response.status === 401) return 0;
+  if (!response.ok) return 0;
+  const parsed = countSchema.safeParse(await response.json());
+  return parsed.success ? parsed.data.total : 0;
+}

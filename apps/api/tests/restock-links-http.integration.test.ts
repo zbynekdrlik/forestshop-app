@@ -260,3 +260,21 @@ it("vráti najviac 3 kandidátov aj keď rovnako skórovaných vyhovuje viac", a
   // Rovnaké skóre pre všetky 4 → tie-break podľa mena, abecedne.
   expect(item?.candidates.map((c) => c.productKey)).toEqual(["RL-STROP-A1", "RL-STROP-B2", "RL-STROP-C3"]);
 });
+
+// issue 331: odznak v ľavom menu (`App.tsx`) čítava TENTO endpoint s
+// `pageSize=1` (lacný dopyt na samotný počet, `restockLinksApi.ts`'s
+// `fetchRestockLinksMissingCount`) — `total` sa MUSÍ počítať nad CELOU
+// odfiltrovanou množinou nezávisle od `pageSize`, inak by odznak
+// zobrazoval len "1" namiesto skutočného počtu. Doteraz žiadny test
+// nepoužil `pageSize` iný než predvolený, tento overuje presne ten
+// predpoklad, na ktorom odznak stojí.
+it("total sa počíta nad CELOU množinou nezávisle od pageSize — odznak v menu na tomto stojí", async () => {
+  const { app, cookie, db } = await boot("citanie");
+  const snapshotId = await insertTestSnapshot(db);
+  await seedVariant(db, snapshotId, "RL-BADGE-1", "RL-BADGE-1/1", { name: "Bez linky Prvý", state: "out_of_stock" });
+  await seedVariant(db, snapshotId, "RL-BADGE-2", "RL-BADGE-2/1", { name: "Bez linky Druhý", state: "out_of_stock" });
+
+  const telo = (await (await app.request("/api/restock-links?q=RL-BADGE&page=1&pageSize=1", { headers: { cookie } })).json()) as Telo;
+  expect(telo.total).toBe(2);
+  expect(telo.items).toHaveLength(1);
+});
