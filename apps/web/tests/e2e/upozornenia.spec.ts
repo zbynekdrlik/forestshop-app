@@ -184,7 +184,10 @@ test("desktop (1600px): pás akcií karty je ≥25 % nižší než issue 303's b
   await expect(card).toBeVisible();
 
   const actionsHeight = await card.evaluate((el) => el.querySelector(".upozornenie-actions")?.getBoundingClientRect().height ?? 0);
-  expect(actionsHeight, "pás akcií karty musí byť ≥25 % nižší než issue 303's nameraný 35.59px baseline (≤26.7px)").toBeLessThanOrEqual(27);
+  // Code review: 35.59 × 0.75 = 26.69px presne — strop musí byť TENTO
+  // reťazec, nie zaokrúhlené 27 (to by pustilo cez ~24.4 % zníženie ako
+  // "≥25 %").
+  expect(actionsHeight, "pás akcií karty musí byť ≥25 % nižší než issue 303's nameraný 35.59px baseline (≤26.69px)").toBeLessThanOrEqual(26.69);
 
   const cardHeight = await card.evaluate((el) => el.getBoundingClientRect().height);
   expect(cardHeight, "celá karta musí byť výrazne nižšia než issue 303's nameraný 269px pre 5-riadkový obsah").toBeLessThanOrEqual(140);

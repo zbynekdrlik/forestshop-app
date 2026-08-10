@@ -204,6 +204,25 @@ describe("deleteUpozornenie — všetky zdroje", () => {
     const { db } = await bootDb();
     expect(await deleteUpozornenie(db, "00000000-0000-0000-0000-000000000000")).toBe(false);
   });
+
+  // Code review pred mergom (issue 327): VYRIEŠENÚ kartu zmazať NEJDE —
+  // server-side vynútenie, nezávisle od toho, že dnešný frontend aj tak
+  // nikdy nerenderuje "Odstrániť" pre vyriešenú kartu. Dôvod: `vratenie`
+  // typu KONEČNOSŤ (`.claude/rules/upozornenia.md`) sa spolieha na to, že
+  // pre `dedupKey` EXISTUJE aj vyriešený riadok — hard-delete by ho
+  // odstránil a ĎALŠÍ import by tú istú (stále aktívnu) vrátkovú kartu
+  // ticho znova založil ako novú.
+  it("NEZMAŽE vyriešenú kartu (vracia false, riadok ostáva)", async () => {
+    const { db, userId } = await bootDb();
+    const now = new Date("2026-08-05T08:00:00Z");
+    const own = await createOwnNote(db, { title: "Vybavené — nezmazať", createdByUserId: userId, now });
+    expect(await resolveUpozornenie(db, { id: own.id, resolvedByUserId: userId, now })).toBe(true);
+
+    expect(await deleteUpozornenie(db, own.id)).toBe(false);
+    const rows = await db.select().from(upozornenie);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.id).toBe(own.id);
+  });
 });
 
 describe("resolveUpozornenie / postponeUpozornenie", () => {

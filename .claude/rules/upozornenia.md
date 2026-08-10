@@ -54,12 +54,27 @@ paths:
   "mountedRef nastavený v tele efektu", `.claude/rules/frontend-design.md`),
   aby sa mark-seen spustil PRESNE RAZ za mount, nikdy znova pri zmene
   filtra "aj vybavené" (ten len refetchne `load()` bez mark-seen).
-- **`updateOwnNote`/`deleteOwnNote` server-side vynucujú `source ===
-  "vlastne"`** — karta zo zdroja "appka" nemá tlačidlá Upraviť/Zmazať vôbec
-  vo frontende, ale to nestačí (rovnaká past ako `.claude/rules/
-  nedostupne.md`'s povinný náhľad — front-end skrytie nie je vynútenie).
-  Server vráti `updated`/`removed: false` namiesto chyby pri pokuse o cudziu
-  kartu.
+- **`updateOwnNote` server-side vynucuje `source === "vlastne"`** — karta zo
+  zdroja "appka" nemá tlačidlo Upraviť vôbec vo frontende, ale to nestačí
+  (rovnaká past ako `.claude/rules/nedostupne.md`'s povinný náhľad —
+  front-end skrytie nie je vynútenie). Server vráti `updated: false`
+  namiesto chyby pri pokuse o cudziu kartu.
+  **AKTUALIZÁCIA (issue 327, 10. 8. 2026): `deleteOwnNote` UŽ NEEXISTUJE —
+  nahradila ho generická `deleteUpozornenie`, ktorá NEVYNUCUJE
+  `source === "vlastne"` (majiteľ chce vedieť odstrániť AKÚKOĽVEK kartu,
+  nielen vlastnú poznámku — tlačidlo "Odstrániť" je teraz v akčnom riadku
+  pre VŠETKY nevyriešené karty).** `deleteUpozornenie` NAOPAK vynucuje
+  `resolved_at IS NULL` (code review pred mergom): vyriešenú kartu zmazať
+  NEJDE, server vráti `removed: false` — nie kvôli zrkadleniu frontendu
+  (ten dnes aj tak nikdy nerenderuje "Odstrániť" pre vyriešenú kartu), ale
+  kvôli vynúteniu `vratenie` typu KONEČNOSTI (pozri nižšie v tomto súbore):
+  `return-upozornenia.ts`'s pre-check rozpoznáva "už bolo vybavené" podľa
+  TOHO, že pre `dedupKey` EXISTUJE aj vyriešený riadok — hard-delete
+  vyriešenej `vratenie` karty by ten riadok odstránil a ĎALŠÍ import tej
+  istej (stále aktívnej) vrátkovej objednávky by ju ticho znova založil ako
+  NOVÚ kartu. Test pri KAŽDOM ĎALŠOM rozšírení nejakej `source`/`resolved`
+  obmedzenej akcie v tomto module: server MUSÍ overiť podmienku SÁM, front-end
+  gate nikdy nestačí.
 - **Odložená karta bola živo nájdená ako NEVIDITEĽNÁ ÚPLNE VŽDY — žiadna
   hodnota žiadneho filtra ju neodkryla, a neexistovala akcia na jej
   vrátenie skôr, než sa vráti sama** (issue 267 follow-up, gap 2, nájdené

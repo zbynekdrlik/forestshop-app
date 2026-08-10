@@ -250,4 +250,23 @@ describe("PATCH/DELETE /api/upozornenia/:id", () => {
     const body = (await list.json()) as { rows: readonly { id: string }[] };
     expect(body.rows.some((r) => r.id === created.id)).toBe(false);
   });
+
+  // Code review pred mergom (issue 327): server-side vynútenie cez CELÚ
+  // HTTP trasu, nielen v `service.ts` — vyriešenú kartu tento endpoint
+  // NIKDY nezmaže (`.claude/rules/upozornenia.md`'s `vratenie` KONEČNOSŤ).
+  it("issue 327: NEZMAŽE vyriešenú kartu (removed:false, karta ostáva v zozname 'Vybavené')", async () => {
+    const { app, cookie, db } = await boot("manazer");
+    const now = new Date("2026-08-10T08:00:00Z");
+    const created = await upsertUpozornenie(db, { type: "vlastna_poznamka", source: "vlastne", title: "Vybavené", now });
+    const resolveRes = await app.request(`/api/upozornenia/${created.id}/resolve`, { method: "POST", headers: { cookie } });
+    expect(((await resolveRes.json()) as { resolved: boolean }).resolved).toBe(true);
+
+    const res = await app.request(`/api/upozornenia/${created.id}`, { method: "DELETE", headers: { cookie } });
+    expect(res.status).toBe(200);
+    expect((await res.json()) as { ok: boolean; removed: boolean }).toEqual({ ok: true, removed: false });
+
+    const resolvedList = await app.request("/api/upozornenia/resolved", { headers: { cookie } });
+    const resolvedBody = (await resolvedList.json()) as { rows: readonly { id: string }[] };
+    expect(resolvedBody.rows.some((r) => r.id === created.id)).toBe(true);
+  });
 });

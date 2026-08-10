@@ -138,8 +138,27 @@ export async function updateOwnNote(db: UpozornenieExecutor, input: UpdateOwnNot
 // `.claude/rules/upozornenia.md`) sa jednoducho znova vytvoria pri ďalšom
 // behu, ak podmienka stále platí — rovnaké správanie ako keby karta nikdy
 // nevznikla.
+//
+// KRITICKÉ (code review pred mergom, issue 327): mazanie je obmedzené na
+// `resolved_at IS NULL` — VYRIEŠENÚ kartu zmazať NEJDE. Dôvod nie je len
+// zrkadlenie frontendu (ten dnes aj tak nikdy nerenderuje "Odstrániť" pre
+// vyriešenú kartu, `row.status !== "vybavene"` v `UpozornenieCard.tsx`) —
+// je to VYNÚTENIE `vratenie` typu KONEČNOSTI (`.claude/rules/
+// upozornenia.md`'s "vybavené je KONEČNÉ, nikdy sa nemá zopakovať"):
+// `return-upozornenia.ts`'s pre-check rozpoznáva "už bolo vybavené" podľa
+// TOHO, že PRE `dedupKey` EXISTUJE (aj vyriešený) riadok — hard-delete
+// vyriešenej `vratenie` karty by ten riadok úplne odstránil, pre-check by
+// nič nenašiel, a ĎALŠÍ import objednávky v tom istom (stále aktívnom)
+// vrátkovom stave by ju TICHO znova založil ako NOVÚ kartu — presne ten bug,
+// čo `return-upozornenia.ts` existuje riešiť. Front-end skrytie NIKDY nie je
+// vynútenie (`.claude/rules/upozornenia.md`'s vlastná disciplína pri
+// `updateOwnNote`/`deleteOwnNote`) — server to musí overiť sám, nezávisle od
+// toho, čo UI dnes ukazuje.
 export async function deleteUpozornenie(db: Database, id: string): Promise<boolean> {
-  const result = await db.delete(upozornenie).where(eq(upozornenie.id, id)).returning({ id: upozornenie.id });
+  const result = await db
+    .delete(upozornenie)
+    .where(and(eq(upozornenie.id, id), isNull(upozornenie.resolvedAt)))
+    .returning({ id: upozornenie.id });
   return result.length > 0;
 }
 

@@ -21,7 +21,11 @@ import type { UpozornenieRow } from "../upozorneniaApi.js";
 // zvyčajne bez `\n` vôbec, takže CELÝ text sa jednoducho presunie vedľa
 // nadpisu) aj pre AKÝKOĽVEK budúci automatický zdroj bez väzby na presnú
 // formuláciu backendového textu.
-function splitDetailLines(details: string): { readonly first: string | null; readonly rest: string } {
+// Exportovaná KVÔLI testovateľnosti (code review pred mergom, issue 327) —
+// vlastný jednotkový test na hraničné prípady (`UpozornenieCard.
+// splitDetailLines.test.ts`), nezávisle od renderovacích testov, ktoré ju
+// pokrývajú len nepriamo.
+export function splitDetailLines(details: string): { readonly first: string | null; readonly rest: string } {
   if (details === "") return { first: null, rest: "" };
   const lines = details.split("\n");
   return { first: lines[0] ?? null, rest: lines.slice(1).join("\n") };

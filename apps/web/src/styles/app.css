@@ -2139,7 +2139,14 @@ a.upozornenie-title:hover {
    serveru (rovnaká metodika ako issue 105/107/111/127/171/204/214/258/303)
    — pôvodný jednoriadkový pás akcií mal ~35.6px (issue 303's vlastný
    nameraný údaj); nižšie paddingy + o stupeň menšie písmo na tlačidlách
-   znižujú výšku o zmeraných ≥25 %, bez zmeny šírky/textu tlačidiel. */
+   znižujú výšku o zmeraných ≥25 %, bez zmeny šírky/textu tlačidiel.
+   Code review: táto trieda (`.upozornenie-actions .btn`) VEDOME zasahuje aj
+   do záložky "Vybavené" (`UpozorneniaResolvedList.tsx` znovupoužíva rovnaké
+   `.upozornenie-actions`/`.btn.sm.ghost` pre "↩ Vrátiť medzi otvorené") —
+   živo overené, že tlačidlo ostáva čitateľné/klikateľné, len o niečo
+   kompaktnejšie. Zámerné zdieľanie triedy naprieč OBOMA záložkami, rovnaký
+   princíp ako issue 303's centrálna zmena tokenov namiesto lokálnych
+   výnimiek (`.claude/rules/frontend-design.md`). */
 .upozornenie-actions .btn {
   padding-top: 1px;
   padding-bottom: 1px;
