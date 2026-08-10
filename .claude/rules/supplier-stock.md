@@ -395,3 +395,30 @@ paths:
   `docker compose exec postgres psql` dopyt na `supplier_stock` po
   konkrétnej doméne PO dokončení behu (`SELECT status FROM job_run WHERE
   id=...`).
+- **"Prepnuté produkty" (história prepnutí, `restock_event`) bola DOTERAZ
+  jediná z troch tabuliek na tejto obrazovke bez akéhokoľvek odkazu na náš
+  produkt** — dostala ho od issue 329 rovnakým LEFT JOIN vzorom ako
+  `allRestockCandidates`'s `ourUrl`, priama adresa z feedu
+  (`.claude/rules/shop-feed.md`), NIKDY fallback na vyhľadávanie
+  (`shopLinks.ts`'s `feedOnlyProductLink`, na rozdiel od `ourProductLink`
+  používaného v "Pripravené na prepnutie" vyššie). Pri ĎALŠOM "chcem odkaz
+  aj tu" požiadavke na túto obrazovku najprv skontroluj, ktorá z troch
+  tabuliek (rozpory / prepnuté / čakajúce) ho ešte nemá, namiesto
+  predpokladu že všetky tri sú rovnaké.
+  `restock_event` je plochá tabuľka BEZ FK na `variant`/`product`
+  (`schema-restock.ts`) — e2e fixtúra preň (`e2e-fixtures-restock-events.ts`)
+  teda nepotrebuje seedovať ani jedno z nich, len samotné udalosti (+
+  zodpovedajúci `shop_product_url` riadok pre prípad S odkazom).
+- **Vitest `screen.getByRole(..., {name})` bez `within(riadok)` sa rozbije
+  hneď, ako pribudne DRUHÝ riadok s ROVNAKÝM prístupným menom** — issue 329
+  pridalo druhý `restock-event-*` riadok do `RestockSection.test.tsx`'s
+  `STATUS.events` fixtúry (kvôli "chýbajúca adresa" prípadu) a existujúci
+  `screen.getByRole("link", {name: "skladom"})` (dovtedy jediný takýto
+  odkaz na stránke) spadol na "found multiple elements", lebo oba riadky
+  zdieľajú `supplierAvailabilityText: "skladom"`. Fix: `within(riadok)
+  .getByRole(...)`, presne rovnaký princíp ako existujúce Playwright
+  substring-kolízie (`.claude/rules/testing.md`), len vo vitest/RTL tvare.
+  Test pri KAŽDOM ďalšom pridaní DRUHÉHO riadku do JUŽ existujúcej
+  jedno-riadkovej vitest fixtúry: `grep` existujúce `screen.getByRole`/
+  `screen.getByText` volania v tom istom test súbore — nesporí sa nejaké o
+  text, ktorý bude po zmene zdieľaný viacerými riadkami?
