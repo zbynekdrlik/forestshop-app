@@ -3253,3 +3253,35 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
   `Closes #309` anywhere in the PR body or any commit message (this repo
   merges via merge commits, so commit messages reach `main` intact and
   would auto-close too).
+
+## Issue 327 (10. 8. 2026) — Upozornenia: kompaktné karty, bez stavu Nevybavená, s mazaním
+
+- Verzia 0.3.0-dev.189 → 0.3.0-dev.190 (`c59f8c7`).
+- Commity: `0bbbeec` [red] test na `isUnfinishedOrderStatus("Nevybavená")
+  === false`, `b6c7861` [green] `UNFINISHED_ORDER_STATUS_NAMES` → len
+  "Vybavuje sa" (existujúce otvorené karty sa AUTOMATICKY zatvoria
+  ďalším `ordersImportJob` behom, žiadna migrácia), `dacff9f`
+  `deleteOwnNote` → generická `deleteUpozornenie` (VŠETKY zdroje),
+  `d359fdb` kompaktné karty (nadpis+meta na jednom riadku, nadpis =
+  odkaz, akčný riadok ≥25 % nižší — živo zmerané 35.59px→25.59px),
+  `3378a1d` code-review fixy (`deleteUpozornenie` teraz odmieta
+  vyriešené karty — chráni `vratenie`'s KONEČNOSŤ; playbook update;
+  e2e strop sprísnený na 26.69px; `splitDetailLines` exportovaná +
+  vlastný test).
+- Dispatchovaný Senior Code Reviewer subagent (rozsah `c59f8c7..d359fdb`):
+  0 🔴, 2 Important + 3 Minor, všetky opravené pred pushom.
+- Testy: web unit 74/74 súborov (539 testov), api unit 51/51 (690
+  testov), api integration 84/84 (629 testov), e2e 51/51 (52 spec
+  súborov) — zero console errors.
+- PR #328 merged (`123b769`) do `main`; main CI + Deploy oba zelené.
+  Deployed image `ghcr.io/zbynekdrlik/forestshop-app:0.3.0-dev.190`
+  potvrdený na dev2.
+- Post-deploy naživo overené (Playwright, prihlásený ako majiteľ
+  Zbyněk/admin): karta 115.58px (predtým 149.58–175.17px podľa
+  obsahu), akčný riadok 25.59px; nadpis je funkčný odkaz s
+  aria-label; ručne spustené "Stiahnuť teraz" (Objednávky) na
+  produkcii AUTOMATICKY zatvorilo obe existujúce otvorené "Nevybavená"
+  karty (žiadny manuálny DB zásah); tlačidlo "Odstrániť" funkčne
+  overené vytvorením + zmazaním testovacej vlastnej poznámky; 0 chýb v
+  konzole počas celého overenia.
+- Issue 327 zavretý s dôkazovým komentárom po živom overení.
