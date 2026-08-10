@@ -3318,3 +3318,43 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
   odkaz mala/nemala + vitest `getByRole` kolízia pri druhom riadku so
   zhodným prístupným menom (`within(riadok)` fix).
 - Issue 329 zavretý s dôkazovým komentárom po živom overení.
+
+## 2026-08-11 — #331 (Vypredané → Skladom: chýbajúce odkazy — hlavná príčina malého počtu prepnutí)
+
+- Solo ticket. Version bump `d714fd8` (0.3.0-dev.195→.196), first commit.
+- STEP 0 (validácia) + design komentár PRED prvým kódovým commitom:
+  https://github.com/zbynekdrlik/forestshop-app/issues/331#issuecomment-5246739482
+  (živé overenie: 34 dnes chýbajúcich, VŠETKY majú kandidáta — #311's
+  mechanizmus je v poriadku) a
+  https://github.com/zbynekdrlik/forestshop-app/issues/331#issuecomment-5246745247
+  (príčina: (b) číslo nikde inde vidno + (c) 0 potvrdení od nasadenia #311;
+  zamietnutá alternatíva: karta na nástenke Upozornenia).
+- Fix: odznak v ľavom menu (`App.tsx`'s `restockLinksMissingCount`, rovnaký
+  vzor ako `upozorneniaCount`/#267 — nová `restockLinksBadgeContext.ts`,
+  `fetchRestockLinksMissingCount` v `restockLinksApi.ts`, reuse
+  `GET /api/restock-links?pageSize=1`) + jednoklikové "✅ Potvrdiť" kandidáta
+  (`RestockLinkSuggestionsSection.tsx`'s `confirmCandidate`, náhrada za
+  dvojklikový "💡 Použiť → 💾 Uložiť"), "✏️ Doplniť" bezo zmeny.
+- Testy: unit (`RestockLinkSuggestionsSection.test.tsx` — nový
+  jednoklikový test + "nič sa neuloží len z načítania" test), integračný
+  (`restock-links-http.integration.test.ts` — `total` nezávislé od
+  `pageSize`), e2e (`restock-links.spec.ts` — odznak hneď po prihlásení +
+  prepísaný jednoklikový flow). Web unit 544/544, api unit 699/699, api
+  integration 631/631, e2e 53/53 (jeden `pairing.spec.ts` flake na
+  preťaženom boxe, izolovaný re-beh aj plný balík znova čisté).
+- Nezávislý code review (subagent): 0 🔴 0 🟡, 2 🔵 informačné, Ready to
+  merge — Yes.
+- PR #338 (`bb7f789`), CI aj Deploy zelené. Systémový nález (page=1/
+  pageSize=50 bez ďalšej strany naprieč viacerými obrazovkami) zapísaný
+  samostatne ako #337, nedotýkané v tomto PR.
+- Post-deploy naživo overené (v0.3.0-dev.196): odznak "34" vidno HNEĎ po
+  prihlásení bez otvorenia záložky, jeden reálny klik na "✅ Potvrdiť"
+  (Fotopasca Wachman King II. gen) uložil odkaz, odznak aj "Nájdených"
+  klesli na 33, hodnota sa objavila aj na "Párovanie produktov" (zdieľaná
+  zápisová cesta), 0 chýb v konzole. Testovací zápis zmazaný
+  (`synced_at IS NULL` overené pred zmazaním), odznak sa vrátil na 34.
+- Playbook: `.claude/rules/restock-links.md` — prečo #311 nezdvihlo
+  pokrytie (chýbala viditeľnosť/rýchlosť, nie logika) + reusable technika
+  overenia produkčnej logiky priamo cez appkin skompilovaný `dist/`
+  (`docker exec ... node -e 'require("./dist/...")'`, `createDb()` vracia
+  `{ pool, db }`, nie `db` priamo).
