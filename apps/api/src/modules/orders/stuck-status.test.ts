@@ -3,11 +3,19 @@ import { ORDER_STUCK_THRESHOLD_DAYS, daysStuck, isUnfinishedOrderStatus, stuckOr
 
 // issue 301: tretie automatické Upozornenie — objednávka, ktorá dlho visí v
 // NEVYBAVENOM stave. Naživo overené stavy (7. 8. 2026): "Vybavuje sa" (31
-// objednávok), "Nevybavená" (3 objednávky) — presne tieto dva, žiadny ďalší.
+// objednávok), "Nevybavená" (3 objednávky).
+//
+// AKTUALIZÁCIA (issue 327): majiteľ nechce kartu za "Nevybavená" vôbec —
+// zostáva len "Vybavuje sa" (`stuck-status.ts`'s vlastný komentár má plné
+// odôvodnenie, vrátane toho, prečo existujúce otvorené karty za tento stav
+// netreba manuálne mazať).
 describe("isUnfinishedOrderStatus", () => {
-  it("rozpozná oba naživo overené nevybavené stavy", () => {
+  it("rozpozná JEDINÝ zostávajúci nevybavený stav 'Vybavuje sa'", () => {
     expect(isUnfinishedOrderStatus("Vybavuje sa")).toBe(true);
-    expect(isUnfinishedOrderStatus("Nevybavená")).toBe(true);
+  });
+
+  it("issue 327: 'Nevybavená' už NIE JE nevybavený stav — karta sa zaň nemá zakladať", () => {
+    expect(isUnfinishedOrderStatus("Nevybavená")).toBe(false);
   });
 
   it("hotové/iné stavy vrátia false", () => {
@@ -20,7 +28,6 @@ describe("isUnfinishedOrderStatus", () => {
 
   it("normalizuje (NFC + orez) rovnako ako `order.status_name`, nikdy bajtovo presnú zhodu", () => {
     expect(isUnfinishedOrderStatus("  Vybavuje sa  ")).toBe(true);
-    expect(isUnfinishedOrderStatus("Nevybavená".normalize("NFD"))).toBe(true);
   });
 });
 

@@ -92,7 +92,10 @@ it("objednávka NEVYBAVENÁ dlhšie než prah vyrobí kartu s číslom, dňami a
   expect(rows[0]?.resolvedAt).toBeNull();
 });
 
-it("Nevybavená (druhý naživo overený nevybavený stav) tiež vyrobí kartu po prekročení prahu", async () => {
+// issue 327: majiteľ nechce kartu za stav "Nevybavená" vôbec — na rozdiel
+// od predošlého správania (issue 301, kde OBA nevybavené stavy zakladali
+// kartu), tento test teraz overuje presný OPAK.
+it("issue 327: objednávka v stave 'Nevybavená' NEVYROBÍ kartu 'visí', hoci prekročila prah", async () => {
   const { db, dir } = await boot();
   await insertTestVariant(db, "40237/XL");
 
@@ -105,8 +108,43 @@ it("Nevybavená (druhý naživo overený nevybavený stav) tiež vyrobí kartu p
   });
 
   const rows = await db.select().from(upozornenie).where(eq(upozornenie.dedupKey, "objednavka-visi:20700003"));
-  expect(rows).toHaveLength(1);
-  expect(rows[0]?.title).toContain("Nevybavená");
+  expect(rows).toHaveLength(0);
+});
+
+// issue 327: existujúca OTVORENÁ karta pre stav "Nevybavená" (založená pred
+// touto zmenou, keď ešte tento stav bol súčasťou "nevybavených") sa má
+// AUTOMATICKY zatvoriť pri najbližšom importe, žiadny manuálny cleanup
+// skript — rovnaký mechanizmus, aký `applyStuckUpozornenia` už používa pre
+// prechod do skutočne vybaveného stavu (test nižšie), len teraz spustený aj
+// pre "Nevybavená", lebo tá už NIE JE v `UNFINISHED_ORDER_STATUS_NAMES`.
+it("issue 327: existujúca otvorená karta 'Vybavuje sa' → 'Nevybavená' sa AUTOMATICKY zatvorí ďalším importom", async () => {
+  const { db, dir } = await boot();
+  await insertTestVariant(db, "40237/XL");
+
+  await ingestOrders(db, {
+    fetchExport: fetcherOf(buildCsv(HEADER, [rowOf("20700007", "Vybavuje sa", "2026-07-18 10:00:00")])),
+    now: NOW,
+    rawDir: dir,
+    windowStart: WINDOW_START,
+    windowEnd: WINDOW_END,
+  });
+  const before = await db.select().from(upozornenie).where(eq(upozornenie.dedupKey, "objednavka-visi:20700007"));
+  expect(before).toHaveLength(1);
+  expect(before[0]?.resolvedAt).toBeNull();
+
+  await ingestOrders(db, {
+    fetchExport: fetcherOf(buildCsv(HEADER, [rowOf("20700007", "Nevybavená", "2026-07-18 10:00:00")])),
+    now: new Date("2026-08-08T10:00:00Z"),
+    rawDir: dir,
+    windowStart: WINDOW_START,
+    windowEnd: WINDOW_END,
+  });
+
+  const after = await db.select().from(upozornenie).where(eq(upozornenie.dedupKey, "objednavka-visi:20700007"));
+  expect(after).toHaveLength(1); // stále jedna karta, žiadna nová
+  expect(after[0]?.id).toBe(before[0]?.id);
+  expect(after[0]?.resolvedAt).not.toBeNull(); // AUTOMATICKY zatvorená
+  expect(after[0]?.resolvedByUserId).toBeNull(); // "vybavené systémom", nie ručne
 });
 
 it("opakovaný import tej istej stuck objednávky NEVYROBÍ druhú kartu, len obnoví počet dní", async () => {
