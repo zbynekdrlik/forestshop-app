@@ -6,6 +6,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { textAvailabilityRuleFor } from "./availability-domain-rules.js";
 import { parsePage } from "./parse.js";
 
 function fixture(name: string): string {
@@ -14,6 +15,7 @@ function fixture(name: string): string {
 
 const HUNTING24_SKLADEM = fixture("hunting24-skladem-pantera.html");
 const CHOCOLENKA_SKLADEM_TOOLTIP = fixture("chocolenka-skladem-vnoreny-tooltip.html");
+const CHOCOLENKA_TOOLTIP_KOLIZNE_SLOVO = fixture("chocolenka-tooltip-kolizne-slovo.html");
 const VRECKOVYNOZ_SKLADOM = fixture("vreckovynoz-skladom-ocielka.html");
 const VRECKOVYNOZ_VYPREDANE_ENTITA = fixture("vreckovynoz-vypredane-entita.html");
 
@@ -32,6 +34,31 @@ describe("parsePage — issue 332: hunting24.cz/chocolenka.cz zdielaju Shoptet s
     expect(result.availability).toBe("available");
     expect(result.availabilityText).toBe("skladem");
     expect(result.source).toBe("text");
+  });
+
+  it("regresny test (code review issue 332): extrahovana oblast je PRESNE 'Skladem', ziadny nezosmiznuty HTML/title fragment vnoreneho tooltipu", () => {
+    // Priamy test extraktora (nie len parsePage vysledku) — bez title=/alt=
+    // stripu pred fixom by tu bol garbled retazec s HTML tagom aj celou
+    // title= hodnotou, nie cisty text. Rovnost (nie len .includes) je presne
+    // to, co by pred-fix kod nesplnil.
+    const rule = textAvailabilityRuleFor("https://www.chocolenka.cz/sk/cokoladove-sady/cokoladova-sada-rybar/");
+    expect(rule).not.toBeNull();
+    const region = rule?.extractRegion(CHOCOLENKA_SKLADEM_TOOLTIP, "https://www.chocolenka.cz/sk/x") ?? null;
+    expect(region).toBe("Skladem");
+  });
+
+  it("regresny test (code review issue 332): kolizne OUT_KEYWORDS slovo VNUTRI tooltip title= sa nesmie dostat do vysledneho textu a nesmie sklopit dostupny produkt na 'unavailable'", () => {
+    // Bez title=/alt= stripu by garbled text niesol aj "nedostupny" z
+    // title= hodnoty tooltipu (dopravna poznamka, nic spolocne so skladovou
+    // dostupnostou) — OUT_KEYWORDS vyhrava nad IN_KEYWORDS
+    // (availabilityFromText), takze pred-fix kod by tu vratil `unavailable`
+    // namiesto spravneho `available`.
+    const result = parsePage(
+      CHOCOLENKA_TOOLTIP_KOLIZNE_SLOVO,
+      "https://www.chocolenka.cz/sk/testovaci-produkt-s-koliznym-tooltipom/",
+    );
+    expect(result.availability).toBe("available");
+    expect(result.availabilityText).toBe("skladem");
   });
 });
 
