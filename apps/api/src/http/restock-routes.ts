@@ -1,14 +1,14 @@
 import { zValidator } from "@hono/zod-validator";
-import { desc, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import type { Hono } from "hono";
 import { z } from "zod";
 import type { Database } from "../db/client.js";
-import { jobRuns, restockEvents } from "../db/schema.js";
+import { jobRuns } from "../db/schema.js";
 import { log } from "../logger.js";
 import { record } from "../modules/audit/service.js";
 import { findFeedStateConflicts } from "../modules/catalog/feed-cross-check.js";
 import { MAX_PER_RUN, RESTOCK_JOB_NAME } from "../modules/restock/constants.js";
-import { listRestockWaiting, selectRestockCandidates } from "../modules/restock/queries.js";
+import { listRestockEvents, listRestockWaiting, selectRestockCandidates } from "../modules/restock/queries.js";
 import type { RestockRunResult, RunRestockOptions } from "../modules/restock/run.js";
 import { isRestockEnabled, runRestock, setRestockEnabled } from "../modules/restock/run.js";
 import { getLatestJobRun } from "../modules/scheduler/queries.js";
@@ -68,7 +68,7 @@ export function registerRestockRoutes(app: Hono<AppBindings>, db: Database, deps
       isRestockEnabled(db),
       getLatestJobRun(db, RESTOCK_JOB_NAME),
       selectRestockCandidates(db, now),
-      db.select().from(restockEvents).orderBy(desc(restockEvents.at)).limit(200),
+      listRestockEvents(db, 200),
       // issue 226: krížová kontrola nášho stavu proti Shoptetovmu feedu —
       // varovanie s číslom a zoznamom priamo na tejto obrazovke, nikdy len
       // tichý zápis do logu.

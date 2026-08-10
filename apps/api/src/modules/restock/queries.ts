@@ -4,9 +4,9 @@
 // e-shope produkt, ktorý majiteľ vedome vypol. Preto sa každá podmienka
 // kontroluje pozitívne (musí platiť), nikdy sa nič nepredpokladá.
 
-import { and, asc, eq, isNull, ne, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, ne, or, sql } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
-import { products, shopProductUrl, supplierStock, variants } from "../../db/schema.js";
+import { products, restockEvents, shopProductUrl, supplierStock, variants } from "../../db/schema.js";
 import { FEED_IN_STOCK } from "../catalog/feed-cross-check.js";
 import {
   CONFIRMATION_MAX_AGE_HOURS,
@@ -201,4 +201,50 @@ export async function listRestockWaiting(
     rows: filtered.slice(options.offset, options.offset + options.limit),
     suppliers,
   };
+}
+
+export interface RestockEventWithLink {
+  readonly id: string;
+  readonly at: Date;
+  readonly variantCode: string;
+  readonly pairCode: string | null;
+  readonly productName: string;
+  readonly supplier: string | null;
+  readonly supplierLink: string;
+  readonly supplierAvailabilityText: string;
+  readonly supplierPrice: string | null;
+  readonly confirmedAt: Date;
+  /**
+   * Priama adresa detailu NÁŠHO produktu z feedu pre porovnávače (issue 329),
+   * alebo `null`, keď kód vo feede nie je (rovnaký LEFT JOIN dôvod ako
+   * `RestockCandidate.ourUrl` vyššie — chýbajúci riadok nesmie históriu
+   * prepnutí zahodiť).
+   */
+  readonly ourUrl: string | null;
+}
+
+/**
+ * História UŽ vykonaných prepnutí (issue 213), teraz aj s odkazom na náš
+ * produkt (issue 329) — majiteľ tak vie jedným klikom overiť, či konkrétne
+ * prepnutie naozaj sedí, nielen dostať sa k stránke dodávateľa.
+ */
+export async function listRestockEvents(db: Database, limit: number): Promise<readonly RestockEventWithLink[]> {
+  return db
+    .select({
+      id: restockEvents.id,
+      at: restockEvents.at,
+      variantCode: restockEvents.variantCode,
+      pairCode: restockEvents.pairCode,
+      productName: restockEvents.productName,
+      supplier: restockEvents.supplier,
+      supplierLink: restockEvents.supplierLink,
+      supplierAvailabilityText: restockEvents.supplierAvailabilityText,
+      supplierPrice: restockEvents.supplierPrice,
+      confirmedAt: restockEvents.confirmedAt,
+      ourUrl: shopProductUrl.url,
+    })
+    .from(restockEvents)
+    .leftJoin(shopProductUrl, eq(shopProductUrl.code, restockEvents.variantCode))
+    .orderBy(desc(restockEvents.at))
+    .limit(limit);
 }
