@@ -1,0 +1,27 @@
+<!-- issue 332: vreckovynoz.sk — hlavný produkt v <p
+     class=product-detail__availability>, bez úvodzoviek okolo triedy v
+     reálnom markupe (rovnaký jav ako rosler.sk, issue 307). Trieda
+     product-detail__code sa opakuje aj pre samotný KÓD produktu v
+     samostatnom PREDCHÁDZAJÚCOM <p> — regex je ukotvený na
+     product-detail__availability, takže kódový span sa nikdy nezachytí.
+     Karta súvisiaceho produktu nižšie (product-card__stock) má ODLIŠNÚ
+     triedu, žiadna kolízia. Overené naživo 11. 8. 2026 (2 rôzne produkty,
+     obe "Skladom > N ks" — genuinný vypredaný text sa nenašiel, rovnaká
+     situácia ako rosler.sk/wetland.sk). -->
+<!doctype html>
+<html lang="sk">
+<head><title>Victorinox 7.8330 ocielka</title></head>
+<body>
+<div class="product-list">
+  <div class="product-card">
+    <div class=product-card__stock> Skladom &gt; 5 ks </div>
+  </div>
+</div>
+<div class="product-detail">
+  <p class=product-detail__code>7.8330</p>
+  <p class=product-detail__availability> Dostupnosť:
+    <span class=product-detail__code> Skladom &gt; 5 ks </span>
+  </p>
+</div>
+</body>
+</html>
