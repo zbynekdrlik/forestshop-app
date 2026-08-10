@@ -3285,3 +3285,36 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
   overené vytvorením + zmazaním testovacej vlastnej poznámky; 0 chýb v
   konzole počas celého overenia.
 - Issue 327 zavretý s dôkazovým komentárom po živom overení.
+
+## Issue 329 — Vypredané → Skladom: odkaz na náš produkt v Prepnutých produktoch (2026-08-10)
+
+- Verzia zdvihnutá 0.3.0-dev.191 → 0.3.0-dev.192 (feature) → 0.3.0-dev.193
+  (playbook-only follow-up po merge, mandatory bump).
+- Design: e1436b8-predchádzajúci komentár na tickete PRED prvým commitom —
+  z troch tabuliek na obrazovke "Vypredané → Skladom" mala odkaz na náš
+  produkt DVE (Rozpory, Pripravené na prepnutie); tretia ("Prepnuté
+  produkty" — história) NEmala žiadny. Zámerne bez fallbacku na
+  vyhľadávanie (na rozdiel od `ourProductLink`), presne podľa zadania
+  ("odkaz sa proste nezobrazí" pri chýbajúcej feed adrese).
+- Backend: `listRestockEvents()` (`restock/queries.ts`) — LEFT JOIN
+  `restock_event` → `shop_product_url`, rovnaký vzor ako existujúci
+  `allRestockCandidates`'s `ourUrl`.
+- Frontend: nový `feedOnlyProductLink()` helper (`shopLinks.ts`), nový
+  stĺpec "Náš produkt" v tabuľke "Prepnuté produkty" (`RestockSection.tsx`).
+- Testy: unit (`shopLinks.test.ts`, `RestockSection.test.tsx`), integračný
+  (`restock-run.integration.test.ts`), nový Playwright e2e
+  (`restock-events.spec.ts` + vlastná fixtúra `e2e-fixtures-restock-events.ts`).
+  Web unit 74/74, api unit 51/51, api integration 84/84, e2e 52/52 spec
+  súborov — zero console errors.
+- Nezávislý code review (subagent, `superpowers:requesting-code-review`):
+  0 🔴 0 🟡, 1 🔵 (informačná, pre-existujúci vzor, bez akcie).
+- PR #333 (feature, `c2660b7`) + PR #334 (playbook + povinný version bump,
+  `804806f`) — oba zlúčené do `main`, CI aj Deploy zelené na oboch.
+- Post-deploy naživo overené (v0.3.0-dev.193): 3 reálne riadky "Prepnuté
+  produkty" viedli na SPRÁVNY produkt (title stránky sedel s názvom),
+  `target="_blank"` + `rel="noreferrer noopener"` na všetkých, výška
+  riadku nezmenená (67.5625px na všetkých 6), 0 chýb v konzole appky.
+- Playbook: `.claude/rules/supplier-stock.md` — ktorá z troch tabuliek
+  odkaz mala/nemala + vitest `getByRole` kolízia pri druhom riadku so
+  zhodným prístupným menom (`within(riadok)` fix).
+- Issue 329 zavretý s dôkazovým komentárom po živom overení.
