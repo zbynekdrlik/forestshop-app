@@ -14,6 +14,10 @@ const eventSchema = z.object({
   supplierAvailabilityText: z.string(),
   supplierPrice: z.string().nullable(),
   confirmedAt: z.string(),
+  // Priama adresa detailu z feedu (issue 329). `null` = kód vo feede nie je
+  // — odkaz sa v tomto zozname nezobrazí vôbec (žiadny fallback na
+  // vyhľadávanie, na rozdiel od "Pripravené na prepnutie" nižšie).
+  ourUrl: z.string().nullable(),
 });
 export type RestockEvent = z.infer<typeof eventSchema>;
 

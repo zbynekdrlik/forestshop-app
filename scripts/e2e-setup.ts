@@ -20,6 +20,7 @@ import { ORDER_REMINDER_SETTINGS_ID } from "../apps/api/src/modules/order-remind
 import { seedDpdFixtures } from "./e2e-fixtures-dpd.js";
 import { seedOrderFlagsFixtures } from "./e2e-fixtures-order-flags.js";
 import { seedProductLinksFixtures } from "./e2e-fixtures-product-links.js";
+import { seedRestockEventsFixtures } from "./e2e-fixtures-restock-events.js";
 import { seedRestockLinksFixtures } from "./e2e-fixtures-restock-links.js";
 import { seedSearchFixtures } from "./e2e-fixtures-search.js";
 
@@ -800,5 +801,8 @@ await seedRestockLinksFixtures(db, teraz, snapshotPrepinanie, E2E_HESLO);
 
 // issue 292: fixtúra vyčlenená do vlastného súboru, rovnaký dôvod ako vyššie.
 await seedDpdFixtures(db, E2E_HESLO);
+
+// issue 329: fixtúra vyčlenená do vlastného súboru, rovnaký dôvod ako vyššie.
+await seedRestockEventsFixtures(db, teraz);
 
 await pool.end();

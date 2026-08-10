@@ -10,7 +10,7 @@ import {
   type RestockStatus,
   type RestockWaitingPage,
 } from "../restockApi.js";
-import { ourProductLink } from "../shopLinks.js";
+import { feedOnlyProductLink, ourProductLink } from "../shopLinks.js";
 
 // Majiteľ si chce vzorku preklikať po stovkách („potváram si zo sto a overím"),
 // takže stránka je 100 riadkov, nie tradičných 20.
@@ -243,23 +243,36 @@ export function RestockSection({
                   <th scope="col">Kód</th>
                   <th scope="col">Názov</th>
                   <th scope="col">Dodávateľ</th>
+                  <th scope="col">Náš produkt</th>
                   <th scope="col">Čo dodávateľ hlásil</th>
                 </tr>
               </thead>
               <tbody>
-                {events.map((event) => (
-                  <tr key={event.id} data-testid={`restock-event-${event.variantCode}`}>
-                    <td>{formatSkDateTime(event.at)}</td>
-                    <td>{event.variantCode}</td>
-                    <td>{event.productName}</td>
-                    <td>{event.supplier ?? "—"}</td>
-                    <td>
-                      <a href={event.supplierLink} target="_blank" rel="noreferrer noopener">
-                        {event.supplierAvailabilityText === "" ? "skladom" : event.supplierAvailabilityText}
-                      </a>
-                    </td>
-                  </tr>
-                ))}
+                {events.map((event) => {
+                  const nasOdkaz = feedOnlyProductLink(event.ourUrl);
+                  return (
+                    <tr key={event.id} data-testid={`restock-event-${event.variantCode}`}>
+                      <td>{formatSkDateTime(event.at)}</td>
+                      <td>{event.variantCode}</td>
+                      <td>{event.productName}</td>
+                      <td>{event.supplier ?? "—"}</td>
+                      <td>
+                        {nasOdkaz === null ? (
+                          "—"
+                        ) : (
+                          <a href={nasOdkaz} target="_blank" rel="noreferrer noopener">
+                            náš ↗
+                          </a>
+                        )}
+                      </td>
+                      <td>
+                        <a href={event.supplierLink} target="_blank" rel="noreferrer noopener">
+                          {event.supplierAvailabilityText === "" ? "skladom" : event.supplierAvailabilityText}
+                        </a>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

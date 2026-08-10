@@ -31,6 +31,22 @@ paths:
 - Bežný lokálny cyklus: `docker compose up -d postgres` (port 5433) →
   `pnpm --filter @forestshop/api db:migrate` → `pnpm test` /
   `pnpm test:integration` / `pnpm --filter @forestshop/web e2e`.
+- **Ručne bežiaci `pnpm --filter @forestshop/api start`/`web dev` (napr. pre
+  naživo Playwright meranie proti lokálnemu devu, `.claude/rules/frontend-
+  design.md`'s metodika) zdieľa TÚ ISTÚ lokálnu Postgres inštanciu (port
+  5433) ako `pnpm --filter @forestshop/api test:integration`.** `test:
+  integration`'s `withCleanDb()` TRUNCATE-uje `users`/`sessions` pri KAŽDOM
+  teste (`.claude/rules/testing.md`) — ak spustíš celú integračnú sadu
+  MEDZI vlastným manuálnym prihlásením a ďalšou akciou, tvoja relácia aj
+  účet ticho zmiznú. Prejaví sa to ZAVÁDZAJÚCO: appka vráti "Nesprávny
+  e-mail alebo heslo" (issue 327, živé overenie) — vyzerá to ako zlé heslo
+  alebo vyčerpaný `login-rate-limit.ts`, v skutočnosti `users` tabuľka je
+  úplne prázdna. Over `SELECT email FROM users` PRED podozrievaním hesla/
+  rate limitu; fix je jednoducho znova spustiť `pnpm exec tsx scripts/
+  e2e-setup.ts` (reseeduje `e2e-*@forestshop.sk` účty) a prihlásiť sa
+  odznova. Nespúšťaj automatizovanú testovaciu sadu (unit test beží bez DB
+  a je bezpečný, ale `test:integration`/`e2e` NIE) medzi krokmi manuálneho
+  naživo overovania na tej istej lokálnej DB.
 - **Vzor pre "priečinok mimo hlavného `tsc -b` composite grafu, ale chcem naň
   plnú prísnu kontrolu typov"** (najprv `scripts/`, potom `apps/api/tests/`
   — issue #4): nový SAMOSTATNÝ, nekompozitný tsconfig (`extends` spoločný

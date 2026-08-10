@@ -4,7 +4,7 @@ import type { Database } from "../src/db/client.js";
 import { products, restockEvents, shopProductUrl, supplierStock, variants } from "../src/db/schema.js";
 import type { ShoptetImportConfig } from "../src/modules/shoptet-writeback/config.js";
 import { runRestock, setRestockEnabled } from "../src/modules/restock/run.js";
-import { listRestockWaiting, selectRestockCandidates } from "../src/modules/restock/queries.js";
+import { listRestockEvents, listRestockWaiting, selectRestockCandidates } from "../src/modules/restock/queries.js";
 import { insertTestSnapshot } from "./helpers/catalog.js";
 import { withCleanDb } from "./helpers/db.js";
 
@@ -326,5 +326,21 @@ describe("prepínanie Vypredané → Skladom", () => {
     await seedVariant("Z3");
 
     expect((await selectRestockCandidates(db, NOW)).picked.map((c) => c.variantCode)).toEqual(["Z3"]);
+  });
+
+  // issue 329 — história prepnutí teraz nesie aj odkaz na náš produkt z
+  // feedu, chýbajúci feed riadok sa nesmie zamlčať výnimkou/pádom.
+  it("história prepnutí nesie priamu adresu z feedu a bez nej riadok nezahodí", async () => {
+    await seedSupplierStock();
+    await seedVariant("V1");
+    await seedVariant("V2");
+    await db.insert(shopProductUrl).values({ code: "V1", url: "https://www.forestshop.sk/v1/", fetchedAt: NOW });
+
+    await runRestock({ db, now: NOW, config: CONFIG, importToShoptet: okImport });
+
+    const udalosti = await listRestockEvents(db, 200);
+    expect(
+      Object.fromEntries(udalosti.map((u) => [u.variantCode, u.ourUrl])),
+    ).toEqual({ V1: "https://www.forestshop.sk/v1/", V2: null });
   });
 });

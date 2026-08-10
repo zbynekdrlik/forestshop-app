@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { RestockSection } from "./RestockSection.js";
 
@@ -70,6 +70,23 @@ const STATUS = {
       supplierAvailabilityText: "skladom",
       supplierPrice: "59.90",
       confirmedAt: "2026-08-04T04:20:00.000Z",
+      ourUrl: "https://www.forestshop.sk/nohavice-forest/?variantId=9001",
+    },
+    {
+      // issue 329: kód, ktorý vo feede pre porovnávače nie je — odkaz na náš
+      // produkt sa nesmie zobraziť vôbec (žiadny fallback na vyhľadávanie,
+      // na rozdiel od "Pripravené na prepnutie" vyššie).
+      id: "e2",
+      at: "2026-08-03T09:00:00.000Z",
+      variantCode: "9002",
+      pairCode: null,
+      productName: "Bunda bez adresy z feedu",
+      supplier: "Huntingshop",
+      supplierLink: "https://huntingshop.eu/bunda-bez-feedu",
+      supplierAvailabilityText: "skladom",
+      supplierPrice: "39.00",
+      confirmedAt: "2026-08-03T08:00:00.000Z",
+      ourUrl: null,
     },
   ],
   lastRun: {
@@ -100,9 +117,25 @@ it("ukáže, ktoré produkty automatizácia prepla", async () => {
   const riadok = await screen.findByTestId("restock-event-40237/L");
   expect(riadok.textContent).toContain("Nohavice FOREST");
   expect(riadok.textContent).toContain("Huntingshop");
-  expect(screen.getByRole("link", { name: "skladom" }).getAttribute("href")).toBe(
+  expect(within(riadok).getByRole("link", { name: "skladom" }).getAttribute("href")).toBe(
     "https://huntingshop.eu/nohavice",
   );
+
+  // issue 329: odkaz na náš produkt priamo z feedu, otvárajúci sa v novej karte.
+  const nasOdkaz = [...riadok.querySelectorAll("a")].find((a) => a.textContent === "náš ↗");
+  expect(nasOdkaz?.getAttribute("href")).toBe("https://www.forestshop.sk/nohavice-forest/?variantId=9001");
+  expect(nasOdkaz?.getAttribute("target")).toBe("_blank");
+});
+
+// issue 329: majiteľ výslovne žiadal, aby chýbajúca adresa z feedu
+// nezobrazila mŕtvy odkaz — riadok sa vykreslí bez chyby a bez odkazu.
+it("prepnutý produkt bez adresy z feedu sa zobrazí bez odkazu na náš produkt a bez chyby", async () => {
+  fetchRestockStatus.mockResolvedValue(STATUS);
+  render(<RestockSection role="admin" onSessionExpired={vi.fn()} />);
+
+  const riadok = await screen.findByTestId("restock-event-9002");
+  expect(riadok.textContent).toContain("Bunda bez adresy z feedu");
+  expect([...riadok.querySelectorAll("a")].some((a) => a.textContent === "náš ↗")).toBe(false);
 });
 
 it("ukáže, koľko produktov čaká na najbližší beh", async () => {
