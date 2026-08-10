@@ -2,12 +2,12 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, expect, it, vi } from "vitest";
 import { UpozorneniaSection } from "./UpozorneniaSection.js";
 
-const { fetchUpozornenia, markUpozorneniaSeen, createOwnNote, updateOwnNote, deleteOwnNote, resolveUpozornenie, postponeUpozornenie } = vi.hoisted(() => ({
+const { fetchUpozornenia, markUpozorneniaSeen, createOwnNote, updateOwnNote, deleteUpozornenie, resolveUpozornenie, postponeUpozornenie } = vi.hoisted(() => ({
   fetchUpozornenia: vi.fn(),
   markUpozorneniaSeen: vi.fn(),
   createOwnNote: vi.fn(),
   updateOwnNote: vi.fn(),
-  deleteOwnNote: vi.fn(),
+  deleteUpozornenie: vi.fn(),
   resolveUpozornenie: vi.fn(),
   postponeUpozornenie: vi.fn(),
 }));
@@ -16,7 +16,7 @@ const { fetchUpozornenia, markUpozorneniaSeen, createOwnNote, updateOwnNote, del
 // `NedostupneSection.test.tsx` — `instanceof` v komponente musí fungovať).
 vi.mock("../upozorneniaApi.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../upozorneniaApi.js")>();
-  return { ...actual, fetchUpozornenia, markUpozorneniaSeen, createOwnNote, updateOwnNote, deleteOwnNote, resolveUpozornenie, postponeUpozornenie };
+  return { ...actual, fetchUpozornenia, markUpozorneniaSeen, createOwnNote, updateOwnNote, deleteUpozornenie, resolveUpozornenie, postponeUpozornenie };
 });
 
 const VLASTNA_KARTA = {
@@ -115,30 +115,37 @@ afterEach(() => {
   vi.resetAllMocks();
 });
 
-it("karta s odkazom (automatický zdroj) zobrazí štítok 'Otvoriť objednávku v Shoptete' a otvára sa v novom okne", async () => {
+// issue 327: nadpis SAMOTNÝ sa stal klikateľným odkazom (predtým samostatný
+// riadok s `LINK_LABELS`'ovým textom) — ten text teraz nesie `aria-label`/
+// `title` (prístupnosť + hover), nie viditeľný `textContent`.
+it("karta s odkazom (automatický zdroj): nadpis JE odkaz, aria-label nesie štítok 'Otvoriť objednávku v Shoptete', otvára sa v novom okne", async () => {
   markUpozorneniaSeen.mockResolvedValue(undefined);
   fetchUpozornenia.mockResolvedValue([VRATENIE_KARTA]);
   render(<UpozorneniaSection role="manazer" onSessionExpired={vi.fn()} />);
   await screen.findByTestId("upozornenie-vratenie-1");
 
   const link = screen.getByTestId<HTMLAnchorElement>("upozornenie-link-vratenie-1");
-  expect(link.textContent).toBe("Otvoriť objednávku v Shoptete");
+  expect(link.textContent).toBe(VRATENIE_KARTA.title);
+  expect(link.getAttribute("aria-label")).toBe(`Otvoriť objednávku v Shoptete — ${VRATENIE_KARTA.title}`);
+  expect(link.getAttribute("title")).toBe("Otvoriť objednávku v Shoptete");
   expect(link.getAttribute("href")).toBe(VRATENIE_KARTA.link);
   expect(link.getAttribute("target")).toBe("_blank");
   expect(link.getAttribute("rel")).toBe("noreferrer");
 });
 
-it("issue 298: karta 'Nevyzdvihnutá zásielka' zobrazí štítok 'Sledovať zásielku na Pošte' s odkazom na Poštu SK, aj termín vyzdvihnutia v details", async () => {
+it("issue 298/327: karta 'Nevyzdvihnutá zásielka' — nadpis je odkaz so štítkom 'Sledovať zásielku na Pošte', prvý riadok details (Zákazník) je vedľa nadpisu, zvyšok (vrátane termínu vyzdvihnutia) ostáva pod kartou", async () => {
   markUpozorneniaSeen.mockResolvedValue(undefined);
   fetchUpozornenia.mockResolvedValue([NEVYZDVIHNUTA_KARTA]);
   render(<UpozorneniaSection role="manazer" onSessionExpired={vi.fn()} />);
   await screen.findByTestId("upozornenie-posta-1");
 
   const link = screen.getByTestId<HTMLAnchorElement>("upozornenie-link-posta-1");
-  expect(link.textContent).toBe("Sledovať zásielku na Pošte");
+  expect(link.textContent).toBe(NEVYZDVIHNUTA_KARTA.title);
+  expect(link.getAttribute("aria-label")).toBe(`Sledovať zásielku na Pošte — ${NEVYZDVIHNUTA_KARTA.title}`);
   expect(link.getAttribute("href")).toBe(NEVYZDVIHNUTA_KARTA.link);
   expect(link.getAttribute("target")).toBe("_blank");
   expect(link.getAttribute("rel")).toBe("noreferrer");
+  expect(screen.getByTestId("upozornenie-meta-posta-1").textContent).toContain("Zákazník: Ján Novák");
   expect(screen.getByText(/Vyzdvihnutie do: 2026-08-15/)).toBeTruthy();
 });
 
@@ -150,13 +157,14 @@ it("issue 299: karta 'Vrátená zásielka' zobrazí vlastný typový štítok a 
 
   expect(screen.getByTestId("upozornenie-type-posta-vratena-1").textContent).toBe("Vrátená zásielka");
   const link = screen.getByTestId<HTMLAnchorElement>("upozornenie-link-posta-vratena-1");
-  expect(link.textContent).toBe("Sledovať zásielku na Pošte");
+  expect(link.textContent).toBe(VRATENA_ZASIELKA_KARTA.title);
+  expect(link.getAttribute("aria-label")).toBe(`Sledovať zásielku na Pošte — ${VRATENA_ZASIELKA_KARTA.title}`);
   expect(link.getAttribute("href")).toBe(VRATENA_ZASIELKA_KARTA.link);
   expect(link.getAttribute("target")).toBe("_blank");
   expect(link.getAttribute("rel")).toBe("noreferrer");
 });
 
-it("issue 301: karta 'Objednávka visí' zobrazí vlastný typový štítok a odkaz do Shoptet administrácie", async () => {
+it("issue 301: karta 'Objednávka visí' zobrazí vlastný typový štítok, nadpis je odkaz do Shoptet administrácie, zákazník je vedľa nadpisu", async () => {
   markUpozorneniaSeen.mockResolvedValue(undefined);
   fetchUpozornenia.mockResolvedValue([OBJEDNAVKA_VISI_KARTA]);
   render(<UpozorneniaSection role="manazer" onSessionExpired={vi.fn()} />);
@@ -164,8 +172,10 @@ it("issue 301: karta 'Objednávka visí' zobrazí vlastný typový štítok a od
 
   expect(screen.getByTestId("upozornenie-type-visi-1").textContent).toBe("Objednávka visí");
   const link = screen.getByTestId<HTMLAnchorElement>("upozornenie-link-visi-1");
-  expect(link.textContent).toBe("Otvoriť objednávku v Shoptete");
+  expect(link.textContent).toBe(OBJEDNAVKA_VISI_KARTA.title);
+  expect(link.getAttribute("aria-label")).toBe(`Otvoriť objednávku v Shoptete — ${OBJEDNAVKA_VISI_KARTA.title}`);
   expect(link.getAttribute("href")).toBe(OBJEDNAVKA_VISI_KARTA.link);
+  expect(screen.getByTestId("upozornenie-meta-visi-1").textContent).toContain("Zákazník: Ján Novák");
 });
 
 it("prázdny zoznam zobrazí informačnú vetu (po označení videných)", async () => {
@@ -185,7 +195,9 @@ it("zobrazí kartu s 'Nové' štítkom pre nevidenú kartu", async () => {
   await screen.findByTestId("upozornenie-own-1");
   expect(screen.getByTestId("upozornenie-nove-own-1").textContent).toBe("Nové");
   expect(screen.getByText("Schôdzka v stredu")).toBeTruthy();
-  expect(screen.getByText("o 10:00")).toBeTruthy();
+  // issue 327: vlastná poznámka (žiadny `\n` v `details`) sa celá presunie
+  // VEDĽA nadpisu — už nie je vlastný samostatný `<p>` element.
+  expect(screen.getByTestId("upozornenie-meta-own-1").textContent).toContain("o 10:00");
 });
 
 it("rola 'citanie' vidí zoznam, ale NEVIDÍ žiadne akčné tlačidlá ani formulár", async () => {
@@ -198,14 +210,19 @@ it("rola 'citanie' vidí zoznam, ale NEVIDÍ žiadne akčné tlačidlá ani form
   expect(screen.queryByTestId("upozornenie-edit-own-1")).toBeNull();
 });
 
-it("karta zo zdroja 'appka' nemá Upraviť/Zmazať, len Vybavené/Odložiť", async () => {
+// issue 327: mazanie sa rozšírilo na VŠETKY zdroje (predtým len vlastné
+// poznámky) — karta zo zdroja "appka" má teraz Vybavené/Odložiť/Odstrániť,
+// ale STÁLE nemá Upraviť (editácia generovaného textu automatickej karty
+// nedáva zmysel, ticket ju ani nežiada).
+it("karta zo zdroja 'appka' nemá Upraviť, ale MÁ Odstrániť (spolu s Vybavené/Odložiť)", async () => {
   markUpozorneniaSeen.mockResolvedValue(undefined);
   fetchUpozornenia.mockResolvedValue([{ ...VLASTNA_KARTA, id: "appka-1", source: "appka" as const }]);
   render(<UpozorneniaSection role="manazer" onSessionExpired={vi.fn()} />);
   await screen.findByTestId("upozornenie-appka-1");
   expect(screen.getByTestId("upozornenie-resolve-appka-1")).toBeTruthy();
+  expect(screen.getByTestId("upozornenie-postpone-appka-1")).toBeTruthy();
+  expect(screen.getByTestId("upozornenie-delete-appka-1")).toBeTruthy();
   expect(screen.queryByTestId("upozornenie-edit-appka-1")).toBeNull();
-  expect(screen.queryByTestId("upozornenie-delete-appka-1")).toBeNull();
 });
 
 it("'+ Nové upozornenie' otvorí formulár, uloženie zavolá createOwnNote a znova načíta zoznam", async () => {
@@ -252,18 +269,37 @@ it("Upraviť predvyplní formulár existujúcimi hodnotami vlastnej poznámky", 
   expect(screen.getByTestId<HTMLTextAreaElement>("upozornenie-form-details").value).toBe("o 10:00");
 });
 
-it("Zmazať zavolá deleteOwnNote a znova načíta zoznam", async () => {
+it("Odstrániť zavolá deleteUpozornenie a znova načíta zoznam (vlastná poznámka)", async () => {
   markUpozorneniaSeen.mockResolvedValue(undefined);
   // Tretie `[]` je issue 267 follow-up gap 3's doplnkový najširší dopyt,
   // ktorý `load()` spraví, keď je zoznam prázdny (tu: po zmazaní).
   fetchUpozornenia.mockResolvedValueOnce([VLASTNA_KARTA]).mockResolvedValueOnce([]).mockResolvedValueOnce([]);
-  deleteOwnNote.mockResolvedValue(undefined);
+  deleteUpozornenie.mockResolvedValue(undefined);
   render(<UpozorneniaSection role="manazer" onSessionExpired={vi.fn()} />);
   await screen.findByTestId("upozornenie-own-1");
 
   fireEvent.click(screen.getByTestId("upozornenie-delete-own-1"));
   await waitFor(() => {
-    expect(deleteOwnNote).toHaveBeenCalledWith("own-1");
+    expect(deleteUpozornenie).toHaveBeenCalledWith("own-1");
+  });
+  await screen.findByTestId("upozornenia-empty");
+});
+
+// issue 327: mazanie sa rozšírilo na VŠETKY zdroje — over aj priamo pre
+// kartu zo zdroja "appka" (automatický zdroj), nielen vlastnú poznámku.
+it("issue 327: Odstrániť zavolá deleteUpozornenie AJ pre kartu zo zdroja 'appka'", async () => {
+  markUpozorneniaSeen.mockResolvedValue(undefined);
+  fetchUpozornenia
+    .mockResolvedValueOnce([{ ...VLASTNA_KARTA, id: "appka-1", source: "appka" as const }])
+    .mockResolvedValueOnce([])
+    .mockResolvedValueOnce([]);
+  deleteUpozornenie.mockResolvedValue(undefined);
+  render(<UpozorneniaSection role="manazer" onSessionExpired={vi.fn()} />);
+  await screen.findByTestId("upozornenie-appka-1");
+
+  fireEvent.click(screen.getByTestId("upozornenie-delete-appka-1"));
+  await waitFor(() => {
+    expect(deleteUpozornenie).toHaveBeenCalledWith("appka-1");
   });
   await screen.findByTestId("upozornenia-empty");
 });

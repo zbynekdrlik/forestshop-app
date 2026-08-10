@@ -7,7 +7,7 @@ import { UpozorneniaResolvedList } from "./UpozorneniaResolvedList.js";
 import {
   cancelPostponeUpozornenie,
   createOwnNote,
-  deleteOwnNote,
+  deleteUpozornenie,
   fetchUpozornenia,
   markUpozorneniaSeen,
   postponeUpozornenie,
@@ -373,7 +373,7 @@ export function UpozorneniaSection({ role, onSessionExpired }: { readonly role: 
                 setDraft({ id: row.id, title: row.title, details: row.details, dueAt: row.dueAt === null ? "" : row.dueAt.slice(0, 10) });
               }}
               onDelete={() => {
-                withBusy(row.id, () => deleteOwnNote(row.id));
+                withBusy(row.id, () => deleteUpozornenie(row.id));
               }}
             />
           ))}

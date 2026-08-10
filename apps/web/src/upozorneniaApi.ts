@@ -104,9 +104,12 @@ export async function updateOwnNote(id: string, input: OwnNoteInput): Promise<bo
   return body.updated;
 }
 
-export async function deleteOwnNote(id: string): Promise<void> {
+// issue 327: mazanie už NIE JE obmedzené na vlastné poznámky (predtým
+// `deleteOwnNote`, issue 267) — akákoľvek karta s `canControl` sa dá
+// odstrániť, viď `service.ts`'s `deleteUpozornenie` pre plné odôvodnenie.
+export async function deleteUpozornenie(id: string): Promise<void> {
   const response = await fetch(`/api/upozornenia/${encodeURIComponent(id)}`, { method: "DELETE" });
-  await readJson(response, "Upozornenie sa nepodarilo zmazať");
+  await readJson(response, "Upozornenie sa nepodarilo odstrániť");
 }
 
 export async function resolveUpozornenie(id: string): Promise<void> {
