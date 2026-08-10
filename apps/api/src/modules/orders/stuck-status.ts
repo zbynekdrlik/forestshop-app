@@ -4,21 +4,30 @@ import { normalizeStatusName } from "./parser.js";
 // NEVYBAVENOM stave (šéf: "objednávky, ktoré je potrebné riešiť"). Naživo
 // overené na produkcii (7. 8. 2026): 31 objednávok v stave "Vybavuje sa"
 // (najstaršia od 30. 4. 2026), 3 v stave "Nevybavená" (najstaršia od
-// 7. 5. 2026) — presne TIETO dva stavy, žiadny ďalší (rozšírenie zoznamu
-// vyžaduje ROVNAKÉ živé overenie proti produkčnej DB ako `return-status.ts`,
-// nikdy odhad).
+// 7. 5. 2026) — pôvodne oba tieto stavy zakladali kartu.
+//
+// AKTUALIZÁCIA (issue 327, 10. 8. 2026): majiteľ výslovne nechce kartu za
+// stav "Nevybavená" vôbec — "ten stav nevybavená — vôbec sem nedávať".
+// `UNFINISHED_ORDER_STATUS_NAMES` teraz obsahuje LEN "Vybavuje sa". Keďže
+// `objednavka_visi` je ZNOVA-OHLÁSITEĽNÁ kategória (nie KONEČNÁ, viď
+// `.claude/rules/upozornenia.md`'s zavedené rozhodnutie z #301,
+// `stuck-upozornenia.ts`), objednávka v stave "Nevybavená" teraz spadne do
+// `!isUnfinishedOrderStatus(...)` vetvy tej istej slučky — EXISTUJÚCE
+// otvorené karty za tento stav sa preto AUTOMATICKY ZATVORIA (`autoResolve
+// ByDedupKey`) pri najbližšom nočnom behu `ordersImportJob`, presne ten istý
+// mechanizmus, aký #297 použilo pre "Vybavená výmena"/"Vybavený Dobropis" —
+// ŽIADNA jednorazová migrácia potrebná (`.claude/rules/upozornenia.md`'s
+// #308 poučenie: over najprv, či nasledujúci naplánovaný beh prirodzene
+// dorieši existujúce riadky).
 //
 // ZÁMERNE NEZDIEĽANÉ s `open-statuses.ts`'s admin-nastaviteľným
 // `order_open_status` zoznamom (ten rozhoduje, čo appka ukáže na "Na
 // objednanie" a šéf ho sám edituje) — "visí príliš dlho" je NEZÁVISLÝ,
 // fixný pojem: aj keby šéf zajtra pridal/odobral stav zo zoznamu "Na
-// objednanie", toto upozornenie musí zostať naviazané na tie ISTÉ dva stavy,
-// ktoré naživo videl v dátach. Rovnaký princíp ako `return-status.ts`'s
+// objednanie", toto upozornenie musí zostať naviazané na TENTO pevný stav,
+// ktorý naživo videl v dátach. Rovnaký princíp ako `return-status.ts`'s
 // vlastný nezávislý zoznam vrátkových stavov.
-const UNFINISHED_ORDER_STATUS_NAMES: ReadonlySet<string> = new Set([
-  normalizeStatusName("Vybavuje sa"),
-  normalizeStatusName("Nevybavená"),
-]);
+const UNFINISHED_ORDER_STATUS_NAMES: ReadonlySet<string> = new Set([normalizeStatusName("Vybavuje sa")]);
 
 // Prečo 14 dní: appka už má KRATŠÍ vekový prah pre PRÍBUZNÚ, ale INÚ vec —
 // `order-reminder/constants.ts`'s `MIN_DAYS = 4` rozhoduje, kedy pripomenúť
