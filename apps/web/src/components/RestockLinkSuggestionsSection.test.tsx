@@ -67,35 +67,44 @@ it("pri 401 zavolá onSessionExpired namiesto zobrazenia všeobecnej chyby", asy
   });
 });
 
-it("rola citanie nevidí stĺpec Akcie ani tlačidlo 'Použiť návrh'", async () => {
+it("rola citanie nevidí stĺpec Akcie ani tlačidlo 'Potvrdiť'", async () => {
   searchRestockLinkSuggestions.mockResolvedValue({ total: 1, items: [S_NAVRHOM] });
 
   render(<RestockLinkSuggestionsSection role="citanie" onSessionExpired={() => {}} />);
 
   await screen.findByTestId("restock-link-row-RL-2");
   expect(screen.queryByTestId("restock-link-edit-toggle-RL-2")).toBeNull();
-  expect(screen.queryByTestId("restock-link-use-candidate-RL-2-RL-CAND")).toBeNull();
+  expect(screen.queryByTestId("restock-link-confirm-RL-2-RL-CAND")).toBeNull();
 });
 
-it("rola manazer klikne na návrh — vyplní vstup, NEULOŽÍ automaticky, potom potvrdí uložením", async () => {
+// issue 331: samotné NAČÍTANIE zoznamu nikdy nič neuloží — `saveProductLink`
+// sa smie zavolať LEN po výslovnom ľudskom klik na konkrétny návrh.
+it("samotné zobrazenie zoznamu s návrhom NEULOŽÍ nič automaticky", async () => {
+  searchRestockLinkSuggestions.mockResolvedValue({ total: 1, items: [S_NAVRHOM] });
+
+  render(<RestockLinkSuggestionsSection role="manazer" onSessionExpired={() => {}} />);
+
+  await screen.findByTestId("restock-link-confirm-RL-2-RL-CAND");
+  expect(saveProductLink).not.toHaveBeenCalled();
+});
+
+it("rola manazer klikne na 'Potvrdiť' pri návrhu — jeden klik rovno uloží presne tento kandidát", async () => {
   searchRestockLinkSuggestions.mockResolvedValueOnce({ total: 1, items: [S_NAVRHOM] });
   searchRestockLinkSuggestions.mockResolvedValueOnce({ total: 0, items: [] });
   saveProductLink.mockResolvedValue(undefined);
 
   render(<RestockLinkSuggestionsSection role="manazer" onSessionExpired={() => {}} />);
 
-  fireEvent.click(await screen.findByTestId("restock-link-use-candidate-RL-2-RL-CAND"));
-  const vstup = screen.getByTestId<HTMLInputElement>("restock-link-edit-input-RL-2");
-  expect(vstup.value).toBe("https://dodavatel.example.com/rl-cand");
-  // Kliknutie na návrh SAMO OSEBE nič neuloží — potvrdenie je až explicitné
-  // kliknutie na Uložiť (ticketova podmienka "nikdy automaticky priradiť").
-  expect(saveProductLink).not.toHaveBeenCalled();
+  fireEvent.click(await screen.findByTestId("restock-link-confirm-RL-2-RL-CAND"));
 
-  fireEvent.click(screen.getByTestId("restock-link-save-RL-2"));
   await waitFor(() => {
     expect(saveProductLink).toHaveBeenCalledWith("RL-2", "https://dodavatel.example.com/rl-cand");
   });
+  expect(saveProductLink).toHaveBeenCalledTimes(1);
   expect(searchRestockLinkSuggestions).toHaveBeenCalledTimes(2);
+  // Produkt teraz MÁ linku — zmizne zo zoznamu (skutočný, nie optimistický
+  // dôkaz, refetch po uložení).
+  await screen.findByTestId("restock-links-empty");
 });
 
 it("rola manazer doplní VLASTNÝ odkaz (bez návrhu) cez tlačidlo Doplniť", async () => {

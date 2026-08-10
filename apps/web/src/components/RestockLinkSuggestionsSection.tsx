@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef, useState, type SyntheticEvent, type JSX } from "react";
+import { useCallback, useContext, useEffect, useRef, useState, type SyntheticEvent, type JSX } from "react";
 import type { Me } from "../api.js";
 import { validateSupplierLinkUrl } from "../ordersApi.js";
+import { RestockLinksBadgeRefreshContext } from "../restockLinksBadgeContext.js";
 import { saveProductLink, SupplierLinksUnauthorizedError } from "../supplierLinksApi.js";
 import {
   RestockLinksUnauthorizedError,
@@ -14,6 +15,11 @@ import {
 // restock-links.md`) a s NAVRHOVANÝM kandidátom (odvodený zo zhody mena +
 // dodávateľa s produktmi, čo UŽ linku majú). Zápis potvrdenia ide cez UŽ
 // existujúcu `saveProductLink` (#239) — žiadna nová zapisovacia trasa.
+// issue 331: klik na kandidáta odteraz UKLADÁ PRIAMO (jeden klik, meno aj
+// URL sú na tlačidle vidno PRED kliknutím — stále výslovné ľudské
+// potvrdenie NA KONKRÉTNOM návrhu, nikdy automatické priradenie) namiesto
+// pôvodného dvojklikového "predvyplň → Uložiť". "✏️ Doplniť" (ručný/opravný
+// vstup) ostáva bezo zmeny pre korekciu/vlastnú adresu.
 const CAN_EDIT_ROLES: ReadonlySet<Me["role"]> = new Set(["admin", "manazer"]);
 
 export function RestockLinkSuggestionsSection({
@@ -34,6 +40,11 @@ export function RestockLinkSuggestionsSection({
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [urlDraft, setUrlDraft] = useState("");
   const [busyKey, setBusyKey] = useState<string | null>(null);
+
+  // issue 331: odznak v ľavom menu (`App.tsx`) sa musí prepočítať po
+  // KAŽDOM úspešnom potvrdení (jednoklikovom aj cez ✏️ Doplniť) — inak by
+  // číslo v menu zaostávalo za tým, čo obrazovka práve zapísala.
+  const restockLinksBadge = useContext(RestockLinksBadgeRefreshContext);
 
   // Len najnovšia požiadavka smie zapísať výsledok (rovnaký dôvod ako
   // `SupplierLinksSection.tsx`'s `searchSeq`).
@@ -121,6 +132,7 @@ export function RestockLinkSuggestionsSection({
         .then(() => {
           if (editingKeyRef.current === productKey) setEditingKey(null);
           refetch();
+          restockLinksBadge.refresh();
         })
         .catch((err: unknown) => {
           if (err instanceof SupplierLinksUnauthorizedError) {
@@ -133,7 +145,36 @@ export function RestockLinkSuggestionsSection({
           setBusyKey(null);
         });
     },
-    [refetch, onSessionExpired, urlDraft],
+    [refetch, onSessionExpired, urlDraft, restockLinksBadge],
+  );
+
+  // issue 331: jednoklikové potvrdenie kandidáta — na rozdiel od `save()`
+  // vyššie (ktorý ukladá `urlDraft` z otvoreného editora) tento ukladá
+  // PRIAMO URL konkrétneho, na tlačidle viditeľne popísaného kandidáta bez
+  // otvárania editora. Stále výslovný ľudský klik na KONKRÉTNY návrh —
+  // nikdy automatické priradenie bez klik.
+  const confirmCandidate = useCallback(
+    (productKey: string, url: string) => {
+      setActionError("");
+      setBusyKey(productKey);
+      saveProductLink(productKey, url)
+        .then(() => {
+          if (editingKeyRef.current === productKey) setEditingKey(null);
+          refetch();
+          restockLinksBadge.refresh();
+        })
+        .catch((err: unknown) => {
+          if (err instanceof SupplierLinksUnauthorizedError) {
+            onSessionExpired();
+            return;
+          }
+          setActionError(err instanceof Error ? err.message : "Uloženie odkazu sa nepodarilo.");
+        })
+        .finally(() => {
+          setBusyKey(null);
+        });
+    },
+    [refetch, onSessionExpired, restockLinksBadge],
   );
 
   return (
@@ -141,8 +182,8 @@ export function RestockLinkSuggestionsSection({
       <p>
         Vypredané produkty, ktoré nemajú VÔBEC žiadny odkaz na dodávateľa — automatika „Vypredané →
         Skladom“ ich preto nikdy neposúdi. Appka podľa názvu a dodávateľa navrhne najpodobnejší
-        produkt, čo linku už má — návrh nikdy nič neuloží sám, len predvyplní vstup, ktorý potvrdíš
-        alebo prepíšeš vlastnou adresou.
+        produkt, čo linku už má — klik na „✅ Potvrdiť“ pri návrhu ho rovno uloží (meno aj adresa sú
+        na tlačidle vidno pred kliknutím). Vlastnú alebo opravenú adresu vlož cez „✏️ Doplniť“.
       </p>
 
       <form onSubmit={submit}>
@@ -195,16 +236,15 @@ export function RestockLinkSuggestionsSection({
                             {canEdit ? (
                               <button
                                 type="button"
-                                className="btn sm ghost"
-                                data-testid={`restock-link-use-candidate-${item.productKey}-${candidate.productKey}`}
-                                aria-label={`Použiť návrh — ${candidate.productName} (${candidate.url})`}
+                                className="btn sm good"
+                                data-testid={`restock-link-confirm-${item.productKey}-${candidate.productKey}`}
+                                aria-label={`Potvrdiť odkaz — ${candidate.productName} (${candidate.url})`}
+                                disabled={busyHere}
                                 onClick={() => {
-                                  setEditingKey(item.productKey);
-                                  setUrlDraft(candidate.url);
-                                  setActionError("");
+                                  confirmCandidate(item.productKey, candidate.url);
                                 }}
                               >
-                                💡 {candidate.productName}: {candidate.url}
+                                ✅ {candidate.productName}: {candidate.url}
                               </button>
                             ) : (
                               <span>
@@ -277,6 +317,7 @@ export function RestockLinkSuggestionsSection({
                             className="btn sm ghost"
                             data-testid={`restock-link-edit-toggle-${item.productKey}`}
                             aria-label={`Doplniť odkaz na dodávateľa — ${item.productName} (${item.productKey})`}
+                            disabled={busyHere}
                             onClick={() => {
                               startEdit(item);
                             }}
