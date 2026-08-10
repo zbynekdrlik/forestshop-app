@@ -11,6 +11,22 @@ import type { UpozornenieRow } from "../upozorneniaApi.js";
 // `UpozorneniaSection.tsx`, ktorý je jediný, čo ho potrebuje zdieľať naprieč
 // viacerými kartami naraz.
 
+// issue 327 (majiteľ, zákresy nad appkou v0.3.0-dev.174: "Datum dať vedľa",
+// "Alebo to dať všetko vedľa"): PRVÝ riadok `details` (v praxi takmer vždy
+// "Zákazník: X" — `posta-uncollected/run.ts`/`orders/return-upozornenia.ts`/
+// `orders/stuck-upozornenia.ts` ho VŽDY píšu ako prvý riadok) sa presúva na
+// riadok s nadpisom, spolu s "Vzniklo .../vybaviť do ...". Toto je
+// ŠTRUKTURÁLNY split (prvý riadok / zvyšok podľa `\n`), nikdy parsovanie
+// "Zákazník:" reťazca — funguje rovnako pre vlastné poznámky (voľný text,
+// zvyčajne bez `\n` vôbec, takže CELÝ text sa jednoducho presunie vedľa
+// nadpisu) aj pre AKÝKOĽVEK budúci automatický zdroj bez väzby na presnú
+// formuláciu backendového textu.
+function splitDetailLines(details: string): { readonly first: string | null; readonly rest: string } {
+  if (details === "") return { first: null, rest: "" };
+  const lines = details.split("\n");
+  return { first: lines[0] ?? null, rest: lines.slice(1).join("\n") };
+}
+
 // Otvorený zoznam typov — budúci ďalší automatický zdroj pridá svoj štítok
 // sem, keď pridá svoju `pgEnum` hodnotu.
 const TYPE_LABELS: Readonly<Record<UpozornenieRow["type"], string>> = {
@@ -86,6 +102,8 @@ export function UpozornenieCard({
   onDelete,
 }: UpozornenieCardProps): JSX.Element {
   const isOwn = row.source === "vlastne";
+  const { first: firstDetailLine, rest: restDetailLines } = splitDetailLines(row.details);
+  const linkLabel = LINK_LABELS[row.type] ?? DEFAULT_LINK_LABEL;
   return (
     <div className={"card upozornenie-card" + (row.status === "nove" ? " upozornenie-nove" : "")} data-testid={`upozornenie-${row.id}`}>
       <div className="upozornenie-head">
@@ -99,17 +117,34 @@ export function UpozornenieCard({
           </span>
         )}
       </div>
-      <p className="upozornenie-title">{row.title}</p>
-      {row.details !== "" && <p className="upozornenie-details">{row.details}</p>}
-      <p className="upozornenie-meta">
-        Vzniklo {formatSkDate(row.createdAt)}
-        {row.dueAt !== null && <> · vybaviť do {formatSkDate(row.dueAt)}</>}
-      </p>
-      {row.link !== null && (
-        <a href={row.link} target="_blank" rel="noreferrer" data-testid={`upozornenie-link-${row.id}`}>
-          {LINK_LABELS[row.type] ?? DEFAULT_LINK_LABEL}
-        </a>
-      )}
+      {/* issue 327: nadpis + "zákazník"/dátum na JEDNOM riadku ("Datum dať
+          vedľa"). Keď karta má odkaz, nadpis SAMOTNÝ sa stane klikateľným
+          odkazom (`LINK_LABELS`'ov text ostáva ako aria-label/title —
+          prístupnosť + hover, keďže vizuálne ho nahradila samotná titulka) —
+          samostatný odkazový riadok pod kartou zmizol. */}
+      <div className="upozornenie-title-row">
+        {row.link !== null ? (
+          <a
+            className="upozornenie-title"
+            href={row.link}
+            target="_blank"
+            rel="noreferrer"
+            aria-label={`${linkLabel} — ${row.title}`}
+            title={linkLabel}
+            data-testid={`upozornenie-link-${row.id}`}
+          >
+            {row.title}
+          </a>
+        ) : (
+          <p className="upozornenie-title">{row.title}</p>
+        )}
+        <span className="upozornenie-inline-meta" data-testid={`upozornenie-meta-${row.id}`}>
+          {firstDetailLine !== null && firstDetailLine !== "" && <>{firstDetailLine} · </>}
+          Vzniklo {formatSkDate(row.createdAt)}
+          {row.dueAt !== null && <> · vybaviť do {formatSkDate(row.dueAt)}</>}
+        </span>
+      </div>
+      {restDetailLines !== "" && <p className="upozornenie-details">{restDetailLines}</p>}
       {canControl && row.status !== "vybavene" && (
         <div className="upozornenie-actions">
           <button type="button" className="btn sm good" disabled={busy} onClick={onResolve} data-testid={`upozornenie-resolve-${row.id}`}>
@@ -128,6 +163,16 @@ export function UpozornenieCard({
           <button type="button" className="btn sm ghost" disabled={busy || postponeDraftValue === ""} onClick={onPostpone} data-testid={`upozornenie-postpone-${row.id}`}>
             Odložiť
           </button>
+          {/* issue 327 (majiteľ, zákres "Odstrániť" vedľa "Odložiť"): mazanie
+              UŽ NIE JE obmedzené len na vlastné poznámky (issue 267) —
+              generický text ticketu ("upozornenie odstrániť") aj umiestnenie
+              v akčnom riadku (renderovanom pre VŠETKY nevyriešené karty)
+              ukazujú na VŠETKY typy, nielen `isOwn`. "Upraviť" (editácia
+              titulku/textu) OSTÁVA len pre vlastné poznámky nižšie — editovať
+              generovaný text automatickej karty nedáva zmysel. */}
+          <button type="button" className="btn sm ghost" disabled={busy} onClick={onDelete} data-testid={`upozornenie-delete-${row.id}`}>
+            Odstrániť
+          </button>
           {row.status === "odlozene" && (
             // issue 267 (živé overenie, gap 2): jediný spôsob, ako vrátiť
             // odloženú kartu SKÔR, než sa vráti sama (napr. majiteľ sa
@@ -137,14 +182,9 @@ export function UpozornenieCard({
             </button>
           )}
           {isOwn && (
-            <>
-              <button type="button" className="btn sm ghost" disabled={busy} onClick={onEdit} data-testid={`upozornenie-edit-${row.id}`}>
-                Upraviť
-              </button>
-              <button type="button" className="btn sm ghost" disabled={busy} onClick={onDelete} data-testid={`upozornenie-delete-${row.id}`}>
-                ✕ Zmazať
-              </button>
-            </>
+            <button type="button" className="btn sm ghost" disabled={busy} onClick={onEdit} data-testid={`upozornenie-edit-${row.id}`}>
+              Upraviť
+            </button>
           )}
         </div>
       )}

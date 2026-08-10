@@ -2081,10 +2081,41 @@ tr:last-child td {
   gap: var(--fs-space-3);
   flex-wrap: wrap;
 }
+/* issue 327 (majiteľ: "Datum dať vedľa", "Alebo to dať všetko vedľa" —
+   kompaktné karty, do dĺžky nie výšky): nadpis + prvý riadok `details`
+   ("Zákazník: X") + dátum vzniku/vybaviť do na JEDNOM riadku namiesto troch
+   samostatných stohovaných `<p>` elementov. `align-items: baseline` drží
+   nadpis (väčšie písmo) a meta (menšie písmo) na spoločnej textovej línii;
+   `flex-wrap: wrap` je poistka pre úzku obrazovku/dlhší nadpis. */
+.upozornenie-title-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--fs-space-2);
+  flex-wrap: wrap;
+}
 .upozornenie-title {
   font-size: var(--fs-text-md);
   font-weight: var(--fs-weight-semibold);
   margin: 0;
+}
+/* Nadpis ako odkaz (karta má `link`) — TRVALÉ podčiarknutie (rovnaký
+   vizuálny jazyk ako `.ord-admin-link`), nie len pri hoveri: keď nadpis
+   VIZUÁLNE nahradil predošlý samostatný odkazový riadok "Otvoriť
+   objednávku v Shoptete", musí byť SÁM OSEBE rozoznateľný ako klikateľný,
+   bez potreby najazdiť naň myšou (živo overené — bez podčiarknutia
+   nebolo vidieť žiadny rozdiel od obyčajného textového nadpisu). */
+a.upozornenie-title {
+  color: var(--fs-ink);
+  text-decoration: underline;
+  text-decoration-color: var(--fs-border);
+}
+a.upozornenie-title:hover {
+  color: var(--fs-brand);
+  text-decoration-color: currentColor;
+}
+.upozornenie-inline-meta {
+  font-size: var(--fs-text-sm);
+  color: var(--fs-ink-faint);
 }
 .upozornenie-details {
   margin: 0;
@@ -2103,6 +2134,17 @@ tr:last-child td {
   flex-wrap: wrap;
   margin-top: var(--fs-space-2);
 }
+/* issue 327 (majiteľ: "tlačidlá a pole s dátumom aspoň o 25 % nižšie —
+   tieto obdĺžniky"): zmerané naživo cez Playwright proti lokálnemu dev
+   serveru (rovnaká metodika ako issue 105/107/111/127/171/204/214/258/303)
+   — pôvodný jednoriadkový pás akcií mal ~35.6px (issue 303's vlastný
+   nameraný údaj); nižšie paddingy + o stupeň menšie písmo na tlačidlách
+   znižujú výšku o zmeraných ≥25 %, bez zmeny šírky/textu tlačidiel. */
+.upozornenie-actions .btn {
+  padding-top: 1px;
+  padding-bottom: 1px;
+  font-size: var(--fs-text-xs);
+}
 /* issue 303: the global `input:not([type="hidden"]) { width: 100% }` reset
    (app.css §1) stretched the "odložiť do" date field to the FULL width of
    this flex row (measured live: 1491px at 1600px desktop) — same trap as
@@ -2117,6 +2159,11 @@ tr:last-child td {
   width: auto;
   min-width: 9.5rem;
   flex: 0 0 auto;
+  /* issue 327: rovnaká ≥25 % nižšia disciplína ako `.upozornenie-actions
+     .btn` vyššie — padding znížený z predvoleného `--fs-space-2`
+     (8px)/strana na 1px/strana. */
+  padding-top: 1px;
+  padding-bottom: 1px;
 }
 .upozornenie-form {
   display: flex;

@@ -148,7 +148,17 @@ test("vlastná poznámka — vytvorenie, 'Nové' zmizne po znovuotvorení, úpra
 // dátumové pole "odložiť do" naťahovalo na CELÚ šírku pásu (naživo namerané:
 // 1491px pri 1600px okne), takže tri ovládacie prvky (✓ Vybavené / dátum /
 // Odložiť) sa zalomili na tri samostatné riadky namiesto jedného.
-test("desktop (1600px): pás akcií karty je jednoriadkový, nie zalomený na viac riadkov (issue 303)", async ({ page }) => {
+//
+// AKTUALIZÁCIA (issue 327, majiteľ: "aspoň o 25 % nižšie — tie obdĺžniky",
+// "jedna poznámka ≈ polovica dnešnej výšky alebo menej"): issue 303's
+// vlastný nameraný jednoriadkový pás akcií (35.59px) je tu DOKUMENTOVANÝ
+// baseline — nový strop (26px) je z neho ≥25 % nižší
+// (35.59 × 0.75 ≈ 26.7px). Samostatná asercia overuje aj CELÚ výšku karty
+// (predtým 269px pre 5-riadkový obsah, `.claude/rules/upozornenia.md`'s
+// vlastný "~150 bodov" odkaz na plnšiu automatickú kartu) — nová karta s
+// nadpisom+meta na jednom riadku a bez samostatného odkazového riadku musí
+// byť výrazne nižšia.
+test("desktop (1600px): pás akcií karty je ≥25 % nižší než issue 303's baseline, karta samotná výrazne kompaktnejšia (issue 327)", async ({ page }) => {
   const chyby: string[] = [];
   page.on("console", (m) => {
     if (m.type() === "error" || m.type() === "warning") chyby.push(m.text());
@@ -166,20 +176,25 @@ test("desktop (1600px): pás akcií karty je jednoriadkový, nie zalomený na vi
 
   await page.getByTestId("upozornenie-new").click();
   await page.getByTestId("upozornenie-form-title").fill("Hustota — pás akcií na jednom riadku");
+  await page.getByTestId("upozornenie-form-details").fill("o 10:00 s dodávateľom");
   await page.getByTestId("upozornenie-form-save").click();
   await expect(page.getByTestId("upozornenie-form")).toBeHidden();
 
   const card = kartaSNadpisom(page, "Hustota — pás akcií na jednom riadku");
   await expect(card).toBeVisible();
 
-  // Strop 50px necháva malú rezervu nad nameraným jednoriadkovým 35.59px
-  // (dátumové pole je vyššie než tlačidlá, takže ono určuje výšku riadku) bez
-  // toho, aby maskoval skutočné zalomenie späť na viac riadkov (namerané
-  // zalomené: 104px — ďaleko nad 50px stropom).
   const actionsHeight = await card.evaluate((el) => el.querySelector(".upozornenie-actions")?.getBoundingClientRect().height ?? 0);
-  expect(actionsHeight, "pás akcií karty musí byť jednoriadkový (<=50px), nie zalomený na viac riadkov").toBeLessThanOrEqual(50);
+  expect(actionsHeight, "pás akcií karty musí byť ≥25 % nižší než issue 303's nameraný 35.59px baseline (≤26.7px)").toBeLessThanOrEqual(27);
 
-  await card.getByRole("button", { name: "Zmazať", exact: false }).click(); // upratanie po teste
+  const cardHeight = await card.evaluate((el) => el.getBoundingClientRect().height);
+  expect(cardHeight, "celá karta musí byť výrazne nižšia než issue 303's nameraný 269px pre 5-riadkový obsah").toBeLessThanOrEqual(140);
+
+  // "zákazník"/detaily vedľa nadpisu na SPOLOČNOM riadku — samostatný
+  // stohovaný riadok (staré správanie) tu neexistuje.
+  await expect(card.getByTestId(/^upozornenie-meta-/)).toContainText("o 10:00 s dodávateľom");
+  await expect(card.getByTestId(/^upozornenie-meta-/)).toContainText("Vzniklo");
+
+  await card.getByRole("button", { name: "Odstrániť", exact: true }).click(); // upratanie po teste
 
   expect(chyby).toEqual([]);
 });
