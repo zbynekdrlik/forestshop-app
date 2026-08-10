@@ -233,4 +233,21 @@ describe("PATCH/DELETE /api/upozornenia/:id", () => {
     expect(res.status).toBe(200);
     expect((await res.json()) as { ok: boolean; removed: boolean }).toEqual({ ok: true, removed: false });
   });
+
+  // issue 327: mazanie UŽ NIE JE obmedzené na vlastné poznámky (issue 267) —
+  // aj karta zo zdroja "appka" (automatický zdroj) sa dá cez túto trasu
+  // odstrániť.
+  it("issue 327: zmaže AJ kartu zo zdroja 'appka' (automatický zdroj)", async () => {
+    const { app, cookie, db } = await boot("manazer");
+    const now = new Date("2026-08-10T08:00:00Z");
+    const created = await upsertUpozornenie(db, { type: "objednavka_visi", source: "appka", title: "Objednávka 1 visí", dedupKey: "objednavka-visi:1", now });
+
+    const res = await app.request(`/api/upozornenia/${created.id}`, { method: "DELETE", headers: { cookie } });
+    expect(res.status).toBe(200);
+    expect((await res.json()) as { ok: boolean; removed: boolean }).toEqual({ ok: true, removed: true });
+
+    const list = await app.request("/api/upozornenia", { headers: { cookie } });
+    const body = (await list.json()) as { rows: readonly { id: string }[] };
+    expect(body.rows.some((r) => r.id === created.id)).toBe(false);
+  });
 });

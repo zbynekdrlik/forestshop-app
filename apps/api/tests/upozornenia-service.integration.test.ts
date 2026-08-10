@@ -5,7 +5,7 @@ import { hashPassword } from "../src/modules/auth/passwords.js";
 import {
   cancelPostpone,
   createOwnNote,
-  deleteOwnNote,
+  deleteUpozornenie,
   markAllSeen,
   postponeUpozornenie,
   resolveUpozornenie,
@@ -144,7 +144,7 @@ describe("upsertUpozornenie — súbežnosť (issue 272)", () => {
   });
 });
 
-describe("updateOwnNote / deleteOwnNote — len zdroj 'vlastne'", () => {
+describe("updateOwnNote — len zdroj 'vlastne'", () => {
   it("upraví vlastnú poznámku", async () => {
     const { db, userId } = await bootDb();
     const now = new Date("2026-08-05T08:00:00Z");
@@ -165,22 +165,44 @@ describe("updateOwnNote / deleteOwnNote — len zdroj 'vlastne'", () => {
     const [row] = await db.select().from(upozornenie);
     expect(row?.title).toBe("Automatická karta");
   });
+});
 
-  it("zmaže vlastnú poznámku, ale NIE kartu zo zdroja 'appka'", async () => {
+// issue 327: mazanie UŽ NIE JE obmedzené na `source === "vlastne"` (predtým
+// `deleteOwnNote`, issue 267) — `deleteUpozornenie` maže KTORÚKOĽVEK kartu
+// bez ohľadu na zdroj, viď `service.ts`'s odôvodnenie.
+describe("deleteUpozornenie — všetky zdroje", () => {
+  it("zmaže vlastnú poznámku", async () => {
     const { db, userId } = await bootDb();
     const now = new Date("2026-08-05T08:00:00Z");
     const own = await createOwnNote(db, { title: "Zmazať ma", createdByUserId: userId, now });
-    const appka = await upsertUpozornenie(db, { type: "vlastna_poznamka", source: "appka", title: "Nezmazať", dedupKey: "posta:W", now });
-    expect(await deleteOwnNote(db, own.id)).toBe(true);
-    expect(await deleteOwnNote(db, appka.id)).toBe(false);
+    expect(await deleteUpozornenie(db, own.id)).toBe(true);
+    const rows = await db.select().from(upozornenie);
+    expect(rows).toHaveLength(0);
+  });
+
+  it("zmaže AJ kartu zo zdroja 'appka' (automatický zdroj)", async () => {
+    const { db } = await bootDb();
+    const now = new Date("2026-08-05T08:00:00Z");
+    const appka = await upsertUpozornenie(db, { type: "vlastna_poznamka", source: "appka", title: "Automatická karta", dedupKey: "posta:W", now });
+    expect(await deleteUpozornenie(db, appka.id)).toBe(true);
+    const rows = await db.select().from(upozornenie);
+    expect(rows).toHaveLength(0);
+  });
+
+  it("nezmaže INÚ kartu, len tú so zhodným id", async () => {
+    const { db, userId } = await bootDb();
+    const now = new Date("2026-08-05T08:00:00Z");
+    const own = await createOwnNote(db, { title: "Zmazať ma", createdByUserId: userId, now });
+    const other = await createOwnNote(db, { title: "Nezmazať", createdByUserId: userId, now });
+    expect(await deleteUpozornenie(db, own.id)).toBe(true);
     const rows = await db.select().from(upozornenie);
     expect(rows).toHaveLength(1);
-    expect(rows[0]?.title).toBe("Nezmazať");
+    expect(rows[0]?.id).toBe(other.id);
   });
 
   it("zmazanie neznámeho/už zmazaného id je neškodné (vracia false, nikdy nevyhodí)", async () => {
     const { db } = await bootDb();
-    expect(await deleteOwnNote(db, "00000000-0000-0000-0000-000000000000")).toBe(false);
+    expect(await deleteUpozornenie(db, "00000000-0000-0000-0000-000000000000")).toBe(false);
   });
 });
 

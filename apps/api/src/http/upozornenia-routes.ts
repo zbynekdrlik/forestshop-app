@@ -7,7 +7,7 @@ import { countActionableUpozornenia, listResolvedUpozornenia, listUpozornenia, t
 import {
   cancelPostpone,
   createOwnNote,
-  deleteOwnNote,
+  deleteUpozornenie,
   markAllSeen,
   postponeUpozornenie,
   resolveUpozornenie,
@@ -118,12 +118,14 @@ export function registerUpozorneniaRoutes(app: Hono<AppBindings>, db: Database):
     },
   );
 
-  // Zmazanie — rovnaká disciplína ako `nedostupne-routes.ts`'s odkazy: neznáme/
-  // už zmazané id (dvojklik) je NEŠKODNÉ, vždy 200, nikdy 4xx.
+  // Zmazanie — issue 327: rozšírené na VŠETKY zdroje (predtým len vlastné
+  // poznámky, issue 267), `deleteUpozornenie` (`service.ts`) to komentuje
+  // podrobne. Rovnaká disciplína ako `nedostupne-routes.ts`'s odkazy:
+  // neznáme/už zmazané id (dvojklik) je NEŠKODNÉ, vždy 200, nikdy 4xx.
   app.delete("/api/upozornenia/:id", requireSameOrigin(), requireUser(db), requireRole("admin", "manazer"), zValidator("param", idParam), async (c) => {
     const { id } = c.req.valid("param");
     const user = c.get("user");
-    const removed = await deleteOwnNote(db, id);
+    const removed = await deleteUpozornenie(db, id);
     if (removed) {
       await record(db, { at: new Date(), actorUserId: user.userId, action: "upozornenie.deleted", entity: "upozornenie", entityId: id, data: { id } });
     }

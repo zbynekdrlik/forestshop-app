@@ -125,11 +125,21 @@ export async function updateOwnNote(db: UpozornenieExecutor, input: UpdateOwnNot
   return result.length > 0;
 }
 
-export async function deleteOwnNote(db: Database, id: string): Promise<boolean> {
-  const result = await db
-    .delete(upozornenie)
-    .where(and(eq(upozornenie.id, id), eq(upozornenie.source, "vlastne")))
-    .returning({ id: upozornenie.id });
+// issue 267 pôvodne obmedzilo mazanie len na `source === "vlastne"`
+// (`deleteOwnNote`) — issue 327 (majiteľ, zákres "Odstrániť" vedľa
+// "Odložiť" v akčnom riadku, ktorý sa renderuje pre VŠETKY nevyriešené
+// karty, plus generický text ticketu "upozornenie odstrániť") rozšírilo
+// mazanie na VŠETKY zdroje. Na rozdiel od "Upraviť" (editácia
+// titulku/textu, `updateOwnNote` nižšie — ostáva vlastníctvom LEN vlastných
+// poznámok, editovať generovaný text automatickej karty nedáva zmysel),
+// zmazanie CELÉHO riadku je zmysluplné pre AKÝKOĽVEK zdroj — majiteľ chce
+// vedieť trvalo odstrániť aj automaticky vygenerovanú kartu, ktorú už
+// nechce vidieť. Znova-ohlásiteľné typy (napr. `objednavka_visi`,
+// `.claude/rules/upozornenia.md`) sa jednoducho znova vytvoria pri ďalšom
+// behu, ak podmienka stále platí — rovnaké správanie ako keby karta nikdy
+// nevznikla.
+export async function deleteUpozornenie(db: Database, id: string): Promise<boolean> {
+  const result = await db.delete(upozornenie).where(eq(upozornenie.id, id)).returning({ id: upozornenie.id });
   return result.length > 0;
 }
 
