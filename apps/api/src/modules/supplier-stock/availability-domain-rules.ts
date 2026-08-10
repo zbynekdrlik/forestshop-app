@@ -309,3 +309,27 @@ export function visibleAvailabilityFor(url: string, html: string): VisibleAvaila
   const rule = VISIBLE_AVAILABILITY_RULES.find((r) => host === r.host || host.endsWith(`.${r.host}`));
   return rule === undefined ? null : rule.read(html);
 }
+
+/**
+ * `true`, keď doména (alebo jej poddoména) MÁ vlastné pravidlo — viditeľné
+ * (`VISIBLE_AVAILABILITY_RULES`) ALEBO textové (`TEXT_AVAILABILITY_RULES`) —
+ * teda keď sa preň niekedy spravila AKÁKOĽVEK overovacia práca (issue 330).
+ * Volá ju `parsePage` (`parse.ts`): doména BEZ AKÉHOKOĽVEK pravidla (presne
+ * prípad `roy.sk` — nie je ani v jednom zo zoznamov) nesmie dostať
+ * `available` len zo strojového JSON-LD/meta údaju bez druhej kontroly —
+ * fail-closed predvolený stav (`unknown`) namiesto dôvery naslepo. Domény
+ * UŽ pokryté jedným z týchto pravidiel sa touto kontrolou nemenia — ich
+ * správanie ostáva presné, aké je dnes (rozhodnutie zapísané na ticket-e).
+ *
+ * Textová polovica zámerne znovu POUŽÍVA `textAvailabilityRuleFor` (čistá,
+ * len na `url` závislá funkcia) namiesto vlastného porovnávania — viditeľná
+ * polovica to urobiť NEMÔŽE (`visibleAvailabilityFor` závisí aj na `html` a
+ * vracia `null` aj keď doména pravidlo MÁ, len sa na TEJTO konkrétnej
+ * stránke nenašla zhoda — to by tu znamenalo mylné "doména bez pravidla").
+ */
+export function hasKnownAvailabilityRule(url: string): boolean {
+  if (textAvailabilityRuleFor(url) !== null) return true;
+  const host = hostOf(url);
+  if (host === "") return false;
+  return VISIBLE_AVAILABILITY_RULES.some((rule) => host === rule.host || host.endsWith(`.${rule.host}`));
+}

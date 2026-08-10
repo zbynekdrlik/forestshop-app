@@ -24,7 +24,7 @@
 // Čokoľvek, čo neprejde ani jednou úrovňou, je `unknown` — a `unknown` nikdy
 // neprepne produkt (issue 213).
 
-import { textAvailabilityRuleFor, visibleAvailabilityFor } from "./availability-domain-rules.js";
+import { hasKnownAvailabilityRule, textAvailabilityRuleFor, visibleAvailabilityFor } from "./availability-domain-rules.js";
 import { availabilityFromText, hostOf, type SupplierAvailability } from "./availability-primitives.js";
 
 export type { SupplierAvailability };
@@ -357,7 +357,18 @@ export function parsePage(html: string, url: string): ParsedPage {
     };
   }
 
+  // issue 330: doména bez AKÉHOKOĽVEK pravidla (ani visible, ani text — teda
+  // sa preň nikdy nespravila žiadna overovacia práca, presne prípad roy.sk)
+  // sa nesmie spoliehať na strojový JSON-LD/meta `available` bez druhej
+  // kontroly — fail-closed, `unknown` namiesto dôvery naslepo. Domény S
+  // pravidlom (text alebo visible) sa nemenia, ich `available` ostáva ako
+  // doteraz.
+  const knownDomain = hasKnownAvailabilityRule(url);
+
   if (jsonLd !== null) {
+    if (jsonLd.availability === "available" && !knownDomain) {
+      return { availability: "unknown", availabilityText: "", price: null, source: "none" };
+    }
     return {
       availability: jsonLd.availability,
       availabilityText: jsonLd.token,
@@ -368,6 +379,9 @@ export function parsePage(html: string, url: string): ParsedPage {
 
   const meta = fromMetaTags(html);
   if (meta !== null) {
+    if (meta.availability === "available" && !knownDomain) {
+      return { availability: "unknown", availabilityText: "", price: null, source: "none" };
+    }
     return {
       availability: meta.availability,
       availabilityText: meta.token,
