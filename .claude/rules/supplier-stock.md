@@ -395,6 +395,19 @@ paths:
   `docker compose exec postgres psql` dopyt na `supplier_stock` po
   konkrétnej doméne PO dokončení behu (`SELECT status FROM job_run WHERE
   id=...`).
+- **Snímka `supplier_stock` PRED čerstvým plným behom PODHODNOCUJE skutočnú
+  "unknown" populáciu — `MAX_AGE_HOURS=20` znamená, že rad riadkov môže byť
+  dni staré medzi dvomi plnými behmi.** Issue 332: prvá diagnostika (10.8.)
+  napočítala 434 `unknown` riadkov naprieč 28 doménami; ČERSTVÝ plný beh
+  spustený PRI OVEROVANÍ TEJTO ZMENY (11.8., ~72 min, `job_run` `success`)
+  ich odhalil 811, vrátane domén, ktoré tento ticket vôbec nemenil
+  (`wetland.sk` 6→184, `tthunt.sk` 1→90) — nie regresia, len presnejší,
+  ČERSTVÝ obraz skutočnej populácie. Test pri KAŽDOM ĎALŠOM "koľko riadkov
+  padá na unknown" meraní PRED písaním kódu (ako táto sekcia žiada vyššie):
+  ak od posledného PLNÉHO behu ubehlo viac než pár hodín, počítaj s tým, že
+  reálne číslo bude VYŠŠIE, než ukáže okamžitá snímka — spusti čerstvý beh
+  (alebo aspoň skontroluj `job_run.finished_at` poslednej úspešnej), než sa
+  z tabuľkového dopytu vyvodí "toto je celý rozsah problému".
 - **Issue 332: po issue 330's fail-closed zmene je populácia domén bez
   pravidla VÄČŠIA, než ukázala pôvodná diagnostika (10.8.: 9/36) — naživo
   premerané 11.8. proti produkcii: 28 domén, 434 riadkov.** Pridané tri nové
