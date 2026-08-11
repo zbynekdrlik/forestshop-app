@@ -52,6 +52,14 @@ export interface NavFolder {
   readonly id: string;
   readonly label: string;
   readonly tabs: readonly NavTab[];
+  // issue 343: predvolený stav ZBALENIA priečinka pri prvom vykreslení menu
+  // (nezapamätáva sa medzi návštevami — vždy sa vráti na túto hodnotu po
+  // obnovení stránky, viď `Sidebar.tsx`). `true` = štartuje zbalený. Chýbajúce
+  // pole = rozbalený (pôvodné, nezmenené správanie). Zámerne PER PRIEČINOK
+  // tu v registri, nie ako zoznam mien priamo v `Sidebar.tsx` — pridanie
+  // nového priečinka (napr. "Dôležité" z issue 342) si tak volí vlastný
+  // predvolený stav jedným riadkom, bez zásahu do Sidebar.tsx.
+  readonly defaultCollapsed?: boolean;
 }
 
 // Ľavé menu — VIDITEĽNÉ položky. Pôvodne (issue 57, 2026-07-30) majiteľ chcel
@@ -119,6 +127,10 @@ export const NAV: readonly NavFolder[] = [
   {
     id: "system",
     label: "Systém",
+    // issue 343: šéf (Discord, 11.8.2026) — s toľkými priečinkami/záložkami
+    // menu zaberá celú výšku a treba rolovať; "Systém" sa denne nepoužíva
+    // (na rozdiel od "Eshop"), preto štartuje zbalený.
+    defaultCollapsed: true,
     // issue 192: "Texty e-mailov" patrí sem — je to nastavenie appky, ktoré sa
     // dotýka VŠETKÝCH automatizácií naraz, nie práca s konkrétnymi
     // objednávkami (tá je v Eshope) ani jedna konkrétna automatizácia.
@@ -134,6 +146,9 @@ export const NAV: readonly NavFolder[] = [
   {
     id: "automations",
     label: "Automatizácie",
+    // issue 343: rovnaký dôvod ako "Systém" vyššie — zbalený predvolene, aby
+    // menu nezaberalo celú výšku obrazovky.
+    defaultCollapsed: true,
     // Len tie dve veci, ktoré SKUTOČNE bežia na plán a dajú sa zapnúť/vypnúť
     // (issue 195). Poradie podľa dôležitosti (issue 185, zadanie majiteľa).
     // issue 193: "Odoslané e-maily" patrí SEM — je to prehľad toho, čo

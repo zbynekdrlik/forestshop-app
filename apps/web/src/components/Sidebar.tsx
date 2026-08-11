@@ -71,7 +71,21 @@ export function Sidebar({
   // tá nemá koncept zapnuté/vypnuté vôbec, je len na požiadanie).
   readonly badgeStatus?: Readonly<Record<string, "on" | "off">>;
 }): JSX.Element {
-  const [collapsed, setCollapsed] = useState<Readonly<Record<string, boolean>>>({});
+  // issue 343: predvolený stav zbalenia sa číta z registra (`NavFolder
+  // .defaultCollapsed` v `nav.ts`), nie hardcoded tu — pridanie nového
+  // priečinka do menu tak nikdy nevyžaduje zásah do tejto komponenty. Lazy
+  // initializer beží len pri prvom vykreslení (rovnaké `folders` prop sa
+  // odovzdáva zo statického registra, nemení sa počas behu appky) — ZÁMERNE
+  // sa NEPAMÄTÁ medzi návštevami (na rozdiel od `rail` nižšie), po obnovení
+  // stránky sa vždy vráti na túto predvolenú hodnotu (viď dizajnové
+  // rozhodnutie na tickete #343).
+  const [collapsed, setCollapsed] = useState<Readonly<Record<string, boolean>>>(() => {
+    const initial: Record<string, boolean> = {};
+    for (const folder of folders) {
+      if (folder.defaultCollapsed === true) initial[folder.id] = true;
+    }
+    return initial;
+  });
   const [rail, setRail] = useState<boolean>(initialRail);
 
   useEffect(() => {
@@ -124,6 +138,20 @@ export function Sidebar({
           // schovať záložky — preto sa trieda `collapsed` v tomto stave
           // neaplikuje. Po rozbalení panela sa pôvodný stav priečinkov vráti.
           const isCollapsed = !rail && collapsed[folder.id] === true;
+          // issue 343 (code review nález): zbalenie priečinka skrylo odznaky/
+          // pilulky, ktoré predtým (#331/#267) žiadali byť vidno HNEĎ po
+          // prihlásení bez otvorenia záložky. Súhrn sa počíta LEN kým je
+          // priečinok zbalený (po rozbalení sú vidno originály vnútri, žiadna
+          // duplicita) — z tých istých `badgeCounts`/`badgeStatus` props, žiadny
+          // nový sieťový dotaz. `aria-hidden` na oboch, aby hlavička priečinka
+          // NEMENILA svoj prístupný názov (existujúce `getByRole("button",
+          // {name: folder.label})` dotazy naprieč testami by inak prestali
+          // sedieť, keďže by doň spadol aj text/aria-label odznaku).
+          const folderBadgeSum = isCollapsed
+            ? folder.tabs.reduce((sum, tab) => sum + (badgeCounts?.[tab.id] ?? 0), 0)
+            : 0;
+          const folderHasStatus =
+            isCollapsed && folder.tabs.some((tab) => badgeStatus?.[tab.id] !== undefined);
           return (
             <div className={"nav-folder" + (isCollapsed ? " collapsed" : "")} key={folder.id}>
               {!rail && (
@@ -136,6 +164,14 @@ export function Sidebar({
                   }}
                 >
                   <span className="ftitle">{folder.label}</span>
+                  {folderBadgeSum > 0 && (
+                    <span className="tab-badge" data-testid={`folder-badge-${folder.id}`} aria-hidden="true">
+                      {folderBadgeSum}
+                    </span>
+                  )}
+                  {folderBadgeSum === 0 && folderHasStatus && (
+                    <span className="folder-dot" data-testid={`folder-dot-${folder.id}`} aria-hidden="true" />
+                  )}
                   <span className="folder-chev" aria-hidden="true">
                     ⌄
                   </span>

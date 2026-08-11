@@ -23,6 +23,8 @@ test("zoznam pripravených na prepnutie ponúkne odkaz na náš produkt aj k dod
   await page.getByRole("button", { name: "Prihlásiť sa" }).click();
 
   // Obrazovka je dostupná z ľavého menu pod "Automatizácie".
+  // issue 343: priečinok "Automatizácie" štartuje zbalený — treba ho najprv rozbaliť.
+  await page.getByRole("button", { name: "Automatizácie" }).click();
   await page.getByRole("button", { name: "Vypredané → Skladom", exact: true }).click();
   await expect(page.getByTestId("restock-waiting-list")).toBeVisible();
 
@@ -68,6 +70,8 @@ test("rozpor nášho stavu s feedom sa ukáže ako varovanie a kandidáta vylú�
   await page.getByLabel("Heslo").fill(E2E_HESLO);
   await page.getByRole("button", { name: "Prihlásiť sa" }).click();
 
+  // issue 343: priečinok "Automatizácie" štartuje zbalený — treba ho najprv rozbaliť.
+  await page.getByRole("button", { name: "Automatizácie" }).click();
   await page.getByRole("button", { name: "Vypredané → Skladom", exact: true }).click();
   await expect(page.getByTestId("restock-waiting-list")).toBeVisible();
 

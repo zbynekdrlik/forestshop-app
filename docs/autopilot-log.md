@@ -3358,3 +3358,27 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
   overenia produkčnej logiky priamo cez appkin skompilovaný `dist/`
   (`docker exec ... node -e 'require("./dist/...")'`, `createDb()` vracia
   `{ pool, db }`, nie `db` priamo).
+
+## Issue 337 (page=1/pageSize=50 na 4 obrazovkách, žiadna ďalšia strana)
+
+- Commits: `c562da1` (shared `useLoadMore.ts` hook), `b2d910b`/`c8013d6`/
+  `0222ac0`/`48abcd3` (zapojenie na CatalogPage/PairingSection/
+  SupplierLinksSection/RestockLinkSuggestionsSection), `9d00b2f` (e2e
+  fixtúra + Playwright dôkaz), `0185840` (catalog.spec.ts count bump),
+  `f8b3d8e`/`2ae1a62`/`5985142`/`55de8a1`/`5a5b4ae` (2 review nálezy:
+  🔴 `reset()` nikdy nevyčistilo `loadingMore`, 🟡 tlačidlo čítalo LIVE
+  `query`/`state` namiesto naposledy odoslaného dopytu — oba RED-verified
+  a opravené vo všetkých 4 obrazovkách).
+- PR #341 (`352045e`), CI aj Deploy zelené (deploy raz zlyhal na známej
+  containerd `failed to Lchown` chybe, vyriešené `docker pull` na dev2 +
+  `gh run rerun --failed`, žiadna zmena kódu).
+- Post-deploy naživo overené (v0.3.0-dev.200): "Eshop → Párovanie
+  produktov" `Nájdených: 2302 (zobrazených prvých 50)` → klik "Načítať
+  ďalšie" → 100 riadkov, "(zobrazených prvých 100)"; "Vypredané → Skladom:
+  návrhy odkazov" (total 34, pod 50) tlačidlo správne chýba. 0 chýb v
+  konzole na oboch.
+- Playbook: `.claude/rules/frontend-design.md` — nový zdieľaný
+  `useLoadMore.ts` hook (budúce obrazovky ho majú znovupoužiť) + 2 nové
+  bullet-y generalizujúce review nálezy (generation-guard musí vyčistiť
+  KAŽDÝ derivovaný stav, "latest ref" trieda platí aj pre onClick
+  handlery, nielen `.then()` mikrotasky).

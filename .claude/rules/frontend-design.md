@@ -1059,3 +1059,51 @@ paths:
   "<názov testu>"` na dôkaz RED, potom `stash pop` + rovnaký beh na dôkaz
   GREEN. Rýchlejšie než plný `pnpm --filter @forestshop/web e2e` cyklus
   pri overovaní JEDNÉHO testu.
+- **Zdieľaný "Načítať ďalšie" stránkovací mechanizmus je `apps/web/src/
+  useLoadMore.ts` (issue 337) — KAŽDÁ ĎALŠIA obrazovka, ktorá potrebuje
+  prekročiť `page: 1`/pevný `pageSize`, ho má POUŽIŤ, nie znova
+  vynachádzať vlastný page-tracking stav.** Zapojenie na 4 existujúcich
+  obrazovkách (`CatalogPage.tsx`/`PairingSection.tsx`/
+  `SupplierLinksSection.tsx`/`RestockLinkSuggestionsSection.tsx`) je
+  identické: `useLoadMore({mountedRef, onAppend, onError})`, `reset()`
+  volaný na ZAČIATKU `search()`, tlačidlo `data-testid="load-more"`
+  viditeľné len keď `items.length < total`, klik pripojí (nikdy
+  nenahrádza) výsledok.
+- **`reset()` v `useLoadMore.ts` MUSÍ vyčistiť KAŽDÝ derivovaný stav, ktorý
+  jeho vlastný generation-guard môže "zamraziť" — nestačí len zvýšiť
+  generáciu.** Code review na PR 341 (issue 337): `reset()` pôvodne len
+  bumpol `genRef`, no `loadingMore` sa nastavuje `true` pri štarte
+  `loadMore()` a späť na `false` AŽ v jeho `.finally()`, ktoré je SAMO
+  podmienené `gen === genRef.current` — takže reset VYVOLANÝ, kým staré
+  "load more" volanie ešte čaká na odpoveď, spôsobil, že `.finally()` sa
+  pre TÚTO (teraz zastaranú) požiadavku už nikdy neuplatnil a `loadingMore`
+  ostal `true` navždy (tlačidlo trvalo "Načítavam…"/disabled). Bežný
+  spúšťací sled: klik "Načítať ďalšie" → PRED doručením odpovede nové
+  vyhľadávanie. Fix: `reset()` teraz aj `setLoadingMore(false)`. Test na
+  KAŽDÝ ĎALŠÍ generation-guard v tomto repe (`searchSeq`/`gen`/podobne):
+  existuje vedľajší `useState` boolean (busy/loading/disabled), ktorý sa
+  nastavuje `true` PRED asynchrónnou operáciou a späť `false` AŽ vnútri
+  toho istého guardovaného `.then()/.catch()/.finally()`? Ak áno, `reset()`
+  (alebo čokoľvek, čo guard obchádza) ho musí vyčistiť SÁM, inak zostane
+  navždy zaseknutý.
+- **"Latest ref"/`queryRef`-`stateRef` trieda chyby (issue 251/254, viď
+  vyššie v tomto súbore) sa netýka LEN `.then()` mikrotaskov — presne ten
+  istý bug vzniká aj v ONCLICK handleri, ktorý priamo číta LIVE component
+  state namiesto hodnôt, čo skutočne vyprodukovali zobrazené výsledky.**
+  Code review na PR 341 (issue 337): "Načítať ďalšie" tlačidlo na všetkých
+  4 obrazovkách pôvodne volalo `searchXxx({q: query, state, page})` —
+  `query`/`state` sú kontrolované vstupy, menia sa pri KAŽDOM stlačení
+  klávesy/zmene selectu, NEZÁVISLE od toho, či `search()` (submit) preň
+  vôbec prebehol. Scenár: odošli vyhľadanie "socks" → výsledky sa
+  vykreslia → rozpíš INÝ text bez kliknutia na "Hľadať" → klik na "Načítať
+  ďalšie" ticho vyžiada druhú stranu NOVÉHO, NEODOSLANÉHO dopytu, hoci
+  `items`/`total` na obrazovke ešte patria pôvodnému. Fix: `search(q, s)`
+  (ktorá už dostáva presne odoslané hodnoty) ich synchrónne uloží do
+  VLASTNÉHO refu (`searchedQueryRef`/`searchedStateRef`, oddeleného od
+  existujúceho `queryRef`/`stateRef`, ktorý zámerne zrkadlí LIVE hodnotu
+  pre INÝ účel — ingest/refetch race), tlačidlo číta z tohto refu, nikdy z
+  live stavu vstupov. Test na KAŽDÝ ĎALŠÍ onClick/onSubmit handler v tomto
+  repe, ktorý volá server s hodnotou z `useState`u kontrolovaného vstupu:
+  je táto hodnota GARANTOVANE tá istá, čo vyprodukovala AKTUÁLNE
+  zobrazené dáta, alebo len "čo je práve rozpísané"? Ak druhé, potrebuje
+  vlastný "naposledy odoslané" ref, nie priamy odkaz na live state.

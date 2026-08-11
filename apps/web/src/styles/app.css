@@ -466,6 +466,18 @@ tr:last-child td {
 .tab-status {
   flex-shrink: 0;
 }
+/* issue 343: malá bodka na hlavičke ZBALENÉHO priečinka — keď vnútri nie je
+   číselný odznak (ten dostane `.tab-badge`, tá istá trieda ako vnútri), ale
+   niečo má stav (Beží/Zastavené), signalizuje "je tu niečo" bez duplicity
+   čísla. Zmizne po rozbalení priečinka (Sidebar.tsx počíta len kým je
+   zbalený). */
+.folder-dot {
+  flex-shrink: 0;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--fs-brand);
+}
 
 .sidefoot {
   border-top: 1px solid var(--fs-border);

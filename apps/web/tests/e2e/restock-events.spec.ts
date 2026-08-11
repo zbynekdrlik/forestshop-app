@@ -24,6 +24,8 @@ test("história prepnutí ponúkne odkaz na náš produkt z feedu, bez neho sa n
   await page.getByLabel("Heslo").fill(E2E_HESLO);
   await page.getByRole("button", { name: "Prihlásiť sa" }).click();
 
+  // issue 343: priečinok "Automatizácie" štartuje zbalený — treba ho najprv rozbaliť.
+  await page.getByRole("button", { name: "Automatizácie" }).click();
   await page.getByRole("button", { name: "Vypredané → Skladom", exact: true }).click();
 
   // Seedovaná udalosť S adresou z feedu (`scripts/e2e-fixtures-restock-events.ts`).
