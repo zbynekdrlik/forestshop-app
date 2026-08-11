@@ -4,9 +4,11 @@ import {
   confirmPairing,
   searchPairings,
   PairingUnauthorizedError,
+  PAGE_SIZE,
   type PairingItem,
   type PairingState,
 } from "../pairingApi.js";
+import { useLoadMore } from "../useLoadMore.js";
 import {
   assertBulkConfirmSucceeded,
   groupPairingItems,
@@ -73,10 +75,23 @@ export function PairingSection({
     };
   }, []);
 
+  // issue 337: zdieľaný "Načítať ďalšie" mechanizmus, `useLoadMore.ts`.
+  const loadMoreState = useLoadMore<PairingItem>({
+    mountedRef,
+    onAppend: (newItems, newTotal) => {
+      setItems((prev) => [...prev, ...newItems]);
+      setTotal(newTotal);
+    },
+    onError: () => {
+      setSearchError("Načítanie ďalších položiek zlyhalo.");
+    },
+  });
+
   const search = useCallback(
     (q: string, s: PairingState) => {
       const seq = (searchSeq.current += 1);
       setSearchError("");
+      loadMoreState.reset();
       searchPairings({ q, state: s, page: 1 })
         .then((result) => {
           if (!mountedRef.current) return; // odmountované skôr, než odpoveď doletela
@@ -470,6 +485,21 @@ export function PairingSection({
             </tbody>
           </table>
         </div>
+      )}
+
+      {items.length < total && (
+        <button
+          type="button"
+          data-testid="load-more"
+          disabled={loadMoreState.loadingMore}
+          onClick={() => {
+            loadMoreState.loadMore((page) => searchPairings({ q: query, state, page }));
+          }}
+        >
+          {loadMoreState.loadingMore
+            ? "Načítavam…"
+            : `Načítať ďalšie (${String(Math.min(PAGE_SIZE, total - items.length))})`}
+        </button>
       )}
     </section>
   );
