@@ -57,6 +57,21 @@ it("NAV má tri priečinky (Eshop/Systém/Automatizácie), s 10/3/5 záložkami 
   ]);
 });
 
+// issue 343: šéf chce, aby "Systém" a "Automatizácie" štartovali v ľavom menu
+// zbalené (menu inak zaberá celú výšku a treba rolovať) — "Eshop" ostáva
+// rozbalený (denne používaná obrazovka). Stav je deklarovaný priamo v
+// registri (`NavFolder.defaultCollapsed`), aby budúci priečinok (napr.
+// "Dôležité" z issue 342) mohol zvoliť vlastný predvolený stav jedným
+// riadkom bez zásahu do `Sidebar.tsx` (viď jeho vlastný test).
+it("Systém a Automatizácie majú defaultCollapsed: true, Eshop ho nemá nastavené", () => {
+  expect(NAV[0]?.label).toBe("Eshop");
+  expect(NAV[0]?.defaultCollapsed).toBeUndefined();
+  expect(NAV[1]?.label).toBe("Systém");
+  expect(NAV[1]?.defaultCollapsed).toBe(true);
+  expect(NAV[2]?.label).toBe("Automatizácie");
+  expect(NAV[2]?.defaultCollapsed).toBe(true);
+});
+
 // issue 287: DEFAULT_TAB_ID sa NEODVODZUJE od NAV[0] (to je "eshop", priečinok,
 // nie záložka) — je to PEVNÝ literál, nezávislý od poradia priečinkov v NAV.
 // issue 302 (šéf, cez Discord): "keď štartnem appku, nešlo by to na Na

@@ -71,7 +71,21 @@ export function Sidebar({
   // tá nemá koncept zapnuté/vypnuté vôbec, je len na požiadanie).
   readonly badgeStatus?: Readonly<Record<string, "on" | "off">>;
 }): JSX.Element {
-  const [collapsed, setCollapsed] = useState<Readonly<Record<string, boolean>>>({});
+  // issue 343: predvolený stav zbalenia sa číta z registra (`NavFolder
+  // .defaultCollapsed` v `nav.ts`), nie hardcoded tu — pridanie nového
+  // priečinka do menu tak nikdy nevyžaduje zásah do tejto komponenty. Lazy
+  // initializer beží len pri prvom vykreslení (rovnaké `folders` prop sa
+  // odovzdáva zo statického registra, nemení sa počas behu appky) — ZÁMERNE
+  // sa NEPAMÄTÁ medzi návštevami (na rozdiel od `rail` nižšie), po obnovení
+  // stránky sa vždy vráti na túto predvolenú hodnotu (viď dizajnové
+  // rozhodnutie na tickete #343).
+  const [collapsed, setCollapsed] = useState<Readonly<Record<string, boolean>>>(() => {
+    const initial: Record<string, boolean> = {};
+    for (const folder of folders) {
+      if (folder.defaultCollapsed === true) initial[folder.id] = true;
+    }
+    return initial;
+  });
   const [rail, setRail] = useState<boolean>(initialRail);
 
   useEffect(() => {

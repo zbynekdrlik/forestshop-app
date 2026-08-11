@@ -20,6 +20,9 @@ const E2E_NAVRHY_ODKAZOV_EMAIL = "e2e-navrhy-odkazov@forestshop.sk";
 // predvyplň-a-potom-Uložiť) — a odznak v ľavom menu (rovnaký generický
 // mechanizmus ako issue 147/267) je vidno HNEĎ po prihlásení, bez toho, aby
 // sa na túto záložku vôbec kliklo.
+// issue 343: priečinok "Automatizácie" (kde táto záložka žije) odteraz
+// štartuje ZBALENÝ — odznak preto potrebuje priečinok najprv rozbaliť,
+// hoci samotnú ZÁLOŽKU test stále neotvára (viď komentár nižšie pri teste).
 
 test("odznak v menu ukazuje počet chýbajúcich odkazov HNEĎ po prihlásení, bez otvorenia záložky; konzola je čistá", async ({
   page,
@@ -42,6 +45,14 @@ test("odznak v menu ukazuje počet chýbajúcich odkazov HNEĎ po prihlásení, 
   // odkazov" vôbec kliklo. Presné číslo je zdieľaný fixtúrový stav (iné
   // spec súbory môžu bežať súbežne) — over PLATNÝ tvar, nie presnú
   // hodnotu, rovnaký princíp ako `nav.spec.ts`'s `nav-badge-orders`.
+  //
+  // issue 343: priečinok "Automatizácie" (a teda aj tento odznak, ktorý žije
+  // NA jeho záložke) štartuje od tohto ticketu ZBALENÝ — odznak je preto
+  // vidno až po rozbalení priečinka, nie hneď po prihlásení ako predtým.
+  // Toto je vedomý dôsledok #343 (zaznamenané aj na tickete), nie regresia
+  // #331 — samotný odznak (počet + hodnota) je nezmenený, mení sa len jeho
+  // predvolená VIDITEĽNOSŤ, presne to, čo znamená "priečinok je zbalený".
+  await page.getByRole("button", { name: "Automatizácie" }).click();
   const odznak = page.getByTestId("nav-badge-restock-links");
   await expect(odznak).toBeVisible();
   await expect(odznak).toHaveText(/^\d+$/);
@@ -65,6 +76,8 @@ test("vypredaný produkt bez linky ponúkne návrh podľa zhody mena + dodávate
   await page.getByLabel("Heslo").fill(E2E_HESLO);
   await page.getByRole("button", { name: "Prihlásiť sa" }).click();
 
+  // issue 343: priečinok "Automatizácie" štartuje zbalený — treba ho najprv rozbaliť.
+  await page.getByRole("button", { name: "Automatizácie" }).click();
   await page.getByRole("button", { name: "Vypredané → Skladom: návrhy odkazov" }).click();
   await expect(page.getByRole("heading", { name: "Vypredané → Skladom: návrhy odkazov" })).toBeVisible();
 

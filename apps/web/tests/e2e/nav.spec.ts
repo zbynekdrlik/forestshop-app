@@ -50,6 +50,18 @@ test("ľavé menu má tri priečinky (Systém/Eshop/Automatizácie) s osemnásti
   await expect(page.getByRole("button", { name: "Eshop" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Automatizácie" })).toBeVisible();
 
+  // issue 343: "Systém" a "Automatizácie" štartujú ZBALENÉ (menu by inak
+  // presahovalo výšku obrazovky), "Eshop" ostáva rozbalený — over predvolený
+  // stav priamo po prihlásení, potom oba priečinky rozbaľ, aby zvyšok tohto
+  // testu mohol pokračovať v pôvodnom toku a klikať na ich záložky.
+  await expect(page.getByRole("button", { name: "Eshop" })).toHaveAttribute("aria-expanded", "true");
+  await expect(page.getByRole("button", { name: "Systém" })).toHaveAttribute("aria-expanded", "false");
+  await expect(page.getByRole("button", { name: "Automatizácie" })).toHaveAttribute("aria-expanded", "false");
+  await page.getByRole("button", { name: "Systém" }).click();
+  await page.getByRole("button", { name: "Automatizácie" }).click();
+  await expect(page.getByRole("button", { name: "Systém" })).toHaveAttribute("aria-expanded", "true");
+  await expect(page.getByRole("button", { name: "Automatizácie" })).toHaveAttribute("aria-expanded", "true");
+
   // Presne osemnásť záložiek v CELOM menu.
   await expect(page.locator(".side-nav .tab")).toHaveCount(18);
   await expect(page.getByRole("button", { name: "Sync zo Shoptetu" })).toBeVisible();
@@ -229,6 +241,8 @@ test("Sync zo Shoptetu ukazuje stav katalógu aj objednávok a tlačidlo 'Stiahn
   // issue 302: predvolená obrazovka po prihlásení je odvtedy "Na
   // objednanie", nie "Sync zo Shoptetu" — tento test overuje práve obrazovku
   // "Sync zo Shoptetu", takže tam teraz musí prejsť explicitným klikom.
+  // issue 343: priečinok "Systém" štartuje zbalený — treba ho najprv rozbaliť.
+  await page.getByRole("button", { name: "Systém" }).click();
   await page.getByRole("button", { name: "Sync zo Shoptetu" }).click();
   await expect(page.getByRole("heading", { name: "Sync zo Shoptetu" })).toBeVisible();
 

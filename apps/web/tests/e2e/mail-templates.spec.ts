@@ -22,6 +22,8 @@ test("úprava znenia e-mailu: vloženie poľa, živý náhľad, uloženie a vrá
   await page.getByRole("button", { name: "Prihlásiť sa" }).click();
 
   // Obrazovka je dostupná z ľavého menu (nie skrytá za `?tab=`).
+  // issue 343: priečinok "Systém" štartuje zbalený — treba ho najprv rozbaliť.
+  await page.getByRole("button", { name: "Systém" }).click();
   await page.getByRole("button", { name: "Texty e-mailov" }).click();
   await expect(page.getByTestId("mail-template-list")).toBeVisible();
 
@@ -50,6 +52,8 @@ test("úprava znenia e-mailu: vloženie poľa, živý náhľad, uloženie a vrá
 
   // Uložené znenie prežije obnovenie stránky.
   await page.reload();
+  // issue 343: obnovenie stránky = nové vykreslenie, priečinok je opäť zbalený.
+  await page.getByRole("button", { name: "Systém" }).click();
   await page.getByRole("button", { name: "Texty e-mailov" }).click();
   await page.getByTestId("mail-template-pick-order_reminder").click();
   await expect(page.getByTestId("mail-template-subject")).toHaveValue("E2E predmet {{cislo_objednavky}}");

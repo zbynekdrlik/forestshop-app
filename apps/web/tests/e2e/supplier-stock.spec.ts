@@ -24,6 +24,8 @@ test("prehľad podľa domény ukáže virginiashop.sk aj upozornenie na vlastný
   await page.getByLabel("Heslo").fill(E2E_HESLO);
   await page.getByRole("button", { name: "Prihlásiť sa" }).click();
 
+  // issue 343: priečinok "Systém" štartuje zbalený — treba ho najprv rozbaliť.
+  await page.getByRole("button", { name: "Systém" }).click();
   await page.getByRole("button", { name: "Dodávateľský sklad" }).click();
   await expect(page.getByRole("heading", { name: "Dodávateľský sklad" })).toBeVisible();
 

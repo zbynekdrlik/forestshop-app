@@ -21,6 +21,8 @@ test("prehľad odoslaných e-mailov ukáže súhrn, riadky s príjemcom a filtro
   await page.getByRole("button", { name: "Prihlásiť sa" }).click();
 
   // Obrazovka je dostupná z ľavého menu pod "Automatizácie".
+  // issue 343: priečinok "Automatizácie" štartuje zbalený — treba ho najprv rozbaliť.
+  await page.getByRole("button", { name: "Automatizácie" }).click();
   await page.getByRole("button", { name: "Odoslané e-maily" }).click();
   await expect(page.getByTestId("mail-log-table")).toBeVisible();
 
