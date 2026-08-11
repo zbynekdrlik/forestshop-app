@@ -95,10 +95,17 @@ it("odpoveď na load-more požiadavku vyslanú PRED reset()-om sa po doručení 
   act(() => {
     result.current.loadMore(staleFetch);
   });
+  expect(result.current.loadingMore).toBe(true);
 
   act(() => {
     result.current.reset();
   });
+
+  // requesting-code-review finding (issue 337): the stale request's own
+  // `.finally()` is skipped entirely (generation mismatch), so WITHOUT
+  // `reset()` itself clearing `loadingMore`, nothing else ever would —
+  // the button would stay stuck `disabled`/"Načítavam…" forever.
+  expect(result.current.loadingMore).toBe(false);
 
   await act(async () => {
     resolveStale?.({ items: ["stale"], total: 99 });
@@ -108,6 +115,7 @@ it("odpoveď na load-more požiadavku vyslanú PRED reset()-om sa po doručení 
 
   expect(onAppend).not.toHaveBeenCalled();
   expect(onError).not.toHaveBeenCalled();
+  expect(result.current.loadingMore).toBe(false); // stale response must not flip it back on
 });
 
 it("keď fetchNextPage zlyhá, zavolá sa onError a loadingMore sa vráti na false", async () => {

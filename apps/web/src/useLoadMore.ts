@@ -36,9 +36,18 @@ export function useLoadMore<T>(params: {
   const [loadingMore, setLoadingMore] = useState(false);
   const { mountedRef, onAppend, onError } = params;
 
+  // requesting-code-review finding (issue 337): `reset()` bumps the
+  // generation so a stale in-flight `loadMore()`'s `.finally()` skips its
+  // own `setLoadingMore(false)` (the `gen === genRef.current` guard is now
+  // false) — WITHOUT this line nothing else ever clears it, so the button
+  // is stuck showing "Načítavam…"/`disabled` for the rest of the component
+  // instance's life the moment a new search starts while a "load more"
+  // request is still in flight (an entirely ordinary sequence: click "Load
+  // more", then submit a new search before page 2 lands).
   const reset = useCallback(() => {
     pageRef.current = 1;
     genRef.current += 1;
+    setLoadingMore(false);
   }, []);
 
   const loadMore = useCallback(
