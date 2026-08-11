@@ -1107,3 +1107,44 @@ paths:
   je táto hodnota GARANTOVANE tá istá, čo vyprodukovala AKTUÁLNE
   zobrazené dáta, alebo len "čo je práve rozpísané"? Ak druhé, potrebuje
   vlastný "naposledy odoslané" ref, nie priamy odkaz na live state.
+- **Predvolený stav (zbalené/rozbalené, viditeľné/skryté, ...) per PRIEČINOK/
+  ZÁLOŽKA v ľavom menu patrí do REGISTRA (`nav.ts`), nikdy ako hardcoded
+  zoznam mien/id v `Sidebar.tsx`.** Issue 343 (šéf: "Systém"/"Automatizácie"
+  majú štartovať zbalené) pridalo `NavFolder.defaultCollapsed?: boolean` —
+  `Sidebar.tsx`'s `collapsed` `useState` sa inicializuje LAZY initializerom,
+  ktorý prejde `folders` prop a nastaví `true` len tam, kde je pole
+  nastavené. Žiadna zmena `Sidebar.tsx` pri pridaní ĎALŠIEHO priečinka s
+  vlastným predvoleným stavom (napr. budúce "Dôležité" z issue 342) — presne
+  ten istý princíp ako existujúci `NavTab.wide`/`icon`. Stav sa NEPAMÄTÁ cez
+  `localStorage` (na rozdiel od `rail`, issue 190) — to bolo výslovné
+  rozhodnutie na tickete (šéf žiadal len predvolený stav, nie pamätanie),
+  nie technické obmedzenie; ak by niekedy chcel pamätanie, je to jasne
+  ohraničené samostatné rozšírenie toho istého `useState`.
+- **Pridanie ĽUBOVOĽNÉHO nového viditeľného prvku (text, odznak, pilulka)
+  DOVNÚTRA tlačidla/hlavičky, ktoré existujúce testy vyhľadávajú cez
+  `getByRole("button", {name: "presný text"})`, potrebuje `aria-hidden="true"`
+  na tom novom prvku, INAK sa zmení PRÍSTUPNÝ NÁZOV tlačidla a všetky
+  exact-name dotazy naprieč testami (unit aj e2e) prestanú sedieť.** Issue
+  343 (code review nález, PR 348): pridanie súhrnného odznaku "34" priamo do
+  `.folder-head` tlačidla "Automatizácie" (súčet `badgeCounts` vnútri, keď je
+  priečinok zbalený — rovnaká `.tab-badge` trieda ako existujúce vnútorné
+  odznaky, `.folder-dot` malá bodka keď je súčet 0 ale niečo má
+  `badgeStatus`) by BEZ `aria-hidden` zmenilo accessible name tlačidla z
+  `"Automatizácie"` na niečo ako `"Automatizácie 34"` — rozbilo by to
+  DESIATKY existujúcich `page.getByRole("button", {name: "Automatizácie"})`
+  klikov naprieč e2e sadou. `aria-hidden` na dekoratívnom doplnku ponecháva
+  názov tlačidla presne taký, aký bol; obsah je stále VIZUÁLNE prítomný, len
+  sa nepočíta do accname algoritmu. Overené `getByTestId`, nikdy `getByRole`
+  dotazom, na nový doplnkový prvok samotný. Akýkoľvek FUTURE "pridaj malý
+  vizuálny indikátor do existujúceho pomenovaného tlačidla" potrebuje rovnakú
+  kontrolu: nezmenilo sa accessible name? (over `getByRole` dotazom
+  s PÔVODNÝM textom, nie novým).
+- **Súhrnný ukazovateľ (odznak/bodka) na hlavičke ZBALENÉHO kontajnera sa
+  počíta z TÝCH ISTÝCH props, čo už vykresľujú originály vnútri — žiadny
+  nový sieťový dotaz, žiadny nový stav navyše.** Issue 343: `folderBadgeSum`/
+  `folderHasStatus` v `Sidebar.tsx` sú odvodené priamo z `badgeCounts`/
+  `badgeStatus`, ktoré komponenta už dostáva ako props (issue 147/185) —
+  počítajú sa LEN kým `isCollapsed` (po rozbalení sú vidno originály, žiadna
+  duplicita). Prioritné poradie (číslo > bodka > nič) je explicitné
+  zadanie na tickete, nie odvodené — pri podobnom "súhrn na zbalenom
+  kontajneri" v budúcnosti si vyžiadaj/over presné poradie, nepredpokladaj ho.

@@ -18,6 +18,11 @@ export interface ShopFeedEntry {
   // celkom. Chýbajúci signál sa NIKDY nezamieňa s prázdnym reťazcom — obe
   // musia byť rovnako "žiadny rozpor", nikdy porovnateľná hodnota.
   readonly availability: string | null;
+  // issue 347: obrázok produktu (`<g:image_link>`) — appka ho potrebuje na
+  // vykreslenie produktovej karty v e-maile "alternatívy k nedostupnému
+  // tovaru". `null` keď feed značku nemá/je prázdna, rovnaká disciplína ako
+  // `availability` vyššie (chýbajúci signál ≠ prázdny reťazec).
+  readonly imageUrl: string | null;
 }
 
 const ENTRY = /<entry>([\s\S]*?)<\/entry>/g;
@@ -26,6 +31,7 @@ const CODE = /<g:id>([\s\S]*?)<\/g:id>/;
 // (samostatne uzavretý, adresa vzorového webu), ktorý sa takto nikdy nechytí.
 const URL_TAG = /<link>([\s\S]*?)<\/link>/;
 const AVAILABILITY_TAG = /<g:availability>([\s\S]*?)<\/g:availability>/;
+const IMAGE_LINK_TAG = /<g:image_link>([\s\S]*?)<\/g:image_link>/;
 
 const ENTITIES: Readonly<Record<string, string>> = {
   "&amp;": "&",
@@ -59,7 +65,13 @@ export function parseShopFeed(xml: string): readonly ShopFeedEntry[] {
     if (seen.has(code)) continue;
     seen.add(code);
     const rawAvailability = decode(AVAILABILITY_TAG.exec(entry)?.[1] ?? "");
-    rows.push({ code, url, availability: rawAvailability === "" ? null : rawAvailability });
+    const rawImageUrl = decode(IMAGE_LINK_TAG.exec(entry)?.[1] ?? "");
+    rows.push({
+      code,
+      url,
+      availability: rawAvailability === "" ? null : rawAvailability,
+      imageUrl: rawImageUrl === "" ? null : rawImageUrl,
+    });
   }
 
   return rows;

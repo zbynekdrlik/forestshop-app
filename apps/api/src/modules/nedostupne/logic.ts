@@ -1,5 +1,6 @@
 import { globalContext, textValue } from "../mail-templates/context.js";
 import { renderTemplate, type MailTemplateText, type RenderedEmail } from "../mail-templates/render.js";
+import type { ResolvedReplacementProduct } from "./resolve-products.js";
 
 // Čistá logika (žiadna DB, žiadna sieť). Znenie e-mailu už NIE je natvrdo tu —
 // issue 192 ho presunulo do upraviteľných šablón (`mail-templates/registry.ts`
@@ -23,15 +24,18 @@ export function buildUnavailableEmail(template: MailTemplateText, customerName: 
 /** E-mail s návrhom náhrady — produkt je nedostupný + majiteľove RUČNE
  * vložené odkazy na náhradné produkty (issue 238 — nahrádza pôvodný
  * automatický návrh z `product.relatedCodes`, ktorý majiteľ zamietol ako
- * "súvisiace produkty, nie náhrady"). Appka k ručne vloženému odkazu nepozná
- * žiadny názov/kód, preto je `label` samotná URL (klikateľný text = presne
- * to, čo majiteľ vložil). Prázdny zoznam náhrad je v šablóne podmienka
+ * "súvisiace produkty, nie náhrady"). Volajúci (`send.ts`) ich PRED touto
+ * funkciou dohľadá proti katalógu (`resolve-products.ts`'s
+ * `resolveReplacementProducts`, issue 347) — keď sa zhoda nenájde, dohľadanie
+ * samo vráti `label === url` (appka nepozná názov), táto funkcia to
+ * nerozlišuje, len prenesie `label`/`url`/`imageUrl`/`priceText` do
+ * šablóny. Prázdny zoznam náhrad je v šablóne podmienka
  * (`{{#ak zoznam_nahrad}}`), nie osobitná vetva v kóde. */
 export function buildAlternativeEmail(
   template: MailTemplateText,
   customerName: string,
   itemName: string,
-  replacementUrls: readonly string[],
+  replacementProducts: readonly ResolvedReplacementProduct[],
 ): BuiltNedostupneEmail {
   return renderTemplate(template, {
     ...globalContext(),
@@ -40,7 +44,12 @@ export function buildAlternativeEmail(
     zoznam_nahrad: {
       kind: "list",
       textPrefix: "- ",
-      items: replacementUrls.map((url) => ({ label: url, url })),
+      items: replacementProducts.map((p) => ({
+        label: p.label,
+        url: p.url,
+        ...(p.imageUrl !== undefined ? { imageUrl: p.imageUrl } : {}),
+        ...(p.priceText !== undefined ? { priceText: p.priceText } : {}),
+      })),
     },
   });
 }

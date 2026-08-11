@@ -1,0 +1,1 @@
+ALTER TABLE "shop_product_url" ADD COLUMN "image_url" text;

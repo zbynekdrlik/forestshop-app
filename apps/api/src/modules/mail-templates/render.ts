@@ -10,9 +10,21 @@
 //   **tučné**
 //   prázdny riadok = nový odstavec, jednoduchý riadok = zalomenie
 
+import { wrapEmailHtml } from "./layout.js";
+
 export interface TemplateListItem {
   readonly label: string;
   readonly url?: string;
+  // issue 347: keď je prítomný, `assembleHtml` vykreslí CELÝ zoznam (nie len
+  // tento prvok) ako produktovú kartu namiesto <ul><li> — obrázok produktu z
+  // feedu pre porovnávače (`shop-feed/parse.ts`'s `<g:image_link>`). Bez
+  // neho sa správanie zoznamu NEMENÍ (napr. `orders/mail.ts`'s
+  // `zoznam_poloziek`, ktorý obrázok nikdy nemá).
+  readonly imageUrl?: string;
+  // issue 347: voliteľná, už NAFORMÁTOVANÁ cena ("64,90 €") — appka tu
+  // nikdy nepočíta menu/desatinné miesta, len zobrazí to, čo jej dal
+  // volajúci (`nedostupne/resolve-products.ts`).
+  readonly priceText?: string;
 }
 
 export type TemplateValue =
@@ -173,6 +185,42 @@ function toPieces(nodes: readonly Node[], ctx: TemplateContext, mode: Mode): Pie
   return out;
 }
 
+// issue 347: zoznam, kde AKÝKOĽVEK prvok nesie `imageUrl` (produktová
+// náhrada s obrázkom z feedu), sa v HTML vykreslí ako "karta" namiesto
+// obyčajného <ul><li> — obrázok, klikací NÁZOV (nikdy holá adresa ako text
+// odkazu), voliteľná cena a tlačidlo. Prvok BEZ obrázka v tom istom zozname
+// (nedohľadaný odkaz) dostane rovnaký rám bez <img>, nikdy sa nezalomí.
+function productCardHtml(item: TemplateListItem): string {
+  const label = htmlEscape(item.label);
+  const hasUrl = item.url !== undefined && item.url !== "";
+  const url = hasUrl ? htmlEscape(item.url) : undefined;
+  const nameHtml =
+    url === undefined
+      ? label
+      : `<a href="${url}" target="_blank" style="color:#2f5233;text-decoration:none;font-weight:bold;">${label}</a>`;
+  const priceHtml =
+    item.priceText !== undefined && item.priceText !== ""
+      ? `<div style="margin-top:4px;color:#555;">${htmlEscape(item.priceText)}</div>`
+      : "";
+  const hasImage = item.imageUrl !== undefined && item.imageUrl !== "";
+  const imageCell = hasImage
+    ? `        <td width="88" style="padding:12px;vertical-align:top;"><img src="${htmlEscape(item.imageUrl)}" width="72" height="72" style="display:block;border-radius:4px;object-fit:cover;" alt="${label}"></td>\n`
+    : "";
+  const buttonHtml =
+    url === undefined
+      ? ""
+      : `<div style="margin-top:10px;"><a href="${url}" target="_blank" style="display:inline-block;padding:6px 14px;background:#2f5233;color:#ffffff;border-radius:4px;text-decoration:none;font-size:13px;">Zobraziť produkt →</a></div>`;
+  return [
+    '    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:10px 0;border:1px solid #e5e0d8;border-radius:6px;">',
+    "      <tr>",
+    imageCell + `        <td style="padding:12px 16px;vertical-align:top;font-size:15px;">`,
+    `          ${nameHtml}${priceHtml}${buttonHtml}`,
+    "        </td>",
+    "      </tr>",
+    "    </table>",
+  ].join("\n");
+}
+
 function assembleHtml(pieces: readonly Piece[]): string {
   const blocks: string[] = [];
   let current: string[] = [];
@@ -197,25 +245,34 @@ function assembleHtml(pieces: readonly Piece[]): string {
     else if (piece.p === "par") flush();
     else {
       flush();
-      const items = piece.items
-        .map((i) => {
-          const label = htmlEscape(i.label);
-          const shown = i.url === undefined || i.url === "" ? label : `<a href="${htmlEscape(i.url)}" target="_blank">${label}</a>`;
-          return `      <li>${shown}</li>`;
-        })
-        .join("\n");
-      if (items !== "") blocks.push(`    <ul>\n${items}\n    </ul>`);
+      const hasCards = piece.items.some((i) => i.imageUrl !== undefined && i.imageUrl !== "");
+      if (hasCards) {
+        const cards = piece.items.map((i) => productCardHtml(i)).join("\n");
+        if (cards !== "") blocks.push(cards);
+      } else {
+        const items = piece.items
+          .map((i) => {
+            const label = htmlEscape(i.label);
+            const shown = i.url === undefined || i.url === "" ? label : `<a href="${htmlEscape(i.url)}" target="_blank">${label}</a>`;
+            return `      <li>${shown}</li>`;
+          })
+          .join("\n");
+        if (items !== "") blocks.push(`    <ul>\n${items}\n    </ul>`);
+      }
     }
   }
   flush();
-  return [
-    "<!DOCTYPE html>",
-    "<html>",
-    '  <body style="font-family: Arial, sans-serif; font-size: 16px; color: #333;">',
-    ...blocks,
-    "  </body>",
-    "</html>",
-  ].join("\n");
+  return wrapEmailHtml(blocks.join("\n"));
+}
+
+// issue 347: keď prvok nesie `url`, jeho adresa ide na SAMOSTATNÝ riadok pod
+// názvom (nikdy "názov (url)") — majiteľov nahlásený bug ("odkaz má ako text
+// celú adresu... zdvojene"). Cena (`priceText`), ak je prítomná, sa pripojí
+// za názov na tom istom riadku.
+function textListItemLine(item: TemplateListItem, prefix: string): string {
+  const priceSuffix = item.priceText !== undefined && item.priceText !== "" ? ` — ${item.priceText}` : "";
+  const head = `${prefix}${item.label}${priceSuffix}`;
+  return item.url === undefined || item.url === "" ? head : `${head}\n${item.url}`;
 }
 
 function assembleText(pieces: readonly Piece[]): string {
@@ -232,9 +289,12 @@ function assembleText(pieces: readonly Piece[]): string {
     else if (piece.p === "br") current.push("\n");
     else if (piece.p === "par") flush();
     else {
-      const lines = piece.items
-        .map((i) => `${piece.textPrefix}${i.label}${i.url === undefined || i.url === "" ? "" : ` (${i.url})`}`)
-        .join("\n");
+      // Prvok s adresou dostane vlastný dvojriadok (názov + adresa) — medzi
+      // TAKÝMITO prvkami je prázdny riadok navyše čitateľnejší; obyčajný
+      // jednoriadkový zoznam (napr. `orders/mail.ts`'s `zoznam_poloziek`,
+      // žiadny prvok nemá `url`) ostáva PRESNE ako predtým.
+      const hasAnyUrl = piece.items.some((i) => i.url !== undefined && i.url !== "");
+      const lines = piece.items.map((i) => textListItemLine(i, piece.textPrefix)).join(hasAnyUrl ? "\n\n" : "\n");
       if (lines !== "") current.push(lines);
     }
   }
@@ -286,14 +346,7 @@ export function renderEditedBody(text: string): RenderedEditedBody {
     .map((p) => p.trim())
     .filter((p) => p !== "");
   const htmlParagraphs = paragraphs.map((p) => `    <p>${htmlEscape(p).replaceAll("\n", "<br>\n      ")}</p>`);
-  const html = [
-    "<!DOCTYPE html>",
-    "<html>",
-    '  <body style="font-family: Arial, sans-serif; font-size: 16px; color: #333;">',
-    ...htmlParagraphs,
-    "  </body>",
-    "</html>",
-  ].join("\n");
+  const html = wrapEmailHtml(htmlParagraphs.join("\n"));
   return { html, text: paragraphs.join("\n\n") };
 }
 

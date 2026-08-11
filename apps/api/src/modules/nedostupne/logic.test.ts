@@ -30,13 +30,15 @@ describe("buildUnavailableEmail", () => {
 });
 
 // issue 238: automatický návrh (`product.relatedCodes` → `buildAlternatives`)
-// je preč — `buildAlternativeEmail` teraz dostáva PRIAMO majiteľove ručne
-// vložené odkazy (holé URL, appka k nim nepozná žiadny názov/kód), preto sa
-// v e-maile zobrazí samotný odkaz ako klikateľný text (`label === url`).
+// je preč — `buildAlternativeEmail` dostáva odkazy DOHĽADANÉ proti katalógu
+// (`resolve-products.ts`'s `ResolvedReplacementProduct` — `send.ts` volá
+// `resolveReplacementProducts` PRED touto funkciou). Keď sa zhoda nenašla,
+// dohľadávanie samo vráti `label === url` (appka nepozná názov) — presne to
+// isté, čo tu simulujú prvé testy priamym zadaním takého tvaru.
 describe("buildAlternativeEmail", () => {
-  it("s ručnými odkazmi vypíše KAŽDÝ z nich (label je samotná URL, appka nepozná názov)", () => {
+  it("nedohľadaný odkaz (label === url, appka nepozná názov) vypíše samotnú URL ako klikateľný text", () => {
     const built = buildAlternativeEmail(ALTERNATIVA, "Ján Zákazník", "Nohavice FOREST 1003", [
-      "https://www.forestshop.sk/nahradny-produkt/",
+      { url: "https://www.forestshop.sk/nahradny-produkt/", label: "https://www.forestshop.sk/nahradny-produkt/" },
     ]);
     expect(built.subject).toBe("Alternatívy k vášmu tovaru — Forestshop.sk");
     expect(built.html).toContain("Nohavice FOREST 1003");
@@ -44,10 +46,30 @@ describe("buildAlternativeEmail", () => {
     expect(built.text).toContain("https://www.forestshop.sk/nahradny-produkt/");
   });
 
+  // issue 347: DOHĽADANÝ odkaz nesie skutočný NÁZOV, cenu a obrázok — v
+  // HTML sa smie ukázať názov ako klikací text, NIKDY holá adresa (majiteľov
+  // nahlásený bug).
+  it("dohľadaný odkaz vypíše NÁZOV produktu ako klikací text, nikdy holú adresu; ukáže aj cenu a obrázok", () => {
+    const built = buildAlternativeEmail(ALTERNATIVA, "Ján Zákazník", "Nohavice FOREST 1003", [
+      {
+        url: "https://www.forestshop.sk/nahradny-produkt/",
+        label: "Podkolienky BOBR",
+        imageUrl: "https://cdn.example.sk/bobr.jpg",
+        priceText: "12,50 €",
+      },
+    ]);
+    expect(built.html).toContain(">Podkolienky BOBR<");
+    expect(built.html).not.toContain(">https://www.forestshop.sk/nahradny-produkt/<");
+    expect(built.html).toContain('<img src="https://cdn.example.sk/bobr.jpg"');
+    expect(built.html).toContain("12,50");
+    expect(built.text).toContain("Podkolienky BOBR");
+    expect(built.text).toContain("https://www.forestshop.sk/nahradny-produkt/");
+  });
+
   it("viac odkazov naraz — každý dostane svoju položku v zozname", () => {
     const built = buildAlternativeEmail(ALTERNATIVA, "Ján", "Bunda", [
-      "https://www.forestshop.sk/a/",
-      "https://www.forestshop.sk/b/",
+      { url: "https://www.forestshop.sk/a/", label: "https://www.forestshop.sk/a/" },
+      { url: "https://www.forestshop.sk/b/", label: "https://www.forestshop.sk/b/" },
     ]);
     expect(built.html).toContain("https://www.forestshop.sk/a/");
     expect(built.html).toContain("https://www.forestshop.sk/b/");
@@ -60,7 +82,9 @@ describe("buildAlternativeEmail", () => {
   });
 
   it("HTML-escapuje názov produktu (odkazy samotné sú validované ako http(s) URL na HTTP hranici, nie voľný text)", () => {
-    const built = buildAlternativeEmail(ALTERNATIVA, "Ján", "<i>Prod</i>", ["https://www.forestshop.sk/x/"]);
+    const built = buildAlternativeEmail(ALTERNATIVA, "Ján", "<i>Prod</i>", [
+      { url: "https://www.forestshop.sk/x/", label: "https://www.forestshop.sk/x/" },
+    ]);
     expect(built.html).not.toContain("<i>Prod</i>");
     expect(built.html).toContain("&lt;i&gt;Prod&lt;/i&gt;");
   });

@@ -3382,3 +3382,30 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
   bullet-y generalizujúce review nálezy (generation-guard musí vyčistiť
   KAŽDÝ derivovaný stav, "latest ref" trieda platí aj pre onClick
   handlery, nielen `.then()` mikrotasky).
+
+## Issue 343 (ľavé menu: Systém a Automatizácie zbalené predvolene)
+
+- Commits: `af06d5a` [red] test (Sidebar defaultCollapsed), `14ea1e7`
+  [green] `NavFolder.defaultCollapsed` + lazy `useState` initializer v
+  `Sidebar.tsx`, `74428ff` súhrnný odznak/bodka na hlavičke zbaleného
+  priečinka (code review nález na PR 348 — issue 331/267's odznaky boli
+  predtým vidno hneď po prihlásení, zbalenie priečinka ich skrylo; fix
+  pridáva agregát z tých istých `badgeCounts`/`badgeStatus` props,
+  `aria-hidden` aby nezmenil accessible name tlačidla — RED-verified cez
+  `git stash push --keep-index` na implementáciu).
+- PR #348 (`f995d85d`), CI aj Deploy na main zelené na PRVÝ pokus (žiadna
+  containerd flaka tentoraz). 8 e2e spec súborov aktualizovaných (klikajú
+  priamo na záložku v Systéme/Automatizáciách, treba najprv rozbaliť
+  priečinok) — grep celého `tests/e2e/` adresára potvrdil úplnosť.
+- Rozhodnutie na tickete: stav zbalenia sa NEPAMÄTÁ medzi návštevami
+  (šéf žiadal len predvolený stav).
+- Post-deploy naživo overené (v0.3.0-dev.202): Eshop rozbalený, Systém aj
+  Automatizácie zbalené, Automatizácie ukazuje "34" na hlavičke (súčet
+  `restock-links` odznaku), po rozbalení zmizne a originály vnútri sú
+  nezmenené. 0 chýb/varovaní v konzole.
+- Playbook: `.claude/rules/frontend-design.md` — 3 nové bullety: per-
+  priečinok `defaultCollapsed` v registri (nie hardcoded v Sidebar.tsx),
+  `aria-hidden` gotcha pri pridávaní vizuálneho doplnku do pomenovaného
+  tlačidla (inak sa zmení accessible name a rozbijú sa `getByRole`
+  dotazy), a súhrnný ukazovateľ na zbalenom kontajneri sa počíta z
+  existujúcich props bez nového fetchu.
