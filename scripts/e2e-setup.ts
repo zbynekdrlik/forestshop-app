@@ -18,6 +18,7 @@ import { DEFAULT_ORDER_OPEN_STATUS } from "../apps/api/src/modules/orders/open-s
 import { POSTA_UNCOLLECTED_SETTINGS_ID } from "../apps/api/src/modules/posta-uncollected/settings.js";
 import { ORDER_REMINDER_SETTINGS_ID } from "../apps/api/src/modules/order-reminder/settings.js";
 import { seedDpdFixtures } from "./e2e-fixtures-dpd.js";
+import { seedFloorOrdersFixtures } from "./e2e-fixtures-floor-orders.js";
 import { seedOrderFlagsFixtures } from "./e2e-fixtures-order-flags.js";
 import { seedPaginationFixtures } from "./e2e-fixtures-pagination.js";
 import { seedProductLinksFixtures } from "./e2e-fixtures-product-links.js";
@@ -811,5 +812,8 @@ await seedRestockEventsFixtures(db, teraz);
 
 // issue 337: fixtúra vyčlenená do vlastného súboru, rovnaký dôvod ako vyššie.
 await seedPaginationFixtures(db, teraz, snapshotPrepinanie);
+
+// issue 345: fixtúra vyčlenená do vlastného súboru, rovnaký dôvod ako vyššie.
+await seedFloorOrdersFixtures(db, E2E_HESLO);
 
 await pool.end();
