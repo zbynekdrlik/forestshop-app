@@ -19,6 +19,7 @@ import { POSTA_UNCOLLECTED_SETTINGS_ID } from "../apps/api/src/modules/posta-unc
 import { ORDER_REMINDER_SETTINGS_ID } from "../apps/api/src/modules/order-reminder/settings.js";
 import { seedDpdFixtures } from "./e2e-fixtures-dpd.js";
 import { seedOrderFlagsFixtures } from "./e2e-fixtures-order-flags.js";
+import { seedPaginationFixtures } from "./e2e-fixtures-pagination.js";
 import { seedProductLinksFixtures } from "./e2e-fixtures-product-links.js";
 import { seedRestockEventsFixtures } from "./e2e-fixtures-restock-events.js";
 import { seedRestockLinksFixtures } from "./e2e-fixtures-restock-links.js";
@@ -804,5 +805,8 @@ await seedDpdFixtures(db, E2E_HESLO);
 
 // issue 329: fixtúra vyčlenená do vlastného súboru, rovnaký dôvod ako vyššie.
 await seedRestockEventsFixtures(db, teraz);
+
+// issue 337: fixtúra vyčlenená do vlastného súboru, rovnaký dôvod ako vyššie.
+await seedPaginationFixtures(db, teraz, snapshotPrepinanie);
 
 await pool.end();
