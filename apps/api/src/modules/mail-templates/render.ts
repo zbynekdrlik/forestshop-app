@@ -193,7 +193,7 @@ function toPieces(nodes: readonly Node[], ctx: TemplateContext, mode: Mode): Pie
 function productCardHtml(item: TemplateListItem): string {
   const label = htmlEscape(item.label);
   const hasUrl = item.url !== undefined && item.url !== "";
-  const url = hasUrl ? htmlEscape(item.url as string) : undefined;
+  const url = hasUrl ? htmlEscape(item.url) : undefined;
   const nameHtml =
     url === undefined
       ? label
@@ -204,7 +204,7 @@ function productCardHtml(item: TemplateListItem): string {
       : "";
   const hasImage = item.imageUrl !== undefined && item.imageUrl !== "";
   const imageCell = hasImage
-    ? `        <td width="88" style="padding:12px;vertical-align:top;"><img src="${htmlEscape(item.imageUrl as string)}" width="72" height="72" style="display:block;border-radius:4px;object-fit:cover;" alt="${label}"></td>\n`
+    ? `        <td width="88" style="padding:12px;vertical-align:top;"><img src="${htmlEscape(item.imageUrl)}" width="72" height="72" style="display:block;border-radius:4px;object-fit:cover;" alt="${label}"></td>\n`
     : "";
   const buttonHtml =
     url === undefined

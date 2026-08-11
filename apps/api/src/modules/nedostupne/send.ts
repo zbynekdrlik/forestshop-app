@@ -11,6 +11,7 @@ import { NEDOSTUPNE_SEND_LOCK_KEY, TYPE_ALTERNATIVE, type NedostupneEmailType } 
 import { renderEditedBody } from "../mail-templates/render.js";
 import { buildAlternativeEmail, buildUnavailableEmail, type BuiltNedostupneEmail } from "./logic.js";
 import { listReplacementLinksForVariant } from "./replacement-links.js";
+import { resolveReplacementProducts } from "./resolve-products.js";
 import { hasSentNedostupne, markSentNedostupne } from "./state.js";
 
 export interface NedostupneEmailContext {
@@ -69,7 +70,11 @@ export async function findNedostupneContext(db: Database, orderCode: string, var
 export async function buildEmailForType(db: Database, ctx: NedostupneEmailContext, type: NedostupneEmailType): Promise<BuiltNedostupneEmail> {
   if (type === TYPE_ALTERNATIVE) {
     const template = await resolveTemplate(db, "nedostupne_alternativa");
-    return buildAlternativeEmail(template, ctx.customerName, ctx.itemName, ctx.replacementUrls);
+    // issue 347: dohľadanie názvu/obrázka/ceny proti katalógu PRED
+    // vyrenderovaním — rovnaká cesta pre náhľad aj skutočné odoslanie
+    // (táto funkcia je volaná z OBOCH, `.claude/rules/mail-templates.md`).
+    const products = await resolveReplacementProducts(db, ctx.replacementUrls);
+    return buildAlternativeEmail(template, ctx.customerName, ctx.itemName, products);
   }
   return buildUnavailableEmail(await resolveTemplate(db, "nedostupne"), ctx.customerName);
 }

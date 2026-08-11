@@ -3,6 +3,7 @@ import type { Database } from "../../db/client.js";
 import { orders, products, variants } from "../../db/schema.js";
 import { log } from "../../logger.js";
 import { listReplacementLinksByVariant } from "../nedostupne/replacement-links.js";
+import { resolveReplacementProducts, type ResolvedReplacementProduct } from "../nedostupne/resolve-products.js";
 import { itemsWord } from "../orders/pluralize.js";
 import { trackingLink } from "../posta-uncollected/constants.js";
 import { textValue } from "./context.js";
@@ -43,10 +44,13 @@ async function productSample(db: Database): Promise<{ name: string; code: string
 // issue 238: vzorka pre "zoznam_nahrad" teraz vychádza z majiteľových
 // RUČNE vložených odkazov (`nedostupne_replacement_link`), nie z pôvodného
 // automatického `product.relatedCodes` návrhu — ten istý variant, ktorého
-// meno použije `nazov_tovaru` vyššie.
-async function replacementLinkSample(db: Database, variantCode: string): Promise<readonly string[]> {
+// meno použije `nazov_tovaru` vyššie. issue 347: náhľad dostáva TÚ ISTÚ
+// dohľadanú kartu (názov/obrázok/cena), akú uvidí zákazník — inak by náhľad
+// v editore šablóny ukazoval holé odkazy, kým skutočný e-mail už karty.
+async function replacementProductSample(db: Database, variantCode: string): Promise<readonly ResolvedReplacementProduct[]> {
   const map = await listReplacementLinksByVariant(db, [variantCode]);
-  return (map.get(variantCode) ?? []).map((link) => link.url);
+  const urls = (map.get(variantCode) ?? []).map((link) => link.url);
+  return resolveReplacementProducts(db, urls);
 }
 
 async function supplierSample(db: Database): Promise<string | null> {
@@ -73,12 +77,17 @@ export async function previewContext(db: Database, key: MailTemplateKey): Promis
         const product = await productSample(db);
         if (product !== null) {
           ctx["nazov_tovaru"] = textValue(product.name);
-          const links = await replacementLinkSample(db, product.code);
-          if (links.length > 0) {
+          const products = await replacementProductSample(db, product.code);
+          if (products.length > 0) {
             ctx["zoznam_nahrad"] = {
               kind: "list",
               textPrefix: "- ",
-              items: links.map((url) => ({ label: url, url })),
+              items: products.map((p) => ({
+                label: p.label,
+                url: p.url,
+                ...(p.imageUrl !== undefined ? { imageUrl: p.imageUrl } : {}),
+                ...(p.priceText !== undefined ? { priceText: p.priceText } : {}),
+              })),
             };
           }
         }
