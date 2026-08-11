@@ -6,11 +6,13 @@ import {
   fetchCatalogStats,
   searchCatalogVariants,
   triggerCatalogIngest,
+  PAGE_SIZE,
   type CatalogIngestOutcome,
   type CatalogState,
   type CatalogStats,
   type VariantSummary,
 } from "../catalogApi.js";
+import { useLoadMore } from "../useLoadMore.js";
 
 const STATE_LABELS: Record<VariantSummary["state"], string> = {
   sellable: "Skladom",
@@ -153,10 +155,42 @@ export function CatalogPage({
       });
   }, [onSessionExpired]);
 
+  // issue 337: zdieľaný "Načítať ďalšie" mechanizmus (`useLoadMore.ts`) —
+  // `reset()` sa volá na ZAČIATKU KAŽDÉHO nového vyhľadávania (nižšie), aby
+  // sa zahodila prípadná ešte nedoručená odpoveď na "load more" patriaca
+  // STARÉMU dopytu/filtru.
+  const loadMoreState = useLoadMore<VariantSummary>({
+    mountedRef,
+    onAppend: (newItems, newTotal) => {
+      setItems((prev) => [...prev, ...newItems]);
+      setTotal(newTotal);
+    },
+    onError: () => {
+      setSearchError("Načítanie ďalších položiek zlyhalo.");
+    },
+  });
+
+  // requesting-code-review finding (issue 337): the "Load more" button MUST
+  // fetch the next page of the filter that actually produced the CURRENT
+  // `items`/`total` — NOT whatever `query`/`state` currently hold, which
+  // track every keystroke/select-change independent of whether `search()`
+  // has actually run for them. Without this, typing a new (unsubmitted)
+  // query after a search renders, then clicking "Load more", silently
+  // fetches page 2 of the NEW query while `total` still reflects the OLD
+  // one — set synchronously inside `search()` itself (same "sync in the
+  // function that owns the value, not via useEffect" discipline as
+  // `queryRef`/`stateRef` above, since `search()` already receives the
+  // exact q/s that will produce the results these refs must describe).
+  const searchedQueryRef = useRef(query);
+  const searchedStateRef = useRef(state);
+
   const search = useCallback(
     (q: string, s: CatalogState) => {
       const seq = (searchSeq.current += 1);
       setSearchError("");
+      searchedQueryRef.current = q;
+      searchedStateRef.current = s;
+      loadMoreState.reset();
       searchCatalogVariants({ q, state: s, page: 1 })
         .then((result) => {
           if (!mountedRef.current) return; // odmountované skôr, než odpoveď doletela
@@ -322,6 +356,23 @@ export function CatalogPage({
             </tbody>
           </table>
         </div>
+      )}
+
+      {items.length < total && (
+        <button
+          type="button"
+          data-testid="load-more"
+          disabled={loadMoreState.loadingMore}
+          onClick={() => {
+            loadMoreState.loadMore((page) =>
+              searchCatalogVariants({ q: searchedQueryRef.current, state: searchedStateRef.current, page }),
+            );
+          }}
+        >
+          {loadMoreState.loadingMore
+            ? "Načítavam…"
+            : `Načítať ďalšie (${String(Math.min(PAGE_SIZE, total - items.length))})`}
+        </button>
       )}
     </section>
   );

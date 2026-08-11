@@ -6,9 +6,11 @@ import {
   saveProductLink,
   searchProductLinks,
   SupplierLinksUnauthorizedError,
+  PAGE_SIZE,
   type ProductLinkItem,
   type ProductLinkState,
 } from "../supplierLinksApi.js";
+import { useLoadMore } from "../useLoadMore.js";
 
 // issue 239: "Eshop → Párovanie produktov" — priamy náprotivok
 // `PairingSection.tsx`, ale kľúčovaný PRODUKTOM (nie variantom): jeden riadok
@@ -76,10 +78,33 @@ export function SupplierLinksSection({
     };
   }, []);
 
+  // issue 337: zdieľaný "Načítať ďalšie" mechanizmus, `useLoadMore.ts`.
+  const loadMoreState = useLoadMore<ProductLinkItem>({
+    mountedRef,
+    onAppend: (newItems, newTotal) => {
+      setItems((prev) => [...prev, ...newItems]);
+      setTotal(newTotal);
+    },
+    onError: () => {
+      setSearchError("Načítanie ďalších položiek zlyhalo.");
+    },
+  });
+
+  // requesting-code-review finding (issue 337, same fix as `CatalogPage
+  // .tsx`/`PairingSection.tsx`): "Load more" must fetch the next page of
+  // the filter that produced the CURRENT `items`/`total`, not whatever
+  // `query`/`state` currently hold — set synchronously inside `search()`
+  // itself, which already receives the exact q/s that produce the results.
+  const searchedQueryRef = useRef(query);
+  const searchedStateRef = useRef(state);
+
   const search = useCallback(
     (q: string, s: ProductLinkState) => {
       const seq = (searchSeq.current += 1);
       setSearchError("");
+      searchedQueryRef.current = q;
+      searchedStateRef.current = s;
+      loadMoreState.reset();
       searchProductLinks({ q, state: s, page: 1 })
         .then((result) => {
           if (!mountedRef.current) return; // odmountované skôr, než odpoveď doletela
@@ -381,6 +406,23 @@ export function SupplierLinksSection({
           </tbody>
         </table>
         </div>
+      )}
+
+      {items.length < total && (
+        <button
+          type="button"
+          data-testid="load-more"
+          disabled={loadMoreState.loadingMore}
+          onClick={() => {
+            loadMoreState.loadMore((page) =>
+              searchProductLinks({ q: searchedQueryRef.current, state: searchedStateRef.current, page }),
+            );
+          }}
+        >
+          {loadMoreState.loadingMore
+            ? "Načítavam…"
+            : `Načítať ďalšie (${String(Math.min(PAGE_SIZE, total - items.length))})`}
+        </button>
       )}
     </section>
   );

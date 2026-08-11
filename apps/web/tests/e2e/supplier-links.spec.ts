@@ -275,3 +275,56 @@ test("uloženie riadku A (ešte čakajúce na odpoveď) nesmie zavrieť editor r
 
   expect(chyby).toEqual([]);
 });
+
+// issue 337: bez tlačidla "Načítať ďalšie" boli položky NAD prvou stranou
+// (`PAGE_SIZE = 50`) NEDOSIAHNUTEĽNÉ, hoci server ich vie vrátiť — presne to
+// je akceptačný dôkaz, ktorý ticket žiada. 60 fixtúrových produktov
+// "E2E-PAGE-001".."E2E-PAGE-060" (`e2e-fixtures-pagination.ts`), dopyt
+// scoped na spoločný prefix "E2E-PAGE-" tak, aby `total` bol nezávislý od
+// zvyšku databázy/ostatných fixtúr.
+test("položka nad hranicou 50 je po kliknutí na 'Načítať ďalšie' skutočne dosiahnuteľná, s viditeľným celkovým počtom", async ({
+  page,
+}) => {
+  const chyby: string[] = [];
+  page.on("console", (m) => {
+    if (m.type() === "error" || m.type() === "warning") chyby.push(m.text());
+  });
+  page.on("pageerror", (e) => {
+    chyby.push(e.message);
+  });
+
+  await page.goto("/?tab=supplier-links");
+  await page.getByLabel("E-mail").fill(E2E_PAROVANIE_EMAIL);
+  await page.getByLabel("Heslo").fill(E2E_HESLO);
+  await page.getByRole("button", { name: "Prihlásiť sa" }).click();
+  await expect(page.getByRole("heading", { name: "Párovanie produktov" })).toBeVisible();
+
+  // Predvolený filter je "Bez linky" — všetkých 60 fixtúrových produktov
+  // (žiadny nemá `internalNote`) tam patrí.
+  await page.getByLabel("Hľadať produkt (kód alebo názov)").fill("E2E-PAGE-");
+  await page.getByRole("button", { name: "Zobraziť" }).click();
+
+  await expect(page.getByTestId("product-link-row-E2E-PAGE-001")).toBeVisible();
+  // Prvá strana = 50 položiek — položka #51 zatiaľ NIE JE v DOM-e vôbec.
+  await expect(page.getByTestId("product-link-row-E2E-PAGE-051")).toHaveCount(0);
+
+  const tlacidlo = page.getByTestId("load-more");
+  await expect(tlacidlo).toHaveText("Načítať ďalšie (10)"); // min(PAGE_SIZE, 60 - 50)
+  // Celkový počet je viditeľný UŽ na prvej strane — presne to bolo pôvodne
+  // neviditeľné ("Nájdených: N" bez poznámky by nikto nevedel, že za
+  // stranou je ešte viac).
+  await expect(page.getByTestId("product-links-total")).toContainText("Nájdených: 60 (zobrazených prvých 50)");
+  await tlacidlo.click();
+
+  // Druhá strana sa PRIPOJILA — položka #51 je teraz dosiahnuteľná a #1
+  // ostáva viditeľná (nič sa nenahradilo).
+  await expect(page.getByTestId("product-link-row-E2E-PAGE-051")).toBeVisible();
+  await expect(page.getByTestId("product-link-row-E2E-PAGE-001")).toBeVisible();
+  await expect(page.getByTestId("product-link-row-E2E-PAGE-060")).toBeVisible();
+
+  // Všetkých 60 je teraz zobrazených — tlačidlo zmizne, viac stránok niet.
+  await expect(page.getByTestId("load-more")).toHaveCount(0);
+  await expect(page.getByTestId("product-links-total")).toHaveText("Nájdených: 60");
+
+  expect(chyby).toEqual([]);
+});

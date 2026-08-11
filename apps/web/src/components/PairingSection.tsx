@@ -4,9 +4,11 @@ import {
   confirmPairing,
   searchPairings,
   PairingUnauthorizedError,
+  PAGE_SIZE,
   type PairingItem,
   type PairingState,
 } from "../pairingApi.js";
+import { useLoadMore } from "../useLoadMore.js";
 import {
   assertBulkConfirmSucceeded,
   groupPairingItems,
@@ -73,10 +75,34 @@ export function PairingSection({
     };
   }, []);
 
+  // issue 337: zdieľaný "Načítať ďalšie" mechanizmus, `useLoadMore.ts`.
+  const loadMoreState = useLoadMore<PairingItem>({
+    mountedRef,
+    onAppend: (newItems, newTotal) => {
+      setItems((prev) => [...prev, ...newItems]);
+      setTotal(newTotal);
+    },
+    onError: () => {
+      setSearchError("Načítanie ďalších položiek zlyhalo.");
+    },
+  });
+
+  // requesting-code-review finding (issue 337, same fix as `CatalogPage
+  // .tsx`): "Load more" must fetch the next page of the filter that
+  // produced the CURRENT `items`/`total`, not whatever `query`/`state`
+  // currently hold (tracks every keystroke, independent of submit) — set
+  // synchronously inside `search()` itself, which already receives the
+  // exact q/s that will produce the results.
+  const searchedQueryRef = useRef(query);
+  const searchedStateRef = useRef(state);
+
   const search = useCallback(
     (q: string, s: PairingState) => {
       const seq = (searchSeq.current += 1);
       setSearchError("");
+      searchedQueryRef.current = q;
+      searchedStateRef.current = s;
+      loadMoreState.reset();
       searchPairings({ q, state: s, page: 1 })
         .then((result) => {
           if (!mountedRef.current) return; // odmountované skôr, než odpoveď doletela
@@ -470,6 +496,23 @@ export function PairingSection({
             </tbody>
           </table>
         </div>
+      )}
+
+      {items.length < total && (
+        <button
+          type="button"
+          data-testid="load-more"
+          disabled={loadMoreState.loadingMore}
+          onClick={() => {
+            loadMoreState.loadMore((page) =>
+              searchPairings({ q: searchedQueryRef.current, state: searchedStateRef.current, page }),
+            );
+          }}
+        >
+          {loadMoreState.loadingMore
+            ? "Načítavam…"
+            : `Načítať ďalšie (${String(Math.min(PAGE_SIZE, total - items.length))})`}
+        </button>
       )}
     </section>
   );
