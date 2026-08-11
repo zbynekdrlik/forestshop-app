@@ -4,6 +4,8 @@ paths:
   - "apps/api/src/**/*.test.ts"
   - "apps/api/vitest.config.ts"
   - "apps/web/vitest.config.ts"
+  - "apps/web/src/**/*.test.ts"
+  - "apps/web/src/**/*.test.tsx"
   - "apps/web/tests/e2e/**"
   - "apps/web/playwright.config.ts"
   - "scripts/e2e-setup.ts"
@@ -611,3 +613,11 @@ paths:
   akéhokoľvek ďalšieho výstupu skús izolovaný re-beh AKO PRVÉ, nie
   predlžovanie timeoutu (`no-timeout-band-aids.md`) ani hľadanie bugu v
   `e2e-setup.ts`/`playwright.config.ts`.
+- **Komponentové testy (`apps/web/src/components/*.test.tsx`) NEMAJÚ
+  `@testing-library/jest-dom` matchery — `expect(el).toHaveAttribute(...)`
+  padne na `tsc` s "Property 'toHaveAttribute' does not exist"** (issue
+  345, živo nájdené). Repo dôsledne používa holé vitest/RTL API:
+  `expect(el.getAttribute("href")).toBe(...)` namiesto jest-dom matcherov
+  (`toHaveAttribute`/`toBeVisible`/`toBeInTheDocument`) — over existujúci
+  sesterský test (napr. `NedostupneSection.test.tsx`) pred písaním nového,
+  nikdy nepredpokladaj, že jest-dom je nainštalovaný.
