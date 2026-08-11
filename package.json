@@ -1,6 +1,6 @@
 {
   "name": "forestshop",
-  "version": "0.3.0-dev.207",
+  "version": "0.3.0-dev.208",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.0.0",
