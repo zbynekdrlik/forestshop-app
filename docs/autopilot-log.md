@@ -3442,3 +3442,51 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
   presný `docker exec` postup na ručné spustenie jobu), `.claude/rules/
   nedostupne.md` (dizajnové rozhodnutie: spätné dohľadanie namiesto
   duplikovania dát na `nedostupne_replacement_link`).
+
+## 2026-08-11 — #344 (Nedostupné tovary — vybavené riadky odlíšené farbou)
+
+- Solo ticket, owner-requested via Discord (boss, 11.8.2026 — "žiaden
+  autopilot-skip", scope-gate `user-request`).
+- Version already strictly above main (0.3.0-dev.205 > main's .204) —
+  no bump commit needed.
+- Design comment BEFORE first code commit:
+  https://github.com/zbynekdrlik/forestshop-app/issues/344#issuecomment-5254401764
+  — signal: `order.nedostupneSent || order.alternativaSent`; colour:
+  `--fs-success`/`--fs-success-bg` (NOT the boss's literal "červené" —
+  red already means error on this same screen, explained on the ticket);
+  whole row (background + accent), not just the button; accessibility
+  floor satisfied by the EXISTING unchanged "✓ Odoslané" button text.
+  Rejected alternative: copying issue 259→263's row-coloring rejection
+  from the Orders screen — different screen, this ticket explicitly asks
+  for row-level distinction here.
+- RED `d4066df` (unit test: data-handled attribute + modifier class,
+  fails against unmodified component) → GREEN `5219f6c` (feat: border-left
+  reservation + CSS).
+- Review pass (fresh-context general-purpose subagent, PR #350, commit
+  range `d4066df^..5219f6c`): 1 🟡 0 🔴 2 🔵 — 🟡 the transparent
+  border-left reservation on every row shifted content ~11px right of
+  the group header/replacement-links above it (no matching inset there);
+  🔵 test coverage only 2/4 boolean combinations; 🔵 comment overclaimed
+  "no layout change" (only height was proven). Fixed same branch, commit
+  `3e9afef`: switched to `box-shadow: inset 3px 0 0 var(--fs-success)`
+  (zero box-model impact, no reservation needed anywhere), `it.each`
+  covering all 4 combinations, comment tightened.
+- Main CI's `integration` job failed once on a single unrelated test
+  (`order-note-playwright.integration.test.ts`, 60s timeout — shoptet
+  writeback/Chromium, nothing this PR touches; same suite had already
+  passed twice on dev's own CI). One `gh run rerun --failed` on run
+  31507330187 came back green — treated as a transient CI-runner flake,
+  not a regression (per `ci-monitoring.md`: one rerun to rule out a
+  transient is acceptable).
+- Merged `fb80ed3`, deployed + verified v0.3.0-dev.205 live on
+  https://forestshop-novy.newlevel.media/?tab=nedostupne: two REAL
+  already-sent orders (20261338/61634, 20261306/61729-M) render
+  `data-handled="true"` with the green tint + accent, `getBoundingClientRect()`
+  identical height/left vs. a pending row (no jog), 0 console
+  errors/warnings, screenshot in the run.
+- Playbook: `.claude/rules/frontend-design.md` (new bullet — per-row
+  state accents must use inset `box-shadow`, never a reserved
+  `border-left`, to avoid the alignment-jog class of bug this ticket's
+  own review caught), `.claude/rules/nedostupne.md` (handled predicate +
+  the "boss says a colour, check it doesn't already mean something else
+  in this app" precedent).

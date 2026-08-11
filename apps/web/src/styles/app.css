@@ -2260,6 +2260,107 @@ a.upozornenie-title:hover {
   color: var(--fs-ink-faint);
 }
 
+/* ---------------- 18. DÔLEŽITÉ → ÚLOHY NA DNES (issue 342) ----------------
+   Majiteľova požiadavka: "space-effective", "nieže dám 4 na stranu" — riadky
+   sú preto ÚZKE (žiadne karty s tieňom/rámikom ako Upozornenia, len tenká
+   deliaca čiara), aby sa na obrazovku zmestilo veľa úloh naraz. */
+.ulohy-add-row {
+  display: flex;
+  gap: var(--fs-space-2);
+  margin-bottom: var(--fs-space-4);
+}
+/* issue 303's globálny `input:not([type="hidden"]) { width: 100% }` reset by
+   inak natiahol vstup na celú šírku a zrazil tlačidlo "+ Pridať" na ďalší
+   riadok pri užšej obrazovke — `flex: 1 1 0%` (issue 105's flex-basis vzor)
+   necháva vstup rásť, tlačidlo ostáva `flex: 0 0 auto` vo `.btn` predvolene. */
+.ulohy-add-row input {
+  flex: 1 1 0%;
+  min-width: 8rem;
+  width: auto;
+}
+.ulohy-list {
+  display: flex;
+  flex-direction: column;
+}
+.uloha-row {
+  display: flex;
+  align-items: center;
+  gap: var(--fs-space-2);
+  padding: var(--fs-space-1) var(--fs-space-2);
+  border-bottom: 1px solid var(--fs-border-soft);
+  font-size: var(--fs-text-sm);
+}
+.uloha-row:first-child {
+  border-top: 1px solid var(--fs-border-soft);
+}
+/* Vybavené úlohy OSTÁVAJÚ v zozname (design rozhodnutie na tickete — poradie
+   je čisto chronologické), len vizuálne stlmené: prečiarknutý text + nižší
+   kontrast, žiadna druhá farba/ikona navyše (rovnaký "jeden jasný signál"
+   princíp ako `.upozornenie-nove`). */
+.uloha-row.done {
+  opacity: 0.6;
+}
+.uloha-row.done .uloha-text {
+  text-decoration: line-through;
+}
+.uloha-done-toggle {
+  flex: 0 0 auto;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: var(--fs-text-md);
+  line-height: 1;
+  padding: 0;
+}
+.uloha-done-toggle:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.uloha-emoji {
+  flex: 0 0 auto;
+}
+.uloha-text {
+  flex: 1 1 auto;
+  overflow-wrap: break-word;
+  min-width: 0;
+}
+.uloha-edit-input {
+  flex: 1 1 0%;
+  min-width: 6rem;
+  width: auto;
+  padding: var(--fs-space-1) var(--fs-space-2);
+}
+.uloha-emoji-input-field {
+  flex: 0 0 auto;
+  width: 4rem;
+  padding: var(--fs-space-1) var(--fs-space-2);
+}
+.uloha-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--fs-space-1);
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+/* Ikonové tlačidlá bez textu — kompaktné, žiadne `.btn` paddingy/pozadie
+   (tie by na riadok pridali výšku, presný opak "space-effective" žiadosti). */
+.uloha-icon-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: var(--fs-text-sm);
+  line-height: 1;
+  padding: var(--fs-space-1);
+}
+.uloha-icon-btn:hover {
+  background: var(--fs-surface-alt);
+  border-radius: var(--fs-radius-sm);
+}
+.uloha-icon-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* ---------------- MODÁLNY DIALÓG (issue 191) ----------------
    Náhľad e-mailu pred odoslaním sa už nerozbaľuje na spodku stránky —
    otvorí sa cez obrazovku, takže je okamžite v zornom poli. `z-index`

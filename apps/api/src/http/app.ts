@@ -12,6 +12,7 @@ import { appVersion } from "../version.js";
 import { registerCalendarRoutes } from "./calendar-routes.js";
 import type { NextEventService } from "../modules/calendar/service.js";
 import { registerCatalogRoutes, type RunIngest } from "./catalog-routes.js";
+import { registerDailyTasksRoutes } from "./daily-tasks-routes.js";
 import { registerDpdRoutes, type DpdRunDeps } from "./dpd-routes.js";
 import { checkLoginRateLimit, clientIp } from "./login-rate-limit.js";
 import { SESSION_COOKIE, requireUser, type AppBindings } from "./middleware.js";
@@ -313,6 +314,7 @@ export function createApp(
   // dependency (na rozdiel od nedostupne/orderReminder vyššie) — táto
   // obrazovka neposiela mail ani nekontaktuje tretiu stranu.
   registerUpozorneniaRoutes(app, db);
+  registerDailyTasksRoutes(app, db);
   // issue 309: rovnaká nástenka, ale NEZÁVISLÝ modul (žiadny dedupKey/
   // resolve/postpone — `upozornenia.md`'s návrhový komentár na tickete).
   registerCalendarRoutes(app, db, options.nextEvent);

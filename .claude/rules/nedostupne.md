@@ -115,3 +115,15 @@ paths:
   A zo samostatnej generickej šablónovej `previewContext` (`mail-
   templates/samples.ts`) — obe cesty musia ukázať TÚ ISTÚ kartu, inak
   by editor šablóny klamal o tom, čo appka naozaj pošle.
+- **issue 344: riadok je "vybavený" keď `order.nedostupneSent ||
+  order.alternativaSent` — buď typ e-mailu stačí, appka nikdy nevynucuje
+  oba.** Šéf pôvodne pýtal "červené" pre vizuálne odlíšenie vybavených
+  riadkov, ale červená v appke inde znamená CHYBU (`--fs-danger`, BCC/mail
+  varovania na tej istej obrazovke) — použitý `--fs-success`/
+  `--fs-success-bg` namiesto toho (zdôvodnené priamo na tikete), rovnaký
+  "hotovo" jazyk ako `.ord-state-btn.active` inde v appke. Implementácia
+  (CSS technika `box-shadow: inset`, nie `border`) je popísaná v
+  `.claude/rules/frontend-design.md`. Keď šéf inde v appke znova povie
+  konkrétnu farbu ("červené"/"zelené"), over najprv, či tá farba už v
+  appke nemá iný, kolidujúci význam, než ju rovno použiješ — a zdôvodnenie
+  zapíš na ticket, nech to vie posúdiť.

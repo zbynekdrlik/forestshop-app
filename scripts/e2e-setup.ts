@@ -209,6 +209,12 @@ const E2E_UPOZORNENIA_EMAIL = "e2e-upozornenia@forestshop.sk"; // musí sa zhodo
 // posúvania stránky na telefónnej šírke) dostáva VLASTNÝ izolovaný účet.
 const E2E_MOBIL_EMAIL = "e2e-mobil@forestshop.sk"; // musí sa zhodovať s hodnotou v mobile-responsive.spec.ts
 
+// issue 342: rovnaký mechanizmus a dôvod ako `E2E_MOBIL_EMAIL` vyššie — nový
+// spec súbor (`daily-tasks.spec.ts` — "Dôležité → Úlohy na dnes") dostáva
+// VLASTNÝ izolovaný účet. Rola "citanie" (zámerne — `daily-tasks-routes.ts`
+// nevyžaduje admin/manazer, úlohy sú súkromné pre KAŽDÚ rolu, test to overuje).
+const E2E_ULOHY_EMAIL = "e2e-ulohy@forestshop.sk"; // musí sa zhodovať s hodnotou v daily-tasks.spec.ts
+
 const { db, pool } = createDb();
 // Konštantný literál bez interpolácie — obyčajný reťazec je tu rovnako bezpečný
 // ako `sql` tagovaná šablóna (tú používa ekvivalentný apps/api/tests/helpers/db.ts),
@@ -374,6 +380,7 @@ await db.insert(users).values({ email: E2E_ZLUCENIE_EMAIL, passwordHash: await h
 await db.insert(users).values({ email: E2E_FARBY_EMAIL, passwordHash: await hashPassword(E2E_HESLO), displayName: "E2E Manažér", role: "manazer" });
 await db.insert(users).values({ email: E2E_UPOZORNENIA_EMAIL, passwordHash: await hashPassword(E2E_HESLO), displayName: "E2E Manažér", role: "manazer" });
 await db.insert(users).values({ email: E2E_MOBIL_EMAIL, passwordHash: await hashPassword(E2E_HESLO), displayName: "E2E Manažér", role: "manazer" });
+await db.insert(users).values({ email: E2E_ULOHY_EMAIL, passwordHash: await hashPassword(E2E_HESLO), displayName: "E2E Čitateľ", role: "citanie" });
 
 // Katalóg pre E2E: tá istá commitnutá fixtúra ako v jednotkových testoch, cez tú istú
 // službu importu — E2E tak overuje skutočnú cestu dát, nie ručne nasypané riadky.
@@ -622,11 +629,7 @@ await db.insert(shopProductUrl).values({
   url: "https://www.forestshop.sk/e2e-nedostupne-40287/",
   fetchedAt: new Date("2026-07-27T09:00:00Z"),
 });
-await db.insert(productSupplierLinkOverrides).values({
-  productKey: "d63e07c9-3c48-11e6-8a3b-0cc47a6c92bc",
-  url: "https://dodavatel.example/e2e-nedostupne-40287",
-  updatedAt: new Date("2026-07-27T09:00:00Z"),
-});
+await db.insert(productSupplierLinkOverrides).values({ productKey: "d63e07c9-3c48-11e6-8a3b-0cc47a6c92bc", url: "https://dodavatel.example/e2e-nedostupne-40287", updatedAt: new Date("2026-07-27T09:00:00Z") });
 
 // F4 (#45): jeden UŽ NAVRHNUTÝ (nepotvrdený) pairing kandidát — simuluje to,
 // čo by inak vložilo #46 (automatické hľadanie kandidátov, ešte
