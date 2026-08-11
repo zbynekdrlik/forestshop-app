@@ -5,6 +5,7 @@ import { ClaimOrdersSection } from "./components/ClaimOrdersSection.js";
 import { DailyTasksSection } from "./components/DailyTasksSection.js";
 import { DpdSection } from "./components/DpdSection.js";
 import { ExchangeOrdersSection } from "./components/ExchangeOrdersSection.js";
+import { FloorOrdersSection } from "./components/FloorOrdersSection.js";
 import { MailLogSection } from "./components/MailLogSection.js";
 import { MailTemplatesSection } from "./components/MailTemplatesSection.js";
 import { NedostupneSection } from "./components/NedostupneSection.js";
@@ -108,6 +109,12 @@ export const NAV: readonly NavFolder[] = [
     // okna, viď `NavTab.wide` vyššie).
     tabs: [
       { id: "orders", label: "Na objednanie", icon: "📦", Component: OrdersSection, wide: true },
+      // issue 345: šéfovo zadanie (Discord, 11.8.2026) — READ-ONLY zoznam
+      // objednávok, ktoré nevznikli v e-shope, ale na kamennej predajni
+      // (`shipping_carrier_name` obsahuje "Osobný odber", návrhový komentár
+      // na tickete). Patrí hneď za "Na objednanie" — obe sú "zoznam
+      // objednávok" obrazovky, najprirodzenejšie susedné.
+      { id: "floor-orders", label: "Objednávky predajňa", icon: "🏬", Component: FloorOrdersSection, wide: true },
       { id: "nedostupne", label: "Nedostupné tovary", icon: "🚫", Component: NedostupneSection, wide: true },
       // issue 290: šéfovo zadanie (Discord, 6.8.2026) — tri nové položky
       // "hneď pod Nedostupné tovary". READ-ONLY pohľady nad `order.status_

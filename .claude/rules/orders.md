@@ -595,3 +595,25 @@ paths:
   cp1250 cez zdieľané `helpers/orders-return-csv.ts`) je v
   `orders-ingest-stuck-upozornenie.integration.test.ts` — rovnaký dôvod na
   cp1250 ako vyššie (stav "Nevybavená" nesie diakritiku).
+- **Issue 345: "Eshop → Objednávky predajňa" — predajňové objednávky sa
+  rozlišujú cez `order.shipping_carrier_name ILIKE '%Osobný odber%'`
+  (PODREŤAZEC, nikdy presná veta s výkričníkom — Shoptet ju môže kedykoľvek
+  preformulovať, `floor-orders-queries.ts`). Zistené naživo na produkcii
+  (ticket, komentár 11.8.2026): `shipping_carrier_name` = "Osobný odber -
+  len na predajni v POPRADE!" (30→32 objednávok), sedí aj s
+  `payment_method_name` = "V hotovosti", ale TÚTO druhú koreláciu appka
+  zámerne NEVYUŽÍVA ako filter (nespoľahlivá, len doplnková zhoda z
+  komentára na tickete). Táto obrazovka je jednotabuľkový WHERE+ORDER BY
+  bez per-riadkového odvodenia — na rozdiel od `order-flags-queries.ts`
+  (load-everything + JS filter, lebo potrebuje `unresolved`) tu je preto
+  správne skutočné SQL `LIMIT`/`OFFSET` + `COUNT(*)`, rovnaký vzor ako
+  `catalog/queries.ts`'s `searchVariants`. `PAGE_SIZE = 10` (zámerne malé,
+  nie zvyčajných 50) — produkcia má len ~30 zodpovedajúcich objednávok,
+  malá strana robí "Načítať ďalšie" reálne overiteľné aj naživo. Review
+  finding: `ORDER BY placed_at DESC` SAMOTNÉ je nedeterministické pri
+  dvoch objednávkach v tej istej minúte (Shoptet `date` má len minútovú
+  presnosť) — `.orderBy(desc(orders.placedAt), desc(orders.id))` je
+  tie-breaker, rovnaký vzor ako `catalog/queries.ts`'s
+  `desc(fetchedAt), desc(id)`. Test na KAŽDÝ ĎALŠÍ nový `ORDER BY placedAt`
+  dopyt s LIMIT/OFFSET: pridaj rovnaký tie-breaker, inak stránkovanie môže
+  riadok zopakovať alebo stratiť pri zhode timestampu.
