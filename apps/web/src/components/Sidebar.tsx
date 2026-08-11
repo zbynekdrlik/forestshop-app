@@ -138,6 +138,20 @@ export function Sidebar({
           // schovať záložky — preto sa trieda `collapsed` v tomto stave
           // neaplikuje. Po rozbalení panela sa pôvodný stav priečinkov vráti.
           const isCollapsed = !rail && collapsed[folder.id] === true;
+          // issue 343 (code review nález): zbalenie priečinka skrylo odznaky/
+          // pilulky, ktoré predtým (#331/#267) žiadali byť vidno HNEĎ po
+          // prihlásení bez otvorenia záložky. Súhrn sa počíta LEN kým je
+          // priečinok zbalený (po rozbalení sú vidno originály vnútri, žiadna
+          // duplicita) — z tých istých `badgeCounts`/`badgeStatus` props, žiadny
+          // nový sieťový dotaz. `aria-hidden` na oboch, aby hlavička priečinka
+          // NEMENILA svoj prístupný názov (existujúce `getByRole("button",
+          // {name: folder.label})` dotazy naprieč testami by inak prestali
+          // sedieť, keďže by doň spadol aj text/aria-label odznaku).
+          const folderBadgeSum = isCollapsed
+            ? folder.tabs.reduce((sum, tab) => sum + (badgeCounts?.[tab.id] ?? 0), 0)
+            : 0;
+          const folderHasStatus =
+            isCollapsed && folder.tabs.some((tab) => badgeStatus?.[tab.id] !== undefined);
           return (
             <div className={"nav-folder" + (isCollapsed ? " collapsed" : "")} key={folder.id}>
               {!rail && (
@@ -150,6 +164,14 @@ export function Sidebar({
                   }}
                 >
                   <span className="ftitle">{folder.label}</span>
+                  {folderBadgeSum > 0 && (
+                    <span className="tab-badge" data-testid={`folder-badge-${folder.id}`} aria-hidden="true">
+                      {folderBadgeSum}
+                    </span>
+                  )}
+                  {folderBadgeSum === 0 && folderHasStatus && (
+                    <span className="folder-dot" data-testid={`folder-dot-${folder.id}`} aria-hidden="true" />
+                  )}
                   <span className="folder-chev" aria-hidden="true">
                     ⌄
                   </span>
