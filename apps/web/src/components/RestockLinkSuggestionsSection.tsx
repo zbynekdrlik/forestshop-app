@@ -6,8 +6,10 @@ import { saveProductLink, SupplierLinksUnauthorizedError } from "../supplierLink
 import {
   RestockLinksUnauthorizedError,
   searchRestockLinkSuggestions,
+  PAGE_SIZE,
   type RestockLinkMissingItem,
 } from "../restockLinksApi.js";
+import { useLoadMore } from "../useLoadMore.js";
 
 // issue 311: "Vypredané → Skladom: návrhy odkazov" — priamy náprotivok
 // `SupplierLinksSection.tsx` (#239), len ZÚŽENÝ na populáciu vypredaných
@@ -59,9 +61,22 @@ export function RestockLinkSuggestionsSection({
     };
   }, []);
 
+  // issue 337: zdieľaný "Načítať ďalšie" mechanizmus, `useLoadMore.ts`.
+  const loadMoreState = useLoadMore<RestockLinkMissingItem>({
+    mountedRef,
+    onAppend: (newItems, newTotal) => {
+      setItems((prev) => [...prev, ...newItems]);
+      setTotal(newTotal);
+    },
+    onError: () => {
+      setSearchError("Načítanie ďalších položiek zlyhalo.");
+    },
+  });
+
   const search = useCallback((q: string) => {
     const seq = (searchSeq.current += 1);
     setSearchError("");
+    loadMoreState.reset();
     searchRestockLinkSuggestions({ q, page: 1 })
       .then((result) => {
         if (!mountedRef.current) return;
@@ -177,6 +192,11 @@ export function RestockLinkSuggestionsSection({
     [refetch, onSessionExpired, restockLinksBadge],
   );
 
+  // issue 337: rovnaká "zobrazených prvých M" poznámka ako `CatalogPage.tsx`/
+  // `PairingSection.tsx`/`SupplierLinksSection.tsx` — predtým chýbala, holé
+  // "Nájdených: N" neukazovalo, že za prvou stranou môže byť ešte viac.
+  const showingAll = total === 0 || items.length >= total;
+
   return (
     <section data-testid="restock-links-section">
       <p>
@@ -201,7 +221,11 @@ export function RestockLinkSuggestionsSection({
 
       {searchError !== "" && <p role="alert">{searchError}</p>}
       {actionError !== "" && <p role="alert">{actionError}</p>}
-      <p data-testid="restock-links-total">Nájdených: {total}</p>
+      <p data-testid="restock-links-total">
+        {showingAll
+          ? `Nájdených: ${String(total)}`
+          : `Nájdených: ${String(total)} (zobrazených prvých ${String(items.length)})`}
+      </p>
 
       {searchLoaded && total === 0 ? (
         <p data-testid="restock-links-empty">Žiadny vypredaný produkt bez linky sa nenašiel.</p>
@@ -333,6 +357,21 @@ export function RestockLinkSuggestionsSection({
             </tbody>
           </table>
         </div>
+      )}
+
+      {items.length < total && (
+        <button
+          type="button"
+          data-testid="load-more"
+          disabled={loadMoreState.loadingMore}
+          onClick={() => {
+            loadMoreState.loadMore((page) => searchRestockLinkSuggestions({ q: query, page }));
+          }}
+        >
+          {loadMoreState.loadingMore
+            ? "Načítavam…"
+            : `Načítať ďalšie (${String(Math.min(PAGE_SIZE, total - items.length))})`}
+        </button>
       )}
     </section>
   );
