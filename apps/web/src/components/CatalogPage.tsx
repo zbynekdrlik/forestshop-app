@@ -6,11 +6,13 @@ import {
   fetchCatalogStats,
   searchCatalogVariants,
   triggerCatalogIngest,
+  PAGE_SIZE,
   type CatalogIngestOutcome,
   type CatalogState,
   type CatalogStats,
   type VariantSummary,
 } from "../catalogApi.js";
+import { useLoadMore } from "../useLoadMore.js";
 
 const STATE_LABELS: Record<VariantSummary["state"], string> = {
   sellable: "Skladom",
@@ -153,10 +155,26 @@ export function CatalogPage({
       });
   }, [onSessionExpired]);
 
+  // issue 337: zdieľaný "Načítať ďalšie" mechanizmus (`useLoadMore.ts`) —
+  // `reset()` sa volá na ZAČIATKU KAŽDÉHO nového vyhľadávania (nižšie), aby
+  // sa zahodila prípadná ešte nedoručená odpoveď na "load more" patriaca
+  // STARÉMU dopytu/filtru.
+  const loadMoreState = useLoadMore<VariantSummary>({
+    mountedRef,
+    onAppend: (newItems, newTotal) => {
+      setItems((prev) => [...prev, ...newItems]);
+      setTotal(newTotal);
+    },
+    onError: () => {
+      setSearchError("Načítanie ďalších položiek zlyhalo.");
+    },
+  });
+
   const search = useCallback(
     (q: string, s: CatalogState) => {
       const seq = (searchSeq.current += 1);
       setSearchError("");
+      loadMoreState.reset();
       searchCatalogVariants({ q, state: s, page: 1 })
         .then((result) => {
           if (!mountedRef.current) return; // odmountované skôr, než odpoveď doletela
@@ -322,6 +340,21 @@ export function CatalogPage({
             </tbody>
           </table>
         </div>
+      )}
+
+      {items.length < total && (
+        <button
+          type="button"
+          data-testid="load-more"
+          disabled={loadMoreState.loadingMore}
+          onClick={() => {
+            loadMoreState.loadMore((page) => searchCatalogVariants({ q: query, state, page }));
+          }}
+        >
+          {loadMoreState.loadingMore
+            ? "Načítavam…"
+            : `Načítať ďalšie (${String(Math.min(PAGE_SIZE, total - items.length))})`}
+        </button>
       )}
     </section>
   );
