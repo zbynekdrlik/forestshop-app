@@ -87,10 +87,21 @@ export function PairingSection({
     },
   });
 
+  // requesting-code-review finding (issue 337, same fix as `CatalogPage
+  // .tsx`): "Load more" must fetch the next page of the filter that
+  // produced the CURRENT `items`/`total`, not whatever `query`/`state`
+  // currently hold (tracks every keystroke, independent of submit) — set
+  // synchronously inside `search()` itself, which already receives the
+  // exact q/s that will produce the results.
+  const searchedQueryRef = useRef(query);
+  const searchedStateRef = useRef(state);
+
   const search = useCallback(
     (q: string, s: PairingState) => {
       const seq = (searchSeq.current += 1);
       setSearchError("");
+      searchedQueryRef.current = q;
+      searchedStateRef.current = s;
       loadMoreState.reset();
       searchPairings({ q, state: s, page: 1 })
         .then((result) => {
@@ -493,7 +504,9 @@ export function PairingSection({
           data-testid="load-more"
           disabled={loadMoreState.loadingMore}
           onClick={() => {
-            loadMoreState.loadMore((page) => searchPairings({ q: query, state, page }));
+            loadMoreState.loadMore((page) =>
+              searchPairings({ q: searchedQueryRef.current, state: searchedStateRef.current, page }),
+            );
           }}
         >
           {loadMoreState.loadingMore

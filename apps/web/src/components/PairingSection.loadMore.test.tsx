@@ -77,3 +77,21 @@ it("keď sú zobrazené všetky varianty, tlačidlo 'Načítať ďalšie' sa vô
   await screen.findByTestId("pairing-A");
   expect(screen.queryByTestId("load-more")).toBeNull();
 });
+
+// requesting-code-review finding (issue 337, rovnaký nález ako
+// `CatalogPage.loadMore.test.tsx`): "Load more" musí žiadať ďalšiu stranu
+// naposledy ODOSLANÉHO dopytu, nie práve rozpísaný (neodoslaný) text.
+it("po rozpísaní NEODOSLANÉHO nového dopytu žiada 'Načítať ďalšie' ďalej stranu PÔVODNÉHO (naposledy odoslaného) dopytu", async () => {
+  searchPairings.mockResolvedValueOnce({ total: 2, items: [item("A")] });
+  searchPairings.mockResolvedValueOnce({ total: 2, items: [item("B")] });
+
+  render(<PairingSection role="manazer" onSessionExpired={() => {}} />);
+  await screen.findByTestId("pairing-A");
+
+  fireEvent.change(screen.getByLabelText("Kód variantu alebo produktu"), { target: { value: "nieco-ine" } });
+
+  fireEvent.click(await screen.findByTestId("load-more"));
+  await screen.findByTestId("pairing-B");
+
+  expect(searchPairings).toHaveBeenLastCalledWith({ q: "", state: "all", page: 2 });
+});
