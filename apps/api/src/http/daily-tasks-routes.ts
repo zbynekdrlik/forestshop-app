@@ -15,7 +15,11 @@ import { requireUser, type AppBindings } from "./middleware.js";
 // zamestnancovi s rolou "citanie" mať VLASTNÝ súkromný zoznam bez dôvodu.
 const createBody = z.object({ text: z.string().trim().min(1).max(300) });
 const updateTextBody = z.object({ text: z.string().trim().min(1).max(300) });
-const updateEmojiBody = z.object({ emoji: z.string().trim().max(16).nullable() });
+// Code review: 16 znakov by odmietlo legitímnu VIACPRVKOVÚ emoji sekvenciu
+// (rodinné/kožný odtieň kombinácie spájané ZWJ znakom môžu ľahko presiahnuť
+// 16 UTF-16 jednotiek) — 32 dáva dosť priestoru aj pre takú sekvenciu a stále
+// bráni zjavnému zneužitiu poľa na dlhý text.
+const updateEmojiBody = z.object({ emoji: z.string().trim().max(32).nullable() });
 const doneBody = z.object({ done: z.boolean() });
 const idParam = z.object({ id: z.string().uuid() });
 

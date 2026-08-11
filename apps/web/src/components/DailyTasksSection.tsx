@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type JSX } from "react";
+import { useCallback, useEffect, useRef, useState, type JSX } from "react";
 import {
   createDailyTask,
   DailyTasksUnauthorizedError,
@@ -32,6 +32,18 @@ export function DailyTasksSection({ onSessionExpired }: { readonly onSessionExpi
   const [editingEmojiId, setEditingEmojiId] = useState<string | null>(null);
   const [emojiDraft, setEmojiDraft] = useState<Record<string, string>>({});
 
+  // Code review (rovnaký nález ako issue 251's `SupplierLinksSection.tsx`/
+  // `PairingSection.tsx`): `saveText`/`saveEmoji`'s `.then()` musí vedieť,
+  // KTORÝ riadok je PRÁVE editovaný V OKAMIHU, keď odpoveď doletí — nie ten,
+  // čo bol editovaný v momente kliknutia na Uložiť. Bez tohto by uloženie
+  // riadku A (ešte čakajúce na odpoveď) mohlo zavrieť editor riadku B,
+  // otvorený medzitým. "Latest ref" vzor — synchrónne priamo v tele
+  // komponentu, nie cez `useEffect`.
+  const editingTextIdRef = useRef(editingTextId);
+  editingTextIdRef.current = editingTextId;
+  const editingEmojiIdRef = useRef(editingEmojiId);
+  editingEmojiIdRef.current = editingEmojiId;
+
   const load = useCallback(() => {
     fetchDailyTasks()
       .then((data) => {
@@ -50,6 +62,22 @@ export function DailyTasksSection({ onSessionExpired }: { readonly onSessionExpi
     load();
   }, [load]);
 
+  // Code review: KAŽDÁ mutácia (nielen počiatočný `load()`) musí rozlíšiť
+  // vypršanú reláciu (401) od bežného zlyhania — inak po vypršaní počas
+  // akcie appka len opakovane hlási všeobecnú chybu bez cesty späť na
+  // prihlásenie. Rovnaký vzor ako `NedostupneSection.tsx`'s každý mutačný
+  // `.catch()`.
+  const handleActionError = useCallback(
+    (err: unknown, fallback: string) => {
+      if (err instanceof DailyTasksUnauthorizedError) {
+        onSessionExpired();
+        return;
+      }
+      setError(fallback);
+    },
+    [onSessionExpired],
+  );
+
   const addTask = useCallback(() => {
     const text = newText.trim();
     if (text === "" || creating) return;
@@ -60,13 +88,13 @@ export function DailyTasksSection({ onSessionExpired }: { readonly onSessionExpi
         setNewText("");
         load();
       })
-      .catch(() => {
-        setError("Úlohu sa nepodarilo pridať — skúste to znova.");
+      .catch((err: unknown) => {
+        handleActionError(err, "Úlohu sa nepodarilo pridať — skúste to znova.");
       })
       .finally(() => {
         setCreating(false);
       });
-  }, [newText, creating, load]);
+  }, [newText, creating, load, handleActionError]);
 
   const toggleDone = useCallback(
     (row: DailyTaskRow) => {
@@ -76,14 +104,14 @@ export function DailyTasksSection({ onSessionExpired }: { readonly onSessionExpi
         .then(() => {
           load();
         })
-        .catch(() => {
-          setError("Akcia zlyhala — skúste to znova.");
+        .catch((err: unknown) => {
+          handleActionError(err, "Akcia zlyhala — skúste to znova.");
         })
         .finally(() => {
           setBusyId("");
         });
     },
-    [load],
+    [load, handleActionError],
   );
 
   const saveText = useCallback(
@@ -94,17 +122,21 @@ export function DailyTasksSection({ onSessionExpired }: { readonly onSessionExpi
       setError("");
       updateDailyTaskText(id, text)
         .then(() => {
-          setEditingTextId(null);
+          // Code review: kým táto odpoveď čakala, používateľ mohol otvoriť
+          // INÝ riadok na úpravu textu (`editingTextId` sa presunul naň) —
+          // vtedy toto zatvorenie NESMIE prebehnúť, inak by ticho zavrelo
+          // CUDZÍ, práve rozpísaný editor.
+          if (editingTextIdRef.current === id) setEditingTextId(null);
           load();
         })
-        .catch(() => {
-          setError("Text sa nepodarilo uložiť — skúste to znova.");
+        .catch((err: unknown) => {
+          handleActionError(err, "Text sa nepodarilo uložiť — skúste to znova.");
         })
         .finally(() => {
           setBusyId("");
         });
     },
-    [textDraft, load],
+    [textDraft, load, handleActionError],
   );
 
   const saveEmoji = useCallback(
@@ -114,17 +146,19 @@ export function DailyTasksSection({ onSessionExpired }: { readonly onSessionExpi
       setError("");
       updateDailyTaskEmoji(id, emoji === "" ? null : emoji)
         .then(() => {
-          setEditingEmojiId(null);
+          // Rovnaký dôvod ako `saveText` vyššie — nezavrieť CUDZÍ, medzitým
+          // otvorený emoji editor.
+          if (editingEmojiIdRef.current === id) setEditingEmojiId(null);
           load();
         })
-        .catch(() => {
-          setError("Emoji sa nepodarilo uložiť — skúste to znova.");
+        .catch((err: unknown) => {
+          handleActionError(err, "Emoji sa nepodarilo uložiť — skúste to znova.");
         })
         .finally(() => {
           setBusyId("");
         });
     },
-    [emojiDraft, load],
+    [emojiDraft, load, handleActionError],
   );
 
   const removeTask = useCallback(
@@ -135,14 +169,14 @@ export function DailyTasksSection({ onSessionExpired }: { readonly onSessionExpi
         .then(() => {
           load();
         })
-        .catch(() => {
-          setError("Úlohu sa nepodarilo odstrániť — skúste to znova.");
+        .catch((err: unknown) => {
+          handleActionError(err, "Úlohu sa nepodarilo odstrániť — skúste to znova.");
         })
         .finally(() => {
           setBusyId("");
         });
     },
-    [load],
+    [load, handleActionError],
   );
 
   const intro = <p>Osobný zoznam úloh — nahrádza poznámky písané do Discordu. Vidíš len svoje vlastné úlohy.</p>;

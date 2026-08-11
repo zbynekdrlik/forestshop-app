@@ -153,3 +153,52 @@ it("pri 401 (session vypršala) zavolá onSessionExpired", async () => {
     expect(onSessionExpired).toHaveBeenCalled();
   });
 });
+
+// Code review: rovnaký nález ako issue 251's `SupplierLinksSection.tsx`/
+// `PairingSection.tsx` — bez "latest ref" guardu by uloženie riadku A (ešte
+// čakajúce na odpoveď) zavrelo editor riadku B, otvorený medzitým.
+it("uloženie textu riadku A (ešte čakajúce na odpoveď) nesmie zavrieť editor riadku B otvorený medzitým", async () => {
+  fetchDailyTasks.mockResolvedValue([ROW_B, ROW_A]);
+  let resolveA: (v: boolean) => void = () => {};
+  updateDailyTaskText.mockImplementationOnce(
+    () =>
+      new Promise<boolean>((resolve) => {
+        resolveA = resolve;
+      }),
+  );
+  render(<DailyTasksSection onSessionExpired={vi.fn()} />);
+  await screen.findByTestId("uloha-row-task-a");
+
+  // Otvoriť editor riadku A a uložiť — odpoveď zatiaľ NEDORAZILA.
+  fireEvent.click(screen.getByTestId("uloha-edit-task-a"));
+  fireEvent.click(screen.getByTestId("uloha-edit-save-task-a"));
+  await waitFor(() => {
+    expect(updateDailyTaskText).toHaveBeenCalledWith("task-a", "poslať DPD");
+  });
+
+  // Kým A čaká, otvoriť editor riadku B (appka dovolí len JEDEN naraz).
+  fireEvent.click(screen.getByTestId("uloha-edit-task-b"));
+  expect(screen.getByTestId("uloha-edit-input-task-b")).toBeTruthy();
+
+  // Teraz nech odpoveď A dorazí — editor riadku B musí OSTAŤ otvorený.
+  resolveA(true);
+  await waitFor(() => {
+    expect(fetchDailyTasks).toHaveBeenCalledTimes(2); // mount + po uložení A
+  });
+  expect(screen.getByTestId("uloha-edit-input-task-b")).toBeTruthy();
+});
+
+it("pri 401 POČAS mutácie (nielen počiatočného načítania) tiež zavolá onSessionExpired", async () => {
+  const { DailyTasksUnauthorizedError } = await import("../dailyTasksApi.js");
+  fetchDailyTasks.mockResolvedValueOnce([ROW_A]);
+  setDailyTaskDone.mockRejectedValueOnce(new DailyTasksUnauthorizedError());
+  const onSessionExpired = vi.fn();
+  render(<DailyTasksSection onSessionExpired={onSessionExpired} />);
+  await screen.findByTestId("uloha-row-task-a");
+
+  fireEvent.click(screen.getByTestId("uloha-done-task-a"));
+
+  await waitFor(() => {
+    expect(onSessionExpired).toHaveBeenCalled();
+  });
+});

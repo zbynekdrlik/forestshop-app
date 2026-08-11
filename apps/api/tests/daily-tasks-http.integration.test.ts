@@ -154,6 +154,24 @@ describe("PATCH /api/daily-tasks/:id/emoji", () => {
     const afterClear = await app.request("/api/daily-tasks", { headers: { cookie } });
     expect(((await afterClear.json()) as { rows: readonly { emoji: string | null }[] }).rows[0]?.emoji).toBeNull();
   });
+
+  // Code review: symetrické pokrytie s "PATCH .../text"'s a "DELETE"'s
+  // rovnaké IDOR testy nižšie — implementácia je identická (`and(eq(id),
+  // eq(userId))`), ale bez PRIAMEHO testu by táto cesta ostala pokrytá len
+  // nepriamo.
+  it("CUDZIU úlohu neupraví emoji (updated:false), emoji ostane pôvodné", async () => {
+    const { app, cookie, db } = await bootUser("sef@forestshop.sk", "admin");
+    const create = await app.request("/api/daily-tasks", { method: "POST", headers: { cookie, "content-type": "application/json" }, body: JSON.stringify({ text: "Šéfova úloha" }) });
+    const { id } = (await create.json()) as { id: string };
+
+    const other = await secondLogin(app, db, "zamestnanec@forestshop.sk", "manazer");
+    const patch = await app.request(`/api/daily-tasks/${id}/emoji`, { method: "PATCH", headers: { cookie: other.cookie, "content-type": "application/json" }, body: JSON.stringify({ emoji: "🚚" }) });
+    expect((await patch.json()) as { ok: boolean; updated: boolean }).toEqual({ ok: true, updated: false });
+
+    const list = await app.request("/api/daily-tasks", { headers: { cookie } });
+    const body = (await list.json()) as { rows: readonly { emoji: string | null }[] };
+    expect(body.rows[0]?.emoji).toBeNull();
+  });
 });
 
 describe("POST /api/daily-tasks/:id/done", () => {
@@ -171,6 +189,21 @@ describe("POST /api/daily-tasks/:id/done", () => {
     expect((await markUndone.json()) as { updated: boolean }).toEqual({ ok: true, updated: true });
     const afterUndone = await app.request("/api/daily-tasks", { headers: { cookie } });
     expect(((await afterUndone.json()) as { rows: readonly { doneAt: string | null }[] }).rows[0]?.doneAt).toBeNull();
+  });
+
+  // Code review: rovnaké symetrické IDOR pokrytie ako "PATCH .../emoji" vyššie.
+  it("CUDZIU úlohu neoznačí ako vybavenú (updated:false), doneAt ostane null", async () => {
+    const { app, cookie, db } = await bootUser("sef@forestshop.sk", "admin");
+    const create = await app.request("/api/daily-tasks", { method: "POST", headers: { cookie, "content-type": "application/json" }, body: JSON.stringify({ text: "Šéfova úloha" }) });
+    const { id } = (await create.json()) as { id: string };
+
+    const other = await secondLogin(app, db, "zamestnanec@forestshop.sk", "manazer");
+    const markDone = await app.request(`/api/daily-tasks/${id}/done`, { method: "POST", headers: { cookie: other.cookie, "content-type": "application/json" }, body: JSON.stringify({ done: true }) });
+    expect((await markDone.json()) as { ok: boolean; updated: boolean }).toEqual({ ok: true, updated: false });
+
+    const list = await app.request("/api/daily-tasks", { headers: { cookie } });
+    const body = (await list.json()) as { rows: readonly { doneAt: string | null }[] };
+    expect(body.rows[0]?.doneAt).toBeNull();
   });
 });
 
