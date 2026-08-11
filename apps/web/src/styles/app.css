@@ -2015,12 +2015,8 @@ tr:last-child td {
   align-items: center;
   flex-wrap: wrap;
   gap: var(--fs-space-3);
-  padding: var(--fs-space-3) 0 var(--fs-space-3) var(--fs-space-3);
+  padding: var(--fs-space-3) 0;
   border-top: 1px solid var(--fs-border-soft);
-  /* issue 344: priehľadný pruh REZERVOVANÝ na všetkých riadkoch (aj
-     nevybavených) — keď `--handled` prifarbí len jeho farbu nižšie, obsah
-     riadkov sa navzájom neposunie ("jog"). */
-  border-left: 3px solid transparent;
 }
 .nedostupne-order-row:first-of-type {
   border-top: none;
@@ -2032,11 +2028,18 @@ tr:last-child td {
    tej istej obrazovke) — zvolený `--fs-success`/`--fs-success-bg`, ten istý
    "hotovo" jazyk, aký appka používa inde (napr. `.ord-state-btn.active`).
    Farba NIE JE jediný signál — existujúci text "✓ Odoslané" na tlačidle
-   (nezmenený) ostáva. Len background/border — ŽIADNA zmena výšky riadku
-   (opakovaná požiadavka, issues 303/327). */
+   (nezmenený) ostáva. `box-shadow: inset` namiesto `border-left` — code
+   review na tento ticket našiel, že skutočný `border-left` (aj
+   priehľadný, rezervovaný na VŠETKÝCH riadkoch) posúva obsah riadku o
+   ~11px doprava oproti hlavičke karty/zoznamu odkazov náhrad NAD ním
+   (tie žiadny rovnaký inset nemajú) — trvalý "jog" ľavého okraja v rámci
+   tej istej karty. Inset box-shadow je čisto vizuálny (nezasahuje do box
+   modelu), takže NEPOTREBUJE žiadnu rezerváciu na nevybavených riadkoch a
+   nemení ŽIADNY rozmer riadku (ani výšku — opakovaná požiadavka, issues
+   303/327 — ani šírku/zarovnanie obsahu). */
 .nedostupne-order-row--handled {
   background: var(--fs-success-bg);
-  border-left-color: var(--fs-success);
+  box-shadow: inset 3px 0 0 var(--fs-success);
 }
 .nedostupne-order-actions {
   display: flex;

@@ -161,24 +161,27 @@ it("rola citanie NEVIDÍ žiadne akčné tlačidlá (len admin/manazer smie odos
 // byť na prvý pohľad odlíšený — over PRIAMO dátový atribút na riadku
 // (nezávislý od konkrétnej CSS triedy/farby), nikdy len že text "Odoslané"
 // niekde existuje (to appka robila už predtým a šéf to označil za nedostatočné).
-it("riadok s odoslaným e-mailom (ktorýkoľvek typ) je označený ako vybavený, čakajúci nie je", async () => {
+// Code review na tento ticket: over VŠETKY štyri kombinácie dvoch boolean
+// polí (predtým testované len 2/4), nie len "nedostupneSent=true" prípad.
+it.each([
+  { nedostupneSent: false, alternativaSent: false, handled: "false" as const },
+  { nedostupneSent: true, alternativaSent: false, handled: "true" as const },
+  { nedostupneSent: false, alternativaSent: true, handled: "true" as const },
+  { nedostupneSent: true, alternativaSent: true, handled: "true" as const },
+])("nedostupneSent=$nedostupneSent, alternativaSent=$alternativaSent → data-handled=$handled", async ({ nedostupneSent, alternativaSent, handled }) => {
   fetchNedostupneList.mockResolvedValue({
-    groups: [{ ...GROUP, orders: [{ ...GROUP.orders[0], nedostupneSent: true, alternativaSent: false }] }],
+    groups: [{ ...GROUP, orders: [{ ...GROUP.orders[0], nedostupneSent, alternativaSent }] }],
     bccMissing: false,
     mailNotConfigured: false,
   });
   render(<NedostupneSection role="manazer" onSessionExpired={vi.fn()} />);
   const row = await screen.findByTestId("nedostupne-order-17600001-40237/L");
-  expect(row.getAttribute("data-handled")).toBe("true");
-  expect(row.className).toContain("nedostupne-order-row--handled");
-});
-
-it("čakajúci riadok (žiadny e-mail odoslaný) NIE JE označený ako vybavený", async () => {
-  fetchNedostupneList.mockResolvedValue(LIST_WITH_GROUP);
-  render(<NedostupneSection role="manazer" onSessionExpired={vi.fn()} />);
-  const row = await screen.findByTestId("nedostupne-order-17600001-40237/L");
-  expect(row.getAttribute("data-handled")).toBe("false");
-  expect(row.className).not.toContain("nedostupne-order-row--handled");
+  expect(row.getAttribute("data-handled")).toBe(handled);
+  if (handled === "true") {
+    expect(row.className).toContain("nedostupne-order-row--handled");
+  } else {
+    expect(row.className).not.toContain("nedostupne-order-row--handled");
+  }
 });
 
 it("klik na 'náhľad' otvorí povinný náhľad PRED odoslaním — Odoslať sa ešte nevolá", async () => {
