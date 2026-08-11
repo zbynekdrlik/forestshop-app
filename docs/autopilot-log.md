@@ -3490,3 +3490,26 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
   own review caught), `.claude/rules/nedostupne.md` (handled predicate +
   the "boss says a colour, check it doesn't already mean something else
   in this app" precedent).
+
+## Issue 351 — tazke brany presunut z dev1 do CI
+
+- Root cause: lokalny predpush zvyk spustal CELU sadu bran (typecheck,
+  lint, unit, integration proti lokalnemu Postgresu, e2e so skutocnym
+  Chromiom) — duplicitu toho, co ci.yml aj tak zadarmo znova bezi na
+  ubuntu-latest. Namerane: zataz 15,6, 4,2 GB swap, eslint sam 1,5 GB.
+  Design comment: issuecomment-5256903352.
+- Commits: 50ea1f1 (version bump 0.3.0-dev.208), 080449f (gates:local +
+  --concurrency=off + playwright workers:1 + playbook), 632cad8 (review
+  fix — stale local-dev.md cyklus + eslint concurrency caveat).
+- PR opened from dev to main, merged 79325b4, main CI + Deploy oboje
+  zelene (vsetkych 5 jobov v CI vratane integration/e2e).
+- Namerane pred/po (jeden reprezentativny beh): stara plna sada 539 s pod
+  zatazou, peak load 4,60; nova gates:local 114 s, peak load 3,91 — 4,7x
+  kratsi cas pod zatazou (integration 655 testov/336 s + e2e 55 testov uz
+  lokalne default nebezia, len v CI).
+- Post-deploy: /api/version + Playwright DOM zhodne s 0.3.0-dev.208 a
+  merge SHA 79325b40, 0 console error/warning.
+- Playbook: .claude/rules/local-dev.md (nova predvolena lokalna sada +
+  namerane cisla), .claude/rules/testing.md (pointer na heavy-gates-CI-
+  only), .claude/rules/ci.md (integration/e2e/docker-build musia ostat
+  bezpodmienecne — plan na tom stoji).
