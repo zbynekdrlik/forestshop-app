@@ -2015,11 +2015,28 @@ tr:last-child td {
   align-items: center;
   flex-wrap: wrap;
   gap: var(--fs-space-3);
-  padding: var(--fs-space-3) 0;
+  padding: var(--fs-space-3) 0 var(--fs-space-3) var(--fs-space-3);
   border-top: 1px solid var(--fs-border-soft);
+  /* issue 344: priehľadný pruh REZERVOVANÝ na všetkých riadkoch (aj
+     nevybavených) — keď `--handled` prifarbí len jeho farbu nižšie, obsah
+     riadkov sa navzájom neposunie ("jog"). */
+  border-left: 3px solid transparent;
 }
 .nedostupne-order-row:first-of-type {
   border-top: none;
+}
+/* issue 344: vybavený riadok (aspoň jeden z dvoch e-mailov odoslaný) —
+   jemný zelený nádych CELÉHO riadku + ľavý pruh, aby bolo vidno na prvý
+   pohľad pri rolovaní zoznamom. Šéf pôvodne povedal "červené", ale červená
+   v appke inde znamená chybu (`--fs-danger`, BCC/mail varovania vyššie na
+   tej istej obrazovke) — zvolený `--fs-success`/`--fs-success-bg`, ten istý
+   "hotovo" jazyk, aký appka používa inde (napr. `.ord-state-btn.active`).
+   Farba NIE JE jediný signál — existujúci text "✓ Odoslané" na tlačidle
+   (nezmenený) ostáva. Len background/border — ŽIADNA zmena výšky riadku
+   (opakovaná požiadavka, issues 303/327). */
+.nedostupne-order-row--handled {
+  background: var(--fs-success-bg);
+  border-left-color: var(--fs-success);
 }
 .nedostupne-order-actions {
   display: flex;
