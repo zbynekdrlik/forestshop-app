@@ -68,3 +68,21 @@ it("keď sú zobrazené všetky položky, tlačidlo 'Načítať ďalšie' sa vô
   await screen.findByTestId("product-link-row-PL-1");
   expect(screen.queryByTestId("load-more")).toBeNull();
 });
+
+// requesting-code-review finding (issue 337, rovnaký nález ako
+// `CatalogPage.loadMore.test.tsx`): "Load more" musí žiadať ďalšiu stranu
+// naposledy ODOSLANÉHO dopytu, nie práve rozpísaný (neodoslaný) text.
+it("po rozpísaní NEODOSLANÉHO nového dopytu žiada 'Načítať ďalšie' ďalej stranu PÔVODNÉHO (naposledy odoslaného) dopytu", async () => {
+  searchProductLinks.mockResolvedValueOnce({ total: 2, missingTotal: 2, items: [item("PL-1")] });
+  searchProductLinks.mockResolvedValueOnce({ total: 2, missingTotal: 2, items: [item("PL-2")] });
+
+  render(<SupplierLinksSection role="manazer" onSessionExpired={() => {}} />);
+  await screen.findByTestId("product-link-row-PL-1");
+
+  fireEvent.change(screen.getByLabelText("Hľadať produkt (kód alebo názov)"), { target: { value: "nieco-ine" } });
+
+  fireEvent.click(await screen.findByTestId("load-more"));
+  await screen.findByTestId("product-link-row-PL-2");
+
+  expect(searchProductLinks).toHaveBeenLastCalledWith({ q: "", state: "missing", page: 2 });
+});
