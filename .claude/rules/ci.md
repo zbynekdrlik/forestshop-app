@@ -6,6 +6,16 @@ paths:
 
 # CI gotchas
 
+- **`integration`, `e2e` a `docker-build` joby MUSIA ostať BEZPODMIENEČNÉ
+  (žiadne `if:`, žiadne `continue-on-error`) na KAŽDOM push/PR do `dev` aj
+  `main` — issue 351 na tom stojí celý plán.** Od issue 351 sa tieto dve
+  brány (postgres + skutočný prehliadač) na dev1 lokálne default NESPÚŠŤAJÚ
+  (`.claude/rules/local-dev.md`'s `pnpm gates:local`) presne preto, že
+  `ci.yml` ich aj tak zakaždým odbeží znova, zadarmo (verejné repo,
+  `ubuntu-latest`). Keby sa niektorá z nich stala podmienenou/voliteľnou,
+  vznikne diera v pokrytí bez toho, aby to bolo vidno lokálne. `version-
+  check`'s `if: github.ref_name != 'main'` je jediná zámerná výnimka
+  (netýka sa testovacích brán, len toho, že na `main` nemá zmysel).
 - **`pnpm/action-setup@v4` sa v `ci.yml` volá BEZ `version:` inputu.**
   `package.json` má `packageManager: "pnpm@10.0.0"` — keď action dostane aj
   explicitný `version` input aj nájde `packageManager`, zlyhá s "Multiple
