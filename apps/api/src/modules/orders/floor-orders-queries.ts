@@ -65,8 +65,15 @@ export async function listFloorOrders(
     })
     .from(orders)
     .where(where)
-    // Najnovšie hore — zadanie tiketu.
-    .orderBy(desc(orders.placedAt))
+    // Najnovšie hore — zadanie tiketu. `desc(orders.id)` je tu tie-breaker
+    // (review finding, issue 345): `placedAt` je len minútová presnosť
+    // (Shoptet export) — bez druhého, jednoznačného kľúča by LIMIT/OFFSET
+    // pri dvoch objednávkach v tej istej minúte mohol byť nedeterministický
+    // (riadok sa zopakuje na ďalšej strane = duplicitný React `key`, alebo
+    // sa celkom stratí). Rovnaký vzor ako `catalog/queries.ts`'s
+    // `desc(fetchedAt), desc(id)` / `orders/queries.ts`'s
+    // `desc(placedAt), desc(orderLines.id)`.
+    .orderBy(desc(orders.placedAt), desc(orders.id))
     .limit(input.pageSize)
     .offset((input.page - 1) * input.pageSize);
 

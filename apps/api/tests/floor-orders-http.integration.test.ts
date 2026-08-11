@@ -101,6 +101,25 @@ describe("GET /api/floor-orders", () => {
     expect(body.items.map((i) => i["externalOrderId"])).toEqual([novsia.externalOrderId, starsia.externalOrderId]);
   });
 
+  // review finding (issue 345): `placedAt` má len minútovú presnosť
+  // (Shoptet export) — bez tie-breakera (`desc(orders.id)`) by LIMIT/OFFSET
+  // pri dvoch objednávkach v TEJ ISTEJ minúte mohol byť nedeterministický
+  // (riadok sa zopakuje na druhej strane, alebo sa stratí).
+  it("dve objednávky s presne rovnakým 'placedAt' sa pri stránkovaní po jednej nikdy nezopakujú ani nestratia", async () => {
+    const { app, cookie, db } = await boot("citanie");
+    const rovnakyCas = new Date("2026-07-15T09:00:00Z");
+    const a = await insertOrder(db, { placedAt: rovnakyCas });
+    const b = await insertOrder(db, { placedAt: rovnakyCas });
+
+    const prva = await app.request("/api/floor-orders?page=1&pageSize=1", { headers: { cookie } });
+    const prvaBody = (await prva.json()) as { items: readonly Record<string, unknown>[] };
+    const druha = await app.request("/api/floor-orders?page=2&pageSize=1", { headers: { cookie } });
+    const druhaBody = (await druha.json()) as { items: readonly Record<string, unknown>[] };
+
+    const videneIds = [prvaBody.items[0]?.["externalOrderId"], druhaBody.items[0]?.["externalOrderId"]];
+    expect(videneIds.sort()).toEqual([a.externalOrderId, b.externalOrderId].sort());
+  });
+
   it("stránkuje podľa page/pageSize, total počíta CELÚ odfiltrovanú množinu", async () => {
     const { app, cookie, db } = await boot("citanie");
     for (let i = 0; i < 5; i += 1) {

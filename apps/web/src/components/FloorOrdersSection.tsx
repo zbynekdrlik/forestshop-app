@@ -38,18 +38,28 @@ export function FloorOrdersSection({ onSessionExpired }: { readonly role: Me["ro
     },
   });
 
+  // "Latest generation" vzor (review finding, issue 345 — rovnaký dôvod ako
+  // `SupplierLinksSection.tsx`/`RestockLinkSuggestionsSection.tsx`'s
+  // `searchSeq`): bez neho by neskoro doručená (napr. StrictMode double-
+  // mount) odpoveď TEJTO funkcie mohla prepísať `items` SPÄŤ na prvú stranu
+  // PO tom, čo už používateľ klikol "Načítať ďalšie" — `useLoadMore`'s
+  // interný `pageRef` by pritom ostal na strane 2, takže ďalší klik by
+  // preskočil rovno na stranu 3 a stratil riadky strany 2.
+  const loadSeq = useRef(0);
+
   const load = useCallback(() => {
+    const seq = (loadSeq.current += 1);
     setError("");
     loadMoreState.reset();
     fetchFloorOrders({ page: 1 })
       .then((result) => {
-        if (!mountedRef.current) return;
+        if (!mountedRef.current || seq !== loadSeq.current) return;
         setItems(result.items);
         setTotal(result.total);
         setLoaded(true);
       })
       .catch((err: unknown) => {
-        if (!mountedRef.current) return;
+        if (!mountedRef.current || seq !== loadSeq.current) return;
         setLoaded(true);
         if (err instanceof FloorOrdersUnauthorizedError) {
           onSessionExpired();
@@ -79,7 +89,13 @@ export function FloorOrdersSection({ onSessionExpired }: { readonly role: Me["ro
       {!loaded ? (
         <p>Načítavam…</p>
       ) : total === 0 ? (
-        <p data-testid="floor-orders-empty">Momentálne žiadna objednávka z predajne nie je evidovaná.</p>
+        // review finding (issue 345): keď POČIATOČNÉ načítanie zlyhá, `total`
+        // je tiež `0` — bez `error === ""` by táto obrazovka klamlivo tvrdila
+        // "žiadna objednávka" popri chybovej hláške vyššie. Chyba pri "Načítať
+        // ďalšie" sem nikdy nespadne (`total`/`items` sa vtedy nemenia, viď
+        // `useLoadMore`'s `onError`), takže tabuľka nižšie ostáva viditeľná aj
+        // pri takej chybe — rovnaké správanie ako `RestockLinkSuggestionsSection.tsx`.
+        error === "" && <p data-testid="floor-orders-empty">Momentálne žiadna objednávka z predajne nie je evidovaná.</p>
       ) : (
         <>
           <p data-testid="floor-orders-total">
