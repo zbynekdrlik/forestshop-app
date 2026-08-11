@@ -3513,3 +3513,37 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
   namerane cisla), .claude/rules/testing.md (pointer na heavy-gates-CI-
   only), .claude/rules/ci.md (integration/e2e/docker-build musia ostat
   bezpodmienecne — plan na tom stoji).
+
+## Issue 345 — Eshop: nová obrazovka Objednávky predajňa (2026-08-11)
+
+- Šéfovo zadanie (Discord): nová záložka pre objednávky vzniknuté priamo
+  na predajni, nie v e-shope. Predošlý komentár na tickete už zistil
+  naživo znak: `order.shipping_carrier_name ILIKE '%Osobný odber%'`
+  (podreťazec, nikdy presná veta) — 30→32 objednávok medzi 11.8. a
+  overením pred implementáciou.
+- Design comment: issuecomment-5257678317 (root cause + SQL-stránkovaný
+  prístup vs. order-flags's load-everything-JS vzor + PAGE_SIZE=10
+  rozhodnutie).
+- Commits: 8d72d9d (version bump .210), d0c6d28 (nová GET
+  /api/floor-orders + FloorOrdersSection.tsx + nav.ts + integration/e2e
+  testy), 6b290ad (review opravy — tie-breaker `desc(orders.id)`,
+  "latest generation" strážca v load(), empty-string pageSize preprocess,
+  empty-state gate, nový FloorOrdersSection.test.tsx), 2ad541c (playbook —
+  jest-dom matcher gotcha), 95837c1 (version bump .211).
+- Review: issuecomment-5258302837 (0 🔴, 3 🟡, 4 🔵, všetko opravené v tej
+  istej vetve).
+- PR #354 (dev→main), merge 4e6f4b0. Deploy padol na známu containerd
+  ingest chybu (`.claude/rules` known issue) — `docker pull` na dev2 +
+  `gh run rerun --failed`, druhý pokus zelený.
+- Post-deploy Playwright: v0.3.0-dev.210 v DOM, "Objednávky predajňa"
+  otvorená z menu, 32 objednávok (sedí s naživo psql dopytom), najnovšie
+  hore, Shoptet odkaz vedie na www.forestshop.sk/admin/, "Načítať ďalšie"
+  pripojilo druhú stranu (10→20/32), konzola 0 chýb/varovaní.
+- Druhé PR #355 (docs-only playbook zápis + version bump .211, keďže
+  playbook-review beží AŽ po merge/deploy), merge 1dfe79c, main CI+Deploy
+  oboje zelené, DOM potvrdzuje v0.3.0-dev.211.
+- Playbook: `.claude/rules/orders.md` (predajňový filter + PAGE_SIZE
+  rozhodnutie + ORDER BY tie-breaker gotcha), `.claude/rules/testing.md`
+  (žiadny jest-dom v komponentových testoch — `getAttribute` namiesto
+  `toHaveAttribute`, + rozšírené `paths:` na `apps/web/src/**/*.test.tsx`).
+- Issue 345 zavretý s dôkazom (issuecomment-5258524496).
