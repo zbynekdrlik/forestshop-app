@@ -45,6 +45,45 @@ it("klik na záložku zavolá onSelectTab s jej id", () => {
   expect(onSelectTab).toHaveBeenCalledWith("orders");
 });
 
+// issue 343: šéf chce, aby "Systém" a "Automatizácie" štartovali ZBALENÉ
+// (menu inak zaberá celú výšku a treba rolovať), "Eshop" ostáva rozbalený.
+// Predvolený stav je deklarovaný PER PRIEČINOK v `nav.ts` (`defaultCollapsed`),
+// nie ako zoznam mien v `Sidebar.tsx` — test preto simuluje presne tento tvar
+// registra (tri priečinky, dva s `defaultCollapsed: true`).
+const FOLDERS_WITH_DEFAULT_COLLAPSED = [
+  {
+    id: "eshop",
+    label: "Eshop",
+    tabs: [{ id: "orders", label: "Na objednanie", icon: "📦", Component: () => null }],
+  },
+  {
+    id: "system",
+    label: "Systém",
+    defaultCollapsed: true,
+    tabs: [{ id: "sync", label: "Sync zo Shoptetu", icon: "🔄", Component: () => null }],
+  },
+  {
+    id: "automations",
+    label: "Automatizácie",
+    defaultCollapsed: true,
+    tabs: [{ id: "restock", label: "Vypredané → Skladom", icon: "🔁", Component: () => null }],
+  },
+];
+
+it("Systém a Automatizácie štartujú zbalené (defaultCollapsed), Eshop ostáva rozbalený", () => {
+  render(<Sidebar folders={FOLDERS_WITH_DEFAULT_COLLAPSED} activeTabId="orders" onSelectTab={() => {}} />);
+
+  expect(screen.getByRole("button", { name: "Eshop" }).getAttribute("aria-expanded")).toBe("true");
+  expect(screen.getByRole("button", { name: "Systém" }).getAttribute("aria-expanded")).toBe("false");
+  expect(screen.getByRole("button", { name: "Automatizácie" }).getAttribute("aria-expanded")).toBe("false");
+});
+
+it("priečinok bez defaultCollapsed (napr. budúce Dôležité z #342) štartuje rozbalený ako doteraz", () => {
+  render(<Sidebar folders={FOLDERS} activeTabId="sync" onSelectTab={() => {}} />);
+
+  expect(screen.getByRole("button", { name: "Systém" }).getAttribute("aria-expanded")).toBe("true");
+});
+
 it("klik na hlavičku priečinka ho zbalí (folder-chev sa otočí cez triedu 'collapsed')", () => {
   render(<Sidebar folders={FOLDERS} activeTabId="sync" onSelectTab={() => {}} />);
 
