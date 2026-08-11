@@ -97,3 +97,21 @@ paths:
   textarea obsahuje (`nedostupne.spec.ts`/`order-merge.spec.ts`, issue
   277 — pôvodné testy kontrolovali `dangerouslySetInnerHTML` div a
   ticho by prestali overovať čokoľvek po prechode na textarea).
+- **issue 347: `resolve-products.ts`'s `resolveReplacementProducts`
+  spätne dohľadá majiteľov ručne vložený odkaz (`nedostupne_
+  replacement_link.url`, issue 238 — appka k nemu NEPOZNÁ názov/kód)
+  proti `shop_product_url`+`variants`, aby e-mailová karta mala NÁZOV/
+  OBRÁZOK/CENU namiesto holej adresy.** Zámerne NEROZŠIRUje
+  `nedostupne_replacement_link` o vlastné stĺpce (majiteľ by ich musel
+  zadávať ručne) — katalóg tieto dáta UŽ MÁ pre každý náš produkt,
+  spätné dohľadanie v momente stavby e-mailu je jednoduchšie a netrpí
+  zastaraním (cena sa mení, odkaz sa vkladá raz). Zhoda: PRESNÁ url
+  najprv, inak zhoda podľa CESTY bez `?variantId=` (majiteľ zvyčajne
+  vkladá bázovú adresu, feed nesie s `?variantId=`); bez zhody sa
+  správanie NEMENÍ oproti pred-347 stavu (`label = url`, žiadny
+  obrázok/cena) — nikdy sa nič nefabrikuje, rovnaká disciplína ako
+  vyššie ("nikdy nevyrábať adresu odhadom"). Volaná z JEDNÉHO miesta
+  spoločného pre náhľad aj odoslanie (`send.ts`'s `buildEmailForType`)
+  A zo samostatnej generickej šablónovej `previewContext` (`mail-
+  templates/samples.ts`) — obe cesty musia ukázať TÚ ISTÚ kartu, inak
+  by editor šablóny klamal o tom, čo appka naozaj pošle.

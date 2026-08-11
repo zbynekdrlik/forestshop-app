@@ -277,8 +277,19 @@ export function NedostupneSection({ role, onSessionExpired }: { readonly role: M
 
               {group.orders.map((order) => {
                 const rowBusy = busyKey.startsWith(`${order.orderCode}|${group.variantCode}|`);
+                // issue 344: šéf chce riadok, kde už bol odoslaný AKÝKOĽVEK
+                // z dvoch e-mailov, odlíšiť na prvý pohľad — `handled`
+                // riadi celý riadok (background + ľavý pruh, `app.css`),
+                // nikdy len tlačidlo. Existujúci text "✓ Odoslané" na
+                // tlačidle nižšie ostáva nezmenený ako non-color signál.
+                const handled = order.nedostupneSent || order.alternativaSent;
                 return (
-                  <div className="nedostupne-order-row" key={order.orderCode} data-testid={`nedostupne-order-${order.orderCode}-${group.variantCode}`}>
+                  <div
+                    className={`nedostupne-order-row${handled ? " nedostupne-order-row--handled" : ""}`}
+                    key={order.orderCode}
+                    data-testid={`nedostupne-order-${order.orderCode}-${group.variantCode}`}
+                    data-handled={handled ? "true" : "false"}
+                  >
                     <a href={order.adminLink} target="_blank" rel="noreferrer">
                       {order.orderCode}
                     </a>

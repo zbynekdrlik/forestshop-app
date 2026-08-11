@@ -3409,3 +3409,36 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
   tlačidla (inak sa zmení accessible name a rozbijú sa `getByRole`
   dotazy), a súhrnný ukazovateľ na zbalenom kontajneri sa počíta z
   existujúcich props bez nového fetchu.
+
+## Issue 347 (e-maily zákazníkom: hlavička/pätička, produktová karta s obrázkom namiesto holej adresy)
+
+- Commits: `cb51182` [red] test (skeleton + card rendering), `7c52e1c`
+  [green] `mail-templates/layout.ts`'s `wrapEmailHtml` + `render.ts`'s
+  `productCardHtml`/`textListItemLine`, `19dae96` shop-feed `image_url`
+  stĺpec (additive migrácia `0045_narrow_leper_queen.sql`) + `<g:image_link>`
+  parsing, `69ee99e` `nedostupne/resolve-products.ts` (URL → názov/obrázok/
+  cena, presná zhoda potom zhoda podľa cesty), `40cdf1e` zapojenie do
+  `logic.ts`/`send.ts`/`samples.ts`.
+- PR #349 (`ff65a9dd`), CI na dev aj main zelené; Deploy raz zlyhal na
+  známej containerd `commit failed: rename ... ingest` chybe, vyriešené
+  `docker pull` na dev2 + `gh run rerun --failed`, žiadna zmena kódu.
+  Review pass (fresh-context subagent nad celým diffom): 0 🔴 0 🟡 3 🔵,
+  všetky len informačné.
+- Post-deploy naživo overené (v0.3.0-dev.204): manuálne spustený
+  `shop-feed` job v kontajneri (`.claude/rules/shop-feed.md`'s nový
+  postup) na zaplnenie `image_url`, potom `/api/nedostupne/preview` pre
+  PRESNE ten prípad z pôvodného nahláseného e-mailu (objednávka 20261306,
+  variant 61729/M, Pavol Bajčičák) — text-verzia dáva názov produktu a
+  adresu na samostatné riadky (žiadne "URL (URL)"), HTML ukazuje dve
+  reálne produktové karty so skutočnými obrázkami z CDN, cenou aj
+  tlačidlom "Zobraziť produkt", a oddelenú pätičku s klikacím telefónom/
+  e-mailom/webom. 0 chýb v konzole. Screenshot vyrenderovaného e-mailu v
+  hlásení.
+- Playbook: `.claude/rules/mail-templates.md` (4 nové bullety: kostra sa
+  volá z dvoch miest a supplier_order ju nikdy nepoužije, opt-in card-list
+  rozšírenie, `dangerouslySetInnerHTML` div zahadzuje `<body>` štýl —
+  predošlý limit nie regresia, manuálne spustenie shop-feed jobu pre
+  naživo overenie), `.claude/rules/shop-feed.md` (`image_url` stĺpec +
+  presný `docker exec` postup na ručné spustenie jobu), `.claude/rules/
+  nedostupne.md` (dizajnové rozhodnutie: spätné dohľadanie namiesto
+  duplikovania dát na `nedostupne_replacement_link`).

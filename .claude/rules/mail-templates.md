@@ -90,3 +90,37 @@ paths:
   `replacementLinkSample` vyhľadá. Rovnaký "vzorka nikdy nespadne, len
   ukáže ukážkovú hodnotu z registra" kontrakt platí ďalej (nič nezmenené v
   `try/catch` obale `previewContext`u).
+- **issue 347: JEDNA zdieľaná HTML kostra (`layout.ts`'s `wrapEmailHtml`) —
+  hlavička + oddelená pätička (telefón/e-mail/web) — obaľuje KAŽDÝ
+  vyrenderovaný e-mail, volaná z DVOCH miest (`assembleHtml`,
+  `renderEditedBody`), nikdy z jednotlivých šablón/odosielateľov.**
+  `orders/mail.ts`'s `supplier_order` (jediný čisto textový e-mail) ostáva
+  bajt na bajt nedotknutý — posiela výhradne `.text`, na `.html` sa nikto
+  nikdy nepozrie, takže kostra sa naň de facto nikdy neuplatní, hoci sa
+  technicky vypočíta.
+- **issue 347: `TemplateListItem` (render.ts) má voliteľné `imageUrl`/
+  `priceText` — zoznam, kde AKÝKOĽVEK prvok nesie `imageUrl`, sa v HTML
+  vykreslí ako "produktová karta" (obrázok + klikací NÁZOV + cena +
+  tlačidlo) namiesto `<ul><li>`. Zoznam BEZ `imageUrl` na žiadnom prvku
+  (napr. `orders/mail.ts`'s `zoznam_poloziek`) ostáva úplne nezmenený —
+  toto je opt-in rozšírenie, nie zmena existujúceho správania.** Text-verzia
+  (`assembleText`) dáva pri prvku s `url` NÁZOV a ADRESU na samostatné
+  riadky (nikdy `"názov (url)"`) — platí pre KAŽDÝ zoznam s `url`, nielen
+  karty; pri prvku bez `url` sa nič nemení.
+- **issue 347: `MailTemplateEditor.tsx`'s preview injektuje celé `html`
+  (vrátane `<!DOCTYPE html><html><body style="...">`) cez
+  `dangerouslySetInnerHTML` do `<div>`.** Fragment-parsing algoritmus
+  prehliadača `<html>`/`<body>` značky ZAHODÍ, takže štýl na `<body>`
+  (pozadie stránky, padding) sa v NÁHĽADE v appke NIKDY neuplatní — v
+  skutočnom e-mailovom klientovi (celý HTML dokument) áno. Toto je
+  PREDOŠLÝ, nezmenený limit (platil aj pred issue 347), nie regresia —
+  preto `wrapEmailHtml` štýluje hlavičku/pätičku/kartu na VNORENÝCH
+  `<table>`/`<td>` elementoch (tie fragment-parsing prežijú nedotknuté),
+  nikdy na `<body>` samotnom.
+- **Naživo overiť kartu s obrázkom vyžaduje `shop_product_url.image_url`
+  vyplnený — appka nemá "spusti teraz" tlačidlo pre `shop-feed` job
+  (`.claude/rules/scheduler.md`), takže po deployi treba manuálne spustiť
+  presne tú istú cestu, akú beží nočný job, priamo v kontajneri
+  (`docker exec forestshop-app-1 node -e "..."`, plný príkaz v
+  `.claude/rules/shop-feed.md`) — legitímne, nedeštruktívne (rovnaký
+  UPSERT ako plánovaný beh), nie obchádzka.

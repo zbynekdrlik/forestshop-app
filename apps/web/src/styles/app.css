@@ -2021,6 +2021,26 @@ tr:last-child td {
 .nedostupne-order-row:first-of-type {
   border-top: none;
 }
+/* issue 344: vybavený riadok (aspoň jeden z dvoch e-mailov odoslaný) —
+   jemný zelený nádych CELÉHO riadku + ľavý pruh, aby bolo vidno na prvý
+   pohľad pri rolovaní zoznamom. Šéf pôvodne povedal "červené", ale červená
+   v appke inde znamená chybu (`--fs-danger`, BCC/mail varovania vyššie na
+   tej istej obrazovke) — zvolený `--fs-success`/`--fs-success-bg`, ten istý
+   "hotovo" jazyk, aký appka používa inde (napr. `.ord-state-btn.active`).
+   Farba NIE JE jediný signál — existujúci text "✓ Odoslané" na tlačidle
+   (nezmenený) ostáva. `box-shadow: inset` namiesto `border-left` — code
+   review na tento ticket našiel, že skutočný `border-left` (aj
+   priehľadný, rezervovaný na VŠETKÝCH riadkoch) posúva obsah riadku o
+   ~11px doprava oproti hlavičke karty/zoznamu odkazov náhrad NAD ním
+   (tie žiadny rovnaký inset nemajú) — trvalý "jog" ľavého okraja v rámci
+   tej istej karty. Inset box-shadow je čisto vizuálny (nezasahuje do box
+   modelu), takže NEPOTREBUJE žiadnu rezerváciu na nevybavených riadkoch a
+   nemení ŽIADNY rozmer riadku (ani výšku — opakovaná požiadavka, issues
+   303/327 — ani šírku/zarovnanie obsahu). */
+.nedostupne-order-row--handled {
+  background: var(--fs-success-bg);
+  box-shadow: inset 3px 0 0 var(--fs-success);
+}
 .nedostupne-order-actions {
   display: flex;
   gap: var(--fs-space-2);
