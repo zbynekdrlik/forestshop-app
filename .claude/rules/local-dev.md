@@ -29,8 +29,26 @@ paths:
   lokálnym behom). Pri kopírovaní `DATABASE_URL` medzi lokálnym behom a CI
   logmi si všimni, že port sa líši — nie je to preklep.
 - Bežný lokálny cyklus: `docker compose up -d postgres` (port 5433) →
-  `pnpm --filter @forestshop/api db:migrate` → `pnpm test` /
-  `pnpm test:integration` / `pnpm --filter @forestshop/web e2e`.
+  `pnpm --filter @forestshop/api db:migrate` → `pnpm gates:local` (výnimočne,
+  keď tiket priamo zasahuje danú oblasť, aj `pnpm test:integration` /
+  `pnpm --filter @forestshop/web e2e` — pozri ďalší bod).
+- **Predvolená lokálna sada PRED pushom je `pnpm gates:local`** (issue 351 —
+  `typecheck && lint && test`, SEKVENČNE, nikdy paralelne) — `test:
+  integration` a `e2e` sa lokálne NESPÚŠŤAJÚ default. Dôvod: `ci.yml` obe
+  brány aj tak znova spustí na `ubuntu-latest` (repo je verejné, zadarmo),
+  takže lokálny beh je čistá duplicita nákladu — a dev1 má len 4 jadrá/7 GB,
+  zdieľané s ďalšími reláciami/projektmi (namerané: záťaž 15,6, 4,2 GB swap,
+  `eslint` sám 1,5 GB pri behu VŠETKÝCH brán naraz). Výnimka: keď tiket
+  PRIAMO zasahuje danú oblasť (obrazovky/UI → `e2e`; prihlásenie/práca s
+  databázou → `test:integration`), spusti LEN tú jednu dotknutú sadu, nikdy
+  obe naraz a nikdy súbežne s `gates:local`. `pnpm lint` má explicitný
+  `--concurrency=off` (ESLint 9.9+, viacvláknový lint je len experimentálny
+  opt-in `--concurrency=auto|N` — na nainštalovanej `9.39.5` je `off` už aj
+  tak default, takže flag lintu samotnému nič neuberá; ide o výslovné
+  zafixovanie zámeru, keby sa niekedy default zmenil) a
+  `apps/web/playwright.config.ts` má mimo
+  CI `workers: 1` — obe zámerne, aby ani výnimočný lokálny beh nezdvojil
+  zaťaženie. Merané dôkazy (peak pamäť/load pred a po) na tikete 351.
 - **Ručne bežiaci `pnpm --filter @forestshop/api start`/`web dev` (napr. pre
   naživo Playwright meranie proti lokálnemu devu, `.claude/rules/frontend-
   design.md`'s metodika) zdieľa TÚ ISTÚ lokálnu Postgres inštanciu (port

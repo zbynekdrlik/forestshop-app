@@ -1,6 +1,6 @@
 {
   "name": "forestshop",
-  "version": "0.3.0-dev.207",
+  "version": "0.3.0-dev.208",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.0.0",
@@ -9,9 +9,10 @@
   },
   "scripts": {
     "typecheck": "tsc -b && tsc -p scripts/tsconfig.json && tsc -p apps/api/tests/tsconfig.json && tsc -p apps/web/tests/e2e/tsconfig.json",
-    "lint": "eslint .",
+    "lint": "eslint . --concurrency=off",
     "test": "pnpm -r test",
     "test:integration": "pnpm --filter @forestshop/api test:integration",
+    "gates:local": "pnpm typecheck && pnpm lint && pnpm test",
     "catalog:ingest": "tsx scripts/catalog-ingest.ts",
     "catalog:prune-raw": "tsx scripts/catalog-prune-raw.ts",
     "orders:ingest": "tsx scripts/orders-ingest.ts"

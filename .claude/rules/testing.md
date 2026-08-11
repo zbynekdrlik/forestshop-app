@@ -11,6 +11,13 @@ paths:
 
 # Tests
 
+- **`test:integration` a `e2e` sa lokálne na dev1 default NESPÚŠŤAJÚ (issue
+  351)** — bežia bezpodmienečne v `ci.yml` (`.claude/rules/ci.md`), lokálne
+  ostáva len `pnpm gates:local` (typecheck+lint+unit testy). Spusti tú
+  jednu heavy sadu lokálne LEN keď tiket priamo zasahuje jej oblasť
+  (obrazovky→e2e, DB/prihlásenie→integration), nikdy obe naraz, nikdy
+  súbežne s ničím iným. Plný dôvod + namerané čísla: `.claude/rules/local-
+  dev.md`.
 - **`apps/api` má dve úrovne testov, oddelené priečinkom aj scriptom:**
   - `src/**/*.test.ts` → `pnpm --filter @forestshop/api test` (`vitest run
     src`) — bežia BEZ databázy, čisto unit (napr. rate-limiter, password

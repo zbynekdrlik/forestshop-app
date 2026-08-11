@@ -3,6 +3,12 @@ import { defineConfig } from "@playwright/test";
 export default defineConfig({
   testDir: "./tests/e2e",
   timeout: 30_000,
+  // issue 351: dev1 (4 jadrá/7 GB) beží zdieľaný s ďalšími reláciami/
+  // projektmi — mimo CI preto e2e beží na JEDEN worker (žiadne súbežné
+  // Chromium procesy), aby prípadný manuálny lokálny beh (tiket priamo
+  // dotýkajúci sa obrazoviek) nezdvojnásobil zaťaženie. V CI (`process.env.CI`,
+  // GitHub Actions ho nastavuje automaticky) ostáva predvolený počet.
+  workers: process.env.CI ? undefined : 1,
   use: { baseURL: "http://127.0.0.1:5173", trace: "on-first-retry" },
   webServer: [
     {
