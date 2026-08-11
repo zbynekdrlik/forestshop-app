@@ -53,3 +53,28 @@ paths:
   inak by jeden pokazený beh zmazal adresy a odkazy by sa ticho vrátili na
   vyhľadávanie. Riadky, ktoré feed už neobsahuje, sa zámerne NEMAŽÚ: stará
   platná adresa je lepšia než žiadna.
+- **issue 347: `image_url` (nullable, additive migrácia) — obrázok produktu
+  z `<g:image_link>`, rovnaká disciplína ako `availability` (UPSERT
+  prepíše na aktuálnu hodnotu vrátane `null`, keď feed značku stratí).
+  Používa ho `nedostupne/resolve-products.ts`'s produktová karta v
+  e-maile "alternatívy k nedostupnému tovaru".**
+- **Job nemá "spusti teraz" tlačidlo (`.claude/rules/scheduler.md`) — po
+  deployi zmeny, ktorá závisí od ČERSTVÝCH dát (napr. nový stĺpec ako
+  `image_url` vyššie), treba pred naživo overením spustiť RUČNE presne tú
+  istú cestu, akú beží nočný beh (03:50), priamo v kontajneri appky:**
+  ```
+  ssh newlevel@dev2
+  docker exec forestshop-app-1 node -e "
+  import('/app/apps/api/dist/db/client.js').then(async ({createDb}) => {
+    const { runShopFeed } = await import('/app/apps/api/dist/modules/shop-feed/run.js');
+    const { createHttpShopFeedFetcher } = await import('/app/apps/api/dist/modules/shop-feed/fetcher.js');
+    const { db, pool } = createDb();
+    const fetchFeed = createHttpShopFeedFetcher('https://www.forestshop.sk/google.xml');
+    console.log(JSON.stringify(await runShopFeed({ db, now: new Date(), fetchFeed })));
+    await pool.end();
+  }).catch(e => { console.error(e); process.exit(1); });
+  "
+  ```
+  Legitímne a nedeštruktívne — presne ten istý UPSERT ako plánovaný beh,
+  len skôr. `createDb()` si `DATABASE_URL` zoberie sám z kontajnerového
+  prostredia (`db/client.ts`), netreba ho zadávať.
