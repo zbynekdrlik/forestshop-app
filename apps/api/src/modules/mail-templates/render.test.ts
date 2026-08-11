@@ -11,6 +11,16 @@ const CTX: TemplateContext = {
   odkaz_sledovanie: { kind: "link", url: "https://tandt.posta.sk/x", label: "https://tandt.posta.sk/x" },
   zoznam_nahrad: { kind: "list", textPrefix: "- ", items: [{ label: "Podkolienky BOBR", url: "https://e.sk/bobr" }] },
   prazdny_zoznam: { kind: "list", items: [] },
+  // issue 347: zoznam s produktovou kartou — jeden prvok má obrázok+cenu,
+  // druhý (nedohľadaný odkaz) ich nemá, aby test overil aj miešaný zoznam.
+  zoznam_karta: {
+    kind: "list",
+    textPrefix: "- ",
+    items: [
+      { label: "Nohavice FOREST 1003", url: "https://e.sk/nohavice", imageUrl: "https://cdn.e.sk/nohavice.jpg", priceText: "64,90 €" },
+      { label: "https://e.sk/nedohladany", url: "https://e.sk/nedohladany" },
+    ],
+  },
 };
 
 const ALLOWED = new Set(Object.keys(CTX));
@@ -82,15 +92,77 @@ describe("renderTemplate — podmienky", () => {
 });
 
 describe("renderTemplate — zoznam", () => {
-  it("v HTML je odrážkový zoznam s odkazmi, v texte riadky s predponou", () => {
+  it("v HTML je odrážkový zoznam s odkazmi (bez obrázka — nezmenené správanie)", () => {
     const out = renderTemplate({ subject: "x", body: "Náhrady:\n{{zoznam_nahrad}}" }, CTX);
     expect(out.html).toContain('<li><a href="https://e.sk/bobr" target="_blank">Podkolienky BOBR</a></li>');
-    expect(out.text).toBe("Náhrady:\n- Podkolienky BOBR (https://e.sk/bobr)");
+  });
+
+  // issue 347: názov a adresa idú na SAMOSTATNÉ riadky — nikdy "názov (url)",
+  // aby text v poštovom klientovi nikdy neukázal adresu zdvojenú v zátvorke.
+  it("v texte idú názov a adresa na samostatné riadky, nikdy adresa v zátvorke", () => {
+    const out = renderTemplate({ subject: "x", body: "Náhrady:\n{{zoznam_nahrad}}" }, CTX);
+    expect(out.text).toBe("Náhrady:\n- Podkolienky BOBR\nhttps://e.sk/bobr");
+    expect(out.text).not.toContain("(https://e.sk/bobr)");
   });
 
   it("prázdny zoznam nevyrobí prázdny <ul>", () => {
     const out = renderTemplate({ subject: "x", body: "A\n{{prazdny_zoznam}}" }, CTX);
     expect(out.html).not.toContain("<ul>");
+  });
+});
+
+// issue 347: majiteľov nahlásený bug — odkaz v e-maile mal ako text celú
+// adresu (zdvojenú), žiadny obrázok produktu, kontakty stratené vo vete.
+describe("renderTemplate — produktová karta v zozname (issue 347)", () => {
+  it("prvok s obrázkom sa vykreslí ako karta (obrázok + klikací NÁZOV, nikdy holá adresa ako text odkazu)", () => {
+    const out = renderTemplate({ subject: "x", body: "Ponúkame:\n{{zoznam_karta}}" }, CTX);
+    expect(out.html).toContain('<img src="https://cdn.e.sk/nohavice.jpg"');
+    expect(out.html).toContain('<a href="https://e.sk/nohavice"');
+    expect(out.html).toContain(">Nohavice FOREST 1003<");
+    expect(out.html).toContain("64,90");
+    // odkaz na produkt sa nesmie ukázať ako holý text URL (pôvodný bug)
+    expect(out.html).not.toContain(">https://e.sk/nohavice<");
+  });
+
+  it('karta má tlačidlo "Zobraziť produkt"', () => {
+    const out = renderTemplate({ subject: "x", body: "{{zoznam_karta}}" }, CTX);
+    expect(out.html).toContain("Zobraziť produkt");
+  });
+
+  it("prvok BEZ obrázka (nedohľadaný odkaz) v tom istom zozname sa vykreslí bez <img>, ale nezhodí zvyšok karty", () => {
+    const out = renderTemplate({ subject: "x", body: "{{zoznam_karta}}" }, CTX);
+    // druhý prvok nemá imageUrl — nesmie vyrobiť <img src="undefined">
+    expect(out.html).not.toContain("undefined");
+  });
+
+  it("zoznam s obrázkom sa v HTML nevykreslí ako <ul><li> (karta nahrádza zoznam)", () => {
+    const out = renderTemplate({ subject: "x", body: "{{zoznam_karta}}" }, CTX);
+    expect(out.html).not.toContain("<li>");
+  });
+
+  it("v texte je pri prvku s cenou aj cena, adresa vždy na vlastnom riadku", () => {
+    const out = renderTemplate({ subject: "x", body: "{{zoznam_karta}}" }, CTX);
+    expect(out.text).toContain("Nohavice FOREST 1003");
+    expect(out.text).toContain("64,90");
+    expect(out.text).toContain("https://e.sk/nohavice");
+    expect(out.text).not.toContain("(https://e.sk/nohavice)");
+  });
+});
+
+// issue 347: spoločná kostra — hlavička + pätička s kontaktami, na VŠETKÝCH
+// e-mailoch appky (kontakty dnes vedeli byť stratené vo vete).
+describe("renderTemplate — spoločná HTML kostra (issue 347)", () => {
+  it("HTML má hlavičku s odkazom na Forestshop.sk", () => {
+    const out = renderTemplate({ subject: "x", body: "Ahoj." }, CTX);
+    expect(out.html).toContain(">Forestshop.sk<");
+    expect(out.html).toContain('href="https://www.forestshop.sk"');
+  });
+
+  it("HTML má oddelenú pätičku s klikacím telefónom, e-mailom a webom — nezávisle od obsahu tela šablóny", () => {
+    const out = renderTemplate({ subject: "x", body: "Text bez akejkoľvek zmienky o kontaktoch." }, CTX);
+    expect(out.html).toContain('href="tel:+421903670766"');
+    expect(out.html).toContain('href="mailto:eshop@forestshop.sk"');
+    expect(out.html).toContain("+421 903 670 766");
   });
 });
 
@@ -144,6 +216,16 @@ describe("renderEditedBody — jednorazová ručná úprava (issue 277)", () => 
     expect(out.html).toContain("<p>Dobrý deň,<br>\n      ešte dopĺňam vetu.</p>");
     expect(out.html).toContain("<p>S pozdravom,<br>\n      obchod</p>");
     expect(out.text).toBe("Dobrý deň,\nešte dopĺňam vetu.\n\nS pozdravom,\nobchod");
+  });
+
+  // issue 347: ručne upravený text (okno náhľadu pred odoslaním) dostane
+  // TÚ ISTÚ spoločnú kostru (hlavička/pätička) ako šablónou vygenerovaný
+  // e-mail — kostra sa aplikuje na oboch vykresľovacích cestách.
+  it("dostane rovnakú hlavičku/pätičku ako šablónou vygenerovaný e-mail (issue 347)", () => {
+    const out = renderEditedBody("Ahoj.");
+    expect(out.html).toContain(">Forestshop.sk<");
+    expect(out.html).toContain('href="tel:+421903670766"');
+    expect(out.html).toContain('href="mailto:eshop@forestshop.sk"');
   });
 
   it("HTML napísané obsluhou sa ESCAPUJE, nikdy sa nestane surovou značkou", () => {
