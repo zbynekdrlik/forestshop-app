@@ -2,6 +2,7 @@ import type { ComponentType } from "react";
 import type { Me } from "./api.js";
 import { CatalogPage } from "./components/CatalogPage.js";
 import { ClaimOrdersSection } from "./components/ClaimOrdersSection.js";
+import { DailyTasksSection } from "./components/DailyTasksSection.js";
 import { DpdSection } from "./components/DpdSection.js";
 import { ExchangeOrdersSection } from "./components/ExchangeOrdersSection.js";
 import { MailLogSection } from "./components/MailLogSection.js";
@@ -72,6 +73,27 @@ export interface NavFolder {
 // App.tsx/Sidebar.tsx.
 export const NAV: readonly NavFolder[] = [
   {
+    id: "dolezite",
+    label: "Dôležité",
+    // issue 342: šéfovo zadanie (Discord, 11.8.2026) — nahrádza jeho poznámky
+    // písané do Discord kanála #úlohy-na-dnes. Priečinok je zámerne PRED
+    // "Eshop" (poradie prvkov = poradie vykreslenia, rovnaký princíp ako
+    // issue 287's presun "Eshop" na prvé miesto) a `defaultCollapsed`
+    // NENASTAVENÉ (teda rozbalený, na rozdiel od "Systém"/"Automatizácie" z
+    // issue 343) — je to dennodenne používaná obrazovka, má byť vidno hneď
+    // bez extra kliku.
+    tabs: [
+      // Presunuté z priečinka "eshop" (predtým riadok tam nižšie) — žiadna
+      // zmena `UpozorneniaSection.tsx`/routes/schémy, len iné miesto v menu
+      // (`isVisibleTabId`/`findTab` fungujú z REGISTRA, nie z priečinka).
+      { id: "upozornenia", label: "Upozornenia", icon: "🔔", Component: UpozorneniaSection, wide: true },
+      // issue 342: nová obrazovka — kompaktný, chronologický osobný zoznam
+      // úloh (najnovšie hore). `wide` sa NENASTAVUJE — je to jednoduchý
+      // stĺpec riadkov, nie hustá viacstĺpcová tabuľka, čitacia šírka stačí.
+      { id: "ulohy", label: "Úlohy na dnes", icon: "📝", Component: DailyTasksSection },
+    ],
+  },
+  {
     id: "eshop",
     label: "Eshop",
     // issue 287: majiteľ, "adresár Eshop dať uplne ako prvý... Eshop je to,
@@ -111,11 +133,6 @@ export const NAV: readonly NavFolder[] = [
       // z rovnakého dôvodu ako "Párovanie produktov"/"Vyhľadať" vyššie
       // (obsluha na nej pracuje, žiadny plán/zapnuté-vypnuté koncept).
       { id: "order-merge", label: "Zlúčenie objednávok", icon: "🔀", Component: OrderMergeSection, wide: true },
-      // issue 267: "Upozornenia" — nástenka vecí, ktoré majiteľ musí vybaviť
-      // (vlastné poznámky + budúce automatické zdroje #268/#269). Patrí sem
-      // (nie do Automatizácie) z rovnakého dôvodu ako "Na objednanie" —
-      // obsluha na nej pracuje, žiadny plán/zapnuté-vypnuté koncept.
-      { id: "upozornenia", label: "Upozornenia", icon: "🔔", Component: UpozorneniaSection, wide: true },
       // issue 292: majiteľ (Discord, 6.8.2026) — jedno tlačidlo na objednanie
       // prepravy DPD. Patrí sem (nie do Automatizácie) z rovnakého dôvodu ako
       // "Na objednanie"/"Zlúčenie objednávok" — obsluha na nej pracuje ručne
