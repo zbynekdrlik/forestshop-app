@@ -6,9 +6,11 @@ import {
   saveProductLink,
   searchProductLinks,
   SupplierLinksUnauthorizedError,
+  PAGE_SIZE,
   type ProductLinkItem,
   type ProductLinkState,
 } from "../supplierLinksApi.js";
+import { useLoadMore } from "../useLoadMore.js";
 
 // issue 239: "Eshop → Párovanie produktov" — priamy náprotivok
 // `PairingSection.tsx`, ale kľúčovaný PRODUKTOM (nie variantom): jeden riadok
@@ -76,10 +78,23 @@ export function SupplierLinksSection({
     };
   }, []);
 
+  // issue 337: zdieľaný "Načítať ďalšie" mechanizmus, `useLoadMore.ts`.
+  const loadMoreState = useLoadMore<ProductLinkItem>({
+    mountedRef,
+    onAppend: (newItems, newTotal) => {
+      setItems((prev) => [...prev, ...newItems]);
+      setTotal(newTotal);
+    },
+    onError: () => {
+      setSearchError("Načítanie ďalších položiek zlyhalo.");
+    },
+  });
+
   const search = useCallback(
     (q: string, s: ProductLinkState) => {
       const seq = (searchSeq.current += 1);
       setSearchError("");
+      loadMoreState.reset();
       searchProductLinks({ q, state: s, page: 1 })
         .then((result) => {
           if (!mountedRef.current) return; // odmountované skôr, než odpoveď doletela
@@ -381,6 +396,21 @@ export function SupplierLinksSection({
           </tbody>
         </table>
         </div>
+      )}
+
+      {items.length < total && (
+        <button
+          type="button"
+          data-testid="load-more"
+          disabled={loadMoreState.loadingMore}
+          onClick={() => {
+            loadMoreState.loadMore((page) => searchProductLinks({ q: query, state, page }));
+          }}
+        >
+          {loadMoreState.loadingMore
+            ? "Načítavam…"
+            : `Načítať ďalšie (${String(Math.min(PAGE_SIZE, total - items.length))})`}
+        </button>
       )}
     </section>
   );
