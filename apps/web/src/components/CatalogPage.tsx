@@ -170,10 +170,26 @@ export function CatalogPage({
     },
   });
 
+  // requesting-code-review finding (issue 337): the "Load more" button MUST
+  // fetch the next page of the filter that actually produced the CURRENT
+  // `items`/`total` — NOT whatever `query`/`state` currently hold, which
+  // track every keystroke/select-change independent of whether `search()`
+  // has actually run for them. Without this, typing a new (unsubmitted)
+  // query after a search renders, then clicking "Load more", silently
+  // fetches page 2 of the NEW query while `total` still reflects the OLD
+  // one — set synchronously inside `search()` itself (same "sync in the
+  // function that owns the value, not via useEffect" discipline as
+  // `queryRef`/`stateRef` above, since `search()` already receives the
+  // exact q/s that will produce the results these refs must describe).
+  const searchedQueryRef = useRef(query);
+  const searchedStateRef = useRef(state);
+
   const search = useCallback(
     (q: string, s: CatalogState) => {
       const seq = (searchSeq.current += 1);
       setSearchError("");
+      searchedQueryRef.current = q;
+      searchedStateRef.current = s;
       loadMoreState.reset();
       searchCatalogVariants({ q, state: s, page: 1 })
         .then((result) => {
@@ -348,7 +364,9 @@ export function CatalogPage({
           data-testid="load-more"
           disabled={loadMoreState.loadingMore}
           onClick={() => {
-            loadMoreState.loadMore((page) => searchCatalogVariants({ q: query, state, page }));
+            loadMoreState.loadMore((page) =>
+              searchCatalogVariants({ q: searchedQueryRef.current, state: searchedStateRef.current, page }),
+            );
           }}
         >
           {loadMoreState.loadingMore
