@@ -80,3 +80,23 @@ it("nové vyhľadávanie (zmena dopytu) resetuje stranu späť na 1 — ďalší
     expect(searchRestockLinkSuggestions).toHaveBeenLastCalledWith({ q: "iny", page: 2 });
   });
 });
+
+// requesting-code-review finding (issue 337, rovnaký nález ako
+// `CatalogPage.loadMore.test.tsx`): "Load more" musí žiadať ďalšiu stranu
+// naposledy ODOSLANÉHO dopytu, nie práve rozpísaný (neodoslaný) text —
+// na rozdiel od testu vyššie, tu sa nový dopyt NIKDY neodošle (žiadny klik
+// na "Zobraziť").
+it("po rozpísaní NEODOSLANÉHO nového dopytu žiada 'Načítať ďalšie' ďalej stranu PÔVODNÉHO (naposledy odoslaného) dopytu", async () => {
+  searchRestockLinkSuggestions.mockResolvedValueOnce({ total: 2, items: [item("RL-1")] });
+  searchRestockLinkSuggestions.mockResolvedValueOnce({ total: 2, items: [item("RL-2")] });
+
+  render(<RestockLinkSuggestionsSection role="manazer" onSessionExpired={() => {}} />);
+  await screen.findByTestId("restock-link-row-RL-1");
+
+  fireEvent.change(screen.getByLabelText("Hľadať produkt (kód alebo názov)"), { target: { value: "nieco-ine" } });
+
+  fireEvent.click(await screen.findByTestId("load-more"));
+  await screen.findByTestId("restock-link-row-RL-2");
+
+  expect(searchRestockLinkSuggestions).toHaveBeenLastCalledWith({ q: "", page: 2 });
+});

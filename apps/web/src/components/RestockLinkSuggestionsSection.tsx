@@ -73,9 +73,17 @@ export function RestockLinkSuggestionsSection({
     },
   });
 
+  // requesting-code-review finding (issue 337, same fix as `CatalogPage
+  // .tsx`/`PairingSection.tsx`/`SupplierLinksSection.tsx`): "Load more"
+  // must fetch the next page of the query that produced the CURRENT
+  // `items`/`total`, not whatever `query` currently holds — set
+  // synchronously inside `search()` itself.
+  const searchedQueryRef = useRef(query);
+
   const search = useCallback((q: string) => {
     const seq = (searchSeq.current += 1);
     setSearchError("");
+    searchedQueryRef.current = q;
     loadMoreState.reset();
     searchRestockLinkSuggestions({ q, page: 1 })
       .then((result) => {
@@ -365,7 +373,7 @@ export function RestockLinkSuggestionsSection({
           data-testid="load-more"
           disabled={loadMoreState.loadingMore}
           onClick={() => {
-            loadMoreState.loadMore((page) => searchRestockLinkSuggestions({ q: query, page }));
+            loadMoreState.loadMore((page) => searchRestockLinkSuggestions({ q: searchedQueryRef.current, page }));
           }}
         >
           {loadMoreState.loadingMore
