@@ -395,6 +395,64 @@ paths:
   `docker compose exec postgres psql` dopyt na `supplier_stock` po
   konkrétnej doméne PO dokončení behu (`SELECT status FROM job_run WHERE
   id=...`).
+- **Issue 332: po issue 330's fail-closed zmene je populácia domén bez
+  pravidla VÄČŠIA, než ukázala pôvodná diagnostika (10.8.: 9/36) — naživo
+  premerané 11.8. proti produkcii: 28 domén, 434 riadkov.** Pridané tri nové
+  domény, KAŽDÁ so živo overeným dôvodom, prečo sa dá spoľahlivo prečítať:
+  `hunting24.cz`/`chocolenka.cz` (rovnaká Shoptet šablóna ako issue 227/307 —
+  len pridanie hosta do existujúceho `shoptetLabelAvailability`) a
+  `vreckovynoz.sk` (nová vlastná trieda `<p
+  class=product-detail__availability>`, bez úvodzoviek v markupe, rovnaký
+  jav ako `rosler.sk`). Doména kóduje diakritiku ako číselné HTML entity
+  inde na stránke (naživo overené), preto `decodeNumericEntities`
+  defenzívne, presne ako `rosler.sk`.
+- **`shoptetLabelAvailability`'s pôvodný regex predpokladal, že
+  `data-testid="labelAvailability"` `<span>` NIKDY nenesie vnorený ĎALŠÍ
+  `<span>` — `chocolenka.cz` (issue 332) to porušuje.** Táto doména obaľuje
+  text label-u vlastným vnoreným tooltip `<span title="…dodacia
+  poznámka…">Skladem</span>` (hover s dodacou lehotou). Pôvodný `[\s\S]*?`
+  capture sa zastavil na PRVOM `</span>` (tomto vnorenom), takže vrátený
+  text niesol nezošmiznutý HTML fragment vrátane celej `title=` hodnoty —
+  fungovalo to doteraz len náhodou (slovo "Skladem" bolo súčasťou textu a
+  tooltip neniesol žiadne kolízne `OUT_KEYWORDS` slovo). Fix: `title=`/`alt=`
+  atribúty sa stripujú PRED stripom tagov, nie po ňom — hodnota vie niesť
+  vlastný `<br />` vnútri úvodzoviek, ktorý by jednoduchý `<[^>]+>` strip
+  inak rozdelil na dve časti uprostred atribútu. Test pri KAŽDEJ ĎALŠEJ
+  doméne pridanej do `shoptetLabelAvailability`'s zoznamu: over naživo, či
+  `data-testid="labelAvailability"` `<span>` obaľuje ešte niečo iné než holý
+  text — Shoptet šablóny sa medzi zákazníkmi líšia aj v tomto.
+- **Rovnaká Shoptet trieda `class="availability-label"` existuje aj na
+  NOVŠEJ šablóne verzii (werra.cz/soxland.sk/citrade.cz, issue 332), ale BEZ
+  `data-testid="labelAvailability"` vôbec — tá šablóna ukazuje len
+  `numberAvailabilityAmount` (počet kusov PRI KAŽDEJ veľkosti v selecte
+  zvlášť), žiadny jeden súhrnný text pre "aktuálne zvolenú" veľkosť.**
+  Pridanie týchto troch domén do `shoptetLabelAvailability`'s zoznamu by
+  nezmenilo nič (extraktor by vždy vrátil `null`) — ZÁMERNE vynechané,
+  overené naživo `grep`om testid zoznamu celej stránky, nielen chýbajúcou
+  zhodou na jednej vzorke. Test pri KAŽDEJ ĎALŠEJ Shoptet doméne: over, že
+  `data-testid="labelAvailability"` v stránke SKUTOČNE existuje (nielen
+  trieda `availability-label`) predtým, než sa pridá do zoznamu.
+- **Issue 332 ZÁMERNE nevyriešilo viacero ďalších veľkých domén — každá s
+  vlastným naživo overeným dôvodom, žiadny dohad:** `tatragoat.sk` (22
+  neznámych) je momentálne celá v "Režim údržby" (HTTP 503,
+  `retry-after: 3600`) — nedá sa postaviť pravidlo na stránke, ktorá sa
+  nedá stiahnuť. `lovuzdar.cz` (21) aj `huntingland.sk` (8) majú hlavný
+  produkt BEZ vlastného static dostupnostného prvku — u `huntingland.sk`
+  (PrestaShop) je `<span id="availability_value">` PRÁZDNY (dopĺňa sa AJAXom
+  po JS) a JEDINÉ nájdené `class="availability"` výskyty patria karuselu
+  "Súvisiace"/"Kúpené spolu" ĎALEKO za hlavným produktom; u `lovuzdar.cz`
+  všetkých 7 nájdených "Skladem" výskytov patrí grid-u podobných produktov,
+  hlavná produktová oblasť nemá žiadny stock indikátor vôbec.
+  `b2b.orbis-textil.de` (11) vyžaduje prihlásenie (naživo overené: redirect
+  na `cl=account`). `betalov.sk` (11) nemá ŽIADEN viditeľný dostupnostný
+  text v static HTML — jediný signál je GA `dataLayer` JS premenná
+  (`is_item_in_stock`), presne ten typ strojového údaja bez viditeľného
+  sprievodcu, čomu sa má tento ticket vyhnúť. `termovel.sk` (4) má jediný
+  kandidát (`deliveryTime`) v `parameter-dependent no-display` obaľovači
+  (JS-riadený, rovnaký jav ako `luko.cz`). `grube.de` (4) je JS SPA — static
+  HTML po presmerovaní je prázdne/500. `b2b.outhunt.eu` (2) má jediný
+  nájdený signál vnorený v app-state JSON (`"stockStatus":"in_stock"`), bez
+  oddeleného viditeľného textu na krížovú kontrolu.
 - **"Prepnuté produkty" (história prepnutí, `restock_event`) bola DOTERAZ
   jediná z troch tabuliek na tejto obrazovke bez akéhokoľvek odkazu na náš
   produkt** — dostala ho od issue 329 rovnakým LEFT JOIN vzorom ako

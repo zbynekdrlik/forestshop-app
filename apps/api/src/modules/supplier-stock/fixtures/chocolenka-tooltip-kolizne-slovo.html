@@ -1,0 +1,22 @@
+<!-- issue 332: regresný test (mechanizmus, nie naživo pozorovaná vzorka) —
+     vnorený tooltip <span title="…"> obsahuje kolízne OUT_KEYWORDS slovo
+     "nedostupny" (dopravná poznámka, nič spoločné so skladovou dostupnosťou
+     produktu samotného). BEZ title=/alt= stripu pred stripom tagov by
+     garbled extrahovaný text niesol aj toto slovo, "vypredané vyhráva nad
+     skladom" pravidlo (availabilityFromText) by ho vyhodnotilo ako
+     `unavailable` — nesprávne, produkt JE skladom. S opravou sa title=
+     hodnota odstráni PRED stripom tagov, takže sa do textu vôbec nedostane. -->
+<!doctype html>
+<html lang="sk">
+<head><title>Testovací produkt s kolíznym tooltipom</title></head>
+<body>
+<div class="product-detail">
+  <div class="availability-value" title="Dostupnost">
+    <span class="availability-label" style="color: #009901" data-testid="labelAvailability">
+                    <span class="show-tooltip acronym" title="Kurier je momentalne nedostupny v tejto oblasti, expedicia sa predlzi.">
+                Skladem
+            </span>
+  </div>
+</div>
+</body>
+</html>

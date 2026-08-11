@@ -89,3 +89,42 @@ paths:
   na KAŽDÉ ĎALŠIE naživo overenie "pridaj odkaz" flow na produkte, čo dovtedy
   ŽIADEN odkaz nemal: `synced_at IS NULL` je podmienka bezpečného zmazania,
   NIE predpoklad — over ju dopytom PRED zmazaním, nikdy nepredpokladaj.
+- **Issue 331: prečo #311 nezdvihlo pokrytie ODKAZOV, hoci mechanizmus návrhov
+  funguje bezchybne — chýbala VIDITEĽNOSŤ a RÝCHLOSŤ, nie logika.** Živé
+  overenie: všetkých vtedy chýbajúcich produktov malo aspoň jedného
+  navrhnutého kandidáta (`with_candidates` = 100 %), ale
+  `product_supplier_link_override` nezaznamenala ANI JEDNO nové potvrdenie
+  medzi nasadením #311 a nálezom #331 — obrazovka SAMA ukazovala "Nájdených:
+  N", ale toto číslo bolo vidno LEN po vyslovnom otvorení tejto jednej
+  obrazovky, nikde inak v appke. Fix: **odznak v ľavom menu** (`App.tsx`'s
+  `restockLinksMissingCount`, presne rovnaký vzor ako `upozorneniaCount`/
+  issue 267 — `fetchRestockLinksMissingCount`, `restockLinksApi.ts`, číta
+  TEN ISTÝ `GET /api/restock-links` s `pageSize=1`, keďže `total` sa počíta
+  nad CELOU odfiltrovanou množinou nezávisle od `pageSize`) plus
+  **jednoklikové potvrdenie**: predošlý dvojklikový "💡 Použiť → predvyplní
+  vstup → 💾 Uložiť" sa zmenil na "✅ Potvrdiť" (jeden klik, meno aj URL
+  kandidáta viditeľné na tlačidle PRED kliknutím — stále výslovné ľudské
+  potvrdenie na KONKRÉTNOM návrhu, nikdy auto-priradenie). "✏️ Doplniť"
+  (ručný/opravný vstup, top kandidát predvyplnený) ostáva bezo zmeny pre
+  korekciu. Zamietnutá alternatíva: karta na nástenke "Upozornenia" — tá
+  tabuľka je postavená na PER-UDALOSŤ dedup/resolve sémantike (konkrétna
+  zásielka/vrátenie), nie na živý agregovaný počet inej obrazovky; 30+
+  samostatných kariet by zaplavilo nástenku, ktorú majiteľ výslovne žiadal
+  držať krátku (#303/#327). Test pri KAŽDOM ĎALŠOM "prečo sa X nepoužíva,
+  hoci appka to vie" tickete: over NAJPRV, či je populácia/logika naozaj
+  chybná (živý dopyt), než sa hľadá UI príčina — tu bola logika v poriadku,
+  problém bol čisto vo VIDITEĽNOSTI a POČTE KLIKOV.
+- **Overenie produkčných čísel PRED písaním kódu (živý dopyt cez appkinu
+  VLASTNÚ, už skompilovanú logiku, nie ručne prepísaný SQL ekvivalent)**:
+  `docker exec forestshop-app-1 sh -c 'cd /app/apps/api && node -e "const {
+  createDb } = require(\"./dist/db/client.js\"); const { <funkcia> } =
+  require(\"./dist/modules/<modul>/queries.js\"); const { db } =
+  createDb(process.env.DATABASE_URL); <funkcia>(db, {...}).then(r =>
+  console.log(JSON.stringify(r)));"'` — `createDb()` vracia `{ pool, db }`,
+  nie priamo `db` (bežná chyba: `db.select is not a function` pri
+  zabudnutí `.db`). Toto beží PRIAMO appkinu skutočnú `suggestCandidates`/
+  `listRestockLinkSuggestions` logiku (žiadne riziko, že ručne napísaný SQL
+  ekvivalent nesedí s tým, čo appka reálne robí) — použité pri issue 331 na
+  overenie "majú VŠETKY chýbajúce produkty kandidáta?" bez písania
+  jediného riadku appkového kódu vopred. Rovnaký vzor pre KAŽDÉ ĎALŠIE
+  "over živé číslo/správanie appkinej logiky na produkcii" pred diagnózou.

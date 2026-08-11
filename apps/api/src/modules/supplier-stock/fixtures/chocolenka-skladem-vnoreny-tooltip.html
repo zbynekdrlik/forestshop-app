@@ -1,0 +1,23 @@
+<!-- issue 332: chocolenka.cz — ROVNAKÁ zdieľaná Shoptet šablóna, ale s
+     VNORENÝM tooltip <span title="…"> priamo vnútri
+     data-testid="labelAvailability" (dodacia poznámka pri hovere). Overené
+     naživo 11. 8. 2026 — bez `title=`/`alt=` stripu pred stripom tagov by
+     extrahovaný text niesol nezošmiznutý HTML fragment namiesto čistého
+     "Skladem" (fungovalo doteraz náhodou, lebo tooltip neniesol kolízne
+     kľúčové slovo). Titulok tu zámerne obsahuje vlastný <br /> vnútri
+     úvodzoviek — presne to, čo naživo pozorovaná stránka robí. -->
+<!doctype html>
+<html lang="sk">
+<head><title>Čokoládová sada Rybár</title></head>
+<body>
+<div class="product-detail">
+  <div class="availability-value" title="Dostupnost">
+    <span class="availability-label" style="color: #009901" data-testid="labelAvailability">
+                    <span class="show-tooltip acronym" title="Odosielame do 4 dni (vyraba sa priamo na objednavku).<br />
+Ina poznamka o dorucen-.">
+                Skladem
+            </span>
+  </div>
+</div>
+</body>
+</html>

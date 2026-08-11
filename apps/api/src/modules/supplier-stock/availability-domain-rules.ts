@@ -96,25 +96,84 @@ function trigonaStockRegion(html: string, url: string): string | null {
 }
 
 /**
- * virginiashop.sk/tenolix.cz/luko.cz/zubicek.cz (issue 227, issue 307):
- * rovnaká Shoptet šablóna, jednoveľkostný produkt nesie `<span
- * class="availability-label" ... data-testid="labelAvailability">Skladom/
- * Skladem/Momentálne(ě) nedostupné</span>` — text sa vracia AKO JE a ide cez
- * existujúci `availabilityFromText` (žiadna nová farebná/triedová logika, na
- * rozdiel od trigona.sk). Naživo overené OBE polarity priamo na
- * virginiashop.sk aj tenolix.cz (rovnaká trieda, rovnaké farby
- * #009901/#cb0000); luko.cz aj zubicek.cz majú naživo overenú len zelenú
- * vetvu — ich sledované odkazy sú z veľkej časti VIACVEĽKOSTNÉ produkty,
- * ktoré tento `data-testid` vôbec nemajú (viď `whenRegionMissing` nižšie),
- * takže ostávajú `unknown` presne ako predtým. Viacvariantový produkt (viac
- * veľkostí/farieb naraz) tento `data-testid` NEVYKRESĽUJE vôbec — vtedy sa
- * nesmie nič uhádnuť z niektorej z viacerých zhôd, preto
- * `whenRegionMissing: "unknown"`.
+ * virginiashop.sk/tenolix.cz/luko.cz/zubicek.cz/hunting24.cz/chocolenka.cz
+ * (issue 227, issue 307, issue 332): rovnaká Shoptet šablóna, jednoveľkostný
+ * produkt nesie `<span class="availability-label" ...
+ * data-testid="labelAvailability">Skladom/Skladem/Momentálne(ě) nedostupné
+ * </span>` — text sa vracia AKO JE a ide cez existujúci `availabilityFromText`
+ * (žiadna nová farebná/triedová logika, na rozdiel od trigona.sk). Naživo
+ * overené OBE polarity priamo na virginiashop.sk aj tenolix.cz (rovnaká
+ * trieda, rovnaké farby #009901/#cb0000); luko.cz, zubicek.cz, hunting24.cz a
+ * chocolenka.cz majú naživo overenú len zelenú vetvu — ich sledované odkazy
+ * sú z veľkej časti VIACVEĽKOSTNÉ produkty, ktoré tento `data-testid` vôbec
+ * nemajú (viď `whenRegionMissing` nižšie), takže ostávajú `unknown` presne
+ * ako predtým. Viacvariantový produkt (viac veľkostí/farieb naraz) tento
+ * `data-testid` NEVYKRESĽUJE vôbec — vtedy sa nesmie nič uhádnuť z niektorej
+ * z viacerých zhôd, preto `whenRegionMissing: "unknown"`.
+ *
+ * Naživo overené, ĎALŠIA doména na tejto šablóne NEMÁ zaručene tú istú
+ * šablónu verziu — werra.cz/soxland.sk/citrade.cz (issue 332) sú tiež
+ * Shoptet, ale NOVŠIA šablóna tento `data-testid` VÔBEC nevykresľuje (má len
+ * per-veľkostný `numberAvailabilityAmount` v selecte veľkostí, žiadny jeden
+ * súhrnný text bez dohadu, ktorá veľkosť je "predvolená") — tie preto NIE SÚ
+ * v zozname nižšie, zámerne.
+ *
+ * `title=`/`alt=` atribút sa stripuje PRED stripom tagov (issue 332, nález
+ * pri overovaní chocolenka.cz): `data-testid="labelAvailability">` niekedy
+ * obaľuje ĎALŠÍ vnorený `<span title="…dodacia poznámka…">Skladem</span>`
+ * (tooltip) — pôvodný regex sa zastavil na PRVOM `</span>` (tomto vnorenom),
+ * takže vrátený text niesol nezošmiznutý HTML tag CELÉHO vnoreného `<span>`
+ * vrátane jeho `title=` hodnoty. Fungovalo to doteraz len náhodou (slovo
+ * "Skladem" bolo súčasťou textu a tooltip neniesol žiadne kolízne kľúčové
+ * slovo) — budúci tooltip s textom obsahujúcim napr. "nedostupné" by mohol
+ * vyhrať namiesto skutočnej dostupnosti. `title=`/`alt=` MUSÍ zmiznúť PRED
+ * `<[^>]+>` stripom, nie po ňom — hodnota tu vie niesť vlastný `<br />`,
+ * ktorý by inak jednoduchý tag-strip rozdelil na dve časti uprostred
+ * atribútu.
  */
 function shoptetLabelAvailability(html: string): string | null {
   const match = /<span\b[^>]*data-testid="labelAvailability"[^>]*>([\s\S]*?)<\/span>/i.exec(html);
   if (match === null) return null;
-  const text = (match[1] ?? "").replace(/\s+/g, " ").trim();
+  const text = (match[1] ?? "")
+    .replace(/\s(?:title|alt)="[^"]*"/gi, "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return text === "" ? null : text;
+}
+
+const VRECKOVYNOZ_AVAILABILITY_RE =
+  /<p\s+class=["']?product-detail__availability["']?>[\s\S]*?<span\s+class=["']?product-detail__code["']?>([\s\S]*?)<\/span>/i;
+
+/**
+ * vreckovynoz.sk (issue 332): hlavný produkt nesie dostupnosť v `<p
+ * class=product-detail__availability> Dostupnosť: <span
+ * class=product-detail__code>TEXT</span></p>` — BEZ úvodzoviek okolo triedy
+ * v reálnom markupe (rovnaký jav ako rosler.sk, issue 307). Trieda
+ * `product-detail__code` sa na stránke opakuje aj pre samotný KÓD produktu
+ * ("7.8330") v SAMOSTATNOM predchádzajúcom `<p>` — regex je preto ukotvený
+ * na `<p class=product-detail__availability>` PRED hľadaním vnoreného
+ * `<span>`u, takže kódový span sa nikdy nezachytí. Súvisiace produkty v
+ * karte nižšie na stránke majú ODLIŠNÚ triedu (`product-card__stock`), žiadna
+ * kolízia (overené naživo — obe triedy koexistujú na stránke, presne raz
+ * každá).
+ *
+ * Naživo overené 2× (2 rôzne produkty), obe "Skladom > N ks" — genuinný
+ * vypredaný text sa nenašiel (rovnaká situácia ako rosler.sk/wetland.sk),
+ * text ide cez existujúci `availabilityFromText`. Doména kóduje diakritiku
+ * ako číselné HTML entity INDE na stránke (naživo overené `curl`om —
+ * `&#x13E;`/`&#xE9;`/`&#x17E;`) — `decodeNumericEntities` sa preto aplikuje
+ * defenzívne, presne ako rosler.sk (issue 307): v našich dvoch vzorkách sa
+ * diakritika v SAMOTNOM dostupnostnom texte nevyskytla, ale budúci
+ * "Vypredané" text by inak mohol ticho spadnúť na `unknown` namiesto
+ * `unavailable`.
+ */
+function vreckovynozAvailability(html: string): string | null {
+  const match = VRECKOVYNOZ_AVAILABILITY_RE.exec(html);
+  if (match === null) return null;
+  const text = decodeNumericEntities((match[1] ?? "").replace(/&gt;/gi, ">"))
+    .replace(/\s+/g, " ")
+    .trim();
   return text === "" ? null : text;
 }
 
@@ -213,6 +272,9 @@ const TEXT_AVAILABILITY_RULES: readonly TextAvailabilityRule[] = Object.freeze([
   { host: "fomei.com", extractRegion: fomeiAvailabilityRegion, whenRegionMissing: "unknown" },
   { host: "rappa.cz", extractRegion: rappaStockRegion, whenRegionMissing: "unknown" },
   { host: "rosler.sk", extractRegion: roslerStockRegion, whenRegionMissing: "unknown" },
+  { host: "hunting24.cz", extractRegion: shoptetLabelAvailability, whenRegionMissing: "unknown" },
+  { host: "chocolenka.cz", extractRegion: shoptetLabelAvailability, whenRegionMissing: "unknown" },
+  { host: "vreckovynoz.sk", extractRegion: vreckovynozAvailability, whenRegionMissing: "unknown" },
 ]);
 
 export function textAvailabilityRuleFor(url: string): TextAvailabilityRule | null {

@@ -1,0 +1,18 @@
+<!-- issue 332: regresný test (mechanizmus, nie naživo overená vzorka —
+     genuinný vypredaný text sa na vreckovynoz.sk naživo nenašiel, presne
+     ako rosler.sk/wetland.sk). Doména kóduje diakritiku ako číselné HTML
+     entity INDE na stránke (naživo overené curl-om) — tento fixture overuje,
+     že entitovo kódované "Vypredan&#xE9;" sa DEKÓDUJE, nikdy len
+     nevyprázdni (rovnaký jav ako rosler.sk, issue 307). -->
+<!doctype html>
+<html lang="sk">
+<head><title>Testovací produkt</title></head>
+<body>
+<div class="product-detail">
+  <p class=product-detail__code>9.9999</p>
+  <p class=product-detail__availability> Dostupnosť:
+    <span class=product-detail__code> Vypredan&#xE9; </span>
+  </p>
+</div>
+</body>
+</html>
