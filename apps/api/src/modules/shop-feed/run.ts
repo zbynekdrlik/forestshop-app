@@ -52,6 +52,10 @@ export async function runShopFeed(options: RunShopFeedOptions): Promise<ShopFeed
           // stará hodnota z predošlého behu tíško prežívala a krížová
           // kontrola by porovnávala proti zastaranému signálu.
           availability: sql`excluded.availability`,
+          // issue 347: obrázok sa PREPÍŠE na aktuálnu hodnotu z tohto behu
+          // (vrátane NULL), rovnaká disciplína ako `availability` vyššie —
+          // inak by stará adresa obrázka z predošlého behu ticho prežívala.
+          imageUrl: sql`excluded.image_url`,
           fetchedAt: sql`excluded.fetched_at`,
         },
       });

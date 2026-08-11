@@ -22,4 +22,9 @@ export const shopProductUrl = pgTable("shop_product_url", {
   // Čas behu, ktorý riadok naposledy potvrdil — keď feed na strane Shoptetu
   // zamrzne, na obrazovke je vidieť, že mapa starne.
   fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull(),
+  // issue 347: obrázok produktu (`<g:image_link>`) — appka ho potrebuje na
+  // vykreslenie produktovej karty v e-maile "alternatívy k nedostupnému
+  // tovaru" (`nedostupne/resolve-products.ts`). Nullable rovnako ako
+  // `availability` vyššie — nie každá položka feedu obrázok nesie.
+  imageUrl: text("image_url"),
 });

@@ -105,3 +105,70 @@ describe("runShopFeed — ukladanie dostupnosti (issue 226)", () => {
     expect(row?.availability).toBeNull();
   });
 });
+
+// issue 347: `runShopFeed` musí uložiť aj `g:image_link` — appka ho potrebuje
+// na vykreslenie produktovej karty v e-maile "alternatívy k nedostupnému
+// tovaru" (`nedostupne/resolve-products.ts`).
+describe("runShopFeed — ukladanie obrázka produktu (issue 347)", () => {
+  let db: Database;
+  let close: () => Promise<void>;
+
+  beforeEach(async () => {
+    ({ db, close } = await withCleanDb());
+  });
+  afterEach(async () => {
+    await close();
+  });
+
+  function feedWithImage(rows: readonly { code: string; imageUrl: string | null }[]): string {
+    const entries = rows
+      .map(
+        (r) =>
+          `<entry><g:id>${r.code}</g:id><link>https://www.forestshop.sk/${r.code}/</link>${
+            r.imageUrl === null ? "" : `<g:image_link>${r.imageUrl}</g:image_link>`
+          }</entry>`,
+      )
+      .join("");
+    const filler = Array.from(
+      { length: 1_000 },
+      (_unused, i) => `<entry><g:id>IMG${String(i)}</g:id><link>https://www.forestshop.sk/img${String(i)}/</link></entry>`,
+    ).join("");
+    return `<feed>${entries}${filler}</feed>`;
+  }
+
+  it("uloží g:image_link spolu s kódom a adresou", async () => {
+    await runShopFeed({
+      db,
+      now: NOW,
+      fetchFeed: () =>
+        Promise.resolve(
+          feedWithImage([{ code: "I1", imageUrl: "https://cdn.example.sk/i1.jpg" }, { code: "I2", imageUrl: null }]),
+        ),
+    });
+
+    const rows = await db
+      .select({ code: shopProductUrl.code, imageUrl: shopProductUrl.imageUrl })
+      .from(shopProductUrl)
+      .where(inArray(shopProductUrl.code, ["I1", "I2"]))
+      .orderBy(asc(shopProductUrl.code));
+
+    expect(rows).toEqual([
+      { code: "I1", imageUrl: "https://cdn.example.sk/i1.jpg" },
+      { code: "I2", imageUrl: null },
+    ]);
+  });
+
+  it("pri opakovanom behu PREPÍŠE starší obrázok novým (UPSERT), aj keď feed značku STRATÍ (prepíše na null)", async () => {
+    const runOnce = (imageUrl: string | null) =>
+      runShopFeed({ db, now: NOW, fetchFeed: () => Promise.resolve(feedWithImage([{ code: "J1", imageUrl }])) });
+
+    await runOnce("https://cdn.example.sk/stary.jpg");
+    await runOnce("https://cdn.example.sk/novy.jpg");
+    let [row] = await db.select({ imageUrl: shopProductUrl.imageUrl }).from(shopProductUrl).where(eq(shopProductUrl.code, "J1"));
+    expect(row?.imageUrl).toBe("https://cdn.example.sk/novy.jpg");
+
+    await runOnce(null);
+    [row] = await db.select({ imageUrl: shopProductUrl.imageUrl }).from(shopProductUrl).where(eq(shopProductUrl.code, "J1"));
+    expect(row?.imageUrl).toBeNull();
+  });
+});
