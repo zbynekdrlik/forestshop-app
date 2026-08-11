@@ -1148,3 +1148,25 @@ paths:
   duplicita). Prioritné poradie (číslo > bodka > nič) je explicitné
   zadanie na tickete, nie odvodené — pri podobnom "súhrn na zbalenom
   kontajneri" v budúcnosti si vyžiadaj/over presné poradie, nepredpokladaj ho.
+- **A per-row visual "state accent" (left border/stripe on SOME rows of a
+  list, not all) needs `box-shadow: inset <x> 0 0 <color>`, NEVER a real
+  `border-left`, even a "transparent-reserved on every row" one.** Issue
+  344 (Nedostupné tovary — vybavené riadky odlíšené farbou): the first
+  attempt reserved a 3px `border-left: solid transparent` on EVERY row so
+  the state-coloured rows wouldn't "jog" relative to pending ones — but a
+  real border still consumes box-model space, and NOTHING else in the same
+  card (the group header, the replacement-links list above the rows) got
+  the same reservation, so every row ended up ~11px right of the text
+  directly above it in the same card (found by code review, not by any
+  existing test — this app has NO layout-shift test for horizontal
+  alignment, only for row HEIGHT per issues 303/327). Fix: `box-shadow:
+  inset 3px 0 0 var(--fs-success)` on the state class ONLY — inset
+  box-shadow is purely visual (paints inside the border box, never
+  resizes/repositions it), so pending rows need ZERO reservation and there
+  is no jog possible, by construction, not by careful measurement. Verified
+  live (production DOM read): identical `getBoundingClientRect().left` and
+  `.height` for a handled vs. a pending row. **Any future per-row/per-card
+  state accent in this app (colour band, status stripe) should default to
+  inset `box-shadow`, not `border`,** given how many prior tickets in this
+  playbook (105/107/111/127/163/204/214/291/303/327) already fought pixel
+  alignment/row-height regressions the hard way.
