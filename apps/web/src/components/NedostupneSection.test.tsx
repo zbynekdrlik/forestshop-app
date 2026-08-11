@@ -157,6 +157,30 @@ it("rola citanie NEVIDÍ žiadne akčné tlačidlá (len admin/manazer smie odos
   expect(screen.queryByTestId("nedostupne-send-17600001-40237/L")).toBeNull();
 });
 
+// issue 344: vybavený riadok (aspoň jeden z dvoch e-mailov odoslaný) musí
+// byť na prvý pohľad odlíšený — over PRIAMO dátový atribút na riadku
+// (nezávislý od konkrétnej CSS triedy/farby), nikdy len že text "Odoslané"
+// niekde existuje (to appka robila už predtým a šéf to označil za nedostatočné).
+it("riadok s odoslaným e-mailom (ktorýkoľvek typ) je označený ako vybavený, čakajúci nie je", async () => {
+  fetchNedostupneList.mockResolvedValue({
+    groups: [{ ...GROUP, orders: [{ ...GROUP.orders[0], nedostupneSent: true, alternativaSent: false }] }],
+    bccMissing: false,
+    mailNotConfigured: false,
+  });
+  render(<NedostupneSection role="manazer" onSessionExpired={vi.fn()} />);
+  const row = await screen.findByTestId("nedostupne-order-17600001-40237/L");
+  expect(row.getAttribute("data-handled")).toBe("true");
+  expect(row.className).toContain("nedostupne-order-row--handled");
+});
+
+it("čakajúci riadok (žiadny e-mail odoslaný) NIE JE označený ako vybavený", async () => {
+  fetchNedostupneList.mockResolvedValue(LIST_WITH_GROUP);
+  render(<NedostupneSection role="manazer" onSessionExpired={vi.fn()} />);
+  const row = await screen.findByTestId("nedostupne-order-17600001-40237/L");
+  expect(row.getAttribute("data-handled")).toBe("false");
+  expect(row.className).not.toContain("nedostupne-order-row--handled");
+});
+
 it("klik na 'náhľad' otvorí povinný náhľad PRED odoslaním — Odoslať sa ešte nevolá", async () => {
   fetchNedostupneList.mockResolvedValue(LIST_WITH_GROUP);
   fetchNedostupnePreview.mockResolvedValue({ ok: true, subject: "Informácia o dostupnosti vašej objednávky — Forestshop.sk", html: "<p>Ahoj</p>", text: "Ahoj", recipient: "jan@example.sk", customerName: "Ján Novák", previewToken: "tok-1" });
