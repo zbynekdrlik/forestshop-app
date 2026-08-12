@@ -48,6 +48,11 @@ const envSchema = z.object({
   MAIL_USER: z.string().optional(),
   MAIL_PASS: z.string().optional(),
   MAIL_FROM: z.string().optional(),
+  // issue 358: Reply-To, ZÁMERNE samostatná od `MAIL_FROM` (nie odvodená) —
+  // aby odpoveď dorazila na správnu adresu, aj keby sa `MAIL_FROM` niekedy
+  // zmenil. Bez nastavenia `createSmtpMailTransport` spadne späť na `from`
+  // (`modules/mail/transport.ts`'s `resolveMailSender`).
+  MAIL_REPLY_TO: z.string().optional(),
   // issue 122: spätný zápis odkazu na dodávateľa do Shoptetu cez hromadný CSV
   // import (Playwright). Skutočné prihlasovacie údaje — rovnaké pravidlo ako
   // `MAIL_PASS` vyššie, nikdy do repa/commit správy/logu. Obe nepovinné:
