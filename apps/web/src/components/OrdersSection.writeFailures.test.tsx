@@ -8,6 +8,18 @@ import { OrdersSection } from "./OrdersSection.js";
 // Vlastný súbor — rovnaký vzor ako existujúce `OrdersSection.ordered.test
 // .tsx`/`OrdersSection.assignSupplier.test.tsx` splity (`.claude/rules/
 // testing.md`), aby žiadny súbor nenarástol cez eslint `max-lines: 400`.
+//
+// issue 365: pôvodne JEDEN `it()` reťazil PÄŤ sekvenčných scenárov (prvé
+// zlyhanie → druhé kumulatívne zlyhanie → úspešná retry → zatvorenie
+// banner), všetky zdieľajúce JEDEN 5000ms `testTimeout` — pod CPU záťažou
+// (mnoho súborov bežiacich súbežne v CI/vyťaženom boxe) sa kumulatívny
+// reálny čas naprieč piatimi `waitFor` volaniami vedel pretiahnuť cez ten
+// spoločný strop, hoci komponent samotný je rýchly (izolovane ~350ms).
+// Rozdelené na TRI samostatné `it()` bloky, každý s VLASTNÝM 5000ms
+// rozpočtom (5s → 15s pre rovnaké množstvo práce) — žiadna asercia sa
+// nevynecháva, len sa rozdeľuje podľa hraníc scenára. Spoločné nastavenie
+// (render + prvé dve zlyhania) je vytiahnuté do `renderWithTwoFailures()`,
+// aby druhý a tretí test nemuseli duplikovať jeho JSX/mock nastavenie.
 
 const { fetchOpenOrders, fetchOrdersOverview, updateOrderLineState, updateOrderLineOrdered } = vi.hoisted(() => ({
   fetchOpenOrders: vi.fn(), fetchOrdersOverview: vi.fn(),
@@ -63,7 +75,11 @@ afterEach(() => {
   vi.resetAllMocks();
 });
 
-it("dve nezávislé zlyhania zápisu (iný riadok, iná akcia) sa zobrazia SÚČASNE, kumulatívne", async () => {
+/** Spoločné nastavenie pre testy 2 a 3: vyrenderuje sekciu, vyvolá OBE
+ * nezávislé zlyhania zápisu (stav riadku Alfa, príznak "objednané" riadku
+ * Beta) a počká, kým sa obe zobrazia kumulatívne — presne stav, z ktorého
+ * pôvodný jediný test pokračoval do retry/zatvorenia. */
+async function renderWithTwoFailures(): Promise<{ checkbox: HTMLInputElement }> {
   fetchOpenOrders.mockResolvedValue([
     { supplier: "Dodávateľ Alfa", lines: [LINE_ALFA, LINE_BETA], email: null },
   ]);
@@ -89,6 +105,13 @@ it("dve nezávislé zlyhania zápisu (iný riadok, iná akcia) sa zobrazia SÚČ
   await waitFor(() => {
     expect(screen.getByTestId("order-write-failures").textContent).toContain("Nepodarilo sa uložiť 2 položky");
   });
+
+  return { checkbox };
+}
+
+it("dve nezávislé zlyhania zápisu (iný riadok, iná akcia) sa zobrazia SÚČASNE, kumulatívne", async () => {
+  const { checkbox } = await renderWithTwoFailures();
+
   expect(screen.getByTestId(`order-write-failure-state:${LINE_ALFA.lineId}`).textContent).toBe(
     "Zmena stavu — obj. 1001, kód A-1 (chyba stavu)",
   );
@@ -98,6 +121,10 @@ it("dve nezávislé zlyhania zápisu (iný riadok, iná akcia) sa zobrazia SÚČ
   // Zamietnutá zmena sa NIKDY netvári ako uložená.
   expect(screen.getByTestId(`state-btn-objednane-${LINE_ALFA.lineId}`).getAttribute("aria-checked")).toBe("true");
   expect(checkbox.checked).toBe(false);
+});
+
+it("úspešný opakovaný zápis (riadok Alfa) zmaže LEN jeho položku — druhá (Beta) ostáva viditeľná", async () => {
+  await renderWithTwoFailures();
 
   // Úspešný opakovaný zápis (riadok Alfa) zmaže LEN jeho položku — druhá
   // (Beta) ostáva viditeľná (legacy `clearToOrderFail`: "drop only ITS line").
@@ -109,8 +136,11 @@ it("dve nezávislé zlyhania zápisu (iný riadok, iná akcia) sa zobrazia SÚČ
   });
   expect(screen.queryByTestId(`order-write-failure-state:${LINE_ALFA.lineId}`)).toBeNull();
   expect(screen.getByTestId(`order-write-failure-ordered:${LINE_BETA.lineId}`)).toBeTruthy();
+});
 
-  // Zatvorenie bannera zmaže VŠETKY zostávajúce položky naraz.
+it("zatvorenie banner zmaže VŠETKY zostávajúce položky naraz", async () => {
+  await renderWithTwoFailures();
+
   fireEvent.click(screen.getByRole("button", { name: "Zavrieť hlásenie o neuložených zmenách" }));
   expect(screen.queryByTestId("order-write-failures")).toBeNull();
 });
