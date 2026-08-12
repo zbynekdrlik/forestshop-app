@@ -733,9 +733,28 @@ tr:last-child td {
 }
 
 /* issue 309: "Eshop → Upozornenia" — najbližšia udalosť z Google kalendára,
-   nad prepínačom záložiek. */
+   nad prepínačom záložiek.
+   issue 382 (majiteľ: "ten obdlžnik nech je polovičny na výšku"): rámček
+   bol oproti textu zbytočne vysoký — namerané 73.59px pre JEDNU udalosť pri
+   predvolenom `.card` paddingu (12px/12px) a NEZTLMENOM prehliadačovom
+   `<p>` marginu (~1em/1em navyše). Prvý pokus (`--fs-space-2` padding +
+   `--fs-text-sm`/1.3 riadkovanie + `--fs-space-1` medzera medzi riadkami)
+   naživo nameral len 72.67px PRE TRI udalosti — sotva pod baseline, ďaleko
+   od "polovica". `--fs-text-xs` (12px, appka's vlastná čitateľnosti
+   podlaha, issue 303) + `line-height:1.2` + `padding: var(--fs-space-1)`
+   (4px) + BEZ medzery medzi riadkami (žiadny token pod 4px, tri krátke
+   jednoriadkové položky bez medzery ostávajú čitateľné vďaka vlastnému
+   riadkovaniu) naživo nameralo 53.2px pre TRI udalosti — pod polovicou
+   pôvodnej JEDNEJ (36.8px) sa nedá ísť bez porušenia 12px podlahy, ale
+   toto je najtesnejšie, čo appka dnes dovolí. */
 .next-calendar-event-card {
   margin-bottom: var(--fs-space-4);
+  padding: var(--fs-space-1) var(--fs-space-4);
+}
+.next-calendar-event-row {
+  margin: 0;
+  font-size: var(--fs-text-xs);
+  line-height: 1.2;
 }
 
 /* ---------------- 5. PRIHLASOVACIA OBRAZOVKA ---------------- */
@@ -2106,9 +2125,40 @@ tr:last-child td {
   gap: var(--fs-space-4);
   margin: var(--fs-space-2) 0 var(--fs-space-4);
 }
+/* issue 382 (majiteľ: "vsetko je pod sebou aj ked to vobec nemusi byt"):
+   `auto-fit`/`minmax` necháva prehliadač sám rozhodnúť, koľko kariet sa
+   zmestí vedľa seba pri danej šírke — na úzkej obrazovke spadne späť na
+   jeden stĺpec (rovnaké správanie ako predtým), na širšej ich poukladá
+   vedľa seba bez potreby ručne stanoveného breakpointu. **`auto-fit`, NIE
+   `auto-fill`** — prvý pokus s `auto-fill` rozbil existujúci e2e test
+   (issue 327's "pás akcií karty ≥25 % nižší"): `auto-fill` REZERVUJE
+   toľko stĺpcových stôp, koľko sa ich zmestí, AJ KEĎ sú prázdne (nemajú
+   kartu) — s JEDNOU kartou v zozname to znamenalo, že karta dostala len
+   1/N dostupnej šírky namiesto celej. `auto-fit` NAOPAK skolabuje prázdne
+   stopy na 0px a `1fr` rozdelí zvyšnú šírku medzi SKUTOČNE obsadené
+   stĺpce — jedna karta dostane celú šírku (rovnaké správanie ako predošlý
+   `flex-direction: column`), viac kariet sa poukladá vedľa seba presne
+   rovnako ako `auto-fill` by urobil.
+   **`minmax` dolná hranica je 500px, NIE ľubovoľné okrúhle číslo — naživo
+   zmerané (`page.addStyleTag` na `grid-template-columns`, rovnaká metodika
+   ako issue 105/107/111/127) proti existujúcej karte s dátumovým poľom +
+   4 tlačidlami (issue 327's `.upozornenie-actions`): pás akcií zostáva na
+   JEDNOM riadku (25.59px) až OD ~490px šírky karty, POD touto hranicou sa
+   zalomí na dva riadky (52.39px, presne dvojnásobná výška) — teda presne
+   ten istý bug, čo issue 303/327 opravili, by sa vrátil pre KAŽDÚ kartu,
+   ktorá by sa v mriežke ocitla užšia než táto hranica. 500px (malá
+   rezerva nad zmeraných ~487px) drží kartu VŽDY dosť širokú, aby jej
+   akčný pás nikdy nezalomil, bez ohľadu na to, koľko stĺpcov sa vedľa
+   seba zmestí — dôsledok je, že viacstĺpcové rozloženie sa reálne
+   prejaví až od širších obrazoviek (≥ ~1600px), na 1280px ostáva jeden
+   stĺpec (rovnaké ako predtým) — presne to, čo ticket žiada ("KDE to
+   obsah dovolí", nie vynútene všade). Test pre KAŽDÚ ĎALŠIU zmenu tejto
+   dolnej hranice: zmeraj `.upozornenie-actions` výšku pri kandidátnej
+   šírke naživo, nikdy nehádaj okrúhle číslo. */
 .upozornenia-list {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+  align-items: start;
   gap: var(--fs-space-4);
 }
 .upozornenie-card {
