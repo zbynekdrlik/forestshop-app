@@ -18,7 +18,8 @@ pred zverejnením repa odhalil audit).
   overovaní na živom systéme, použi zástupný text `<heslo — mimo repozitára>`
   namiesto skutočnej hodnoty.
 - Skutočné hodnoty žijú len:
-  - v `/srv/forestshop/.env` (mode 600) na dev2, alebo
+  - v `/srv/forestshop/.env` (mode 600) na `forestshop-dev`
+    (`forestshop-dev.newlevel.media` — presunuté z dev2, issue 366), alebo
   - v lokálnej pamäti relácie (Claude memory), nikdy commitované.
 - Pred pushom vždy skontroluj diff (`git diff --cached` / `git show`) na
   prítomnosť akejkoľvek reálnej citlivej hodnoty — najmä keď si práve
