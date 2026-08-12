@@ -3569,3 +3569,49 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
 - Playbook: `.claude/rules/deploy.md` (nová sekcia — Error 1033 diagnostika +
   oprava + monitor).
 - Issue 357 zavretý s dôkazom po merge/nasadení.
+
+## Issue 366 — nasadzovanie z CI mierilo na dev2, hoci produkcia beží na novom serveri (12. 8. 2026)
+
+- PR #373: https://github.com/zbynekdrlik/forestshop-app/pull/373 — merge
+  `0d76943`.
+- Commits na dev: `b80eb73` (verzia 0.3.0-dev.216), `178dd9a` (runs-on +
+  LIVE_HOSTNAME + deploy.md/CLAUDE.md/sensitive-values.md), `bb89bd7`
+  (pridaný `scripts/backup-db-local.sh` + review fixy), `9e79cb1`
+  (no-test bypass poznámka).
+- Príčina: neschválený agent 12. 8. presunul produkciu z dev2 na vyhradený
+  Hetzner VPS `forestshop-dev` (178.105.89.168) mimo bežného PR procesu.
+  `deploy.yml` stále cieľom `runs-on: [self-hosted, dev2]` — ďalší merge do
+  `main` by nasadil do prázdna.
+- `runs-on` → `[self-hosted, forestshop-dev]` (runner tam bol už
+  zaregistrovaný a bežal, len overený, nie znovu zaregistrovaný).
+  `LIVE_HOSTNAME` → `forestshop.newlevel.media` (issue #5 nezávisle overené
+  ako reálne vyriešené už 3. 8. 2026, cez Cloudflare API + DNS
+  `modified_on`/komentár — nesúvisí s dnešným presunom).
+- Nezávislý review (fresh-context subagent) našiel 🔴: `deploy.yml`'s
+  `rsync -a --delete` do `/srv/forestshop/scripts/` by prvým nasadením
+  zmazal `backup-db-local.sh` (existoval len na serveri, nie v repe) —
+  opravené pridaním súboru do repa PRED mergom.
+- Po merge zlyhal `deploy` job prvýkrát: `node: command not found` v kroku
+  "Overiť verziu na živej stránke" — nový runner (`forestshop-dev-runner`)
+  nemal systémovo nainštalovaný Node.js (dev2's runner ho mal). Samotné
+  nasadenie (pull/up -d) PREBEHLO úspešne, zlyhal len overovací krok.
+  Root-cause fix: `sudo apt-get install -y nodejs` (NodeSource, v24) na
+  `forestshop-dev`, reštart runner služby, `gh run rerun --failed` → zelené.
+- Naživo overené: `/api/version` na OBOCH hostnames (`forestshop.
+  newlevel.media`, `forestshop-novy.newlevel.media`) vracia
+  `0.3.0-dev.216` / `0d76943`; `docker ps` na serveri potvrdzuje rovnaký
+  image tag. Frontend číta verziu runtime cez `/api/version` (žiadny
+  build-time baked string), takže DOM zobrazí presne to, čo API vrátilo —
+  Playwright MCP nebol v tejto relácii dostupný, overenie preto išlo cez
+  zdrojový kód + curl namiesto vizuálneho screenshotu.
+- Staré `dev2-forestshop` runner ostáva zaregistrovaný, nečinný, ako
+  rollback cesta (rozhodnutie podľa zadania tiketu).
+- Vedľajšie nálezy založené ako issue 369 (osirelý dev postgres kontajner +
+  zvyškové dump súbory), issue 371 (5 ďalších playbook súborov so
+  zastaranými dev2 príkazmi), issue 372 (backups.md stále rámcuje dev2 ako
+  hlavné zálohovanie).
+- Playbook: `.claude/rules/deploy.md` (kompletne prepísaná sekcia o cieli
+  nasadenia + runner + hostname), `.claude/rules/backups.md` (nová
+  zálohovacia varianta pre forestshop-dev).
+- Issue 366 zavretý ručne po naživo overení (nie cez `Closes #N` v PR —
+  overenie prišlo AŽ po merge/deploy).
