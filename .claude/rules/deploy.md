@@ -131,7 +131,12 @@ paths:
   stroji už neexistuje). Druhý, od appky nezávislý Linux účet `stepan` má na
   tom istom stroji vlastný izolovaný klon repa — obidva účty môžu bežať
   vlastné Claude relácie bez vzájomného rušenia. SSH: `ssh
-  admin@forestshop-dev.newlevel.media` (alebo priamo IP).
+  admin@forestshop-dev.newlevel.media` (alebo priamo IP). **Playbook
+  príkazy s týmto `ssh` prefixom sú písané pre reláciu bežiacu na dev1** —
+  Claude relácia, ktorá už beží PRIAMO na `forestshop-dev` (napr. `stepan`'s
+  vlastný klon, alebo self-hosted runner), rovnaké príkazy spúšťa lokálne,
+  bez `ssh` prefixu (over `hostname` pri pochybnosti, ktorý prípad práve
+  platí — issue 371, 12. 8. 2026).
   Obsahuje `.env` (mode 600 — `POSTGRES_PASSWORD`, `CF_TUNNEL_TOKEN`),
   `docker-compose.prod.yml` (kopírovaný z repa pri každom deploy) a
   `scripts/` (synchronizovaný `rsync -a --delete` z repa pri každom deploy —

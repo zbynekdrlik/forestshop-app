@@ -146,3 +146,37 @@ it("bez žiadneho nevybaveného riadku ukáže '—' namiesto dátumu najstarše
   expect(screen.getByTestId("overview-ordering-oldest").textContent).toContain("—");
   expect(screen.getByTestId("overview-ordering-remaining").textContent).toContain("0");
 });
+
+// issue 360 (majiteľ: "všetko v jednom riadku") — všetkých 7 dlaždíc
+// ("Prehľad e-shopu" + "Súhrn o objednávaní") musí byť priamym potomkom
+// TOHO ISTÉHO `.overview-tiles` kontajnera (jeden spoločný flex riadok),
+// nie rozdelené do dvoch samostatných skupín ako predtým issue 237.
+it("všetkých 7 súhrnných čísel je v JEDNOM spoločnom riadku, nie v dvoch oddelených skupinách", async () => {
+  fetchOrdersOverview.mockResolvedValue(OVERVIEW);
+  render(<OrdersOverviewTiles suppliers={[]} onSessionExpired={() => {}} />);
+
+  await waitFor(() => {
+    expect(screen.getByTestId("overview-shop-today")).toBeTruthy();
+  });
+
+  const row = screen.getByTestId("overview-shop-today").parentElement;
+  expect(row?.className).toBe("overview-tiles");
+
+  const testIds = [
+    "overview-shop-today",
+    "overview-shop-week",
+    "overview-shop-month",
+    "overview-ordering-remaining",
+    "overview-ordering-affected-orders",
+    "overview-ordering-already-ordered",
+    "overview-ordering-oldest",
+  ];
+  for (const testId of testIds) {
+    expect(screen.getByTestId(testId).parentElement).toBe(row);
+  }
+  expect(row?.children.length).toBe(testIds.length);
+
+  // Nadpisy skupín ("Prehľad e-shopu"/"Súhrn o objednávaní") sú preč.
+  expect(screen.queryByText("Prehľad e-shopu")).toBeNull();
+  expect(screen.queryByText("Súhrn o objednávaní")).toBeNull();
+});

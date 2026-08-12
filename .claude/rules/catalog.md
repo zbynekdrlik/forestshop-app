@@ -147,8 +147,10 @@ paths:
   transakciou) zostali navždy bez záznamu, čo by naň ukazoval (review task-5-fix-1).
 - **Variant, ktorý zmizne z exportu, sa NEMAŽE** — nastaví sa `missing_since`. Keď sa
   vráti, `missing_since` sa vynuluje v tom istom UPSERTe.
-- **Surové bajty nie sú v Postgrese.** Ležia gzipnuté v `CATALOG_RAW_DIR` (na dev2
-  docker zväzok `catalog-raw`), v databáze je len `raw_path` + `content_sha256`.
+- **Surové bajty nie sú v Postgrese.** Ležia gzipnuté v `CATALOG_RAW_DIR` (od
+  presunu appky — issue 366 — na `forestshop-dev` docker zväzok `catalog-raw`,
+  živo overené `docker volume ls`/`docker inspect` 12. 8. 2026, issue 371:
+  `forestshop_catalog-raw`), v databáze je len `raw_path` + `content_sha256`.
   `pg_dump` ich teda NEZAHŔŇA — a nemusí, odvodený katalóg je celý v databáze.
   Retencia (`pnpm catalog:prune-raw`): prijaté staršie než 14 dní (skrátené z 30
   v issue 184 súčasne s prechodom importu na hodinovú kadenciu — viac
@@ -184,8 +186,11 @@ paths:
   `scripts/catalog-ingest.ts` zostáva len pohodlný LOKÁLNY/CI vstupný bod.
 - **`SHOPTET_EXPORT_URL` je tajomstvo** (prihlasovací `hash` je v query parametri). Do
   databázy ani do logov nesmie ísť celá — vždy cez `redactUrl`. V repe nikdy nie je.
-  Na dev2 zatiaľ nie je nastavené (issue #8) — appka bez neho beží ďalej (premenná je
-  v `env.ts` `.optional()`), len ručný import vráti 503.
+  Pôvodne na dev2 nebolo nastavené (issue #8) — appka bez neho beží ďalej (premenná je
+  v `env.ts` `.optional()`), len ručný import vráti 503. **Na `forestshop-dev` JE
+  nastavené** (živo overené priamo v bežiacom kontajneri 12. 8. 2026, issue 371 —
+  premenná je prítomná, hodnota sa neoveruje/nevypisuje, per
+  `.claude/rules/sensitive-values.md`).
 - **`redactUrl` (`fetcher.ts`) prekrýva ALLOWLISTOM, nie denylistom** (review
   final-wave-a, položka 2) — prekryje HODNOTU KAŽDÉHO query parametra okrem
   malého zoznamu známych neškodných (`patternId`, `partnerId`); pôvodne to

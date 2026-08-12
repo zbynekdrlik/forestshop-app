@@ -653,3 +653,23 @@ paths:
   prejaví POMALOSŤOU/timeoutmi na NÁHODNÝCH testoch, toto sa prejaví
   ÚPLNÝM zamrznutím KAŽDÉHO ĎALŠIEHO integračného súboru bez jediného
   riadku výstupu, kým sa nezabije držiaci proces.
+- **Jeden `it()`, ktorý reťazí VIAC sekvenčných UI scenárov (viac `waitFor`
+  volaní za sebou) v JEDNOM zdieľanom `testTimeout` (predvolene 5000ms), je
+  flaky POD ZÁŤAŽOU (veľa súborov bežiacich súbežne cez vitest thread pool)
+  aj keď je komponent sám rýchly.** Issue 365
+  (`OrdersSection.writeFailures.test.tsx`): izolovane 345-388ms (13-14×
+  rezerva), no pod záťažou (viac `claude`/CI procesov na tom istom boxe)
+  padal na `Test timed out in 5000ms` — nie regresia, len 5 `waitFor`
+  volaní zdieľajúcich JEDEN 5000ms strop namiesto vlastného pre každé.
+  **Fix je VŽDY rozdeliť na samostatné `it()` bloky (každý dostane VLASTNÝ
+  5000ms rozpočet), nikdy zvýšiť `testTimeout`** (`no-timeout-band-aids.md`
+  — timeout nie je príčina, len symptóm zdieľaného rozpočtu). Vzor:
+  spoločné nastavenie (render + kroky, ktoré vytvoria stav potrebný pre
+  VIAC nasledujúcich testov) sa vytiahne do malého lokálneho `async`
+  helpera volaného na začiatku KAŽDÉHO nového testu — žiadna asercia sa pri
+  rozdelení nesmie vynechať, len sa presunie do testu, ktorého scenár
+  overuje. Test na KAŽDÝ ĎALŠÍ nahlásený "flaky, timeoutuje pod záťažou,
+  ale prechádza izolovane" nález v tomto repe: najprv over izolovaný beh
+  (potvrdí/vyvráti, že komponent je naozaj rýchly), potom hľadaj v súbore
+  JEDEN `it()` s viacerými `waitFor` volaniami — to je takmer vždy skutočná
+  príčina, nie testovacie prostredie.
