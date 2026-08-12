@@ -184,7 +184,16 @@ services:
   cloudflared:
     image: cloudflare/cloudflared:latest
     restart: unless-stopped
-    command: tunnel --no-autoupdate run --token ${CF_TUNNEL_TOKEN:?chyba CF_TUNNEL_TOKEN}
+    # issue 357: cloudflared sa predvolene pripája protokolom QUIC (UDP 7844).
+    # Na sieti dev2 QUIC handshake prestal prechádzať ("failed to dial to edge
+    # with quic: timeout") na VŠETKÝCH štyroch spojeniach súčasne -> tunel
+    # nemal ani jedno živé spojenie -> Cloudflare Error 1033 / HTTP 530 na
+    # oboch verejných adresách (výpadok 12. 8. 2026 ráno). `--protocol http2`
+    # núti tunel ísť po TCP 443 namiesto UDP — bezpečná voľba bez ohľadu na
+    # to, či bol QUIC výpadok dočasný alebo trvalý. Bez tohto riadku by
+    # KAŽDÉ ďalšie nasadenie (deploy.yml kopíruje tento súbor na dev2)
+    # potichu vrátilo QUIC a výpadok sa zopakuje.
+    command: tunnel --no-autoupdate --protocol http2 run --token ${CF_TUNNEL_TOKEN:?chyba CF_TUNNEL_TOKEN}
     depends_on: [app]
     logging: *default-logging
 

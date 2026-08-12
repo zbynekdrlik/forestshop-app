@@ -10,6 +10,44 @@ paths:
 
 # Deployment (dev2)
 
+- **Cloudflare Error 1033 / HTTP 530 na oboch verejných adresách = tunel bez
+  živého spojenia, NIE appka (issue 357, výpadok 12. 8. 2026 ráno).**
+  `cloudflared` sa predvolene pripája protokolom QUIC (UDP 7844); keď QUIC
+  handshake na sieti dev2 prestane prechádzať (`ERR Failed to dial a quic
+  connection error="failed to dial to edge with quic: timeout: handshake
+  did not complete in time"` na všetkých štyroch spojeniach naraz), appka aj
+  DB bežia ďalej v poriadku (lokálne `HTTP 200` na dev2), len Cloudflare
+  nemá kam smerovať požiadavky. Diagnostika: `docker logs
+  forestshop-cloudflared-1` (hľadaj `quic`), `docker inspect
+  forestshop-cloudflared-1 --format '{{json .Config.Cmd}}'` (over aktuálny
+  príkaz). Oprava: `--protocol http2` v `cloudflared`'s `command:` v
+  `docker-compose.prod.yml` — vynúti TCP 443 namiesto UDP, bezpečná voľba
+  bez ohľadu na to, či bol QUIC výpadok dočasný alebo trvalý (mierne
+  pomalšie, zanedbateľne). **Táto zmena MUSÍ byť v repozitárovom
+  `docker-compose.prod.yml`, nie len ručne na dev2** — `deploy.yml`'s
+  `cp "$GITHUB_WORKSPACE/docker-compose.prod.yml" .` krok pri KAŽDOM
+  nasadení kompletne prepíše `/srv/forestshop/docker-compose.prod.yml`
+  súborom z repa; ranná ručná oprava priamo na serveri by prvým ďalším
+  nasadením potichu zmizla a výpadok by sa zopakoval.
+- **Vonkajšie sledovanie dostupnosti (issue 357):** appka predtým nemala nič,
+  čo by z VONKU kontrolovalo, či verejná adresa žije — výpadok objavil
+  majiteľ, nie automatika. `scripts/uptime-check.sh` (v tomto repe) beží cez
+  systemd `--user` timer **na dev1** (zámerne NIE na dev2 — monitor na tom
+  istom stroji, čo sleduje, by zomrel spolu s tým, čo má hlásiť; rovnaký
+  vzor ako `api-watchdog.timer`/`imag-obs-alert-watchdog.timer`), kontroluje
+  obe verejné adresy (`forestshop.newlevel.media`,
+  `forestshop-novy.newlevel.media`) každých 5 minút, alertuje až po 2
+  zlyhaniach za sebou (~10 min súvislého výpadku, nie jeden blik) cez
+  `~/devel/airuleset/airuleset.py notify --body ... --owner-name marek`,
+  opakovaný alert pre TÚ ISTÚ prebiehajúcu udalosť najviac raz za ~1h
+  (throttle) + jedna správa pri zotavení. **Systemd `.timer`/`.service`
+  súbory sa NEVERZUJÚ do repa** (`~/.config/systemd/user/uptime-check.
+  {timer,service}` na dev1, rovnaký vzor ako `parovanie-backup.timer`) —
+  repo drží len skript, inštalácia je ručný jednorazový krok. Stavový súbor
+  (potvrdzovací počítadlo + throttle) je v `${XDG_RUNTIME_DIR:-/tmp}` —
+  netreba ho zálohovať, monitor sa po reštarte dev1 sám znovu rozbehne od
+  nuly (najhorší prípad: jeden alert navyše, nikdy tichý výpadok).
+
 - **Kontajner beží v `TZ=Europe/Bratislava` (issue 293) — nastavené DVAKRÁT,
   zámerne.** `Dockerfile`'s `ENV TZ=Europe/Bratislava` (runtime štádium) je
   baked-in predvolená hodnota v samotnom obraze; `docker-compose.prod.yml`'s
