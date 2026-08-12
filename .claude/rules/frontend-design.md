@@ -1170,3 +1170,17 @@ paths:
   inset `box-shadow`, not `border`,** given how many prior tickets in this
   playbook (105/107/111/127/163/204/214/291/303/327) already fought pixel
   alignment/row-height regressions the hard way.
+- **A registered `NAV`/`HIDDEN_TABS` screen that does NOT need role-based
+  gating can declare its own props type NARROWER than the shared
+  `SectionProps` (`{role, onSessionExpired}`) — TypeScript still accepts
+  it as `ComponentType<SectionProps>` because `App.tsx` passes a real
+  `SectionProps` OBJECT VARIABLE (`<ActiveComponent role={me.role}
+  onSessionExpired={reload} />`), and excess-property checking only
+  fires on object LITERALS, never on a wider-typed value flowing into a
+  narrower parameter.** Issue 342's `DailyTasksSection` takes only
+  `{onSessionExpired}` (its data is scoped by `user_id` server-side, so no
+  `CONTROL_ROLES`-style role check exists anywhere in the component) — no
+  cast, no `as SectionProps`, `pnpm typecheck` passes clean. Reach for this
+  ONLY when the screen genuinely has no role distinction (server enforces
+  ownership/permission some OTHER way); if any role check exists, take the
+  full `SectionProps` like every other screen in `nav.ts`.
