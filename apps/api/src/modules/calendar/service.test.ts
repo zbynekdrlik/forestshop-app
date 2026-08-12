@@ -28,6 +28,42 @@ describe("createNextEventService — cache", () => {
     await expect(service.getNextEvent(NOW)).resolves.toEqual({ ok: false });
   });
 
+  // issue 382: majiteľ chce TRI najbližšie udalosti — `getNextEvent` vracia
+  // pole (`events`), nie singulárnu `event` hodnotu.
+  it("nakonfigurované s TROMI budúcimi udalosťami vráti pole VŠETKÝCH troch (limit 3)", async () => {
+    const ics = [
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "BEGIN:VEVENT",
+      "UID:e1@test",
+      "DTSTAMP:20260101T000000Z",
+      "SUMMARY:Prvá",
+      "DTSTART;TZID=Europe/Bratislava:20260809T090000",
+      "DTEND;TZID=Europe/Bratislava:20260809T100000",
+      "END:VEVENT",
+      "BEGIN:VEVENT",
+      "UID:e2@test",
+      "DTSTAMP:20260101T000000Z",
+      "SUMMARY:Druhá",
+      "DTSTART;TZID=Europe/Bratislava:20260810T090000",
+      "DTEND;TZID=Europe/Bratislava:20260810T100000",
+      "END:VEVENT",
+      "BEGIN:VEVENT",
+      "UID:e3@test",
+      "DTSTAMP:20260101T000000Z",
+      "SUMMARY:Tretia",
+      "DTSTART;TZID=Europe/Bratislava:20260811T090000",
+      "DTEND;TZID=Europe/Bratislava:20260811T100000",
+      "END:VEVENT",
+      "END:VCALENDAR",
+    ].join("\r\n");
+    const fetchIcs = vi.fn().mockResolvedValue(ics);
+    const service = createNextEventService(fetchIcs);
+    const result = await service.getNextEvent(NOW);
+    expect(result.ok).toBe(true);
+    expect(result.ok && result.events.map((e) => e.title)).toEqual(["Prvá", "Druhá", "Tretia"]);
+  });
+
   it("zlyhanie sa cachuje LEN na kratšiu error TTL — po jej uplynutí appka skúsi znova", async () => {
     const fetchIcs = vi.fn().mockRejectedValueOnce(new Error("výpadok")).mockResolvedValueOnce(ICS);
     const service = createNextEventService(fetchIcs);
@@ -38,14 +74,14 @@ describe("createNextEventService — cache", () => {
     // Po uplynutí error TTL — skúsi znova a tentokrát uspeje.
     const result = await service.getNextEvent(new Date(NOW.getTime() + NEXT_EVENT_ERROR_CACHE_TTL_MS + 1));
     expect(fetchIcs).toHaveBeenCalledTimes(2);
-    expect(result).toEqual({ ok: true, event: null });
+    expect(result).toEqual({ ok: true, events: [] });
   });
 
   it("úspešné-ale-prázdne (žiadna udalosť) sa cachuje ako úspešný výsledok, nie ako chyba", async () => {
     const fetchIcs = vi.fn().mockResolvedValue(ICS);
     const service = createNextEventService(fetchIcs);
     const result = await service.getNextEvent(NOW);
-    expect(result).toEqual({ ok: true, event: null });
+    expect(result).toEqual({ ok: true, events: [] });
   });
 
   it("SÚBEŽNÉ volania počas prebiehajúceho fetchu zdieľajú JEDEN prísľub — fetchIcs sa zavolá len raz", async () => {

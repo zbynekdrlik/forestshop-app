@@ -1247,3 +1247,55 @@ paths:
   381's `emojiDraft` cleanup. The lint-safe equivalent is `Object
   .fromEntries(Object.entries(obj).filter(([key]) => key !== id))`, never
   an `eslint-disable` comment.
+- **`grid-template-columns: repeat(auto-fill, minmax(X, 1fr))` squeezes a
+  LONE item to a fraction of the container instead of giving it the full
+  width — `auto-fit` is almost always what you actually want.** Issue 382
+  (`.upozornenia-list`, majiteľ: "nech sa vojde viac vedľa seba, keď je
+  miesto"): the first attempt used `auto-fill`, which RESERVES as many
+  column tracks as fit the container's width at the given minimum, even
+  when those tracks hold no item — a container wide enough for 3 tracks
+  with only ONE real card in it still gets 3 equal `1fr` tracks, so the
+  one card gets ~1/3 the width instead of the full width. This broke an
+  EXISTING e2e test (issue 327's "action row stays on one line") the
+  moment a test created just one card — the card's real width dropped
+  from ~1300px to ~420px and its button row wrapped to two lines,
+  LOOKING exactly like a regression in the button-row CSS itself, when
+  the real cause was the grid keyword. `auto-fit` collapses genuinely
+  EMPTY tracks to 0 width and lets `1fr` redistribute their share to the
+  tracks that DO hold an item — a lone card gets 100% of the width
+  (identical to the previous `flex-direction: column` behavior), while N
+  cards still sit side by side exactly like `auto-fill` would arrange
+  them. Use `auto-fit` by default for a "cards that wrap when there's
+  room" grid; reach for `auto-fill` only when you deliberately want
+  visible empty slots reserved (rare — a fixed-size palette/swatch grid,
+  not a variable-count card list).
+- **The `minmax(X, 1fr)` MINIMUM in that same pattern needs a
+  `min(Xpx, 100%)` wrapper whenever the container can ever be narrower
+  than X — a bare `minmax(500px, 1fr)` overflows on any screen under
+  500px, and on a `wide: true` tab (`nav.ts`) that overflow is SILENTLY
+  CLIPPED, not scrollable, because `.main-wide` has `overflow-x: hidden`
+  (this file, §1).** Found by an independent review dispatch on issue
+  382, not by any existing test — confirmed live at 375px
+  (`document.documentElement.scrollWidth` stayed pinned to the forced
+  minimum while `window.innerWidth` was smaller, meaning content past
+  the edge was genuinely unreachable, no scrollbar). Fix:
+  `minmax(min(500px, 100%), 1fr)` — identical behavior above 500px
+  (`min` picks the 500px branch), but on a narrower container `min`
+  picks `100%` instead, so the track shrinks to fit rather than forcing
+  overflow. Any FUTURE `auto-fit`/`auto-fill` grid on a `wide: true`
+  screen in this app needs this same `min(...)` wrapper — verify with a
+  live narrow-viewport check (this file's own established methodology,
+  issues 161/190/291), not just a wide-screen screenshot.
+- **The exact minimum column width for a "keep this card's inline
+  action row on one line" grid floor is NOT a round guess — measure it
+  live with `page.addStyleTag` overriding `grid-template-columns` to a
+  sequence of candidate PIXEL widths (not percentages), same technique
+  as the `<colgroup>` methodology (issues 105/107/111/127) applied to a
+  grid instead of a table.** Issue 382's `.upozornenia-actions` (issue
+  327's date input + 4 buttons) wraps to two lines below ~490px card
+  width — binary-searched live (340→500px candidates) rather than
+  assumed, landing on a 500px floor (small margin above the measured
+  ~487px threshold). A round guess here would either break the existing
+  one-line invariant (too narrow) or needlessly suppress multi-column
+  layout on common viewports (too wide, e.g. picking 600px+ "to be
+  safe").

@@ -125,6 +125,22 @@ paths:
   dodávateľa by teda prežívali z predošlého e2e behu do ďalšieho, presne tá
   istá tichá pasca, akú `.claude/rules/supplier-stock.md` popisuje pre
   integračné testy. Pri KAŽDEJ novej koreňovej tabuľke uprav OBA zoznamy naraz.
+- **`upozornenie` tabuľka CHÝBA v OBOCH TRUNCATE zoznamoch (`scripts/
+  e2e-setup.ts` AJ `apps/api/tests/helpers/db.ts`) — nájdené issue 382,
+  zapísané ako #384, zatiaľ NEOPRAVENÉ.** Neškodilo to, kým karty boli
+  vždy `flex-direction: column` (vždy celá šírka, bez ohľadu na počet) —
+  po issue 382's CSS Grid rozložení (`.upozornenia-list`) môžu
+  NEVYMAZANÉ riadky z PREDCHÁDZAJÚCEHO lokálneho behu (`upozornenia
+  .spec.ts`'s hlavný flow test navyše ÚMYSELNE necháva 2 karty
+  needeletnuté — testuje odloženie/vrátenie, nie mazanie) zmeniť SKUTOČNÝ
+  počet stĺpcov mriežky, a teda aj šírku/výšku existujúcich testovaných
+  kariet — presne toto najprv vyzeralo ako regresia v issue 327's teste
+  ("pás akcií karty ≥25% nižší"), kým sa nenašlo, že príčinou boli
+  LEFTOVER riadky z predchádzajúceho behu, nie samotná CSS zmena. Pred
+  DÔVEROVANÍM akémukoľvek "regresia v `upozornenia.spec.ts`" nálezu na
+  TOMTO lokálnom boxe: `docker exec <postgres-kontajner> psql -U
+  forestshop -d forestshop -c "TRUNCATE TABLE upozornenie RESTART
+  IDENTITY;"` a over znova, kým #384 nie je opravené.
 - **Pridanie čo i len JEDNÉHO variantu do e2e seedu posunie pevné počty v
   `catalog.spec.ts`** (`"Nájdených: N"` aj `"Variantov v katalógu (vrátane
   chýbajúcich): N"`) — nie je to nič, čo by sa dalo obísť, len sa na to musí

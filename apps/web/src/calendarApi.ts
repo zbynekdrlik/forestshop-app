@@ -4,9 +4,10 @@ import { z } from "zod";
 // Samostatný modul od `upozorneniaApi.ts` (rovnaký dôvod ako na strane API
 // — nie DB-backed "upozornenie", nezávislý read-through pohľad).
 
+// issue 382: pole (až tri udalosti), nie jedna — majiteľova žiadosť.
 const nextEventSchema = z.object({
   configured: z.boolean(),
-  event: z.object({ title: z.string(), dateLabel: z.string(), allDay: z.boolean() }).nullable(),
+  events: z.array(z.object({ title: z.string(), dateLabel: z.string(), allDay: z.boolean() })),
   error: z.boolean(),
 });
 export type NextCalendarEventResult = z.infer<typeof nextEventSchema>;
@@ -16,7 +17,7 @@ export type NextCalendarEventResult = z.infer<typeof nextEventSchema>;
 // nástenke, nikdy nesmie zablokovať/zobraziť chybu namiesto zvyšku
 // "Upozornenia" (rovnaký princíp ako `fetchUpozorneniaCount`'s tolerantný
 // bezpečný default).
-const UNAVAILABLE: NextCalendarEventResult = { configured: false, event: null, error: false };
+const UNAVAILABLE: NextCalendarEventResult = { configured: false, events: [], error: false };
 
 export async function fetchNextCalendarEvent(): Promise<NextCalendarEventResult> {
   try {

@@ -59,8 +59,12 @@ function hasNotEnded(candidate: Candidate, now: Date): boolean {
  * stránka vrátená s HTTP 200) ticho vyzeral ako "žiadna nadchádzajúca
  * udalosť" namiesto toho, aby nahlas zlyhal (dispatch: "Fetch failure /
  * malformed feed → fail loud, never crash, never show raw error").
+ *
+ * issue 382: majiteľ chce TRI najbližšie udalosti, nie jednu — `limit`
+ * rozhoduje koľko sa vráti (zoradené podľa najskoršieho začiatku), NIKDY
+ * viac než reálne dostupných kandidátov.
  */
-export function resolveNextEvent(icsText: string, now: Date): NextCalendarEvent | null {
+export function resolveNextEvents(icsText: string, now: Date, limit: number): NextCalendarEvent[] {
   if (!icsText.includes("BEGIN:VCALENDAR")) {
     throw new Error("Stiahnutý obsah nevyzerá ako platný ICS kalendár (chýba BEGIN:VCALENDAR)");
   }
@@ -86,7 +90,5 @@ export function resolveNextEvent(icsText: string, now: Date): NextCalendarEvent 
   }
 
   const upcoming = candidates.filter((c) => hasNotEnded(c, now)).sort((a, b) => a.start.getTime() - b.start.getTime());
-  const next = upcoming[0];
-  if (next === undefined) return null;
-  return { title: next.title, dateLabel: formatDateLabel(next.start), allDay: next.allDay };
+  return upcoming.slice(0, limit).map((c) => ({ title: c.title, dateLabel: formatDateLabel(c.start), allDay: c.allDay }));
 }

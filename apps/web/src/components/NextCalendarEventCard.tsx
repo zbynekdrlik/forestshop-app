@@ -37,13 +37,18 @@ export function NextCalendarEventCard(): JSX.Element | null {
   return (
     <div className="card next-calendar-event-card" data-testid="next-calendar-event">
       {result.error ? (
-        <p>Najbližšiu udalosť z kalendára sa nepodarilo načítať.</p>
-      ) : result.event === null ? (
-        <p>V kalendári nie je žiadna nadchádzajúca udalosť.</p>
+        <p className="next-calendar-event-row">Najbližšiu udalosť z kalendára sa nepodarilo načítať.</p>
+      ) : result.events.length === 0 ? (
+        <p className="next-calendar-event-row">V kalendári nie je žiadna nadchádzajúca udalosť.</p>
       ) : (
-        <p>
-          📅 <strong>{result.event.dateLabel}</strong> — {result.event.title}
-        </p>
+        // issue 382: až TRI najbližšie udalosti namiesto jednej — každá
+        // vlastný kompaktný riadok (`.next-calendar-event-row`, žiadny
+        // predvolený prehliadačový `<p>` margin), nie samostatné karty.
+        result.events.map((event, i) => (
+          <p className="next-calendar-event-row" key={`${event.dateLabel}-${event.title}-${String(i)}`}>
+            📅 <strong>{event.dateLabel}</strong> — {event.title}
+          </p>
+        ))
       )}
     </div>
   );

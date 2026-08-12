@@ -64,19 +64,22 @@ it("bez dodanej nextEvent service vráti configured:false, žiadny fetch sa nevo
   const { app, cookie } = await boot();
   const res = await app.request("/api/upozornenia/next-event", { headers: { cookie } });
   expect(res.status).toBe(200);
-  await expect(res.json()).resolves.toEqual({ configured: false, event: null, error: false });
+  await expect(res.json()).resolves.toEqual({ configured: false, events: [], error: false });
 });
 
-it("s nakonfigurovanou service vráti najbližšiu udalosť z (falošne) stiahnutého ICS", async () => {
+// issue 382: majiteľ chce TRI najbližšie udalosti — trasa vracia pole
+// `events`, nie singulárnu `event` hodnotu.
+it("s nakonfigurovanou service vráti najbližšie udalosti z (falošne) stiahnutého ICS", async () => {
   const service = createNextEventService(() => Promise.resolve(icsWithEventTomorrow()));
   const { app, cookie } = await boot(service);
   const res = await app.request("/api/upozornenia/next-event", { headers: { cookie } });
   expect(res.status).toBe(200);
-  const body = (await res.json()) as { configured: boolean; error: boolean; event: { title: string; allDay: boolean } | null };
+  const body = (await res.json()) as { configured: boolean; error: boolean; events: { title: string; allDay: boolean }[] };
   expect(body.configured).toBe(true);
   expect(body.error).toBe(false);
-  expect(body.event?.title).toBe("Stretnutie s dodávateľom");
-  expect(body.event?.allDay).toBe(false);
+  expect(body.events).toHaveLength(1);
+  expect(body.events[0]?.title).toBe("Stretnutie s dodávateľom");
+  expect(body.events[0]?.allDay).toBe(false);
 });
 
 it("keď fetch zlyhá, appka vráti error:true, nikdy surovú chybu ani pád", async () => {
@@ -84,7 +87,7 @@ it("keď fetch zlyhá, appka vráti error:true, nikdy surovú chybu ani pád", a
   const { app, cookie } = await boot(service);
   const res = await app.request("/api/upozornenia/next-event", { headers: { cookie } });
   expect(res.status).toBe(200);
-  await expect(res.json()).resolves.toEqual({ configured: true, event: null, error: true });
+  await expect(res.json()).resolves.toEqual({ configured: true, events: [], error: true });
 });
 
 it("neprihlásený dostane 401", async () => {
