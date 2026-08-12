@@ -67,18 +67,27 @@ function formatSupplierOrderMailLine(line: SupplierOrderMailLine): string {
 // (0, 1, 2, 4, 5) bez behu integračných testov. Znenie prichádza z
 // upraviteľnej šablóny (issue 192); tento e-mail je jediný ČISTO TEXTOVÝ,
 // takže sa z výsledku berie len textová verzia.
+// issue 379: `{ footer: false }` — jediný explicitný opt-out z kontaktnej
+// pätičky (`layout.ts`'s `wrapEmailText`, teraz predvolene pripájaná ku
+// KAŽDÉMU `renderTemplate` výstupu). Pôvodné znenie tohto e-mailu nikdy
+// nespomínalo telefón/e-mail/web, takže pätička by pridala obsah, ktorý
+// predtým nebol — `orders/mail.test.ts` drží výsledok bajt na bajt.
 export function formatSupplierOrderMailText(
   template: MailTemplateText,
   supplier: string,
   lines: readonly SupplierOrderMailLine[],
 ): { readonly subject: string; readonly body: string } {
-  const rendered = renderTemplate(template, {
-    ...globalContext(),
-    dodavatel: textValue(supplier),
-    pocet_poloziek: textValue(String(lines.length)),
-    slovo_poloziek: textValue(itemsWord(lines.length)),
-    zoznam_poloziek: { kind: "list", items: lines.map((line) => ({ label: formatSupplierOrderMailLine(line) })) },
-  });
+  const rendered = renderTemplate(
+    template,
+    {
+      ...globalContext(),
+      dodavatel: textValue(supplier),
+      pocet_poloziek: textValue(String(lines.length)),
+      slovo_poloziek: textValue(itemsWord(lines.length)),
+      zoznam_poloziek: { kind: "list", items: lines.map((line) => ({ label: formatSupplierOrderMailLine(line) })) },
+    },
+    { footer: false },
+  );
   return { subject: rendered.subject, body: rendered.text };
 }
 

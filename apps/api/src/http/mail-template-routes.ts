@@ -69,7 +69,11 @@ export function registerMailTemplateRoutes(app: Hono<AppBindings>, db: Database)
     if (!isMailTemplateKey(key)) return c.json({ ok: false as const, error: "Neznámy druh e-mailu." });
     const errors = validateTemplateText({ subject, body }, allowedPlaceholderNames(key));
     if (errors.length > 0) return c.json({ ok: false as const, error: errors.join(" ") });
-    const rendered = renderTemplate({ subject, body }, await previewContext(db, key));
+    // issue 379 review finding: náhľad musí zrkadliť PRESNE to, čo appka
+    // skutočne pošle — `supplier_order` je jediný druh, ktorý si kontaktnú
+    // pätičku vypína (`orders/mail.ts`), inak by náhľad ukazoval pätičku,
+    // ktorú reálny odoslaný e-mail nikdy nemá.
+    const rendered = renderTemplate({ subject, body }, await previewContext(db, key), { footer: key !== "supplier_order" });
     return c.json({ ok: true as const, subject: rendered.subject, html: rendered.html, text: rendered.text });
   });
 
