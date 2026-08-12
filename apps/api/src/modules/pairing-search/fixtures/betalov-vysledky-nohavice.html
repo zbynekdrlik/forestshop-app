@@ -1,0 +1,116 @@
+<!--
+  Orezaná vzorka https://www.huntingshop.eu/hladanie?search=nohavice (issue
+  387 E2, živý fetch 13. 8. 2026, po session warm-up GET na homepage — bez
+  neho by `#snippet--productList` bol prázdny, `.claude/rules/pairing-
+  search.md`). Karty 1–3 sú DOSLOVNE prevzaté (href aj názov nezmenené,
+  odstránený len okolitý balast — swiper komentáre, cena, obľúbené tlačidlo,
+  ktoré parser nečíta). Táto konkrétna živá odpoveď nemala v rámci
+  `.product-col` žiadny prirodzený duplikát ani vylúčenú cestu, preto:
+    - Karta 4 je karta 1 znova (identická reálna URL) — mechanizmus testu
+      dedup podľa URL (rovnaký princíp ako `wetland-vysledky-nohavice.html`).
+    - Karta 5 je SKONŠTRUOVANÁ (nie naživo nájdená) — má rovnakú skutočnú
+      štruktúru karty, ale `mh-100` odkaz mieri na `/kosik` (skutočná
+      položka `_EXCLUDE_PREFIXES` zoznamu) — overuje, že navigačná cesta sa
+      vylúči, aj keby sa objavila vo výsledkovom kontajneri.
+-->
+<html lang="sk">
+<head><title>Vyhľadávanie: nohavice | huntingshop.eu</title></head>
+<body>
+<div class="tab-content mb-5" data-ajax-append id="snippet--productList">
+  <div class="tab-pane fade show active" id="home" role="tabpanel">
+    <div class="row grid-view">
+
+      <div class="product-col col-sm-6 col-md-4 col-lg-4 col-xl-3">
+        <div class="product-card ">
+          <div class="product-thumb-nail text-center d-flex flex-column justify-content-center ">
+            <a href="/detske-outdoorove-nohavice-combi-14695" class="mh-100">
+              <img class="product-image w-100" src="/upload/images/product/md__14695-detske-outdoorove-nohavice-combi-1.webp" alt="Detské outdoorové nohavice - Combi">
+            </a>
+          </div>
+          <div class="product-content ">
+            <h3 class="product-title mb-0 text-center w-100 mh-100 " style="min-height: 70px;">
+              <a href="detske-outdoorove-nohavice-combi-14695">
+                Detské outdoorové nohavice - Combi
+              </a>
+            </h3>
+          </div>
+        </div>
+      </div>
+
+      <div class="product-col col-sm-6 col-md-4 col-lg-4 col-xl-3">
+        <div class="product-card ">
+          <div class="product-thumb-nail text-center d-flex flex-column justify-content-center ">
+            <a href="/armotion-class-t-damske-nohavice-14306" class="mh-100">
+              <img class="product-image w-100" src="/upload/images/product/md__14306-armotion-class-t-damske-nohavice-1.webp" alt="Armotion Class-T dámske nohavice">
+            </a>
+          </div>
+          <div class="product-content ">
+            <h3 class="product-title mb-0 text-center w-100 mh-100 " style="min-height: 70px;">
+              <a href="armotion-class-t-damske-nohavice-14306">
+                Armotion Class-T dámske nohavice
+              </a>
+            </h3>
+          </div>
+        </div>
+      </div>
+
+      <div class="product-col col-sm-6 col-md-4 col-lg-4 col-xl-3">
+        <div class="product-card ">
+          <div class="product-thumb-nail text-center d-flex flex-column justify-content-center ">
+            <a href="/wadera-detske-kratke-nohavice-hnede-14266" class="mh-100">
+              <img class="product-image w-100" src="/upload/images/product/md__14266-wadera-detske-kratke-nohavice-hnede-1.webp" alt="WADERA - Detské krátke nohavice - Hnedé">
+            </a>
+          </div>
+          <div class="product-content ">
+            <h3 class="product-title mb-0 text-center w-100 mh-100 " style="min-height: 70px;">
+              <a href="wadera-detske-kratke-nohavice-hnede-14266">
+                WADERA - Detské krátke nohavice - Hnedé
+              </a>
+            </h3>
+          </div>
+        </div>
+      </div>
+
+      <div class="product-col col-sm-6 col-md-4 col-lg-4 col-xl-3">
+        <div class="product-card ">
+          <div class="product-thumb-nail text-center d-flex flex-column justify-content-center ">
+            <a href="/detske-outdoorove-nohavice-combi-14695" class="mh-100">
+              <img class="product-image w-100" src="/upload/images/product/md__14695-detske-outdoorove-nohavice-combi-1.webp" alt="Detské outdoorové nohavice - Combi">
+            </a>
+          </div>
+          <div class="product-content ">
+            <h3 class="product-title mb-0 text-center w-100 mh-100 " style="min-height: 70px;">
+              <a href="detske-outdoorove-nohavice-combi-14695">
+                Detské outdoorové nohavice - Combi
+              </a>
+            </h3>
+          </div>
+        </div>
+      </div>
+
+      <div class="product-col col-sm-6 col-md-4 col-lg-4 col-xl-3">
+        <div class="product-card ">
+          <div class="product-thumb-nail text-center d-flex flex-column justify-content-center ">
+            <a href="/kosik" class="mh-100">
+              <img class="product-image w-100" src="/upload/images/icons/cart.svg" alt="Košík">
+            </a>
+          </div>
+          <div class="product-content ">
+            <h3 class="product-title mb-0 text-center w-100 mh-100 " style="min-height: 70px;">
+              <a href="kosik">Košík</a>
+            </h3>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="tab-pane fade " id="profile" role="tabpanel">
+    <div class="row grid-view-list overflow-hidden">
+      <div class="row grid-view-list"></div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

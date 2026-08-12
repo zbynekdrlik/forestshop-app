@@ -1,0 +1,25 @@
+<!--
+  Orezaná vzorka https://www.huntingshop.eu/hladanie?search=<náhodný
+  neexistujúci reťazec> (issue 387 E2, živý fetch 13. 8. 2026, po session
+  warm-up). Reálny tvar prázdneho `#snippet--productList` — oba tab-pane
+  (`home` aj `profile`) sú prítomné, ale bez jedinej `.product-col`/
+  `.product-card` karty.
+-->
+<html lang="sk">
+<head><title>Vyhľadávanie: zzzznonexistentqueryxyzabc9999 | huntingshop.eu</title></head>
+<body>
+<div class="tab-content mb-5" data-ajax-append id="snippet--productList">
+  <div class="tab-pane fade show active" id="home" role="tabpanel">
+    <div class="row grid-view">
+    </div>
+  </div>
+  <div class="tab-pane fade " id="profile" role="tabpanel">
+    <div class="row grid-view-list overflow-hidden">
+      <div class="row grid-view-list">
+      </div>
+    </div>
+  </div>
+</div>
+<div id="snippet--paginator"></div>
+</body>
+</html>
