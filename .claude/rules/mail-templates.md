@@ -124,3 +124,33 @@ paths:
   (`docker exec forestshop-app-1 node -e "..."`, plný príkaz v
   `.claude/rules/shop-feed.md`) — legitímne, nedeštruktívne (rovnaký
   UPSERT ako plánovaný beh), nie obchádzka.
+- **issue 379: kontaktný `TemplateValue` (`kind: "link"`) s `label`, ktorý
+  je UŽ SÁM osebe plne čitateľná/dosiahnuteľná hodnota (kontaktný e-mail,
+  telefón, doména — appka ich pozná v `context.ts`'s `globalContext`),
+  potrebuje `showUrlInText: false` — inak textová verzia vypíše "${label}
+  (${url})" aj keď `url` nesie TÚ ISTÚ informáciu (len s `mailto:`/`tel:`/
+  `https://` predponou), čo zákazník vidí ako zdvojenú adresu v JEDNOM
+  mieste ("eshop@forestshop.sk (mailto:eshop@forestshop.sk)"). Predvolené
+  `true` (nezmenené) je správne pre produktové/sledovacie odkazy, kde
+  `label` a `url` naozaj nesú RÔZNU informáciu (názov vs. adresa, ktorú
+  text-only klient nevie kliknúť) — nikdy neprepínaj default, len pridaj
+  `showUrlInText: false` na konkrétnu kontaktnú hodnotu.
+- **issue 379: textová verzia e-mailu (`assembleText`) NEMALA vlastnú
+  kontaktnú pätičku — `wrapEmailHtml` (issue 347) bola len pre HTML.**
+  Keď sa z tela šablóny (`registry.ts`) odstránili opakované vety s
+  `{{kontakt_email}}`/`{{kontakt_telefon}}`/`{{web_forestshop}}` (kontakt
+  je od issue 347 VŽDY vidieť v pätičke, takže veta bola čisté zdvojenie),
+  text by kontakt stratil ÚPLNE — preto pribudla `layout.ts`'s `wrapEmailText`
+  (rovnaké 3 riadky ako HTML pätička, bez značiek), volaná z RENDER.TS na
+  TOM ISTOM mieste ako `wrapEmailHtml` (`renderTemplate`'s nový voliteľný
+  3. parameter `{ footer?: boolean }`, default `true`; `renderEditedBody`
+  bezpodmienečne). **`supplier_order` (jediný čisto textový e-mail
+  DODÁVATEĽOVI, nikdy nemal kontaktnú vetu) je JEDINÝ opt-out
+  (`renderTemplate(..., { footer: false })`, `orders/mail.ts`) — pridanie
+  ĎALŠIEHO druhu e-mailu s vlastným `footer: false` výnimkou musí
+  potvrdiť, že naozaj nikdy nemal kontakt, inak `orders/mail.test.ts`-štýl
+  bajt-na-bajt test to odhalí.** Náhľad (`http/mail-template-routes.ts`'s
+  `POST /api/mail-templates/preview`) musí rovnako posielať `{ footer: key
+  !== "supplier_order" }` — bez toho by náhľad ukazoval pätičku, ktorú
+  skutočne odoslaný e-mail pre tento druh nikdy nemá (nájdené code review,
+  nie testom — preview endpoint dovtedy testoval len `nedostupne`).

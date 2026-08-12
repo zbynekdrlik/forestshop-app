@@ -114,6 +114,31 @@ it("náhľad vyrenderuje rozpísané (neuložené) znenie a nič neuloží", asy
   expect(await db.select().from(mailTemplates)).toHaveLength(0);
 });
 
+// issue 379 review finding: náhľad musí zrkadliť PRESNE to, čo appka
+// skutočne pošle — `supplier_order` je jediný druh, ktorý si kontaktnú
+// pätičku vypína (`orders/mail.ts`'s `{ footer: false }`), inak by náhľad
+// ukazoval pätičku, ktorú reálne odoslaný e-mail nikdy nemá.
+it("náhľad supplier_order NEMÁ kontaktnú pätičku — rovnako ako skutočne odoslaný e-mail", async () => {
+  const { app, cookie } = await boot("manazer");
+  const res = await app.request(
+    "/api/mail-templates/preview",
+    jsonRequest(cookie, "POST", { key: "supplier_order", subject: "Objednávka — {{dodavatel}}", body: "Objednávka — {{dodavatel}}\n{{zoznam_poloziek}}" }),
+  );
+  const payload = (await res.json()) as { ok: boolean; text: string };
+  expect(payload.ok).toBe(true);
+  expect(payload.text).not.toContain("Tel.:");
+  expect(payload.text).not.toContain("eshop@forestshop.sk");
+});
+
+it("náhľad ostatných druhov (napr. nedostupne) kontaktnú pätičku MÁ", async () => {
+  const { app, cookie } = await boot("manazer");
+  const res = await app.request("/api/mail-templates/preview", jsonRequest(cookie, "POST", { key: "nedostupne", subject: "Vec", body: "Ahoj." }));
+  const payload = (await res.json()) as { ok: boolean; text: string };
+  expect(payload.ok).toBe(true);
+  expect(payload.text).toContain("Tel.:");
+  expect(payload.text).toContain("eshop@forestshop.sk");
+});
+
 it("náhľad neplatnej šablóny vráti chybu namiesto rozbitého e-mailu", async () => {
   const { app, cookie } = await boot("manazer");
   const res = await app.request("/api/mail-templates/preview", jsonRequest(cookie, "POST", { key: "nedostupne", subject: "Vec", body: "{{vymyslene_pole}}" }));
