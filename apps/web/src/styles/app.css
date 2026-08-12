@@ -2154,10 +2154,22 @@ tr:last-child td {
    stĺpec (rovnaké ako predtým) — presne to, čo ticket žiada ("KDE to
    obsah dovolí", nie vynútene všade). Test pre KAŽDÚ ĎALŠIU zmenu tejto
    dolnej hranice: zmeraj `.upozornenie-actions` výšku pri kandidátnej
-   šírke naživo, nikdy nehádaj okrúhle číslo. */
+   šírke naživo, nikdy nehádaj okrúhle číslo.
+   **Code review nález: holé `minmax(500px, 1fr)` bez `min(...)` obalu
+   pretečie na úzkej obrazovke.** Táto záložka je `wide: true` (`nav.ts`)
+   → `.main-wide` má `overflow-x: hidden` (vyššie v tomto súbore) — na
+   šírke, kde je dostupný priestor menší než 500px (mobil, úzke okno so
+   zbaleným/rozbaleným bočným panelom), by JEDEN stĺpec zostal vynútene
+   500px široký a zvyšok by sa ticho ODREZAL (žiadny scroll na obnovenie,
+   `overflow-x: hidden` ho jednoducho skryje) — presne opak toho, čo
+   `overflow-x: hidden` má chrániť. `minmax(min(500px, 100%), 1fr)` rieši
+   toto BEZ media query: dolná hranica je "500px, alebo 100 % dostupnej
+   šírky, podľa toho, čo je menšie" — na širokej obrazovke sa správa
+   identicky (500px), na úzkej sa stĺpec zmenší na celú (jedinú) dostupnú
+   šírku namiesto pretečenia. */
 .upozornenia-list {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(500px, 100%), 1fr));
   align-items: start;
   gap: var(--fs-space-4);
 }

@@ -208,6 +208,19 @@ test("desktop (1600px): pás akcií karty je ≥25 % nižší než issue 303's b
 // (`getBoundingClientRect`), nie len prítomnosťou CSS triedy `grid`
 // v štýlopise (rovnaký princíp ako issue 263's `getComputedStyle`
 // farebný dôkaz namiesto kontroly `className`).
+//
+// Code review otázka: nezávisí tento test na PARITE/počte prípadných
+// leftover kariet z predchádzajúceho testu v tomto súbore (ten svoje
+// dve karty úmyselne NEMAŽE — testuje odloženie/vrátenie, nie mazanie)?
+// NIE — `listUpozornenia` triedi `asc(dueAt), desc(createdAt)`
+// (`queries.ts`); ani táto dvojica, ani predošlé leftover karty nikdy
+// nenastavujú `dueAt` (zostáva `null`, radí sa AŽ ZA všetky s termínom),
+// takže v rámci "bez termínu" skupiny vyhráva `desc(createdAt)` — dve
+// PRÁVE vytvorené karty sú vždy najnovšie, teda vždy prvé dve v poradí,
+// teda vždy v PRVOM riadku mriežky, bez ohľadu na to, koľko starších
+// kariet leží pod nimi. Overené naživo aj so 4 reálnymi kartami v
+// tabuľke (2 z predchádzajúceho testu + tieto 2) — test prešiel
+// rovnako spoľahlivo ako s čistou tabuľkou.
 test("desktop (1600px): dve karty upozornení sa uložia VEDĽA SEBA, nie pod sebou (issue 382)", async ({ page }) => {
   const chyby: string[] = [];
   page.on("console", (m) => {
