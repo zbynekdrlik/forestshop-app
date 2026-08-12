@@ -23,6 +23,16 @@ paths:
   `packageManager` (`pnpm@10.0.0`), nie nainštalovaná globálne. `.npmrc` má
   `engine-strict=true` — inštalácia zlyhá nahlas, ak Node/pnpm nesedí, namiesto
   tichého pokračovania so zlou verziou.
+- **Čerstvý `git worktree` checkout (napr. autopilot-worker's izolovaná
+  vetva) NEMÁ `node_modules`** — nie je súčasťou `.git`, každý strom si ho
+  musí založiť sám. Bez neho `pnpm run lint` NEHLÁSI "chýba inštalácia" —
+  vyzerá to ako reálna, obrovská porucha kódu: typescript-eslint's project
+  service nevie vyriešiť typy zo žiadneho importovaného balíka, takže
+  KAŽDÝ `.insert()`/`.values()`/atď. na cudzom module ohlási
+  `no-unsafe-call`/`no-unsafe-member-access` — desiatky tisíc falošných
+  chýb naraz (issue 376, nameraných presne 50546). Fix: `pnpm install`
+  PRED prvým lintom v novom worktree (rýchle, `pnpm-lock.yaml` je
+  nezmenený, len sa znovupoužijú balíky z pnpm store — žiadne sťahovanie).
 - **Lokálna databáza beží na porte 5433** (`docker-compose.yml`,
   `127.0.0.1:5433:5432`), **CI integration/e2e joby používajú 5432** (Postgres
   ako GitHub Actions `services:` kontajner, žiadny port-mapping konflikt s
