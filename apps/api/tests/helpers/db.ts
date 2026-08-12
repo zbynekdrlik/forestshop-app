@@ -63,12 +63,22 @@ export async function withCleanDb(): Promise<{ db: Database; close: () => Promis
     // "order_open_status"/"supplier_contact" above — no FK in either
     // direction (its `pickup_date` is a free-standing date, not tied to any
     // order), so TRUNCATE CASCADE from any listed table never reaches it.
-    // "dpd_shipment" does NOT need listing here — it has a real FK into
-    // "order" (`onDelete: cascade`), so `TRUNCATE "order" CASCADE` already
-    // reaches it automatically (same reasoning as "order_line" via
-    // "variant" above).
+    // issue 384: "upozornenie" (#267), "daily_task" (#342), "mail_log"
+    // (#193), "dpd_shipment" (#292), "product_supplier_override"/
+    // "product_supplier_link_override" (#121) were all missing from this
+    // list — each DOES have a real FK into an already-listed table
+    // ("users" for the first three, "product"/"order" for the rest), so
+    // CASCADE already reaches them without being named (empirically
+    // confirmed on issue 384 — no leaked rows across two consecutive real
+    // e2e runs even before this change). Listed explicitly anyway for the
+    // SAME self-documenting consistency as "order_line"/"pairing" above —
+    // relying on an unlisted FK path is fragile against a future
+    // `onDelete` change, and "dpd_shipment" used to be this file's one
+    // deliberate exception to that convention (previous comment here said
+    // it "does NOT need listing"); it is now included like everything else
+    // instead of staying the sole exception.
     await db.execute(
-      sql`TRUNCATE TABLE ingest_issue, variant, product, catalog_snapshot, job_run, audit_events, sessions, users, order_line, "order", supplier_contact, pairing, supplier, order_open_status, posta_uncollected_settings, posta_uncollected_state, order_reminder_settings, order_reminder_state, nedostupne_state, nedostupne_replacement_link, mail_template, mail_template_history, supplier_stock, restock_settings, restock_event, shop_product_url, theme_color, dpd_pickup_request RESTART IDENTITY CASCADE`,
+      sql`TRUNCATE TABLE ingest_issue, variant, product, catalog_snapshot, job_run, audit_events, sessions, users, order_line, "order", supplier_contact, pairing, supplier, order_open_status, posta_uncollected_settings, posta_uncollected_state, order_reminder_settings, order_reminder_state, nedostupne_state, nedostupne_replacement_link, mail_template, mail_template_history, supplier_stock, restock_settings, restock_event, shop_product_url, theme_color, dpd_pickup_request, upozornenie, daily_task, mail_log, dpd_shipment, product_supplier_override, product_supplier_link_override RESTART IDENTITY CASCADE`,
     );
     // issue 59: `order_open_status` is a NEW table with real production
     // content (the migration seeds it) — TRUNCATE alone would leave every
