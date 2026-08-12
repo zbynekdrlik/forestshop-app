@@ -77,7 +77,7 @@ export function parseBetalovSearch(html: string): PairingCandidate[] {
     // Port `urljoin(base_url + "/", href.lstrip("/"))` — obe formy (vedúca
     // lomka aj bez nej) sa normalizujú na rovnaký absolútny tvar.
     const url = resolveAndStripFragment(href.replace(/^\/+/, ""), `${BASE_URL}/`);
-    if (!belongsToBase(url, BASE_URL)) return;
+    if (url === null || !belongsToBase(url, BASE_URL)) return;
 
     const path = url.slice(BASE_URL.length);
     if (EXCLUDE_PREFIXES.some((prefix) => path.startsWith(prefix))) return;

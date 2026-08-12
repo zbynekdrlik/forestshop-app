@@ -43,6 +43,58 @@ describe("parseBetalovSearch", () => {
   it("returns an empty list when both tab-panes are empty", () => {
     expect(parseBetalovSearch(PRAZDNE)).toEqual([]);
   });
+
+  // Syntetické HTML zlomky (nie živo stiahnuté fixtúry) — testujú
+  // ŠTRUKTURÁLNE vetvy (chýbajúci mh-100/chýbajúci #snippet--productList),
+  // nie nuansu reálneho markupu.
+  it("falls back to .product-title a href when a.mh-100 is missing on the card", () => {
+    const html =
+      '<div class="product-col"><h3 class="product-title"><a href="len-title-odkaz">Len title odkaz</a></h3></div>';
+    expect(parseBetalovSearch(html)).toEqual([
+      {
+        name: "Len title odkaz",
+        url: "https://www.huntingshop.eu/len-title-odkaz",
+        code: null,
+        price: null,
+        rawScore: 0,
+        codeHit: false,
+      },
+    ]);
+  });
+
+  it("searches the whole document for .product-col when #snippet--productList is absent", () => {
+    const html =
+      '<div class="product-col"><a href="/x" class="mh-100">img</a>' +
+      '<h3 class="product-title"><a href="x">Bez snippetu</a></h3></div>';
+    expect(parseBetalovSearch(html)).toEqual([
+      {
+        name: "Bez snippetu",
+        url: "https://www.huntingshop.eu/x",
+        code: null,
+        price: null,
+        rawScore: 0,
+        codeHit: false,
+      },
+    ]);
+  });
+
+  it("skips a single malformed href without losing the other, valid cards (review finding, issue 387 E2)", () => {
+    const html =
+      '<div class="product-col"><a href="http://[" class="mh-100">img</a>' +
+      '<h3 class="product-title"><a href="http://[">Pokazená</a></h3></div>' +
+      '<div class="product-col"><a href="/dobra" class="mh-100">img</a>' +
+      '<h3 class="product-title"><a href="dobra">Dobrá karta</a></h3></div>';
+    expect(parseBetalovSearch(html)).toEqual([
+      {
+        name: "Dobrá karta",
+        url: "https://www.huntingshop.eu/dobra",
+        code: null,
+        price: null,
+        rawScore: 0,
+        codeHit: false,
+      },
+    ]);
+  });
 });
 
 describe("betalovAdapter", () => {

@@ -12,7 +12,8 @@
 //   `_warm` v starej appke skúsi warm-up presne raz a host označí za
 //   "warmed" AJ pri zlyhaní (žiadny opakovaný pokus pri ďalšom dopyte na
 //   ten istý host) — port zachováva toto správanie doslovne.
-// - **Throttle 0,7 s** pred KAŽDÝM reálnym requestom (nikdy pri
+// - **Throttle 0,7 s** raz pred KAŽDÝM `SearchClient.search()` volaním,
+//   ktoré skutočne ide na sieť (nie pri cache hite, nikdy pri
 //   injektovanom fake fetcheri v testoch — identity-check proti
 //   `nativeFetcher`, port Pythonovho `fetch is _DEFAULT_FETCH`).
 // - **3 pokusy s backoffom 1,5·(pokus+1) s** — doslovný port vrátane toho,
@@ -25,6 +26,7 @@
 //   zdieľateľná naprieč viacerými `SearchClient` inštanciami (rovnaký
 //   zámer ako Pythonov `cache: dict | None` konštruktorový parameter).
 
+import { log } from "../../logger.js";
 import type { PairingCandidate } from "./types.js";
 import { adapterFor } from "./adapters/registry.js";
 
@@ -96,34 +98,43 @@ function baseHeaders(cookie: string): Record<string, string> {
   return headers;
 }
 
-interface FetchOutcome {
-  readonly text: string;
-  readonly setCookie: readonly string[];
-}
-
 /** Port `_SessionFetcher.__call__`'s retry slučky: 3 pokusy, 2xx inak
- *  chyba, backoff 1,5·(pokus+1) s medzi pokusmi (aj po poslednom). */
+ *  chyba, backoff 1,5·(pokus+1) s medzi pokusmi (aj po poslednom).
+ *
+ *  `buildHeaders` sa volá NANOVO PRED KAŽDÝM pokusom (nie raz vopred) —
+ *  `onResponseCookies` (nižšie) sa volá pre KAŽDÚ prijatú odpoveď (aj
+ *  ne-2xx), takže cookie vydaná spolu s napr. 503 na 1. pokuse MUSÍ byť
+ *  súčasťou hlavičiek 2. pokusu (review nález, issue 387 E2 — jeden
+ *  vopred zmrazený `headers` objekt by ju stratil, presnú regresiu na to
+ *  drží `client.test.ts`'s "captures a Set-Cookie carried on a FAILED
+ *  (non-2xx) attempt" test). Port `requests.Session`'s správania, ktoré
+ *  cookies extrahuje zo VŠETKÝCH odpovedí, nielen z tej poslednej
+ *  úspešnej. */
 async function fetchWithRetry(
   rawFetch: RawFetcher,
   url: string,
-  headers: Record<string, string>,
+  buildHeaders: () => Record<string, string>,
   sleep: (ms: number) => Promise<void>,
-): Promise<FetchOutcome> {
+  onResponseCookies: (setCookie: readonly string[]) => void,
+): Promise<string> {
   let lastError: unknown;
   for (let attempt = 0; attempt < MAX_RETRIES; attempt += 1) {
     try {
-      const response = await rawFetch(url, { headers });
+      const response = await rawFetch(url, { headers: buildHeaders() });
+      onResponseCookies(response.getSetCookie());
       if (response.status < 200 || response.status >= 300) {
         throw new Error(`HTTP ${String(response.status)}`);
       }
-      const text = await response.text();
-      return { text, setCookie: response.getSetCookie() };
+      return await response.text();
     } catch (error) {
       lastError = error;
+      const reason = error instanceof Error ? error.message : String(error);
+      log.warn({ url, attempt: attempt + 1, reason }, "pairing-search: fetch zlyhal, skúšam znova");
       await sleep(1.5 * (attempt + 1) * 1000);
     }
   }
   const reason = lastError instanceof Error ? lastError.message : String(lastError);
+  log.error({ url, attempts: MAX_RETRIES, reason }, "pairing-search: fetch zlyhal aj po opakovaných pokusoch");
   throw new Error(`fetch zlyhal aj po opakovaných pokusoch: ${url} (${reason})`);
 }
 
@@ -174,10 +185,13 @@ export function createSessionFetcher(options: SessionFetcherOptions = {}): Fetch
     try {
       const response = await rawFetch(`https://${host}/`, { headers: baseHeaders(cookieHeaderFor(host)) });
       storeSetCookies(host, response.getSetCookie());
-    } catch {
+      log.info({ host }, "pairing-search: zohriata session (homepage warm-up)");
+    } catch (error) {
       // Port `_warm`'s `except Exception: log.warning(...)` — zlyhaný
       // warm-up sa neopakuje, host sa napriek tomu označí za "warmed"
       // (nižšie, mimo try/catch, presne ako v Pythone).
+      const reason = error instanceof Error ? error.message : String(error);
+      log.warn({ host, reason }, "pairing-search: warm-up zlyhal, host sa aj tak označí za zohriaty");
     }
     warmedHosts.add(host);
   }
@@ -185,9 +199,15 @@ export function createSessionFetcher(options: SessionFetcherOptions = {}): Fetch
   return async (url: string): Promise<string> => {
     const host = hostOf(url);
     await warmHost(host);
-    const outcome = await fetchWithRetry(rawFetch, url, baseHeaders(cookieHeaderFor(host)), sleep);
-    storeSetCookies(host, outcome.setCookie);
-    return outcome.text;
+    return fetchWithRetry(
+      rawFetch,
+      url,
+      () => baseHeaders(cookieHeaderFor(host)),
+      sleep,
+      (setCookie) => {
+        storeSetCookies(host, setCookie);
+      },
+    );
   };
 }
 
@@ -241,6 +261,7 @@ export class SearchClient {
     const url = adapter.buildSearchUrl(query);
     const html = await this.fetcher(url);
     const candidates = adapter.parseSearchResults(html);
+    log.info({ adapterKey, query, count: candidates.length }, "pairing-search: vyhľadávanie dokončené");
     this.cache.set(cacheKey, candidates);
     return candidates;
   }

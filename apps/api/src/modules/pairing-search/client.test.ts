@@ -213,6 +213,30 @@ describe("createSessionFetcher", () => {
     expect(text).toBe("<html>ok</html>");
     expect(searchAttempts).toBe(2);
   });
+
+  it("captures a Set-Cookie carried on a FAILED (non-2xx) attempt, not just the final success (review finding)", async () => {
+    let searchAttempts = 0;
+    const seenCookieHeaders: (string | undefined)[] = [];
+    const rawFetch: RawFetcher = (url, init) => {
+      seenCookieHeaders.push(init.headers["cookie"]);
+      if (url === "https://example.sk/") return Promise.resolve(fakeResponse("<html></html>"));
+      searchAttempts += 1;
+      if (searchAttempts < 2) {
+        // A 503 that ALSO issues a fresh session cookie — real servers do
+        // this (e.g. a load balancer re-routing + stamping a new sticky
+        // session cookie on the error response itself).
+        return Promise.resolve(fakeResponse("", { status: 503, setCookie: ["retry_session=xyz; Path=/"] }));
+      }
+      return Promise.resolve(fakeResponse("<html>ok</html>"));
+    };
+    const fetcher = createSessionFetcher({ rawFetch, sleep: () => Promise.resolve() });
+
+    await fetcher("https://example.sk/search?q=a");
+
+    // [warm-up, 1st (503) attempt, 2nd (success) attempt] — the cookie
+    // issued on the FAILED 1st attempt must already be present on the 2nd.
+    expect(seenCookieHeaders).toEqual([undefined, undefined, "retry_session=xyz"]);
+  });
 });
 
 describe("nativeFetcher", () => {

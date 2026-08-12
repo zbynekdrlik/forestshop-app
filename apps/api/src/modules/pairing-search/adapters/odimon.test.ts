@@ -36,6 +36,40 @@ describe("parseOdimonSearch", () => {
   it("returns an empty list when .product-list__results has no cards", () => {
     expect(parseOdimonSearch(PRAZDNE)).toEqual([]);
   });
+
+  // Syntetické HTML zlomky (nie živo stiahnuté fixtúry) — testujú
+  // ŠTRUKTURÁLNE vetvy, nie nuansu reálneho markupu.
+  it("searches the whole document for a.product-card when .product-list__results is absent", () => {
+    const html = '<a class="product-card" href="https://www.odimon.sk/x"><img alt="Bez kontajnera"></a>';
+    expect(parseOdimonSearch(html)).toEqual([
+      {
+        name: "Bez kontajnera",
+        url: "https://www.odimon.sk/x",
+        code: null,
+        price: null,
+        rawScore: 0,
+        codeHit: false,
+      },
+    ]);
+  });
+
+  it("skips a single malformed href without losing the other, valid cards (review finding, issue 387 E2)", () => {
+    const html =
+      '<div class="product-list__results">' +
+      '<a class="product-card" href="http://["><img alt="Pokazená"></a>' +
+      '<a class="product-card" href="https://www.odimon.sk/dobra"><img alt="Dobrá karta"></a>' +
+      "</div>";
+    expect(parseOdimonSearch(html)).toEqual([
+      {
+        name: "Dobrá karta",
+        url: "https://www.odimon.sk/dobra",
+        code: null,
+        price: null,
+        rawScore: 0,
+        codeHit: false,
+      },
+    ]);
+  });
 });
 
 describe("odimonAdapter", () => {

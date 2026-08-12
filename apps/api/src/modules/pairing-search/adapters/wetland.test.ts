@@ -42,6 +42,34 @@ describe("parseWetlandSearch", () => {
   it("returns an empty list when the search page has no results", () => {
     expect(parseWetlandSearch(PRAZDNE)).toEqual([]);
   });
+
+  // Synteticky zostavený HTML zlomok (nie živo stiahnutá fixtúra) — testuje
+  // ŠTRUKTURÁLNU vetvu (chýbajúci primárny selektor), nie nuansu reálneho
+  // markupu, ktorá by inak zaslúžila commitnutú fixtúru.
+  it("falls back to a.product-miniature__link when the primary title selector matches nothing", () => {
+    const html =
+      '<a class="product-miniature__link" href="/x" title="Miniatúra produktu">' +
+      '<img alt="obrázok"></a>';
+    expect(parseWetlandSearch(html)).toEqual([
+      { name: "Miniatúra produktu", url: "https://www.wetland.sk/x", code: null, price: null, rawScore: 0, codeHit: false },
+    ]);
+  });
+
+  it("skips a single malformed href without losing the other, valid cards (review finding, issue 387 E2)", () => {
+    const html =
+      '<div class="product-miniature__title"><a class="link" href="http://[">Pokazená karta</a></div>' +
+      '<div class="product-miniature__title"><a class="link" href="/nohavice/dobra">Dobrá karta</a></div>';
+    expect(parseWetlandSearch(html)).toEqual([
+      {
+        name: "Dobrá karta",
+        url: "https://www.wetland.sk/nohavice/dobra",
+        code: null,
+        price: null,
+        rawScore: 0,
+        codeHit: false,
+      },
+    ]);
+  });
 });
 
 describe("wetlandAdapter", () => {

@@ -38,7 +38,7 @@ export function parseWetlandSearch(html: string): PairingCandidate[] {
     if (!href) return;
 
     const url = resolveAndStripFragment(href, BASE_URL);
-    if (!belongsToBase(url, BASE_URL)) return;
+    if (url === null || !belongsToBase(url, BASE_URL)) return;
     if (seen.has(url)) return;
     seen.add(url);
 
