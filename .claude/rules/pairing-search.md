@@ -72,3 +72,74 @@ https://github.com/zbynekdrlik/forestshop-app/issues/387#issuecomment-5273377438
   batériu vstup→výstup dvojíc, over TS port proti nim priamo (nie len proti
   ručne napísaným testom, ktoré by mohli zopakovať rovnakú chybu ako
   implementácia).
+
+## E2 — SearchClient + 3 adaptéry (`client.ts`, `adapters/`)
+
+- **`code`/`price` sa pri PARSOVANÍ VÝSLEDKOV VYHĽADÁVANIA nikdy
+  nenapĺňajú — zostávajú `null`, doslovne ako stará appka.** Ani jeden z
+  troch `suppliers/*.py` parserov `Candidate.code`/`.price` nenastavuje
+  (`models.Candidate(name, url)`, defaulty `None`) — kód sa dopĺňa až pri
+  overení na DETAILE produktu (`verify.py`, mimo E2, plánované E4). Zadanie
+  E2 síce menuje "kód/cena" medzi extrahovanými poľami, ale doslovný port
+  necháva `code`/`price` `null` — pri ĎALŠEJ zmene parsera never sa nepokúšaj
+  "vylepšiť" extrakciu o cenu/kód zo search-výsledkov, kým sa nezmení sám
+  zdrojový kontrakt (`PairingCandidate`).
+- **`SupplierAdapter` (`adapters/types.ts`) zlučuje starú appka's oddelený
+  `config.SUPPLIERS` (URL šablóny) + `client.PARSERS` (parsery) do JEDNÉHO
+  objektu na dodávateľa, registrovaného v `adapters/registry.ts` pod
+  `adapterKey`.** `baseUrl`/`buildSearchUrl` sú súčasťou KÓDU adaptéra, nie
+  DB — `supplier.wholesale_base_url` (E1's `schema-pairing.ts`) je pre
+  zobrazenie/budúce overenie (E3+), nikdy pre stavbu vyhľadávacej URL.
+  Nový dodávateľ = nový `adapters/<meno>.ts` súbor + 1 riadok v
+  `registry.ts` (presne ako stará appka's "Pridanie nového dodávateľa"
+  postup, `.claude/skills/suppliers/SKILL.md`).
+- **Živo overené 13. 8. 2026 — všetky tri selektory zo starej appky STÁLE
+  PLATIA bezo zmeny** od 27. 6. 2026: `div.product-miniature__title a.link`
+  (wetland/PrestaShop), `#snippet--productList` + `.product-col` +
+  `a.mh-100`/`.product-title a` (betalov/Nette), `.product-list__results`
+  + `a.product-card` + `img[alt]` (odimon/BUXUS). Pri drifte markupu
+  (E2's riziko #2 v návrhu) over PRVÝ krok vždy živým `curl` (session
+  warm-up + throttle, presne ako `client.ts`), nikdy len proti fixtúre —
+  fixtúra je z definície malá/stará.
+- **BETALOV's `#snippet--productList` má DVA tab-pane so SAMOSTATNÝMI CSS
+  triedami na kartu** — `#home` (mriežka) používa `.product-col`, `#profile`
+  (zoznam) používa `.product-card` BEZ `product-col`. Parser scopuje na
+  `.product-col`, takže zoznamový pohľad sa NIKDY neparsuje — na živej
+  stránke preto NEEXISTUJE prirodzený duplikát v rámci `.product-col`
+  (overené 13. 8. 2026, dopyt "nohavice": 16 kariet, 16 distinct URL).
+  Dedup/exclusion-prefix testy preto používajú SKONŠTRUOVANÉ karty
+  (zdokumentované priamo v komentári fixtúry) — rovnaký precedens ako
+  `supplier-stock/fixtures/rosler-vypredane-noz-entita.html`.
+- **cheerio's `$.root()` má typ `Cheerio<Document>`, NIE `Cheerio<Element>`
+  — premenná `snippet.length > 0 ? snippet : $.root()` (zmiešaný typ) sa
+  nedá bezpečne zavolať `.find(...)` na nej pod `strictTypeChecked`**
+  (`TS2684: The 'this' context ... is not assignable`). Fix (vzor v
+  `betalov.ts`/`odimon.ts`): DVE samostatne typované vetvy —
+  `scope.length > 0 ? scope.find(selector) : $(selector)` (fallback
+  hľadá selektor na CELOM dokumente, nie cez `.find()` na
+  `Cheerio<Document>`) — nikdy si neuklad `$.root()` do premennej, ktorú
+  neskôr voláš `.find()`.
+- **`Record<string, string>` objekt (napr. HTTP hlavičky) pod
+  `noPropertyAccessFromIndexSignature`/`strictTypeChecked` VYŽADUJE
+  bracket notáciu pri PRIRADENÍ NOVÉHO kľúča po inicializácii** —
+  `headers.cookie = x` hlási `TS4111`, `headers["cookie"] = x` prejde.
+  Platí to len pre prístup MIMO object-literal inicializátora (kľúče
+  zadané priamo v `{ "user-agent": ..., accept: ... }` sú v poriadku).
+- **`SearchClient`'s throttle (0,7 s) je identity-check proti
+  `nativeFetcher` singletonu (`this.fetcher === nativeFetcher`), presne
+  ako stará appka's `fetch is _DEFAULT_FETCH`** — test naň (nikdy live
+  sieť) potrebuje `vi.stubGlobal("fetch", ...)` PLUS `sleep` injektovaný
+  cez `SearchClientOptions.sleep` (fetcher sa necháva na predvolený
+  `nativeFetcher`, aby identity-check prešiel) — pozri `client.test.ts`'s
+  "throttles 700ms" test. Injektovaný fake `Fetcher` (bežný prípad vo
+  väčšine testov) throttle VYNECHÁVA úplne, aj keď `throttleMs`/`sleep` sú
+  nastavené — to je zámer, nie diera.
+- **Diagnostická technika: keď `grep`/`Edit`'s string-match ticho nenájde
+  reťazec, ktorý v súbore PREUKÁZATEĽNE JE (`Read` ho ukáže)** — over
+  najprv, či súbor neobsahuje skutočný NUL bajt (`python3 -c "print(b'\x00'
+  in open(cesta,'rb').read())"`); `grep` bez `-a` traktuje takýto súbor
+  ako binárny a ticho nič nevráti (žiadna chyba, len prázdny výstup), aj
+  keď `head`/`cat`/`wc -l` fungujú normálne. Vzniklo tu autorskou chybou
+  pri skladaní obsahu nástroja `Write` (zamýšľaná medzera sa zapísala ako
+  NUL) — oprava je priamy binárny `read().replace(b"\x00", b" ")`, nikdy
+  prepis celého súboru odhadom správneho obsahu.
