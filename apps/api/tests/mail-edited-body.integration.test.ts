@@ -17,6 +17,14 @@ import { withCleanDb } from "./helpers/db.js";
 // vygenerovanú šablónu), zapísať TO ISTÉ do Knihy odoslaných e-mailov, a
 // šablóna v `mail_template` musí po odoslaní ostať bajt na bajt nezmenená.
 // Falošný mail transport — nikdy skutočný SMTP (majiteľova podmienka).
+//
+// issue 379: `renderEditedBody` (`render.ts`) teraz bezpodmienečne pripája
+// kontaktnú pätičku (`wrapEmailText`) — táto cesta je VŽDY zákaznícky
+// e-mail, takže "presne to, čo obsluha upravila" v skutočnosti odíde ako
+// upravený text + pätička; `sendLoggedMail` zapisuje do Knihy presne to,
+// čo sa odoslalo (`mail-log/service.ts`, `.claude/rules/mail-log.md`), teda
+// aj tam ide upravený text + pätička.
+const KONTAKT_FOOTER_TEXT = "Tel.: +421 903 670 766\nE-mail: eshop@forestshop.sk\nwww.forestshop.sk";
 
 let close: (() => Promise<void>) | undefined;
 afterEach(async () => {
@@ -81,7 +89,7 @@ it("nedostupne: editedBody nahradí vygenerované znenie, šablóna ostáva nezm
   });
   expect(result).toEqual({ ok: true });
   expect(sent).toHaveLength(1);
-  expect(sent[0]?.text).toBe(editedText);
+  expect(sent[0]?.text).toBe(`${editedText}\n\n${KONTAKT_FOOTER_TEXT}`);
   expect(sent[0]?.html).toContain("váš tovar bohužiaľ nemáme skladom");
   expect(sent[0]?.html).not.toContain("Vlastné znenie pre");
   // Predmet ostáva z NEUPRAVENÉHO vyrenderovania (ticket edituje len text).
@@ -92,7 +100,7 @@ it("nedostupne: editedBody nahradí vygenerované znenie, šablóna ostáva nezm
 
   const logRow = (await db.select({ recipient: mailLog.recipient, body: mailLog.body }).from(mailLog))[0];
   expect(logRow?.recipient).toBe("jan@example.sk");
-  expect(logRow?.body).toBe(editedText);
+  expect(logRow?.body).toBe(`${editedText}\n\n${KONTAKT_FOOTER_TEXT}`);
 });
 
 async function seedActor(db: Awaited<ReturnType<typeof boot>>): Promise<string> {
@@ -131,11 +139,11 @@ it("order-merge: editedBody nahradí vygenerované znenie, Kniha uloží upraven
   });
   expect(result.status).toBe("sent");
   expect(sent).toHaveLength(1);
-  expect(sent[0]?.text).toBe(editedText);
+  expect(sent[0]?.text).toBe(`${editedText}\n\n${KONTAKT_FOOTER_TEXT}`);
   expect(sent[0]?.html).toContain("obe tvoje objednávky posielame spolu");
 
   const logRow = (await db.select({ body: mailLog.body }).from(mailLog))[0];
-  expect(logRow?.body).toBe(editedText);
+  expect(logRow?.body).toBe(`${editedText}\n\n${KONTAKT_FOOTER_TEXT}`);
 });
 
 // HTTP-úrovňový dôkaz — náhľad vracia `text` (frontend ho predvyplní do
@@ -203,9 +211,9 @@ it("HTTP: nedostupne náhľad vráti 'text', /send prijme editedBody, mail-log u
     body: JSON.stringify({ orderCode: "27700201", variantCode: "P277B", emailType: "nedostupne", previewToken: preview.previewToken, editedBody: editedText }),
   });
   expect((await sendRes.json() as { ok: boolean }).ok).toBe(true);
-  expect(nedostupneSent[0]?.text).toBe(editedText);
+  expect(nedostupneSent[0]?.text).toBe(`${editedText}\n\n${KONTAKT_FOOTER_TEXT}`);
 
   const logRes = await app.request("/api/mail-log", { headers: { cookie } });
   const logBody = (await logRes.json()) as { rows: { body: string | null }[] };
-  expect(logBody.rows[0]?.body).toBe(editedText);
+  expect(logBody.rows[0]?.body).toBe(`${editedText}\n\n${KONTAKT_FOOTER_TEXT}`);
 });

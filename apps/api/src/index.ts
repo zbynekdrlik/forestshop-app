@@ -128,6 +128,8 @@ const sendSupplierMail =
         user: env.MAIL_USER,
         pass: env.MAIL_PASS,
         from: env.MAIL_FROM,
+        // issue 358: nezávislá od `from` — pozri `env.ts`/`transport.ts`.
+        replyTo: env.MAIL_REPLY_TO,
       });
 
 // issue 122: spätný zápis odkazu na dodávateľa do Shoptetu — rovnaká úvaha

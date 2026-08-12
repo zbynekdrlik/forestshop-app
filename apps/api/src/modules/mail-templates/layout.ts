@@ -1,4 +1,4 @@
-import { KONTAKT_EMAIL, KONTAKT_TELEFON, WEB_FORESTSHOP } from "./context.js";
+import { KONTAKT_EMAIL, KONTAKT_TELEFON, WEB_FORESTSHOP, WEB_FORESTSHOP_LABEL } from "./context.js";
 
 // issue 347 — majiteľ: e-maily zákazníkom vyzerali "hrozne" (holá adresa ako
 // text odkazu, žiadny obrázok, telefón/e-mail stratené vo vete). Táto jedna
@@ -35,11 +35,26 @@ export function wrapEmailHtml(bodyHtml: string): string {
     '      <tr><td style="padding:20px 32px;border-top:1px solid #e5e0d8;font-size:13px;color:#666;">',
     `        <div style="margin-bottom:4px;">Tel.: <a href="${TEL_HREF}" style="color:${BRAND};text-decoration:none;">${KONTAKT_TELEFON}</a></div>`,
     `        <div style="margin-bottom:4px;">E-mail: <a href="mailto:${KONTAKT_EMAIL}" style="color:${BRAND};text-decoration:none;">${KONTAKT_EMAIL}</a></div>`,
-    `        <div><a href="${WEB_FORESTSHOP}" style="color:${BRAND};text-decoration:none;">www.forestshop.sk</a></div>`,
+    `        <div><a href="${WEB_FORESTSHOP}" style="color:${BRAND};text-decoration:none;">${WEB_FORESTSHOP_LABEL}</a></div>`,
     "      </td></tr>",
     "    </table>",
     "    </td></tr></table>",
     "  </body>",
     "</html>",
   ].join("\n");
+}
+
+// issue 379: textový analóg tej istej pätičky — predtým JESTVOVALA len pre
+// HTML (`wrapEmailHtml`), takže čistotextová verzia e-mailu nemala kontakt
+// NIKDE potom, čo sa z tela šablóny odstránili opakované vety s
+// `{{kontakt_email}}`/`{{kontakt_telefon}}` (issue 379 — kontakt sa NESMIE
+// opakovať v tele AJ v pätičke). Volá sa z TOHO ISTÉHO miesta ako
+// `wrapEmailHtml` (`render.ts`'s `renderTemplate`/`renderEditedBody`), takže
+// platí pre každý zákaznícky e-mail rovnako — OKREM `supplier_order`
+// (jediný čisto textový e-mail dodávateľovi, ktorý si toto explicitne
+// vypína cez `renderTemplate`'s `{ footer: false }`, `orders/mail.ts`, aby
+// ostal bajt na bajt nezmenený, `.claude/rules/mail-templates.md`).
+export function wrapEmailText(bodyText: string): string {
+  const footer = [`Tel.: ${KONTAKT_TELEFON}`, `E-mail: ${KONTAKT_EMAIL}`, WEB_FORESTSHOP_LABEL].join("\n");
+  return bodyText === "" ? footer : `${bodyText}\n\n${footer}`;
 }

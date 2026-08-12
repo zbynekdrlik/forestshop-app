@@ -25,9 +25,13 @@ const CTX: TemplateContext = {
 
 const ALLOWED = new Set(Object.keys(CTX));
 
+// issue 379: presný textový tvar kontaktnej pätičky, ktorú `wrapEmailText`
+// pripája ku KAŽDÉMU textovému výstupu (default `{ footer: true }`).
+const KONTAKT_FOOTER_TEXT = "Tel.: +421 903 670 766\nE-mail: eshop@forestshop.sk\nwww.forestshop.sk";
+
 describe("renderTemplate — dosadzovanie polí", () => {
   it("dosadí text a odkaz do HTML aj do čistého textu", () => {
-    const out = renderTemplate({ subject: "Objednávka {{cislo_objednavky}}", body: "Dobrý deň, {{meno_zakaznika}}.\n\nSledovanie: {{odkaz_sledovanie}}" }, CTX);
+    const out = renderTemplate({ subject: "Objednávka {{cislo_objednavky}}", body: "Dobrý deň, {{meno_zakaznika}}.\n\nSledovanie: {{odkaz_sledovanie}}" }, CTX, { footer: false });
     expect(out.subject).toBe("Objednávka 20260123");
     expect(out.html).toContain("<p>Dobrý deň, Ján Novák.</p>");
     expect(out.html).toContain('<a href="https://tandt.posta.sk/x" target="_blank">https://tandt.posta.sk/x</a>');
@@ -35,14 +39,14 @@ describe("renderTemplate — dosadzovanie polí", () => {
   });
 
   it("neznáme pole sa ticho zahodí (uložiť sa taká šablóna vôbec nedá — viď kontrolu nižšie)", () => {
-    const out = renderTemplate({ subject: "x", body: "A{{neexistuje}}B" }, CTX);
+    const out = renderTemplate({ subject: "x", body: "A{{neexistuje}}B" }, CTX, { footer: false });
     expect(out.text).toBe("AB");
   });
 });
 
 describe("renderTemplate — tučné písmo", () => {
   it("spáruje hviezdičky OKOLO zástupného poľa (padli by do dvoch rôznych útržkov)", () => {
-    const out = renderTemplate({ subject: "x", body: "Dobrý deň, **{{meno_zakaznika}}**," }, CTX);
+    const out = renderTemplate({ subject: "x", body: "Dobrý deň, **{{meno_zakaznika}}**," }, CTX, { footer: false });
     expect(out.html).toContain("<p>Dobrý deň, <strong>Ján Novák</strong>,</p>");
     expect(out.text).toBe("Dobrý deň, Ján Novák,");
   });
@@ -77,16 +81,16 @@ describe("renderTemplate — podmienky", () => {
   const body = "{{#ak termin_vyzdvihnutia}}do {{termin_vyzdvihnutia}}{{inak}}čo najskôr{{/ak}}";
 
   it("prázdna hodnota vezme vetvu {{inak}}", () => {
-    expect(renderTemplate({ subject: "x", body }, CTX).text).toBe("čo najskôr");
+    expect(renderTemplate({ subject: "x", body }, CTX, { footer: false }).text).toBe("čo najskôr");
   });
 
   it("vyplnená hodnota vezme prvú vetvu", () => {
     const ctx = { ...CTX, termin_vyzdvihnutia: { kind: "text" as const, text: "12. 8. 2026" } };
-    expect(renderTemplate({ subject: "x", body }, ctx).text).toBe("do 12. 8. 2026");
+    expect(renderTemplate({ subject: "x", body }, ctx, { footer: false }).text).toBe("do 12. 8. 2026");
   });
 
   it("prázdny zoznam je pre podmienku nevyplnená hodnota", () => {
-    const out = renderTemplate({ subject: "x", body: "{{#ak prazdny_zoznam}}je{{inak}}nie je{{/ak}}" }, CTX);
+    const out = renderTemplate({ subject: "x", body: "{{#ak prazdny_zoznam}}je{{inak}}nie je{{/ak}}" }, CTX, { footer: false });
     expect(out.text).toBe("nie je");
   });
 });
@@ -100,7 +104,7 @@ describe("renderTemplate — zoznam", () => {
   // issue 347: názov a adresa idú na SAMOSTATNÉ riadky — nikdy "názov (url)",
   // aby text v poštovom klientovi nikdy neukázal adresu zdvojenú v zátvorke.
   it("v texte idú názov a adresa na samostatné riadky, nikdy adresa v zátvorke", () => {
-    const out = renderTemplate({ subject: "x", body: "Náhrady:\n{{zoznam_nahrad}}" }, CTX);
+    const out = renderTemplate({ subject: "x", body: "Náhrady:\n{{zoznam_nahrad}}" }, CTX, { footer: false });
     expect(out.text).toBe("Náhrady:\n- Podkolienky BOBR\nhttps://e.sk/bobr");
     expect(out.text).not.toContain("(https://e.sk/bobr)");
   });
@@ -215,17 +219,20 @@ describe("renderEditedBody — jednorazová ručná úprava (issue 277)", () => 
     const out = renderEditedBody("Dobrý deň,\nešte dopĺňam vetu.\n\nS pozdravom,\nobchod");
     expect(out.html).toContain("<p>Dobrý deň,<br>\n      ešte dopĺňam vetu.</p>");
     expect(out.html).toContain("<p>S pozdravom,<br>\n      obchod</p>");
-    expect(out.text).toBe("Dobrý deň,\nešte dopĺňam vetu.\n\nS pozdravom,\nobchod");
+    expect(out.text).toBe(`Dobrý deň,\nešte dopĺňam vetu.\n\nS pozdravom,\nobchod\n\n${KONTAKT_FOOTER_TEXT}`);
   });
 
   // issue 347: ručne upravený text (okno náhľadu pred odoslaním) dostane
   // TÚ ISTÚ spoločnú kostru (hlavička/pätička) ako šablónou vygenerovaný
-  // e-mail — kostra sa aplikuje na oboch vykresľovacích cestách.
-  it("dostane rovnakú hlavičku/pätičku ako šablónou vygenerovaný e-mail (issue 347)", () => {
+  // e-mail — kostra sa aplikuje na oboch vykresľovacích cestách. issue 379:
+  // od teraz platí aj pre TEXTOVÚ pätičku (predtým ju `renderEditedBody`
+  // vôbec nemala).
+  it("dostane rovnakú hlavičku/pätičku ako šablónou vygenerovaný e-mail (issue 347), aj v textovej verzii (issue 379)", () => {
     const out = renderEditedBody("Ahoj.");
     expect(out.html).toContain(">Forestshop.sk<");
     expect(out.html).toContain('href="tel:+421903670766"');
     expect(out.html).toContain('href="mailto:eshop@forestshop.sk"');
+    expect(out.text).toBe(`Ahoj.\n\n${KONTAKT_FOOTER_TEXT}`);
   });
 
   it("HTML napísané obsluhou sa ESCAPUJE, nikdy sa nestane surovou značkou", () => {
@@ -238,11 +245,53 @@ describe("renderEditedBody — jednorazová ručná úprava (issue 277)", () => 
   it("prázdne odstavce (viac za sebou idúcich prázdnych riadkov) sa zahodia, nezostanú prázdne <p>", () => {
     const out = renderEditedBody("Prvý.\n\n\n\nDruhý.");
     expect(out.html.match(/<p>/g)).toHaveLength(2);
-    expect(out.text).toBe("Prvý.\n\nDruhý.");
+    expect(out.text).toBe(`Prvý.\n\nDruhý.\n\n${KONTAKT_FOOTER_TEXT}`);
   });
 
   it("okolité biele znaky celého textu aj každého odseku sa orežú", () => {
     const out = renderEditedBody("  \n  Ahoj.  \n\n  ");
+    expect(out.text).toBe(`Ahoj.\n\n${KONTAKT_FOOTER_TEXT}`);
+  });
+});
+
+// issue 379: majiteľ nahlásil, že telefón/e-mail/webová adresa sa v
+// odoslanom e-maile opakujú. Dva nezávislé zdroje toho istého symptómu:
+// (1) `{{kontakt_email}}`/`{{kontakt_telefon}}`/`{{web_forestshop}}`
+// zdvojovali SAMÉ SEBA v textovej verzii ("eshop@forestshop.sk
+// (mailto:eshop@forestshop.sk)") — `showUrlInText: false` to vypína,
+// (2) textová verzia predtým NEMALA kontaktnú pätičku vôbec (len HTML),
+// takže po odstránení opakovaných viet z tela šablóny (`registry.ts`) by
+// kontakt v texte úplne chýbal — `wrapEmailText` dopĺňa presne TAKÚTO
+// pätičku, akú má HTML, na TOM ISTOM mieste (`renderTemplate`).
+describe("renderTemplate — kontaktné údaje presne raz (issue 379)", () => {
+  const KONTAKT: TemplateContext = {
+    kontakt_email: { kind: "link", url: "mailto:eshop@forestshop.sk", label: "eshop@forestshop.sk", showUrlInText: false },
+    kontakt_telefon: { kind: "link", url: "tel:+421903670766", label: "+421 903 670 766", showUrlInText: false },
+  };
+
+  it("kontaktný odkaz so showUrlInText:false sa v texte ukáže LEN ako čitateľná hodnota, bez (mailto:...)/(tel:...) zátvorky", () => {
+    const out = renderTemplate({ subject: "x", body: "Píšte na {{kontakt_email}} alebo volajte {{kontakt_telefon}}." }, KONTAKT, { footer: false });
+    expect(out.text).toBe("Píšte na eshop@forestshop.sk alebo volajte +421 903 670 766.");
+    expect(out.text).not.toContain("(mailto:");
+    expect(out.text).not.toContain("(tel:");
+  });
+
+  it("odkaz BEZ showUrlInText (predvolené true) si zátvorku s adresou ponecháva — nezmenené správanie pre iné odkazy (napr. produktový)", () => {
+    const out = renderTemplate(
+      { subject: "x", body: "Sledovanie: {{odkaz}}" },
+      { odkaz: { kind: "link", url: "https://tandt.posta.sk/x", label: "Sledovanie zásielky" } },
+      { footer: false },
+    );
+    expect(out.text).toBe("Sledovanie: Sledovanie zásielky (https://tandt.posta.sk/x)");
+  });
+
+  it("pätička sa predvolene pripája k textovej verzii — predtým ju text vôbec nemal", () => {
+    const out = renderTemplate({ subject: "x", body: "Ahoj." }, {});
+    expect(out.text).toBe(`Ahoj.\n\n${KONTAKT_FOOTER_TEXT}`);
+  });
+
+  it("{ footer: false } textovú pätičku vypne — presne to, čo si opt-outuje supplier_order (orders/mail.ts)", () => {
+    const out = renderTemplate({ subject: "x", body: "Ahoj." }, {}, { footer: false });
     expect(out.text).toBe("Ahoj.");
   });
 });

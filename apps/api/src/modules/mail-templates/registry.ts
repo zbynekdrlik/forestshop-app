@@ -67,7 +67,20 @@ const CISLO_OBJEDNAVKY: PlaceholderDef = {
   example: { kind: "text", text: "20260123" },
 };
 
-const PODPIS_TIM = ["S pozdravom,", "**Tím Forestshop.sk**", "{{web_forestshop}}"].join("\n");
+// issue 379: `{{web_forestshop}}` sa TU už nespomína — pätička (`layout.ts`'s
+// `wrapEmailHtml`/`wrapEmailText`, teraz predvolene pripájaná ku KAŽDÉMU
+// e-mailu) je od issue 347 JEDINÉ kanonické miesto pre web adresu; podpis
+// tesne pred pätičkou ju predtým opakoval ("dva krát adresa" z tiketu).
+const PODPIS_TIM = ["S pozdravom,", "**Tím Forestshop.sk**"].join("\n");
+
+// issue 379: JEDNA veta namiesto opakovania {{kontakt_email}}/
+// {{kontakt_telefon}} v tele KAŽDEJ šablóny — kontakt je od issue 347 VŽDY
+// vidieť v pätičke (klikací telefón aj e-mail), takže vypisovať ho ešte raz
+// vo vete bolo presne to zdvojenie, čo majiteľ nahlásil ("dva krát cislo a
+// dva krat email", neskôr upresnené na "tri krát" v HTML — vo vete AJ v
+// pätičke). Zdieľaná konštanta = jedno miesto na opravu pre všetky šablóny,
+// ktoré vetu používajú (tiketov bod 4).
+const KONTAKTUJTE_NAS = "Ak máte akékoľvek otázky, pokojne nás kontaktujte.";
 
 const POSTA_PLACEHOLDERS: readonly PlaceholderDef[] = [
   MENO,
@@ -102,7 +115,7 @@ function postaBody(intro: string, urgency: string): string {
     "",
     "👉 Stav zásielky môžete sledovať tu: {{odkaz_sledovanie}}",
     "",
-    "Ak máte akékoľvek otázky, pokojne nás kontaktujte na {{kontakt_email}}.",
+    KONTAKTUJTE_NAS,
     "",
     PODPIS_TIM,
   ].join("\n");
@@ -125,7 +138,6 @@ const KINDS: readonly MailTemplateKind[] = [
         "",
         "S pozdravom,",
         "**Drlík, Forestshop.sk**",
-        "{{web_forestshop}}",
       ].join("\n"),
     },
   },
@@ -156,7 +168,7 @@ const KINDS: readonly MailTemplateKind[] = [
         "{{#ak zoznam_nahrad}}Radi by sme vám preto ponúkli tieto **alternatívne produkty**:{{inak}}Radi vám pomôžeme nájsť vhodnú alternatívu — stačí nás kontaktovať.{{/ak}}",
         "{{zoznam_nahrad}}",
         "",
-        "Ak máte akékoľvek otázky, pokojne nás kontaktujte na {{kontakt_email}} alebo na telefónnom čísle {{kontakt_telefon}}.",
+        KONTAKTUJTE_NAS,
         "",
         "Ďakujeme vám za dôveru.",
         "",
@@ -212,7 +224,7 @@ const KINDS: readonly MailTemplateKind[] = [
       subject: "Posledná výzva: zásielka bude vrátená | {{cislo_zasielky}}",
       body: postaBody(
         `napriek opakovaným upozorneniam vaša zásielka č. **{{cislo_zasielky}}** je stále nevyzdvihnutá ${POSTA_MIESTO}.`,
-        "Zásielka bude v najbližších dňoch vrátená späť. Ak ju stále chcete, prosím kontaktujte nás čo najskôr na {{kontakt_email}} alebo telefonicky.",
+        "Zásielka bude v najbližších dňoch vrátená späť. Ak ju stále chcete, prosím kontaktujte nás čo najskôr.",
       ),
     },
   },
@@ -232,7 +244,7 @@ const KINDS: readonly MailTemplateKind[] = [
         "",
         "👉 V prípade potreby zmeny, alternatívy alebo potvrdenia z vašej strany vás budeme osobne kontaktovať v najbližšom čase.",
         "",
-        "Ďakujeme vám za trpezlivosť a dôveru. Ak máte akékoľvek otázky, pokojne nás kontaktujte na {{kontakt_email}} alebo na telefónnom čísle {{kontakt_telefon}}.",
+        "Ďakujeme vám za trpezlivosť a dôveru. " + KONTAKTUJTE_NAS,
         "",
         PODPIS_TIM,
       ].join("\n"),
@@ -283,7 +295,7 @@ const KINDS: readonly MailTemplateKind[] = [
         "",
         "radi by sme vás informovali, že vaše objednávky {{zoznam_objednavok}} spolu odosielame ako JEDNU zásielku — ušetríte tak na poštovnom aj na čakaní.",
         "",
-        "Ak máte akékoľvek otázky, pokojne nás kontaktujte na {{kontakt_email}} alebo na telefónnom čísle {{kontakt_telefon}}.",
+        KONTAKTUJTE_NAS,
         "",
         PODPIS_TIM,
       ].join("\n"),

@@ -28,10 +28,27 @@ export interface SmtpMailConfig {
   readonly user?: string | undefined;
   readonly pass?: string | undefined;
   readonly from?: string | undefined;
+  // issue 358: majiteľ zistil, že odpoveď zákazníka na e-mail appky pristála
+  // v inej schránke, než appka v texte sľubuje. ZÁMERNE nezávislé od `from`
+  // (nikdy sa z neho neodvodzuje samo) — "aj keby sa odosielateľ (From) v
+  // budúcnosti zmenil, Reply-To má ostať rovnaké" (tiket, bod 2). Bez
+  // nastavenia spadne späť na `from` (nižšie), appka nikdy nepošle mail bez
+  // Reply-To.
+  readonly replyTo?: string | undefined;
 }
 
+// Čistá funkcia (žiadny SMTP) — vytiahnutá z `createSmtpMailTransport`, aby
+// sa dala unit-testovať bez bežiaceho servera (issue 358).
 // Odosielateľ: explicitný `MAIL_FROM`, inak SMTP účet (`user`), inak
 // samotný host — appka nikdy nepošle mail bez hlavičky `From`.
+export function resolveMailSender(
+  config: Pick<SmtpMailConfig, "host" | "user" | "from" | "replyTo">,
+): { readonly from: string; readonly replyTo: string } {
+  const from = config.from ?? config.user ?? config.host;
+  const replyTo = config.replyTo ?? from;
+  return { from, replyTo };
+}
+
 export function createSmtpMailTransport(config: SmtpMailConfig): MailTransport {
   const transporter = nodemailer.createTransport({
     host: config.host,
@@ -45,11 +62,12 @@ export function createSmtpMailTransport(config: SmtpMailConfig): MailTransport {
         ? { user: config.user, pass: config.pass ?? "" }
         : undefined,
   });
-  const from = config.from ?? config.user ?? config.host;
+  const { from, replyTo } = resolveMailSender(config);
 
   return async (message: MailMessage): Promise<void> => {
     await transporter.sendMail({
       from,
+      replyTo,
       to: message.to,
       subject: message.subject,
       text: message.text,

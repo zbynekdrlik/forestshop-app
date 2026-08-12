@@ -403,3 +403,43 @@ paths:
   tento tunel: neber klientsku chybu/timeout ako dôkaz zlyhania behu — over
   server-side stav (advisory zámok, `job_run`, alebo priamo cieľová
   tabuľka) predtým, než sa čokoľvek reštartuje/opakuje.
+
+## Vývoj a produkcia bežia na TOM ISTOM 2-jadrovom stroji — 502 z preťaženia
+
+**Výpadok 12. 8. 2026 večer (`Bad gateway Error code 502` na
+`forestshop.newlevel.media`).** Príčina NEBOLA appka ani databáza: appka
+odpovedala lokálne `HTTP 200` za 8 ms, kontajner sa nereštartoval
+(`RestartCount=0`, `OOMKilled=false`). Padol `cloudflared` — všetky štyri
+spojenia na Cloudflare edge naraz odpadli s
+`TLS handshake with edge error: … i/o timeout` (`connIndex=0..3`) a znovu
+sa zaregistrovali až o minútu neskôr. To NIE JE sieťová chyba — je to
+hladovanie po CPU: v tom čase bežal na stroji `pnpm -r test` (plná sada
+vrátane integračných testov) a `load average` vyšplhal na **13,3 pri 2
+jadrách**. Tunel nestihol ani TLS handshake, takže Cloudflare nemal kam
+smerovať požiadavky.
+
+**Poučenie:** `forestshop-dev` je jediný 2-jadrový / 4 GB stroj, na ktorom
+beží PRODUKCIA aj VÝVOJ. Ťažký lokálny beh (plná sada testov, build,
+`pnpm -r test`) vie zhodiť produkčný tunel.
+
+**Trvalé opatrenia (nasadené na stroji 12. 8. 2026, prežijú reštart):**
+
+- **Prioritizácia CPU cez cgroup** — kontajnery (`system.slice`) majú
+  prednosť pred vývojom (`user.slice`):
+
+      sudo systemctl set-property user.slice CPUWeight=20
+      sudo systemctl set-property system.slice CPUWeight=500
+
+  Je to POMER, nie strop: keď produkcia nič nerobí, testy dostanú plný
+  výkon; pri súbehu dostane produkcia ~96 % času. Overenie:
+  `cat /sys/fs/cgroup/user.slice/cpu.weight` (má byť `20`).
+- **4 GB swap** (`/swapfile`, v `/etc/fstab`, `vm.swappiness=10`
+  v `/etc/sysctl.d/99-swappiness.conf`) — stroj predtým nemal žiadny a
+  `kswapd0` už bol aktívny.
+
+**Disciplína pri práci na tomto stroji:** lokálne spúšťaj len
+`pnpm gates:local` (typecheck + lint + unit). `pnpm test` / `pnpm -r test`
+ťahá aj integračné testy proti databáze — tie patria do CI, nie na ruku
+(pozri `.claude/rules/testing.md`). Keď appka odpovedá `502`, najprv over
+`cat /proc/loadavg` a `docker logs forestshop-cloudflared-1 | grep -i
+"handshake"`, až potom hľadaj chybu v kóde.
