@@ -143,3 +143,35 @@ https://github.com/zbynekdrlik/forestshop-app/issues/387#issuecomment-5273377438
   pri skladaní obsahu nástroja `Write` (zamýšľaná medzera sa zapísala ako
   NUL) — oprava je priamy binárny `read().replace(b"\x00", b" ")`, nikdy
   prepis celého súboru odhadom správneho obsahu.
+- **Cookie header pre retry v `fetchWithRetry` sa MUSÍ stavať NANOVO pred
+  KAŽDÝM pokusom, nikdy raz vopred pred celou slučkou** — pôvodná
+  implementácia dostávala `headers: Record<string,string>` ako HOTOVÝ
+  objekt (postavený RAZ, pred prvým pokusom), takže cookie uložená do
+  cookie jaru PO neúspešnom 1. pokuse (napr. session cookie vydaná spolu
+  s 503) sa na 2. pokus vôbec nedostala — `headers` bol zmrazený snímok
+  spred jej príchodu. Fix: `buildHeaders: () => Record<string,string>`
+  (factory, volaná vnútri `for` slučky pred KAŽDÝM `rawFetch`), nie
+  statický objekt. **Nájdené VLASTNÝM regresným testom pri prvom behu**
+  (`client.test.ts`'s "captures a Set-Cookie carried on a FAILED attempt")
+  — presne dôkaz, že aj pri doslovnom porte s vysokou dôverou treba
+  regresný test na KAŽDÉ tvrdenie o správaní, nielen na tie, čo pôsobia
+  rizikovo. Rovnaký test pri ĎALŠOM stavovom fetcheri/retry mechanizme v
+  appke: ak sa hlavičky/stav menia MEDZI pokusmi tej istej operácie,
+  over explicitne, že KAŽDÝ pokus číta AKTUÁLNY stav, nie stav zachytený
+  pred prvým pokusom.
+- **WHATWG `URL` konštruktor je PRÍSNY parser, na rozdiel od Pythonovho
+  zhovievavého `urllib.parse.urljoin`/`urldefrag`** — vyhadzuje na tvaroch
+  vstupu, ktoré by Python ticho spracoval (živo overené: `new URL("http://
+  [", base)` aj `new URL("http://exam ple.com/x", base)` obe vyhodia
+  `TypeError: Invalid URL`). Pri DOSLOVNOM porte kódu, ktorý v Pythone
+  nikdy nepotreboval per-item try/except (lebo `urljoin` jednoducho
+  nevyhadzuje), preto TREBA pridať izoláciu, ktorú Python nemal — inak
+  JEDNA pokazená karta na živej stránke zhodí `.each()` slučku a zahodí aj
+  všetky OSTATNÉ platné kandidáty (review nález, issue 387 E2). Riešenie
+  tu: `resolveAndStripFragment` (`adapters/url.ts`) vracia `string | null`
+  namiesto vyhodenia — volajúci (KAŽDÝ z troch adaptérov) kontroluje
+  `null` presne tak, ako už kontroluje prázdny `href`. Test pri KAŽDOM
+  ĎALŠOM 1:1 porte Python kódu, ktorý sa spolieha na `urljoin`/`urldefrag`/
+  iné zhovievavé parsovanie: over, či JS/TS ekvivalent (`URL`,
+  `URLSearchParams`, ...) vyhadzuje na rovnakých vstupoch — ak áno, obal
+  ho tak, aby zlyhanie JEDNÉHO záznamu nezhodilo celý dávkový cyklus.
