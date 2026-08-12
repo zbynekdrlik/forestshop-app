@@ -202,3 +202,60 @@ it("pri 401 POČAS mutácie (nielen počiatočného načítania) tiež zavolá o
     expect(onSessionExpired).toHaveBeenCalled();
   });
 });
+
+// Issue 381 (majiteľ: "to emoji čo si môžeš priradiť na úlohy na dnes tam
+// chcem mať ale sa správa hrozne") — naživo reprodukované na produkcii
+// (komentár na ticket-e): rozpísaný emoji draft sa ticho stratí pri
+// prepnutí na iný riadok, chýba Zrušiť, textový aj emoji editor sa dajú
+// mať otvorené súčasne na tom istom riadku.
+
+it("draft rozpísaného emoji PREŽIJE prepnutie na iný riadok a späť (bez uloženia)", async () => {
+  fetchDailyTasks.mockResolvedValue([ROW_B, ROW_A]);
+  render(<DailyTasksSection onSessionExpired={vi.fn()} />);
+  await screen.findByTestId("uloha-row-task-a");
+
+  // Otvor emoji editor riadku A, rozpíš draft, NEULOŽ.
+  fireEvent.click(screen.getByTestId("uloha-emoji-task-a"));
+  fireEvent.change(screen.getByTestId<HTMLInputElement>("uloha-emoji-input-task-a"), { target: { value: "🎯" } });
+
+  // Appka dovolí len JEDEN otvorený naraz — otvorenie iného riadku ticho
+  // "zavrie" prvý.
+  fireEvent.click(screen.getByTestId("uloha-emoji-task-b"));
+  expect(screen.queryByTestId("uloha-emoji-input-task-a")).toBeNull();
+
+  // Zavri riadok B (Zrušiť, bez uloženia) a znova otvor riadok A — draft
+  // 🎯 musí byť STÁLE tam, appka ho nesmie zahodiť len preto, že si sa
+  // pozrel na iný riadok.
+  fireEvent.click(screen.getByTestId("uloha-emoji-cancel-task-b"));
+  fireEvent.click(screen.getByTestId("uloha-emoji-task-a"));
+  expect(screen.getByTestId<HTMLInputElement>("uloha-emoji-input-task-a").value).toBe("🎯");
+});
+
+it("Zrušiť v emoji editore ho zavrie BEZ uloženia a zahodí draft (ďalšie otvorenie ukáže znova serverovú hodnotu)", async () => {
+  fetchDailyTasks.mockResolvedValueOnce([ROW_A]);
+  render(<DailyTasksSection onSessionExpired={vi.fn()} />);
+  await screen.findByTestId("uloha-row-task-a");
+
+  fireEvent.click(screen.getByTestId("uloha-emoji-task-a"));
+  fireEvent.change(screen.getByTestId<HTMLInputElement>("uloha-emoji-input-task-a"), { target: { value: "🚚" } });
+  fireEvent.click(screen.getByTestId("uloha-emoji-cancel-task-a"));
+
+  expect(updateDailyTaskEmoji).not.toHaveBeenCalled();
+  expect(screen.queryByTestId("uloha-emoji-input-task-a")).toBeNull();
+
+  fireEvent.click(screen.getByTestId("uloha-emoji-task-a"));
+  expect(screen.getByTestId<HTMLInputElement>("uloha-emoji-input-task-a").value).toBe("");
+});
+
+it("otvorenie textového editora zavrie emoji editor TOHO ISTÉHO riadku (nikdy oba naraz)", async () => {
+  fetchDailyTasks.mockResolvedValueOnce([ROW_A]);
+  render(<DailyTasksSection onSessionExpired={vi.fn()} />);
+  await screen.findByTestId("uloha-row-task-a");
+
+  fireEvent.click(screen.getByTestId("uloha-emoji-task-a"));
+  expect(screen.getByTestId("uloha-emoji-input-task-a")).toBeTruthy();
+
+  fireEvent.click(screen.getByTestId("uloha-edit-task-a"));
+  expect(screen.queryByTestId("uloha-emoji-input-task-a")).toBeNull();
+  expect(screen.getByTestId("uloha-edit-input-task-a")).toBeTruthy();
+});
