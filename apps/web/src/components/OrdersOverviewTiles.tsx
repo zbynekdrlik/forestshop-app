@@ -3,15 +3,22 @@ import { formatSkDate } from "../formatDate.js";
 import { fetchOrdersOverview, OrdersUnauthorizedError, type OrdersOverview, type SupplierOpenOrders } from "../ordersApi.js";
 import { countAffectedOrders, formatOrderCount, oldestWaitingPlacedAt, summarizeOrderLines } from "../ordersSummary.js";
 
-// issue 237: blok dlaždíc NAD zoznamom na obrazovke "Na objednanie" — dve
-// skupiny. "Prehľad e-shopu" (dnes/tento týždeň/tento mesiac, presne ako
-// Shoptet-ov vlastný dashboard) je NEZÁVISLÝ od dodávateľského pracovného
-// zoznamu — vlastný fetch (rovnaký tvar ako `OrderOpenStatusesPanel.tsx`:
+// issue 237: blok dlaždíc NAD zoznamom na obrazovke "Na objednanie".
+// "Prehľad e-shopu" (dnes/tento týždeň/tento mesiac, presne ako Shoptet-ov
+// vlastný dashboard) je NEZÁVISLÝ od dodávateľského pracovného zoznamu —
+// vlastný fetch (rovnaký tvar ako `OrderOpenStatusesPanel.tsx`:
 // `useEffect`/`onSessionExpired`), lebo potrebuje VŠETKY objednávky (aj
 // uzavreté), nie len OPEN-status podmnožinu, akú appka už má v `suppliers`.
 // "Súhrn o objednávaní" NEPOTREBUJE žiadny nový fetch — počíta sa čisto z
 // UŽ načítaných `suppliers` (rovnaké zdieľané funkcie ako `OrdersToolbar.tsx`
 // používa pre svoj filter-viazaný súhrn, `ordersSummary.ts`).
+//
+// issue 360 (majiteľ: "všetko robíš zbytočne veľké ... všetko v jednom
+// riadku"): pôvodne dve samostatné skupiny (vlastný nadpis + vlastný
+// `.overview-tiles` riadok každá) stackované pod sebou — teraz JEDEN
+// spoločný `.overview-tiles` riadok pre všetkých 7 čísel, bez nadpisov
+// skupín (každá dlaždica má vlastný popisok, takže nadpis nie je nutný na
+// zrozumiteľnosť). Nič iné na obrazovke sa nemení.
 //
 // Dlaždice sú PREHĽAD, nikdy filter — kliknutie na ne nemení obsah zoznamu
 // nižšie (ticketova explicitná požiadavka).
@@ -49,30 +56,24 @@ export function OrdersOverviewTiles({
 
   return (
     <div className="orders-overview" data-testid="orders-overview">
-      <div className="overview-group">
-        <h2 className="overview-group-title">Prehľad e-shopu</h2>
-        {error !== "" && <p role="alert">{error}</p>}
-        {!loaded && error === "" && <p>Načítavam prehľad…</p>}
+      {error !== "" && <p role="alert">{error}</p>}
+      {!loaded && error === "" && <p>Načítavam prehľad…</p>}
+      <div className="overview-tiles">
         {overview !== null && (
-          <div className="overview-tiles">
+          <>
             <OverviewTile testId="overview-shop-today" label="Dnes" orderCount={overview.today.orderCount} revenue={overview.today.revenue} />
             <OverviewTile testId="overview-shop-week" label="Tento týždeň" orderCount={overview.week.orderCount} revenue={overview.week.revenue} />
             <OverviewTile testId="overview-shop-month" label="Tento mesiac" orderCount={overview.month.orderCount} revenue={overview.month.revenue} />
-          </div>
+          </>
         )}
-      </div>
-      <div className="overview-group">
-        <h2 className="overview-group-title">Súhrn o objednávaní</h2>
-        <div className="overview-tiles">
-          <SimpleTile testId="overview-ordering-remaining" label="Položiek na objednanie" value={String(ordering.remaining)} />
-          <SimpleTile testId="overview-ordering-affected-orders" label="Dotknutých objednávok" value={String(affectedOrders)} />
-          <SimpleTile testId="overview-ordering-already-ordered" label="Už objednané" value={String(ordering.ordered)} />
-          <SimpleTile
-            testId="overview-ordering-oldest"
-            label="Najstaršia čakajúca"
-            value={formatSkDate(oldestPlacedAt)}
-          />
-        </div>
+        <SimpleTile testId="overview-ordering-remaining" label="Položiek na objednanie" value={String(ordering.remaining)} />
+        <SimpleTile testId="overview-ordering-affected-orders" label="Dotknutých objednávok" value={String(affectedOrders)} />
+        <SimpleTile testId="overview-ordering-already-ordered" label="Už objednané" value={String(ordering.ordered)} />
+        <SimpleTile
+          testId="overview-ordering-oldest"
+          label="Najstaršia čakajúca"
+          value={formatSkDate(oldestPlacedAt)}
+        />
       </div>
     </div>
   );
