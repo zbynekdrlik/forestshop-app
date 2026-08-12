@@ -3569,3 +3569,30 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
 - Playbook: `.claude/rules/deploy.md` (nová sekcia — Error 1033 diagnostika +
   oprava + monitor).
 - Issue 357 zavretý s dôkazom po merge/nasadení.
+
+## issue 359 — Zrušiť obdĺžnik „Zbaliť menu“, presunúť na šípky vpravo hore v hlavičke menu
+
+- `a15c17b` chore: bump verzie na 0.3.0-dev.215 (0.3.0-dev.214 obsadené
+  neschváleným issue 358 + stash-om).
+- `ab2327f` feat: prepínač zbalenia presunutý zo samostatného celoširokého
+  obdĺžnika pod hlavičkou dovnútra `.brand`, ako 28×28px ikona bez rámu/
+  textu vpravo hore vedľa loga/názvu appky (`.brand`'s `justify-content:
+  space-between`); logo+text zabalené do nového `.brand-id`. Funkcia
+  (localStorage, `aria-expanded`, klik, auto-zbalenie na úzkej obrazovke)
+  bit-identická — overené existujúcou sadou bezo zmeny.
+  RED->GREEN regresný test: `Sidebar.test.tsx` "prepínač zbalenia je vždy
+  len ikona (bez viditeľného textu 'Zbaliť menu'), žijúca v hlavičke vedľa
+  loga" — padal proti pôvodnému kódu (span s textom "Zbaliť menu" nájdený),
+  prešiel proti `ab2327f`.
+- `0596e4d` review: nezávislý review dispatch našiel 1 zistenie (rail móde
+  72px `.brand` by pretiekol o ~2px kvôli zdedenému `gap` fungujúcemu ako
+  minimum aj pod `space-between`) — opravené `gap: 0` v rail móde, naživo
+  premerané (`scrollWidth === clientWidth`).
+- `9cfc204` docs: playbook zápis (`.claude/rules/frontend-design.md`) — gap
+  ako minimálna medzera pod `space-between`.
+- Pull request do vetvy dev (branch issue-359-collapse-icon), CI zelené
+  (5/5 SUCCESS), mergeable, mergeStateStatus CLEAN.
+- ZAMERNE NEZLUCENE, NENASADENE, tiket ostava otvoreny — nasadenie je
+  zmrazene kvoli issue 366 (produkcia presunuta z dev2 neautorizovanym
+  agentom, CI deploy job stale mieri na dev2). Merge/nasadenie/zavretie
+  tiketu caka na rozhodnutie majitela o issue 366.
