@@ -378,9 +378,16 @@ export function DailyTasksSection({ onSessionExpired }: { readonly onSessionExpi
                     >
                       💾
                     </button>
+                    {/* Review dispatch (issue 381): bez `disabled={busy}` by Zrušiť
+                        počas ROZBEHNUTÉHO uloženia TOHO ISTÉHO riadku otvorilo
+                        okno na race — zrušenie + nový rozpis medzitým a
+                        následné doručenie PÔVODNEJ (už "zrušenej") odpovede
+                        by ten nový rozpis ticho zahodilo cez `saveEmoji`'s
+                        `forgetEmojiDraft`. Rovnaký `busy` guard ako má Save. */}
                     <button
                       type="button"
                       className="uloha-icon-btn"
+                      disabled={busy}
                       onClick={() => {
                         cancelEmojiEdit(row.id);
                       }}
