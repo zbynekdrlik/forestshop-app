@@ -25,9 +25,20 @@ Smer je preto obrátený:
 - **`/srv/forestshop/scripts/backup-db-local.sh`** (pridané do repa pri
   issue 366 — inak by ho `deploy.yml`'s `rsync -a --delete` z repového
   `scripts/` pri najbližšom nasadení potichu zmazal, keďže by existoval len
-  na serveri) beží cez cron `15 2 * * *`, **box-lokálny čas = UTC**
-  (`forestshop-dev`'s systémový čas je `Etc/UTC`, overené priamo
-  `timedatectl`). Robí LEN lokálnu časť: `pg_dump -Fc` databázy → over
+  na serveri) beží cez cron `15 2 * * *`, **box-lokálny čas — POZOR, mení
+  sa v čase, over vždy znova `timedatectl` pred prepočtom na UTC.** K
+  12. 8. 2026 21:xx (issue 376, overené priamo) `/etc/localtime` ukazuje na
+  `Europe/Bratislava` (aktuálne CEST, +02:00) — symlink bol podľa jeho
+  vlastného mtime zmenený TEN ISTÝ DEŇ o 18:29 CEST, teda box krátko po
+  svojom vzniku (issue 366, ráno 12. 8.) skutočne bežal na UTC (odtiaľ
+  pôvodná, teraz už neplatná poznámka "systémový čas je `Etc/UTC`"), no
+  odvtedy sa preklopil na Bratislava-local. `/etc/timezone` (súbor, ktorý
+  cron NEČÍTA — použitý je `/etc/localtime`) ostáva zastarane na
+  `Etc/UTC` a nie je spoľahlivý zdroj. Praktický dôsledok: dnes v noci
+  (12.→13. 8.) tento cron prvýkrát reálne pobeží o **02:15
+  Europe/Bratislava-local = 00:15 UTC v CEST** (v CET by to bolo 01:15
+  UTC) — NIE o 02:15 UTC, ako tvrdila pôvodná verzia tohto bulletu. Robí
+  LEN lokálnu časť: `pg_dump -Fc` databázy → over
   `pg_restore --list` PRED čímkoľvek ďalším (poškodený/prázdny dump zastaví
   skript hneď, `exit 1`, nikdy sa neoznačí za platný) → zašifruje `.env`
   (`gpg --symmetric`, heslo v `/srv/forestshop/.backup-passphrase`, mode
@@ -36,18 +47,36 @@ Smer je preto obrátený:
   `/srv/forestshop/backups/forestshop-<STAMP>.dump` + `.env.gpg`.
 - **dev1 si súbory STIAHNE vlastným pull cronom** —
   `~/backups/pull-forestshop-dev-backup.sh` (žije len na dev1, mimo tohto
-  repa). **Presný čas má DVA nezhodné zdroje, ani jeden overiteľný z tohto
-  stroja:** `backup-db-local.sh`'s vlastný hlavičkový komentár (už v repe,
-  napísaný pri issue 366 — pravdepodobne s priamym prístupom na dev1 v tom
-  čase) hovorí "beží 02:25 — 10 min po tomto skripte" (teda ~02:25 UTC, len
-  10 min odstup od zdrojového behu); issue 367's zadanie namiesto toho
-  tvrdí cron `30 4 * * *` **Bratislava-local**, čo v CEST vychádza na
-  ~02:30 UTC (15 min odstup) a v CET na ~03:30 UTC (1h15 odstup) — v OBOCH
-  prípadoch výrazne menej než "kladný odstup naprieč oboma pásmami" by
-  malo znamenať, a navyše nesedí s "10 min po tomto skripte". Túto
-  nezhodu NERIEŠIM sám (vyžaduje priamy pohľad na dev1's skutočný
-  crontab, `forestshop-dev` k dev1 nemá sieťovú cestu) — over `crontab -l`
-  priamo na dev1 pri najbližšej príležitosti a zapíš sem skutočný riadok.
+  repa). **Presný riadok dev1's crontabu (issue 376) ZOSTÁVA UNVERIFIED —
+  ale nie preto, že by sa to nedalo overiť z `forestshop-dev`.** `ssh
+  dev1`/`ssh 100.104.8.125` z tohto boxu naozaj zlyhávajú (žiadna sieťová
+  cesta, potvrdené), no dá sa to overiť NEPRIAMO — `forestshop-dev`'s
+  vlastný `auth.log` zaznamenáva KAŽDÉ prihlásenie reštrikovaným pull
+  kľúčom aj s presným časom. Postup, opakovateľný kýmkoľvek na tomto boxi:
+  1. zisti fingerprint kľúča z `~/.ssh/authorized_keys` (riadok
+     `command="/usr/bin/rrsync -ro ..." ssh-ed25519 ...
+     forestshop-dev-backup-pull@dev1`) cez `ssh-keygen -lf`;
+  2. `sudo grep '<fingerprint>' /var/log/auth.log` — každý riadok
+     `Accepted publickey for admin ... ssh2: ED25519 SHA256:<fingerprint>`
+     je jeden reálny pull, s UTC časovou pečiatkou v samotnom logu
+     (nezávisle od box-lokálneho `timedatectl` nastavenia vyššie).
+
+  K 12. 8. 2026 19:xx (deň, keď box vôbec prvýkrát začal bežať ako
+  `forestshop-dev` — `journalctl --list-boots` ukazuje prvý boot tejto
+  identity 12. 8. 2026 13:14 CEST) toto našlo presne 7 úspešných
+  prihlásení tým kľúčom, VŠETKY zhlukovo medzi 12:46:44–13:06:03 UTC toho
+  istého dňa — zjavne ručné testovanie pri zapájaní (issue 366/367 setup:
+  7× pripojenie za 20 minút, nie raz-denne opakovaný cron vzor). Nočné
+  okno `backup-db-local.sh`'s cronu (bullet vyššie) v tejto podobe boxu
+  ešte VÔBEC nenastalo (dnešné 02:15 už prešlo predtým, než box v tejto
+  identite existoval) — teda ani dev1's nadväzujúci pull cron nemal
+  doteraz ŽIADNU reálnu produkčnú príležitosť spustiť sa. Prvá reálna
+  noc je až 12.→13. 8. **Skutočný cyklický čas preto zatiaľ nemá dôkaz —
+  ani jeden z dvoch pôvodne citovaných zdrojov (02:25 UTC / cron
+  `30 4 * * *` Bratislava-local) sa nedal ani potvrdiť, ani vyvrátiť.**
+  Až po prvej reálnej noci zopakuj krok 2 vyššie — nový výsledok bude mať
+  presne jeden riadok s pravidelným denným časom namiesto zhluku, a ten
+  čas nahraď sem.
   Cieľ na dev1: **`~/backups/forestshop-dev/`** — samostatný adresár,
   ODDELENE od dev2's `~/backups/forestshop/` (nižšie), aby sa dve
   nezávislé zálohovacie histórie nikdy nepomiešali.
@@ -75,11 +104,15 @@ Smer je preto obrátený:
 `forestshop-dev`, takže box's vlastná strana (crontab, obsah skriptu,
 `authorized_keys`, reálne súbory v `/srv/forestshop/backups/` — napr.
 `forestshop-20260812T130301.dump` + `.env.gpg` z behu 12. 8. 2026) je overená
-priamym čítaním, nie len z textu tiketu. **dev1-strana** (pull skript, jeho
-vlastný crontab, obsah `~/backups/forestshop-dev/`) **nebola overená naživo
-z tohto stroja** — `forestshop-dev` nemá k dev1 žiadnu sieťovú cestu (`ssh
-dev1`/`ssh 100.104.8.125` obe zlyhali, presne z dôvodu popísaného vyššie) —
-tá časť je zdokumentovaná z pôvodného zadania issue 367.
+priamym čítaním, nie len z textu tiketu. **dev1-strana priamo (jeho vlastný
+crontab súbor, obsah `~/backups/forestshop-dev/`) sa naďalej NEDÁ overiť z
+tohto stroja** — `forestshop-dev` nemá k dev1 žiadnu sieťovú cestu (`ssh
+dev1`/`ssh 100.104.8.125` obe zlyhali). **Dev1's SKUTOČNÉ SPRÁVANIE (kedy sa
+naozaj pripája) sa ale DÁ overiť nepriamo** cez `forestshop-dev`'s vlastný
+`auth.log` (issue 376 — postup + zatiaľ nerozhodnutý výsledok pozri bullet
+"dev1 si súbory STIAHNE" vyššie): box beží v aktuálnej podobe len od
+12. 8. 2026, žiadna reálna noc ešte neprebehla, takže presný cyklický čas
+zatiaľ nemá dôkaz ani z jedného smeru.
 
 ## dev2 (statická rollback kópia)
 
