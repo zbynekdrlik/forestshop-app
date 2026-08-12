@@ -1184,3 +1184,24 @@ paths:
   ONLY when the screen genuinely has no role distinction (server enforces
   ownership/permission some OTHER way); if any role check exists, take the
   full `SectionProps` like every other screen in `nav.ts`.
+- **`gap` on a `display:flex` parent is a MINIMUM spacing floor that
+  `justify-content: space-between` cannot shrink below — it adds on top of
+  the children's own widths even when the parent is nearly full.** Issue
+  359 (sidebar collapse toggle moved from a standalone full-width row
+  INTO `.brand`, as an icon sibling of the logo): `.sidebar-rail .brand` is
+  only 72px wide, and after its own padding the content box is 64px — the
+  logo (32px, fixed) + the new icon button (28px, fixed) sum to exactly
+  60px, which LOOKS like it fits with 4px to spare. It did not: `.brand`'s
+  inherited `gap: var(--fs-space-2)` (6px) is enforced as a MINIMUM gap
+  between the two flex items regardless of `justify-content`, pushing the
+  real required width to 66px — a ~2px overflow invisible by inspection,
+  caught only by an independent review dispatch and confirmed by a live
+  `element.scrollWidth > element.clientWidth` check (`.claude/rules/
+  frontend-design.md`'s own established measurement pattern, issues
+  105/107/111/127/161/214). Fix: `.sidebar-rail .brand { gap: 0; }` — the
+  remaining slack is distributed by `space-between` alone, no minimum gap
+  fighting it. **Any FUTURE flex row that mixes a real `gap` with
+  `justify-content: space-between`/`space-around` in a TIGHT (near-zero-slack)
+  container:** the true minimum width is `Σ(children widths) + gap ×
+  (children − 1)`, not just `Σ(children widths)` — measure or compute
+  that explicitly before trusting `space-between` to "make it fit".
