@@ -5,6 +5,7 @@
 #
 # scripts/uptime-check.sh — issue 357, external public-URL availability monitor.
 #
+# HELP-BEGIN
 # WHY: nič doteraz z VONKU nekontrolovalo, či `forestshop.newlevel.media` /
 # `forestshop-novy.newlevel.media` žijú — 12. 8. 2026 objavil výpadok (Cloudflare
 # Error 1033, pozri .claude/rules/deploy.md) majiteľ, nie automatika. Beží NA
@@ -26,12 +27,25 @@
 #   scripts/uptime-check.sh            # one pass: measure -> decide -> alert
 #   scripts/uptime-check.sh --dry-run  # measure + decide + LOG only; never alert
 #   scripts/uptime-check.sh --help
+# HELP-END
 set -uo pipefail
+
+# Prints everything between the HELP-BEGIN/HELP-END marker comments above,
+# stripped of the leading "# " — a marker range instead of hard-coded line
+# numbers, so editing the header comment can never silently desync --help
+# from its actual content (review finding, issue 357).
+print_help() {
+  awk '
+    /^# HELP-BEGIN/ { on=1; next }
+    /^# HELP-END/   { on=0 }
+    on              { sub(/^# ?/, ""); print }
+  ' "${BASH_SOURCE[0]}"
+}
 
 case "${1:-}" in
   --dry-run) DRY_RUN=1 ;;
   --help|-h)
-    sed -n '3,26p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    print_help
     exit 0
     ;;
   "") DRY_RUN=0 ;;
@@ -40,7 +54,10 @@ esac
 
 # ── config (all env-overridable) ─────────────────────────────────────────────
 # Bez trailing lomky — curl aj štítky nižšie sa opierajú o presne tento tvar.
-URLS="${UPTIME_CHECK_URLS:-https://forestshop.newlevel.media https://forestshop-novy.newlevel.media}"
+# Pole, nie reťazec + `for url in $URLS` — review finding, issue 357: neúvodzovkovaná
+# expanzia reťazca sa spolieha na delenie slov (funguje, ale je krehké); pole je
+# odolnejšie a jasnejšie vyjadruje zámer (viacero nezávislých URL).
+read -ra URLS <<< "${UPTIME_CHECK_URLS:-https://forestshop.newlevel.media https://forestshop-novy.newlevel.media}"
 CONFIRM_THRESHOLD="${UPTIME_CHECK_CONFIRM_THRESHOLD:-2}"
 ALERT_THROTTLE_PASSES="${UPTIME_CHECK_ALERT_THROTTLE_PASSES:-12}"   # ~1h at the 5-min cadence
 CURL_TIMEOUT="${UPTIME_CHECK_CURL_TIMEOUT:-10}"
@@ -151,7 +168,7 @@ check_url() {
 
 main() {
   log "pass start (dry_run=$DRY_RUN, threshold=$CONFIRM_THRESHOLD, throttle=$ALERT_THROTTLE_PASSES)"
-  for url in $URLS; do
+  for url in "${URLS[@]}"; do
     check_url "$url"
   done
   log "pass end"

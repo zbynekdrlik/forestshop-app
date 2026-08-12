@@ -30,6 +30,14 @@ paths:
   nasadení kompletne prepíše `/srv/forestshop/docker-compose.prod.yml`
   súborom z repa; ranná ručná oprava priamo na serveri by prvým ďalším
   nasadením potichu zmizla a výpadok by sa zopakoval.
+  **`--protocol http2` je od `cloudflared` 2026.7.3 nezdokumentovaný —
+  funguje (overené naživo proti bežiacemu `cloudflared:latest`), ale vo
+  vlastnom `cloudflared tunnel --help` výstupe už nie je uvedený.** Keď po
+  najbližšom zdvihnutí verzie obrazu (`docker-compose.prod.yml`'s
+  `cloudflare/cloudflared:latest`) tunel znovu spadne, over NAJPRV, či
+  prepínač nebol pri tej príležitosti (napr. pri čítaní `--help`) omylom
+  odstránený ako "neexistujúci" — nepredpokladaj automaticky, že ide o ten
+  istý QUIC problém.
 - **Vonkajšie sledovanie dostupnosti (issue 357):** appka predtým nemala nič,
   čo by z VONKU kontrolovalo, či verejná adresa žije — výpadok objavil
   majiteľ, nie automatika. `scripts/uptime-check.sh` (v tomto repe) beží cez
