@@ -14,8 +14,8 @@ import { requireUser, type AppBindings } from "./middleware.js";
 // (rovnaký "configured" vzor ako `dpd-routes.ts`'s `DpdRunDeps`).
 export function registerCalendarRoutes(app: Hono<AppBindings>, db: Database, deps?: NextEventService): void {
   app.get("/api/upozornenia/next-event", requireUser(db), async (c) => {
-    if (deps === undefined) return c.json({ configured: false as const, event: null, error: false });
+    if (deps === undefined) return c.json({ configured: false as const, events: [], error: false });
     const result = await deps.getNextEvent(new Date());
-    return c.json({ configured: true as const, event: result.ok ? result.event : null, error: !result.ok });
+    return c.json({ configured: true as const, events: result.ok ? result.events : [], error: !result.ok });
   });
 }

@@ -8,10 +8,12 @@
 
 import { log } from "../../logger.js";
 import type { IcsFetcher } from "./fetcher.js";
-import { resolveNextEvent, type NextCalendarEvent } from "./next-event.js";
-import { NEXT_EVENT_ERROR_CACHE_TTL_MS, NEXT_EVENT_OK_CACHE_TTL_MS } from "./constants.js";
+import { resolveNextEvents, type NextCalendarEvent } from "./next-event.js";
+import { NEXT_EVENT_ERROR_CACHE_TTL_MS, NEXT_EVENT_OK_CACHE_TTL_MS, NEXT_EVENTS_LIMIT } from "./constants.js";
 
-export type NextEventResult = { readonly ok: true; readonly event: NextCalendarEvent | null } | { readonly ok: false };
+// issue 382: pole namiesto singulárnej udalosti — majiteľ chce TRI
+// najbližšie, nie jednu (`NEXT_EVENTS_LIMIT`).
+export type NextEventResult = { readonly ok: true; readonly events: readonly NextCalendarEvent[] } | { readonly ok: false };
 
 export interface NextEventService {
   getNextEvent(now: Date): Promise<NextEventResult>;
@@ -34,8 +36,8 @@ export function createNextEventService(fetchIcs: IcsFetcher): NextEventService {
   async function refresh(now: Date): Promise<CacheEntry> {
     try {
       const icsText = await fetchIcs();
-      const event = resolveNextEvent(icsText, now);
-      return { result: { ok: true, event }, cachedAtMs: now.getTime(), ttlMs: NEXT_EVENT_OK_CACHE_TTL_MS };
+      const events = resolveNextEvents(icsText, now, NEXT_EVENTS_LIMIT);
+      return { result: { ok: true, events }, cachedAtMs: now.getTime(), ttlMs: NEXT_EVENT_OK_CACHE_TTL_MS };
     } catch (error) {
       const rawErrorMessage = error instanceof Error ? error.message : String(error);
       // Chybová hláška NIKDY neobsahuje URL (`fetcher.ts`'s vlastný
