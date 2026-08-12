@@ -102,35 +102,40 @@ export function Sidebar({
   return (
     <aside className={"sidebar" + (rail ? " sidebar-rail" : "")}>
       <div className="brand">
-        <span className="logo" aria-hidden="true">
-          🌲
-        </span>
-        {!rail && (
-          <span className="brandtxt">
-            Forestshop
-            <small>Firemný systém</small>
+        <div className="brand-id">
+          <span className="logo" aria-hidden="true">
+            🌲
           </span>
-        )}
+          {!rail && (
+            <span className="brandtxt">
+              Forestshop
+              <small>Firemný systém</small>
+            </span>
+          )}
+        </div>
+        {/* issue 359: prepínač bol samostatný celoširoký obdĺžnik pod hlavičkou
+            (issue 190) — šéf ho výslovne zakázal a chce len ikonu so šípkami v
+            hlavičke, vpravo hore, vedľa názvu appky. Rovnaký `data-testid`/
+            `aria-label`/`aria-expanded`/`onClick`/`localStorage` správanie,
+            len iná poloha a vizuál (bez rámu/textu). Prístupný názov (`aria-
+            label`) aj bublina myšou (`title`) ostávajú VŽDY rovnaké, aj keď je
+            teraz vždy len ikona bez viditeľného textu. */}
+        <button
+          type="button"
+          className="rail-toggle"
+          data-testid="sidebar-rail-toggle"
+          aria-expanded={!rail}
+          aria-label={railToggleLabel}
+          title={railToggleLabel}
+          onClick={() => {
+            setRail((r) => !r);
+          }}
+        >
+          <span className="rail-toggle-icon" aria-hidden="true">
+            {rail ? "»" : "«"}
+          </span>
+        </button>
       </div>
-      {/* issue 190: prepínač má VŽDY rovnaký prístupný názov (`aria-label`),
-          aj keď je jeho text v zbalenom stave skrytý — inak by sa tlačidlo v
-          lište stalo bezmenným. `title` dáva ten istý text ako bublinu myšou. */}
-      <button
-        type="button"
-        className="rail-toggle"
-        data-testid="sidebar-rail-toggle"
-        aria-expanded={!rail}
-        aria-label={railToggleLabel}
-        title={railToggleLabel}
-        onClick={() => {
-          setRail((r) => !r);
-        }}
-      >
-        <span className="rail-toggle-icon" aria-hidden="true">
-          {rail ? "»" : "«"}
-        </span>
-        {!rail && <span className="rail-toggle-label">Zbaliť menu</span>}
-      </button>
       <nav className="side-nav">
         {folders.map((folder) => {
           // V zbalenej lište sa hlavičky priečinkov nevykresľujú vôbec (nemajú
