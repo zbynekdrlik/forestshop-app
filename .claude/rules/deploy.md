@@ -148,6 +148,16 @@ paths:
   `runs-on: [self-hosted, forestshop-dev]`.
   **Starý `dev2-forestshop` runner (label `dev2`) ostáva zaregistrovaný, ale
   nečinný** — žiadny workflow naň už necieli; ponechaný ako rollback cesta.
+  **Runner potrebuje systémovo nainštalovaný Node.js (issue 366, prvý beh po
+  presune na `forestshop-dev` zlyhal `node: command not found`)** — posledný
+  krok `deploy` jobu ("Overiť verziu na živej stránke") beží `node -p ...`
+  PRIAMO v shelli runnera (nie v Docker kontajneri appky), a `apt`/nový
+  server ho automaticky nemá. Fix: `sudo apt-get install -y nodejs` (Node
+  ≥24, cez NodeSource repo — `curl -fsSL https://deb.nodesource.com/
+  setup_24.x | sudo -E bash -` PRED `apt-get install`) na `forestshop-dev`,
+  reštart runner služby. Ak sa runner niekedy znova presunie/prestaví na
+  úplne novom stroji, over TOTO ako prvé, PRED tým, než sa hľadá iná príčina
+  zlyhania overovacieho kroku.
   Zoznam runnerov repa:
   `gh api repos/zbynekdrlik/forestshop-app/actions/runners`.
 - **Tag obrazu tečie z build jobu do deploy jobu cez `needs.build.outputs`,
