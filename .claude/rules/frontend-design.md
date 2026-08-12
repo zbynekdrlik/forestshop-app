@@ -1205,3 +1205,45 @@ paths:
   container:** the true minimum width is `Σ(children widths) + gap ×
   (children − 1)`, not just `Σ(children widths)` — measure or compute
   that explicitly before trusting `space-between` to "make it fit".
+- **A toggle-open inline editor keyed by a single global scalar
+  (`editingXId`) whose "open" `onClick` UNCONDITIONALLY reseeds its draft
+  from the server value is a silent-data-loss trap** — issue 381 (majiteľ:
+  "to emoji ... sa správa hrozne"): `DailyTasksSection.tsx`'s emoji editor
+  let only ONE row be open at a time, and the ONLY way to "close" the
+  currently-open row was to open a DIFFERENT row's editor — but that same
+  `onClick` also unconditionally overwrote `emojiDraft[row.id]` with the
+  server value, so a draft typed but not yet saved was silently gone the
+  moment you switched away and back (naživo reprodukované, komentár na
+  tickete). Fix pattern: seed the draft ONLY if no in-memory entry already
+  exists for that id (`row.id in d ? d : {...d, [row.id]: seed}`), and
+  explicitly DELETE the draft entry on both successful save AND explicit
+  cancel — so a LATER reopen still gets a fresh server value (no
+  staleness), but a temporary switch-away-and-back does not lose anything.
+  **Two independent per-row toggle-open editors on the SAME row (text vs.
+  emoji, each its own `editingXId` scalar) can end up open SIMULTANEOUSLY**
+  if opening one never closes the other — found live via Playwright
+  against PRODUCTION (not by any existing test) as two duplicate 💾 save
+  buttons rendered side by side on one row. Fix: each "open X editor"
+  action must ALSO close any OTHER per-row editor open for the SAME row id
+  (`setEditingOtherId((current) => (current === row.id ? null : current))`
+  inside the "open" handler). **A Cancel/close button added NEXT TO an
+  existing Save button on a per-row editor needs the SAME `disabled={busy}`
+  guard Save already has** — found by an independent review dispatch, not a
+  test written first: without it, cancelling while THIS row's OWN save is
+  in flight, then reopening and retyping, lets the ORIGINAL (already
+  "cancelled" from the UI's perspective) save's success handler race
+  against and silently discard the NEW draft once it resolves — the same
+  class of bug the file's existing "latest ref" pattern
+  (`editingTextIdRef`/`editingEmojiIdRef`) already guards against for a
+  DIFFERENT row switching away, but it also applies WITHIN the same row
+  across a cancel+retype cycle. Any FUTURE per-row toggle-open editor
+  (draft + Save + Cancel) added to this app needs all three checks: does
+  "open" only seed-if-absent (never unconditionally overwrite)? does it
+  close any OTHER per-row editor on the SAME row? does Cancel share Save's
+  `disabled={busy}` guard?
+- **Deleting one dynamic key from a `Record<string,string>` React state
+  update triggers `@typescript-eslint/no-dynamic-delete`** (`delete
+  obj[dynamicKey]`, this repo's `strictTypeChecked` eslint config) — issue
+  381's `emojiDraft` cleanup. The lint-safe equivalent is `Object
+  .fromEntries(Object.entries(obj).filter(([key]) => key !== id))`, never
+  an `eslint-disable` comment.
