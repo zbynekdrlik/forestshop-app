@@ -262,6 +262,12 @@ tr:last-child td {
 }
 .sidebar-rail .brand {
   padding: var(--fs-space-4) var(--fs-space-1) var(--fs-space-2);
+  /* Rail je len 72px široká — logo (32px) + ikona (28px) = 60px, čo sa do
+     zvyšných 64px (72 − 2×4px odsadenie) zmestí len s NULOVOU medzerou.
+     Bez tohto prepísania by zdedená `.brand`'s `gap: var(--fs-space-2)`
+     (6px, vynucovaná ako minimum aj pri `justify-content: space-between`)
+     vyžadovala 66px a o ~2px pretiekla. */
+  gap: 0;
 }
 /* issue 359: prepínač zbalenia žil predtým ako samostatný celoširoký
    obdĺžnik s rámom + textom pod hlavičkou (issue 190) — šéf ho výslovne
