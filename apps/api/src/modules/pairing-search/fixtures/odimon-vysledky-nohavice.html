@@ -1,0 +1,66 @@
+<!--
+  Orezaná vzorka https://www.odimon.sk/vysledky-vyhladavania?term=nohavice
+  (issue 387 E2, živý fetch 13. 8. 2026, po session warm-up GET na homepage —
+  BUXUS cookie-gated presne ako huntingshop.eu). Karty 1–3 sú DOSLOVNE
+  prevzaté (href aj `alt` text nezmenené, odstránený len obalový balast —
+  data-track-product JSON atribúty, cena, promo štítky). Táto konkrétna
+  živá odpoveď nemala žiadny prirodzený duplikát, preto karta 4 je karta 1
+  znova (identická reálna URL) — mechanizmus testu dedup podľa URL (rovnaký
+  princíp ako `wetland-vysledky-nohavice.html`/`betalov-vysledky-
+  nohavice.html`). `.claude/rules/supplier-stock.md` potvrdzuje, že
+  `odimon.sk` je BUXUS a JSON-LD na tejto doméne nie je pre stránku
+  vyhľadávania relevantné (parser meno berie z `img[alt]`).
+-->
+<html lang="sk">
+<head><title>Výsledky vyhľadávania: nohavice | odimon.sk</title></head>
+<body>
+<div class="col-lg-9 col-md-9 col-sm-12 fs-products__col product-list_col product-list_col--products">
+  <div class="product-list__results">
+    <div class="product-list__info-box-wrapper fs_results_info">
+      <div class="product-list-info-box"><b>146</b> produktov</div>
+    </div>
+
+    <div class="item col-xs-6 col-lg-3">
+      <div class="product tag-product-card">
+        <div class="image">
+          <a href="https://www.odimon.sk/obuv-a-oblecenie/polovnicke-oblecenie/polovnicke-termopradlo/termopradlo-nohavice-modal-termovel" class="product-card">
+            <img class="img-responsive lazy" alt="Termoprádlo nohavice modal Termovel">
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <div class="item col-xs-6 col-lg-3">
+      <div class="product tag-product-card">
+        <div class="image">
+          <a href="https://www.odimon.sk/obuv-a-oblecenie/margita-oblecenie/panske-polovnicke-nohavice-michal" class="product-card">
+            <img class="img-responsive lazy" alt="Pánske poľovnícke nohavice Michal ">
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <div class="item col-xs-6 col-lg-3">
+      <div class="product tag-product-card">
+        <div class="image">
+          <a href="https://www.odimon.sk/obuv-a-oblecenie/deerhunter-oblecenie/nohavice-deerhunter/polovnicke-nohavice-deerhunter-ram" class="product-card">
+            <img class="img-responsive lazy" alt="Poľovnícke nohavice Deerhunter Ram">
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <div class="item col-xs-6 col-lg-3">
+      <div class="product tag-product-card">
+        <div class="image">
+          <a href="https://www.odimon.sk/obuv-a-oblecenie/polovnicke-oblecenie/polovnicke-termopradlo/termopradlo-nohavice-modal-termovel" class="product-card">
+            <img class="img-responsive lazy" alt="Termoprádlo nohavice modal Termovel">
+          </a>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+</body>
+</html>

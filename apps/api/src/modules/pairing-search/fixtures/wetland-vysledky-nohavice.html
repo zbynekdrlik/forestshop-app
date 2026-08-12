@@ -1,0 +1,29 @@
+<!--
+  Orezaná vzorka https://www.wetland.sk/vyhladavanie?controller=search&s=nohavice
+  (issue 387 E2, živý fetch 13. 8. 2026, po session warm-up GET na homepage).
+  Prvé tri karty sú DOSLOVNE skopírované z reálnej odpovede (href aj text
+  názvu nezmenené). Štvrtá karta je REÁLNA prvá karta znova, len s iným
+  fragmentom (`#/10-velkost-50` namiesto `#/9-velkost-48`) — na tejto
+  konkrétnej živej stránke sa žiadny prirodzený duplikát (rovnaká URL pred
+  `#`, iný fragment veľkosti) nenašiel, tento pár preto simuluje presne ten
+  jav, ktorý `urldefrag` + dedup podľa URL musí zvládnuť (mechanizmus, nie
+  naživo nájdená vzorka — rovnaký princíp ako `supplier-stock/fixtures/
+  rosler-vypredane-noz-entita.html`).
+-->
+<html lang="sk">
+<head><title>Vyhľadávanie: nohavice | wetland.sk</title></head>
+<body>
+  <div class="product-miniature__title">
+    <a class="link" href="https://www.wetland.sk/nohavice/deerhunter-pro-gamekeeper-boot-trousers-polovnicke-nohavice-111-592#/9-velkost-48">DEERHUNTER Pro Gamekeeper Boot Trousers - poľovnícke nohavice</a>
+  </div>
+  <div class="product-miniature__title">
+    <a class="link" href="https://www.wetland.sk/nohavice/deerhunter-strike-extreme-pull-over-trousers-ochranne-nohavice-60-19897#/46-velkost-l_xl">DEERHUNTER Strike Extreme Pull-Over Trousers - ochranné nohavice</a>
+  </div>
+  <div class="product-miniature__title">
+    <a class="link" href="https://www.wetland.sk/nohavice/deerhunter-lady-excape-winter-trousers-damske-nohavice-101-20063#/7-velkost-44">DEERHUNTER Lady Excape Winter Trousers - dámske nohavice</a>
+  </div>
+  <div class="product-miniature__title">
+    <a class="link" href="https://www.wetland.sk/nohavice/deerhunter-pro-gamekeeper-boot-trousers-polovnicke-nohavice-111-592#/10-velkost-50">DEERHUNTER Pro Gamekeeper Boot Trousers - poľovnícke nohavice</a>
+  </div>
+</body>
+</html>
