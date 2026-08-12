@@ -21,6 +21,15 @@ import {
 // `ComponentType<SectionProps>` (`nav.ts`), lebo objekt s VIAC poľami (role
 // navyše) sa dá vždy odovzdať tam, kde sa čaká len podmnožina.
 
+// Issue 381: odstráni draft PRE JEDEN riadok z `emojiDraft` bez `delete`
+// operátora (`@typescript-eslint/no-dynamic-delete` zakazuje `delete
+// next[dynamickýKľúč]`) — filtrovanie cez `Object.entries` je funkčne
+// rovnaké, len lint-safe.
+function forgetEmojiDraft(draft: Record<string, string>, id: string): Record<string, string> {
+  if (!(id in draft)) return draft;
+  return Object.fromEntries(Object.entries(draft).filter(([key]) => key !== id));
+}
+
 export function DailyTasksSection({ onSessionExpired }: { readonly onSessionExpired: () => void }): JSX.Element {
   const [rows, setRows] = useState<readonly DailyTaskRow[] | null>(null);
   const [error, setError] = useState("");
@@ -149,6 +158,10 @@ export function DailyTasksSection({ onSessionExpired }: { readonly onSessionExpi
           // Rovnaký dôvod ako `saveText` vyššie — nezavrieť CUDZÍ, medzitým
           // otvorený emoji editor.
           if (editingEmojiIdRef.current === id) setEditingEmojiId(null);
+          // Issue 381: draft je teraz uložený, zahoď ho — ĎALŠIE otvorenie
+          // musí znova nasadiť čerstvú serverovú hodnotu, nie tento (už
+          // uložený, prípadne časom zastaraný) záznam.
+          setEmojiDraft((d) => forgetEmojiDraft(d, id));
           load();
         })
         .catch((err: unknown) => {
@@ -160,6 +173,40 @@ export function DailyTasksSection({ onSessionExpired }: { readonly onSessionExpi
     },
     [emojiDraft, load, handleActionError],
   );
+
+  // Issue 381: majiteľ nahlásil, že priraďovanie emoji "sa správa hrozne" —
+  // naživo overené (komentár na ticket-e): (1) rozpísaný draft sa ticho
+  // stratí pri prepnutí na iný riadok, (2) chýba Zrušiť, (3) textový aj
+  // emoji editor sa dajú mať otvorené súčasne na tom istom riadku. Tri
+  // opravy nižšie, minimálne, správanie funkcie samotnej nemenia.
+
+  // Draft sa nasadí len keď PRE TENTO riadok ešte neexistuje (prvé
+  // otvorenie od posledného uloženia/zrušenia) — nie bezpodmienečne pri
+  // KAŽDOM kliknutí. Vďaka tomu draft prežije prepnutie na iný riadok a
+  // späť namiesto toho, aby ho každé ďalšie otvorenie ticho prepísalo
+  // serverovou hodnotou.
+  const openEmojiEditor = useCallback((row: DailyTaskRow) => {
+    setEmojiDraft((d) => (row.id in d ? d : { ...d, [row.id]: row.emoji ?? "" }));
+    // Textový a emoji editor sa nesmú dať mať otvorené súčasne na tom
+    // istom riadku (viedlo to k dvom identickým 💾 tlačidlám vedľa seba).
+    setEditingTextId((current) => (current === row.id ? null : current));
+    setEditingEmojiId(row.id);
+  }, []);
+
+  const openTextEditor = useCallback((row: DailyTaskRow) => {
+    setTextDraft((d) => ({ ...d, [row.id]: row.text }));
+    setEditingEmojiId((current) => (current === row.id ? null : current));
+    setEditingTextId(row.id);
+  }, []);
+
+  // Explicitné Zrušiť pre emoji editor (textový editor už jedno má) —
+  // predtým bol jediný spôsob odchodu Uložiť, aj s prázdnou/nechcenou
+  // hodnotou. Draft sa zahodí, aby ďalšie otvorenie ukázalo znova
+  // serverovú hodnotu, nie tento zrušený pokus.
+  const cancelEmojiEdit = useCallback((id: string) => {
+    setEditingEmojiId((current) => (current === id ? null : current));
+    setEmojiDraft((d) => forgetEmojiDraft(d, id));
+  }, []);
 
   const removeTask = useCallback(
     (id: string) => {
@@ -331,6 +378,18 @@ export function DailyTasksSection({ onSessionExpired }: { readonly onSessionExpi
                     >
                       💾
                     </button>
+                    <button
+                      type="button"
+                      className="uloha-icon-btn"
+                      onClick={() => {
+                        cancelEmojiEdit(row.id);
+                      }}
+                      title="Zrušiť"
+                      aria-label="Zrušiť úpravu emoji"
+                      data-testid={`uloha-emoji-cancel-${row.id}`}
+                    >
+                      ✕
+                    </button>
                   </>
                 )}
 
@@ -340,8 +399,7 @@ export function DailyTasksSection({ onSessionExpired }: { readonly onSessionExpi
                       type="button"
                       className="uloha-icon-btn"
                       onClick={() => {
-                        setTextDraft((d) => ({ ...d, [row.id]: row.text }));
-                        setEditingTextId(row.id);
+                        openTextEditor(row);
                       }}
                       title="Upraviť text"
                       aria-label={`Upraviť text úlohy ${row.text}`}
@@ -354,8 +412,7 @@ export function DailyTasksSection({ onSessionExpired }: { readonly onSessionExpi
                         type="button"
                         className="uloha-icon-btn"
                         onClick={() => {
-                          setEmojiDraft((d) => ({ ...d, [row.id]: row.emoji ?? "" }));
-                          setEditingEmojiId(row.id);
+                          openEmojiEditor(row);
                         }}
                         title="Pridať/zmeniť emoji"
                         aria-label={`Pridať/zmeniť emoji úlohy ${row.text}`}
