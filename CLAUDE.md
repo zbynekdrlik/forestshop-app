@@ -15,7 +15,10 @@ other's session.
 Repo: `zbynekdrlik/forestshop-app` (public). Two-branch flow — `main`
 (production) + `dev` (work). Fáza F0 (základ) je hotová: pnpm workspace
 `apps/api` (Hono + Drizzle + PostgreSQL) a `apps/web` (React + Vite),
-nasadenie na dev2 cez GHCR a Cloudflare tunel.
+nasadenie cez GHCR a Cloudflare tunel. **Od 12. 8. 2026 nasadzuje CI na
+vyhradený Hetzner VPS `forestshop-dev` (`forestshop-dev.newlevel.media`),
+NIE na dev2** — pozri `.claude/rules/deploy.md`'s "Kam sa nasadzuje" pre
+plné detaily (issue 366).
 
 **`gh issue view <N>` (bez `--json`) na tomto repe padá** (`GraphQL: Projects
 (classic) is being deprecated…`) — použi `gh issue view <N> --json
@@ -82,7 +85,7 @@ Per-area rules live in `.claude/rules/<area>.md` with `paths:` frontmatter.
 - database / Docker (Postgres 18 PGDATA, migrations) → `.claude/rules/database.md`
 - tests (unit vs integration split, e2e setup) → `.claude/rules/testing.md`
 - CI gotchas (pnpm action, Vite host binding) → `.claude/rules/ci.md`
-- deployment on dev2 → `.claude/rules/deploy.md`
+- deployment (forestshop-dev VPS, since 12.8.2026) → `.claude/rules/deploy.md`
 - backups / restore → `.claude/rules/backups.md`
 - katalóg zo Shoptetu (import, snapshoty, dostupnosť) → `.claude/rules/catalog.md`
 - plánovač úloh (F2 — nočné joby, job_run, advisory zámok) → `.claude/rules/scheduler.md`

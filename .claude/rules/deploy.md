@@ -9,7 +9,7 @@ paths:
   - "scripts/*.sh"
 ---
 
-# Deployment (dev2)
+# Deployment (forestshop-dev — presunuté z dev2, issue 366)
 
 - **Cloudflare Error 1033 / HTTP 530 na oboch verejných adresách = tunel bez
   živého spojenia, NIE appka (issue 357, výpadok 12. 8. 2026 ráno).**
@@ -41,9 +41,10 @@ paths:
 - **Vonkajšie sledovanie dostupnosti (issue 357):** appka predtým nemala nič,
   čo by z VONKU kontrolovalo, či verejná adresa žije — výpadok objavil
   majiteľ, nie automatika. `scripts/uptime-check.sh` (v tomto repe) beží cez
-  systemd `--user` timer **na dev1** (zámerne NIE na dev2 — monitor na tom
-  istom stroji, čo sleduje, by zomrel spolu s tým, čo má hlásiť; rovnaký
-  vzor ako `api-watchdog.timer`/`imag-obs-alert-watchdog.timer`), kontroluje
+  systemd `--user` timer **na dev1** (zámerne NIE na tom istom stroji, čo
+  beží appka — monitor na tom istom stroji, čo sleduje, by zomrel spolu s
+  tým, čo má hlásiť; rovnaký vzor ako
+  `api-watchdog.timer`/`imag-obs-alert-watchdog.timer`), kontroluje
   obe verejné adresy (`forestshop.newlevel.media`,
   `forestshop-novy.newlevel.media`) každých 5 minút, alertuje až po 2
   zlyhaniach za sebou (~10 min súvislého výpadku, nie jeden blik) cez
@@ -91,7 +92,7 @@ paths:
   (rob ju pri KAŽDOM pridaní premennej do `env.ts`, ešte pred hľadaním chyby v
   kóde):
   ```bash
-  ssh newlevel@dev2 'docker exec forestshop-app-1 sh -c "env | grep -E \"<PREMENNA>\""'
+  ssh admin@forestshop-dev.newlevel.media 'docker exec forestshop-app-1 sh -c "env | grep -E \"<PREMENNA>\""'
   ```
   Prázdny výstup = chýbajúci riadok v compose, nie chyba v appke.
   **Zopakovalo sa presne to isté (issue 292, PR 324/9.8.2026):**
@@ -123,18 +124,31 @@ paths:
   bare kľúč — to premennú v kontajneri NASTAVÍ na `""`, čo `z.string().url()`
   v `env.ts` odmietne a appku pri štarte zhodí, hoci samotná premenná je
   deklarovaná ako nepovinná.
-- **Kam sa nasadzuje:** `/srv/forestshop` na dev2 (vlastník `newlevel`).
+- **Kam sa nasadzuje (od 12. 8. 2026 — presunuté z dev2, issue 366):**
+  `/srv/forestshop` na vyhradenom Hetzner VPS **`forestshop-dev`**
+  (`forestshop-dev.newlevel.media`, `178.105.89.168`, nbg1; 2 CPU / 4 GB RAM
+  / 38 GB disk), vlastník `admin` (predtým `newlevel` — ten účet na tomto
+  stroji už neexistuje). Druhý, od appky nezávislý Linux účet `stepan` má na
+  tom istom stroji vlastný izolovaný klon repa — obidva účty môžu bežať
+  vlastné Claude relácie bez vzájomného rušenia. SSH: `ssh
+  admin@forestshop-dev.newlevel.media` (alebo priamo IP).
   Obsahuje `.env` (mode 600 — `POSTGRES_PASSWORD`, `CF_TUNNEL_TOKEN`),
   `docker-compose.prod.yml` (kopírovaný z repa pri každom deploy) a
   `scripts/` (synchronizovaný `rsync -a --delete` z repa pri každom deploy —
   predtým tam ležala ručne položená kópia, ktorá by sa tichým opomenutím
-  rozišla od gitu naveky; teraz je vynútené, že dev2 má vždy presne to, čo je
-  v repe).
-- **Self-hosted runner:** `dev2-forestshop`, labels
-  `self-hosted,Linux,X64,dev2`, beží ako systemd služba
-  `actions.runner.zbynekdrlik-forestshop-app.dev2-forestshop.service`
-  (enabled, prežije reboot). `deploy` job cieli `runs-on: [self-hosted,
-  dev2]`.
+  rozišla od gitu naveky; teraz je vynútené, že server má vždy presne to, čo
+  je v repe).
+  **Na dev2 ostáva `forestshop-postgres-1` bežať ďalej ako záložná kópia dát**
+  (majiteľove rozhodnutie, ticket 366) — appka a cloudflared tam boli pri
+  presune odstránené, dev2 sa už NIKDY nemá stať cieľom nasadenia znova.
+- **Self-hosted runner:** `forestshop-dev-runner`, label `forestshop-dev`,
+  beží ako systemd služba `actions.runner.zbynekdrlik-forestshop-app.
+  forestshop-dev-runner.service` na `forestshop-dev` (enabled, prežije
+  reboot). `deploy` job cieli `runs-on: [self-hosted, forestshop-dev]`.
+  **Starý `dev2-forestshop` runner (label `dev2`) ostáva zaregistrovaný, ale
+  nečinný** — žiadny workflow naň už necieli; ponechaný ako rollback cesta.
+  Zoznam runnerov repa: `gh api repos/zbynekdrlik/forestshop-app/actions/
+  runners`.
 - **Tag obrazu tečie z build jobu do deploy jobu cez `needs.build.outputs`,
   NIE cez `:latest`.** `build` job nastaví `outputs.version` (verzia z
   `package.json`), `deploy` job ho číta do `env.IMAGE_TAG` a použije ho pri
@@ -153,51 +167,32 @@ paths:
   (`**/node_modules`, `**/dist`, `**/*.tsbuildinfo`, `**/playwright-report`,
   `**/test-results`) — Docker ignore semantika bez `**/` matchuje len bare
   názvy v koreni kontextu, nie v podadresároch typu `apps/api/dist`.
-- **Verejný hostname `forestshop.newlevel.media` je zdieľaný problém, nie
-  technický detail.** V čase F0 ho živo obsluhoval iný projekt
-  (`parovanie_produktov`, rozhodnutie z 2026-07-22, issue #120 v tamojšom
-  repe) — presmerovanie DNS na nový systém by ho ticho odpojilo. Cloudflare
-  tunnel pre tento projekt (`forestshop-app`, samostatný od súrodenca) je
-  pripravený a pripojený.
-  **Rozhodnuté majiteľom 2026-07-29: hlavné meno prevezme tento systém až vo
-  fáze F6**, keď sa stará appka vypína — dovtedy sa `forestshop.newlevel.media`
-  nechá starému projektu (issue #5 je teraz úloha pre F6, nie otvorená otázka).
-
-- **Dočasný verejný hostname (do fázy F6, issue #5):
-  `forestshop-novy.newlevel.media`.** Beží na samostatnom tunneli
-  `forestshop-app` (id `e0cdc5bf-fbc8-45de-b1f7-f4c0b2a9b0dc`), ingress
-  `forestshop-novy.newlevel.media` → `http://app:3000` (popri pôvodnom
-  `forestshop.newlevel.media` ingress pravidle na tom istom tuneli — obe
-  smerujú na tú istú appku, líšia sa len menom). CNAME záznam vytvorený v
-  zóne `newlevel.media` (`b9019ca...`), `proxied: true`.
-  - **Prečo nie `novy.forestshop.newlevel.media` (pôvodne zamýšľaný tvar)?**
-    Cloudflare Universal SSL certifikát tejto zóny pokrýva len
-    `newlevel.media` + `*.newlevel.media` (jedna úroveň wildcard) — overené
-    `openssl s_client` + SAN výpisom certifikátu. Hostname o dve úrovne pod
-    apexom preto pri TLS handshake padá (`sslv3 alert handshake failure`).
-    Riešenie by vyžadovalo Cloudflare Total TLS / Advanced Certificate Manager
-    (samostatné oprávnenie `SSL and Certificates:Edit` na API tokene — token
-    použitý v F0 má len Tunnel Write + DNS Write + Zone Read + Account
-    Settings Read a na `/acm/total_tls` aj `/ssl/certificate_packs` vracia
-    autorizačnú chybu). Namiesto rozširovania oprávnení tokenu pre dočasný
-    hostname bol zvolený tvar o jednu úroveň nižšie (`forestshop-novy.` priamo
-    pod `newlevel.media`), ktorý sedí do existujúceho wildcard certifikátu bez
-    ďalších zásahov.
-  - **Prepnutie na finálny hostname po rozhodnutí issue #5:**
-    1. Zmeniť `LIVE_HOSTNAME` v `.github/workflows/deploy.yml` (jeden riadok).
-    2. Ak finálny hostname má byť opäť `forestshop.newlevel.media` (t.j. tento
-       projekt preberie meno): zmazať/presmerovať pôvodný záznam u súrodenca
-       (mimo tohto repa) a v CNAME zázname tejto appky prepísať `name` na
-       `forestshop.newlevel.media` (alebo pridať nový záznam a zmazať dočasný
-       `forestshop-novy`).
-    3. Ak finálny hostname zostáva iný ale je jednoúrovňový pod
-       `newlevel.media` → žiadny certifikátový problém, len DNS CNAME + ingress
-       hostname update cez Cloudflare API (rovnaký postup ako vyššie).
-    4. Ak sa má použiť viacúrovňový tvar ako pôvodne zamýšľaný
-       `novy.forestshop.newlevel.media` → najprv treba na Cloudflare API tokene
-       doplniť oprávnenie `SSL and Certificates:Edit` a zapnúť Total TLS
-       (`PATCH /zones/{zone}/acm/total_tls`) alebo objednať Advanced
-       Certificate, inak TLS handshake opäť zlyhá.
+- **Verejný hostname `forestshop.newlevel.media` odteraz patrí tejto appke —
+  VYRIEŠENÉ, issue #5, uzavreté 3. 8. 2026 (znovu overené 12. 8. 2026 pri
+  issue 366, nezávisle od presunu na `forestshop-dev`).** V čase F0 ho živo
+  obsluhoval súrodenský projekt `parovanie_produktov`; majiteľ 3. 8. 2026
+  výslovne schválil prepnutie ("chcem prejst na novu, staru vypinam"), starú
+  appku vypol sám a prepnutie bolo naživo overené (login screen, verzia v
+  pätičke). Nezávislé overenie z 12. 8. 2026: Cloudflare tunnel `forestshop-app`
+  (`e0cdc5bf-...`) má ingress pre `forestshop.newlevel.media` → `http://app:3000`
+  už od 29. 7. 2026; DNS CNAME v zóne `newlevel.media` naň ukazuje od 3. 8. 2026
+  (Cloudflare-ov vlastný `modified_on` + komentár na zázname "prepnute na novu
+  appku (issue 5)"); `curl https://forestshop.newlevel.media/api/version` aj
+  `curl https://forestshop-novy.newlevel.media/api/version` vracajú v tej istej
+  chvíli identickú verziu — obe mená obsluhuje TÁTO appka.
+- **`forestshop-novy.newlevel.media` zostáva funkčná záložná adresa** na tom
+  istom tuneli/kontajneri — netreba ju mazať, `deploy.yml` overuje verziu
+  proti `LIVE_HOSTNAME` (`forestshop.newlevel.media`), ale obe URL vždy
+  smerujú na rovnaký bežiaci `app` kontajner.
+  - **Prečo nie `novy.forestshop.newlevel.media` (pôvodne zamýšľaný tvar pre
+    `forestshop-novy`)?** Cloudflare Universal SSL certifikát zóny pokrýva
+    len `newlevel.media` + `*.newlevel.media` (jedna úroveň wildcard) —
+    overené `openssl s_client` + SAN výpisom certifikátu; hostname o dve
+    úrovne pod apexom pri TLS handshake padá (`sslv3 alert handshake
+    failure`). Preto bol zvolený jednoúrovňový tvar `forestshop-novy.` priamo
+    pod `newlevel.media`. Relevantné len ak v budúcnosti pribudne ďalší
+    viacúrovňový hostname — vyžadovalo by to na API tokene navyše oprávnenie
+    `SSL and Certificates:Edit` + zapnutý Total TLS.
 
 - **Docker inicializuje ČERSTVÝ named volume kopírovaním obsahu (aj
   vlastníctva) z toho, čo v obraze UŽ existuje na tej istej ceste v momente
@@ -225,7 +220,7 @@ paths:
 - **Retencia surových súborov (`.claude/rules/catalog.md`'s `pruneRawSnapshots`) beží
   PRIAMO v produkčnom obraze — nie cez `scripts/`.** `scripts/catalog-ingest.ts` a
   `scripts/catalog-prune-raw.ts` (spúšťané cez `pnpm catalog:*`, `tsx`) potrebujú
-  celý monorepo `node_modules` — na dev2 sú `scripts/` len ako `rsync`-nutá kópia
+  celý monorepo `node_modules` — na serveri sú `scripts/` len ako `rsync`-nutá kópia
   BEZ `node_modules` (final-wave-b, položka 2: prvý reálny produkčný import zapísal
   surový súbor a nemal ho čo niekedy zmazať, zväzok `catalog-raw` by rástol
   donekonečna). Kanonická implementácia preto žije v `apps/api/src/cli/
@@ -236,7 +231,7 @@ paths:
   `apps/api/dist`) — žiadna zmena Dockerfile nebola potrebná. Príkaz na produkcii:
 
   ```bash
-  ssh newlevel@dev2 'cd /srv/forestshop && docker compose -f docker-compose.prod.yml exec app node apps/api/dist/cli/catalog-prune-raw.js'
+  ssh admin@forestshop-dev.newlevel.media 'cd /srv/forestshop && docker compose -f docker-compose.prod.yml exec app node apps/api/dist/cli/catalog-prune-raw.js'
   ```
 
   Vypíše jednu ľudskú vetu aj JSON riadok (`{"removed": N}`) — bezpečné spustiť
@@ -247,7 +242,7 @@ paths:
   procese appky), takže `scripts/catalog-ingest.ts` zostáva len pohodlný LOKÁLNY/CI
   vstupný bod, nie produkčná nutnosť.
 
-- **`deploy` job (self-hosted dev2) môže raz za čas zlyhať na `failed to
+- **`deploy` job (self-hosted runner) môže raz za čas zlyhať na `failed to
   extract layer ... link ... no such file or directory` počas `docker
   compose pull app`** (pozorované 2026-07-29, PR #16 — žiadna zmena
   závislostí v tom PR, čiže nešlo o obsah image, ale o lokálny
@@ -258,11 +253,11 @@ paths:
   (`/root/.local/share/pnpm/store/v10/...`) do TEJ ISTEJ vrstvy ako
   `node_modules` — ak sa pri sťahovaní/extrakcii na dev2 poškodí/vynechá
   jeden blob v containerd content-store, hardlink naň zlyhá.
-  **Diagnostika (bez zásahu do bežiacich kontajnerov iných projektov na
-  zdieľanom dev2):**
+  **Diagnostika (bez zásahu do bežiacich kontajnerov iných účtov na tom
+  istom serveri):**
   ```bash
-  ssh newlevel@dev2 "sudo ctr --address /run/containerd/containerd.sock -n moby snapshots ls | grep <snapshot-id z chybovej hlášky>"
-  ssh newlevel@dev2 "sudo ctr --address /run/containerd/containerd.sock -n moby content ls | grep <chýbajúci sha256 prefix z chybovej hlášky>"
+  ssh admin@forestshop-dev.newlevel.media "sudo ctr --address /run/containerd/containerd.sock -n moby snapshots ls | grep <snapshot-id z chybovej hlášky>"
+  ssh admin@forestshop-dev.newlevel.media "sudo ctr --address /run/containerd/containerd.sock -n moby content ls | grep <chýbajúci sha256 prefix z chybovej hlášky>"
   ```
   (`ctr` bez `--address`/`-n moby` sa pripája na iný — prázdny — namespace a
   nič neukáže; docker's vlastný containerd socket je `/run/containerd/
@@ -273,13 +268,15 @@ paths:
   bežných "unused images"). V tomto prípade stačí `gh run rerun <run-id>
   --failed` — čerstvý pull znova stiahne vrstvu od nuly. Ak sa to isté zopakuje
   DRUHÝKRÁT za sebou, už to nie je transientný jav — over `docker system df`
-  (miesto na disku) a zváž reštart `containerd`/`docker` služby na dev2.
-  **Ďalší pozorovaný spúšťač TEJ ISTEJ triedy (issue 169, 2026-08-01): SÚBEŽNÝ
-  CI job na tom istom self-hosted dev2 runneri, ktorý si sám ťahá/spúšťa
-  Docker image (integration/e2e job's efemérne `postgres` service kontajnery)
-  presne v okamihu, keď `deploy` job extrahuje appkin image.** Potvrdené
-  koreláciou časových pečiatok — `ssh newlevel@dev2 "journalctl -u docker
-  --since '10 min ago'"` ukázal `image pulled ... postgres:16` tesne PRED aj
+  (miesto na disku) a zváž reštart `containerd`/`docker` služby na serveri.
+  **Ďalší pozorovaný spúšťač TEJ ISTEJ triedy (issue 169, 2026-08-01, vtedy
+  na dev2): SÚBEŽNÝ CI job na tom istom self-hosted runneri, ktorý si sám
+  ťahá/spúšťa Docker image (integration/e2e job's efemérne `postgres`
+  service kontajnery) presne v okamihu, keď `deploy` job extrahuje appkin
+  image.** Potvrdené koreláciou časových pečiatok — `ssh
+  admin@forestshop-dev.newlevel.media "journalctl -u docker --since '10 min
+  ago'"` (vtedy `ssh newlevel@dev2 ...`) ukázal `image pulled ...
+  postgres:16` tesne PRED aj
   PO zlyhanom `deploy`'s `failed to Lchown ...` v tej istej sekunde, a
   `gh run list --json databaseId,name,event,createdAt` potvrdil, že `CI`
   (push na `main`) a `Deploy` (push na `main`) z toho istého merge commitu
@@ -345,7 +342,7 @@ paths:
   `docker compose -f docker-compose.prod.yml exec` cieli na kontajner
   bežiaci PRIAMO Postgres, appka sama nemá `psql` nainštalované:
   ```
-  ssh newlevel@dev2
+  ssh admin@forestshop-dev.newlevel.media
   cd /srv/forestshop
   docker compose -f docker-compose.prod.yml exec -T postgres \
     psql -U forestshop -d forestshop -t -c \
@@ -381,7 +378,7 @@ paths:
   zatvorenie klientskeho spojenia (žiadny `req.on("close")`/abort-signal na
   tejto ceste), takže Cloudflare-ov 524 NIE JE zlyhanie behu — je to len
   strata KLIENTSKEJ odpovede. Overenie, či beh naozaj pokračuje/dobehol, ide
-  MIMO tunela, priamo cez SSH na dev2 (`.claude/rules/database.md`'s
+  MIMO tunela, priamo cez SSH na server (`.claude/rules/database.md`'s
   `postgres` service dopyt) — `pg_locks` filtrovaný na konkrétny advisory
   kľúč (`SELECT count(*) FROM pg_locks WHERE locktype='advisory' AND
   ((classid::bigint << 32) | objid::bigint) = <kľúč>;`, `1` = stále beží,

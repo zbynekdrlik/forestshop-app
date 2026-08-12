@@ -6,17 +6,22 @@ on:
 
 # Two quick merges to main can otherwise run two deploy jobs concurrently, and a
 # `docker compose pull` + `up -d` from the OLDER run finishing last would overwrite
-# the newer image on dev2. Never cancel a deploy mid-flight (cancel-in-progress:
-# false) — queue instead, so every push still gets fully deployed, in order.
+# the newer image on the target server. Never cancel a deploy mid-flight
+# (cancel-in-progress: false) — queue instead, so every push still gets fully
+# deployed, in order.
 concurrency:
   group: deploy
   cancel-in-progress: false
 
 env:
-  # Temporary public hostname while forestshop.newlevel.media still serves the
-  # older sibling project (parovanie_produktov) — decision pending issue #5.
-  # Switching to the final hostname later is a one-line change here.
-  LIVE_HOSTNAME: forestshop-novy.newlevel.media
+  # issue #5 (closed 2026-08-03): parovanie_produktov, the older sibling
+  # project that used to serve this hostname, was retired by its owner and
+  # forestshop.newlevel.media now belongs to this app — verified live
+  # (Cloudflare tunnel ingress + DNS CNAME both point here). See issue 366
+  # for the re-verification done when the deploy target moved off dev2.
+  # forestshop-novy.newlevel.media still resolves to the same app on the
+  # same tunnel and is kept working as a fallback address.
+  LIVE_HOSTNAME: forestshop.newlevel.media
 
 jobs:
   build:
@@ -56,7 +61,13 @@ jobs:
 
   deploy:
     needs: build
-    runs-on: [self-hosted, dev2]
+    # issue 366 (2026-08-12): production moved off dev2 onto a dedicated
+    # Hetzner VPS (`forestshop-dev`, forestshop-dev.newlevel.media). Runner
+    # `forestshop-dev-runner` is registered there (label `forestshop-dev`),
+    # enabled as a systemd service so it survives a reboot. dev2's old
+    # runner (`dev2-forestshop`, label `dev2`) is left registered but idle
+    # as a rollback path — no workflow targets it anymore.
+    runs-on: [self-hosted, forestshop-dev]
     env:
       # Pin pull + up to the version THIS run just built — never the mutable
       # `:latest` tag, which a second, faster deploy could repoint mid-flight.
@@ -67,7 +78,7 @@ jobs:
         working-directory: /srv/forestshop
         run: |
           cp "$GITHUB_WORKSPACE/docker-compose.prod.yml" .
-          # scripts/ (zálohovanie, obnovovací drill) musí byť na dev2 vždy presne to,
+          # scripts/ (zálohovanie, obnovovací drill) musí byť na serveri vždy presne to,
           # čo je v repozitári — inak sa tichým opomenutím rozíde od gitu naveky.
           mkdir -p scripts
           rsync -a --delete "$GITHUB_WORKSPACE/scripts/" scripts/
