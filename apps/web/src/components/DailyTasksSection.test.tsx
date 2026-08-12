@@ -259,3 +259,34 @@ it("otvorenie textového editora zavrie emoji editor TOHO ISTÉHO riadku (nikdy 
   expect(screen.queryByTestId("uloha-emoji-input-task-a")).toBeNull();
   expect(screen.getByTestId("uloha-edit-input-task-a")).toBeTruthy();
 });
+
+// Nezávislý review dispatch (issue 381 PR) našiel doplnkový race: Zrušiť
+// nebolo chránené proti bežiacemu uloženiu TOHO ISTÉHO riadku — kliknutie
+// Zrušiť počas čakajúcej odpovede, znovu-otvorenie a nový rozpis by stále
+// mohli byť zahodené, keď PÔVODNÁ (už zrušená) odpoveď dorazí neskôr.
+it("Zrušiť je disabled, kým čaká uloženie TOHO ISTÉHO riadku (nedá sa obísť rozbehnuté uloženie)", async () => {
+  fetchDailyTasks.mockResolvedValue([ROW_A]);
+  let resolveSave: (v: boolean) => void = () => {};
+  updateDailyTaskEmoji.mockImplementationOnce(
+    () =>
+      new Promise<boolean>((resolve) => {
+        resolveSave = resolve;
+      }),
+  );
+  render(<DailyTasksSection onSessionExpired={vi.fn()} />);
+  await screen.findByTestId("uloha-row-task-a");
+
+  fireEvent.click(screen.getByTestId("uloha-emoji-task-a"));
+  fireEvent.change(screen.getByTestId<HTMLInputElement>("uloha-emoji-input-task-a"), { target: { value: "🚚" } });
+  fireEvent.click(screen.getByTestId("uloha-emoji-save-task-a"));
+
+  // Odpoveď ešte NEDORAZILA — Zrušiť musí byť disabled, presne ako Uložiť.
+  expect(screen.getByTestId<HTMLButtonElement>("uloha-emoji-cancel-task-a").disabled).toBe(true);
+  fireEvent.click(screen.getByTestId("uloha-emoji-cancel-task-a"));
+  expect(screen.getByTestId("uloha-emoji-input-task-a")).toBeTruthy();
+
+  resolveSave(true);
+  await waitFor(() => {
+    expect(updateDailyTaskEmoji).toHaveBeenCalledWith("task-a", "🚚");
+  });
+});
