@@ -621,3 +621,35 @@ paths:
   (`toHaveAttribute`/`toBeVisible`/`toBeInTheDocument`) — over existujúci
   sesterský test (napr. `NedostupneSection.test.tsx`) pred písaním nového,
   nikdy nepredpokladaj, že jest-dom je nainštalovaný.
+- **Playwright's `.filter({ hasText })` re-vyhodnocuje sa PRI KAŽDOM ĎALŠOM
+  použití locatora — ak akcia PREPÍŠE riadok tak, že jeho pôvodný text už
+  NIE JE textovým uzlom (napr. inline-edit prepne `<span>text</span>` na
+  `<input value="text">`), ten istý `hasText` filter prestane nachádzať
+  ČOKOĽVEK a ďalší krok (`.locator("input")` na ňom) timeoutne bez chyby o
+  tom, PREČO.** Issue 342 (`daily-tasks.spec.ts`): `<input>`'s `value`
+  atribút sa NEPOČÍTA do textového obsahu, na rozdiel od `<span>`. Fix pre
+  KROKY vnútri takto prepísaného stavu: nájsť vstup/tlačidlo GLOBÁLNE cez
+  jeho PEVNÝ (nie per-riadok interpolovaný) `aria-label`/CSS triedu, bezpečné
+  len keď appka dovolí najviac JEDEN riadok v tomto stave naraz (over to v
+  komponente pred spoliehaním sa naň). Pred/po tomto prepnutí (keď text
+  OSTÁVA viditeľný ako `<span>`) `hasText` funguje ďalej bez problémov —
+  past sa týka LEN krokov PROBIEHAJÚCICH počas prepnutia.
+- **`withCleanDb()`'s advisory zámok (`TEST_DB_ISOLATION_LOCK_KEY`) sa môže
+  natrvalo ZASEKNÚŤ, keď ho držiaci klient nikdy nezavolá `close()`
+  (zomrelý/killnutý proces, nie len preťažený box) — výsledný symptóm je
+  RASTÚCA fronta `pg_advisory_lock` čakateľov (jeden pribudne pri KAŽDOM
+  ĎALŠOM súbore vitestu, ~30s odstup = `testTimeout`), nie len pomalý beh.**
+  Issue 342: plný `test:integration` beh (predtým spustený a KILLNUTÝ inak,
+  nie `Ctrl+C`/graceful) nechal PRVÉHO držiteľa zámku v stave `idle`
+  (`pg_stat_activity`), takže KAŽDÝ ĎALŠÍ súbor v novom behu čakal navždy.
+  Diagnostika: `docker exec <postgres-kontajner> psql -U forestshop -d
+  forestshop -c "select pid, state, wait_event_type, query_start, left
+  (query,60) from pg_stat_activity where datname='forestshop' order by
+  query_start;"` — prvý riadok v stave `idle` s dávno starým `query_start`
+  DRŽÍ zámok, zvyšok ČAKÁ naň. Fix: `pg_terminate_backend(<ten prvý pid>)`
+  (bezpečné na LOKÁLNEJ dev DB, nikdy na produkcii), potom `ps aux | grep
+  vitest` + `kill -9` na osirelé OS procesy, potom nový beh. Príznak, čo to
+  odlišuje od bežného "preťažený box" (vyššie v tomto súbore): ten sa
+  prejaví POMALOSŤOU/timeoutmi na NÁHODNÝCH testoch, toto sa prejaví
+  ÚPLNÝM zamrznutím KAŽDÉHO ĎALŠIEHO integračného súboru bez jediného
+  riadku výstupu, kým sa nezabije držiaci proces.
