@@ -36,12 +36,21 @@ Smer je preto obrátený:
   `/srv/forestshop/backups/forestshop-<STAMP>.dump` + `.env.gpg`.
 - **dev1 si súbory STIAHNE vlastným pull cronom** —
   `~/backups/pull-forestshop-dev-backup.sh` (žije len na dev1, mimo tohto
-  repa), cron `30 4 * * *` **Bratislava-local** (zámerne o vyše 2h neskôr
-  než `forestshop-dev`'s 02:15 UTC beh — udržiava kladný odstup medzi
-  zdrojovým behom a pull-om naprieč CEST aj CET, keďže obe škatuľky bežia v
-  rôznych časových pásmach). Cieľ na dev1: **`~/backups/forestshop-dev/`**
-  — samostatný adresár, ODDELENE od dev2's `~/backups/forestshop/`
-  (nižšie), aby sa dve nezávislé zálohovacie histórie nikdy nepomiešali.
+  repa). **Presný čas má DVA nezhodné zdroje, ani jeden overiteľný z tohto
+  stroja:** `backup-db-local.sh`'s vlastný hlavičkový komentár (už v repe,
+  napísaný pri issue 366 — pravdepodobne s priamym prístupom na dev1 v tom
+  čase) hovorí "beží 02:25 — 10 min po tomto skripte" (teda ~02:25 UTC, len
+  10 min odstup od zdrojového behu); issue 367's zadanie namiesto toho
+  tvrdí cron `30 4 * * *` **Bratislava-local**, čo v CEST vychádza na
+  ~02:30 UTC (15 min odstup) a v CET na ~03:30 UTC (1h15 odstup) — v OBOCH
+  prípadoch výrazne menej než "kladný odstup naprieč oboma pásmami" by
+  malo znamenať, a navyše nesedí s "10 min po tomto skripte". Túto
+  nezhodu NERIEŠIM sám (vyžaduje priamy pohľad na dev1's skutočný
+  crontab, `forestshop-dev` k dev1 nemá sieťovú cestu) — over `crontab -l`
+  priamo na dev1 pri najbližšej príležitosti a zapíš sem skutočný riadok.
+  Cieľ na dev1: **`~/backups/forestshop-dev/`** — samostatný adresár,
+  ODDELENE od dev2's `~/backups/forestshop/` (nižšie), aby sa dve
+  nezávislé zálohovacie histórie nikdy nepomiešali.
 - **Prístup je READ-ONLY a scopovaný na jeden adresár.** Dedikovaný SSH
   kľúč `~/.ssh/forestshop_dev_backup_pull` na dev1, na strane
   `forestshop-dev` reštrikovaný v `authorized_keys` cez
