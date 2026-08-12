@@ -2,7 +2,19 @@ import js from "@eslint/js";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["**/dist/**", "**/dist-types/**", "**/node_modules/**", "**/*.config.js"] },
+  {
+    ignores: [
+      "**/dist/**",
+      "**/dist-types/**",
+      "**/node_modules/**",
+      "**/*.config.js",
+      // Izolované worktrees dispatchnutých agentov: sú to celé kópie repa, ktoré
+      // typovaný parser nevie priradiť k tomuto tsconfigu (allowDefaultProject
+      // sedí len na koreňové apps/*/…config.ts), takže lint na nich padá na
+      // parsing errors, hoci ich obsah sa nikdy necommituje.
+      ".claude/worktrees/**",
+    ],
+  },
   js.configs.recommended,
   ...tseslint.configs.strictTypeChecked,
   {
