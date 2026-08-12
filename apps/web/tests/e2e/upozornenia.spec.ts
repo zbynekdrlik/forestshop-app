@@ -201,3 +201,64 @@ test("desktop (1600px): pás akcií karty je ≥25 % nižší než issue 303's b
 
   expect(chyby).toEqual([]);
 });
+
+// issue 382 (majiteľ: "vsetko je pod sebou aj ked to vobec nemusi byt"):
+// dve karty sa na dostatočne širokej obrazovke poukladajú VEDĽA SEBA
+// (rovnaký `top`, rôzny `left`), nie pod sebou — dôkaz reálnym rozložením
+// (`getBoundingClientRect`), nie len prítomnosťou CSS triedy `grid`
+// v štýlopise (rovnaký princíp ako issue 263's `getComputedStyle`
+// farebný dôkaz namiesto kontroly `className`).
+//
+// Code review otázka: nezávisí tento test na PARITE/počte prípadných
+// leftover kariet z predchádzajúceho testu v tomto súbore (ten svoje
+// dve karty úmyselne NEMAŽE — testuje odloženie/vrátenie, nie mazanie)?
+// NIE — `listUpozornenia` triedi `asc(dueAt), desc(createdAt)`
+// (`queries.ts`); ani táto dvojica, ani predošlé leftover karty nikdy
+// nenastavujú `dueAt` (zostáva `null`, radí sa AŽ ZA všetky s termínom),
+// takže v rámci "bez termínu" skupiny vyhráva `desc(createdAt)` — dve
+// PRÁVE vytvorené karty sú vždy najnovšie, teda vždy prvé dve v poradí,
+// teda vždy v PRVOM riadku mriežky, bez ohľadu na to, koľko starších
+// kariet leží pod nimi. Overené naživo aj so 4 reálnymi kartami v
+// tabuľke (2 z predchádzajúceho testu + tieto 2) — test prešiel
+// rovnako spoľahlivo ako s čistou tabuľkou.
+test("desktop (1600px): dve karty upozornení sa uložia VEDĽA SEBA, nie pod sebou (issue 382)", async ({ page }) => {
+  const chyby: string[] = [];
+  page.on("console", (m) => {
+    if (m.type() === "error" || m.type() === "warning") chyby.push(m.text());
+  });
+  page.on("pageerror", (e) => {
+    chyby.push(e.message);
+  });
+
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto("/?tab=upozornenia");
+  await page.getByLabel("E-mail").fill(E2E_UPOZORNENIA_EMAIL);
+  await page.getByLabel("Heslo").fill(E2E_HESLO);
+  await page.getByRole("button", { name: "Prihlásiť sa" }).click();
+  await expect(page.getByRole("heading", { name: "Upozornenia" })).toBeVisible();
+
+  for (const nadpis of ["Vedľa seba — prvá", "Vedľa seba — druhá"]) {
+    await page.getByTestId("upozornenie-new").click();
+    await page.getByTestId("upozornenie-form-title").fill(nadpis);
+    await page.getByTestId("upozornenie-form-save").click();
+    await expect(page.getByTestId("upozornenie-form")).toBeHidden();
+  }
+
+  const prva = kartaSNadpisom(page, "Vedľa seba — prvá");
+  const druha = kartaSNadpisom(page, "Vedľa seba — druhá");
+  await expect(prva).toBeVisible();
+  await expect(druha).toBeVisible();
+
+  const [boxPrva, boxDruha] = await Promise.all([prva.boundingBox(), druha.boundingBox()]);
+  if (boxPrva === null || boxDruha === null) throw new Error("karta nemá bounding box");
+  // Rovnaký `top` (v tom istom riadku mriežky) A odlišný `left` (nie
+  // navzájom prekrytá) — to je jediný spoľahlivý dôkaz "vedľa seba", nie
+  // len "obe niekde viditeľné".
+  expect(Math.abs(boxPrva.y - boxDruha.y), "obe karty musia byť v tom istom riadku (rovnaký top)").toBeLessThan(2);
+  expect(Math.abs(boxPrva.x - boxDruha.x), "karty sa nesmú prekrývať na tej istej x-pozícii").toBeGreaterThan(100);
+
+  await druha.getByRole("button", { name: "Odstrániť", exact: true }).click();
+  await prva.getByRole("button", { name: "Odstrániť", exact: true }).click(); // upratanie po teste
+
+  expect(chyby).toEqual([]);
+});
