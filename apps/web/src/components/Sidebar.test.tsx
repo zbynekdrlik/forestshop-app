@@ -301,3 +301,29 @@ it("uložená voľba (užívateľ predtým panel ručne rozbalil) vyhráva aj na
 
   expect(screen.getByTestId("sidebar-rail-toggle").getAttribute("aria-expanded")).toBe("true");
 });
+
+// issue 359: šéf zrušil samostatný celoširoký obdĺžnik "« Zbaliť menu" pod
+// hlavičkou — prepínač je teraz VŽDY len ikona (bez viditeľného textu) žijúca
+// v hlavičke (`.brand`) vedľa loga/názvu appky, nikdy samostatný riadok pod
+// ňou. Funkcia (zbalenie/rozbalenie) ostáva bit-identická — overuje ju
+// existujúca sada vyššie; tento test overuje LEN tvar/polohu prepínača.
+it("prepínač zbalenia je vždy len ikona (bez viditeľného textu 'Zbaliť menu'), žijúca v hlavičke vedľa loga", () => {
+  const { container } = render(<Sidebar folders={FOLDERS} activeTabId="sync" onSelectTab={() => {}} />);
+
+  // Starý viditeľný text zmizol úplne — v žiadnom stave sa nevykresľuje.
+  expect(screen.queryByText("Zbaliť menu")).toBeNull();
+
+  const toggle = screen.getByTestId("sidebar-rail-toggle");
+  // Prepínač je DIEŤA `.brand` hlavičky (rovnaký kontajner ako logo/názov),
+  // nie samostatný súrodenec `<aside>`-u ako predtým issue 190.
+  expect(toggle.closest(".brand")).not.toBeNull();
+  expect(container.querySelector(".brand > .rail-toggle")).toBe(toggle);
+
+  // Prístupný názov aj bublina myšou ostávajú, aj keď viditeľný text nie je.
+  expect(toggle.getAttribute("aria-label")).toBe("Zbaliť bočné menu");
+  expect(toggle.getAttribute("title")).toBe("Zbaliť bočné menu");
+
+  fireEvent.click(toggle);
+  expect(screen.queryByText("Zbaliť menu")).toBeNull();
+  expect(toggle.getAttribute("aria-label")).toBe("Rozbaliť bočné menu");
+});

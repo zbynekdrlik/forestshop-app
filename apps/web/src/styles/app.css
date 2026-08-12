@@ -82,9 +82,9 @@
      sú dnes tesné) — každý ĎALŠÍ token je centrálne zmenšený, takže sa to
      prejaví naprieč VŠETKÝMI obrazovkami/tabuľkami/formulármi naraz (tie
      používajú tokeny, nie vlastné px hodnoty — `.claude/rules/
-     frontend-design.md`). Klikacie plochy s VLASTNÝM pevným `min-width`/
-     `min-height` (36×36px "veľké tlačidlá", `.rail-toggle`'s 40px, …) tento
-     posun NEZMENŠUJE — tie rozmery nie sú odvodené z tejto škály. */
+     frontend-design.md`). Klikacie plochy s VLASTNÝM pevným `width`/`height`
+     (36×36px "veľké tlačidlá", `.rail-toggle`'s 28×28px, …) tento posun
+     NEZMENŠUJE — tie rozmery nie sú odvodené z tejto škály. */
   --fs-space-1: 0.25rem;
   --fs-space-2: 0.375rem;
   --fs-space-3: 0.5rem;
@@ -261,41 +261,55 @@ tr:last-child td {
   flex: 0 0 var(--fs-sidebar-rail-width);
 }
 .sidebar-rail .brand {
-  justify-content: center;
-  padding: var(--fs-space-4) 0 var(--fs-space-2);
+  padding: var(--fs-space-4) var(--fs-space-1) var(--fs-space-2);
+  /* Rail je len 72px široká — logo (32px) + ikona (28px) = 60px, čo sa do
+     zvyšných 64px (72 − 2×4px odsadenie) zmestí len s NULOVOU medzerou.
+     Bez tohto prepísania by zdedená `.brand`'s `gap: var(--fs-space-2)`
+     (6px, vynucovaná ako minimum aj pri `justify-content: space-between`)
+     vyžadovala 66px a o ~2px pretiekla. */
+  gap: 0;
 }
+/* issue 359: prepínač zbalenia žil predtým ako samostatný celoširoký
+   obdĺžnik s rámom + textom pod hlavičkou (issue 190) — šéf ho výslovne
+   zakázal ("ten obdlžnik prosím ťa zruš") a chce len ikonu so šípkami v
+   hlavičke, vpravo hore, vedľa loga/názvu appky ("tak ako je to u
+   všetkých programov"). Teraz je vždy len 28×28px ikona bez rámu/textu —
+   `.brand`'s `justify-content: space-between` ju posunie na pravý okraj. */
 .rail-toggle {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: var(--fs-space-2);
-  min-height: 40px;
-  margin: 0 var(--fs-space-3) var(--fs-space-2);
-  border: 1px solid var(--fs-border);
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  padding: 0;
+  border: 0;
   border-radius: var(--fs-radius-sm);
   background: none;
   cursor: pointer;
   color: var(--fs-ink-muted);
-  font-size: var(--fs-text-sm);
-  font-weight: var(--fs-weight-medium);
 }
 .rail-toggle:hover {
   background: var(--fs-surface-alt);
-  border-color: var(--fs-ink-faint);
+  color: var(--fs-ink);
 }
 .rail-toggle-icon {
   font-size: var(--fs-text-md);
   line-height: 1;
 }
-.sidebar-rail .rail-toggle {
-  margin: 0 var(--fs-space-2) var(--fs-space-2);
-}
 
 .brand {
   display: flex;
   align-items: center;
-  gap: var(--fs-space-3);
+  justify-content: space-between;
+  gap: var(--fs-space-2);
   padding: var(--fs-space-5) var(--fs-space-4) var(--fs-space-4);
+}
+.brand-id {
+  display: flex;
+  align-items: center;
+  gap: var(--fs-space-3);
+  min-width: 0;
 }
 .brand .logo {
   width: 32px;
