@@ -29,3 +29,6 @@ test-results/
 # Lokálny pnpm store (`.pnpm-store/`, ak je nakonfigurovaný store-dir mimo
 # globálneho) — build artefakt, nikdy v git histórii.
 .pnpm-store/
+
+# Izolované worktrees dispatchnutých agentov (dočasné, nikdy sa necommitujú)
+.claude/worktrees/

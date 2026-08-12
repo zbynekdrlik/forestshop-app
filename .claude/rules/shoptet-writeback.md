@@ -166,9 +166,9 @@ paths:
   chýba v CSV, chýba aj tam** — nie je to nezávislý zdroj na obnovu tohto
   konkrétneho poľa (issue 181: overené na 80 objednávkach, všade prázdne
   v oboch exportoch aj v samotnej administrácii). Užitočný ako RÝCHLA
-  prvá kontrola pred Playwright vzorkou (stiahni raz cez `curl` na dev2 do
-  `/tmp`, over cez `python3`, potom zmaž), ale nečakaj od neho zázrak pri
-  tomto poli.
+  prvá kontrola pred Playwright vzorkou (stiahni raz cez `curl` na
+  `forestshop-dev` do `/tmp`, over cez `python3`, potom zmaž), ale nečakaj
+  od neho zázrak pri tomto poli.
 - **CSV-injection ochrana (issue 153) sedí v `csv.ts`'s `dataRowToLine`, NIE
   vo validácii vyššie prúdu.** `formula-guard.ts`'s `csvSafe` sa aplikuje na
   KAŽDÚ bunku KAŽDÉHO dátového riadku PRIAMO pri zápise CSV — chráni aj

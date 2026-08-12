@@ -136,10 +136,13 @@ paths:
   druhom kliku na "Odoslať". Pri manuálnom/Playwright overovaní na živom
   systéme na to netreba zabudnúť (#38, 2026-07-30) — jeden klik ešte nič
   neodošle.
-- **`MAIL_HOST/PORT/USER/PASS/FROM` na dev2 sú od #38 (2026-07-30) reálne
-  nastavené** — appka odosiela cez ROVNAKÚ SMTP schránku ako stará appka
-  (`parovanie_produktov`, majiteľovo rozhodnutie), hodnoty prevzaté z jej
-  gitignorovaného `data/.mail_env`. Overené end-to-end reálnym mailom cez
+- **`MAIL_HOST/PORT/USER/PASS/FROM` sú reálne nastavené od #38 (2026-07-30,
+  vtedy na dev2 — od presunu appky, issue 366, sú rovnaké premenné v
+  `/srv/forestshop/.env` na `forestshop-dev`, živo overené priamo v
+  bežiacom kontajneri 12. 8. 2026, issue 371)** — appka odosiela cez
+  ROVNAKÚ SMTP schránku ako stará appka (`parovanie_produktov`, majiteľovo
+  rozhodnutie), hodnoty prevzaté z jej gitignorovaného `data/.mail_env`.
+  Overené end-to-end reálnym mailom cez
   dočasný `supplier_contact` kontakt nastavený na majiteľovu vlastnú
   adresu, po overení znova odstránený. `MAIL_BCC` (BCC-vždy konvencia
   starej appky) táto appka zatiaľ NEPODPORUJE vôbec (nie je v `env.ts` ani
