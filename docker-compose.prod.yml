@@ -134,6 +134,11 @@ services:
       MAIL_USER:
       MAIL_PASS:
       MAIL_FROM:
+      # issue 358: ZÁMERNE samostatná od MAIL_FROM (nie odvodená) — aby
+      # odpoveď zákazníka dorazila na správnu adresu, aj keby sa MAIL_FROM
+      # niekedy zmenil. Rovnaká úvaha ako MAIL_HOST vyššie (bare kľúč,
+      # `.optional()` v env.ts).
+      MAIL_REPLY_TO:
       # Skrytá kópia (BCC) na KAŽDOM maile dodávateľovi z obrazovky "Na
       # objednanie". Majiteľ 3. 8. 2026: "vsade zatial ma byt ked nieco
       # posiela mail dokial sa to neosvedci ze to funguje dobre" — chýbal

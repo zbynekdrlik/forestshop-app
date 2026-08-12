@@ -11,7 +11,6 @@ describe("resolveMailSender", () => {
   it("from: použije explicitný config.from, keď je nastavený", () => {
     const { from } = resolveMailSender({
       host: "mbox.myshoptet.com",
-      port: 587,
       user: "info@forestshop.sk",
       from: "eshop@forestshop.sk",
     });
@@ -21,7 +20,6 @@ describe("resolveMailSender", () => {
   it("from: bez config.from spadne späť na SMTP účet (user)", () => {
     const { from } = resolveMailSender({
       host: "mbox.myshoptet.com",
-      port: 587,
       user: "info@forestshop.sk",
     });
     expect(from).toBe("info@forestshop.sk");
@@ -30,7 +28,6 @@ describe("resolveMailSender", () => {
   it("from: bez config.from AJ bez user spadne späť na host", () => {
     const { from } = resolveMailSender({
       host: "mbox.myshoptet.com",
-      port: 587,
     });
     expect(from).toBe("mbox.myshoptet.com");
   });
@@ -41,7 +38,6 @@ describe("resolveMailSender", () => {
     // replyTo VLASTNÁ hodnota, nikdy odvodená z from, keď je nastavená.
     const { from, replyTo } = resolveMailSender({
       host: "mbox.myshoptet.com",
-      port: 587,
       from: "novy-odosielatel@forestshop.sk",
       replyTo: "eshop@forestshop.sk",
     });
@@ -52,7 +48,6 @@ describe("resolveMailSender", () => {
   it("replyTo: bez config.replyTo spadne späť na rovnakú hodnotu ako from (appka nikdy nepošle mail bez Reply-To)", () => {
     const { from, replyTo } = resolveMailSender({
       host: "mbox.myshoptet.com",
-      port: 587,
       from: "eshop@forestshop.sk",
     });
     expect(replyTo).toBe(from);
