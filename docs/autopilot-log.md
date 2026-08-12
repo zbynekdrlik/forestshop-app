@@ -3547,3 +3547,25 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
   (žiadny jest-dom v komponentových testoch — `getAttribute` namiesto
   `toHaveAttribute`, + rozšírené `paths:` na `apps/web/src/**/*.test.tsx`).
 - Issue 345 zavretý s dôkazom (issuecomment-5258524496).
+
+## Issue 357 — Výpadok: Cloudflare tunel QUIC handshake timeout (Error 1033)
+
+- Commits: `c91b2aa` (version bump 0.3.0-dev.213), `6074931` (fix + monitor).
+- Root cause: `cloudflared` predvolene ide QUIC (UDP 7844); handshake na sieti
+  dev2 prestal prechádzať na všetkých 4 spojeniach naraz -> tunel bez živého
+  spojenia -> Cloudflare 1033. Appka aj DB boli celý čas OK.
+- Ranná ručná oprava (`--protocol http2` priamo na dev2) teraz aj v repe
+  (`docker-compose.prod.yml`) — `deploy.yml` inak prepíše server súbor pri
+  ďalšom nasadení a výpadok by sa vrátil.
+- Nový `scripts/uptime-check.sh` — vonkajší monitor oboch verejných adries,
+  systemd `--user` timer NA DEV1 (`forestshop-uptime-check.timer`, 5 min
+  cadence, nainštalovaný ručne mimo repa — rovnaký vzor ako
+  `parovanie-backup.timer`). Confirm-threshold 2, throttle 12 prechodov
+  (~1h), + recovery správa. Alert cez `airuleset.py notify --body ...
+  --owner-name marek`.
+- Naživo overené VŠETKY vetvy rozhodovacej logiky (below-threshold,
+  confirm+skutočný alert doručený — `notify-delivery.log` `sent`,
+  throttle-suppress, recovery) — pozri PR popis / issue komentár.
+- Playbook: `.claude/rules/deploy.md` (nová sekcia — Error 1033 diagnostika +
+  oprava + monitor).
+- Issue 357 zavretý s dôkazom po merge/nasadení.
