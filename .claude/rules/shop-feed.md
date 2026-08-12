@@ -63,7 +63,7 @@ paths:
   `image_url` vyššie), treba pred naživo overením spustiť RUČNE presne tú
   istú cestu, akú beží nočný beh (03:50), priamo v kontajneri appky:**
   ```
-  ssh newlevel@dev2
+  ssh admin@forestshop-dev.newlevel.media
   docker exec forestshop-app-1 node -e "
   import('/app/apps/api/dist/db/client.js').then(async ({createDb}) => {
     const { runShopFeed } = await import('/app/apps/api/dist/modules/shop-feed/run.js');
