@@ -10,7 +10,7 @@
 //   **tučné**
 //   prázdny riadok = nový odstavec, jednoduchý riadok = zalomenie
 
-import { wrapEmailHtml } from "./layout.js";
+import { wrapEmailHtml, wrapEmailText } from "./layout.js";
 
 export interface TemplateListItem {
   readonly label: string;
@@ -29,7 +29,20 @@ export interface TemplateListItem {
 
 export type TemplateValue =
   | { readonly kind: "text"; readonly text: string }
-  | { readonly kind: "link"; readonly url: string; readonly label: string }
+  | {
+      readonly kind: "link";
+      readonly url: string;
+      readonly label: string;
+      // issue 379: keď je `label` už samo osebe plne čitateľná/dosiahnuteľná
+      // hodnota (kontaktný e-mail, telefón, doména — appka ich pozná v
+      // `context.ts`'s `globalContext`), zátvorka s adresou v TEXTOVEJ verzii
+      // (`"${label} (${url})"`) je čistá duplicita, lebo `url` nesie TÚ ISTÚ
+      // informáciu (len s `mailto:`/`tel:`/`https://` predponou). Default
+      // `true` (nezmenené správanie) — pre produktové/sledovacie odkazy, kde
+      // `label` a `url` naozaj nesú RÔZNU informáciu (názov vs. adresa,
+      // ktorú text-only klient nevie kliknúť), sa zátvorka ponecháva.
+      readonly showUrlInText?: boolean;
+    }
   | { readonly kind: "list"; readonly items: readonly TemplateListItem[]; readonly textPrefix?: string };
 
 export type TemplateContext = Readonly<Record<string, TemplateValue>>;
@@ -169,7 +182,11 @@ function valuePieces(value: TemplateValue | undefined, mode: Mode): Piece[] {
   if (value.kind === "link") {
     if (value.url === "") return [];
     const label = value.label === "" ? value.url : value.label;
-    if (mode === "text") return [{ p: "frag", s: label === value.url ? value.url : `${label} (${value.url})` }];
+    if (mode === "text") {
+      const showUrl = value.showUrlInText ?? true;
+      const text = label === value.url || !showUrl ? label : `${label} (${value.url})`;
+      return [{ p: "frag", s: text }];
+    }
     return [{ p: "frag", s: `<a href="${htmlEscape(value.url)}" target="_blank">${htmlEscape(label)}</a>` }];
   }
   return [{ p: "list", items: value.items, textPrefix: value.textPrefix ?? "" }];
@@ -315,12 +332,23 @@ function assembleSubject(pieces: readonly Piece[]): string {
     .trim();
 }
 
-export function renderTemplate(template: MailTemplateText, ctx: TemplateContext): RenderedEmail {
+export interface RenderTemplateOptions {
+  // issue 379: pätička (telefón/e-mail/web, `layout.ts`'s `wrapEmailText`)
+  // sa pripája k TEXTOVEJ verzii KAŽDÉHO e-mailu, default `true` — presne
+  // TAK ISTO, ako HTML verzia vždy dostáva `wrapEmailHtml`. Jediná výnimka
+  // je `supplier_order` (`orders/mail.ts`), jediný čisto textový e-mail bez
+  // akejkoľvek zmienky o kontaktoch v pôvodnom znení — ten si pätičku
+  // explicitne vypína, aby ostal bajt na bajt nezmenený.
+  readonly footer?: boolean;
+}
+
+export function renderTemplate(template: MailTemplateText, ctx: TemplateContext, options: RenderTemplateOptions = {}): RenderedEmail {
   const bodyNodes = parse(template.body);
+  const text = assembleText(toPieces(bodyNodes, ctx, "text"));
   return {
     subject: assembleSubject(toPieces(parse(template.subject), ctx, "text")),
     html: assembleHtml(toPieces(bodyNodes, ctx, "html")),
-    text: assembleText(toPieces(bodyNodes, ctx, "text")),
+    text: (options.footer ?? true) ? wrapEmailText(text) : text,
   };
 }
 
@@ -347,7 +375,11 @@ export function renderEditedBody(text: string): RenderedEditedBody {
     .filter((p) => p !== "");
   const htmlParagraphs = paragraphs.map((p) => `    <p>${htmlEscape(p).replaceAll("\n", "<br>\n      ")}</p>`);
   const html = wrapEmailHtml(htmlParagraphs.join("\n"));
-  return { html, text: paragraphs.join("\n\n") };
+  // issue 379: táto cesta je VŽDY zákaznícky e-mail (`nedostupne/send.ts`'s
+  // `editedBody`, jednorazová ručná úprava tesne pred odoslaním) — dostáva
+  // preto TÚ ISTÚ textovú pätičku ako `renderTemplate`, bez opt-outu (žiadny
+  // volajúci `renderEditedBody` nie je `supplier_order`).
+  return { html, text: wrapEmailText(paragraphs.join("\n\n")) };
 }
 
 /** Mená zástupných polí použitých v texte — vrátane tých v podmienkach. */
