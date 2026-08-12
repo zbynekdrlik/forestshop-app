@@ -6,6 +6,7 @@ paths:
   - ".dockerignore"
   - "apps/api/src/cli/**"
   - "scripts/*.ts"
+  - "scripts/*.sh"
 ---
 
 # Deployment (dev2)
