@@ -58,7 +58,7 @@ export function OrdersOverviewTiles({
     <div className="orders-overview" data-testid="orders-overview">
       {error !== "" && <p role="alert">{error}</p>}
       {!loaded && error === "" && <p>Načítavam prehľad…</p>}
-      <div className="overview-tiles">
+      <div className="overview-tiles" role="group" aria-label="Prehľad e-shopu a súhrn o objednávaní">
         {overview !== null && (
           <>
             <OverviewTile testId="overview-shop-today" label="Dnes" orderCount={overview.today.orderCount} revenue={overview.today.revenue} />
