@@ -70,3 +70,16 @@ paths:
   začalo čakať. Prvý pokus (`toHaveCount(0)` hneď po prihlásení, bez
   `waitForResponse`) by prešiel aj VŽDY (komponent renderuje `null` aj
   počas načítavania, aj pri `configured:false`) — nedokazoval by nič.
+- **Issue 382 (majiteľ chce vidieť TRI najbližšie udalosti, nie jednu):
+  `resolveNextEvent(icsText, now)` sa premenovalo na `resolveNextEvents
+  (icsText, now, limit)` — vracia ZORADENÉ pole (max `limit`, konštanta
+  `NEXT_EVENTS_LIMIT = 3` v `constants.ts`), nikdy singulárny `T | null`.
+  Rovnaká zmena prešla CELÝM reťazcom: `NextEventResult`'s `event` →
+  `events` (`service.ts`), HTTP odpoveď `event` → `events`
+  (`calendar-routes.ts`), zod schéma aj `NextCalendarEventCard.tsx`
+  (mapuje pole na max 3 riadky). Žiadna INÁ logika (poradie, filtrovanie
+  CANCELLED, celodenné/RRULE spracovanie) sa nemenila — len návratový
+  tvar a orezanie na `limit`. Pri KAŽDOM ĎALŠOM "zobraz N namiesto 1"
+  tickete v tomto module: rovnaký vzor (funkcia dostane `limit` parameter,
+  vráti pole, `.slice(0, limit)` na konci), nie duplicitná druhá funkcia
+  vedľa pôvodnej.
