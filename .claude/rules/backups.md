@@ -1,6 +1,7 @@
 ---
 paths:
   - "scripts/backup-db.sh"
+  - "scripts/backup-db-local.sh"
   - "scripts/restore-drill.sh"
 ---
 
@@ -44,3 +45,20 @@ paths:
   kontajner toho istého mena.
 - Žiadne heslo/passphrase/token sa v repe (ani v tomto rule súbore) nevypisuje
   ako hodnota — len cesty k súborom a názvy premenných.
+- **`scripts/backup-db-local.sh` (pridané do repa pri issue 366) je LOKÁLNA
+  varianta pre `forestshop-dev` (178.105.89.168).** `backup-db.sh` po
+  zálohovaní sám AKTÍVNE PUSHUJE dump + zašifrovaný `.env` na dev1 cez
+  `BACKUP_HOST=newlevel@100.104.8.125` (Tailscale) — `forestshop-dev` nemá
+  do dev1 žiadnu sieťovú cestu (žiadny tailscale klient), takže ten istý
+  push by tam vždy zlyhal timeoutom PRED zašifrovaním `.env`/mazaním podľa
+  retencie. `backup-db-local.sh` preto robí LEN lokálnu časť (dump, over
+  `pg_restore --list`, zašifruj `.env`, zmaž staršie ako 14 dní) — súbory si
+  odtiaľ STIAHNE dev1 vlastným pull cronom (`~/backups/
+  pull-forestshop-dev-backup.sh`, mimo tohto repa). Cron na `forestshop-dev`:
+  `15 2 * * *` (`backup-db.sh` na dev2 beží v rovnakom čase, teraz už len
+  ako záložná kópia záložnej kópie — dev2's postgres tam ostáva bežať ako
+  rollback dáta, appka tam nebeží). **Prečo je tento súbor teraz v repe:**
+  `deploy.yml`'s deploy krok robí `rsync -a --delete` z repového `scripts/`
+  do `/srv/forestshop/scripts/` na cieľovom stroji — súbor, ktorý existuje
+  len na serveri a nie v repe, by prvým ďalším nasadením na `forestshop-dev`
+  tichým zmazaním prišiel o nočné zálohovanie.

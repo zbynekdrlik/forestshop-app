@@ -85,7 +85,7 @@ jobs:
           docker compose -f docker-compose.prod.yml pull app
           docker compose -f docker-compose.prod.yml up -d
       - name: Upratať staršie obrazy TEJTO appky
-        # issue 206: dev2 je zdieľaný stroj a bol na 100 % disku — jeden náš
+        # issue 206: dev2 (vtedajší cieľ nasadenia) bol zdieľaný stroj a bol na 100 % disku — jeden náš
         # obraz má ~1,4 GB, takže každé nasadenie doteraz nechalo po sebe
         # ďalší. Maže sa VÝHRADNE `ghcr.io/<repo>` (naše vlastné obrazy) a
         # nikdy ten práve nasadený — cudzie projekty na tom istom stroji sa

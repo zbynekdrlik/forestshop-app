@@ -142,13 +142,14 @@ paths:
   (majiteľove rozhodnutie, ticket 366) — appka a cloudflared tam boli pri
   presune odstránené, dev2 sa už NIKDY nemá stať cieľom nasadenia znova.
 - **Self-hosted runner:** `forestshop-dev-runner`, label `forestshop-dev`,
-  beží ako systemd služba `actions.runner.zbynekdrlik-forestshop-app.
-  forestshop-dev-runner.service` na `forestshop-dev` (enabled, prežije
-  reboot). `deploy` job cieli `runs-on: [self-hosted, forestshop-dev]`.
+  beží ako systemd služba
+  `actions.runner.zbynekdrlik-forestshop-app.forestshop-dev-runner.service`
+  na `forestshop-dev` (enabled, prežije reboot). `deploy` job cieli
+  `runs-on: [self-hosted, forestshop-dev]`.
   **Starý `dev2-forestshop` runner (label `dev2`) ostáva zaregistrovaný, ale
   nečinný** — žiadny workflow naň už necieli; ponechaný ako rollback cesta.
-  Zoznam runnerov repa: `gh api repos/zbynekdrlik/forestshop-app/actions/
-  runners`.
+  Zoznam runnerov repa:
+  `gh api repos/zbynekdrlik/forestshop-app/actions/runners`.
 - **Tag obrazu tečie z build jobu do deploy jobu cez `needs.build.outputs`,
   NIE cez `:latest`.** `build` job nastaví `outputs.version` (verzia z
   `package.json`), `deploy` job ho číta do `env.IMAGE_TAG` a použije ho pri
