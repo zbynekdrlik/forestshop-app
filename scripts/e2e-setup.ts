@@ -248,8 +248,16 @@ await db.execute(
   // `.claude/rules/supplier-stock.md`, tam pre `tests/helpers/db.ts`).
   // "dpd_pickup_request" (issue 292) je rovnaký prípad znova — bez FK,
   // pridané ručne (`tests/helpers/db.ts` má rovnaký riadok navyše).
-  // "dpd_shipment" NETREBA — FK do "order" ho CASCADE strhne automaticky.
-  'TRUNCATE TABLE ingest_issue, variant, product, catalog_snapshot, job_run, audit_events, sessions, users, order_line, "order", supplier_contact, pairing, supplier, order_open_status, posta_uncollected_settings, posta_uncollected_state, order_reminder_settings, order_reminder_state, nedostupne_state, nedostupne_replacement_link, mail_template, mail_template_history, supplier_stock, restock_settings, restock_event, shop_product_url, theme_color, dpd_pickup_request RESTART IDENTITY CASCADE',
+  // issue 384: "upozornenie" (#267), "daily_task" (#342), "mail_log" (#193),
+  // "dpd_shipment" (#292), "product_supplier_override"/
+  // "product_supplier_link_override" (#121) v tomto zozname chýbali — každá
+  // MÁ reálny FK do už uvedenej tabuľky ("users" pri prvých troch,
+  // "product"/"order" pri zvyšných), takže CASCADE ich strhne aj bez
+  // uvedenia (naživo overené na tickete 384 — 2 po sebe idúce reálne e2e
+  // behy nezanechali žiadny navyše riadok ani PRED touto zmenou). Pridané
+  // ručne rovnako ako "order_line"/"pairing" vyššie — kvôli tej istej
+  // sebadokumentujúcej dôslednosti, nie kvôli chýbajúcemu CASCADE.
+  'TRUNCATE TABLE ingest_issue, variant, product, catalog_snapshot, job_run, audit_events, sessions, users, order_line, "order", supplier_contact, pairing, supplier, order_open_status, posta_uncollected_settings, posta_uncollected_state, order_reminder_settings, order_reminder_state, nedostupne_state, nedostupne_replacement_link, mail_template, mail_template_history, supplier_stock, restock_settings, restock_event, shop_product_url, theme_color, dpd_pickup_request, upozornenie, daily_task, mail_log, dpd_shipment, product_supplier_override, product_supplier_link_override RESTART IDENTITY CASCADE',
 );
 // Rovnaký dôvod ako `tests/helpers/db.ts`: bez tohto by "Na objednanie" bolo
 // v CELOM e2e behu prázdne pre KAŽDÚ objednávku (žiadny nastavený otvorený
