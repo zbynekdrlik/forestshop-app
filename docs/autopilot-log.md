@@ -3642,3 +3642,42 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
   zálohovacia varianta pre forestshop-dev).
 - Issue 366 zavretý ručne po naživo overení (nie cez `Closes #N` v PR —
   overenie prišlo AŽ po merge/deploy).
+
+## Issue 403 — Úlohy na dnes: naživo pomenované problémy + prerobenie hustoty/ovládania
+
+- Naživo overené na produkcii (Playwright, `vychod@varos.sk`, 11 úloh):
+  4 pomenované problémy (komentár na tickete) — falošný Unicode ☐/☑
+  checkbox namiesto skutočného `<input>`, priemerná mŕtva medzera 771px
+  medzi textom a ikonami (`.uloha-text` neohraničený `flex:1 1 auto` cez
+  celú stránku), žiadna vizuálna hranica zoznamu, checkbox/ikony
+  center-ované voči celému zalomenému textu na užšom okne namiesto
+  prvého riadku. Počet klikov na bežné úkony bol už predtým minimálny —
+  potvrdené, nemenené.
+- Fix: `commit 5e6b7eb` — `.ulohy-panel` (max-width 40rem, ustálený vzor
+  `.ord-supplier-link-edit`), skutočný `<input type="checkbox">` namiesto
+  `<button>`u, `.uloha-row`'s `align-items: flex-start`. Cestou nájdený
+  SKUTOČNÝ bug: bare `.uloha-done-toggle` prehrával špecificitou proti
+  globálnemu `input:not([type="hidden"])` resetu (width:100%) — checkbox
+  kradol takmer celú šírku riadku, `.uloha-text` mal vypočítanú šírku 0px.
+  Fix: `.uloha-row .uloha-done-toggle` (vyššia špecificita).
+- Merané PRED→PO (1440px, 11 úloh, Range-nad-textovým-uzlom metodika):
+  priemerná mŕtva medzera 771px → 327px (-58 %), checkbox 13.5×15px
+  Unicode glyph → 18×18px skutočný `<input>`, riadková výška nezmenená
+  30-31px, panel šírka 640px (predtým neohraničená ~1072px).
+  `commit 033f3be` — review dispatch našiel 2 🔵 (chýbajúci komentár na
+  `:hover`, nepresné tvrdenie o precedente) — oba opravené.
+- Testy: nový vitest regresný test na `role=checkbox`+`checked` (overený
+  RED proti starému `<button>` markupu cez review dispatch); `daily-tasks
+  .spec.ts` aktualizovaný na `getByRole("checkbox", ...)`. Celá
+  web+api unit sada (887+610) aj celá lokálna e2e sada (59/59) zelené.
+- **Vedľajší nález (nie tejto zmeny bug, ale AKTÍVNY súbežný jav počas
+  tejto relácie):** dva po sebe idúce lokálne e2e behy proti zdieľanej
+  `forestshop_app-postgres-1` (5433) zlyhali z dôvodov NESÚVISIACICH s
+  týmto diffom — súbežné worktree relácie (issues 397/400) races-ovali
+  `scripts/e2e-setup.ts`'s nezamknutý TRUNCATE. Vyriešené izolovanou
+  throwaway `docker run postgres:18` inštanciou (port 5555) namiesto
+  čakania na tiché okno — 59/59 zelené. Playbook: `.claude/rules/
+  local-dev.md` (izolovaná Postgres technika), `.claude/rules/
+  frontend-design.md` (CSS špecificita vs. globálny `input` reset).
+- Worktree mode (izolácia #317) — commit ostáva na vlastnej vetve,
+  supervisor mergne + spustí CI pri round-integrácii.

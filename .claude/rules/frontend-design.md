@@ -1325,3 +1325,31 @@ paths:
   NOT work once the badge is populated (only works for a badge-less tab,
   the `restock-links.md`'s "Vypredané → Skladom" precedent) — reach for the
   `data-testid` instead of trying to out-clever the accessible-name string.
+- **A bare single-class selector styling a NEW `<input>` (e.g.
+  `.my-checkbox { width: 1rem; }`) silently LOSES to this file's own
+  global reset `input:not([type="hidden"]) { width: 100%; ... }` (line
+  ~161) — regardless of source order.** CSS specificity: the global
+  reset is `input` (1 element) + `:not([type="hidden"])`'s attribute
+  argument (1 attribute/class-level) = (0,0,1,1); a bare
+  `.my-checkbox` is (0,0,1,0) — ONE class-level component, strictly
+  lower, so it loses even though it's defined LATER in the file (tie-
+  breaking by source order only applies when specificity is EQUAL).
+  Issue 403's `.uloha-done-toggle` hit this converting a `<button>`
+  (Unicode ☐/☑) to a real `<input type="checkbox">`: the checkbox
+  silently got `width:100%`, stealing nearly the whole flex row and
+  squeezing the sibling text span to a computed `width:0` — found via
+  live Playwright DOM inspection (`getComputedStyle`/
+  `getBoundingClientRect` on a local dev server, not by reading the CSS,
+  since a screenshot alone doesn't reveal a 0-width element sitting
+  behind a stretched sibling) after a Playwright e2e test reported the
+  text as unexpectedly `"hidden"` (a 0-width bounding box reads as not
+  visible). **Fix: scope with a PARENT class, not just the element's
+  own** — `.uloha-row .uloha-done-toggle` = 2 class-level components =
+  (0,0,2,0), which beats (0,0,1,1) unconditionally (class-count 2>1
+  decides before the element-count tiebreak is even reached). This is
+  the SAME shape as the pre-existing `.order-group input[type="checkbox"]`
+  precedent (`app.css` ~line 1202, (0,0,2,1)) — any FUTURE new
+  `<input>` styled in this codebase needs AT LEAST 2 class-level
+  selector components (a parent-scoped class, or `.class[type="..."]`),
+  never a bare single class, or it silently inherits the global
+  `width:100%`/border/padding/background reset instead of its own CSS.

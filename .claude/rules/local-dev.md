@@ -127,3 +127,30 @@ paths:
   behu identické (rovnaký kód); jediný rozdiel sú zdrojové dáta v
   tabuľkách, čo neovplyvňuje výšku/rozloženie blokov závislých len od CSS a
   počtu položiek.
+- **Keď lokálny e2e beh proti zdieľanej `forestshop_app-postgres-1` (5433)
+  padá NEVYSVETLITEĽNE (zlé heslo pri overene správnom účte, FK porušenie
+  na tabuľke, ktorú si sám nesiahol) A na boxe bežia SÚBEŽNÉ worktree
+  relácie (iné autopilot-worker tikety), podozrievaj NAJPRV kolíziu so
+  `scripts/e2e-setup.ts`'s nezamknutým TRUNCATE (`.claude/rules/testing.md`)
+  — a najspoľahlivejší fix nie je čakať na tiché okno, ale spustiť si
+  ÚPLNE VLASTNÚ, izolovanú Postgres inštanciu.** Issue 403: `ps aux | grep
+  -E "vitest|playwright|e2e-setup"` ukázalo prázdno, no `pnpm exec tsx
+  scripts/e2e-setup.ts` napriek tomu spadol na `insert or update on table
+  "order_line" violates foreign key constraint` (`order_id` odkazoval na
+  medzičasom zmazaný `order` riadok) — klasický odtlačok TRUNCATE-u
+  bežiaceho SÚBEŽNE s INOU reláciou (krátkodobý proces, čo `ps aux`
+  jednoducho nestihol zachytiť). Namiesto opakovaného čakania/skúšania:
+  `docker run -d --name <unikátny-názov> -p 127.0.0.1:<voľný-port>:5432 -e
+  POSTGRES_USER=forestshop -e POSTGRES_PASSWORD=forestshop -e
+  POSTGRES_DB=forestshop postgres:18` → `DATABASE_URL=postgres://forestshop
+  :forestshop@127.0.0.1:<port>/forestshop pnpm --filter @forestshop/api
+  db:migrate` → `pnpm --filter @forestshop/web e2e` s tým istým
+  `DATABASE_URL` (Playwright's vlastný `webServer` si `e2e-setup.ts` aj
+  API spustí sám). Presne táto ISTÁ izolácia, akú CI dostáva zadarmo
+  (vlastný efemérny Postgres kontajner na job) — 59/59 e2e testov prešlo
+  načisto po prechode na izolovanú inštanciu, zatiaľ čo DVA po sebe idúce
+  pokusy proti zdieľanej 5433 zlyhali z DÔVODOV NESÚVISIACICH s
+  testovaným diffom. `docker rm -f <unikátny-názov>` po overení — jednorazová
+  inštancia, žiadny cleanup skript netreba. Použi UNIKÁTNY názov kontajnera
+  a VOĽNÝ port (`ss -ltnp | grep :<port>` najprv) — súbežný worktree môže
+  robiť to isté.
