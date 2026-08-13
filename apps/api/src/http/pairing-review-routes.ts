@@ -153,6 +153,7 @@ export function registerPairingReviewRoutes(app: Hono<AppBindings>, db: Database
       const result = await setPairingDecision(db, { ...body, productKey, actorUserId: user.userId, now });
       if (result === "not_found") return c.json({ error: "Produkt sa nenašiel" }, 404);
       if (result === "no_candidate") return c.json({ error: "Tento produkt nemá navrhnutého kandidáta na potvrdenie" }, 400);
+      if (result === "not_multi_variant") return c.json({ error: "Tento produkt má len jednu veľkosť — rozdelenie na veľkosti nedáva zmysel" }, 400);
 
       log.info({ actorUserId: user.userId, productKey, status: body.status }, "rozhodnutie o párovaní produktu");
       return c.json({ ok: true as const, status: body.status });

@@ -1,6 +1,6 @@
-import { eq } from "drizzle-orm";
+import { count, eq } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
-import { pairingCandidateSets, pairingDecisions, products } from "../../db/schema.js";
+import { pairingCandidateSets, pairingDecisions, products, variants } from "../../db/schema.js";
 import { record } from "../audit/service.js";
 import { upsertProductSupplierLink, type UpsertExecutor } from "../orders/supplier-link-assignment.js";
 
@@ -40,7 +40,7 @@ export type SetPairingDecisionInput =
   | (BaseInput & { readonly status: "split" })
   | (BaseInput & { readonly status: "revert" });
 
-export type SetPairingDecisionResult = "ok" | "not_found" | "no_candidate";
+export type SetPairingDecisionResult = "ok" | "not_found" | "no_candidate" | "not_multi_variant";
 
 interface UpsertDecisionRowInput {
   readonly productKey: string;
@@ -185,6 +185,17 @@ export async function setPairingDecision(db: Database, input: SetPairingDecision
     // `pairingVariantLinks`, zapísané samostatne cez `variant-links.ts`).
     const [product] = await tx.select({ key: products.key }).from(products).where(eq(products.key, input.productKey)).limit(1);
     if (product === undefined) return "not_found";
+
+    // issue 399 (review finding, #423 self-review) — obranná kontrola:
+    // frontend zobrazuje "✂ Rozdeliť na veľkosti" LEN pri `variantCount >
+    // 1` (`PairingReviewCard.tsx`), ale server nikdy nedôveruje klientovmu
+    // UI stavu (rovnaký princíp ako "good"'s `chosenUrl === null` kontrola
+    // vyššie) — priame API volanie nesmie označiť jednovariantný produkt
+    // ako "split".
+    if (input.status === "split") {
+      const [variantCountRow] = await tx.select({ n: count() }).from(variants).where(eq(variants.productKey, input.productKey));
+      if ((variantCountRow?.n ?? 0) <= 1) return "not_multi_variant";
+    }
 
     await upsertPairingDecisionRow(tx, {
       productKey: input.productKey,

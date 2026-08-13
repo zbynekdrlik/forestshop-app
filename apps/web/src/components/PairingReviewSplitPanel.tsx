@@ -31,12 +31,14 @@ function VariantRow({
   candidates,
   busy,
   onSaved,
+  onBusyChange,
 }: {
   readonly productKey: string;
   readonly variant: PairingVariantLink;
   readonly candidates: readonly PairingReviewCandidate[] | null;
   readonly busy: boolean;
   readonly onSaved: (code: string, url: string | null) => void;
+  readonly onBusyChange: (code: string, busy: boolean) => void;
 }): JSX.Element {
   const [draft, setDraft] = useState(variant.url ?? "");
   const [rowBusy, setRowBusy] = useState(false);
@@ -55,6 +57,7 @@ function VariantRow({
       }
       setRowError("");
       setRowBusy(true);
+      onBusyChange(variant.code, true);
       savePairingVariantLink(productKey, variant.code, trimmed === "" ? null : trimmed)
         .then(() => {
           onSaved(variant.code, trimmed === "" ? null : trimmed);
@@ -64,9 +67,10 @@ function VariantRow({
         })
         .finally(() => {
           setRowBusy(false);
+          onBusyChange(variant.code, false);
         });
     },
-    [productKey, variant.code, onSaved],
+    [productKey, variant.code, onSaved, onBusyChange],
   );
 
   const disabled = busy || rowBusy;
@@ -148,6 +152,7 @@ export function PairingReviewSplitPanel({
 }): JSX.Element {
   const [variants, setVariants] = useState<readonly PairingVariantLink[] | null>(null);
   const [variantsError, setVariantsError] = useState("");
+  const [busyRowCodes, setBusyRowCodes] = useState<ReadonlySet<string>>(new Set());
   const loadSeq = useRef(0);
 
   useEffect(() => {
@@ -175,8 +180,25 @@ export function PairingReviewSplitPanel({
     setVariants((prev) => (prev === null ? prev : prev.map((v) => (v.code === code ? { ...v, url } : v))));
   }, []);
 
+  // issue 399 (review finding, #423 self-review) — "✓ Hotovo" nesmie ísť
+  // odoslať, kým NIEKTORÝ riadok ešte čaká na svoj VLASTNÝ zápis (`save()`
+  // vyššie) — bez tohto by klik mohol vidieť `variants`'ov ešte-nezapísaný
+  // (starý) stav a zbytočne (konzervatívne) ukázať varovací dialóg o
+  // chýbajúcom linku, hoci zápis, čo je práve v letu, ho o pár ms doplní.
+  const onRowBusyChange = useCallback((code: string, rowBusy: boolean) => {
+    setBusyRowCodes((prev) => {
+      const has = prev.has(code);
+      if (rowBusy === has) return prev;
+      const next = new Set(prev);
+      if (rowBusy) next.add(code);
+      else next.delete(code);
+      return next;
+    });
+  }, []);
+
   const isSplit = item.decision?.status === "split";
   const missingCount = variants?.filter((v) => v.url === null).length ?? 0;
+  const anyRowBusy = busyRowCodes.size > 0;
 
   return (
     <div className="pairing-review-split-panel" data-testid={`pairing-review-split-panel-${item.productKey}`}>
@@ -184,7 +206,7 @@ export function PairingReviewSplitPanel({
       {variantsError !== "" && <p role="alert">{variantsError}</p>}
       {variants === null && variantsError === "" && <p>Načítavam veľkosti…</p>}
       {variants !== null &&
-        variants.map((v) => <VariantRow key={v.code} productKey={item.productKey} variant={v} candidates={candidates} busy={busy} onSaved={onVariantSaved} />)}
+        variants.map((v) => <VariantRow key={v.code} productKey={item.productKey} variant={v} candidates={candidates} busy={busy} onSaved={onVariantSaved} onBusyChange={onRowBusyChange} />)}
       {candidatesError !== "" && <p role="alert">{candidatesError}</p>}
 
       <div className="pairing-review-split-foot">
@@ -204,7 +226,7 @@ export function PairingReviewSplitPanel({
           <button
             type="button"
             className="btn good sm"
-            disabled={busy || variants === null}
+            disabled={busy || variants === null || anyRowBusy}
             onClick={() => {
               // issue 399 (port starej appky's #180 varovanie) — veľkosť bez
               // vlastného linku ostane s pôvodným (produktovým) odkazom,

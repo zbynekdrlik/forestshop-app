@@ -20,8 +20,9 @@ const { fetchPairingCandidates, sendPairingDecision, fetchPairingVariantLinks, s
 // `PairingReviewUnauthorizedError` ostáva SKUTOČNÁ trieda (rovnaký dôvod ako
 // `PairingReviewSection.test.tsx` — `instanceof` v komponente musí fungovať).
 // issue 399 — `fetchPairingVariantLinks`/`savePairingVariantLink` mockované
-// TU (nie len v `PairingReviewSplitPanel.test.tsx`), lebo `PairingReviewCard`
-// vykresľuje `PairingReviewSplitPanel` priamo (rovnaký modul, rovnaký mock).
+// TU, lebo `PairingReviewCard` vykresľuje `PairingReviewSplitPanel` priamo
+// (rovnaký modul, rovnaký mock) — `PairingReviewSplitPanel` samo nemá
+// vlastný test súbor, jeho pokrytie je celé cez tento súbor.
 vi.mock("../pairingReviewApi.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../pairingReviewApi.js")>();
   return { ...actual, fetchPairingCandidates, sendPairingDecision, fetchPairingVariantLinks, savePairingVariantLink };
@@ -399,6 +400,42 @@ it("split riadok: uloženie manuálnej URL zavolá savePairingVariantLink a prep
   });
   await waitFor(() => {
     expect(screen.getByTestId("pairing-review-split-state-PR-1/S").textContent).toBe("✓ link nastavený");
+  });
+});
+
+// issue 399 (review finding, #423 self-review) — "✓ Hotovo" musí zostať
+// disabled, kým NIEKTORÝ riadok ešte čaká na svoj VLASTNÝ zápis, inak by
+// klik mohol vidieť ešte-nezapísaný (starý) stav a zbytočne (konzervatívne)
+// ukázať potvrdzovací dialóg o chýbajúcom linku napriek zápisu v letu.
+it("'✓ Hotovo – rozdelené' je disabled, kým beží zápis JEDNÉHO riadku (rowBusy), aj keď hlavný 'busy' guard je voľný", async () => {
+  fetchPairingCandidates.mockResolvedValue([]);
+  fetchPairingVariantLinks.mockResolvedValue([{ code: "PR-1/S", sizeLabel: "S", url: null }]);
+  let resolveSave: (() => void) | undefined;
+  savePairingVariantLink.mockImplementation(
+    () =>
+      new Promise<void>((resolve) => {
+        resolveSave = resolve;
+      }),
+  );
+
+  render(<PairingReviewCard item={MATCHED_ITEM} role="manazer" onDecided={() => {}} onSessionExpired={() => {}} />);
+  fireEvent.click(screen.getByTestId("pairing-review-split-PR-1"));
+  await screen.findByTestId("pairing-review-split-row-PR-1/S");
+
+  const doneButton = screen.getByTestId<HTMLButtonElement>("pairing-review-split-done-PR-1");
+  expect(doneButton.disabled).toBe(false);
+
+  const input = screen.getByTestId<HTMLInputElement>("pairing-review-split-input-PR-1/S");
+  fireEvent.change(input, { target: { value: "https://dodavatel.example.com/velkost-s" } });
+  fireEvent.click(screen.getByTestId("pairing-review-split-save-PR-1/S"));
+
+  await waitFor(() => {
+    expect(doneButton.disabled).toBe(true);
+  });
+
+  resolveSave?.();
+  await waitFor(() => {
+    expect(doneButton.disabled).toBe(false);
   });
 });
 

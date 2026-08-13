@@ -230,6 +230,24 @@ it("CHECK obmedzenie: 'split' s VYPLNENOU url zlyhá na DB úrovni", async () =>
   ).rejects.toThrow();
 });
 
+// issue 399 (review finding, #423 self-review) — server nikdy nedôveruje
+// klientovmu UI stavu: frontend zobrazuje trigger "✂ Rozdeliť na veľkosti"
+// LEN pri `variantCount > 1`, ale priame API volanie musí byť odmietnuté aj
+// pre jednovariantný produkt — rovnaký princíp ako "good"'s `chosenUrl ===
+// null` obranná kontrola.
+it("decision 'split' na produkte s JEDNÝM variantom vráti 400, žiadny riadok sa nezapíše", async () => {
+  const { app, cookie, db } = await boot("manazer");
+  const snapshotId = await insertTestSnapshot(db);
+  await seedProduct(db, snapshotId, "PR-SPLIT-SINGLEVARIANT", { name: "Jednovariantný produkt" });
+
+  const res = await decide(app, cookie, "PR-SPLIT-SINGLEVARIANT", { status: "split" });
+  expect(res.status).toBe(400);
+  expect((await res.json()) as { readonly error: string }).toEqual({ error: "Tento produkt má len jednu veľkosť — rozdelenie na veľkosti nedáva zmysel" });
+
+  const decisionRows = await db.select().from(pairingDecisions).where(eq(pairingDecisions.productKey, "PR-SPLIT-SINGLEVARIANT"));
+  expect(decisionRows).toHaveLength(0);
+});
+
 // issue 399 — poradie panela je podľa `sizeLabel` (sk locale), NIE podľa
 // poradia vloženia/`code` — "L" < "S" abecedne, takže A (sizeLabel "L")
 // predchádza B (sizeLabel "S") bez ohľadu na to, že B bol vložený PRVÝ.
