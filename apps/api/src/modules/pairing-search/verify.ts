@@ -116,12 +116,16 @@ function extractOdimonCode($: cheerio.CheerioAPI): string | null {
 
 const GENERIC_CODE_SELECTORS = ['[itemprop="sku"]', ".product-code", ".sku", ".kod", "[data-code]"] as const;
 
-/** 3. Generický fallback: `content`/`data-code` atribút, inak text. */
+/** 3. Generický fallback: `content`/`data-code` atribút, inak text. Port
+ *  Python's `el.get("content") or el.get("data-code") or el.get_text(...)`
+ *  — `or` padá na ĎALŠÍ zdroj aj pri PRÁZDNOM (nie len chýbajúcom) reťazci,
+ *  preto `||` (nie `??`, review nález issue 387 E4: `??` by pri prázdnom
+ *  `content=""` zastavilo na ňom namiesto skúsenia `data-code`/textu). */
 function extractGenericCode($: cheerio.CheerioAPI): string | null {
   for (const selector of GENERIC_CODE_SELECTORS) {
     const el = $(selector).first();
     if (el.length === 0) continue;
-    const value = (el.attr("content") ?? el.attr("data-code") ?? el.text()).trim();
+    const value = (el.attr("content") || el.attr("data-code") || el.text()).trim();
     if (value.length > 0) return value;
   }
   return null;
@@ -176,13 +180,17 @@ export async function verifyCandidateCode(
   if (product.externalCodes.length === 0) {
     return { verdict: "unsure", reason: "produkt nemá žiadny external kód na overenie" };
   }
-  let html: string;
+  // Sieťová ANI parse chyba sa nikdy nevyhodí ďalej — obe (fetch aj
+  // extractPage/codeVerdict) sú v JEDNOM try, aby zlyhanie overenia nikdy
+  // nezhodilo celý per-produkt gather cyklus (`run.ts`), presne ako
+  // dokstring sľubuje (review nález issue 387 E4: pôvodná verzia chránila
+  // len fetch, nie parsovanie).
   try {
-    html = await client.fetchPage(url);
+    const html = await client.fetchPage(url);
+    return codeVerdict(product, extractPage(html));
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    log.warn({ url, message }, "pairing-search: verify fetch zlyhal, verdikt unsure");
-    return { verdict: "unsure", reason: `stránku kandidáta sa nepodarilo stiahnuť (${message})` };
+    log.warn({ url, message }, "pairing-search: verify zlyhal, verdikt unsure");
+    return { verdict: "unsure", reason: `overenie kandidáta zlyhalo (${message})` };
   }
-  return codeVerdict(product, extractPage(html));
 }
