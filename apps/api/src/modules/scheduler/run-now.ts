@@ -68,6 +68,48 @@ function formatBratislavaTime(instant: Date): string {
   return `${pad(hour)}:${pad(minute)}`;
 }
 
+/**
+ * Zapíše KONEČNÝ stav `job_run` riadku — NIKDY sama nevyhodí (review nález,
+ * issue 413). Pôvodná verzia mala priamy `db.update(...)` v oboch vetvách
+ * (`.then()`'s success aj failure) BEZ vlastnej ochrany — keby TENTO zápis
+ * zlyhal (napr. krátky sieťový výpadok DB tesne po tom, čo beh sám dobehol),
+ * chyba spadla do vonkajšieho obranného `.catch()`, ktorý len loguje —
+ * riadok ostal navždy `status: "running"`, hoci proces, čo ho vložil, stále
+ * žije. Po ĎALŠOM reštarte appky by `startup-cleanup.ts`'s
+ * `cleanOrphanedJobRuns` takýto riadok navyše NESPRÁVNE označil za
+ * "prerušený reštartom", hoci v skutočnosti dobehol — len sa nepodarilo
+ * zapísať výsledok.
+ *
+ * Fix: keď hlavný zápis zlyhá, skús JEDEN núdzový zápis `failure` s
+ * vysvetľujúcou správou — riadok sa tak VŽDY dostane do konečného stavu
+ * (nikdy nezostane "running" navždy), aj keď stratí presný pôvodný
+ * výsledok/chybu. Keby zlyhal AJ núdzový zápis (dvojnásobný DB výpadok),
+ * len sa zaloguje — to je jediný prípad, keď riadok skutočne môže ostať
+ * "running" (rovnaká zvyšková miera rizika, akú má KAŽDÝ DB zápis v appke).
+ */
+async function writeTerminalOutcome(
+  db: Database,
+  jobName: string,
+  runId: string,
+  patch: { readonly status: "success" | "failure"; readonly finishedAt: Date; readonly detail?: unknown; readonly errorMessage?: string },
+): Promise<void> {
+  try {
+    await db.update(jobRuns).set(patch).where(eq(jobRuns.id, runId));
+  } catch (writeError) {
+    const rawErrorMessage = writeError instanceof Error ? writeError.message : String(writeError);
+    log.error({ jobName, rawErrorMessage }, "run-now: zápis konečného stavu behu zlyhal — skúšam núdzový zápis 'failure'");
+    try {
+      await db
+        .update(jobRuns)
+        .set({ status: "failure", finishedAt: new Date(), errorMessage: `Beh dobehol, ale zápis výsledku zlyhal: ${rawErrorMessage}` })
+        .where(eq(jobRuns.id, runId));
+    } catch (fallbackError) {
+      const fallbackMessage = fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
+      log.error({ jobName, fallbackMessage }, "run-now: NÚDZOVÝ zápis konečného stavu TIEŽ zlyhal — riadok ostáva 'running'");
+    }
+  }
+}
+
 async function buildBusyMessage(db: Database, jobName: string): Promise<string> {
   const currentRun = await getLatestJobRun(db, jobName);
   if (currentRun !== null && currentRun.status === "running") {
@@ -119,7 +161,7 @@ export async function startRunNow<T>(
     .then(
       async (result) => {
         if (runId !== undefined) {
-          await db.update(jobRuns).set({ status: "success", finishedAt: new Date(), detail: result }).where(eq(jobRuns.id, runId));
+          await writeTerminalOutcome(db, job.jobName, runId, { status: "success", finishedAt: new Date(), detail: result });
         }
         await onSettled({ status: "success", result });
       },
@@ -127,7 +169,7 @@ export async function startRunNow<T>(
         const rawErrorMessage = error instanceof Error ? error.message : String(error);
         log.error({ jobName: job.jobName, rawErrorMessage }, "run-now: beh na pozadí zlyhal");
         if (runId !== undefined) {
-          await db.update(jobRuns).set({ status: "failure", finishedAt: new Date(), errorMessage: rawErrorMessage }).where(eq(jobRuns.id, runId));
+          await writeTerminalOutcome(db, job.jobName, runId, { status: "failure", finishedAt: new Date(), errorMessage: rawErrorMessage });
         }
         await onSettled({ status: "failure", error });
       },
