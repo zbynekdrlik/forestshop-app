@@ -385,3 +385,23 @@ https://github.com/zbynekdrlik/forestshop-app/issues/387#issuecomment-5273377438
   záložka, ktorej meno je prefixom existujúcej, A ZÁROVEŇ nesie odznak počtu)
   — plný mechanizmus a fix zdokumentovaný v `.claude/rules/frontend-
   design.md` (hľadaj "nav-tab-"), nie duplikovaný tu.
+- **Nová e2e fixtúra (`scripts/e2e-fixtures-pairing-review.ts`, PR pre issue
+  387 E5) zhodila 4 EXISTUJÚCE testy v `catalog.spec.ts` — spadla len preto,
+  že vlastný `pairing-review.spec.ts` prešiel izolovane pri prvom overení,
+  nikdy sa nespustil CELÝ balík pred pushom.** Tri nové produkty
+  (`E2E-PR-CHYBA`/`E2E-PR-NENAJDENY`/`E2E-PR-SLINKOU`) sú `state: "sellable"`,
+  `productVisibility: "visible"` — presne tá istá trieda ako issue 217/337
+  (`.claude/rules/testing.md`'s "Pridanie čo i len JEDNÉHO variantu do e2e
+  seedu posunie pevné počty v `catalog.spec.ts`"): total `103→106`, filter
+  "sellable" `72→75`, "missing"(1) nezmenené (žiadny z troch je `missing`).
+  Zvolené riešenie je AKTUALIZÁCIA pevných počtov (precedens issue 337), nie
+  izolácia — celkový počet by sa musel zvýšiť aj tak (nové produkty MUSIA byť
+  reálne katalógové varianty, inak by pairing-review populácia — INNER JOIN
+  na `pairing_candidate_set` — nemala čo zobraziť), takže "izolovať od
+  catalog počtov" nie je pre TOTAL nikdy možné, len pre "sellable" filter.
+  **Test na KAŽDÚ ĎALŠIU novú e2e fixtúru vyčlenenú do vlastného súboru
+  (vzor `seedXFixtures`, `scripts/e2e-setup.ts`): spusti CELÝ e2e balík
+  (`pnpm --filter @forestshop/web e2e`), nikdy len vlastný nový spec súbor —
+  presne rovnaká past ako `aria-label`/`getByRole`/nav-záložka kolízie
+  zdokumentované v `.claude/rules/testing.md`, len tentoraz cez ZDIEĽANÝ
+  POČET namiesto zdieľaného selektora.**
