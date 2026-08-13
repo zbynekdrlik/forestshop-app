@@ -24,7 +24,6 @@ import { seedPaginationFixtures } from "./e2e-fixtures-pagination.js";
 import { seedProductLinksFixtures } from "./e2e-fixtures-product-links.js";
 import { seedRestockEventsFixtures } from "./e2e-fixtures-restock-events.js";
 import { seedPairingReviewFixtures } from "./e2e-fixtures-pairing-review.js";
-import { seedRestockLinksFixtures } from "./e2e-fixtures-restock-links.js";
 import { seedSearchFixtures } from "./e2e-fixtures-search.js";
 
 const E2E_HESLO = "e2e-test-heslo"; // musí sa zhodovať s hodnotou v login.spec.ts/catalog.spec.ts/orders.spec.ts
@@ -815,9 +814,6 @@ await seedSearchFixtures(db, teraz, snapshotPrepinanie, E2E_HESLO);
 
 // issue 290: fixtúra vyčlenená do vlastného súboru, rovnaký dôvod ako vyššie.
 await seedOrderFlagsFixtures(db, E2E_HESLO);
-
-// issue 311: fixtúra vyčlenená do vlastného súboru, rovnaký dôvod ako vyššie.
-await seedRestockLinksFixtures(db, teraz, snapshotPrepinanie, E2E_HESLO);
 
 // issue 292: fixtúra vyčlenená do vlastného súboru, rovnaký dôvod ako vyššie.
 await seedDpdFixtures(db, E2E_HESLO);

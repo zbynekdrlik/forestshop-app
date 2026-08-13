@@ -14,8 +14,9 @@ paths:
 Port starej appky (`https://github.com/zbynekdrlik/parovanie-produktov`,
 commit `60b6164`) do tejto appky, po etapách (E1..E9 — návrh
 https://github.com/zbynekdrlik/forestshop-app/issues/387#issuecomment-5273377438).
-**Tento súbor NAHRADÍ `.claude/rules/restock-links.md`, keď E8 vyradí #311**
-(návrh, sekcia 4) — dovtedy existujú vedľa seba.
+**Tento súbor NAHRADIL `.claude/rules/restock-links.md`** — issue 387 E8
+vyradilo #311 aj jeho playbook súbor (návrh, sekcia 4); router v
+`CLAUDE.md` má odvtedy len tento riadok.
 
 - **`rapidfuzz.fuzz.token_set_ratio` je CASE-SENSITIVE bez akéhokoľvek
   predspracovania (žiadne `.lower()`) a stará appka ho volá presne takto

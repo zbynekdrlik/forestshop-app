@@ -17,7 +17,7 @@ export type FloorOrderRow = z.infer<typeof floorOrderRowSchema>;
 
 const searchSchema = z.object({ total: z.number(), items: z.array(floorOrderRowSchema) });
 
-// Zámerne malé (nie 50 ako `restock-links`/katalóg) — produkcia má dnes len
+// Zámerne malé (nie 50 ako katalóg/pairing-review) — produkcia má dnes len
 // ~30 zodpovedajúcich objednávok, malá strana robí "Načítať ďalšie" reálne
 // overiteľné aj naživo na skutočných dátach (rozhodnuté na tickete).
 export const PAGE_SIZE = 10;
