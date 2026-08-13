@@ -330,6 +330,13 @@
       "when": 1786464616133,
       "tag": "0046_third_master_mold",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1786580717528,
+      "tag": "0047_brief_yellowjacket",
+      "breakpoints": true
     }
   ]
 }

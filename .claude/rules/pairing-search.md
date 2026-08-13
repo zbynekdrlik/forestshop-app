@@ -175,3 +175,69 @@ https://github.com/zbynekdrlik/forestshop-app/issues/387#issuecomment-5273377438
   iné zhovievavé parsovanie: over, či JS/TS ekvivalent (`URL`,
   `URLSearchParams`, ...) vyhadzuje na rovnakých vstupoch — ak áno, obal
   ho tak, aby zlyhanie JEDNÉHO záznamu nezhodilo celý dávkový cyklus.
+
+## E3 — DB + gather job (`run.ts`, `select.ts`, `schema-pairing-review.ts`)
+
+- **`gather_candidates` (top-K review, `query_variants` union), NIE
+  `match_one` (priamy CSV-import match, `query_ladder` sekvenčný fallback)
+  — stará appka MALA obe funkcie a robia rozdielne veci.** `matcher.py`'s
+  `match_one` sa zastaví na PRVOM dopyte, čo vrátil kandidátov. `gather_
+  candidates` (k=8) skúša VŠETKY dopyty, poolu je kandidátov podľa URL
+  naprieč nimi a vráti top-K — TOTO je funkcia, ktorú nová appka's top-8
+  review obrazovka reálne portuje (návrh: „top-K = 8, únia všetkých
+  query_variants"). Zadanie tejto etapy malo skratkovité „query ladder →
+  SearchClient", čo je nepresné — `run.ts` používa `buildQueryVariants`,
+  nikdy `buildQueryLadder`. Test pri KAŽDOM ďalšom porte funkcie zo starej
+  appky, ktorá má VIAC príbuzných variantov (napr. E4's `verify.py` môže
+  mať podobný pár): priamo v zdrojáku over, KTORÁ funkcia zodpovedá
+  cieľovému správaniu, nikdy neodvodzuj z podobného mena.
+- **`suppliers` (schema-pairing.ts, F4/#44) UŽ EXISTOVALA, prázdna — E3 ju
+  len naplnila.** Migračný seed je `ON CONFLICT (name) DO UPDATE SET
+  adapter_key=…, wholesale_base_url=…` (nie `DO NOTHING`) — keby riadok pre
+  daného dodávateľa už niekedy vznikol ručne, tento seed ho DOPLNÍ, nikdy
+  nezduplikuje. `currency` sa pri konflikte nemení. Rovnaký vzor pri
+  KAŽDOM ďalšom "existujúca tabuľka konečne dostane obsah" seede.
+- **`product.supplier` (Shoptet-ov voľný text) je case/whitespace-
+  insensitívny kľúč do `suppliers.name` — existujúci `orders/supplier-
+  key.ts`'s `normalizeSupplierKeyJs` (predtým len pre dodávateľské
+  zoskupenie objednávok) je PRESNE tá istá normalizácia, čo potrebuje
+  párovací výber.** Produkt, ktorého `product.supplier` nesedí so ŽIADNYM
+  `suppliers` riadkom s vyplneným `adapter_key`, sa gatherom NIKDY
+  nevyberie — presne ako stará appka spracovávala VÝHRADNE (supplier,
+  pairCode) skupiny patriace jej trom `config.SUPPLIERS` (`csv_loader.py`'s
+  `load_rows(path, suppliers)` filter), nikdy celý katalóg.
+- **Checkpoint = per-produkt TRANSAKČNÝ upsert (delete+insert kandidátov +
+  candidate_set upsert v JEDNEJ transakcii), ŽIADNA cursor tabuľka.**
+  Obnoviteľnosť po páde príde ZADARMO z `input_hash`: produkt už
+  committnutý v predošlom (spadnutom) behu má `input_hash` zhodný so svojím
+  aktuálnym stavom → `select.ts` ho ďalší beh sám preskočí. Zamietnutá
+  alternatíva (design komentár na tickete): samostatná cursor tabuľka —
+  menej stavu bez nej, žiadne riziko neplatného kurzora pri zmene eligible
+  množiny medzi behmi.
+- **Časový (nie počtový) strop behu** — na rozdiel od `restock`'s
+  `MAX_PER_RUN` (počet zápisov do CUDZIEHO systému) je gatherov nákladový
+  faktor SIEŤOVÝ ČAS na produkt (viac `query_variants` × throttle 0,7s ×
+  až 3 retry), ktorý sa medzi produktmi výrazne líši — počtový strop by
+  negarantoval predvídateľnú dĺžku behu. `RUN_TIME_BUDGET_MS` sa
+  kontroluje PRED každým ďalším produktom (nikdy uprostred jeho
+  transakcie); `clock`/`timeBudgetMs` sú injektovateľné pre testy —
+  deterministický test vynúti "spracuj presne 1 produkt, potom stop"
+  sekvenciou vopred pripravených návratových hodnôt `clock()` (`[0, 0,
+  1000]` s `timeBudgetMs: 1` — prvé volanie = deadline výpočet, druhé =
+  pred-item0 kontrola < deadline, tretie = pred-item1 kontrola ≥ deadline).
+- **REVIEW NÁLEZ (🔴, opravené pred mergom): nový advisory zámok kľúč
+  KOLIDOVAL s existujúcim, lebo `.claude/rules/scheduler.md`'s vlastný
+  registr bol zastaraný.** Návrh aj zadanie E3 menovali `787_878_007` ako
+  "voľný" — v skutočnosti už mesiace patril `SUPPLIER_STOCK_RUN_LOCK_KEY`
+  (`supplier-stock/constants.ts`, issue 212), ale registr v `scheduler.md`
+  ho (spolu s `restock`'s `008`) NIKDY nezaznamenal. Oba sú session-scoped
+  `pg_advisory_lock` — kolízia by znamenala BEZČASOVÉ vzájomné zablokovanie
+  dvoch nesúvisiacich behov. Oprava: `787_878_009`, registr doplnený.
+  **Test pri KAŽDOM ďalšom advisory zámku: never dôveruj číslu z návrhu/
+  zadania naslepo — `grep -rn "787_878_0" apps/api/src` PRIAMO v kóde je
+  jediný spoľahlivý zdroj pravdy, playbook je len pomôcka a môže zaostávať.**
+- **`pairing_candidate.raw_score` je `numeric` (string na JS strane), nie
+  `real`/`doublePrecision`** — v CELEJ appke sa floaty ukladajú VÝHRADNE
+  cez `numeric` (peňažné polia), žiadny natívny float typ sa nikde
+  nepoužíva. `rawScore` (number z `ranking.ts`) sa pri zápise konvertuje
+  `.toFixed(4)`.

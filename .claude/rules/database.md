@@ -235,3 +235,31 @@ paths:
   ako duplicitu. Prvý reálny prípad + plné odôvodnenie: issue 267's
   `upozornenie_dedup_key_uq` (`.claude/rules/upozornenia.md`), nájdené
   integračným testom PRED mergom, nie odhadom.
+- **Drizzle-ov AUTO-generovaný FK názov (`<tabuľka>_<stĺpec>_<cudzia
+  tabuľka>_<cudzí stĺpec>_fk`, keď je FK deklarovaná inline cez
+  `.references(...)` na stĺpci) môže PREKROČIŤ Postgres-ov 63-bajtový
+  `NAMEDATALEN` limit identifikátora, keď obe tabuľky majú dlhšie mená.**
+  Postgres taký názov TICHO orezáva pri `CREATE TABLE`/`ALTER TABLE ADD
+  CONSTRAINT` (žiadna chyba, žiadne varovanie), ale `drizzle-kit`'s
+  snapshot JSON si pamätá PLNÝ, nikdy-neintrospektovaný názov — zistené
+  issue 387 E3 review (`pairing_candidate.product_key` →
+  `pairing_candidate_set.product_key`: auto-názov
+  `pairing_candidate_product_key_pairing_candidate_set_product_key_fk` má
+  69 znakov). Dôsledok: budúci `db:generate`, ktorý by túto konkrétnu FK
+  menil (zmena `onDelete`, premenovanie stĺpca), by vygeneroval `ALTER
+  TABLE ... DROP CONSTRAINT "<69-znakový názov>"` proti reálnej DB, kde
+  constraint v skutočnosti existuje pod ORAZANÝM (63-znakovým) menom —
+  migrácia by zlyhala na "constraint does not exist". Fix: pri KAŽDEJ
+  novej FK medzi dvomi tabuľkami, ktorých mená + stĺpce dokopy prekročia
+  ~55 znakov, nepoužívaj inline `.references(...)` — namiesto toho
+  deklaruj stĺpec bez neho a pridaj explicitne pomenovanú `foreignKey({
+  name: "<krátky-názov>", columns: [t.stlpec], foreignColumns:
+  [cudziaTabulka.stlpec] }).onDelete("cascade")` do tabuľkinho
+  constraint-array (`(t) => [...]`). Over PO KAŽDEJ takejto zmene: zresetuj
+  lokálnu DB od nuly (`DROP SCHEMA public, drizzle CASCADE` — `drizzle`
+  schéma nesie `__drizzle_migrations`, `TRUNCATE`/`DROP SCHEMA public` samo
+  osebe ju NEVYMAŽE, takže opakovaný `db:migrate` po holom
+  `public`-reset-e ticho preskočí VŠETKY migrácie ako "už aplikované" a
+  nevytvorí žiadnu tabuľku) → `db:migrate` odznova → `select conname from
+  pg_constraint where conrelid = '<tabuľka>'::regclass;` — potvrď, že meno
+  je PRESNE také, aké si zadal, nie orezané.
