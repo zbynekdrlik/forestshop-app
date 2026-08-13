@@ -26,6 +26,7 @@ import { registerOrderFlagsRoutes } from "./order-flags-routes.js";
 import { registerOrderMergeRoutes, type OrderMergeRunDeps } from "./order-merge-routes.js";
 import { requireSameOrigin } from "./origin-check.js";
 import { registerPairingRoutes } from "./pairing-routes.js";
+import { registerPairingReviewRoutes } from "./pairing-review-routes.js";
 import { registerPairingSearchRoutes } from "./pairing-search-routes.js";
 import { registerPostaUncollectedRoutes, type PostaUncollectedRunDeps } from "./posta-uncollected-routes.js";
 import { registerProductLinksRoutes } from "./product-links-routes.js";
@@ -215,6 +216,13 @@ export function createApp(
   // verejných vyhľadávacích stránok dodávateľov), na rozdiel od
   // `restock`/`shoptet-writeback` vyššie.
   registerPairingSearchRoutes(app, db);
+  // issue 387 E5: "Eshop → Párovanie" — LEN čítanie nad tým, čo E3/E4
+  // zozbierali/overili (karty + filtre). Rozhodnutia (E6) ešte neexistujú —
+  // žiadna zapisovacia trasa tu, samostatné od `registerPairingRoutes`
+  // (skrytá F4 "Kontrola párovania") aj `registerProductLinksRoutes` nižšie
+  // (#239 "Párovanie produktov") — obe ostávajú nedotknuté (design komentár
+  // na tickete: E9 ich prípadné vyradenie potrebuje výslovný súhlas majiteľa).
+  registerPairingReviewRoutes(app, db);
   // issue 239: "Eshop → Párovanie produktov" — zoznam produktov bez
   // dodávateľskej linky + doplnenie/oprava (zapisuje do rovnakej
   // `product_supplier_link_override` tabuľky ako #121, žiadna nová cesta do
