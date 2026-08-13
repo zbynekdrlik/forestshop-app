@@ -77,8 +77,16 @@ export async function withCleanDb(): Promise<{ db: Database; close: () => Promis
     // deliberate exception to that convention (previous comment here said
     // it "does NOT need listing"); it is now included like everything else
     // instead of staying the sole exception.
+    // issue 387 E3: "pairing_candidate_set"/"pairing_candidate" DO have a
+    // real FK chain into "product" (cascade), so `TRUNCATE product CASCADE`
+    // already reaches them transitively — listed explicitly anyway for the
+    // SAME self-documenting consistency as "dpd_shipment"/"pairing" above.
+    // "pairing_search_settings" is the SAME situation as "restock_settings"
+    // above — no FK in either direction (singleton id), and (like
+    // "restock_settings") the migration seeds NO default row, so no reseed
+    // is needed below either.
     await db.execute(
-      sql`TRUNCATE TABLE ingest_issue, variant, product, catalog_snapshot, job_run, audit_events, sessions, users, order_line, "order", supplier_contact, pairing, supplier, order_open_status, posta_uncollected_settings, posta_uncollected_state, order_reminder_settings, order_reminder_state, nedostupne_state, nedostupne_replacement_link, mail_template, mail_template_history, supplier_stock, restock_settings, restock_event, shop_product_url, theme_color, dpd_pickup_request, upozornenie, daily_task, mail_log, dpd_shipment, product_supplier_override, product_supplier_link_override RESTART IDENTITY CASCADE`,
+      sql`TRUNCATE TABLE ingest_issue, variant, product, catalog_snapshot, job_run, audit_events, sessions, users, order_line, "order", supplier_contact, pairing, supplier, order_open_status, posta_uncollected_settings, posta_uncollected_state, order_reminder_settings, order_reminder_state, nedostupne_state, nedostupne_replacement_link, mail_template, mail_template_history, supplier_stock, restock_settings, restock_event, shop_product_url, theme_color, dpd_pickup_request, upozornenie, daily_task, mail_log, dpd_shipment, product_supplier_override, product_supplier_link_override, pairing_candidate, pairing_candidate_set, pairing_search_settings RESTART IDENTITY CASCADE`,
     );
     // issue 59: `order_open_status` is a NEW table with real production
     // content (the migration seeds it) — TRUNCATE alone would leave every

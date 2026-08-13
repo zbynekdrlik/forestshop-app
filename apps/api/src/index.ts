@@ -24,6 +24,7 @@ import {
   ordersImportJob,
   orderNoteWritebackJob,
   orderReminderJob,
+  pairingSearchJob,
   shopFeedJob,
   supplierStockJob,
   restockJob,
@@ -33,6 +34,7 @@ import {
   sessionCleanupJob,
   shoptetWritebackJob,
 } from "./modules/scheduler/jobs.js";
+import { runPairingSearch } from "./modules/pairing-search/run.js";
 import { DEFAULT_SHOP_FEED_URL } from "./modules/shop-feed/constants.js";
 import { createHttpShopFeedFetcher } from "./modules/shop-feed/fetcher.js";
 import { runShopFeed } from "./modules/shop-feed/run.js";
@@ -288,6 +290,12 @@ const scheduler = startScheduler(db, [
   shopFeedJob((db2, now) => runShopFeed({ db: db2, now, fetchFeed: fetchShopFeed })),
   supplierStockJob((db2, now) => runSupplierStock({ db: db2, now, fetchPage: fetchSupplierPage })),
   restockJob(runRestockFn),
+  // issue 387 E3: žiadne prihlasovacie údaje potrebné (verejné vyhľadávacie
+  // stránky dodávateľov) — na rozdiel od `restockJob`/`shoptetWritebackJob`
+  // vyššie sa `run` tu nikdy nezostavuje ako `undefined`. Automatika je
+  // napriek tomu default VYPNUTÁ (`pairing_search_settings.enabled`) —
+  // `pairingSearchJob`'s vlastná kontrola pred behom, nie chýbajúca konfigurácia.
+  pairingSearchJob((db2, now) => runPairingSearch({ db: db2, now })),
 ]);
 
 // `@hono/node-server`'s `serveStatic` prints its OWN `console.error` on every
