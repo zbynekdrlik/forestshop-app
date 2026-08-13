@@ -126,11 +126,11 @@ export const NAV: readonly NavFolder[] = [
       { id: "claims", label: "Reklamácie", icon: "⚠️", Component: ClaimOrdersSection, wide: true },
       // issue 387 E5: "profesionálne párovanie" — port starej appky
       // (`webreview`), karty (náš produkt vs. dodávateľov navrhnutý kandidát)
-      // nad tým, čo E3 (gather)/E4 (verify) zozbierali. issue 400 (E9)
-      // odstránilo staršiu obrazovku "Párovanie produktov" (#239, majiteľ:
-      // "a stare parovanie produktov z apky odober") — tá bola predtým
-      // HNEĎ PRED touto, robila to isté cez rovnaké zápisové jadro. Rozhodnutia
-      // (E6) tu ešte nie sú — obrazovka je LEN čítanie.
+      // nad tým, čo E3 (gather)/E4 (verify) zozbierali. E6 pridalo
+      // rozhodovanie (✓ Dobré / ✗ Zlé). issue 400 (E9) odstránilo staršiu
+      // obrazovku "Párovanie produktov" (#239, majiteľ: "a stare parovanie
+      // produktov z apky odober") — tá bola predtým HNEĎ PRED touto, robila
+      // to isté cez rovnaké zápisové jadro.
       { id: "pairing-review", label: "Párovanie", icon: "🧩", Component: PairingReviewSection, wide: true },
       // issue 240: "rýchla ruka" na JEDEN konkrétny kus tovaru/objednávku —
       // nájsť + rovno opraviť dodávateľskú linku. Patrí sem z rovnakého
