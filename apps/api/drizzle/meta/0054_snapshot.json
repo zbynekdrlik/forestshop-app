@@ -3256,7 +3256,7 @@
       "checkConstraints": {
         "pairing_decision_url_ck": {
           "name": "pairing_decision_url_ck",
-          "value": "(\"pairing_decision\".\"status\" IN ('good','manual') AND \"pairing_decision\".\"url\" IS NOT NULL) OR (\"pairing_decision\".\"status\" IN ('unavailable','discontinued','split') AND \"pairing_decision\".\"url\" IS NULL)"
+          "value": "(\"pairing_decision\".\"status\"::text IN ('good','manual') AND \"pairing_decision\".\"url\" IS NOT NULL) OR (\"pairing_decision\".\"status\"::text IN ('unavailable','discontinued','split') AND \"pairing_decision\".\"url\" IS NULL)"
         }
       },
       "isRLSEnabled": false

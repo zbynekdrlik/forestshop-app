@@ -199,7 +199,20 @@ export const pairingDecisions = pgTable(
       "pairing_decision_url_ck",
       // issue 399 — `split` pridané do NULOVEJ vetvy (žiadna URL na tomto
       // riadku, per-veľkosť linky žijú v `pairingVariantLinks`).
-      sql`(${t.status} IN ('good','manual') AND ${t.url} IS NOT NULL) OR (${t.status} IN ('unavailable','discontinued','split') AND ${t.url} IS NULL)`,
+      //
+      // issue 399 (prod výpadok, 13. 8. 2026) — `${t.status}` sa musí porovnávať cez
+      // `::text`, NIE priamo ako enum literál. Runtime drizzle-orm migrátor
+      // (`apps/api/src/index.ts`) beží VŠETKY čakajúce migrácie v JEDNEJ
+      // transakcii (na rozdiel od `drizzle-kit` CLI, ktoré commitne po
+      // súbore) — Postgres odmieta použiť novú enum hodnotu (`ADD VALUE
+      // 'split'` z 0053) v tej istej transakcii, čo ju pridala (55P04 "New
+      // enum values must be committed before they can be used"), aj keď je
+      // použitie v NASLEDUJÚCOM .sql SÚBORE (0054). `::text` porovnanie sa
+      // tomuto úplne vyhne — reťazcová rovnosť nepotrebuje enum hodnotu
+      // "commitnutú". Pozri `.claude/rules/database.md` pre plné vysvetlenie
+      // a test na KAŽDÝ ďalší `ADD VALUE` + použitie v tej istej/blízkej
+      // migrácii.
+      sql`(${t.status}::text IN ('good','manual') AND ${t.url} IS NOT NULL) OR (${t.status}::text IN ('unavailable','discontinued','split') AND ${t.url} IS NULL)`,
     ),
   ],
 );

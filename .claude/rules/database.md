@@ -38,11 +38,23 @@ paths:
 - **Migrácie bežia pri štarte aplikácie** (`apps/api/src/index.ts`), nie ako
   samostatný deploy krok — `deploy.yml` preto nemá vlastný migračný step,
   spolieha sa na to, že appka si to spraví sama pri boote kontajnera.
-- **Drizzle-ov migrátor nedrží advisory lock.** Každá migrácia beží vo
-  vlastnej transakcii (takže appka nikdy neobslúži polovične zmigrovanú
-  schému), ale dve súčasne štartujúce inštancie by si mohli pretekať o rovnaké
-  DDL. Netýka sa dnešného deploy flow (beží vždy presne jedna inštancia) —
-  ak sa niekedy pridá druhá replika appky, toto sa musí doriešiť pred tým.
+- **Drizzle-ov migrátor nedrží advisory lock.** Dve súčasne štartujúce
+  inštancie by si mohli pretekať o rovnaké DDL. Netýka sa dnešného deploy
+  flow (beží vždy presne jedna inštancia) — ak sa niekedy pridá druhá
+  replika appky, toto sa musí doriešiť pred tým.
+  **OPRAVA (issue 399, 13. 8. 2026) — predošlá veta tu tvrdila "Každá
+  migrácia beží vo vlastnej transakcii", čo je NESPRÁVNE a bolo priamou
+  príčinou produkčného výpadku.** Skutočnosť (overené priamo v
+  `drizzle-orm@0.38.4`'s `pg-core/dialect.js`'s `PgDialect.migrate()`):
+  JEDNO `await session.transaction(async (tx) => { for await (const
+  migration of migrations) { ... } })` obaľuje VŠETKY čakajúce migrácie
+  naraz — nie je to per-súbor transakcia. Toto platí ROVNAKO pre runtime
+  `migrate()` volaný z `apps/api/src/index.ts` AJ pre `drizzle-kit migrate`
+  CLI (`db:migrate`) — obe idú cez ten istý `dialect.migrate()`, empiricky
+  overené priamym CLI behom s dvomi čakajúcimi migráciami naraz proti DB s
+  existujúcim riadkom (rovnaký pád, rovnaký rollback). Plný incident +
+  praktický dôsledok (kedy je "ADD VALUE do enumu + použitie hodnoty" v
+  DVOCH SÚBOROCH napriek tomu nebezpečné) nižšie pri "issue 399 — produkčný výpadok".
 - **`drizzle-kit` 0.30.x nevie `db:generate`/`db:migrate`, keď jeden
   `src/db/schema*.ts` súbor cez `export * from "./other.js"` odkazuje na iný
   (napr. `schema.ts` re-exportuje `schema-catalog.ts`).** Jeho zabudovaný
@@ -323,3 +335,74 @@ paths:
   nevytvorí žiadnu tabuľku) → `db:migrate` odznova → `select conname from
   pg_constraint where conrelid = '<tabuľka>'::regclass;` — potvrď, že meno
   je PRESNE také, aké si zadal, nie orezané.
+- **issue 399 (13. 8. 2026, produkčný výpadok pri deployi) — `ALTER TYPE ... ADD VALUE`
+  + POUŽITIE tej istej hodnoty v CHECK/porovnaní, DVE SÚBORY, DVE súvislé
+  MIGRÁCIE naraz čakajúce na nasadenie + tabuľka s existujúcim riadkom =
+  55P04 pád, aj keď hodnota a jej použitie sú v ODDELENÝCH `.sql`
+  súboroch.** Nasadenie `0.3.0-dev.251` (issue 399: `0053_pale_epoch.sql`
+  `ALTER TYPE pairing_decision_status ADD VALUE 'split'` +
+  `0054_zippy_invisible_woman.sql`'s `pairing_decision_url_ck` CHECK
+  referencujúci `'split'`) zhodilo appku hneď pri štarte s Postgresovou
+  `55P04 unsafe use of new value "split" ... New enum values must be
+  committed before they can be used`, celá transakcia sa rollbackla
+  (enum bez `'split'`, `pairing_variant_link` neexistuje), appka
+  crashloopovala → ručný rollback na `0.3.0-dev.249`.
+  **Prečo boli 0053/0054 v SAMOSTATNÝCH súboroch a AJ TAK to spadlo:**
+  rozdelenie do dvoch súborov je štandardná obrana proti tomu, že Postgres
+  odmieta použiť ešte-necommitnutú enum hodnotu VNÚTRI JEDNÉHO `.sql`
+  súboru (viď opravený bod vyššie + `docs/autopilot-log.md`'s issue 399
+  záznam) — ale táto obrana funguje LEN vtedy, keď migrátor commitne PO
+  KAŽDOM súbore zvlášť. Overené priamo v `drizzle-orm@0.38.4`'s
+  `pg-core/dialect.js`: `PgDialect.migrate()` obaľuje VŠETKY momentálne
+  ČAKAJÚCE migrácie do JEDNÉHO `session.transaction(...)` volania — takže
+  keď je pri jednom spustení `migrate()` čakajúcich viac než jedna
+  migrácia (tu: `0053`+`0054` naraz, appka nebola nasadená od skoršej
+  verzie), Postgres vidí `ADD VALUE` aj jeho použitie v TEJ ISTEJ
+  transakcii bez ohľadu na to, že sú v dvoch rôznych súboroch/príkazoch.
+  **DRUHÁ, rovnako nutná podmienka — CHECK sa musí SKUTOČNE VYHODNOTIŤ
+  proti existujúcemu riadku.** `ALTER TABLE ... ADD CONSTRAINT CHECK (...)`
+  validuje VŠETKY existujúce riadky cieľovej tabuľky; keď má tabuľka NULA
+  riadkov, Postgres výraz nikdy nevyhodnotí (0 riadkov na skenovanie), takže
+  "unsafe use" strážca sa vôbec nespustí — CHECK sa ticho vytvorí aj s
+  ešte-necommitnutou hodnotou. Priamo overené (throwaway Postgres 18,
+  `docker run postgres:18-alpine`): identický `migrate()` beh nad
+  PRÁZDNOU `pairing_decision` tabuľkou prešiel bez chyby; ten istý beh nad
+  tabuľkou s JEDNÝM existujúcim riadkom (ľubovoľného stavu, nie `'split'`)
+  spadol s presne `55P04`. `pairing_decision` na produkcii má reálne
+  objednávkové dáta — preto padlo LEN naživo, nikdy v CI/lokálne.
+  **Prečo CI aj lokálny vývoj tento pád nikdy neuvideli (obe podmienky
+  chýbali, nie len jedna):** CI (`ci.yml`) beží `db:migrate` proti ČERSTVÉMU
+  efemérnemu Postgresu PRED akýmkoľvek seedom testových dát — `pairing_
+  decision` má vtedy vždy 0 riadkov, takže druhá podmienka vyššie nikdy
+  nenastane, bez ohľadu na to, koľko migrácií čaká naraz. Lokálny vývoj
+  (issue 399's vlastný log: "empiricky overené (RED aj GREEN)") aplikoval
+  `0053` a `0054` KAŽDÚ ZVLÁŠŤ, hneď po jej vygenerovaní (bežný cyklus,
+  `.claude/rules/local-dev.md`) — pri KAŽDOM jednotlivom `db:migrate` behu
+  bola čakajúca len JEDNA migrácia, takže prvá podmienka (≥2 migrácie naraz
+  v jednej `migrate()` transakcii) nenastala. **`drizzle-kit migrate` CLI
+  TU NIE JE BEZPEČNEJŠIE než runtime `migrate()`** — omyl v predošlej verzii
+  tohto playbooku (opravený bod vyššie). Priamo overené: rovnaký CLI beh
+  (`drizzle-kit migrate`, `db:migrate` skript) proti DB s existujúcim
+  riadkom a OBOMA migráciami čakajúcimi naraz spadol identicky (exit 1,
+  rovnaký rollback) — CLI len ZVYČAJNE nenaráža na podmienku "≥2 migrácie
+  naraz", nie preto, že by commitovalo po súbore.
+  **Fix (nie nová migrácia — oprava OBOCH ešte-nenasadených súborov, keďže
+  na produkcii sa vôbec nezapísali, `#0053`/`#0054` boli po rollbacku ROVNAKO
+  "pending" ako predtým):** `0054`'s CHECK porovnáva `status::text IN (...)`
+  namiesto `status IN (...)` — textové porovnanie nepotrebuje "commitnutú"
+  enum hodnotu vôbec, takže obchádza celý mechanizmus (nie len jednu z
+  dvoch podmienok vyššie). **Test na KAŽDÚ ĎALŠIU `ADD VALUE` + CHECK/
+  index/generated-column POUŽITIE tej istej hodnoty, aj keď sú v
+  RÔZNYCH `.sql` súboroch:** buď (a) porovnávaj cez `::text`, nikdy priamo
+  enum literálom, v KAŽDOM výraze, čo môže bežať v TEJ ISTEJ `migrate()`
+  transakcii ako svoj vlastný `ADD VALUE` (t.j. v migrácii s VYŠŠÍM alebo
+  ROVNAKÝM číslom, kým appka nie je nasadená MEDZI nimi), alebo (b) nasaď
+  appku so SAMOTNÝM `ADD VALUE` PRED tým, než napíšeš/nasadíš migráciu, čo
+  hodnotu používa — nikdy sa nespoliehaj len na to, že sú v oddelených
+  súboroch/PR-och. Reprodukcia + fix boli overené throwaway Postgres 18
+  kontajnermi (nie proti produkcii) — `docker run --rm -d -p 127.0.0.1:
+  <voľný-port>:5432 postgres:18-alpine`, seed jedného `pairing_decision`
+  riadku cez priamy SQL insert (produkt/používateľ/snapshot závislosti),
+  potom `migrate()`/`drizzle-kit migrate` nad zvyšnými čakajúcimi
+  migráciami — presne rovnaký vzor ako issue 400/403 vyššie, len s
+  DÔRAZOM na existujúci riadok v cieľovej tabuľke, nie na súbežnosť.

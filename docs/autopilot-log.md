@@ -4010,3 +4010,72 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
   past, split dátový model rozhodnutie, `isUnreviewed`/scoped-vs-full-
   catalog split, 3-file card extraction, e2e fixtúra/poradie/dialóg/
   "Hľadať" kolízia gotchas.
+
+## 2026-08-13 — #399 fix-forward (produkčný výpadok pri nasadení dev.251)
+
+- **URGENT fix-forward, priama práca na `dev` bez worktree** — nasadenie
+  `0.3.0-dev.251` (issue 399 vyššie) zhodilo produkciu hneď pri štarte
+  appky: Postgres `55P04 unsafe use of new value "split" of enum type
+  pairing_decision_status ... New enum values must be committed before
+  they can be used`. Ručný rollback na `0.3.0-dev.249` (predošlý stabilný
+  image) stabilizoval produkciu; issue 399's funkcie (✂ Rozdeliť na
+  veľkosti + Hľadať/opraviť) zostali NENASADENÉ, kým sa migrácie neopravia.
+- **Príčina (overená priamo, nie prevzatá):** `0053_pale_epoch.sql`
+  (`ALTER TYPE pairing_decision_status ADD VALUE 'split'`) +
+  `0054_zippy_invisible_woman.sql` (nový `pairing_decision_url_ck` CHECK
+  referencujúci `'split'`) boli OBE ešte nenasadené na produkcii (overené
+  priamym dopytom: `select hash from drizzle.__drizzle_migrations order by
+  created_at desc limit 1` sedí presne s `sha256sum
+  0052_thankful_invisible_woman.sql`). Runtime drizzle-orm migrátor
+  (`apps/api/src/index.ts`) aj `drizzle-kit migrate` CLI obaľujú VŠETKY
+  momentálne čakajúce migrácie do JEDNÉHO `session.transaction(...)` —
+  keď je pri jednom behu čakajúcich viac než jedna migrácia (tu: obe
+  naraz), `ADD VALUE` aj jeho použitie skončia v TEJ ISTEJ transakcii, aj
+  keď sú v dvoch rôznych `.sql` súboroch. Postgres to dovolí LEN vtedy, keď
+  sa CHECK výraz nikdy reálne nevyhodnotí (tabuľka s 0 riadkami) — na
+  produkcii má `pairing_decision` reálne dáta, takže `ADD CONSTRAINT`
+  validácia narazila na existujúci riadok a spustila "unsafe use" strážcu.
+  Presne preto to nikdy nespadlo v CI (čerstvá prázdna DB pred seedom) ani
+  lokálne počas vývoja (migrácie aplikované jedna-po-druhej, nie naraz).
+  Plný mechanizmus + oprava PREDOŠLEJ nesprávnej playbook vety (tvrdila
+  "každá migrácia vo vlastnej transakcii"): `.claude/rules/database.md`'s
+  nová sekcia "issue 399 (13. 8. 2026, produkčný výpadok pri deployi)".
+- **REPRO-THEN-PROVE, throwaway Postgres 18 kontajnery (nikdy proti
+  produkcii):** (1) RED — čerstvý kontajner, migrácie 0000-0052 cez CLI,
+  seed JEDNÉHO reálneho `pairing_decision` riadku (product/user/snapshot
+  závislosti), runtime `migrate()` proti PÔVODNÝM (rozbitým) `0053`+`0054`
+  → `55P04`, presne rovnaká hláška ako na produkcii, transakcia sa celá
+  rollbackla (enum bez `'split'`, `pairing_variant_link` neexistuje —
+  zhoduje sa 1:1 s pozorovaným produkčným stavom). (2) GREEN — ten istý
+  seedovaný stav, runtime `migrate()` proti OPRAVENÝM súborom → úspech,
+  `pg_get_constraintdef` potvrdil `::text` porovnanie, insert `split`
+  riadku s `url IS NULL` prešiel, s `url` vyplneným zamietnutý CHECK
+  porušením. (3) Rovnaký RED/GREEN pár zopakovaný cez `drizzle-kit migrate`
+  CLI (`--config` na dočasný config so scratch `out` priečinkom) — potvrdil,
+  že CLI NIE JE bezpečnejšie (rovnaký pád na rozbitých súboroch, rovnaký
+  úspech na opravených).
+- **Fix:** `0054`'s CHECK (`apps/api/drizzle/0054_zippy_invisible_woman.sql`
+  aj zdroj `apps/api/src/db/schema-pairing-review.ts`'s `pairing_decision_url_ck`
+  aj `apps/api/drizzle/meta/0054_snapshot.json`) porovnáva
+  `status::text IN (...)` namiesto `status IN (...)` — textové porovnanie
+  neobchádza jednu z dvoch podmienok vyššie, obchádza CELÝ mechanizmus
+  (nepotrebuje "commitnutú" enum hodnotu vôbec). `db:generate` po oprave:
+  "No schema changes, nothing to migrate" (žiadny nový/zabudnutý súbor).
+- **Gates:** `pnpm gates:local` (lint + typecheck čisté; unit: api 73
+  súborov/962 testov, web 85 súborov/646 testov, oba zelené) +
+  scoped `pairing-review-*.integration.test.ts` (5 súborov/52 testov)
+  proti izolovanej throwaway Postgres inštancii (nie zdieľaná lokálna
+  5433 — súbežný worktree worker na issue 422 mohol bežať naraz, plus
+  tento box hostuje živú produkciu, `.claude/rules/local-dev.md`'s "Vývoj
+  a produkcia bežia na TOM ISTOM 2-jadrovom stroji" — plná `test:
+  integration`/e2e sada zámerne NEBEŽALA lokálne, necháva sa na CI).
+  Version bump `0.3.0-dev.251 → 0.3.0-dev.253` (súbežný worker na issue
+  422 — nesúvisiaci ticket, "Párovanie: doplniť AI zdôvodnenie..." — v tom
+  čase držal `.252`).
+- Playbook: `.claude/rules/database.md` — opravená nesprávna veta o
+  per-súbor transakciách + nová dedikovaná sekcia "issue 399 (13. 8. 2026,
+  produkčný výpadok pri deployi)" s plným mechanizmom, dôkazmi a testom
+  na budúce `ADD VALUE` + použitie kombinácie.
+- Súvisiace, NEMENENÉ týmto fix-forward: issue 425 (chýbajúci automatický
+  rollback v `deploy.yml` pri zlyhanom overení — samostatný, už filed
+  ticket o deploy workflow odolnosti, nie o tejto migračnej príčine).
