@@ -193,7 +193,7 @@ export function PairingReviewSection({ onSessionExpired }: { readonly onSessionE
           <button
             key={f}
             type="button"
-            className={"chip" + (f === filter ? " active" : " chip-all")}
+            className={"chip" + (f === filter ? " active" : " chip-neutral")}
             data-testid={`pairing-review-filter-${f}`}
             onClick={() => {
               changeFilter(f);

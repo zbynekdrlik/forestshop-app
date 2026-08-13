@@ -970,6 +970,17 @@ tr:last-child td {
   color: var(--fs-ink);
   border-color: var(--fs-border);
 }
+/* issue 387 E5 (review nález): rovnaký neutrálny vzhľad ako `.chip-all`
+   vyššie, ale VLASTNÝM menom — `.chip-all` je od issue 263 vyhradené pre
+   súhrnný "Všetci" čip BEZ dátového stavu (OrdersToolbar.tsx); filtrovacie
+   čipy na tejto obrazovke (Nezrevidované/Napárované/…/Skladom/…) nie sú
+   "všetci", len bežné neaktívne filtre — zdieľanie `.chip-all`'ovho mena by
+   bolo zavádzajúce pre budúceho čitateľa. */
+.chip.chip-neutral {
+  background: var(--fs-surface-alt);
+  color: var(--fs-ink);
+  border-color: var(--fs-border);
+}
 .chip.done {
   background: var(--chip-done-bg);
   color: var(--chip-done-text);

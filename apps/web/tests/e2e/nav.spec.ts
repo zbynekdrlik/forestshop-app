@@ -36,7 +36,7 @@ const E2E_NAV_EMAIL = "e2e-nav@forestshop.sk";
 // samostatnom `daily-tasks.spec.ts`, rovnaký vzor). Issue 345 (2026-08-11)
 // pridáva "Objednávky predajňa" HNEĎ ZA "Na objednanie" — dvadsiata záložka
 // celkovo (funkčný test v samostatnom `floor-orders.spec.ts`, rovnaký vzor).
-test("ľavé menu má štyri priečinky (Dôležité/Eshop/Systém/Automatizácie) s dvadsiatimi záložkami, klik prepne obrazovku, panel sa zbalí do lišty a stav si pamätá, konzola je čistá", async ({
+test("ľavé menu má štyri priečinky (Dôležité/Eshop/Systém/Automatizácie) s dvadsiatimi jeden záložkami, klik prepne obrazovku, panel sa zbalí do lišty a stav si pamätá, konzola je čistá", async ({
   page,
 }) => {
   const chyby: string[] = [];
@@ -73,8 +73,8 @@ test("ľavé menu má štyri priečinky (Dôležité/Eshop/Systém/Automatizáci
   await expect(page.getByRole("button", { name: "Systém" })).toHaveAttribute("aria-expanded", "true");
   await expect(page.getByRole("button", { name: "Automatizácie" })).toHaveAttribute("aria-expanded", "true");
 
-  // Presne dvadsať záložiek v CELOM menu.
-  await expect(page.locator(".side-nav .tab")).toHaveCount(20);
+  // Presne dvadsaťjeden záložiek v CELOM menu (issue 387 E5 pridalo "Párovanie").
+  await expect(page.locator(".side-nav .tab")).toHaveCount(21);
   await expect(page.getByRole("button", { name: "Sync zo Shoptetu" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Texty e-mailov" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Na objednanie" })).toBeVisible();
@@ -86,6 +86,12 @@ test("ľavé menu má štyri priečinky (Dôležité/Eshop/Systém/Automatizáci
   await expect(page.getByRole("button", { name: "Vrátený tovar" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Reklamácie" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Párovanie produktov" })).toBeVisible();
+  // issue 387 E5: nová záložka "Párovanie" — substring-om obsiahnuté v
+  // "Párovanie produktov" vyššie AJ vo VLASTNOM odznakovom aria-label
+  // ("Párovanie Párovanie: N" — ani `exact: true`, ani obyčajný substring
+  // ju jednoznačne nenájdu naraz), preto `data-testid` (`Sidebar.tsx`'s
+  // `nav-tab-${tab.id}`), nie `getByRole`.
+  await expect(page.getByTestId("nav-tab-pairing-review")).toBeVisible();
   await expect(page.getByRole("button", { name: "Vyhľadať" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Zlúčenie objednávok" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Upozornenia" })).toBeVisible();
@@ -216,7 +222,7 @@ test("ľavé menu má štyri priečinky (Dôležité/Eshop/Systém/Automatizáci
 
   // Hlavičky priečinkov zmiznú, ikony všetkých modulov ostanú.
   await expect(page.getByRole("button", { name: "Systém" })).toHaveCount(0);
-  await expect(page.locator(".side-nav .tab")).toHaveCount(20);
+  await expect(page.locator(".side-nav .tab")).toHaveCount(21);
   // Názov sa v lište ukáže bublinou pri prejdení myšou.
   await expect(page.getByRole("button", { name: "Na objednanie" })).toHaveAttribute(
     "title",
