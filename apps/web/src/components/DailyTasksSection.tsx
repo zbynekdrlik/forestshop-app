@@ -21,6 +21,27 @@ import {
 // `ComponentType<SectionProps>` (`nav.ts`), lebo objekt s VIAC poľami (role
 // navyše) sa dá vždy odovzdať tam, kde sa čaká len podmnožina.
 
+// Issue 403 (majiteľ: "stale to je otras" — naživo pomenované na tickete):
+// tri štrukturálne opravy, žiadna zmena funkčnosti/testid.
+// 1) `.ulohy-panel` (JSX nižšie) obmedzuje šírku pridávacieho riadku aj
+//    zoznamu na `max-width: 40rem` (app.css) — bez neho sa `.uloha-text`ov
+//    `flex:1 1 auto` naťahoval cez CELÚ neohraničenú `<section>` a
+//    `.uloha-actions`ov `margin-left:auto` odsúval ikony (✏️😊🗑) na
+//    vzdialený pravý okraj, s priemernou nameranou mŕtvou medzerou 771px pri
+//    1440px okne (komentár na tickete). Ohraničenie na 40rem (rovnaký
+//    ustálený vzor ako `.ord-supplier-link-edit`, issue 162) zníži ju na
+//    ~338px bez zmeny riadkovej výšky.
+// 2) Prepínač "vybavené" je teraz skutočný `<input type="checkbox">`
+//    namiesto `<button>`u s Unicode ☐/☑ — jediné miesto v appke, kde hlavný
+//    ovládací prvok obrazovky bol len text namiesto skutočného UI prvku
+//    (OrderLineRow.tsx/UpozorneniaSection.tsx/DpdSection.tsx majú všade
+//    skutočný checkbox — CSS špecificitu proti globálnemu resetu, pozri
+//    app.css, si však rieši výslovne len OrderLineRow.tsx's
+//    `.order-group input[type="checkbox"]`, viď fix nižšie).
+// 3) `.uloha-row`'s `align-items` je `flex-start` namiesto `center` — pri
+//    zalomení textu na užšom okne (viac riadkov) drží checkbox/ikony pri
+//    PRVOM riadku textu namiesto stredu celého zalomeného bloku.
+
 // Issue 381: odstráni draft PRE JEDEN riadok z `emojiDraft` bez `delete`
 // operátora (`@typescript-eslint/no-dynamic-delete` zakazuje `delete
 // next[dynamickýKľúč]`) — filtrovanie cez `Object.entries` je funkčne
@@ -256,8 +277,10 @@ export function DailyTasksSection({ onSessionExpired }: { readonly onSessionExpi
     return (
       <section>
         {intro}
-        {addRow}
-        <p role="alert">{error}</p>
+        <div className="ulohy-panel">
+          {addRow}
+          <p role="alert">{error}</p>
+        </div>
       </section>
     );
   }
@@ -265,8 +288,10 @@ export function DailyTasksSection({ onSessionExpired }: { readonly onSessionExpi
     return (
       <section>
         {intro}
-        {addRow}
-        <p>Načítavam…</p>
+        <div className="ulohy-panel">
+          {addRow}
+          <p>Načítavam…</p>
+        </div>
       </section>
     );
   }
@@ -274,180 +299,180 @@ export function DailyTasksSection({ onSessionExpired }: { readonly onSessionExpi
   return (
     <section>
       {intro}
-      {addRow}
-      {error !== "" && <p role="alert">{error}</p>}
+      <div className="ulohy-panel">
+        {addRow}
+        {error !== "" && <p role="alert">{error}</p>}
 
-      {rows.length === 0 ? (
-        <p data-testid="ulohy-empty">Žiadne úlohy — napíš prvú vyššie.</p>
-      ) : (
-        <div className="ulohy-list" data-testid="ulohy-list">
-          {rows.map((row) => {
-            const isDone = row.doneAt !== null;
-            const busy = busyId === row.id;
-            return (
-              <div className={"uloha-row" + (isDone ? " done" : "")} key={row.id} data-testid={`uloha-row-${row.id}`}>
-                <button
-                  type="button"
-                  className="uloha-done-toggle"
-                  aria-pressed={isDone}
-                  aria-label={isDone ? "Označiť ako nevybavené" : "Označiť ako vybavené"}
-                  title={isDone ? "Označiť ako nevybavené" : "Označiť ako vybavené"}
-                  disabled={busy}
-                  onClick={() => {
-                    toggleDone(row);
-                  }}
-                  data-testid={`uloha-done-${row.id}`}
-                >
-                  {isDone ? "☑" : "☐"}
-                </button>
+        {rows.length === 0 ? (
+          <p data-testid="ulohy-empty">Žiadne úlohy — napíš prvú vyššie.</p>
+        ) : (
+          <div className="ulohy-list" data-testid="ulohy-list">
+            {rows.map((row) => {
+              const isDone = row.doneAt !== null;
+              const busy = busyId === row.id;
+              return (
+                <div className={"uloha-row" + (isDone ? " done" : "")} key={row.id} data-testid={`uloha-row-${row.id}`}>
+                  <input
+                    type="checkbox"
+                    className="uloha-done-toggle"
+                    checked={isDone}
+                    aria-label={isDone ? "Označiť ako nevybavené" : "Označiť ako vybavené"}
+                    title={isDone ? "Označiť ako nevybavené" : "Označiť ako vybavené"}
+                    disabled={busy}
+                    onChange={() => {
+                      toggleDone(row);
+                    }}
+                    data-testid={`uloha-done-${row.id}`}
+                  />
 
-                {row.emoji !== null && editingEmojiId !== row.id && (
-                  <span className="uloha-emoji" aria-hidden="true">
-                    {row.emoji}
-                  </span>
-                )}
+                  {row.emoji !== null && editingEmojiId !== row.id && (
+                    <span className="uloha-emoji" aria-hidden="true">
+                      {row.emoji}
+                    </span>
+                  )}
 
-                {editingTextId === row.id ? (
-                  <>
-                    <input
-                      className="uloha-edit-input"
-                      value={textDraft[row.id] ?? row.text}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        setTextDraft((d) => ({ ...d, [row.id]: value }));
-                      }}
-                      aria-label="Upraviť text úlohy"
-                      data-testid={`uloha-edit-input-${row.id}`}
-                      autoFocus
-                    />
-                    <button
-                      type="button"
-                      className="uloha-icon-btn"
-                      disabled={busy}
-                      onClick={() => {
-                        saveText(row.id);
-                      }}
-                      title="Uložiť"
-                      aria-label="Uložiť text"
-                      data-testid={`uloha-edit-save-${row.id}`}
-                    >
-                      💾
-                    </button>
-                    <button
-                      type="button"
-                      className="uloha-icon-btn"
-                      onClick={() => {
-                        setEditingTextId(null);
-                      }}
-                      title="Zrušiť"
-                      aria-label="Zrušiť úpravu textu"
-                    >
-                      ✕
-                    </button>
-                  </>
-                ) : (
-                  <span className="uloha-text" data-testid={`uloha-text-${row.id}`}>
-                    {row.text}
-                  </span>
-                )}
-
-                {editingEmojiId === row.id && (
-                  <>
-                    <input
-                      className="uloha-emoji-input-field"
-                      value={emojiDraft[row.id] ?? row.emoji ?? ""}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        setEmojiDraft((d) => ({ ...d, [row.id]: value }));
-                      }}
-                      aria-label="Emoji úlohy"
-                      placeholder="😊"
-                      data-testid={`uloha-emoji-input-${row.id}`}
-                      autoFocus
-                    />
-                    <button
-                      type="button"
-                      className="uloha-icon-btn"
-                      disabled={busy}
-                      onClick={() => {
-                        saveEmoji(row.id);
-                      }}
-                      title="Uložiť emoji"
-                      aria-label="Uložiť emoji"
-                      data-testid={`uloha-emoji-save-${row.id}`}
-                    >
-                      💾
-                    </button>
-                    {/* Review dispatch (issue 381): bez `disabled={busy}` by Zrušiť
-                        počas ROZBEHNUTÉHO uloženia TOHO ISTÉHO riadku otvorilo
-                        okno na race — zrušenie + nový rozpis medzitým a
-                        následné doručenie PÔVODNEJ (už "zrušenej") odpovede
-                        by ten nový rozpis ticho zahodilo cez `saveEmoji`'s
-                        `forgetEmojiDraft`. Rovnaký `busy` guard ako má Save. */}
-                    <button
-                      type="button"
-                      className="uloha-icon-btn"
-                      disabled={busy}
-                      onClick={() => {
-                        cancelEmojiEdit(row.id);
-                      }}
-                      title="Zrušiť"
-                      aria-label="Zrušiť úpravu emoji"
-                      data-testid={`uloha-emoji-cancel-${row.id}`}
-                    >
-                      ✕
-                    </button>
-                  </>
-                )}
-
-                {editingTextId !== row.id && (
-                  <div className="uloha-actions">
-                    <button
-                      type="button"
-                      className="uloha-icon-btn"
-                      onClick={() => {
-                        openTextEditor(row);
-                      }}
-                      title="Upraviť text"
-                      aria-label={`Upraviť text úlohy ${row.text}`}
-                      data-testid={`uloha-edit-${row.id}`}
-                    >
-                      ✏️
-                    </button>
-                    {editingEmojiId !== row.id && (
+                  {editingTextId === row.id ? (
+                    <>
+                      <input
+                        className="uloha-edit-input"
+                        value={textDraft[row.id] ?? row.text}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setTextDraft((d) => ({ ...d, [row.id]: value }));
+                        }}
+                        aria-label="Upraviť text úlohy"
+                        data-testid={`uloha-edit-input-${row.id}`}
+                        autoFocus
+                      />
+                      <button
+                        type="button"
+                        className="uloha-icon-btn"
+                        disabled={busy}
+                        onClick={() => {
+                          saveText(row.id);
+                        }}
+                        title="Uložiť"
+                        aria-label="Uložiť text"
+                        data-testid={`uloha-edit-save-${row.id}`}
+                      >
+                        💾
+                      </button>
                       <button
                         type="button"
                         className="uloha-icon-btn"
                         onClick={() => {
-                          openEmojiEditor(row);
+                          setEditingTextId(null);
                         }}
-                        title="Pridať/zmeniť emoji"
-                        aria-label={`Pridať/zmeniť emoji úlohy ${row.text}`}
-                        data-testid={`uloha-emoji-${row.id}`}
+                        title="Zrušiť"
+                        aria-label="Zrušiť úpravu textu"
                       >
-                        😊
+                        ✕
                       </button>
-                    )}
-                    <button
-                      type="button"
-                      className="uloha-icon-btn"
-                      disabled={busy}
-                      onClick={() => {
-                        removeTask(row.id);
-                      }}
-                      title="Odstrániť"
-                      aria-label={`Odstrániť úlohu ${row.text}`}
-                      data-testid={`uloha-delete-${row.id}`}
-                    >
-                      🗑
-                    </button>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
+                    </>
+                  ) : (
+                    <span className="uloha-text" data-testid={`uloha-text-${row.id}`}>
+                      {row.text}
+                    </span>
+                  )}
+
+                  {editingEmojiId === row.id && (
+                    <>
+                      <input
+                        className="uloha-emoji-input-field"
+                        value={emojiDraft[row.id] ?? row.emoji ?? ""}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setEmojiDraft((d) => ({ ...d, [row.id]: value }));
+                        }}
+                        aria-label="Emoji úlohy"
+                        placeholder="😊"
+                        data-testid={`uloha-emoji-input-${row.id}`}
+                        autoFocus
+                      />
+                      <button
+                        type="button"
+                        className="uloha-icon-btn"
+                        disabled={busy}
+                        onClick={() => {
+                          saveEmoji(row.id);
+                        }}
+                        title="Uložiť emoji"
+                        aria-label="Uložiť emoji"
+                        data-testid={`uloha-emoji-save-${row.id}`}
+                      >
+                        💾
+                      </button>
+                      {/* Review dispatch (issue 381): bez `disabled={busy}` by Zrušiť
+                          počas ROZBEHNUTÉHO uloženia TOHO ISTÉHO riadku otvorilo
+                          okno na race — zrušenie + nový rozpis medzitým a
+                          následné doručenie PÔVODNEJ (už "zrušenej") odpovede
+                          by ten nový rozpis ticho zahodilo cez `saveEmoji`'s
+                          `forgetEmojiDraft`. Rovnaký `busy` guard ako má Save. */}
+                      <button
+                        type="button"
+                        className="uloha-icon-btn"
+                        disabled={busy}
+                        onClick={() => {
+                          cancelEmojiEdit(row.id);
+                        }}
+                        title="Zrušiť"
+                        aria-label="Zrušiť úpravu emoji"
+                        data-testid={`uloha-emoji-cancel-${row.id}`}
+                      >
+                        ✕
+                      </button>
+                    </>
+                  )}
+
+                  {editingTextId !== row.id && (
+                    <div className="uloha-actions">
+                      <button
+                        type="button"
+                        className="uloha-icon-btn"
+                        onClick={() => {
+                          openTextEditor(row);
+                        }}
+                        title="Upraviť text"
+                        aria-label={`Upraviť text úlohy ${row.text}`}
+                        data-testid={`uloha-edit-${row.id}`}
+                      >
+                        ✏️
+                      </button>
+                      {editingEmojiId !== row.id && (
+                        <button
+                          type="button"
+                          className="uloha-icon-btn"
+                          onClick={() => {
+                            openEmojiEditor(row);
+                          }}
+                          title="Pridať/zmeniť emoji"
+                          aria-label={`Pridať/zmeniť emoji úlohy ${row.text}`}
+                          data-testid={`uloha-emoji-${row.id}`}
+                        >
+                          😊
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className="uloha-icon-btn"
+                        disabled={busy}
+                        onClick={() => {
+                          removeTask(row.id);
+                        }}
+                        title="Odstrániť"
+                        aria-label={`Odstrániť úlohu ${row.text}`}
+                        data-testid={`uloha-delete-${row.id}`}
+                      >
+                        🗑
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </section>
   );
 }
