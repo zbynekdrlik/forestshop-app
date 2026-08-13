@@ -118,6 +118,64 @@ describe("startRunNow — zlyhaný beh", () => {
   });
 });
 
+describe("startRunNow — zápis KONEČNÉHO stavu (po dobehnutí behu) zlyhá", () => {
+  // Independent reviewer's finding (issue 413): the original success/failure
+  // `.then()` branches wrote the terminal status with a bare `db.update(...)`
+  // — if THAT specific write throws (a transient DB blip right after the
+  // job itself finished normally), the rejection fell into the outer
+  // defensive `.catch()`, which only logs. The row stayed "running" forever
+  // — and a LATER restart's `cleanOrphanedJobRuns` would then mislabel it
+  // as "interrupted by a deploy", which it never was.
+  it("úspešný beh, ale zápis 'success' zlyhá → NÚDZOVÝ zápis 'failure' to zachráni, riadok NEOSTANE 'running' navždy", async () => {
+    const ctx = await withCleanDb();
+    close = ctx.close;
+    let updateAttempts = 0;
+    // Atrapa: PRVÉ volanie `db.update` (skutočný zápis výsledku) synchrónne
+    // vyhodí, KAŽDÉ ĎALŠIE (núdzový zápis) sa prepustí na skutočnú `db`
+    // (naviazané späť na `target`, nie na proxy, aby drizzle-ov interný
+    // `this` ostal správny). Všetko OSTATNÉ (vrátane `$client`u pre zámok)
+    // ide priamo na skutočnú `db`.
+    const flakyOnceUpdateDb = new Proxy(ctx.db, {
+      get(target, prop, receiver: unknown) {
+        if (prop === "update") {
+          return (...args: unknown[]) => {
+            updateAttempts += 1;
+            if (updateAttempts === 1) {
+              throw new Error("simulované zlyhanie zápisu výsledku behu");
+            }
+            const real = Reflect.get(target, prop, receiver) as (...a: unknown[]) => unknown;
+            const value: unknown = real.apply(target, args);
+            return value;
+          };
+        }
+        const value: unknown = Reflect.get(target, prop, receiver);
+        if (typeof value === "function") {
+          const bound: unknown = value.bind(target);
+          return bound;
+        }
+        return value;
+      },
+    });
+
+    const outcome = await startRunNow(
+      flakyOnceUpdateDb,
+      { jobName: TEST_JOB_NAME, lockKey: TEST_RUN_NOW_LOCK_KEY, run: () => Promise.resolve({ marker: "hotovo" }) },
+      new Date(),
+      () => undefined,
+    );
+    expect(outcome).toEqual({ status: "started" });
+
+    const finalRun = await waitForJobRunSettled(ctx.db, TEST_JOB_NAME);
+    expect(finalRun.status).toBe("failure");
+    expect(finalRun.errorMessage).toContain("Beh dobehol, ale zápis výsledku zlyhal");
+    expect(updateAttempts).toBe(2);
+
+    // Zámok sa aj tak uvoľnil — táto oprava sa netýka zámku (ten bol
+    // vždy uvoľnený v `.finally()`u), len konečného stavu riadku.
+    expect(await tryLockFromSeparateConnection(process.env["DATABASE_URL"] ?? "")).toBe(true);
+  });
+});
+
 describe("startRunNow — zlyhanie PRI VKLADANÍ 'running' riadku (zámok už bol získaný)", () => {
   // Code review nález (issue 413): zámok sa berie PRED `db.insert(jobRuns)`.
   // Bez explicitného try/catch okolo insertu by JEHO zlyhanie (napr.
