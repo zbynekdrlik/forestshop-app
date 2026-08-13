@@ -27,12 +27,14 @@ import { DEFAULT_TAB_ID, HIDDEN_TABS, NAV, findTab, isVisibleTabId } from "./nav
 // "Upozornenia" doňho a pridalo novú záložku "Úlohy na dnes".
 // Issue 345 pridalo "Objednávky predajňa" hneď za "Na objednanie" (obe sú
 // "zoznam objednávok" obrazovky).
+// Issue 387 E5 pridalo "Párovanie" hneď za "Párovanie produktov" (#239) —
+// najbližší príbuzný obsah, obe zatiaľ bežia vedľa seba.
 // Tento test je najbližšie k tomu, čo strojovo overiť dá (registrácia, nie DOM).
-it("NAV má štyri priečinky (Dôležité/Eshop/Systém/Automatizácie), s 2/10/3/5 záložkami v poradí podľa dôležitosti", () => {
+it("NAV má štyri priečinky (Dôležité/Eshop/Systém/Automatizácie), s 2/11/3/5 záložkami v poradí podľa dôležitosti", () => {
   expect(NAV).toHaveLength(4);
   expect(NAV.map((f) => f.label)).toEqual(["Dôležité", "Eshop", "Systém", "Automatizácie"]);
   expect(NAV[0]?.tabs).toHaveLength(2);
-  expect(NAV[1]?.tabs).toHaveLength(10);
+  expect(NAV[1]?.tabs).toHaveLength(11);
   expect(NAV[2]?.tabs).toHaveLength(3);
   expect(NAV[3]?.tabs).toHaveLength(5);
   expect(NAV[0]?.tabs.map((t) => t.label)).toEqual(["Upozornenia", "Úlohy na dnes"]);
@@ -44,6 +46,7 @@ it("NAV má štyri priečinky (Dôležité/Eshop/Systém/Automatizácie), s 2/10
     "Vrátený tovar",
     "Reklamácie",
     "Párovanie produktov",
+    "Párovanie",
     "Vyhľadať",
     "Zlúčenie objednávok",
     "Preprava DPD",
@@ -104,6 +107,7 @@ it("findTab nájde viditeľnú aj skrytú záložku podľa id, neznáme id vrát
   expect(findTab("returned")?.label).toBe("Vrátený tovar");
   expect(findTab("claims")?.label).toBe("Reklamácie");
   expect(findTab("restock-links")?.label).toBe("Vypredané → Skladom: návrhy odkazov");
+  expect(findTab("pairing-review")?.label).toBe("Párovanie");
   expect(findTab("upozornenia")?.label).toBe("Upozornenia");
   expect(findTab("ulohy")?.label).toBe("Úlohy na dnes");
   expect(findTab("neexistuje")).toBeUndefined();
@@ -124,6 +128,8 @@ it("isVisibleTabId rozlíši viditeľné (NAV) od skrytých (HIDDEN_TABS)", () =
   expect(isVisibleTabId("claims")).toBe(true);
   // issue 311: nová viditeľná záložka "Vypredané → Skladom: návrhy odkazov".
   expect(isVisibleTabId("restock-links")).toBe(true);
+  // issue 387 E5: nová viditeľná záložka "Párovanie".
+  expect(isVisibleTabId("pairing-review")).toBe(true);
   // issue 342: nová viditeľná záložka "Úlohy na dnes" (v priečinku "Dôležité").
   expect(isVisibleTabId("ulohy")).toBe(true);
   for (const hiddenId of Object.keys(HIDDEN_TABS)) {

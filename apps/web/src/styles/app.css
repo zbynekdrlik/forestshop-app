@@ -970,6 +970,17 @@ tr:last-child td {
   color: var(--fs-ink);
   border-color: var(--fs-border);
 }
+/* issue 387 E5 (review nález): rovnaký neutrálny vzhľad ako `.chip-all`
+   vyššie, ale VLASTNÝM menom — `.chip-all` je od issue 263 vyhradené pre
+   súhrnný "Všetci" čip BEZ dátového stavu (OrdersToolbar.tsx); filtrovacie
+   čipy na tejto obrazovke (Nezrevidované/Napárované/…/Skladom/…) nie sú
+   "všetci", len bežné neaktívne filtre — zdieľanie `.chip-all`'ovho mena by
+   bolo zavádzajúce pre budúceho čitateľa. */
+.chip.chip-neutral {
+  background: var(--fs-surface-alt);
+  color: var(--fs-ink);
+  border-color: var(--fs-border);
+}
 .chip.done {
   background: var(--chip-done-bg);
   color: var(--chip-done-text);
@@ -2882,4 +2893,151 @@ a.upozornenie-title:hover {
 .themecolor-hex-input[aria-invalid="true"] {
   border-color: var(--fs-danger);
   background: var(--fs-danger-bg);
+}
+
+/* ---------------- 19. ESHOP → PÁROVANIE (issue 387 E5) ---------------- */
+/* Karty (nie tabuľka — dvojstĺpcové porovnanie náš produkt vs. dodávateľ,
+   presne ako stará appka's `webreview` UX, ale VLASTNÝ dizajn nad appkinými
+   tokenmi — `.claude/rules/frontend-design.md`'s "legacy app je referencia
+   len na správanie, nikdy na vzhľad"). */
+.pairing-review-progress {
+  display: flex;
+  align-items: center;
+  gap: var(--fs-space-3);
+  margin: var(--fs-space-3) 0;
+  font-size: var(--fs-text-sm);
+}
+.pairing-review-progress-text {
+  color: var(--fs-ink-muted);
+  white-space: nowrap;
+}
+.pairing-review-progress-bar {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 8px;
+  background: var(--fs-surface-alt);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.pairing-review-progress-bar-fill {
+  height: 100%;
+  background: var(--fs-brand);
+  border-radius: 999px;
+  transition: width 0.2s;
+}
+
+.pairing-review-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--fs-space-4);
+  margin-top: var(--fs-space-4);
+}
+.pairing-review-card {
+  padding: var(--fs-space-4);
+}
+/* Dva stĺpce (náš produkt / dodávateľov kandidát) — `minmax(0, 1fr)` na
+   OBOCH stranách (nie holé `1fr 1fr`), aby dlhý názov/URL nikdy nevynútil
+   vodorovné pretečenie `.main-wide`u (ten má `overflow-x: hidden` — issue
+   382's poučenie o `min()`/`minmax(0,...)` na `wide: true` obrazovke). Pod
+   36rem (kratšia čítacia šírka než klasické tabuľkové 48rem obrazovky, lebo
+   karta má menej stĺpcov na zúženie) sa stĺpce zalomia pod seba. */
+.pairing-review-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--fs-space-5);
+}
+@media (max-width: 36rem) {
+  .pairing-review-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.pairing-review-side {
+  min-width: 0;
+}
+.pairing-review-label {
+  font-size: var(--fs-text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--fs-ink-muted);
+  margin-bottom: var(--fs-space-1);
+}
+.pairing-review-name {
+  display: block;
+  font-weight: var(--fs-weight-semibold);
+  font-size: var(--fs-text-md);
+  color: var(--fs-brand-strong);
+  text-decoration: none;
+  overflow-wrap: break-word;
+}
+.pairing-review-name:hover {
+  text-decoration: underline;
+}
+.pairing-review-meta {
+  font-size: var(--fs-text-sm);
+  color: var(--fs-ink-muted);
+  margin: var(--fs-space-1) 0;
+  overflow-wrap: break-word;
+}
+.pairing-review-state-badge {
+  display: inline-block;
+  font-size: var(--fs-text-xs);
+  font-weight: var(--fs-weight-semibold);
+  padding: var(--fs-space-1) var(--fs-space-3);
+  border-radius: 999px;
+  margin: var(--fs-space-1) 0;
+}
+.pairing-review-state-sellable {
+  background: var(--fs-success-bg);
+  color: var(--fs-success);
+}
+.pairing-review-state-out_of_stock {
+  background: var(--fs-warning-bg);
+  color: var(--fs-warning);
+}
+.pairing-review-state-discontinued {
+  background: var(--fs-surface-alt);
+  color: var(--fs-ink-muted);
+}
+.pairing-review-price {
+  font-size: var(--fs-text-sm);
+  font-weight: var(--fs-weight-semibold);
+  color: var(--fs-ink);
+  margin: var(--fs-space-1) 0;
+}
+.pairing-review-imgbox {
+  margin-top: var(--fs-space-2);
+}
+.pairing-review-imgbox img {
+  max-width: 100%;
+  width: 96px;
+  height: 96px;
+  object-fit: contain;
+  background: var(--fs-surface-alt);
+  border: 1px solid var(--fs-border);
+  border-radius: var(--fs-radius-sm);
+}
+.pairing-review-noimg {
+  font-size: var(--fs-text-xs);
+  color: var(--fs-ink-faint);
+}
+.pairing-review-nocandidate {
+  font-size: var(--fs-text-sm);
+  color: var(--fs-ink-muted);
+  margin: var(--fs-space-1) 0;
+}
+.pairing-review-verdict {
+  font-size: var(--fs-text-xs);
+  margin-top: var(--fs-space-1);
+}
+.pairing-review-verdict-ok {
+  color: var(--fs-success);
+}
+.pairing-review-verdict-unsure {
+  color: var(--fs-warning);
+}
+.pairing-review-placeholder {
+  font-size: var(--fs-text-xs);
+  color: var(--fs-ink-faint);
+  font-style: italic;
+  margin-top: var(--fs-space-3);
 }

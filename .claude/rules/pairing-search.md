@@ -1,6 +1,12 @@
 ---
 paths:
   - "apps/api/src/modules/pairing-search/**"
+  - "apps/api/src/modules/pairing-review/**"
+  - "apps/api/src/http/pairing-review-routes.ts"
+  - "apps/web/src/pairingReviewApi.ts"
+  - "apps/web/src/components/PairingReview*.tsx"
+  - "apps/web/tests/e2e/pairing-review.spec.ts"
+  - "scripts/e2e-fixtures-pairing-review.ts"
 ---
 
 # Profesionálne párovanie produktov — jadro vyhľadávania (issue 387)
@@ -312,3 +318,90 @@ https://github.com/zbynekdrlik/forestshop-app/issues/387#issuecomment-5273377438
   musel host znova warm-upovať a strácal by session medzi search a
   detail fetchmi. Bez cache (na rozdiel od `.search()`) — detailná URL
   je vždy jedinečná, cache by nikdy nehitla.
+
+## E5 — Obrazovka Párovanie, čítanie (`pairing-review/`, `PairingReviewSection.tsx`)
+
+- **Populácia je "produkty S `pairing_candidate_set` riadkom" (INNER JOIN),
+  nie "produkty vhodné na gather".** `pairing-search/select.ts`'s
+  `selectEligibleProducts` (E3) rieši ÚPLNE inú otázku ("koho má gather
+  ešte spracovať/prespracovať") — E5's `listPairingReview` (`pairing-review/
+  queries.ts`) nad tým NESTAVIA, číta VLASTNÝ, jednoduchší dopyt priamo z
+  `pairing_candidate_set`. Produkt, ktorý nočný beh ešte nikdy nezbieral, sa
+  na tejto obrazovke nezobrazí vôbec — to je ZÁMER (zadanie: "zoznam
+  produktov S kandidátmi"), nie chyba/medzera.
+- **`pairing_decision` (E6) v čase E5 EŠTE NEEXISTUJE — "Nezrevidované"
+  filter/odznak/progress preto NIE JE "chýba rozhodnutie", je to "chýba
+  EFEKTÍVNA dodávateľská linka"** (`resolveEffectiveSupplierLink`, tá istá
+  funkcia ako `product-links`/`restock-links`, zohľadňujúca AJ
+  `product_supplier_link_override` AJ `internalNote`). Design komentár na
+  tickete (issue 387 E5) toto rozhodnutie explicitne zdôvodňuje a
+  poznamenáva, že E6 môže tento predikát ĎALEJ zúžiť (napr. vylúčiť produkty
+  rozhodnuté `unavailable`/`discontinued`) BEZ zmeny API kontraktu ani tejto
+  obrazovky — pri práci na E6 over najprv, či `unreviewed`'s SQL/JS predikát
+  v `queries.ts` ešte zodpovedá aktuálnemu zámeru, než sa píše nová logika
+  vedľa neho.
+- **`matched`/`unmatched` = `pairing_candidate_set.chosen_url !== null`,
+  NIKDY `confidence !== "none"` priamo** — funkčne rovnaké (`ranking.ts`'s
+  `pickBest()` vracia `confidence: "none"` PRÁVE VTEDY, keď `candidates.length
+  === 0`, teda `chosen_url` je vtedy vždy `null`), ale `chosen_url` je
+  priamy, jednoznačný stĺpec bez potreby poznať `pickBest()`'s vnútorné
+  správanie — over TOTO tvrdenie priamo v `ranking.ts` pri KAŽDEJ ďalšej
+  zmene `pickBest()`u, nie len tu v playbooku.
+- **Naša strana karty (`ourUrl`/`ourImageUrl`) ide cez `shop_product_url`
+  spárovaný podľa KTORÉHOKOĽVEK kódu variantu produktu** (deterministicky —
+  najmenší kód vyhráva pri viacerých zhodách, rovnaký vzor ako
+  `nedostupne/resolve-products.ts`'s `findMatchingCode`), fallback na
+  `…/vyhladavanie/?string=<meno>` presne ako stará appka. Meta (cena/sklad)
+  je rozsah (`priceMin`/`priceMax`) naprieč VŠETKÝMI variantmi produktu — na
+  rozdiel od starej appky (jeden variant = jeden riadok) môže mať produkt
+  tejto appky viac cien naraz.
+- **Kandidátova strana ukazuje LEN `chosenUrl`, nikdy celých top-8.**
+  Rozbaľovací panel so všetkými kandidátmi (výber jedného, manuálne URL) je
+  E6-ova ROZHODOVACIA UI (design komentár, sekcia 3) — E5 je explicitne "BEZ
+  akčných tlačidiel". Lazy live-fetch meta endpoint (analóg starej appky's
+  `/api/images`) bol pre E5 ZÁMERNE preskočený (technické rozhodnutie, nie
+  medzera) — všetko, čo karta potrebuje (meno/URL/skóre/istota/verdikt), je
+  už persistované z E3/E4; ak E6's rozhodovací panel skutočne potrebuje
+  živú cenu/obrázok kandidáta, TAM sa má live-fetch pridať, nie predtým.
+- **Worktree založený PRED tým, než predchádzajúca etapa domergovala do
+  `dev`, obsahuje STARÝ kód bez nej — `git status`/`git log origin/dev..HEAD`
+  prázdne NEZNAMENÁ "som na aktuálnom stave dev", znamená len "moje commity
+  sú podmnožinou origin/dev-u v čase FETCHU".** E5's worktree bol založený
+  na E3's merge bode (`a6c0c10`/`d031c27`) TESNE PRED tým, než E4's
+  round-integrácia dobehla (`4a0707b`, `origin/dev` verzia `0.3.0-dev.229`) —
+  dispatch prompt správne hlásil "dev = .229", ale worktree samo malo ešte
+  `.228` a ANI JEDEN E4 súbor (`verify.ts`, zapojenie do `run.ts`). Bez `git
+  merge origin/dev` PRED prvým commitom by E5 stavalo na E1-E3 kóde a E4's
+  zmeny (najmä `pairing_candidate_set.verdict`, ktorý E5 priamo zobrazuje)
+  by chýbali z worktree úplne, hoci sú dávno zmergované. **Pri KAŽDEJ ĎALŠEJ
+  etape tejto sériovej reťaze (E6-E9): PRED prvým riadkom kódu vždy `git
+  fetch origin && git log HEAD..origin/dev --oneline` — ak nie je prázdne,
+  `git merge origin/dev` PRED verziovým bumpom**, presne ako predpisuje
+  autopilot-workerov vlastný CYCLE krok 1 ("RESUME, don't restart") — v
+  paralelnom worktree-dispatchi (issue #317) je to bežný, nie výnimočný
+  prípad, keďže susedná etapa sa mohla domergovať PO založení tohto
+  worktree, ale PRED začiatkom skutočnej práce naň.
+- **Substring/accessible-name kolízia s BADGE odznakom** (nová viditeľná
+  záložka, ktorej meno je prefixom existujúcej, A ZÁROVEŇ nesie odznak počtu)
+  — plný mechanizmus a fix zdokumentovaný v `.claude/rules/frontend-
+  design.md` (hľadaj "nav-tab-"), nie duplikovaný tu.
+- **Nová e2e fixtúra (`scripts/e2e-fixtures-pairing-review.ts`, PR pre issue
+  387 E5) zhodila 4 EXISTUJÚCE testy v `catalog.spec.ts` — spadla len preto,
+  že vlastný `pairing-review.spec.ts` prešiel izolovane pri prvom overení,
+  nikdy sa nespustil CELÝ balík pred pushom.** Tri nové produkty
+  (`E2E-PR-CHYBA`/`E2E-PR-NENAJDENY`/`E2E-PR-SLINKOU`) sú `state: "sellable"`,
+  `productVisibility: "visible"` — presne tá istá trieda ako issue 217/337
+  (`.claude/rules/testing.md`'s "Pridanie čo i len JEDNÉHO variantu do e2e
+  seedu posunie pevné počty v `catalog.spec.ts`"): total `103→106`, filter
+  "sellable" `72→75`, "missing"(1) nezmenené (žiadny z troch je `missing`).
+  Zvolené riešenie je AKTUALIZÁCIA pevných počtov (precedens issue 337), nie
+  izolácia — celkový počet by sa musel zvýšiť aj tak (nové produkty MUSIA byť
+  reálne katalógové varianty, inak by pairing-review populácia — INNER JOIN
+  na `pairing_candidate_set` — nemala čo zobraziť), takže "izolovať od
+  catalog počtov" nie je pre TOTAL nikdy možné, len pre "sellable" filter.
+  **Test na KAŽDÚ ĎALŠIU novú e2e fixtúru vyčlenenú do vlastného súboru
+  (vzor `seedXFixtures`, `scripts/e2e-setup.ts`): spusti CELÝ e2e balík
+  (`pnpm --filter @forestshop/web e2e`), nikdy len vlastný nový spec súbor —
+  presne rovnaká past ako `aria-label`/`getByRole`/nav-záložka kolízie
+  zdokumentované v `.claude/rules/testing.md`, len tentoraz cez ZDIEĽANÝ
+  POČET namiesto zdieľaného selektora.**
