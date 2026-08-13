@@ -7,6 +7,20 @@
 
 import type { PairingCandidate } from "../types.js";
 
+// issue 422 — živá cena + dostupnosť KANDIDÁTA/rozhodnutia z jeho DETAILNEJ
+// stránky (na rozdiel od `parseSearchResults`, ktorý parsuje VÝSLEDKOVÚ
+// stránku). `null`/`null` = žiadny zdroj neposkytol použiteľnú hodnotu —
+// nikdy sa nehádže, best-effort presne ako stará appka's `_supplier_meta`.
+export interface SupplierDetailMeta {
+  /** Formátované na 2 desatinné miesta (`"149.90"`), mena je vždy EUR
+   *  (živo overené na všetkých troch dodávateľoch, design komentár na
+   *  tickete #422) — frontend pridáva `€` rovnako, ako to robí stará appka. */
+  readonly price: string | null;
+  /** Ľudsky čitateľný slovenský text ("Skladom"/"Nedostupné"), nikdy surový
+   *  schema.org token. */
+  readonly availabilityText: string | null;
+}
+
 export interface SupplierAdapter {
   /** Zhoduje sa s `supplier.adapter_key` v DB (pripravené na E3). */
   readonly adapterKey: string;
@@ -25,4 +39,11 @@ export interface SupplierAdapter {
    * vlastným výpočtom, nikdy nečíta vstupnú hodnotu.
    */
   parseSearchResults(html: string): readonly PairingCandidate[];
+  /** issue 422 — živá cena+dostupnosť z DETAILNEJ stránky (`SearchClient
+   *  .fetchPage`'s výstup). KAŽDÝ dodávateľ potrebuje VLASTNÚ extrakciu —
+   *  živo overené (design komentár #422), že WETLAND/ODIMON majú JSON-LD
+   *  `Offer` (zdieľaný helper, `detail-meta.ts`), zatiaľ čo BETALOV
+   *  (huntingshop.eu) nemá ŽIADNE JSON-LD/meta a jeho CSS triedy sa
+   *  opakujú v karuseli súvisiacich produktov — vlastná extrakcia. */
+  extractDetailMeta(html: string): SupplierDetailMeta;
 }

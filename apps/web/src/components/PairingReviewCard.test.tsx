@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { PairingReviewCard } from "./PairingReviewCard.js";
 
 // issue 387 E6 — rozhodovacia UX karty (`.claude/rules/frontend-design.md`'s
@@ -10,11 +10,12 @@ import { PairingReviewCard } from "./PairingReviewCard.js";
 // issue 398/401/409 — testy prerobené na novú UX (žiadne "✗ Zlé", priamy
 // riadok ✓ Dobré/„vyber url"/📦/🚫, adapterless hláška, obrázky v paneli).
 
-const { fetchPairingCandidates, sendPairingDecision, fetchPairingVariantLinks, savePairingVariantLink } = vi.hoisted(() => ({
+const { fetchPairingCandidates, sendPairingDecision, fetchPairingVariantLinks, savePairingVariantLink, fetchLiveSupplierInfo } = vi.hoisted(() => ({
   fetchPairingCandidates: vi.fn(),
   sendPairingDecision: vi.fn(),
   fetchPairingVariantLinks: vi.fn(),
   savePairingVariantLink: vi.fn(),
+  fetchLiveSupplierInfo: vi.fn(),
 }));
 
 // `PairingReviewUnauthorizedError` ostáva SKUTOČNÁ trieda (rovnaký dôvod ako
@@ -23,9 +24,13 @@ const { fetchPairingCandidates, sendPairingDecision, fetchPairingVariantLinks, s
 // TU, lebo `PairingReviewCard` vykresľuje `PairingReviewSplitPanel` priamo
 // (rovnaký modul, rovnaký mock) — `PairingReviewSplitPanel` samo nemá
 // vlastný test súbor, jeho pokrytie je celé cez tento súbor.
+// issue 422 — `fetchLiveSupplierInfo` mockovaný TU (nie priamo v
+// `useLiveSupplierInfo.ts`), lebo `useLiveSupplierInfo` importuje z TOHTO
+// modulu — mock celého `pairingReviewApi.js` pokrýva aj hook bez
+// samostatného `vi.mock` na hook súbor.
 vi.mock("../pairingReviewApi.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../pairingReviewApi.js")>();
-  return { ...actual, fetchPairingCandidates, sendPairingDecision, fetchPairingVariantLinks, savePairingVariantLink };
+  return { ...actual, fetchPairingCandidates, sendPairingDecision, fetchPairingVariantLinks, savePairingVariantLink, fetchLiveSupplierInfo };
 });
 
 const { PairingReviewUnauthorizedError } = await import("../pairingReviewApi.js");
@@ -40,6 +45,13 @@ const MATCHED_ITEM = {
   priceMin: "59.90",
   priceMax: "64.90",
   currency: "EUR",
+  // issue 422 — "naša strana" (persistované). `standardPriceMin/Max` sa
+  // ZÁMERNE zhoduje s `priceMin/Max` v tomto základnom fixture (žiadna
+  // zľava) — vlastný test nižšie prepíše na inú hodnotu.
+  standardPriceMin: "59.90",
+  standardPriceMax: "64.90",
+  stockTotal: 0,
+  availabilityText: null,
   ourUrl: "https://www.forestshop.sk/bunda-alfa",
   ourUrlIsSearchFallback: false,
   ourImageUrl: "https://www.forestshop.sk/img/bunda.jpg",
@@ -89,6 +101,14 @@ const DECIDED_GOOD_ITEM = {
   hasEffectiveLink: true,
   decision: { status: "good" as const, url: "https://dodavatel.example.com/bunda-alfa", decidedAt: "2026-08-13T04:00:00.000Z" },
 };
+
+// issue 422 — bezpečný default pre KAŽDÝ test (žiadne live info), ak si ho
+// konkrétny test výslovne nepreklopí vlastnou hodnotou — `resetAllMocks()`
+// v `afterEach` niže vymaže implementáciu, takže sa musí nastaviť znova PRED
+// KAŽDÝM testom, nie len raz pri module-load.
+beforeEach(() => {
+  fetchLiveSupplierInfo.mockResolvedValue({ price: null, availabilityText: null });
+});
 
 afterEach(() => {
   cleanup();
@@ -472,3 +492,4 @@ it("produkt UŽ rozdelený (decision.status==='split') ukáže odznak + editor p
   expect(screen.getByTestId("pairing-review-split-cancel-PR-5")).toBeDefined();
   expect(screen.queryByTestId("pairing-review-split-done-PR-5")).toBeNull();
 });
+

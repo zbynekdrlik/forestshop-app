@@ -87,6 +87,26 @@ test("predvolený filter 'Nezrevidované' ukáže produkty bez linky (s aj bez k
   await expect(chybaKarta.locator("img").nth(0)).toHaveAttribute("src", E2E_OUR_IMAGE_DATA_URI);
   await expect(chybaKarta.locator("img").nth(1)).toHaveAttribute("src", E2E_CANDIDATE_IMAGE_DATA_URI);
 
+  // issue 422 (gap 1 — AI zdôvodnenie zhody): `chosenReason` seedovaný na
+  // tejto fixtúre už dávno ("najlepší nájdený"), predtým nikdy nerenderovaný.
+  await expect(chybaKarta.getByTestId("pairing-review-reason-E2E-PR-CHYBA")).toHaveText("🤖 najlepší nájdený");
+
+  // issue 422 (gap 2, "naša strana" — persistované, žiadny live-fetch):
+  // cena so zľavou (49,90 aktuálna, 59,90 pôvodná — seedované vyššie) +
+  // súčet skladu + dostupnostný text.
+  await expect(chybaKarta.getByTestId("pairing-review-stock-E2E-PR-CHYBA")).toContainText("sklad: 3 ks");
+  await expect(chybaKarta.getByTestId("pairing-review-stock-E2E-PR-CHYBA")).toContainText("Skladom");
+  await expect(chybaKarta).toContainText("49.90");
+  await expect(chybaKarta).toContainText("pôv. 59.90");
+
+  // issue 422 (gap 2, dodávateľská strana — live-fetch): kandidátova URL
+  // (`https://e2e-dodavatel.example.com/...`) patrí MIMO všetkých troch
+  // známych adaptérov (wetland.sk/huntingshop.eu/odimon.sk) — appka preto
+  // NEROBÍ žiadny sieťový fetch a TICHO nič nezobrazí (žiadny "Skladom"/
+  // cenový riadok od dodávateľa), presne zámerné zúženie rozsahu z design
+  // komentára na tickete. Konzola ostáva čistá (asercia na konci testu).
+  await expect(page.getByTestId("pairing-review-live-info-E2E-PR-CHYBA")).toHaveCount(0);
+
   // Nenapárovaný produkt (gather nenašiel u dodávateľa nič) — vlastná hláška.
   const nenajdenyKarta = page.getByTestId("pairing-review-card-E2E-PR-NENAJDENY");
   await expect(nenajdenyKarta).toBeVisible();
@@ -306,6 +326,12 @@ test("issue 409: panel kandidátov ukazuje obrázok KAŽDÉHO kandidáta; výber
   await expect(panel.locator("img")).toHaveCount(2);
   await expect(panel.locator("img").nth(0)).toHaveAttribute("src", E2E_CANDIDATE_IMAGE_DATA_URI);
   await expect(panel.locator("img").nth(1)).toHaveAttribute("src", E2E_ALT_CANDIDATE_IMAGE_DATA_URI);
+
+  // issue 422 — obaja kandidáti v paneli majú URL MIMO troch známych
+  // adaptérov ("e2e-dodavatel.example.com") — appka pre nich TICHO
+  // nezobrazí žiadnu živú cenu/dostupnosť, konzola ostáva čistá.
+  await expect(panel.getByTestId("pairing-review-panel-live-info-E2E-PR-PANEL-0")).toHaveCount(0);
+  await expect(panel.getByTestId("pairing-review-panel-live-info-E2E-PR-PANEL-1")).toHaveCount(0);
 
   await panel.getByTestId("pairing-review-panel-pick-E2E-PR-PANEL-1").click();
   // Filter "Všetky" ukazuje kartu ĎALEJ (na rozdiel od "Nezrevidované") — teraz

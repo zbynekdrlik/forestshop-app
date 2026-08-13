@@ -76,6 +76,20 @@ export interface PairingReviewItem {
   readonly priceMin: string | null;
   readonly priceMax: string | null;
   readonly currency: string | null;
+  /** issue 422 — pôvodná (pred zľavou) cena, rovnaká rozsahová agregácia
+   *  ako `priceMin`/`priceMax`. Frontend ju ukáže LEN keď sa líši od
+   *  priceMin/priceMax (rovnaký princíp ako stará appka's `cp.std !==
+   *  cp.price`). */
+  readonly standardPriceMin: string | null;
+  readonly standardPriceMax: string | null;
+  /** issue 422 — súčet `variant.stock` naprieč variantmi produktu. Zásoba
+   *  je v tomto obchode dekoratívna (`.claude/rules/catalog.md`), stále
+   *  užitočná na zobrazenie presne ako v starej appke. */
+  readonly stockTotal: number;
+  /** issue 422 — distinct neprázdne `variant.availabilityText` naprieč
+   *  variantmi, spojené " / " pri viacerých odlišných; `null` keď sú
+   *  všetky varianty bez textu. */
+  readonly availabilityText: string | null;
   /** Nikdy `null` — padá na `OWN_SHOP_SEARCH_BASE` fallback, presne ako stará appka. */
   readonly ourUrl: string;
   /** issue 402: `true` = `ourUrl` je LEN vyhľadávací fallback (žiadny riadok v `shop_product_url`), nie priamy odkaz na produkt — karta ho vizuálne odlíši. */
@@ -131,6 +145,10 @@ interface VariantRow {
   readonly missingSince: Date | null;
   readonly price: string | null;
   readonly currency: string | null;
+  /** issue 422 */
+  readonly standardPrice: string | null;
+  readonly stock: number;
+  readonly availabilityText: string;
 }
 
 /** Nejaký variant `sellable` → Skladom; inak nejaký `out_of_stock` a VIDITEĽNÝ
@@ -252,6 +270,10 @@ async function buildPairingReviewItems(db: Database, productKeys: string[]): Pro
       missingSince: variants.missingSince,
       price: variants.price,
       currency: variants.currency,
+      // issue 422
+      standardPrice: variants.standardPrice,
+      stock: variants.stock,
+      availabilityText: variants.availabilityText,
     })
     .from(variants)
     .where(inArray(variants.productKey, productKeys));
@@ -337,6 +359,30 @@ async function buildPairingReviewItems(db: Database, productKeys: string[]): Pro
     const priceMax = prices.length > 0 ? Math.max(...prices).toFixed(2) : null;
     const currency = productVariants.find((v) => v.currency !== null)?.currency ?? null;
 
+    // issue 422 — rovnaká rozsahová agregácia ako priceMin/Max vyššie.
+    const standardPrices = productVariants
+      .map((v) => v.standardPrice)
+      .filter((p): p is string => p !== null)
+      .map(Number)
+      .filter((n) => Number.isFinite(n));
+    const standardPriceMin = standardPrices.length > 0 ? Math.min(...standardPrices).toFixed(2) : null;
+    const standardPriceMax = standardPrices.length > 0 ? Math.max(...standardPrices).toFixed(2) : null;
+
+    const stockTotal = productVariants.reduce((sum, v) => sum + v.stock, 0);
+
+    // Distinct neprázdne texty naprieč variantmi, poradie prvého výskytu
+    // (rovnaký princíp ako `externalCodes` dedup vyššie v tejto funkcii).
+    const seenAvailabilityTexts = new Set<string>();
+    const availabilityTexts: string[] = [];
+    for (const v of productVariants) {
+      const text = v.availabilityText.trim();
+      if (text !== "" && !seenAvailabilityTexts.has(text)) {
+        seenAvailabilityTexts.add(text);
+        availabilityTexts.push(text);
+      }
+    }
+    const availabilityText = availabilityTexts.length > 0 ? availabilityTexts.join(" / ") : null;
+
     const effective = resolveEffectiveSupplierLink(product.internalNote, overrideByProduct.get(productKey) ?? null);
 
     const chosenUrl = set?.chosenUrl ?? null;
@@ -366,6 +412,10 @@ async function buildPairingReviewItems(db: Database, productKeys: string[]): Pro
       priceMin,
       priceMax,
       currency,
+      standardPriceMin,
+      standardPriceMax,
+      stockTotal,
+      availabilityText,
       ourUrl,
       ourUrlIsSearchFallback,
       ourImageUrl,

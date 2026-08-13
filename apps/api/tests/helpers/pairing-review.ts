@@ -23,6 +23,13 @@ export async function seedPairingReviewProduct(
       readonly productVisibility?: string;
       readonly missingSince?: Date | null;
       readonly price?: string | null;
+      /** issue 422 — voliteľné, chýbajúce necháva DB default (`null`). */
+      readonly standardPrice?: string | null;
+      /** issue 422 — voliteľné, chýbajúce necháva pôvodné správanie (`0`). */
+      readonly stock?: number;
+      /** issue 422 — voliteľné explicitný text; chýbajúce necháva pôvodné
+       *  odvodenie zo `state` (Skladom/Vypredané). */
+      readonly availabilityText?: string;
     }[];
   },
 ): Promise<void> {
@@ -44,11 +51,15 @@ export async function seedPairingReviewProduct(
       guid: productKey,
       externalCode: v.externalCode ?? null,
       name: over.name,
+      // `variant_money_needs_currency_ck` (`.claude/rules/database.md`) —
+      // menu treba nastaviť VŽDY, keď je nastavená hociktorá cena.
+      currency: v.price !== undefined || v.standardPrice !== undefined ? "EUR" : null,
       price: v.price ?? null,
-      stock: 0,
+      standardPrice: v.standardPrice ?? null,
+      stock: v.stock ?? 0,
       availabilityInStockText: "Skladom",
       availabilityOutOfStockText: "Vypredané",
-      availabilityText: v.state === "out_of_stock" ? "Vypredané" : "Skladom",
+      availabilityText: v.availabilityText ?? (v.state === "out_of_stock" ? "Vypredané" : "Skladom"),
       productVisibility: v.productVisibility ?? "visible",
       state: v.state ?? "sellable",
       missingSince: v.missingSince ?? null,

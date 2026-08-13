@@ -56,6 +56,10 @@ interface Telo {
     readonly productState: "sellable" | "out_of_stock" | "discontinued";
     readonly priceMin: string | null;
     readonly priceMax: string | null;
+    readonly standardPriceMin: string | null;
+    readonly standardPriceMax: string | null;
+    readonly stockTotal: number;
+    readonly availabilityText: string | null;
     readonly ourUrl: string;
     readonly ourUrlIsSearchFallback: boolean;
     readonly ourImageUrl: string | null;
@@ -317,4 +321,62 @@ it("total/gatheredTotal/linkedTotal sa počítajú nezávisle od pageSize", asyn
   const telo = (await (await app.request("/api/pairing-review?filter=unreviewed&page=1&pageSize=1", { headers: { cookie } })).json()) as Telo;
   expect(telo.total).toBe(2);
   expect(telo.items).toHaveLength(1);
+});
+
+// issue 422 — "naša strana": pôvodná (pred zľavou) cena, súčet zásoby,
+// dostupnostný text — rozšírenie `PairingReviewItem` o persistované polia
+// (žiadny live-fetch).
+it("issue 422: standardPriceMin/Max, stockTotal, availabilityText — jednoveľkostný produkt s pôvodnou cenou a skladom", async () => {
+  const { app, cookie, db } = await boot("citanie");
+  const snapshotId = await insertTestSnapshot(db);
+  await seedProduct(db, snapshotId, "PR-CENA-1", {
+    name: "Produkt so zľavou",
+    variants: [{ code: "PR-CENA-1/1", price: "49.90", standardPrice: "59.90", stock: 3, availabilityText: "Skladom" }],
+  });
+  await seedCandidateSet(db, "PR-CENA-1");
+
+  const telo = (await (await app.request("/api/pairing-review?filter=all", { headers: { cookie } })).json()) as Telo;
+  const item = telo.items.find((i) => i.productKey === "PR-CENA-1");
+  expect(item?.priceMin).toBe("49.90");
+  expect(item?.standardPriceMin).toBe("59.90");
+  expect(item?.standardPriceMax).toBe("59.90");
+  expect(item?.stockTotal).toBe(3);
+  expect(item?.availabilityText).toBe("Skladom");
+});
+
+it("issue 422: viacveľkostný produkt — standardPrice/stock/availabilityText sa agregujú naprieč variantmi (min/max/súčet/distinct join)", async () => {
+  const { app, cookie, db } = await boot("citanie");
+  const snapshotId = await insertTestSnapshot(db);
+  await seedProduct(db, snapshotId, "PR-CENA-2", {
+    name: "Produkt viac veľkostí",
+    variants: [
+      { code: "PR-CENA-2/S", price: "10.00", standardPrice: "12.00", stock: 2, availabilityText: "Skladom" },
+      { code: "PR-CENA-2/M", price: "10.00", standardPrice: "15.00", stock: 5, availabilityText: "Posledný kus" },
+    ],
+  });
+  await seedCandidateSet(db, "PR-CENA-2");
+
+  const telo = (await (await app.request("/api/pairing-review?filter=all", { headers: { cookie } })).json()) as Telo;
+  const item = telo.items.find((i) => i.productKey === "PR-CENA-2");
+  expect(item?.standardPriceMin).toBe("12.00");
+  expect(item?.standardPriceMax).toBe("15.00");
+  expect(item?.stockTotal).toBe(7);
+  expect(item?.availabilityText).toBe("Skladom / Posledný kus");
+});
+
+it("issue 422: bez pôvodnej ceny/zásoby/textu — všetky tri polia sú null/0/null, nikdy nevyhodí", async () => {
+  const { app, cookie, db } = await boot("citanie");
+  const snapshotId = await insertTestSnapshot(db);
+  await seedProduct(db, snapshotId, "PR-CENA-PRAZDNY", {
+    name: "Produkt bez cenových dát",
+    variants: [{ code: "PR-CENA-PRAZDNY/1", availabilityText: "" }],
+  });
+  await seedCandidateSet(db, "PR-CENA-PRAZDNY");
+
+  const telo = (await (await app.request("/api/pairing-review?filter=all", { headers: { cookie } })).json()) as Telo;
+  const item = telo.items.find((i) => i.productKey === "PR-CENA-PRAZDNY");
+  expect(item?.standardPriceMin).toBeNull();
+  expect(item?.standardPriceMax).toBeNull();
+  expect(item?.stockTotal).toBe(0);
+  expect(item?.availabilityText).toBeNull();
 });

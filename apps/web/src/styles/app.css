@@ -3084,6 +3084,17 @@ a.upozornenie-title:hover {
   color: var(--fs-ink);
   margin: var(--fs-space-1) 0;
 }
+/* issue 422 — pôvodná (pred zľavou) cena, vedľa aktuálnej ceny. */
+.pairing-review-price-original {
+  font-weight: normal;
+  color: var(--fs-ink-muted);
+}
+/* issue 422 — súčet zásoby + dostupnostný text ("naša strana", persistované). */
+.pairing-review-stock {
+  font-size: var(--fs-text-sm);
+  color: var(--fs-ink-muted);
+  margin: var(--fs-space-1) 0;
+}
 .pairing-review-imgbox {
   margin-top: var(--fs-space-2);
 }
@@ -3114,6 +3125,20 @@ a.upozornenie-title:hover {
 }
 .pairing-review-verdict-unsure {
   color: var(--fs-warning);
+}
+/* issue 422 — 🤖 AI zdôvodnenie zhody, vedľa navrhnutého kandidáta. */
+.pairing-review-reason {
+  font-size: var(--fs-text-xs);
+  color: var(--fs-ink-muted);
+  font-style: italic;
+  margin-top: var(--fs-space-1);
+}
+/* issue 422 — živá cena+dostupnosť dodávateľa (lazy-fetch), na karte aj v paneli. */
+.pairing-review-supplier-live,
+.pairing-review-panel-candidate-live {
+  font-size: var(--fs-text-xs);
+  color: var(--fs-ink-muted);
+  margin-top: var(--fs-space-1);
 }
 /* issue 387 E6 — rozhodovacia UX (nahradzuje E5's statický "Rozhodovanie
    príde v ďalšej etape" placeholder text). */

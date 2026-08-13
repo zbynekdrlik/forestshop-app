@@ -4079,3 +4079,83 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
 - Súvisiace, NEMENENÉ týmto fix-forward: issue 425 (chýbajúci automatický
   rollback v `deploy.yml` pri zlyhanom overení — samostatný, už filed
   ticket o deploy workflow odolnosti, nie o tejto migračnej príčine).
+
+## 2026-08-13 — #422 (Párovanie: AI zdôvodnenie zhody + živé ceny/dostupnosť)
+
+- Solo ticket (audit úplnosti vs stará appka, mandát z issue 399).
+  Worktree dispatch, verzia `0.3.0-dev.251→.252` (`962c979`), prvý commit.
+- Design komentár PRED prvým kódovým commitom:
+  https://github.com/zbynekdrlik/forestshop-app/issues/422#issuecomment-5286316390
+  — root cause (`chosenReason` je pre nenapárované produkty ŠTRUKTURÁLNE
+  vždy `null`, `run.ts`'s auto-fill `pickBest()`, odchýlka od starej appky)
+  + 3 zvažované prístupy pre živé info (supplier-stock reuse zamietnuté —
+  fail-closed brána pre INÚ automatizáciu; generický regex zamietnutý po
+  živom overení — betalov nemá JSON-LD, karuselová kolízia na CSS triedach;
+  vybrané — per-dodávateľ `extractDetailMeta` na `SupplierAdapter`).
+  Validácia platnosti ticketu (STEP 0):
+  https://github.com/zbynekdrlik/forestshop-app/issues/422#issuecomment-5286318778
+- Implementácia:
+  - `chosenReason` renderovaný na karte (`ChosenCandidateExtras`,
+    `PairingReviewPanelParts.tsx`) LEN vedľa `chosenCandidate !== null`.
+  - "Naša strana": `standardPriceMin/Max`/`stockTotal`/`availabilityText`
+    pridané do `PairingReviewItem` (`pairing-review/queries.ts`), rovnaká
+    agregácia ako existujúce `priceMin/Max`.
+  - "Dodávateľská strana": `SupplierAdapter.extractDetailMeta` (nové pole
+    interface, `adapters/types.ts`) — WETLAND/ODIMON zdieľajú JSON-LD
+    helper (`adapters/detail-meta.ts`, znovupoužíva `supplier-stock/
+    parse.ts`'s `fromJsonLd`), BETALOV vlastná `var prodData` extrakcia
+    (`betalov.ts`). Nový `adapterForUrl` (`registry.ts`, host lookup).
+    Orchestrácia `pairing-search/live-detail-info.ts`
+    (`createLiveSupplierInfoFetcher`, per-URL cache vrátane zlyhaní).
+    Nová trasa `GET /api/pairing-review/live-supplier-info`
+    (`pairing-review-routes.ts`, registrovaná PRED `:productKey`), DI cez
+    `registerPairingReviewRoutes`'s nový `searchClient?` parameter +
+    `createApp`'s `pairingSearchClient?` option.
+    Frontend: `useLiveSupplierInfo.ts` hook (concurrency-cap 4, mount-time
+    lazy fetch), zapojený v karte AJ paneli top-8 kandidátov.
+  - 3 nové fixtúry (`fixtures/{wetland,odimon,betalov}-detail-cena-
+    dostupnost.html`), orezané zo živo overených reálnych stránok
+    (13. 8. 2026).
+- RED→GREEN: gap 1 (chosenReason) aj gap 2 (naša strana) sú UI/query
+  doplnky nad existujúcimi dátami — testy pridané priamo (feature-style,
+  test-first pre novú `extractDetailMeta`/`adapterForUrl`/
+  `createLiveSupplierInfoFetcher` logiku, keďže ide o nové správanie, nie
+  bug fix nad existujúcou funkciou).
+- Testy pridané: `adapters/detail-meta.test.ts` (9), `registry.test.ts`
+  (+2), `live-detail-info.test.ts` (5), `pairing-review-http.integration
+  .test.ts` (+3), nový `pairing-review-live-supplier-info-http.integration
+  .test.ts` (6), `PairingReviewCard.liveInfo.test.tsx` (nový súbor, 9 —
+  vyčlenené OD `PairingReviewCard.test.tsx` kvôli `max-lines: 400`),
+  `PairingReviewPanelParts.test.tsx` (+4).
+- Plný lokálny beh na izolovanej throwaway Postgres inštancii (port 5434):
+  typecheck + lint čisté; plný unit balík (`apps/api` 75 súborov/978
+  testov + `apps/web` 86 súborov/658 testov) zelený; scoped pairing-review
+  + pairing-search integračná sada (8 súborov/78 testov) zelená; plná
+  lokálna e2e sada 60/60 zelená (žiadny nový console error, `catalog
+  .spec.ts`'s pevné počty nedotknuté — žiadny nový produkt/variant, len
+  price/standardPrice/stock na existujúcom fixtúrovom variante).
+- Self-review (fresh-context `general-purpose` subagent, plný diff proti
+  `cc174bb`): VERDICT 0 🔴, 1 🟡, 4 🔵. Opravené `c5d88a5`: 🟡
+  `live-detail-info.ts`'s cache dostala `CACHE_TTL_MS = 15 min` (appka
+  beží ako dlhoživý kontajner, cache bez TTL by "živé" info navždy
+  zamrazila na prvej hodnote/zlyhaní) + 3 nové testy; 🔵 `<div>` vnútri
+  `<span>` v `PairingReviewPanelParts.tsx` (neplatný HTML5) opravené na
+  `<div>` obal. Zvyšné 3 🔵 nálezy ponechané s dôvodom (komentár na
+  tickete: https://github.com/zbynekdrlik/forestshop-app/issues/422#issuecomment-5286854484)
+  — client-side dedup (server cache už rieši reálny prípad), JSON-LD
+  price-loss-on-unknown-token (existujúce, inde spoliehané `supplier-
+  stock` správanie, mimo rozsahu), case-sensitive `belongsToBase`
+  (existujúca, nezmenená funkcia, potvrdené nezneužiteľné). Opravy
+  overené: typecheck+lint čisté, `live-detail-info.test.ts` 8/8 (5+3 nové
+  TTL testy), `apps/api` plný unit balík 981/981 (978+3 po review
+  testoch), scoped
+  integračné testy (`pairing-review-http`/`pairing-review-live-supplier-
+  info-http`) 23/23, `pairing-review.spec.ts` + `pairing-review-split
+  .spec.ts` e2e 9/9.
+- Playbook: `.claude/rules/pairing-search.md`'s nová sekcia "issue 422 —
+  AI zdôvodnenie zhody + živé ceny/dostupnosť" — `chosenReason` auto-fill
+  odchýlka, trojica RÔZNYCH extrakcií (JSON-LD zdieľané WETLAND/ODIMON,
+  vlastná `prodData` pre BETALOV), ODIMON JSON-LD-môže-klamať akceptované
+  riziko pre informatívny náhľad, `adapterForUrl` zámerné zúženie rozsahu,
+  `variant_money_needs_currency_ck` past v seed helperoch, a (po review)
+  "hodnota vs. štruktúra" pravidlo pre TTL na module-level cache.

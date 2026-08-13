@@ -8,6 +8,8 @@ import { supplierLinkUrlBody } from "../modules/orders/supplier-link-assignment.
 import { setPairingDecision } from "../modules/pairing-review/decisions.js";
 import { getPairingReviewItem, listPairingCandidatesForProduct, listPairingReview } from "../modules/pairing-review/queries.js";
 import { listPairingVariantLinks, setPairingVariantLink } from "../modules/pairing-review/variant-links.js";
+import { SearchClient } from "../modules/pairing-search/client.js";
+import { createLiveSupplierInfoFetcher } from "../modules/pairing-search/live-detail-info.js";
 import { isStateWritebackEnabled, setStateWritebackEnabled } from "../modules/shoptet-writeback/state-writeback-settings.js";
 import { requireRole, requireUser, type AppBindings } from "./middleware.js";
 import { requireSameOrigin } from "./origin-check.js";
@@ -55,6 +57,12 @@ const pairingDecisionBody = z.discriminatedUnion("status", [
 
 const setStateWritebackEnabledBody = z.object({ enabled: z.boolean() });
 
+// issue 422 — rovnaká http(s)+formula-injection validácia ako ukladaná
+// dodávateľská linka (`supplierLinkUrlBody`, zdieľané) — tu len na ČÍTANIE
+// (query parameter, nikdy sa nezapisuje), ale schéma je rovnako vhodná:
+// odmietne nevalidný/nie-http(s) vstup skôr, než sa vôbec pokúsi o fetch.
+const liveSupplierInfoQuery = z.object({ url: supplierLinkUrlBody.shape.url });
+
 // issue 399 — `code` v TELE (nie ceste), rovnaký dôvod ako `pairing.md`'s
 // `variantCode`-v-tele pravidlo (kód variantu nesie lomku, napr.
 // "40237/3XL" — necháva sa neoverené, či by prešiel cez URL cestový
@@ -65,7 +73,23 @@ const pairingVariantLinkBody = z.object({
   url: z.union([supplierLinkUrlBody.shape.url, z.literal("")]).nullable(),
 });
 
-export function registerPairingReviewRoutes(app: Hono<AppBindings>, db: Database): void {
+// issue 422 — `searchClient` je voliteľný (rovnaká DI disciplína ako
+// `fetchSupplierPage`/`restock`'s config v `http/app.ts`): default REÁLNY
+// `SearchClient` (rovnaký vzor ako `pairing-search/run.ts`'s vlastný
+// `options.searchClient ?? new SearchClient()`), testy si dodajú vlastný s
+// injektovaným `Fetcher` a NIKDY nechodia na skutočnú dodávateľskú stránku.
+export function registerPairingReviewRoutes(app: Hono<AppBindings>, db: Database, searchClient: SearchClient = new SearchClient()): void {
+  // issue 422 — literálna 2-segmentová cesta MUSÍ byť registrovaná PRED
+  // `:productKey` nižšie (`.claude/rules/http-routes.md`'s poradie-registrácie
+  // pravidlo) — rovnaké miesto/dôvod ako `state-writeback-enabled` vyššie.
+  const fetchLiveSupplierInfo = createLiveSupplierInfoFetcher(searchClient);
+  app.get(
+    "/api/pairing-review/live-supplier-info",
+    requireUser(db),
+    zValidator("query", liveSupplierInfoQuery),
+    async (c) => c.json(await fetchLiveSupplierInfo(c.req.valid("query").url)),
+  );
+
   // issue 387 E7 — `/api/pairing-review/state-writeback-enabled` má INÝ
   // segmentový tvar než `:productKey/candidates`/`:productKey/decision`
   // nižšie (2 segmenty za prefixom, nie `:productKey` + ďalší literál), takže
