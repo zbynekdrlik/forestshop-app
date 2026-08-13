@@ -171,6 +171,7 @@ it("ordersImportJob s nakonfigurovaným runOrdersIngest naň deleguje a vráti j
     pseudoItemCount: 0,
     issueCount: 0,
     skippedResolvedReturnCount: 0,
+    deletedStaleLineCount: 0,
     rawPath: "/tmp/fake.csv.gz",
   };
   let receivedNow: Date | undefined;

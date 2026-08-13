@@ -31,7 +31,8 @@ function popis(result: OrdersIngestResult): string {
         `Import prijatý: ${String(result.orderCount)} objednávok, ` +
         `${String(result.lineCount)} riadkov, ${String(result.skippedItemCount)} položiek ` +
         `neznámeho variantu preskočených, ${String(result.pseudoItemCount)} položiek dopravy/platby/zľavy ` +
-        `ignorovaných, ${String(result.issueCount)} problémov so záznamami.`
+        `ignorovaných, ${String(result.issueCount)} problémov so záznamami, ` +
+        `${String(result.deletedStaleLineCount)} zastaraných riadkov (vymenený/odstránený produkt) zmazaných.`
       );
     case "rejected":
       return `Import odmietnutý: ${result.reason}`;
