@@ -7,7 +7,7 @@ function product(name: string, externalCodes: readonly string[] = []): PairingPr
 }
 
 function candidate(name: string, url: string, code: string | null = null): PairingCandidate {
-  return { name, url, code, price: null, rawScore: 0, codeHit: false };
+  return { name, url, code, price: null, imageUrl: null, rawScore: 0, codeHit: false };
 }
 
 // Fixtúry prevzaté z `tests/test_ranking.py` starej appky (commit 60b6164,

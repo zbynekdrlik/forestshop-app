@@ -23,23 +23,36 @@
 // Krok 2b nižšie (`.product-property-item`) je NOVÝ, pridaný medzi Nette a
 // generický fallback — bez neho by ODIMON kandidáti VŽDY skončili na
 // `unsure` (bezpečné, ale zbytočne slabé pokrytie tretiny dodávateľov).
+//
+// issue 397: `image` — `og:image` z TEJ ISTEJ detailnej HTML, čo táto
+// funkcia aj tak sťahuje na kódovú kaskádu (ŽIADEN extra request). Použité
+// v `run.ts` LEN ako fallback, keď adaptér vlastný obrázok z výsledkovej
+// karty nenašiel — filtrovaný cez `resolveImageUrl`'s šumový zoznam
+// (`adapters/url.ts`), lebo BETALOV's `og:image` je na tejto doméne VŽDY
+// stránkové logo (živo overené, design komentár na tickete).
 
 import * as cheerio from "cheerio";
+import { resolveImageUrl } from "./adapters/url.js";
 import { codePresent } from "./normalize.js";
 import type { SearchClient } from "./client.js";
 import type { PairingProduct, PairingVerdict } from "./types.js";
 import { log } from "../../logger.js";
 
 /** Výstup kódovej kaskády — port `extract_page`'s title+code polí (price sa
- *  neportuje, viď komentár vyššie). */
+ *  neportuje, viď komentár vyššie) + `image` (issue 397, mimo portu). */
 export interface PageExtract {
   readonly title: string;
   readonly code: string | null;
+  readonly image: string | null;
 }
 
 export interface VerifyOutcome {
   readonly verdict: PairingVerdict;
   readonly reason: string;
+  /** issue 397 — `og:image` fallback z tej istej stránky, `null` keď
+   *  chýba/je šumový (`resolveImageUrl`). Volajúci (`run.ts`) ho použije
+   *  LEN keď adaptér vlastný obrázok kandidáta nenašiel. */
+  readonly imageUrl: string | null;
 }
 
 const WHITESPACE_RUN = /\s+/g;
@@ -137,10 +150,28 @@ function extractCode($: cheerio.CheerioAPI): string | null {
   );
 }
 
-/** Port `extract_page` (title+code časť — price sa neportuje). */
-export function extractPage(html: string): PageExtract {
+/**
+ * issue 397 (mimo doslovného portu): `<meta property="og:image">` —
+ * jediný obrázkový zdroj tohto fallbacku (dispatch: "fallback og:image z
+ * detailu", nikdy celá stará appka's gallery-selektorová kaskáda —
+ * `adaptéry` už dnes reálne dávajú obrázok priamo z výsledkovej karty pre
+ * všetkých troch dodávateľov, toto je len defenzívna posledná záchrana).
+ * `resolveImageUrl` (zdieľané s adaptérmi) rieši relatívny `content` voči
+ * `detailUrl` A filtruje šumové obrázky (logo/placeholder/…) — bez tohto
+ * by BETALOV's stránkové logo (`og:image` je tam VŽDY logo, živo overené)
+ * skončilo ako "obrázok kandidáta".
+ */
+function extractOgImage($: cheerio.CheerioAPI, detailUrl: string): string | null {
+  const content = $('meta[property="og:image"]').first().attr("content");
+  return resolveImageUrl([content], detailUrl);
+}
+
+/** Port `extract_page` (title+code časť — price sa neportuje) + `image`
+ *  (issue 397). `detailUrl` je stránka, z ktorej `html` pochádza —
+ *  potrebná na rezolúciu relatívnej `og:image` URL (`resolveImageUrl`). */
+export function extractPage(html: string, detailUrl: string): PageExtract {
   const $ = cheerio.load(html);
-  return { title: collapseWhitespace(extractTitle($)), code: extractCode($) };
+  return { title: collapseWhitespace(extractTitle($)), code: extractCode($), image: extractOgImage($, detailUrl) };
 }
 
 /**
@@ -152,16 +183,17 @@ export function extractPage(html: string): PageExtract {
  */
 export function codeVerdict(product: PairingProduct, page: PageExtract): VerifyOutcome {
   if (product.externalCodes.length === 0) {
-    return { verdict: "unsure", reason: "produkt nemá žiadny external kód na overenie" };
+    return { verdict: "unsure", reason: "produkt nemá žiadny external kód na overenie", imageUrl: page.image };
   }
   const hay = [page.title, page.code ?? ""].filter((part) => part.length > 0).join(" ");
   const matchedCode = product.externalCodes.find((code) => codePresent(code, hay));
   if (matchedCode !== undefined) {
-    return { verdict: "ok", reason: `kód ${matchedCode} sa nachádza na stránke kandidáta` };
+    return { verdict: "ok", reason: `kód ${matchedCode} sa nachádza na stránke kandidáta`, imageUrl: page.image };
   }
   return {
     verdict: "unsure",
     reason: `žiadny z kódov produktu (${product.externalCodes.join(", ")}) sa na stránke kandidáta nenašiel`,
+    imageUrl: page.image,
   };
 }
 
@@ -178,7 +210,9 @@ export async function verifyCandidateCode(
   product: PairingProduct,
 ): Promise<VerifyOutcome> {
   if (product.externalCodes.length === 0) {
-    return { verdict: "unsure", reason: "produkt nemá žiadny external kód na overenie" };
+    // Žiadny fetch (šetrí requesty, nezmenené E4 správanie) — teda ani
+    // žiadna šanca na `og:image` fallback, `imageUrl` ostáva `null`.
+    return { verdict: "unsure", reason: "produkt nemá žiadny external kód na overenie", imageUrl: null };
   }
   // Sieťová ANI parse chyba sa nikdy nevyhodí ďalej — obe (fetch aj
   // extractPage/codeVerdict) sú v JEDNOM try, aby zlyhanie overenia nikdy
@@ -187,10 +221,10 @@ export async function verifyCandidateCode(
   // len fetch, nie parsovanie).
   try {
     const html = await client.fetchPage(url);
-    return codeVerdict(product, extractPage(html));
+    return codeVerdict(product, extractPage(html, url));
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     log.warn({ url, message }, "pairing-search: verify zlyhal, verdikt unsure");
-    return { verdict: "unsure", reason: `overenie kandidáta zlyhalo (${message})` };
+    return { verdict: "unsure", reason: `overenie kandidáta zlyhalo (${message})`, imageUrl: null };
   }
 }

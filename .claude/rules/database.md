@@ -63,6 +63,18 @@ paths:
   prechádza bez varovania). Kým sa obe knižnice nezarovnajú na rovnakú
   generáciu, každú vygenerovanú `.sql` migráciu si pred commitom prečítaj —
   neber jej obsah len na základe toho, že `db:generate` prebehlo bez chyby.
+- **Paralelné worktree workery generujú KOLÍZNE čísla migrácií** (13. 8. 2026:
+  issue 402 aj issue 397 vytvorili nezávisle `0050_*.sql` — obe vetvy
+  vychádzali z rovnakého dev). Supervisor to rieši PRI INTEGRÁCII: migrácia,
+  ktorá už je NASADENÁ na produkcii (over `origin/main` ancestry, nie poradie
+  merge-ov v dev!), si číslo nechá; nenasadená sa prečísluje (`git mv`) +
+  `meta/_journal.json` (idx, tag, `when` ostro rastúce) + jej snapshot dostane
+  `prevId` = id ponechanej migrácie — a ak snapshot druhej vetvy neobsahuje
+  zmeny prvej, treba ho REKONŠTRUOVAŤ (snapshot ponechanej + schema-zmeny
+  prečíslovanej), inak najbližší `db:generate` tie zmeny zahodí. Po vyriešení
+  over na čistom Postgrese (`docker run … postgres:18` + `db:migrate`;
+  premenovanie nemení hash — drizzle hashuje OBSAH .sql). Prevencia: dvom
+  súbežným workerom, čo oba pridajú migráciu, prideľ čísla dopredu ako verzie.
 - **Funkcia, ktorá má bežať AJ na top-level `db`, AJ vnútri `db.transaction(async (tx) => ...)`,
   nesmie typovať svoj parameter ako `Database`** (`db/client.ts`'s
   `NodePgDatabase<schema> & {$client: Pool}`) — `tx` je `PgTransaction`,

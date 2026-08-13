@@ -42,6 +42,9 @@ const OWN_SHOP_SEARCH_BASE = "https://www.forestshop.sk/vyhladavanie/?string=";
 export interface PairingReviewChosenCandidate {
   readonly name: string;
   readonly url: string;
+  /** issue 397 — obrázok kandidáta (z adaptéra, alebo `verify.ts`'s
+   *  `og:image` fallback), `null` keď žiadny zdroj neposkytol použiteľný. */
+  readonly imageUrl: string | null;
   readonly rawScore: number;
   readonly codeHit: boolean;
 }
@@ -190,6 +193,7 @@ export async function listPairingReview(db: Database, input: PairingReviewSearch
       productKey: pairingCandidates.productKey,
       name: pairingCandidates.name,
       url: pairingCandidates.url,
+      imageUrl: pairingCandidates.imageUrl,
       rawScore: pairingCandidates.rawScore,
       codeHit: pairingCandidates.codeHit,
     })
@@ -270,7 +274,13 @@ export async function listPairingReview(db: Database, input: PairingReviewSearch
     const chosenCandidate: PairingReviewChosenCandidate | null =
       chosenCandidateRow === undefined
         ? null
-        : { name: chosenCandidateRow.name, url: chosenCandidateRow.url, rawScore: Number(chosenCandidateRow.rawScore), codeHit: chosenCandidateRow.codeHit };
+        : {
+            name: chosenCandidateRow.name,
+            url: chosenCandidateRow.url,
+            imageUrl: chosenCandidateRow.imageUrl,
+            rawScore: Number(chosenCandidateRow.rawScore),
+            codeHit: chosenCandidateRow.codeHit,
+          };
 
     const decisionRow = decisionByProduct.get(set.productKey);
     const decision: PairingReviewDecision | null =

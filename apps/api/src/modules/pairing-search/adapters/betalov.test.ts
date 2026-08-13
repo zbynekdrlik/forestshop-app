@@ -21,11 +21,16 @@ describe("parseBetalovSearch", () => {
       url: "https://www.huntingshop.eu/detske-outdoorove-nohavice-combi-14695",
       code: null,
       price: null,
+      // issue 397: `img.product-image` je REÁLNE prítomný v tejto naživo
+      // zachytenej fixtúre (nebolo treba dopĺňať).
+      imageUrl: "https://www.huntingshop.eu/upload/images/product/md__14695-detske-outdoorove-nohavice-combi-1.webp",
       rawScore: 0,
       codeHit: false,
     });
     expect(candidates[1]?.name).toBe("Armotion Class-T dámske nohavice");
+    expect(candidates[1]?.imageUrl).toBe("https://www.huntingshop.eu/upload/images/product/md__14306-armotion-class-t-damske-nohavice-1.webp");
     expect(candidates[2]?.name).toBe("WADERA - Detské krátke nohavice - Hnedé");
+    expect(candidates[2]?.imageUrl).toBe("https://www.huntingshop.eu/upload/images/product/md__14266-wadera-detske-kratke-nohavice-hnede-1.webp");
   });
 
   it("dedups the repeated card by canonical URL", () => {
@@ -56,6 +61,7 @@ describe("parseBetalovSearch", () => {
         url: "https://www.huntingshop.eu/len-title-odkaz",
         code: null,
         price: null,
+        imageUrl: null,
         rawScore: 0,
         codeHit: false,
       },
@@ -72,6 +78,7 @@ describe("parseBetalovSearch", () => {
         url: "https://www.huntingshop.eu/x",
         code: null,
         price: null,
+        imageUrl: null,
         rawScore: 0,
         codeHit: false,
       },
@@ -90,10 +97,18 @@ describe("parseBetalovSearch", () => {
         url: "https://www.huntingshop.eu/dobra",
         code: null,
         price: null,
+        imageUrl: null,
         rawScore: 0,
         codeHit: false,
       },
     ]);
+  });
+
+  it("issue 397: šumový obrázok (.svg ikonka) sa filtruje na imageUrl null, aj keď path nie je vylúčená", () => {
+    const html =
+      '<div class="product-col"><a href="/x" class="mh-100"><img class="product-image" src="/upload/images/icons/cart.svg"></a>' +
+      '<h3 class="product-title"><a href="x">Produkt s ikonkou namiesto fotky</a></h3></div>';
+    expect(parseBetalovSearch(html)[0]?.imageUrl).toBeNull();
   });
 });
 
