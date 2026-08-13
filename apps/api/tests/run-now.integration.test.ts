@@ -1,6 +1,5 @@
 import pg from "pg";
 import { afterEach, describe, expect, it } from "vitest";
-import type { Database } from "../src/db/client.js";
 import { getLatestJobRun } from "../src/modules/scheduler/queries.js";
 import { startRunNow, type RunNowOutcome } from "../src/modules/scheduler/run-now.js";
 import { withCleanDb } from "./helpers/db.js";
@@ -141,9 +140,10 @@ describe("startRunNow — zlyhanie PRI VKLADANÍ 'running' riadku (zámok už bo
             throw new Error("simulované zlyhanie vloženia job_run riadku");
           };
         }
-        return Reflect.get(target, prop, receiver);
+        const value: unknown = Reflect.get(target, prop, receiver);
+        return value;
       },
-    }) as Database;
+    });
 
     await expect(
       startRunNow(
