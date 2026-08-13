@@ -782,3 +782,24 @@ vyradilo #311 aj jeho playbook súbor (návrh, sekcia 4); router v
   substring "hľadať" ⊂ "vyhľadať") AJ VLASTNÁ "Hľadať / opraviť" pod-
   záložka (prefix). `{ name: "Hľadať", exact: true }` je jediná
   jednoznačná cesta k skutočnému submit tlačidlu.
+- **Súhrnné "Hotovo"/potvrdzovacie tlačidlo NAD viacerými NEZÁVISLE
+  ukladajúcimi sa RIADKAMI (každý riadok VLASTný `rowBusy` `useState`)
+  potrebuje tento stav VYZDVIHNUTÝ do rodiča — nestačí len rodičov
+  spoločný `busy` prop.** Nájdené v self-review (nie testom):
+  `PairingReviewSplitPanel.tsx`'s "✓ Hotovo – rozdelené" kontrolovalo len
+  `busy` (karta-úrovňová) a `variants === null`, nie `rowBusy` VNÚTRI
+  `VariantRow`u (súkromný, rodičovi neviditeľný stav) — klik počas
+  rozbehnutého zápisu JEDNÉHO riadku mohol vidieť ešte-nezapísaný
+  (starý) stav a zbytočne ukázať konzervatívny potvrdzovací dialóg. Fix:
+  rodič drží `Set<string>` kódov s bežiacim zápisom (`busyRowCodes`), dieťa
+  (`VariantRow`) hlási zmenu cez `onBusyChange(code, busy)` callback pri
+  `setRowBusy` (oba smery — `true` aj `false`, symetricky), rodičovo
+  tlačidlo pridá `anyRowBusy = busyRowCodes.size > 0` do svojej `disabled`
+  podmienky. Iný tvar ako existujúci "per-item vs. group busy-guard,
+  disabled v OBOCH smeroch" vzor (`.claude/rules/frontend-design.md`,
+  issue 60) — TAM sú dva SÚRODENECKÉ akcie (jedna na riadku, jedna nad
+  skupinou), TU je to N nezávislých DETÍ hlásiacich svoj stav JEDNÉMU
+  rodičovmu tlačidlu — pri KAŽDOM ĎALŠOM "spoločné Hotovo/Uložiť nad
+  zoznamom nezávisle sa ukladajúcich riadkov" v tejto appke over, či
+  riadky majú VLASTNÝ busy stav, ktorý treba vyzdvihnúť rovnakým
+  callback vzorom.
