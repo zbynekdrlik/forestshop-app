@@ -143,6 +143,23 @@ function postgresErrorCode(error: unknown): string | undefined {
   return undefined;
 }
 
+// Code review finding: the "resolves fast, never hangs" bound previously
+// hardcoded an UNVERIFIED assumption (Postgres's `deadlock_timeout`
+// defaults to 1s). Nothing in this repo overrides it today, but reading the
+// LIVE value directly (instead of assuming it) means a future config change
+// can never turn this into a confusing near-timeout failure — the bound
+// below scales with whatever is ACTUALLY configured.
+async function getDeadlockTimeoutMs(client: pg.Client): Promise<number> {
+  const { rows } = await client.query<{ deadlock_timeout: string }>("SHOW deadlock_timeout");
+  const raw = rows[0]?.deadlock_timeout;
+  const match = raw === undefined ? null : /^(\d+)(ms|s|min|h|d)?$/.exec(raw.trim());
+  if (match === null) return 1000; // nerozpoznaný tvar — bezpečný predvolený predpoklad (1s)
+  const value = Number(match[1]);
+  const unit = match[2] ?? "ms";
+  const multiplierByUnit: Record<string, number> = { ms: 1, s: 1000, min: 60_000, h: 3_600_000, d: 86_400_000 };
+  return value * (multiplierByUnit[unit] ?? 1);
+}
+
 it(
   "reconciliation DELETE vs. hromadné 'objednané': skutočný AB-BA cyklus sa vyrieši rýchlym Postgres deadlock-abortom, nikdy nekonečným zaseknutím/hladovaním",
   async () => {
@@ -170,22 +187,30 @@ it(
 
     const databaseUrl = process.env["DATABASE_URL"];
     if (databaseUrl === undefined || databaseUrl === "") throw new Error("Integračné testy potrebujú DATABASE_URL");
+    // Code review finding: konštrukcia/pripojenie/prvý zámok bežali PRED
+    // `try` blokom — zlyhanie na ktoromkoľvek z týchto krokov by oba
+    // klienty nechalo bez `.end()`. Presunuté DOVNÚTRA `try`/`finally`.
     const rawClient = new pg.Client({ connectionString: databaseUrl });
     const pollClient = new pg.Client({ connectionString: databaseUrl });
-    await rawClient.connect();
-    await pollClient.connect();
-    const rawClientPid = await getBackendPid(rawClient);
-    const pollClientPid = await getBackendPid(pollClient);
 
     let ingestSettled: PromiseSettledResult<Awaited<ReturnType<typeof ingestOrders>>> | undefined;
     let orderLockSettled: PromiseSettledResult<pg.QueryResult<{ id: string }>> | undefined;
 
-    await rawClient.query("BEGIN");
-    // KROK 1: zamkne `order_line` riadok PRED `order` riadkom — opačné
-    // poradie, aké má `ingestOrders`'s vlastný upsert cyklus.
-    await rawClient.query('SELECT id FROM order_line WHERE id = $1 FOR UPDATE', [staryRiadok.id]);
-
     try {
+      await rawClient.connect();
+      await pollClient.connect();
+      const rawClientPid = await getBackendPid(rawClient);
+      const pollClientPid = await getBackendPid(pollClient);
+      // Code review finding: hranica "rýchle riešenie" nižšie NESMIE
+      // spoliehať na NEOVERENÝ predpoklad o `deadlock_timeout` — prečíta sa
+      // priamo z bežiacej DB.
+      const deadlockTimeoutMs = await getDeadlockTimeoutMs(pollClient);
+
+      await rawClient.query("BEGIN");
+      // KROK 1: zamkne `order_line` riadok PRED `order` riadkom — opačné
+      // poradie, aké má `ingestOrders`'s vlastný upsert cyklus.
+      await rawClient.query('SELECT id FROM order_line WHERE id = $1 FOR UPDATE', [staryRiadok.id]);
+
       const ingestPromise = ingestOrders(db, { fetchExport: fetcherOf(zmenena), now: NOW, rawDir: dir, windowStart: WINDOW_START, windowEnd: WINDOW_END });
 
       // Prvá polovica cyklu: PRÁVE TENTO (ingestOrders's) backend, a žiadny
@@ -205,11 +230,13 @@ it(
       [ingestSettled, orderLockSettled] = await Promise.allSettled([ingestPromise, orderLockPromise]);
       const resolvedWithinMs = Date.now() - cycleFormedAt;
 
-      // Postgresov deadlock detektor beží na `deadlock_timeout` (predvolene
-      // 1s) — 10s je veľkorysá rezerva nad tým (ďaleko pod 45s test
-      // timeoutom), ale STÁLE ďaleko pod tým, ako by vyzeralo skutočné
+      // Postgresov deadlock detektor beží na ŽIVO PREČÍTANEJ
+      // `deadlock_timeout` hodnote (predvolene 1s) — 5-násobná rezerva nad
+      // tým (minimálne 10s, ďaleko pod 45s test timeoutom) prežije aj
+      // budúcu zmenu tejto DB nastavenia bez zavádzajúceho near-timeout
+      // zlyhania, ale je STÁLE ďaleko pod tým, ako by vyzeralo skutočné
       // hladovanie (appka by import zopakovala o hodinu, nie čakala minúty).
-      expect(resolvedWithinMs).toBeLessThan(10_000);
+      expect(resolvedWithinMs).toBeLessThan(Math.max(10_000, deadlockTimeoutMs * 5));
 
       const ingestRejected = ingestSettled.status === "rejected";
       const orderLockRejected = orderLockSettled.status === "rejected";
@@ -227,10 +254,12 @@ it(
       // rawClient's transakcia je po deadlock-abortoch VŽDY buď aborted
       // (ak bol OBEŤOU), alebo stále otvorená s nekomitnutými zámkami (ak
       // VYHRAL) — ROLLBACK ju v OBOCH prípadoch bezpečne uzavrie (rawClient
-      // nikdy nič nezapisuje, len drží zámky na overenie).
+      // nikdy nič nezapisuje, len drží zámky na overenie). `.catch()` na
+      // KAŽDOM čistiacom volaní — konštrukcia/pripojenie mohli zlyhať skôr,
+      // než akýkoľvek z týchto krokov vôbec dáva zmysel volať.
       await rawClient.query("ROLLBACK").catch(() => undefined);
-      await rawClient.end();
-      await pollClient.end();
+      await rawClient.end().catch(() => undefined);
+      await pollClient.end().catch(() => undefined);
     }
 
     // Konzistencia DB PO doriešení — NIKDY čiastočný zápis, bez ohľadu na
