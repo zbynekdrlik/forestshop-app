@@ -9,8 +9,9 @@ import {
   type PairingReviewCandidate,
   type PairingReviewItem,
 } from "../pairingReviewApi.js";
+import { useLiveSupplierInfo } from "../useLiveSupplierInfo.js";
 import { PairingReviewDecisionPanel } from "./PairingReviewDecisionPanel.js";
-import { TerminalButtons } from "./PairingReviewPanelParts.js";
+import { ChosenCandidateExtras, TerminalButtons } from "./PairingReviewPanelParts.js";
 import { PairingReviewSplitPanel } from "./PairingReviewSplitPanel.js";
 
 // issue 387 E5: karta jedného produktu, vyčlenená VOPRED z `PairingReviewSection.tsx`
@@ -75,6 +76,18 @@ function formatPriceRange(item: PairingReviewItem): string | null {
   return `${item.priceMin}–${item.priceMax}${currencySuffix}`;
 }
 
+// issue 422 — pôvodná (pred zľavou) cena, rovnaká rozsahová logika ako
+// vyššie. Ukáže sa LEN keď sa naozaj líši od priceMin/priceMax (rovnaký
+// princíp ako stará appka's `cp.std !== cp.price`) — inak by na
+// nezľavnenom produkte ukazovala tú istú cenu dvakrát.
+function formatStandardPriceRange(item: PairingReviewItem): string | null {
+  if (item.standardPriceMin === null || item.standardPriceMax === null) return null;
+  if (item.standardPriceMin === item.priceMin && item.standardPriceMax === item.priceMax) return null;
+  const currencySuffix = item.currency !== null && item.currency !== "" && item.currency !== "EUR" ? ` ${item.currency}` : " €";
+  if (item.standardPriceMin === item.standardPriceMax) return `${item.standardPriceMin}${currencySuffix}`;
+  return `${item.standardPriceMin}–${item.standardPriceMax}${currencySuffix}`;
+}
+
 export function PairingReviewCard({
   item,
   role,
@@ -87,8 +100,14 @@ export function PairingReviewCard({
   readonly onSessionExpired: () => void;
 }): JSX.Element {
   const priceRange = formatPriceRange(item);
+  const standardPriceRange = formatStandardPriceRange(item);
   const codes = item.externalCodes.length > 0 ? item.externalCodes.join(", ") : "—";
   const canEdit = CAN_EDIT_ROLES.has(role);
+
+  // issue 422 — živá cena+dostupnosť dodávateľa pre navrhnutého kandidáta
+  // (lazy, mountnutá spolu s kartou — `useLiveSupplierInfo.ts`'s vlastný
+  // concurrency-cap chráni pred burstom N súbežných fetchov).
+  const liveSupplierInfo = useLiveSupplierInfo(item.chosenCandidate?.url ?? null);
 
   const [panelOpen, setPanelOpen] = useState(false);
   const [candidates, setCandidates] = useState<readonly PairingReviewCandidate[] | null>(null);
@@ -247,7 +266,19 @@ export function PairingReviewCard({
           >
             {STATE_LABELS[item.productState]}
           </span>
-          {priceRange !== null && <div className="pairing-review-price">💶 {priceRange}</div>}
+          {priceRange !== null && (
+            <div className="pairing-review-price">
+              💶 {priceRange}
+              {standardPriceRange !== null && <span className="pairing-review-price-original"> · pôv. {standardPriceRange}</span>}
+            </div>
+          )}
+          {(item.stockTotal > 0 || item.availabilityText !== null) && (
+            <div className="pairing-review-stock" data-testid={`pairing-review-stock-${item.productKey}`}>
+              {item.stockTotal > 0 && <>sklad: {item.stockTotal} ks</>}
+              {item.stockTotal > 0 && item.availabilityText !== null && " · "}
+              {item.availabilityText}
+            </div>
+          )}
           <div className="pairing-review-imgbox">
             {item.ourImageUrl !== null ? (
               <img src={item.ourImageUrl} alt={item.productName} loading="lazy" />
@@ -320,6 +351,7 @@ export function PairingReviewCard({
                       {VERDICT_LABELS[item.verdict]}
                     </div>
                   )}
+                  <ChosenCandidateExtras productKey={item.productKey} chosenReason={item.chosenReason} liveInfo={liveSupplierInfo} />
                   <div className="pairing-review-imgbox">
                     {item.chosenCandidate.imageUrl !== null ? (
                       <img src={item.chosenCandidate.imageUrl} alt={item.chosenCandidate.name} loading="lazy" />
