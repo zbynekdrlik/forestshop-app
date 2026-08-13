@@ -203,6 +203,36 @@ paths:
   `withCleanDb()`'s advisory izolačný zámok + `fileParallelism: false`
   (`.claude/rules/testing.md`) garantujú, že žiadny INÝ backend v tú chvíľu
   nebeží, takže "niekto je zaseknutý na zámku" môže byť len testovaný kód.
+- **Vyššie uvedené vzory dokazujú JEDNOSMERNÉ čakanie (TOCTOU) — deterministicky
+  vynútiť SKUTOČNÝ obojsmerný DEADLOCK cyklus (AB-BA, dva backendy čakajúce
+  KAŽDÝ na toho druhého) potrebuje TRETÍ krok navyše, nie len jeden druhý
+  pripojenie.** Issue 416 (teoretický cyklus medzi `ingestOrders`'s
+  reconciliation DELETE a `setSupplierLinesOrdered`'s bulk `.for("update",
+  { of: [...] })` JOIN): (1) druhé pripojenie zamkne riadok A v OPAČNOM
+  poradí, aké testovaný kód používa (`order_line` PRED `order`); (2)
+  testovaný kód (reálne zavolaný, nie simulovaný) sa zasekne na tomto
+  zámku — `findBackendBlockedBy` (nová pomôcka, `orders-ingest-supplier-
+  bulk-deadlock.integration.test.ts`) to potvrdí cez `$1 = ANY
+  (pg_blocking_pids(a.pid))`, nie len "niekto čaká"; (3) AŽ TERAZ (nie
+  skôr — cyklus musí vzniknúť DETERMINISTICKY, nie závodom) to isté druhé
+  pripojenie zamkne riadok B (ktorý testovaný kód už drží od svojho
+  úvodného kroku) — týmto sa SAMO zablokuje, čím sa cyklus uzavrie.
+  Postgresov deadlock detektor (predvolený `deadlock_timeout = 1s`) ho
+  vyrieši do ~1-2s — meraj CELKOVÝ čas OD uzavretia cyklu (krok 3), nie od
+  začiatku testu, a nastav veľkorysú rezervu (10s) namiesto pevného
+  predpokladu presne 1s. `Promise.allSettled` na OBOCH stranách (nikdy
+  `await` na jednu a potom druhú — obeťou deadlocku môže byť KTORÁKOĽVEK
+  strana, Postgres si vyberá) + kontrola `error.code === "40P01"` (rovnaký
+  `typeof error === "object" && "code" in error` idiom ako
+  `catalog/ingest.ts`'s `23505` kontrola) dokazuje, že išlo naozaj o
+  deadlock, nie o iné zlyhanie. `rawClient.query("ROLLBACK").catch(() =>
+  undefined)` vo `finally` bloku je bezpečný v OBOCH prípadoch (rawClient
+  bol obeťou → transakcia už aborted, ROLLBACK je no-op cleanup; rawClient
+  vyhral → transakcia je stále otvorená s nekomitnutými zámkami, ROLLBACK
+  ich uvoľní). Rovnaký vzor pre KAŽDÝ ĎALŠÍ podozrivý AB-BA cyklus v tomto
+  repe: netestuj len "zasekne sa THIS backend na THAT zámku" (TOCTOU), ale
+  AJ "zasekne sa DRUHÁ strana SPÄŤ na PRVEJ" (skutočný cyklus) — inak test
+  dokáže len jednosmerné čakanie, nikdy skutočný deadlock-safety.
 - **Funkcia, ktorá má bežať aj s `tx`, potrebuje zúžený parameter aj pre
   `.select()`, nielen pre `.insert()`** (rozšírenie vzoru vyššie z `audit/
   service.ts`'s `AuditExecutor`) — `orders/open-statuses.ts`'s
