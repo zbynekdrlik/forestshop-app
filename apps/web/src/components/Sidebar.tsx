@@ -200,6 +200,17 @@ export function Sidebar({
                         key={tab.id}
                         type="button"
                         className={"tab" + (tab.id === activeTabId ? " active" : "")}
+                        // issue 387 E5 (review nález): odznak-nesúci tlačidlo
+                        // spája SVOJU accessible-name značku s odznakovým
+                        // `aria-label`om (napr. "Párovanie" + "Párovanie: 2" →
+                        // "Párovanie Párovanie: 2") — keď má tab ZÁROVEŇ
+                        // meno, čo je PREFIXOM iného existujúceho tabu (napr.
+                        // "Párovanie" / "Párovanie produktov"), ani `exact:
+                        // true` (rozbije sa o odznakový suffix), ani obyčajný
+                        // substring (nájde OBOCH) nevie tlačidlo jednoznačne
+                        // vybrať. `data-testid` obchádza celý accessible-name
+                        // problém.
+                        data-testid={`nav-tab-${tab.id}`}
                         aria-current={tab.id === activeTabId ? "page" : undefined}
                         aria-label={rail ? railLabel : undefined}
                         title={rail ? railLabel : undefined}

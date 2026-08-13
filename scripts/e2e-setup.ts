@@ -23,6 +23,7 @@ import { seedOrderFlagsFixtures } from "./e2e-fixtures-order-flags.js";
 import { seedPaginationFixtures } from "./e2e-fixtures-pagination.js";
 import { seedProductLinksFixtures } from "./e2e-fixtures-product-links.js";
 import { seedRestockEventsFixtures } from "./e2e-fixtures-restock-events.js";
+import { seedPairingReviewFixtures } from "./e2e-fixtures-pairing-review.js";
 import { seedRestockLinksFixtures } from "./e2e-fixtures-restock-links.js";
 import { seedSearchFixtures } from "./e2e-fixtures-search.js";
 
@@ -281,12 +282,7 @@ await db.insert(users).values({ email: "e2e@forestshop.sk", passwordHash: await 
 await db.insert(users).values({ email: E2E_HESLO_ZMENA_EMAIL, passwordHash: await hashPassword(E2E_HESLO), displayName: "E2E Manažér", role: "manazer" });
 await db.insert(users).values({ email: E2E_SKUPINY_EMAIL, passwordHash: await hashPassword(E2E_HESLO), displayName: "E2E Manažér", role: "manazer" });
 await db.insert(users).values({ email: E2E_NAV_EMAIL, passwordHash: await hashPassword(E2E_HESLO), displayName: "E2E Manažér", role: "manazer" });
-await db.insert(users).values({
-  email: E2E_OTVORENE_STAVY_EMAIL,
-  passwordHash: await hashPassword(E2E_HESLO),
-  displayName: "E2E Manažér",
-  role: "manazer",
-});
+await db.insert(users).values({ email: E2E_OTVORENE_STAVY_EMAIL, passwordHash: await hashPassword(E2E_HESLO), displayName: "E2E Manažér", role: "manazer" });
 await db.insert(users).values({
   email: E2E_OBJEDNANE_EMAIL,
   passwordHash: await hashPassword(E2E_HESLO),
@@ -828,5 +824,8 @@ await seedPaginationFixtures(db, teraz, snapshotPrepinanie);
 
 // issue 345: fixtúra vyčlenená do vlastného súboru, rovnaký dôvod ako vyššie.
 await seedFloorOrdersFixtures(db, E2E_HESLO);
+
+// issue 387 E5: fixtúra vyčlenená do vlastného súboru, rovnaký dôvod ako vyššie.
+await seedPairingReviewFixtures(db, teraz, snapshotPrepinanie, E2E_HESLO);
 
 await pool.end();
