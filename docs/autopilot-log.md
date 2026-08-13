@@ -3935,3 +3935,78 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
   supervisor mergne priamo z tejto REF-y a spustí CI pri round-integrácii.
   Throwaway Postgres kontajner (`agent-a5e9dfcc17ee273e4-pg`, port 5440)
   odstránený na konci.
+
+## 2026-08-13 — #399 (Párovanie: ✂ Rozdeliť na veľkosti + Hľadať/opraviť)
+
+- Worktree-izolovaný autopilot dispatch (`isolation: "worktree"`, plná
+  autorita) — commity na vlastnej vetve `worktree-agent-a71f1f73fa045c975`,
+  supervisor mergne priamo z tejto REF-y a spustí CI pri round-integrácii.
+- Pôvodne otázkový ticket, vyriešený supervisorom + potvrdený majiteľom
+  (komentáre https://github.com/zbynekdrlik/forestshop-app/issues/399#issuecomment-5285260185
+  a …#issuecomment-5285283097: "1 ano uplne vsetko zo starej") — obe funkcie
+  zo starej appky (`parovanie_produktov` @ f76cafa) sa portujú v plnom rozsahu.
+- Version bump `47f6971` (0.3.0-dev.250→.251), first commit.
+- Design komentár (Triage: NON-TRIVIAL, 2-3 zvažované prístupy +
+  Architektúra sekcia) BEFORE prvý feature-kódový commit (`d5d4744`, 22:11
+  local — komentár 21:24 local, predchádza):
+  https://github.com/zbynekdrlik/forestshop-app/issues/399#issuecomment-5285366354
+  — root cause: stará appka mala DVE funkcie ("✂ Rozdeliť na veľkosti" +
+  "Hľadať/opraviť"), nová appka žiadnu z nich; zvolený prístup: NOVÁ
+  nezávislá `pairing_variant_link` tabuľka (per-veľkosť linky) + nový
+  `pairing_decision.status = 'split'` (žiadna URL na produktovej úrovni,
+  rovnaký tvar ako `unavailable`/`discontinued`) + zdieľaná
+  `PairingReviewCard` pre "Hľadať/opraviť" (žiadna paralelná UI); zamietnutá
+  alternatíva: reuse `product_supplier_link_override`
+  (korumpovalo by "1 riadok = 1 produkt" predpoklad iných automatizácií —
+  writeback E7, dodávateľský sklad #212/#213) a reuse F4's `pairing` tabuľky
+  (explicitne zamietnutá minulým merge rozhodnutím).
+- Doplnok k dizajnu (nález počas implementácie — appka už má JEDNU "✂
+  Rozdeliť" na inej obrazovke, žiadna kolízia):
+  https://github.com/zbynekdrlik/forestshop-app/issues/399#issuecomment-5285383307
+- STEP 0 validácia (ticket stále platný, obe funkcie reálne chýbajú):
+  https://github.com/zbynekdrlik/forestshop-app/issues/399#issuecomment-5285383649
+- Migrácia: `0053_pale_epoch.sql` (enum `ADD VALUE 'split'` samostatne) +
+  `0054_zippy_invisible_woman.sql` (`pairing_variant_link` tabuľka + CHECK
+  constraint) — Postgres NEDOVOLÍ použiť novú enum hodnotu v CHECK/INSERT
+  v TEJ ISTEJ transakcii, keď sa posiela ako samostatné príkazy (drizzle-
+  kit-ov migrátor aj `psql` skript-mód) — empiricky overené (RED aj GREEN)
+  na čerstvej Postgres 18 inštancii, plný 54-migračný reťazec.
+- API: `variant-links.ts` (`listPairingVariantLinks`/`setPairingVariantLink`,
+  vlastná NEZÁVISLÁ zápisová cesta), `queries.ts` refaktor
+  (`determineReviewPopulationKeys`/`buildPairingReviewItems` extrakcia,
+  nový `getPairingReviewItem` pre jednoproduktovú kartu — SCOPED dopyt,
+  nie plný katalóg), `decisions.ts`'s `split` vetva, 3 nové HTTP trasy
+  (`GET /:productKey`, `GET/POST /:productKey/variants|variant-link`).
+- Web: `PairingReviewSplitPanel.tsx` (nový, per-veľkosť editor),
+  `PairingReviewDecisionPanel.tsx` (extrahovaný z `PairingReviewCard.tsx`,
+  400-line cap), `PairingSearchFixTab.tsx` (nová "Hľadať/opraviť"
+  pod-záložka, zdieľa `PairingReviewCard` — žiadna paralelná UI),
+  `PairingReviewSection.tsx` (nový `activeTab` prepínač).
+- Self-review (fresh-context `general-purpose` dispatch, CYCLE step 6,
+  diff `6195b06..cca6a5d`): 0 🔴 0 🟡 3 🔵 — všetky opravené v TEJTO vetve,
+  commit `7999d05`: (1) zastaraný test komentár, (2) "✓ Hotovo" row-busy
+  guard (`busyRowCodes`), (3) server-side obranná kontrola proti split na
+  jednovariantnom produkte (`not_multi_variant` → 400).
+- Testy: integračné (`pairing-review-item-http`,
+  `pairing-review-variant-links-http` — 13 testov vrátane cross-product
+  404, CHECK constraint, revert-preserves-links, single-variant reject),
+  frontend unit (`PairingReviewCard.test.tsx` +6 vrátane row-busy guard,
+  nový `PairingSearchFixTab.test.tsx` +7), e2e
+  (`pairing-review-split.spec.ts`, 3 testy — confirm dialóg pri chýbajúcom
+  linku, obe veľkosti bez varovania, Hľadať/opraviť cross-tab flow).
+- Plný lokálny beh na izolovanej throwaway Postgres inštancii (port 15544):
+  typecheck + lint čisté, plný web unit balík 85 súborov/646 testov
+  zelený, plný API `test:integration` balík 107 súborov/804 testov zelený
+  (pred opravami self-review nálezov; scoped pairing-review sada — 5
+  súborov/52 testov — zelená AJ po opravách), plná lokálna e2e sada 60/60
+  zelená (3 nové bugy nájdené+opravené: filter-viditeľnosť po split
+  rozhodnutí, medzi-testové zdieľanie fixtúry `E2E-PR-SPLIT`, "Hľadať"
+  accessible-name kolízia so sidebarom).
+- Follow-up filed: #423 (downstream šírenie per-veľkosť linkov do
+  Shoptet writeback + dodávateľský sklad — `Scope-gate: cross-cutting`,
+  zámerne mimo tohto ticketu).
+- Playbook: `.claude/rules/pairing-search.md`'s nová sekcia "issue 399 —
+  ✂ Rozdeliť na veľkosti + Hľadať/opraviť (mimo E1-E9)" — 2-migration enum
+  past, split dátový model rozhodnutie, `isUnreviewed`/scoped-vs-full-
+  catalog split, 3-file card extraction, e2e fixtúra/poradie/dialóg/
+  "Hľadať" kolízia gotchas.
