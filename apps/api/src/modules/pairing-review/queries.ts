@@ -42,6 +42,9 @@ const OWN_SHOP_SEARCH_BASE = "https://www.forestshop.sk/vyhladavanie/?string=";
 export interface PairingReviewChosenCandidate {
   readonly name: string;
   readonly url: string;
+  /** issue 397 — obrázok kandidáta (z adaptéra, alebo `verify.ts`'s
+   *  `og:image` fallback), `null` keď žiadny zdroj neposkytol použiteľný. */
+  readonly imageUrl: string | null;
   readonly rawScore: number;
   readonly codeHit: boolean;
 }
@@ -68,6 +71,8 @@ export interface PairingReviewItem {
   readonly currency: string | null;
   /** Nikdy `null` — padá na `OWN_SHOP_SEARCH_BASE` fallback, presne ako stará appka. */
   readonly ourUrl: string;
+  /** issue 402: `true` = `ourUrl` je LEN vyhľadávací fallback (žiadny riadok v `shop_product_url`), nie priamy odkaz na produkt — karta ho vizuálne odlíši. */
+  readonly ourUrlIsSearchFallback: boolean;
   readonly ourImageUrl: string | null;
   /** `true` = appka už pozná EFEKTÍVNU dodávateľskú linku (override alebo
    * extrahovaná z `internalNote`) — toto JE "unreviewed" predikát (viď hlavička súboru). */
@@ -188,6 +193,7 @@ export async function listPairingReview(db: Database, input: PairingReviewSearch
       productKey: pairingCandidates.productKey,
       name: pairingCandidates.name,
       url: pairingCandidates.url,
+      imageUrl: pairingCandidates.imageUrl,
       rawScore: pairingCandidates.rawScore,
       codeHit: pairingCandidates.codeHit,
     })
@@ -246,6 +252,11 @@ export async function listPairingReview(db: Database, input: PairingReviewSearch
         break;
       }
     }
+    // issue 402: majiteľ reagoval na to, že tento fallback vyzerá ako priamy
+    // odkaz na produkt, hoci v skutočnosti otvorí vyhľadávanie — karta ho
+    // teraz vizuálne odlíši (`PairingReviewCard.tsx`), preto potrebuje
+    // explicitný signál, nie odhad z tvaru URL na frontende.
+    const ourUrlIsSearchFallback = ourUrl === null;
     if (ourUrl === null) ourUrl = OWN_SHOP_SEARCH_BASE + encodeURIComponent(product.name);
 
     const prices = productVariants
@@ -263,7 +274,13 @@ export async function listPairingReview(db: Database, input: PairingReviewSearch
     const chosenCandidate: PairingReviewChosenCandidate | null =
       chosenCandidateRow === undefined
         ? null
-        : { name: chosenCandidateRow.name, url: chosenCandidateRow.url, rawScore: Number(chosenCandidateRow.rawScore), codeHit: chosenCandidateRow.codeHit };
+        : {
+            name: chosenCandidateRow.name,
+            url: chosenCandidateRow.url,
+            imageUrl: chosenCandidateRow.imageUrl,
+            rawScore: Number(chosenCandidateRow.rawScore),
+            codeHit: chosenCandidateRow.codeHit,
+          };
 
     const decisionRow = decisionByProduct.get(set.productKey);
     const decision: PairingReviewDecision | null =
@@ -280,6 +297,7 @@ export async function listPairingReview(db: Database, input: PairingReviewSearch
       priceMax,
       currency,
       ourUrl,
+      ourUrlIsSearchFallback,
       ourImageUrl,
       hasEffectiveLink: effective.url !== null,
       gatheredAt: set.gatheredAt.toISOString(),

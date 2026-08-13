@@ -21,11 +21,21 @@
 // `fixtures/betalov-prazdne-vysledky.html`) — selektory aj `#snippet--
 // productList`/`.product-col` tvar sa zhodujú so starou appka's
 // dokumentáciou z 27. 6. 2026.
+//
+// issue 397: obrázok kandidáta (MIMO doslovného portu). Karta nesie
+// `<div class="product-thumb-nail"><a class="mh-100"><img class="product-
+// image" src="/upload/images/product/md__…"></a></div>` — `img.product-
+// image` v tej istej `.product-col` karte, čo už dnes dáva `a.mh-100`'s
+// `href`. **`og:image` na DETAILNEJ stránke je na tejto doméne VŽDY
+// stránkové logo (`/svg/logo2.svg`), nikdy produktová fotka** (živo
+// overené) — presne prípad, na ktorý `resolveImageUrl`'s šumový filter
+// existuje; `verify.ts`'s fallback ho preto na tomto dodávateľovi nikdy
+// neuplatní.
 
 import * as cheerio from "cheerio";
 import type { PairingCandidate } from "../types.js";
 import type { SupplierAdapter } from "./types.js";
-import { belongsToBase, resolveAndStripFragment } from "./url.js";
+import { belongsToBase, resolveAndStripFragment, resolveImageUrl } from "./url.js";
 
 const BASE_URL = "https://www.huntingshop.eu";
 
@@ -86,7 +96,9 @@ export function parseBetalovSearch(html: string): PairingCandidate[] {
     seen.add(url);
 
     const name = card.find(".product-title a").first().text().trim();
-    out.push({ name, url, code: null, price: null, rawScore: 0, codeHit: false });
+    const img = card.find("img.product-image").first();
+    const imageUrl = resolveImageUrl([img.attr("src")], BASE_URL);
+    out.push({ name, url, code: null, price: null, imageUrl, rawScore: 0, codeHit: false });
   });
 
   return out;

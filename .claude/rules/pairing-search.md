@@ -543,3 +543,65 @@ vyradilo #311 aj jeho playbook súbor (návrh, sekcia 4); router v
   `restock-waiting.spec.ts`/`restock-events.spec.ts`) je priamy dôkaz.
   Použi rovnaký vzor pri E9 (vyradenie starého #239 UI + F4) na dôkaz, že
   `/api/product-links` route a jej zapisovacia cesta ostali nedotknuté.
+
+## issue 397 — Obrázok kandidáta na karte (mimo E1-E9 sériovej reťaze)
+
+- **Stará appka NIKDY neparsovala kandidátov obrázok z výsledkovej karty —
+  ťahala ho AŽ naživo z DETAILU (`og:image`, LEN pri otvorení karty vo
+  webreview, disk-cache).** Dispatch predpokladal opak; skutočnosť je
+  LEPŠIA — živé overenie (curl + cookie warm-up, 13. 8. 2026) ukázalo, že
+  VŠETKY TRI dodávateľské výsledkové karty DNES reálne obrázok nesú, len
+  ho žiadny parser doteraz nečítal. `PairingCandidate.imageUrl` sa preto
+  pľní PRIAMO v E2's adaptéroch (žiadny extra network request), s `og:image`
+  fallback (`verify.ts`) len ako defenzívna posledná záchrana pre CHOSEN
+  kandidáta, keď E4 aj tak beží (confidence high/medium).
+- **Per-dodávateľ selektor + past, živo overené 13. 8. 2026:**
+  - WETLAND: `img.product-miniature__image` v `<picture>` vnútri
+    `a.product-miniature__link`, SÚRODENEC (nie predok/potomok) title-
+    anchoru — treba `.closest(".product-miniature")` na spoločnú kartu,
+    potom `.find(...)`. `data-full-size-image-url` (plná veľkosť)
+    uprednostnené pred menším `src`.
+  - BETALOV: `img.product-image` v `a.mh-100` vnútri TEJ ISTEJ `.product-col`
+    karty, čo už dnes dáva `href` — priamy `card.find(...)`, žiadny
+    `.closest()` netreba. **PASCA: jej DETAILNEJ stránky `og:image` je
+    VŽDY stránkové logo (`/svg/logo2.svg`), nikdy produkt** — fallback
+    preň preto reálne nikdy nič neprinesie (šumový filter ho vyfiltruje),
+    zámerne, nie medzera.
+  - ODIMON: `img` vnútri `a.product-card`, TEN ISTÝ element, čo už dnes dáva
+    `alt`/`title` pre meno. **KRITICKÁ PASCA: `src` je na tejto doméne
+    VŽDY `.../no-image.png` placeholder (lazy-load cez JS) — skutočný
+    obrázok je LEN v `data-src`.** `resolveImageUrl`'s poradie
+    (`data-src` pred `src`) preto nie je štylistická preferencia, je nutná
+    správnosť.
+- **`resolveImageUrl` (`adapters/url.ts`, zdieľaná adaptérmi AJ `verify.ts`'s
+  `og:image` fallbackom) je doslovný port starej appka's `_IMG_NOISE`
+  (`webreview/app.py`) — `logo`/`/producer/`/`.svg`/`/svg/`/`placeholder`/
+  `no-image`/`banner`/`/img/m/` substring filter (case-insensitive), na
+  REZOLVOVANEJ (nie surovej) URL.** Vyberá prvý NEPRÁZDNY, nespracovateľný/
+  šumový sa PRESKOČÍ (fallback na ĎALŠIEHO kandidáta v poli, nikdy hneď
+  `null`). Test pri KAŽDOM ĎALŠOM dodávateľovi/zdroji obrázka: over živo,
+  či jeho "očividný" zdroj (og:image, hlavný `<img>`) nie je v skutočnosti
+  logo/placeholder/ikonka — mikrodáta aj obrázky vedia klamať rovnako ako
+  `supplier-stock.md`'s dostupnostné JSON-LD.
+- **Backfill existujúcich kandidátov BEZ obrázka (1309 riadkov, 177 s
+  `chosen_url` v čase merge) je DEDIKOVANÝ idempotentný CLI
+  (`backfill.ts` + `cli/pairing-backfill-images.ts` + `scripts/` alias,
+  presne vzor `catalog-prune-raw.ts`), NIKDY `input_hash` bump/plný
+  re-gather.** Scope = LEN `pairing_candidate` riadky, kde `url =
+  candidate_set.chosen_url` (karta ukazuje LEN chosenCandidate, top-8
+  panel obrázok nepotrebuje) `AND image_url IS NULL` — jeden
+  `SearchClient.fetchPage` na produkt, žiadne query-variant vyhľadávanie
+  navyše. Zdieľa `PAIRING_SEARCH_RUN_LOCK_KEY` (žiadny nový kľúč), aby sa
+  nikdy nepretínal s nočným gather behom nad TÝMI ISTÝMI riadkami. Príkaz
+  na produkcii: `docker compose -f docker-compose.prod.yml exec app node
+  apps/api/dist/cli/pairing-backfill-images.js` (bezpečné spustiť
+  kedykoľvek znova — WHERE-om idempotentný).
+- **Pokrytie NÁŠHO obrázka (`ourImageUrl`, `shop_product_url`) zmerané
+  priamo na produkcii (13. 8. 2026): 185 gathered produktov, LEN 28 má
+  zodpovedajúci `shop_product_url` riadok (26 s vyplneným obrázkom) — teda
+  159/185 (86 %) ukáže na ĽAVEJ strane "bez obrázka".** 157 z týchto 159
+  NEMÁ vôbec žiadny `shop_product_url` riadok — presne už zdokumentovaná
+  medzera issue 220 (626 viditeľných variantov mimo `google.xml` feedu,
+  `.claude/rules/shop-feed.md`), NIE bug tejto appky ani tohto tiketu.
+  Zlepšenie by znamenalo vylepšiť Shoptet feed/vyhľadávací fallback —
+  samostatný tiket, mimo rozsahu "ukáž oba obrázky".

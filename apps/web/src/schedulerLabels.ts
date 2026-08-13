@@ -26,6 +26,7 @@ export const JOB_LABELS: Readonly<Record<string, string>> = {
   "shoptet-writeback": "Spätný zápis dodávateľa do Shoptetu",
   "order-note-writeback": "Spätný zápis poznámky do Shoptetu",
   "pairing-search": "Párovanie: nočný zber kandidátov u dodávateľov",
+  "shop-sitemap": "Adresy z mapy stránok (doplnok k feedu)",
 };
 
 export const STATUS_LABELS: Record<JobRun["status"], string> = {

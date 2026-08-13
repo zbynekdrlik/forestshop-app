@@ -32,13 +32,20 @@ const MATCHED_ITEM = {
   priceMax: "64.90",
   currency: "EUR",
   ourUrl: "https://www.forestshop.sk/bunda-alfa",
+  ourUrlIsSearchFallback: false,
   ourImageUrl: "https://www.forestshop.sk/img/bunda.jpg",
   hasEffectiveLink: false,
   gatheredAt: "2026-08-13T03:35:00.000Z",
   confidence: "high" as const,
   chosenReason: "najlepší nájdený",
   verdict: "ok" as const,
-  chosenCandidate: { name: "Bunda Alfa", url: "https://dodavatel.example.com/bunda-alfa", rawScore: 1080.5, codeHit: true },
+  chosenCandidate: {
+    name: "Bunda Alfa",
+    url: "https://dodavatel.example.com/bunda-alfa",
+    imageUrl: "https://dodavatel.example.com/img/bunda-alfa.jpg",
+    rawScore: 1080.5,
+    codeHit: true,
+  },
   decision: null,
 };
 
@@ -68,6 +75,22 @@ afterEach(() => {
   vi.resetAllMocks();
 });
 
+// issue 402: majiteľ — "otvorí sa vyhľadávanie namiesto produktu, nič to
+// nehovorí" — odkaz na vyhľadávací fallback sa MUSÍ dať vizuálne odlíšiť od
+// priameho odkazu na produkt.
+it("ourUrlIsSearchFallback=true pridá vizuálne odlíšenie (trieda + poznámka), false ho vynechá", async () => {
+  const { unmount } = render(<PairingReviewCard item={{ ...MATCHED_ITEM, ourUrlIsSearchFallback: true }} role="manazer" onDecided={() => {}} onSessionExpired={() => {}} />);
+  const fallbackLink = await screen.findByTestId("pairing-review-our-link-PR-1");
+  expect(fallbackLink.className).toContain("pairing-review-name-fallback");
+  expect(screen.getByTestId("pairing-review-fallback-note-PR-1")).toBeDefined();
+  unmount();
+
+  render(<PairingReviewCard item={MATCHED_ITEM} role="manazer" onDecided={() => {}} onSessionExpired={() => {}} />);
+  const directLink = await screen.findByTestId("pairing-review-our-link-PR-1");
+  expect(directLink.className).not.toContain("pairing-review-name-fallback");
+  expect(screen.queryByTestId("pairing-review-fallback-note-PR-1")).toBeNull();
+});
+
 it("'citanie' rola nevidí ŽIADNE akčné tlačidlo", async () => {
   render(<PairingReviewCard item={MATCHED_ITEM} role="citanie" onDecided={() => {}} onSessionExpired={() => {}} />);
   const card = await screen.findByTestId("pairing-review-card-PR-1");
@@ -88,6 +111,22 @@ it("napárovaný produkt bez rozhodnutia ukáže ✓ Dobré / ✗ Zlé; klik na 
   await waitFor(() => {
     expect(onDecided).toHaveBeenCalledTimes(1);
   });
+});
+
+it("issue 397: karta ukazuje obrázok kandidáta AJ nášho produktu vedľa seba; chýbajúci obrázok kandidáta ukáže 'bez obrázka'", async () => {
+  render(<PairingReviewCard item={MATCHED_ITEM} role="citanie" onDecided={() => {}} onSessionExpired={() => {}} />);
+  const card = await screen.findByTestId("pairing-review-card-PR-1");
+  const images = card.querySelectorAll("img");
+  expect(images).toHaveLength(2);
+  expect(images[0]?.getAttribute("src")).toBe(MATCHED_ITEM.ourImageUrl);
+  expect(images[1]?.getAttribute("src")).toBe(MATCHED_ITEM.chosenCandidate.imageUrl);
+
+  cleanup();
+  const bezObrazka = { ...MATCHED_ITEM, productKey: "PR-NOIMG", chosenCandidate: { ...MATCHED_ITEM.chosenCandidate, imageUrl: null } };
+  render(<PairingReviewCard item={bezObrazka} role="citanie" onDecided={() => {}} onSessionExpired={() => {}} />);
+  const cardBezObrazka = await screen.findByTestId("pairing-review-card-PR-NOIMG");
+  expect(cardBezObrazka.querySelectorAll("img")).toHaveLength(1); // len naša strana
+  expect(cardBezObrazka.querySelectorAll(".pairing-review-noimg")).toHaveLength(1);
 });
 
 it("klik na ✗ Zlé ROZBALÍ panel NA MIESTE (karta ostáva) a načíta kandidátov; 'Vybrať' odošle manual s URL toho kandidáta", async () => {

@@ -20,11 +20,19 @@ describe("parseOdimonSearch", () => {
       url: "https://www.odimon.sk/obuv-a-oblecenie/polovnicke-oblecenie/polovnicke-termopradlo/termopradlo-nohavice-modal-termovel",
       code: null,
       price: null,
+      // issue 397: `data-src` (skutočný lazy-load obrázok) uprednostnené
+      // pred `src` (na tejto doméne VŽDY `no-image.png` placeholder).
+      imageUrl:
+        "https://www.odimon.sk/buxus/images/cache/product_catalog.eshop_product_list/produkty/katalog_produktov/obuv_a_oblecenie/polovnicke_termopradlo/termopradlo_nohavice_modal_termovel/20161611121146-termovelspodky.jpg",
       rawScore: 0,
       codeHit: false,
     });
     expect(candidates[1]?.name).toBe("Pánske poľovnícke nohavice Michal");
+    // issue 397: karty 2-3 nemajú `data-src`/`src` vo fixtúre (zámerne) ->
+    // žiadny obrázok sa nájsť nedá.
+    expect(candidates[1]?.imageUrl).toBeNull();
     expect(candidates[2]?.name).toBe("Poľovnícke nohavice Deerhunter Ram");
+    expect(candidates[2]?.imageUrl).toBeNull();
   });
 
   it("dedups the repeated card by canonical URL", () => {
@@ -47,6 +55,7 @@ describe("parseOdimonSearch", () => {
         url: "https://www.odimon.sk/x",
         code: null,
         price: null,
+        imageUrl: null,
         rawScore: 0,
         codeHit: false,
       },
@@ -65,10 +74,18 @@ describe("parseOdimonSearch", () => {
         url: "https://www.odimon.sk/dobra",
         code: null,
         price: null,
+        imageUrl: null,
         rawScore: 0,
         codeHit: false,
       },
     ]);
+  });
+
+  it("issue 397: samotný src bez data-src (no-image.png placeholder) sa NIKDY nezoberie ako obrázok", () => {
+    const html =
+      '<a class="product-card" href="https://www.odimon.sk/bez-obrazka">' +
+      '<img alt="Bez obrázka" src="/buxus/images/cache/product_catalog.eshop_product_list/no-image.png"></a>';
+    expect(parseOdimonSearch(html)[0]?.imageUrl).toBeNull();
   });
 });
 

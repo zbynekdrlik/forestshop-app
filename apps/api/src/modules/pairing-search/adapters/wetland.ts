@@ -14,11 +14,21 @@
 // Živo overené 13. 8. 2026 (`fixtures/wetland-vysledky-nohavice.html`,
 // `fixtures/wetland-prazdne-vysledky.html`) — selektory aj tvar URL sa
 // zhodujú so starou appka's dokumentáciou z 27. 6. 2026.
+//
+// issue 397: obrázok kandidáta (MIMO doslovného portu — stará appka ho z
+// výsledkovej karty nikdy nečítala). Karta nesie `<picture><img
+// class="product-miniature__image" data-full-size-image-url="…"
+// src="…_default_md/…">` vnútri `a.product-miniature__link`, ktorý je
+// SÚRODENEC (nie predok/potomok) title-anchoru — preto `.closest(".product-
+// miniature")` na spoločného predka karty, potom `.find(...)` naň. Živo
+// overené (13. 8. 2026): OBAJA atribúty nesú REÁLNY, nie-placeholder
+// obrázok — `data-full-size-image-url` (plná veľkosť) sa uprednostní pred
+// menším `src`.
 
 import * as cheerio from "cheerio";
 import type { PairingCandidate } from "../types.js";
 import type { SupplierAdapter } from "./types.js";
-import { belongsToBase, resolveAndStripFragment } from "./url.js";
+import { belongsToBase, resolveAndStripFragment, resolveImageUrl } from "./url.js";
 
 const BASE_URL = "https://www.wetland.sk";
 
@@ -43,7 +53,13 @@ export function parseWetlandSearch(html: string): PairingCandidate[] {
     seen.add(url);
 
     const name = (anchor.text().trim() || anchor.attr("title") || "").trim();
-    out.push({ name, url, code: null, price: null, rawScore: 0, codeHit: false });
+    // `.closest()`/`.find()` na PRÁZDNEJ zhode (žiadny "product-miniature"
+    // predok) vracajú ĎALŠIU prázdnu zhodu, nikdy nevyhodia — `.attr()` na
+    // nej je bezpečne `undefined`, žiadny osobitný "chýbajúci obal" vetva
+    // netreba.
+    const img = anchor.closest(".product-miniature").find("img.product-miniature__image").first();
+    const imageUrl = resolveImageUrl([img.attr("data-full-size-image-url"), img.attr("src")], BASE_URL);
+    out.push({ name, url, code: null, price: null, imageUrl, rawScore: 0, codeHit: false });
   });
 
   return out;

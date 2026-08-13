@@ -10,6 +10,12 @@
   nohavice.html`). `.claude/rules/supplier-stock.md` potvrdzuje, že
   `odimon.sk` je BUXUS a JSON-LD na tejto doméne nie je pre stránku
   vyhľadávania relevantné (parser meno berie z `img[alt]`).
+
+  issue 397: PRVÁ karta má naviac naživo overené `data-src`/`src` atribúty
+  (13. 8. 2026) — `src` je na tejto doméne VŽDY `no-image.png` placeholder
+  (lazy-load cez JS), skutočný obrázok je len v `data-src`. Karty 2-4
+  ZÁMERNE ostávajú bez obrázkových atribútov (mechanizmus "chýbajúci
+  data-src/src -> imageUrl null", nie chyba).
 -->
 <html lang="sk">
 <head><title>Výsledky vyhľadávania: nohavice | odimon.sk</title></head>
@@ -24,7 +30,9 @@
       <div class="product tag-product-card">
         <div class="image">
           <a href="https://www.odimon.sk/obuv-a-oblecenie/polovnicke-oblecenie/polovnicke-termopradlo/termopradlo-nohavice-modal-termovel" class="product-card">
-            <img class="img-responsive lazy" alt="Termoprádlo nohavice modal Termovel">
+            <img class="img-responsive lazy" alt="Termoprádlo nohavice modal Termovel"
+                 data-src="/buxus/images/cache/product_catalog.eshop_product_list/produkty/katalog_produktov/obuv_a_oblecenie/polovnicke_termopradlo/termopradlo_nohavice_modal_termovel/20161611121146-termovelspodky.jpg"
+                 src="/buxus/images/cache/product_catalog.eshop_product_list/no-image.png">
           </a>
         </div>
       </div>

@@ -1,0 +1,2 @@
+CREATE TYPE "public"."shop_product_url_source" AS ENUM('feed', 'sitemap', 'probe');--> statement-breakpoint
+ALTER TABLE "shop_product_url" ADD COLUMN "source" "shop_product_url_source" DEFAULT 'feed' NOT NULL;

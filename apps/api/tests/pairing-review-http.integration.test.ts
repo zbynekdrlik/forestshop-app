@@ -57,11 +57,18 @@ interface Telo {
     readonly priceMin: string | null;
     readonly priceMax: string | null;
     readonly ourUrl: string;
+    readonly ourUrlIsSearchFallback: boolean;
     readonly ourImageUrl: string | null;
     readonly hasEffectiveLink: boolean;
     readonly confidence: "high" | "medium" | "low" | "none";
     readonly verdict: "ok" | "unsure" | null;
-    readonly chosenCandidate: { readonly name: string; readonly url: string; readonly rawScore: number; readonly codeHit: boolean } | null;
+    readonly chosenCandidate: {
+      readonly name: string;
+      readonly url: string;
+      readonly imageUrl: string | null;
+      readonly rawScore: number;
+      readonly codeHit: boolean;
+    } | null;
   }[];
 }
 
@@ -92,7 +99,15 @@ it("napárovaný produkt (chosenUrl) nesie navrhnutého kandidáta so skóre/ist
     chosenUrl: "https://dodavatel.example.com/bunda-alfa",
     confidence: "high",
     verdict: "ok",
-    candidates: [{ url: "https://dodavatel.example.com/bunda-alfa", name: "Bunda Alfa", rawScore: "1080.5000", codeHit: true }],
+    candidates: [
+      {
+        url: "https://dodavatel.example.com/bunda-alfa",
+        name: "Bunda Alfa",
+        rawScore: "1080.5000",
+        codeHit: true,
+        imageUrl: "https://dodavatel.example.com/img/bunda-alfa.jpg",
+      },
+    ],
   });
 
   const telo = (await (await app.request("/api/pairing-review?filter=matched", { headers: { cookie } })).json()) as Telo;
@@ -100,7 +115,13 @@ it("napárovaný produkt (chosenUrl) nesie navrhnutého kandidáta so skóre/ist
   expect(item).toBeDefined();
   expect(item?.confidence).toBe("high");
   expect(item?.verdict).toBe("ok");
-  expect(item?.chosenCandidate).toMatchObject({ name: "Bunda Alfa", url: "https://dodavatel.example.com/bunda-alfa", rawScore: 1080.5, codeHit: true });
+  expect(item?.chosenCandidate).toMatchObject({
+    name: "Bunda Alfa",
+    url: "https://dodavatel.example.com/bunda-alfa",
+    imageUrl: "https://dodavatel.example.com/img/bunda-alfa.jpg",
+    rawScore: 1080.5,
+    codeHit: true,
+  });
 });
 
 it("nenapárovaný produkt (confidence none, žiadny kandidát) má chosenCandidate null a padne do filtra 'unmatched'", async () => {
@@ -209,10 +230,14 @@ it("naša URL/obrázok prichádza zo shop_product_url zhody podľa kódu variant
   const telo = (await (await app.request("/api/pairing-review?filter=all", { headers: { cookie } })).json()) as Telo;
   const withFeed = telo.items.find((i) => i.productKey === "PR-FEED");
   expect(withFeed?.ourUrl).toBe("https://www.forestshop.sk/produkt-s-feedom");
+  expect(withFeed?.ourUrlIsSearchFallback).toBe(false);
   expect(withFeed?.ourImageUrl).toBe("https://www.forestshop.sk/img/x.jpg");
 
   const withoutFeed = telo.items.find((i) => i.productKey === "PR-NOFEED");
   expect(withoutFeed?.ourUrl).toBe("https://www.forestshop.sk/vyhladavanie/?string=" + encodeURIComponent("Produkt Bez Feedu"));
+  // issue 402: fallback bez akéhokoľvek shop_product_url riadku sa MUSÍ dať
+  // rozlíšiť od priameho odkazu — karta ho vizuálne odlíši práve podľa tohto poľa.
+  expect(withoutFeed?.ourUrlIsSearchFallback).toBe(true);
   expect(withoutFeed?.ourImageUrl).toBeNull();
 });
 

@@ -3035,6 +3035,23 @@ a.upozornenie-title:hover {
 .pairing-review-name:hover {
   text-decoration: underline;
 }
+/* issue 402: vyhľadávací fallback (žiadna priama adresa produktu známa) sa
+   NESMIE tváriť ako odkaz na produkt — tlmená farba + prerušovaná čiara
+   namiesto plnej farby značky (`.pairing-review-name`), aj samostatná
+   poznámka pod odkazom (farba/text nikdy nie je jediný signál). */
+.pairing-review-name-fallback {
+  color: var(--fs-ink-muted);
+  text-decoration: underline dashed;
+}
+.pairing-review-name-fallback:hover {
+  color: var(--fs-brand-strong);
+}
+.pairing-review-fallback-note {
+  font-size: var(--fs-text-xs);
+  color: var(--fs-ink-faint);
+  font-style: italic;
+  margin-bottom: var(--fs-space-1);
+}
 .pairing-review-meta {
   font-size: var(--fs-text-sm);
   color: var(--fs-ink-muted);

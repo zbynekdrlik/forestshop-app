@@ -66,7 +66,14 @@ export async function seedPairingCandidateSet(
     readonly chosenUrl?: string | null;
     readonly confidence?: "high" | "medium" | "low" | "none";
     readonly verdict?: "ok" | "unsure" | null;
-    readonly candidates?: readonly { readonly url: string; readonly name: string; readonly rawScore: string; readonly codeHit: boolean }[];
+    readonly candidates?: readonly {
+      readonly url: string;
+      readonly name: string;
+      readonly rawScore: string;
+      readonly codeHit: boolean;
+      /** issue 397 — voliteľné, `undefined`/chýbajúce necháva DB default (`null`). */
+      readonly imageUrl?: string | null;
+    }[];
   } = {},
 ): Promise<void> {
   await db.insert(pairingCandidateSets).values({
@@ -86,6 +93,7 @@ export async function seedPairingCandidateSet(
       position: i,
       name: c.name,
       url: c.url,
+      imageUrl: c.imageUrl ?? null,
       rawScore: c.rawScore,
       codeHit: c.codeHit,
     });

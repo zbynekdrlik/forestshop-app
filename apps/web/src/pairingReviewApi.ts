@@ -11,6 +11,8 @@ export type PairingReviewFilter = (typeof PAIRING_REVIEW_FILTERS)[number];
 const chosenCandidateSchema = z.object({
   name: z.string(),
   url: z.string(),
+  // issue 397 — obrázok kandidáta (adaptér, alebo `og:image` fallback).
+  imageUrl: z.string().nullable(),
   rawScore: z.number(),
   codeHit: z.boolean(),
 });
@@ -36,6 +38,7 @@ const itemSchema = z.object({
   priceMax: z.string().nullable(),
   currency: z.string().nullable(),
   ourUrl: z.string(),
+  ourUrlIsSearchFallback: z.boolean(),
   ourImageUrl: z.string().nullable(),
   hasEffectiveLink: z.boolean(),
   gatheredAt: z.string(),

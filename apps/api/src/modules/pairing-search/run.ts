@@ -106,7 +106,7 @@ async function runPairingSearchLocked(options: RunPairingSearchOptions): Promise
     try {
       const { queries, candidates } = await gatherCandidates(searchClient, item);
       const pick = pickBest(item.product, candidates);
-      const { verdict, verdictCheckedAt } = await verifyPickIfWarranted(searchClient, item.product, pick, now);
+      const { verdict, verdictCheckedAt, fallbackImageUrl } = await verifyPickIfWarranted(searchClient, item.product, pick, now);
       await upsertCandidateSet(db, {
         productKey: item.product.productKey,
         gatheredAt: now,
@@ -117,7 +117,7 @@ async function runPairingSearchLocked(options: RunPairingSearchOptions): Promise
         confidence: pick.confidence,
         verdict,
         verdictCheckedAt,
-        candidates,
+        candidates: applyImageFallback(candidates, pick.candidate?.url ?? null, fallbackImageUrl),
       });
       succeeded += 1;
     } catch (error) {
@@ -164,6 +164,11 @@ async function gatherCandidates(
 interface VerifyOutcomeFields {
   readonly verdict: PairingVerdict | null;
   readonly verdictCheckedAt: Date | null;
+  /** issue 397 — `og:image` z TEJ ISTEJ overovacej stránky, keď verify vôbec
+   *  fetchol (nulový extra request). `null`, keď sa neoverovalo VÔBEC, ALEBO
+   *  keď stránka žiadny použiteľný obrázok neniesla — `applyImageFallback`
+   *  nižšie ho použije LEN ako doplnok k chýbajúcemu adaptérovmu obrázku. */
+  readonly fallbackImageUrl: string | null;
 }
 
 /**
@@ -179,10 +184,29 @@ async function verifyPickIfWarranted(
   now: Date,
 ): Promise<VerifyOutcomeFields> {
   if (pick.candidate === null || (pick.confidence !== "high" && pick.confidence !== "medium")) {
-    return { verdict: null, verdictCheckedAt: null };
+    return { verdict: null, verdictCheckedAt: null, fallbackImageUrl: null };
   }
   const outcome = await verifyCandidateCode(client, pick.candidate.url, product);
-  return { verdict: outcome.verdict, verdictCheckedAt: now };
+  return { verdict: outcome.verdict, verdictCheckedAt: now, fallbackImageUrl: outcome.imageUrl };
+}
+
+/**
+ * issue 397: keď E4's overenie vrátilo `og:image` fallback, doplní ho LEN
+ * do CHOSEN kandidátovho riadku v top-8 poli (`chosenUrl` zhoda) A LEN keď
+ * ten riadok ešte NEMÁ vlastný obrázok z adaptéra — fallback fetch prebehol
+ * VÝHRADNE preň, ostatných top-8 kandidátov sa netýka. Vracia NOVÉ pole
+ * (vstupné `candidates` ostáva nedotknuté, rovnaká disciplína ako
+ * `ranking.ts`'s `rank()`).
+ */
+function applyImageFallback(
+  candidates: readonly PairingCandidate[],
+  chosenUrl: string | null,
+  fallbackImageUrl: string | null,
+): readonly PairingCandidate[] {
+  if (chosenUrl === null || fallbackImageUrl === null) return candidates;
+  return candidates.map((candidate) =>
+    candidate.url === chosenUrl && candidate.imageUrl === null ? { ...candidate, imageUrl: fallbackImageUrl } : candidate,
+  );
 }
 
 /** Krátky ľudsky čitateľný dôvod voľby — nová appka's pole, stará appka ho
@@ -239,6 +263,7 @@ async function upsertCandidateSet(db: Database, input: UpsertCandidateSetInput):
           url: candidate.url,
           code: candidate.code,
           price: candidate.price,
+          imageUrl: candidate.imageUrl,
           rawScore: candidate.rawScore.toFixed(4),
           codeHit: candidate.codeHit,
         })),
