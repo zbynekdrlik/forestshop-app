@@ -14,7 +14,7 @@ import type { NextEventService } from "../modules/calendar/service.js";
 import { registerCatalogRoutes, type RunIngest } from "./catalog-routes.js";
 import { registerDailyTasksRoutes } from "./daily-tasks-routes.js";
 import { registerDpdRoutes, type DpdRunDeps } from "./dpd-routes.js";
-import { registerFloorOrdersRoutes } from "./floor-orders-routes.js";
+import { registerFloorNotesRoutes } from "./floor-notes-routes.js";
 import { checkLoginRateLimit, clientIp } from "./login-rate-limit.js";
 import { SESSION_COOKIE, requireUser, type AppBindings } from "./middleware.js";
 import { registerOrdersRoutes, type RunOrdersIngest } from "./orders-routes.js";
@@ -336,9 +336,12 @@ export function createApp(
   // READ-ONLY pohľady + appkina vlastná reklamácia-značka. Žiadny voliteľný
   // dependency (rovnaký dôvod ako `upozornenia` vyššie).
   registerOrderFlagsRoutes(app, db, options.adminBaseUrl ?? "https://www.forestshop.sk");
-  // issue 345: "Eshop → Objednávky predajňa" — LEN čítanie, rovnaká rodina
-  // ako `registerOrderFlagsRoutes` vyššie, žiadna nová zapisovacia cesta.
-  registerFloorOrdersRoutes(app, db, options.adminBaseUrl ?? "https://www.forestshop.sk");
+  // issue 410: "Eshop → Objednávky predajňa" — nahrádza Shoptet-viazaný
+  // `registerFloorOrdersRoutes` (issue 345) vlastnými zápismi z predajne.
+  // Zápis (vytvoriť/upraviť/zmazať/prepnúť značku/pripnúť-odopnúť produkt)
+  // je gejtovaný `requireRole("admin","manazer")` PRIAMO v
+  // `floor-notes-routes.ts`, žiadny extra dependency tu netreba.
+  registerFloorNotesRoutes(app, db);
   // issue 292: "Eshop → Preprava DPD" — bez dodanej konfigurácie sa do DPD
   // NEODOSIELA vôbec (fail-closed, rovnaký princíp ako `restock`/
   // `nedostupne` vyššie): akcie vrátia 503 "nenakonfigurované".
