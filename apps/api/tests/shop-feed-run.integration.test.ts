@@ -172,3 +172,32 @@ describe("runShopFeed — ukladanie obrázka produktu (issue 347)", () => {
     expect(row?.imageUrl).toBeNull();
   });
 });
+
+// issue 402: `source` stĺpec — feed je AUTORITATÍVNY zdroj, `shop-sitemap`
+// (sitemap.xml + HTTP sonda) zapisuje len kódy, čo feed nepokrýva.
+describe("runShopFeed — stĺpec source (issue 402)", () => {
+  let db: Database;
+  let close: () => Promise<void>;
+
+  beforeEach(async () => {
+    ({ db, close } = await withCleanDb());
+  });
+  afterEach(async () => {
+    await close();
+  });
+
+  it("nový riadok z feedu dostane source='feed'", async () => {
+    await runShopFeed({ db, now: NOW, fetchFeed: () => Promise.resolve(feedWith([{ code: "K1", availability: null }])) });
+    const [row] = await db.select({ source: shopProductUrl.source }).from(shopProductUrl).where(eq(shopProductUrl.code, "K1"));
+    expect(row?.source).toBe("feed");
+  });
+
+  it("feed RECLAIMUJE kód späť na source='feed', keď ho `shop-sitemap` predtým označil ako sitemap/probe", async () => {
+    await db.insert(shopProductUrl).values({ code: "L1", url: "https://www.forestshop.sk/stary-sitemap-odkaz/", fetchedAt: NOW, source: "sitemap" });
+
+    await runShopFeed({ db, now: NOW, fetchFeed: () => Promise.resolve(feedWith([{ code: "L1", availability: null }])) });
+
+    const [row] = await db.select({ source: shopProductUrl.source, url: shopProductUrl.url }).from(shopProductUrl).where(eq(shopProductUrl.code, "L1"));
+    expect(row).toEqual({ source: "feed", url: "https://www.forestshop.sk/L1/" });
+  });
+});
