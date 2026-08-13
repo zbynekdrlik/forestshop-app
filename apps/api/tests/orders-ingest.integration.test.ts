@@ -407,6 +407,66 @@ it("re-import NIKDY neprepíše ručne nastavený stav riadku ani komentár obje
   expect(rereadLine?.quantity).toBe(3); // množstvo sa AJ TAK osviežuje
 });
 
+// issue 412: majiteľ nahlásil, že objednávka 20261306 zmenená v Shoptete na
+// úplne iný produkt stále ukazuje STARÝ, dávno vymenený produkt — import
+// dovtedy len INSERToval/UPDATEoval, nikdy nemazal riadok, ktorého
+// (objednávka, variant) dvojica z novšieho exportu zmizla. Scenár nižšie
+// pokrýva OBE tvrdenia zadania naraz: (1) vymenený produkt sa NAHRADÍ (stará
+// položka zmizne, nová sa objaví s predvolenými hodnotami — nezačala sa ešte
+// vybavovať), (2) SÚRODENECKÝ riadok tej istej objednávky, ktorého produkt sa
+// NEZMENIL, si ZACHOVÁ manažérom nastavený stav — dôkaz, že reconciliation je
+// CIELENÝ (mazacia množina = presne to, čo z exportu zmizlo), nie plný
+// replace celej objednávky (ktorý by reštartoval aj nezmenené riadky).
+it("re-import ODSTRÁNI riadok produktu, ktorý Shoptet z objednávky vymenil, a zachová stav nezmeneného súrodeneckého riadku", async () => {
+  const { db, dir } = await boot();
+  await insertTestVariant(db, "40237/XL"); // "A" — bude vymenený
+  await insertTestVariant(db, "40238/M"); // "B" — nahradí A
+  await insertTestVariant(db, "40239/S"); // "C" — ostáva nezmenený súrodenec
+
+  const povodna = buildCsv(HEADER, [
+    { code: "9201", date: "2026-07-01 10:00:00", statusName: "Vybavuje sa", billFullName: "Pavol Bajčičák", itemName: "Produkt A", itemAmount: "1", itemCode: "40237/XL" },
+    { code: "9201", date: "2026-07-01 10:00:00", statusName: "Vybavuje sa", billFullName: "Pavol Bajčičák", itemName: "Produkt C", itemAmount: "1", itemCode: "40239/S" },
+  ]);
+  await ingestOrders(db, { fetchExport: fetcherOf(povodna), now: NOW, rawDir: dir, windowStart: WINDOW_START, windowEnd: WINDOW_END });
+
+  const [order9201] = await db.select().from(orders).where(eq(orders.externalOrderId, "9201"));
+  if (order9201 === undefined) throw new Error("objednávka sa nenašla");
+  const povodneRiadky = await db.select().from(orderLines).where(eq(orderLines.orderId, order9201.id));
+  expect(povodneRiadky).toHaveLength(2);
+  const [lineA] = povodneRiadky.filter((l) => l.variantCode === "40237/XL");
+  const [lineC] = povodneRiadky.filter((l) => l.variantCode === "40239/S");
+  if (lineA === undefined || lineC === undefined) throw new Error("riadok sa nenašiel");
+  // Manažér oba riadky ručne spracoval PRED tým, než Shoptet vymenil produkt A.
+  await db.update(orderLines).set({ state: "nedostupne", ordered: false }).where(eq(orderLines.id, lineA.id));
+  await db.update(orderLines).set({ state: "caka_sa", ordered: true }).where(eq(orderLines.id, lineC.id));
+
+  // Shoptet: produkt A vymenený za B, C ostáva nezmenený (rovnaké množstvo).
+  const zmenena = buildCsv(HEADER, [
+    { code: "9201", date: "2026-07-01 10:00:00", statusName: "Vybavuje sa", billFullName: "Pavol Bajčičák", itemName: "Produkt B", itemAmount: "1", itemCode: "40238/M" },
+    { code: "9201", date: "2026-07-01 10:00:00", statusName: "Vybavuje sa", billFullName: "Pavol Bajčičák", itemName: "Produkt C", itemAmount: "1", itemCode: "40239/S" },
+  ]);
+  const result = await ingestOrders(db, { fetchExport: fetcherOf(zmenena), now: NOW, rawDir: dir, windowStart: WINDOW_START, windowEnd: WINDOW_END });
+  expect(result.status).toBe("accepted");
+
+  const noveRiadky = await db.select().from(orderLines).where(eq(orderLines.orderId, order9201.id));
+  // Presne 2 riadky — STARÝ "A" je preč, "B" pribudol, "C" ostal (nie 3).
+  expect(noveRiadky).toHaveLength(2);
+  const zostavaA = noveRiadky.find((l) => l.variantCode === "40237/XL");
+  expect(zostavaA).toBeUndefined(); // obrazovka "Na objednanie" už NESMIE ukázať vymenený produkt A
+
+  const novyB = noveRiadky.find((l) => l.variantCode === "40238/M");
+  expect(novyB).toBeDefined(); // obrazovka MUSÍ ukázať nový produkt B
+  expect(novyB?.state).toBe("objednane"); // nový riadok, predvolený stav — vybavovanie začína odznova
+  expect(novyB?.ordered).toBe(false);
+
+  const zachovanyC = noveRiadky.find((l) => l.variantCode === "40239/S");
+  expect(zachovanyC).toBeDefined();
+  // C sa v exporte nezmenil — jeho manažérom nastavený stav MUSÍ prežiť,
+  // presne ako existujúci test vyššie dokazuje pre celú nezmenenú objednávku.
+  expect(zachovanyC?.state).toBe("caka_sa");
+  expect(zachovanyC?.ordered).toBe(true);
+});
+
 it("prázdny (0 bajtov) export sa odmietne bez zápisu", async () => {
   const { db, dir } = await boot();
   const result = await ingestOrders(db, {
