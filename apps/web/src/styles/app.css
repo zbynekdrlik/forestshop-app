@@ -3149,6 +3149,14 @@ a.upozornenie-title:hover {
   background: var(--fs-surface-alt);
   color: var(--fs-ink-muted);
 }
+/* issue 398 — vysvetlenie pod terminálnym odznakom (unavailable/discontinued),
+   že reálne prepnutie na eshope robí nočná automatika, nie táto obrazovka. */
+.pairing-review-terminal-note {
+  font-size: var(--fs-text-xs);
+  color: var(--fs-ink-faint);
+  font-style: italic;
+  margin-top: var(--fs-space-1);
+}
 .pairing-review-panel {
   margin-top: var(--fs-space-3);
   padding: var(--fs-space-3);
@@ -3162,10 +3170,25 @@ a.upozornenie-title:hover {
 .pairing-review-panel-candidate {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: var(--fs-space-2);
   font-size: var(--fs-text-sm);
   overflow-wrap: break-word;
+}
+/* issue 409 — malý náhľad obrázka na KAŽDOM riadku panelu (nie len chosenCandidate). */
+.pairing-review-panel-candidate-imgbox {
+  flex: 0 0 auto;
+}
+.pairing-review-panel-candidate-imgbox img {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+  background: var(--fs-surface);
+  border: 1px solid var(--fs-border);
+  border-radius: var(--fs-radius-sm);
+}
+.pairing-review-panel-candidate-text {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 .pairing-review-manual-row,
 .pairing-review-terminal-row {

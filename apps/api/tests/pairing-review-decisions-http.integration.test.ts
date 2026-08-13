@@ -105,6 +105,10 @@ it("'good': v JEDNEJ transakcii zapíše override AJ pairing_decision, okamžite
   expect(item?.hasEffectiveLink).toBe(true);
   expect(item?.decision).toEqual({ status: "good", url: "https://dodavatel.example.com/bunda-alfa", decidedAt: expect.any(String) as string });
   expect(await unreviewedKeys(app, cookie)).not.toContain("PR-GOOD");
+
+  // issue 398 — nový "✓ Dobré/Vybrané" filter ho zahŕňa.
+  const decidedTelo = (await (await app.request("/api/pairing-review?filter=decided", { headers: { cookie } })).json()) as { readonly items: { readonly productKey: string }[] };
+  expect(decidedTelo.items.some((i) => i.productKey === "PR-GOOD")).toBe(true);
 });
 
 it("'good' bez navrhnutého kandidáta (confidence none) vráti 400 a NIČ nezapíše", async () => {

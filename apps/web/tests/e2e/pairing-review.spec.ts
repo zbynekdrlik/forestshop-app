@@ -7,14 +7,17 @@ const E2E_HESLO = "e2e-test-heslo"; // účet existuje len v testovacej databáz
 // pairing-review.ts`'s `E2E_PAROVANIE_REVIEW_EMAIL`.
 const E2E_PAROVANIE_REVIEW_EMAIL = "e2e-parovanie-review@forestshop.sk";
 // issue 397 — musia sa zhodovať s `E2E_OUR_IMAGE_DATA_URI`/`E2E_CANDIDATE_
-// IMAGE_DATA_URI` v `scripts/e2e-fixtures-pairing-review.ts` (rovnaký
-// "musí sa zhodovať" vzor ako heslo/email vyššie — `data:` URI, nikdy
-// skutočná `https://` adresa, inak prehliadač reálne skúsi obrázok
-// stiahnuť a zapíše `net::ERR_NAME_NOT_RESOLVED`/404 do konzoly).
+// IMAGE_DATA_URI`/`E2E_ALT_CANDIDATE_IMAGE_DATA_URI` v `scripts/e2e-fixtures-
+// pairing-review.ts` (rovnaký "musí sa zhodovať" vzor ako heslo/email
+// vyššie — `data:` URI, nikdy skutočná `https://` adresa, inak prehliadač
+// reálne skúsi obrázok stiahnuť a zapíše `net::ERR_NAME_NOT_RESOLVED`/404
+// do konzoly).
 const E2E_OUR_IMAGE_DATA_URI =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC";
 const E2E_CANDIDATE_IMAGE_DATA_URI =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNgYPgPAAEDAQAIicLsAAAAAElFTkSuQmCC";
+const E2E_ALT_CANDIDATE_IMAGE_DATA_URI =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==";
 
 // issue 387 E5: "Eshop → Párovanie" — VIDITEĽNÁ záložka (`nav.ts`, priečinok
 // Eshop). Fixtúry (`scripts/e2e-fixtures-pairing-review.ts`): "E2E-PR-CHYBA"
@@ -31,6 +34,15 @@ const E2E_CANDIDATE_IMAGE_DATA_URI =
 // "E2E-PR-NENAJDENY" (nemá kandidáta, panel je hneď otvorený) sú fixtúry E5,
 // zámerne dovtedy NEROZHODNUTÉ, aby E6 testy mali čerstvý "nezrevidovaný"
 // stav na začiatku behu (fixtúrový súbor sa medzi behmi znova naseeduje).
+//
+// issue 398: žiadny "✗ Zlé" medzikrok — nerozhodnutá karta s kandidátom
+// ukazuje ŠTYRI možnosti priamo (✓ Dobré / „vyber url" / 📦 / 🚫).
+// issue 401: "E2E-PR-BEZADAPTERA" (dodávateľ BEZ registrovaného adaptéra,
+// žiadny `pairing_candidate_set` riadok) — dokazuje plnú populáciu + vlastnú
+// "zatiaľ nemá automatické vyhľadávanie" hlášku.
+// issue 409: "E2E-PR-PANEL" (DRUHÝ/alternatívny, nevybraný kandidát s
+// VLASTNÝM obrázkom) — dokazuje, že panel ukazuje obrázok KAŽDÉHO z top-8,
+// zámerne dovtedy nerozhodnutý produkt, čo žiadny INÝ test v súbore netrafí.
 
 test("predvolený filter 'Nezrevidované' ukáže produkty bez linky (s aj bez kandidáta), vylúči produkt, čo linku už má; konzola je čistá", async ({
   page,
@@ -54,15 +66,19 @@ test("predvolený filter 'Nezrevidované' ukáže produkty bez linky (s aj bez k
   await page.getByTestId("nav-tab-pairing-review").click();
   await expect(page.getByRole("heading", { name: "Párovanie", exact: true })).toBeVisible();
 
-  // Napárovaný produkt — karta ukazuje náš produkt aj navrhnutého kandidáta,
-  // s presne DVOMA akčnými tlačidlami (✓ Dobré / ✗ Zlé, issue 387 E6 —
-  // fixtúrový účet má rolu "manazer", teda smie rozhodovať).
+  // issue 398 — napárovaný produkt: karta ukazuje náš produkt aj navrhnutého
+  // kandidáta, so ŠTYRMI akčnými tlačidlami PRIAMO na karte (✓ Dobré / vyber
+  // url / 📦 / 🚫), žiadny "✗ Zlé" medzikrok.
   const chybaKarta = page.getByTestId("pairing-review-card-E2E-PR-CHYBA");
   await expect(chybaKarta).toBeVisible();
   await expect(chybaKarta).toContainText("E2E Bunda Alfa Nezrevidovaná");
   await expect(page.getByTestId("pairing-review-candidate-E2E-PR-CHYBA")).toContainText("E2E Bunda Alfa u dodávateľa");
   await expect(chybaKarta.getByTestId("pairing-review-good-E2E-PR-CHYBA")).toBeVisible();
-  await expect(chybaKarta.getByTestId("pairing-review-open-panel-E2E-PR-CHYBA")).toBeVisible();
+  await expect(chybaKarta.getByTestId("pairing-review-open-panel-E2E-PR-CHYBA")).toHaveText("vyber url");
+  await expect(chybaKarta.getByTestId("pairing-review-unavailable-E2E-PR-CHYBA")).toBeVisible();
+  await expect(chybaKarta.getByTestId("pairing-review-discontinued-E2E-PR-CHYBA")).toBeVisible();
+  // Panel NIE JE otvorený automaticky — "vyber url" ho len ponúka.
+  await expect(chybaKarta.getByTestId("pairing-review-panel-E2E-PR-CHYBA")).toHaveCount(0);
 
   // issue 397 — karta ukazuje OBA obrázky vedľa seba (náš produkt aj
   // navrhnutý kandidát), nielen text okolo nich (`scripts/e2e-fixtures-
@@ -75,6 +91,13 @@ test("predvolený filter 'Nezrevidované' ukáže produkty bez linky (s aj bez k
   const nenajdenyKarta = page.getByTestId("pairing-review-card-E2E-PR-NENAJDENY");
   await expect(nenajdenyKarta).toBeVisible();
   await expect(page.getByTestId("pairing-review-no-candidate-E2E-PR-NENAJDENY")).toContainText("Nenašiel sa žiadny kandidát");
+
+  // issue 401 — produkt dodávateľa BEZ adaptéra: VLASTNÁ hláška, NIKDY
+  // "Nenašiel sa žiadny kandidát" (gather preň vôbec nebehal).
+  const bezAdapteraKarta = page.getByTestId("pairing-review-card-E2E-PR-BEZADAPTERA");
+  await expect(bezAdapteraKarta).toBeVisible();
+  await expect(page.getByTestId("pairing-review-no-adapter-E2E-PR-BEZADAPTERA")).toContainText("nemá automatické vyhľadávanie");
+  await expect(page.getByTestId("pairing-review-no-candidate-E2E-PR-BEZADAPTERA")).toHaveCount(0);
 
   // Produkt, čo UŽ MÁ efektívnu linku — "Nezrevidované" ho vylúči.
   await expect(page.getByTestId("pairing-review-card-E2E-PR-SLINKOU")).toHaveCount(0);
@@ -118,8 +141,9 @@ test("odznak v menu ukazuje počet nezrevidovaných HNEĎ po prihlásení, bez o
 
 // issue 387 E6 — "✓ Dobré": karta vypadne z predvoleného "Nezrevidované"
 // filtra (presne "unreviewed" definícia — bez efektívnej linky), dostane
-// odznak "✓ Dobré" pod filtrom "Všetky", A efektívny odkaz sa OKAMŽITE
-// prejaví aj na obrazovke "Vyhľadať" (#240) — obe čítajú TÚ ISTÚ
+// odznak "✓ Dobré" pod filtrom "Všetky" AJ pod novým "✓ Dobré/Vybrané"
+// filtrom (issue 398), A efektívny odkaz sa OKAMŽITE prejaví aj na
+// obrazovke "Vyhľadať" (#240) — obe čítajú TÚ ISTÚ
 // `product_supplier_link_override` tabuľku, zdieľaný zápis
 // (`.claude/rules/product-links.md`). Pôvodne toto krížové overenie
 // išlo cez sesterskú obrazovku "Párovanie produktov" (#239) — issue 400
@@ -155,6 +179,10 @@ test("'✓ Dobré' rozhodnutie zapíše efektívny odkaz — viditeľný na tejt
   await expect(kartaVsetky).toBeVisible();
   await expect(kartaVsetky.getByTestId("pairing-review-decision-badge-E2E-PR-CHYBA")).toHaveText("✓ Dobré");
 
+  // issue 398 — nový "✓ Dobré/Vybrané" filter ho zahŕňa.
+  await page.getByTestId("pairing-review-filter-decided").click();
+  await expect(page.getByTestId("pairing-review-card-E2E-PR-CHYBA")).toBeVisible();
+
   // Krížové overenie na "Vyhľadať" (#240) — zdieľaná zapisovacia cesta,
   // rovnaký vzor ako `search.spec.ts`'s "Hľadať produkt".
   await page.getByRole("button", { name: "Vyhľadať" }).click();
@@ -169,7 +197,11 @@ test("'✓ Dobré' rozhodnutie zapíše efektívny odkaz — viditeľný na tejt
 // issue 387 E6 — "📦 Nie je skladom" (terminálny stav bez odkazu) + "↩
 // Vrátiť": produkt vypadne z "Nezrevidované" (je zrevidovaný, aj bez
 // efektívnej linky — E5's forward-kompat poznámka), Vrátiť ho vráti späť.
-test("'📦 Nie je skladom' vyradí produkt z 'Nezrevidované'; '↩ Vrátiť' ho vráti späť; konzola je čistá", async ({ page }) => {
+// issue 398 pridáva vysvetľujúcu poznámku o nočnej automatike + nový
+// "⛔ Vyriešené-vypnuté" filter.
+test("'📦 Nie je skladom' vyradí produkt z 'Nezrevidované', ukáže poznámku o nočnej automatike a je v '⛔ Vyriešené-vypnuté'; '↩ Vrátiť' ho vráti späť; konzola je čistá", async ({
+  page,
+}) => {
   const chyby: string[] = [];
   page.on("console", (m) => {
     if (m.type() === "error" || m.type() === "warning") chyby.push(m.text());
@@ -185,7 +217,7 @@ test("'📦 Nie je skladom' vyradí produkt z 'Nezrevidované'; '↩ Vrátiť' h
   await page.getByTestId("nav-tab-pairing-review").click();
 
   // "E2E-PR-NENAJDENY" nemá kandidáta — panel (📦/🚫/manuál) je vidno PRIAMO,
-  // bez ✓/✗ prepínača (nič na "prijatie").
+  // bez ✓/vyber url prepínača (nič na "prijatie").
   const karta = page.getByTestId("pairing-review-card-E2E-PR-NENAJDENY");
   await expect(karta).toBeVisible();
   await karta.getByTestId("pairing-review-unavailable-E2E-PR-NENAJDENY").click();
@@ -195,10 +227,98 @@ test("'📦 Nie je skladom' vyradí produkt z 'Nezrevidované'; '↩ Vrátiť' h
   const kartaVsetky = page.getByTestId("pairing-review-card-E2E-PR-NENAJDENY");
   await expect(kartaVsetky).toBeVisible();
   await expect(kartaVsetky.getByTestId("pairing-review-decision-badge-E2E-PR-NENAJDENY")).toHaveText("📦 Nie je skladom");
-  await kartaVsetky.getByTestId("pairing-review-revert-E2E-PR-NENAJDENY").click();
+  await expect(kartaVsetky.getByTestId("pairing-review-terminal-note-E2E-PR-NENAJDENY")).toContainText("nočná automatika");
+
+  // issue 398 — nový "⛔ Vyriešené-vypnuté" filter ho zahŕňa.
+  await page.getByTestId("pairing-review-filter-terminal").click();
+  await expect(page.getByTestId("pairing-review-card-E2E-PR-NENAJDENY")).toBeVisible();
+
+  await page.getByTestId("pairing-review-filter-all").click();
+  await page.getByTestId("pairing-review-card-E2E-PR-NENAJDENY").getByTestId("pairing-review-revert-E2E-PR-NENAJDENY").click();
 
   await page.getByTestId("pairing-review-filter-unreviewed").click();
   await expect(page.getByTestId("pairing-review-card-E2E-PR-NENAJDENY")).toBeVisible();
+
+  expect(chyby).toEqual([]);
+});
+
+// issue 401 — dodávateľ BEZ adaptéra: karta bez kandidátov, vlastná hláška,
+// manuálne URL pole + 📦/🚫 (rovnaké možnosti z #398) — ručne zadaná URL sa
+// zapíše cez ZDIEĽANÚ zapisovaciu cestu presne ako pri adaptérovom produkte.
+test("issue 401: produkt dodávateľa BEZ adaptéra — vlastná hláška, ručne zadaná URL sa uloží a produkt vypadne z 'Nezrevidované'; konzola je čistá", async ({
+  page,
+}) => {
+  const chyby: string[] = [];
+  page.on("console", (m) => {
+    if (m.type() === "error" || m.type() === "warning") chyby.push(m.text());
+  });
+  page.on("pageerror", (e) => {
+    chyby.push(e.message);
+  });
+
+  await page.goto("/");
+  await page.getByLabel("E-mail").fill(E2E_PAROVANIE_REVIEW_EMAIL);
+  await page.getByLabel("Heslo").fill(E2E_HESLO);
+  await page.getByRole("button", { name: "Prihlásiť sa" }).click();
+  await page.getByTestId("nav-tab-pairing-review").click();
+
+  const karta = page.getByTestId("pairing-review-card-E2E-PR-BEZADAPTERA");
+  await expect(karta).toBeVisible();
+  await expect(page.getByTestId("pairing-review-no-adapter-E2E-PR-BEZADAPTERA")).toBeVisible();
+
+  await karta.getByTestId("pairing-review-manual-input-E2E-PR-BEZADAPTERA").fill("https://dodavatel-bez-adaptera.example.com/rucne-zadana");
+  await karta.getByTestId("pairing-review-manual-save-E2E-PR-BEZADAPTERA").click();
+  await expect(karta).toHaveCount(0);
+
+  await page.getByTestId("pairing-review-filter-all").click();
+  const kartaVsetky = page.getByTestId("pairing-review-card-E2E-PR-BEZADAPTERA");
+  await expect(kartaVsetky).toBeVisible();
+  await expect(kartaVsetky.getByTestId("pairing-review-decision-badge-E2E-PR-BEZADAPTERA")).toHaveText("✓ Vybraný link");
+
+  expect(chyby).toEqual([]);
+});
+
+// issue 409 — panel ukazuje obrázok KAŽDÉHO z top-8, nielen navrhnutého
+// kandidáta: dva kandidáti s DVOMA ODLIŠNÝMI obrázkami, výber alternatívneho
+// (nevybraného) kandidáta zapíše JEHO url, nie chosenUrl.
+test("issue 409: panel kandidátov ukazuje obrázok KAŽDÉHO kandidáta; výber alternatívneho zapíše jeho URL; konzola je čistá", async ({ page }) => {
+  const chyby: string[] = [];
+  page.on("console", (m) => {
+    if (m.type() === "error" || m.type() === "warning") chyby.push(m.text());
+  });
+  page.on("pageerror", (e) => {
+    chyby.push(e.message);
+  });
+
+  await page.goto("/");
+  await page.getByLabel("E-mail").fill(E2E_PAROVANIE_REVIEW_EMAIL);
+  await page.getByLabel("Heslo").fill(E2E_HESLO);
+  await page.getByRole("button", { name: "Prihlásiť sa" }).click();
+  await page.getByTestId("nav-tab-pairing-review").click();
+  await page.getByTestId("pairing-review-filter-all").click();
+
+  const karta = page.getByTestId("pairing-review-card-E2E-PR-PANEL");
+  await expect(karta).toBeVisible();
+  await karta.getByTestId("pairing-review-open-panel-E2E-PR-PANEL").click();
+
+  const panel = karta.getByTestId("pairing-review-panel-E2E-PR-PANEL");
+  await expect(panel).toBeVisible();
+  await expect(panel.locator("img")).toHaveCount(2);
+  await expect(panel.locator("img").nth(0)).toHaveAttribute("src", E2E_CANDIDATE_IMAGE_DATA_URI);
+  await expect(panel.locator("img").nth(1)).toHaveAttribute("src", E2E_ALT_CANDIDATE_IMAGE_DATA_URI);
+
+  await panel.getByTestId("pairing-review-panel-pick-E2E-PR-PANEL-1").click();
+  // Filter "Všetky" ukazuje kartu ĎALEJ (na rozdiel od "Nezrevidované") — teraz
+  // s odznakom rozhodnutia namiesto akčných tlačidiel/panelu.
+  await expect(karta.getByTestId("pairing-review-decision-badge-E2E-PR-PANEL")).toHaveText("✓ Vybraný link");
+
+  // Krížové overenie na "Vyhľadať" (#240) — dokazuje, že sa zapísala URL
+  // ALTERNATÍVNEHO kandidáta (druhá pozícia), nie navrhnutého ("chosenUrl").
+  await page.getByRole("button", { name: "Vyhľadať" }).click();
+  await page.getByLabel("Produkt").fill("E2E-PR-PANEL");
+  await page.getByRole("button", { name: "Hľadať produkt" }).click();
+  await page.getByTestId("search-product-open-E2E-PR-PANEL").click();
+  await expect(page.getByTestId("search-detail-link-value")).toHaveText("https://e2e-dodavatel.example.com/bunda-beta-alt");
 
   expect(chyby).toEqual([]);
 });

@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, type JSX } from "react";
+import { useCallback, useEffect, useRef, useState, type JSX } from "react";
 import type { Me } from "../api.js";
 import { validateSupplierLinkUrl } from "../ordersApi.js";
 import {
@@ -9,19 +9,34 @@ import {
   type PairingReviewCandidate,
   type PairingReviewItem,
 } from "../pairingReviewApi.js";
+import { PanelCandidateRow, TerminalButtons } from "./PairingReviewPanelParts.js";
 
 // issue 387 E5: karta jedného produktu, vyčlenená VOPRED z `PairingReviewSection.tsx`
 // (rovnaký princíp ako `OrderLineRow.tsx`/`UpozornenieCard.tsx` — dvojstĺpcová
 // karta má dosť JSX na prekročenie eslint `max-lines: 400` v jednom súbore,
 // `.claude/rules/frontend-design.md`).
 //
-// issue 387 E6: pridáva rozhodovanie — presne UX starej appky (design
-// komentár na tickete): ✓ Dobré / ✗ Zlé (✗ len ROZBALÍ panel na mieste,
-// NEPRESÚVA kartu), panel so zoznamom top-8 kandidátov ("Vybrať"), ručné URL
-// pole ("Uložiť"), 📦/🚫 terminálne stavy, ↩ Vrátiť + "Zmeniť" pri už
-// rozhodnutých. Panel je PER-KARTE lokálny stav (žiadny globálny
-// `editingXId` scalar) — issue 381's krížová strata konceptu sa netýka.
-// VŠETKY akčné tlačidlá zdieľajú JEDEN `busy` guard.
+// issue 398: posledná podoba starej appky (`parovanie-produktov` @ f76cafa,
+// commit `f45af65`) nahradila mätúci medzikrok „✗ Zlé" priamymi tlačidlami
+// NA KARTE — nerozhodnutá karta s kandidátom ukazuje VŠETKY možnosti naraz
+// (✓ Dobré / „vyber url" / 📦 / 🚫), žiadny medzikrok. „vyber url" (predtým
+// „✗ Zlé") má PRESNE rovnaké správanie ako predtým — len ROZBALÍ panel na
+// mieste (NEPRESÚVA kartu, NEMENÍ stav), teraz len s iným labelom a bez
+// zbytočného "zlé" rámovania. Panel (kandidáti/manuál/📦/🚫/Zavrieť) sa
+// ukazuje aj priamo, keď karta nemá kandidáta vôbec. Panel je PER-KARTE
+// lokálny stav (žiadny globálny `editingXId` scalar) — issue 381's krížová
+// strata konceptu sa netýka. VŠETKY akčné tlačidlá zdieľajú JEDEN `busy` guard.
+//
+// issue 401: `item.supplierHasAdapter === false` (dodávateľ bez
+// automatického adaptéra WETLAND/BETALOV/ODIMON) dostáva VLASTNÚ hlášku
+// namiesto "Nenašiel sa žiadny kandidát" — karta inak vyzerá identicky
+// (manuálne URL pole + 📦/🚫 sú tie isté možnosti z #398).
+//
+// issue 409: panel kandidátov ukazuje obrázok KAŽDÉHO z top-8 (dáta sú UŽ
+// perzistované z gather behu — žiadny live-fetch navyše, design komentár).
+//
+// Design komentár (root cause/prístup/zamietnutá alternatíva/Architektúra)
+// pre #398/#401/#409: https://github.com/zbynekdrlik/forestshop-app/issues/398
 
 const STATE_LABELS: Readonly<Record<PairingReviewItem["productState"], string>> = {
   sellable: "🟢 Skladom",
@@ -83,15 +98,17 @@ export function PairingReviewCard({
   // zavrieť/znovu otvoriť skôr, než dobehne pôvodný `fetchPairingCandidates`.
   const openSeq = useRef(0);
 
-  const openPanel = useCallback(() => {
+  // issue 398/401 review nález: panel sa ukazuje AJ AUTOMATICKY (bez kliku na
+  // "vyber url"), keď karta nemá kandidáta vôbec — pred touto opravou sa v
+  // tom prípade `fetchPairingCandidates` NIKDY nezavolalo (volalo sa len z
+  // `openPanel`u), takže "Načítavam kandidátov…" ostávalo navždy zobrazené aj
+  // keď v skutočnosti niet čo načítať (item.chosenCandidate === null vždy
+  // znamená `confidence === "none"`, teda top-8 zoznam je prázdny — `.claude/
+  // rules/pairing-search.md`'s E5 sekcia). issue 401 tento stav sprístupnilo
+  // OVEĽA ČASTEJŠIE (každý produkt bez adaptéra ho má), preto oprava patrí sem.
+  const loadCandidates = useCallback(() => {
     const seq = (openSeq.current += 1);
-    setPanelOpen(true);
-    setActionError("");
     setCandidatesError("");
-    // Predvyplní vlastnú URL len keď ide o EXISTUJÚCE manuálne rozhodnutie,
-    // čo NESEDÍ so žiadnym kandidátom (rovnaký vzor ako stará appka's
-    // `resolutionPanel`) — inak prázdne, nikdy neuhádnuté.
-    setManualUrl(item.decision?.status === "manual" ? (item.decision.url ?? "") : "");
     setCandidates(null);
     fetchPairingCandidates(item.productKey)
       .then((result) => {
@@ -106,7 +123,30 @@ export function PairingReviewCard({
         }
         setCandidatesError("Zoznam kandidátov sa nepodarilo načítať.");
       });
-  }, [item.productKey, item.decision, onSessionExpired]);
+  }, [item.productKey, onSessionExpired]);
+
+  const openPanel = useCallback(() => {
+    setPanelOpen(true);
+    setActionError("");
+    // Predvyplní vlastnú URL len keď ide o EXISTUJÚCE manuálne rozhodnutie,
+    // čo NESEDÍ so žiadnym kandidátom (rovnaký vzor ako stará appka's
+    // `resolutionPanel`) — inak prázdne, nikdy neuhádnuté.
+    setManualUrl(item.decision?.status === "manual" ? (item.decision.url ?? "") : "");
+    loadCandidates();
+  }, [item.decision, loadCandidates]);
+
+  const autoShowsPanel = item.decision === null && item.chosenCandidate === null;
+  // Beží pri MOUNTE (keď karta odrazu štartuje v "bez kandidáta" stave) AJ
+  // pri KAŽDOM prechode false→true PO mounte (napr. "↩ Vrátiť" na produkte
+  // bez kandidáta vráti `decision` na `null`, karta ostáva TOU ISTOU
+  // inštanciou — žiadny remount, žiadny iný spúšťač by fetch nespustil).
+  // Pole závislostí je ÚPLNÉ (tento repo nemá `eslint-plugin-react-hooks`,
+  // `.claude/rules/frontend-design.md` — kontrola je ručná, nie lintová):
+  // `loadCandidates` je stabilné (memoizované na `[item.productKey,
+  // onSessionExpired]`, oboje stabilné hodnoty).
+  useEffect(() => {
+    if (autoShowsPanel) loadCandidates();
+  }, [autoShowsPanel, loadCandidates]);
 
   const closePanel = useCallback(() => {
     openSeq.current += 1; // zahodí prípadnú ešte-bežiacu odpoveď na kandidátov
@@ -193,9 +233,18 @@ export function PairingReviewCard({
         <div className="pairing-review-side">
           <div className="pairing-review-label">Navrhnutý kandidát</div>
           {item.chosenCandidate === null ? (
-            <p className="pairing-review-nocandidate" data-testid={`pairing-review-no-candidate-${item.productKey}`}>
-              Nenašiel sa žiadny kandidát u dodávateľa.
-            </p>
+            item.supplierHasAdapter ? (
+              <p className="pairing-review-nocandidate" data-testid={`pairing-review-no-candidate-${item.productKey}`}>
+                Nenašiel sa žiadny kandidát u dodávateľa.
+              </p>
+            ) : (
+              // issue 401 — dodávateľ NEMÁ automatický adaptér (nie
+              // WETLAND/BETALOV/ODIMON) — gather preň vôbec nebehal, na
+              // rozdiel od "gather behal, nič nenašiel" vyššie.
+              <p className="pairing-review-nocandidate" data-testid={`pairing-review-no-adapter-${item.productKey}`}>
+                Tento dodávateľ zatiaľ nemá automatické vyhľadávanie — link treba zadať ručne.
+              </p>
+            )
           ) : (
             <div data-testid={`pairing-review-candidate-${item.productKey}`}>
               <a
@@ -258,6 +307,17 @@ export function PairingReviewCard({
                 </div>
               )}
 
+              {/* issue 398 — vysvetlenie dôsledku pri už rozhodnutom
+                  terminálnom stave: appka SAMA nič na eshope nemení hneď,
+                  reálne prepnutie robí nočná automatika (E7 stavový writeback). */}
+              {item.decision !== null && !panelOpen && (item.decision.status === "unavailable" || item.decision.status === "discontinued") && (
+                <p className="pairing-review-terminal-note" data-testid={`pairing-review-terminal-note-${item.productKey}`}>
+                  Reálne prepnutie viditeľnosti na eshope urobí nočná automatika (stavový zápis) — toto rozhodnutie je len príprava naň.
+                </p>
+              )}
+
+              {/* issue 398 — posledná podoba starej appky: KOLEKTÍVNY riadok
+                  všetkých možností priamo na karte, žiadny "✗ Zlé" medzikrok. */}
               {item.decision === null && item.chosenCandidate !== null && !panelOpen && (
                 <div className="pairing-review-actions">
                   <button
@@ -271,9 +331,10 @@ export function PairingReviewCard({
                   >
                     ✓ Dobré
                   </button>
-                  <button type="button" className="btn bad sm" disabled={busy} onClick={openPanel} data-testid={`pairing-review-open-panel-${item.productKey}`}>
-                    ✗ Zlé
+                  <button type="button" className="btn ghost sm" disabled={busy} onClick={openPanel} data-testid={`pairing-review-open-panel-${item.productKey}`}>
+                    vyber url
                   </button>
+                  <TerminalButtons busy={busy} submit={submit} productKey={item.productKey} />
                 </div>
               )}
 
@@ -284,23 +345,7 @@ export function PairingReviewCard({
                   {candidates === null && candidatesError === "" && <p>Načítavam kandidátov…</p>}
                   {candidates !== null &&
                     candidates.map((c, i) => (
-                      <div key={c.url} className="pairing-review-panel-candidate">
-                        <span>
-                          {c.name}: {c.url}
-                          {c.codeHit && " (kód sedí)"}
-                        </span>
-                        <button
-                          type="button"
-                          className="btn good sm"
-                          disabled={busy}
-                          onClick={() => {
-                            submit({ status: "manual", url: c.url });
-                          }}
-                          data-testid={`pairing-review-panel-pick-${item.productKey}-${String(i)}`}
-                        >
-                          Vybrať
-                        </button>
-                      </div>
+                      <PanelCandidateRow key={c.url} candidate={c} index={i} busy={busy} submit={submit} productKey={item.productKey} />
                     ))}
 
                   <div className="pairing-review-manual-row">
@@ -326,30 +371,7 @@ export function PairingReviewCard({
                   </div>
 
                   <div className="pairing-review-terminal-row">
-                    <button
-                      type="button"
-                      className="btn warn sm"
-                      disabled={busy}
-                      onClick={() => {
-                        submit({ status: "unavailable" });
-                      }}
-                      data-testid={`pairing-review-unavailable-${item.productKey}`}
-                      title="visible + Vypredané, stock 0 — dočasne, ostáva na re-kontrolu"
-                    >
-                      📦 Nie je skladom
-                    </button>
-                    <button
-                      type="button"
-                      className="btn ghost sm"
-                      disabled={busy}
-                      onClick={() => {
-                        submit({ status: "discontinued" });
-                      }}
-                      data-testid={`pairing-review-discontinued-${item.productKey}`}
-                      title="detailOnly + Predaj výrobku skončil — link ostane pre Google"
-                    >
-                      🚫 Už sa nebude predávať
-                    </button>
+                    <TerminalButtons busy={busy} submit={submit} productKey={item.productKey} />
                   </div>
 
                   {panelOpen && (
