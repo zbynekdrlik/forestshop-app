@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { between, eq, inArray, sql } from "drizzle-orm";
+import { and, between, eq, inArray, notInArray, sql } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
 import { orderLines, orders, variants } from "../../db/schema.js";
 import { log } from "../../logger.js";
@@ -115,6 +115,11 @@ export type OrdersIngestResult =
       // (žiadny nevyriešený súrodenec) — rovnaké pomenovanie ako
       // `skippedItemCount` vyššie.
       readonly skippedResolvedReturnCount: number;
+      // issue 412: počet `order_line` riadkov zmazaných v tomto behu, lebo
+      // ich (objednávka, variant) dvojica z aktuálneho exportu zmizla
+      // (produkt bol v Shoptete vymenený/odstránený z už prijatej
+      // objednávky) — rovnaké pomenovanie ako `skippedItemCount` vyššie.
+      readonly deletedStaleLineCount: number;
       readonly rawPath: string;
     }
   | { readonly status: "rejected"; readonly reason: string; readonly rawPath: string | null };
@@ -507,6 +512,50 @@ export async function ingestOrders(db: Database, options: OrdersIngestOptions): 
         insertedLineCount += batch.length;
       }
 
+      // issue 412: zosúladenie riadkov EXISTUJÚCEJ objednávky s AKTUÁLNYM
+      // exportom — Shoptet dovolí zmeniť produkt na už prijatej objednávke
+      // (vymeniť itemCode, nie len upraviť množstvo). Upsert vyššie NOVÝ
+      // produkt vždy pridá (INSERT vetva ON CONFLICT), ale bez tohto kroku
+      // by STARÝ riadok (produkt, ktorý Shoptet už nehlási) navždy zostal v
+      // DB — presne bug #412 (objednávka 20261306 stále ukazovala dávno
+      // vymenený produkt). Rozsah je PRESNE tento beh: mažú sa LEN riadky
+      // objednávok, ktoré TENTO import naozaj spracoval
+      // (`orderIdByExternalId`), a LEN tie (objednávka, variant) dvojice,
+      // ktoré TENTO export už vôbec nehlási (`lineTotals` — surová množina,
+      // PRED filtrom na známy variant, aby sa nezmazal legitímny existujúci
+      // riadok len preto, že katalógové overenie preň v tomto behu
+      // zlyhalo). Riadky objednávok MIMO tohto behu (staršie než okno,
+      // alebo objednávka bez jediného reálneho produktu v tomto behu) sa
+      // vôbec nedotýkajú — nie sú v `orderIdByExternalId`.
+      //
+      // FK prieskum (design komentár na tickete): NIČ v appke nemá cudzí
+      // kľúč na `order_line.id` ani na dvojicu (order_id, variant_code) —
+      // pripomienky (`order_reminder_state`, kľúč `order_code`), DPD
+      // zásielky (`dpd_shipment`, kľúč `order_id`), dodávateľské odkazy
+      // (`product_supplier_override`/`product_supplier_link_override`,
+      // kľúč `product_key`) a Zlúčenie objednávok (číta LEN `order`, žiadny
+      // JOIN na `order_line`) prežijú zmazanie bez zmeny. `audit_events.
+      // entity_id` je prostý text bez FK. Frontendov `lineId` je len
+      // dočasný stav v pamäti prehliadača — súbežný zápis na medzičasom
+      // zmazaný riadok narazí na už existujúcu "not_found" vetvu
+      // (`state.ts`), rovnaká neškodná zhoda ako pri akejkoľvek inej
+      // súbežnej úprave.
+      let deletedStaleLineCount = 0;
+      for (const [externalOrderId, orderId] of orderIdByExternalId) {
+        const byVariant = lineTotals.get(externalOrderId);
+        // Nemôže nastať v praxi (`orderIdByExternalId` aj `lineTotals` sa
+        // plnia z toho istého `candidates` prechodu vyššie) — defenzívne,
+        // aby prípadný budúci refaktor tento predpoklad nikdy ticho
+        // neporušil zmazaním všetkých riadkov danej objednávky.
+        if (byVariant === undefined) continue;
+        const keepVariantCodes = [...byVariant.keys()];
+        const deleted = await tx
+          .delete(orderLines)
+          .where(and(eq(orderLines.orderId, orderId), notInArray(orderLines.variantCode, keepVariantCodes)))
+          .returning({ id: orderLines.id });
+        deletedStaleLineCount += deleted.length;
+      }
+
       // issue 269/297: druhý automatický zdroj pre nástenku Upozornenia
       // (#267) — plná logika (AKTÍVNY vrátkový stav zakladá/obnoví kartu,
       // HOTOVÝ ju automaticky zatvorí) vyčlenená do `return-upozornenia.ts`
@@ -545,6 +594,7 @@ export async function ingestOrders(db: Database, options: OrdersIngestOptions): 
           autoResolvedFinishedReturnCount,
           stuckOrderCount,
           autoResolvedStuckOrderCount,
+          deletedStaleLineCount,
         },
         "objednávky naimportované",
       );
@@ -557,6 +607,7 @@ export async function ingestOrders(db: Database, options: OrdersIngestOptions): 
         pseudoItemCount,
         issueCount: issues.length,
         skippedResolvedReturnCount,
+        deletedStaleLineCount,
         rawPath,
       };
     });
