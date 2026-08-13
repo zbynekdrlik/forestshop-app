@@ -1,9 +1,16 @@
-// Beh gather automatizácie (issue 387 E3) — pre KAŽDÝ eligible produkt
+// Beh gather automatizácie (issue 387 E3+E4) — pre KAŽDÝ eligible produkt
 // (`select.ts`) skúsi VŠETKY `buildQueryVariants` (union, port starej
 // appky's `matcher.py`'s `gather_candidates(product, client, k=8)` — NIE
 // `match_one`/`query_ladder`, viď design komentár na tickete), poolu je
 // kandidátov podľa URL naprieč všetkými dopytmi, rankuje CELÝ pool a
 // zapíše top-8 + `pickBest()`'s voľbu.
+//
+// **E4:** po `pickBest()`, keď je vybraný kandidát s `confidence`
+// `high`/`medium`, overí sa jeho kód na detailnej stránke
+// (`verify.ts`'s `verifyCandidateCode`) a výsledok (`verdict`/
+// `verdictCheckedAt`) sa zapíše do TOHO ISTÉHO checkpointu. `low`/`none`
+// (alebo žiadny kandidát) sa NIKDY neoveruje — šetrí requesty (dispatch
+// E4, bod 2) a nízkoistotný kandidát má beztak malú šancu na zhodu.
 //
 // Checkpoint = per-produkt TRANSAKČNÝ upsert (`upsertCandidateSet`) —
 // žiadna samostatná cursor tabuľka. Pád uprostred behu necháva už
@@ -12,7 +19,9 @@
 // zapísaný nový `input_hash` → zostáva eligible pre ďalší beh. Per-produkt
 // VÝNIMKA (sieť/parsing) sa zaloguje a zapíše do `errors`, cyklus
 // pokračuje ĎALŠÍM produktom — ten istý princíp ako `posta-uncollected/
-// run.ts`.
+// run.ts`. Overenie SAMO nikdy nevyhodí (`verifyCandidateCode` zachytáva
+// vlastné sieťové chyby a vracia `unsure`), takže nemôže spôsobiť túto
+// per-produkt výnimku.
 
 import { eq } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
@@ -23,7 +32,8 @@ import { SearchClient } from "./client.js";
 import { buildQueryVariants } from "./queries.js";
 import { pickBest, rank, type PairingPick } from "./ranking.js";
 import { selectEligibleProducts, type EligibleProduct } from "./select.js";
-import type { PairingCandidate, PairingConfidence } from "./types.js";
+import type { PairingCandidate, PairingConfidence, PairingProduct, PairingVerdict } from "./types.js";
+import { verifyCandidateCode } from "./verify.js";
 
 export interface PairingSearchRunError {
   readonly productKey: string;
@@ -96,6 +106,7 @@ async function runPairingSearchLocked(options: RunPairingSearchOptions): Promise
     try {
       const { queries, candidates } = await gatherCandidates(searchClient, item);
       const pick = pickBest(item.product, candidates);
+      const { verdict, verdictCheckedAt } = await verifyPickIfWarranted(searchClient, item.product, pick, now);
       await upsertCandidateSet(db, {
         productKey: item.product.productKey,
         gatheredAt: now,
@@ -104,6 +115,8 @@ async function runPairingSearchLocked(options: RunPairingSearchOptions): Promise
         chosenUrl: pick.candidate?.url ?? null,
         chosenReason: buildChosenReason(pick),
         confidence: pick.confidence,
+        verdict,
+        verdictCheckedAt,
         candidates,
       });
       succeeded += 1;
@@ -148,6 +161,30 @@ async function gatherCandidates(
   return { queries: queryVariants, candidates: ranked.slice(0, CANDIDATE_LIMIT) };
 }
 
+interface VerifyOutcomeFields {
+  readonly verdict: PairingVerdict | null;
+  readonly verdictCheckedAt: Date | null;
+}
+
+/**
+ * E4: overí kódovú zhodu vybraného kandidáta, ale LEN keď `confidence` je
+ * `high`/`medium` (dispatch: "Verify len pre chosen_url s confidence
+ * high/medium — šetri requesty"). `low`/`none`/žiadny kandidát → `verdict`/
+ * `verdictCheckedAt` ostávajú `null`, presne ako E3 pred touto zmenou.
+ */
+async function verifyPickIfWarranted(
+  client: SearchClient,
+  product: PairingProduct,
+  pick: PairingPick,
+  now: Date,
+): Promise<VerifyOutcomeFields> {
+  if (pick.candidate === null || (pick.confidence !== "high" && pick.confidence !== "medium")) {
+    return { verdict: null, verdictCheckedAt: null };
+  }
+  const outcome = await verifyCandidateCode(client, pick.candidate.url, product);
+  return { verdict: outcome.verdict, verdictCheckedAt: now };
+}
+
 /** Krátky ľudsky čitateľný dôvod voľby — nová appka's pole, stará appka ho
  * nemala (mala len číselnú `confidence`). Diagnostický text pre budúcu
  * obrazovku (E5/E6), žiadny funkčný dopad v E3. */
@@ -165,13 +202,16 @@ interface UpsertCandidateSetInput {
   readonly chosenUrl: string | null;
   readonly chosenReason: string | null;
   readonly confidence: PairingConfidence;
+  readonly verdict: PairingVerdict | null;
+  readonly verdictCheckedAt: Date | null;
   readonly candidates: readonly PairingCandidate[];
 }
 
 /** Checkpoint — JEDNA transakcia na produkt: upsert `candidate_set` +
  * úplná náhrada jeho `pairing_candidate` riadkov (delete+insert, nikdy
  * inkrementálny diff — top-8 je vždy "posledný pohľad", nie história).
- * `verdict`/`verdict_checked_at` ostávajú `null` (E4). */
+ * `verdict`/`verdict_checked_at` ostávajú `null`, keď `verifyPickIfWarranted`
+ * overenie preskočilo (`confidence` nízka alebo bez kandidáta, issue 387 E4). */
 async function upsertCandidateSet(db: Database, input: UpsertCandidateSetInput): Promise<void> {
   await db.transaction(async (tx) => {
     const setValues = {
@@ -181,8 +221,8 @@ async function upsertCandidateSet(db: Database, input: UpsertCandidateSetInput):
       chosenUrl: input.chosenUrl,
       chosenReason: input.chosenReason,
       confidence: input.confidence,
-      verdict: null,
-      verdictCheckedAt: null,
+      verdict: input.verdict,
+      verdictCheckedAt: input.verdictCheckedAt,
     };
     await tx
       .insert(pairingCandidateSets)

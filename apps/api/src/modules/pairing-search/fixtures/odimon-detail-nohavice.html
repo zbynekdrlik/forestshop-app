@@ -1,0 +1,29 @@
+<!--
+  Orezaná vzorka https://www.odimon.sk/obuv-a-oblecenie/polovnicke-
+  oblecenie/polovnicke-termopradlo/termopradlo-nohavice-modal-termovel
+  (issue 387 E4, živý fetch 13. 8. 2026, po session warm-up). Stará appka
+  NEMALA vlastný selektor pre ODIMON (žiadna fixtúra ani docstring
+  v `60b6164`'s `verify.py`) — generický fallback ([itemprop=sku]/
+  .product-code/.sku/.kod/[data-code]) na tejto stránke NIČ netrafí.
+  `.product-property-item` (Kategória PRED Kód produktu, presne ako na
+  reálnej stránke — over, že kaskáda preskočí "Kategória" a nájde AŽ
+  položku s "kód" v popisku) so `.product-property__value` je NOVÁ,
+  živo overená trieda selektorov pridaná v E4 (design komentár na
+  tickete, "Rozhodnutie k ODIMON").
+-->
+<html lang="sk">
+<head><title>Termoprádlo nohavice modal Termovel | odimon.sk</title></head>
+<body>
+  <h1 class="product-title" itemprop="name">Termoprádlo nohavice modal Termovel</h1>
+  <ul class="product-properties">
+    <li class="product-property-item">
+      <span class="product-property__title">Kategória:</span>
+      <span class="product-property__value">Poľovnícke termoprádlo</span>
+    </li>
+    <li class="product-property-item">
+      <span class="product-property__title">Kód produktu:</span>
+      <span class="product-property__value">PO22811</span>
+    </li>
+  </ul>
+</body>
+</html>
