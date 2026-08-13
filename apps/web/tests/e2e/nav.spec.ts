@@ -36,9 +36,11 @@ const E2E_NAV_EMAIL = "e2e-nav@forestshop.sk";
 // login screen odteraz vidí menu v poradí Dôležité/Eshop/Systém/
 // Automatizácie), presúva "Upozornenia" doňho (z priečinka "Eshop") a pridáva
 // novú záložku "Úlohy na dnes" (funkčný test v samostatnom
-// `daily-tasks.spec.ts`, rovnaký vzor). Issue 345 (2026-08-11) pridáva
-// "Objednávky predajňa" HNEĎ ZA "Na objednanie" (funkčný test v samostatnom
-// `floor-orders.spec.ts`, rovnaký vzor).
+// `daily-tasks.spec.ts`, rovnaký vzor). Issue 345 (2026-08-11) pridalo
+// "Objednávky predajňa" HNEĎ ZA "Na objednanie" — issue 410 (2026-08-13)
+// nahradilo jej Shoptet-viazaný obsah vlastnými zápismi z predajne
+// (`id`/`label`/miesto v menu nezmenené, funkčný test teraz v samostatnom
+// `floor-notes.spec.ts`, rovnaký vzor).
 test("ľavé menu má štyri priečinky (Dôležité/Eshop/Systém/Automatizácie) s dvadsiatimi záložkami, klik prepne obrazovku, panel sa zbalí do lišty a stav si pamätá, konzola je čistá", async ({
   page,
 }) => {
