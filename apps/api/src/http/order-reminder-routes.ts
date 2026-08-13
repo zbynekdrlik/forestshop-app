@@ -10,8 +10,10 @@ import { resolveTemplate } from "../modules/mail-templates/store.js";
 import { buildReminderEmail } from "../modules/order-reminder/logic.js";
 import { ORDER_REMINDER_JOB_NAME } from "../modules/scheduler/jobs.js";
 import { getLatestJobRun } from "../modules/scheduler/queries.js";
+import { startRunNow, type RunNowStart } from "../modules/scheduler/run-now.js";
+import { ORDER_REMINDER_RUN_LOCK_KEY } from "../modules/order-reminder/constants.js";
 import type { OrderReminderRow, OrderReminderRunResult, RunOrderReminderOptions } from "../modules/order-reminder/run.js";
-import { runOrderReminder, runOrderReminderOverride } from "../modules/order-reminder/run.js";
+import { runOrderReminderLocked, runOrderReminderOverride } from "../modules/order-reminder/run.js";
 import { isOrderReminderEnabled, setOrderReminderEnabled } from "../modules/order-reminder/settings.js";
 import { requireRole, requireUser, type AppBindings } from "./middleware.js";
 import { requireSameOrigin } from "./origin-check.js";
@@ -30,33 +32,12 @@ function isRunResult(detail: unknown): detail is OrderReminderRunResult {
   return typeof detail === "object" && detail !== null && "noNote" in detail;
 }
 
-/**
- * Manuálne "Spustiť teraz" aj naplánovaný beh zapisujú job_run TÝM ISTÝM
- * vzorom, aký #172's `runAndRecord` používa — `GET /api/order-reminder` tak
- * vidí manuálny beh HNEĎ, nielen po ďalšom pravidelnom ticku.
- */
-async function runAndRecord(db: Database, deps: OrderReminderRunDeps, now: Date, actorUserId: string): Promise<OrderReminderRunResult> {
-  const [inserted] = await db
-    .insert(jobRuns)
-    .values({ jobName: ORDER_REMINDER_JOB_NAME, startedAt: now, status: "running" })
-    .returning({ id: jobRuns.id });
-  const runId = inserted?.id;
-  try {
-    // issue 193: "Spustiť teraz" je RUČNÁ akcia (kniha odoslaných e-mailov).
-    const result = await runOrderReminder({ db, now, ...deps, trigger: "manual", actorUserId });
-    if (runId !== undefined) {
-      await db.update(jobRuns).set({ status: "success", finishedAt: new Date(), detail: result }).where(eq(jobRuns.id, runId));
-    }
-    return result;
-  } catch (error) {
-    const rawErrorMessage = error instanceof Error ? error.message : String(error);
-    log.error({ rawErrorMessage }, "Pripomienky objednávok: ručný beh zlyhal");
-    if (runId !== undefined) {
-      await db.update(jobRuns).set({ status: "failure", finishedAt: new Date(), errorMessage: rawErrorMessage }).where(eq(jobRuns.id, runId));
-    }
-    throw error;
-  }
-}
+// issue 413: manuálne "Spustiť teraz" ide cez zdieľaný `startRunNow`
+// (`modules/scheduler/run-now.ts`) — vloží "running" riadok HNEĎ a vráti
+// odpoveď BEZ čakania na celý beh (predtým synchrónne; Cloudflare tunel
+// 100s timeout spôsoboval 524 + duplicitný beh). `GET /api/order-reminder`
+// tak vidí manuálny beh HNEĎ AKO ZAČAL (status "running"), nielen po
+// dobehnutí.
 
 function findRow(result: OrderReminderRunResult | null, orderCode: string): OrderReminderRow | undefined {
   if (result === null) return undefined;
@@ -179,21 +160,36 @@ export function registerOrderReminderRoutes(app: Hono<AppBindings>, db: Database
     async (c) => {
       const user = c.get("user");
       const now = new Date();
-      let result: OrderReminderRunResult;
+      let outcome: RunNowStart;
       try {
-        result = await runAndRecord(db, deps, now, user.userId);
+        outcome = await startRunNow(
+          db,
+          {
+            jobName: ORDER_REMINDER_JOB_NAME,
+            lockKey: ORDER_REMINDER_RUN_LOCK_KEY,
+            // issue 193: "Spustiť teraz" je RUČNÁ akcia (kniha odoslaných e-mailov).
+            run: (runNow) => runOrderReminderLocked({ db, now: runNow, ...deps, trigger: "manual", actorUserId: user.userId }),
+          },
+          now,
+          async (settled) => {
+            if (settled.status !== "success") return;
+            await record(db, {
+              at: now,
+              actorUserId: user.userId,
+              action: "order_reminder.run_now",
+              entity: "job_run",
+              data: { stats: settled.result.stats },
+            });
+            log.info({ actorUserId: user.userId, stats: settled.result.stats }, "Pripomienky objednávok: ručné spustenie");
+          },
+        );
       } catch {
-        return c.json({ error: "Beh zlyhal — skúste to znova o chvíľu." }, 502);
+        return c.json({ error: "Beh sa nepodarilo spustiť — skúste to znova o chvíľu." }, 500);
       }
-      await record(db, {
-        at: now,
-        actorUserId: user.userId,
-        action: "order_reminder.run_now",
-        entity: "job_run",
-        data: { stats: result.stats },
-      });
-      log.info({ actorUserId: user.userId, stats: result.stats }, "Pripomienky objednávok: ručné spustenie");
-      return c.json({ ok: true as const, result });
+      // issue 413: "busy" je bežný, očakávaný doménový výsledok — 200, nikdy
+      // 4xx/5xx (`.claude/rules/testing.md`).
+      if (outcome.status === "busy") return c.json({ error: outcome.message }, 200);
+      return c.json({ ok: true as const, started: true as const }, 202);
     },
   );
 

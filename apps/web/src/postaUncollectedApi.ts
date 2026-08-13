@@ -79,8 +79,14 @@ export type PostaUncollectedStatus = z.infer<typeof statusSchema>;
 
 const setEnabledResultSchema = z.object({ ok: z.literal(true), enabled: z.boolean() });
 
+// issue 413: run-now beží odteraz ASYNC — server vráti 202 `{ok:true,
+// started:true}` HNEĎ (beh pokračuje na pozadí) namiesto pôvodného
+// synchrónneho `{ok:true, result}`. "Beh už prebieha" (druhý klik/
+// Cloudflare retry) je BEŽNÝ doménový výsledok, server ho vracia s 200
+// `{error: "..."}` (`.claude/rules/testing.md`), nikdy 4xx/5xx — ten istý
+// tvar, aký táto schéma už mala pre skutočné zlyhania.
 const runNowResultSchema = z.union([
-  z.object({ ok: z.literal(true), result: runResultSchema }),
+  z.object({ ok: z.literal(true), started: z.literal(true) }),
   z.object({ error: z.string() }),
 ]);
 
@@ -140,11 +146,10 @@ export async function setPostaUncollectedEnabled(enabled: boolean): Promise<bool
   return parsed.enabled;
 }
 
-export async function runPostaUncollectedNow(): Promise<PostaUncollectedRunResult> {
+export async function runPostaUncollectedNow(): Promise<void> {
   const response = await fetch("/api/posta-uncollected/run-now", { method: "POST" });
   const parsed = runNowResultSchema.parse(await readJson(response, "Beh sa nepodarilo spustiť"));
   if ("error" in parsed) throw new Error(parsed.error);
-  return parsed.result;
 }
 
 export async function fetchPostaUncollectedPreview(packageNumber: string): Promise<PostaUncollectedPreview> {

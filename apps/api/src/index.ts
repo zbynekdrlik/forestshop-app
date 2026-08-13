@@ -48,6 +48,7 @@ import { orderNoteWritebackConfigFromBaseUrl, shoptetImportConfigFromBaseUrl } f
 import { dpdPortalConfigFromBaseUrl } from "./modules/dpd/config.js";
 import { runOrderNoteWritebackJob } from "./modules/shoptet-writeback/run-order-note-writeback.js";
 import { runShoptetWritebackSequence } from "./modules/shoptet-writeback/run-writeback-sequence.js";
+import { cleanOrphanedJobRuns } from "./modules/scheduler/startup-cleanup.js";
 import { createShutdownHandler } from "./shutdown.js";
 import { appVersion } from "./version.js";
 
@@ -61,6 +62,12 @@ const { db, pool } = createDb(env.DATABASE_URL);
 // a jeden z nich zlyhá na kolízii (napr. "already exists"). Nasadenie beží ako
 // jedna inštancia (docker-compose.prod.yml), takže to dnes nehrozí.
 await migrate(db, { migrationsFolder: fileURLToPath(new URL("../drizzle", import.meta.url)) });
+
+// issue 413: osirotené `job_run` riadky (predošlý reštart/deploy zabil
+// rozbehnutý beh, `status='running'` ostal navždy) sa vyčistia HNEĎ TU —
+// PRED `createApp`/`startScheduler`/`serve()`, takže ešte NIKTO nemohol
+// vložiť NOVÝ "running" riadok (žiadny race s čerstvo vloženým riadkom).
+await cleanOrphanedJobRuns(db, new Date());
 
 // `SHOPTET_EXPORT_URL` je nepovinná (env.ts) — bez nej appka beží ďalej, len
 // ručný import vráti 503 (catalog-routes.ts). `exactOptionalPropertyTypes` je

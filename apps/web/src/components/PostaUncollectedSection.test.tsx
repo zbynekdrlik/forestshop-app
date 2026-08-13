@@ -179,8 +179,12 @@ it("klik na 'Náhľad' zobrazí presne to, čo by odišlo, bez odoslania", async
 });
 
 it("'Spustiť teraz' zavolá beh a obnoví stav", async () => {
+  // issue 413: run-now je ASYNC — `runPostaUncollectedNow()` už neresolvuje
+  // výsledok priamo (server 202-ne hneď), komponent ho PREBERIE opakovaným
+  // čítaním stavu (`pollUntilJobDone`), preto tu netreba mock rozlíšenej
+  // hodnoty niesť.
   fetchPostaUncollectedStatus.mockResolvedValueOnce({ enabled: true, lastRun: null }).mockResolvedValue(STATUS_WITH_RESULT);
-  runPostaUncollectedNow.mockResolvedValue(RUN_RESULT);
+  runPostaUncollectedNow.mockResolvedValue(undefined);
 
   render(<PostaUncollectedSection role="manazer" onSessionExpired={() => {}} />);
   await screen.findByTestId("posta-run-now");

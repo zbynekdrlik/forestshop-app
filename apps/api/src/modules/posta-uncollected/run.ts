@@ -128,7 +128,13 @@ export async function runPostaUncollected(options: RunPostaUncollectedOptions): 
   }
 }
 
-async function runPostaUncollectedLocked(options: RunPostaUncollectedOptions): Promise<PostaUncollectedRunResult> {
+// issue 413: exportované, aby `startRunNow` (`modules/scheduler/run-now.ts`)
+// mohlo zavolať odomknuté jadro PRIAMO — `startRunNow` drží
+// `POSTA_UNCOLLECTED_RUN_LOCK_KEY` SÁM po celý čas run-now behu, takže
+// volanie `runPostaUncollected` (jej zámkový obal vyššie) by tu skončilo v
+// deadlocku (čakalo by na zámok, ktorý drží volajúci). Naplánovaný beh
+// (`scheduler/jobs.ts`) naďalej volá `runPostaUncollected` (obal), nezmenené.
+export async function runPostaUncollectedLocked(options: RunPostaUncollectedOptions): Promise<PostaUncollectedRunResult> {
   const { db, now, trackingClient, mailTransport, bccEmail, adminBaseUrl, actorUserId } = options;
   const trigger = options.trigger ?? "scheduled";
   const adminOrderUrl = (order: { readonly externalOrderId: string; readonly shoptetOrderId: number | null }): string =>

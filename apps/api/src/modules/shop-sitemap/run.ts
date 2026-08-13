@@ -66,7 +66,9 @@ export async function runShopSitemap(options: RunShopSitemapOptions): Promise<Sh
   }
 }
 
-async function runShopSitemapLocked(options: RunShopSitemapOptions): Promise<ShopSitemapRunResult> {
+// issue 413: exportované pre `startRunNow` (`modules/scheduler/run-now.ts`),
+// rovnaký dôvod ako `posta-uncollected/run.ts`'s `runPostaUncollectedLocked`.
+export async function runShopSitemapLocked(options: RunShopSitemapOptions): Promise<ShopSitemapRunResult> {
   const { db, now } = options;
   const fetchSitemap = options.fetchSitemap ?? createHttpSitemapFetcher();
   const fetchCandidate = options.fetchCandidate ?? createHttpProbeFetcher();
