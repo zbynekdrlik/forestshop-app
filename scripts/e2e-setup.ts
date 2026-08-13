@@ -18,7 +18,7 @@ import { DEFAULT_ORDER_OPEN_STATUS } from "../apps/api/src/modules/orders/open-s
 import { POSTA_UNCOLLECTED_SETTINGS_ID } from "../apps/api/src/modules/posta-uncollected/settings.js";
 import { ORDER_REMINDER_SETTINGS_ID } from "../apps/api/src/modules/order-reminder/settings.js";
 import { seedDpdFixtures } from "./e2e-fixtures-dpd.js";
-import { seedFloorOrdersFixtures } from "./e2e-fixtures-floor-orders.js";
+import { seedFloorNotesFixtures } from "./e2e-fixtures-floor-notes.js";
 import { seedOrderFlagsFixtures } from "./e2e-fixtures-order-flags.js";
 import { seedPaginationFixtures } from "./e2e-fixtures-pagination.js";
 import { seedProductLinksFixtures } from "./e2e-fixtures-product-links.js";
@@ -268,7 +268,7 @@ await db.execute(
   // issue 387 E7: "pairing_state_writeback_settings" je rovnaká situácia ako
   // "pairing_search_settings"/"restock_settings" (žiadny FK, singleton id,
   // žiadny migračný seed riadok).
-  'TRUNCATE TABLE ingest_issue, variant, product, catalog_snapshot, job_run, audit_events, sessions, users, order_line, "order", supplier_contact, pairing, supplier, order_open_status, posta_uncollected_settings, posta_uncollected_state, order_reminder_settings, order_reminder_state, nedostupne_state, nedostupne_replacement_link, mail_template, mail_template_history, supplier_stock, restock_settings, restock_event, shop_product_url, theme_color, dpd_pickup_request, upozornenie, daily_task, mail_log, dpd_shipment, product_supplier_override, product_supplier_link_override, pairing_candidate, pairing_candidate_set, pairing_search_settings, pairing_decision, pairing_state_writeback_settings RESTART IDENTITY CASCADE',
+  'TRUNCATE TABLE ingest_issue, variant, product, catalog_snapshot, job_run, audit_events, sessions, users, order_line, "order", supplier_contact, pairing, supplier, order_open_status, posta_uncollected_settings, posta_uncollected_state, order_reminder_settings, order_reminder_state, nedostupne_state, nedostupne_replacement_link, mail_template, mail_template_history, supplier_stock, restock_settings, restock_event, shop_product_url, theme_color, dpd_pickup_request, upozornenie, daily_task, mail_log, dpd_shipment, product_supplier_override, product_supplier_link_override, pairing_candidate, pairing_candidate_set, pairing_search_settings, pairing_decision, pairing_state_writeback_settings, floor_note, floor_note_product RESTART IDENTITY CASCADE',
 );
 // Rovnaký dôvod ako `tests/helpers/db.ts`: bez tohto by "Na objednanie" bolo
 // v CELOM e2e behu prázdne pre KAŽDÚ objednávku (žiadny nastavený otvorený
@@ -824,8 +824,8 @@ await seedRestockEventsFixtures(db, teraz);
 // issue 337: fixtúra vyčlenená do vlastného súboru, rovnaký dôvod ako vyššie.
 await seedPaginationFixtures(db, teraz, snapshotPrepinanie);
 
-// issue 345: fixtúra vyčlenená do vlastného súboru, rovnaký dôvod ako vyššie.
-await seedFloorOrdersFixtures(db, E2E_HESLO);
+// issue 410: fixtúra vyčlenená do vlastného súboru, rovnaký dôvod ako vyššie.
+await seedFloorNotesFixtures(db, teraz, snapshotPrepinanie, E2E_HESLO);
 
 // issue 387 E5: fixtúra vyčlenená do vlastného súboru, rovnaký dôvod ako vyššie.
 await seedPairingReviewFixtures(db, teraz, snapshotPrepinanie, E2E_HESLO);
