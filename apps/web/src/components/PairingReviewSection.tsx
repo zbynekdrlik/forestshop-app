@@ -29,6 +29,10 @@ import { PairingReviewCard } from "./PairingReviewCard.js";
 // efektu, nielen v `useRef` počiatočnej hodnote). Viditeľná záložka v `NAV`
 // (`nav.ts`) — ŽIADEN vlastný `<h1>`/`<h2>`, `App.tsx`/`Topbar` ho vykreslí sám.
 
+// issue 398 — plný zoznam z majiteľovho komentára na tickete (poslednej
+// podoby starej appky): Nezrevidované · Napárované (AI) · Nenapárované ·
+// 🟢 Skladom · 📦 Nie skladom · 🚫 Nepredáva sa · ✓ Dobré/Vybrané ·
+// ⛔ Vyriešené-vypnuté · Všetky — presne v tomto poradí.
 const FILTER_LABELS: Readonly<Record<PairingReviewFilter, string>> = {
   unreviewed: "Nezrevidované",
   matched: "Napárované (AI)",
@@ -36,6 +40,8 @@ const FILTER_LABELS: Readonly<Record<PairingReviewFilter, string>> = {
   st1: "🟢 Skladom",
   st2: "📦 Nie skladom",
   st3: "🚫 Nepredáva sa",
+  decided: "✓ Dobré/Vybrané",
+  terminal: "⛔ Vyriešené-vypnuté",
   all: "Všetky",
 };
 
@@ -190,9 +196,10 @@ export function PairingReviewSection({ role, onSessionExpired }: { readonly role
   return (
     <section data-testid="pairing-review-section">
       <p>
-        Produkty, ktoré appka už porovnala s ponukou dodávateľov (WETLAND/BETALOV/ODIMON) — vľavo náš produkt, vpravo
-        najlepší nájdený kandidát. Rozhodovanie (potvrdenie odkazu, „Nie je skladom“, „Už sa nebude predávať“) príde v
-        ďalšej etape; táto obrazovka zatiaľ len ukazuje stav.
+        Produkty bez napárovaného odkazu na dodávateľa — vľavo náš produkt, vpravo najlepší nájdený kandidát (ak ho
+        appka u dodávateľa s automatickým vyhľadávaním našla). Na karte priamo potvrdíš navrhnutý odkaz, vyberieš
+        iného kandidáta alebo zadáš vlastnú URL, prípadne označíš produkt ako „Nie je skladom“/„Už sa nebude
+        predávať“.
       </p>
 
       <div className="pairing-review-progress" data-testid="pairing-review-progress">

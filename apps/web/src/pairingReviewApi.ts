@@ -5,7 +5,7 @@ import { z } from "zod";
 // rozhodnutia: `sendPairingDecision`/`fetchPairingCandidates` + `decision`
 // pole v položke.
 
-export const PAIRING_REVIEW_FILTERS = ["unreviewed", "matched", "unmatched", "st1", "st2", "st3", "all"] as const;
+export const PAIRING_REVIEW_FILTERS = ["unreviewed", "matched", "unmatched", "st1", "st2", "st3", "decided", "terminal", "all"] as const;
 export type PairingReviewFilter = (typeof PAIRING_REVIEW_FILTERS)[number];
 
 const chosenCandidateSchema = z.object({
@@ -41,7 +41,10 @@ const itemSchema = z.object({
   ourUrlIsSearchFallback: z.boolean(),
   ourImageUrl: z.string().nullable(),
   hasEffectiveLink: z.boolean(),
-  gatheredAt: z.string(),
+  // issue 401 — `true` = dodávateľ MÁ automatický adaptér (WETLAND/BETALOV/ODIMON).
+  supplierHasAdapter: z.boolean(),
+  // issue 401 — `null` keď produkt ešte nikdy nebol gatherovaný.
+  gatheredAt: z.string().nullable(),
   confidence: z.enum(["high", "medium", "low", "none"]),
   chosenReason: z.string().nullable(),
   verdict: z.enum(["ok", "unsure"]).nullable(),
@@ -111,6 +114,8 @@ export async function fetchPairingReviewUnreviewedCount(): Promise<number> {
 const candidateSchema = z.object({
   name: z.string(),
   url: z.string(),
+  // issue 409 — obrázok kandidáta, `null` keď žiadny zdroj neposkytol použiteľný.
+  imageUrl: z.string().nullable(),
   rawScore: z.number(),
   codeHit: z.boolean(),
 });
@@ -118,7 +123,7 @@ export type PairingReviewCandidate = z.infer<typeof candidateSchema>;
 const candidatesSchema = z.object({ candidates: z.array(candidateSchema) });
 
 // issue 387 E6 — lazy top-8 kandidátov pre rozhodovací panel (design komentár
-// na tickete: volané AŽ pri otvorení panelu ✗ Zlé, nikdy vopred).
+// na tickete: volané AŽ pri otvorení panelu „vyber url"/„✗ Zmeniť", nikdy vopred).
 export async function fetchPairingCandidates(productKey: string): Promise<readonly PairingReviewCandidate[]> {
   const response = await fetch(`/api/pairing-review/${encodeURIComponent(productKey)}/candidates`);
   return candidatesSchema.parse(await readJson(response, "Zoznam kandidátov sa nepodarilo načítať")).candidates;

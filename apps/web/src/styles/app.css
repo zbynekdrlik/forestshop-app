@@ -3149,6 +3149,14 @@ a.upozornenie-title:hover {
   background: var(--fs-surface-alt);
   color: var(--fs-ink-muted);
 }
+/* issue 398 — vysvetlenie pod terminálnym odznakom (unavailable/discontinued),
+   že reálne prepnutie na eshope robí nočná automatika, nie táto obrazovka. */
+.pairing-review-terminal-note {
+  font-size: var(--fs-text-xs);
+  color: var(--fs-ink-faint);
+  font-style: italic;
+  margin-top: var(--fs-space-1);
+}
 .pairing-review-panel {
   margin-top: var(--fs-space-3);
   padding: var(--fs-space-3);
@@ -3162,10 +3170,25 @@ a.upozornenie-title:hover {
 .pairing-review-panel-candidate {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: var(--fs-space-2);
   font-size: var(--fs-text-sm);
   overflow-wrap: break-word;
+}
+/* issue 409 — malý náhľad obrázka na KAŽDOM riadku panelu (nie len chosenCandidate). */
+.pairing-review-panel-candidate-imgbox {
+  flex: 0 0 auto;
+}
+.pairing-review-panel-candidate-imgbox img {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+  background: var(--fs-surface);
+  border: 1px solid var(--fs-border);
+  border-radius: var(--fs-radius-sm);
+}
+.pairing-review-panel-candidate-text {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 .pairing-review-manual-row,
 .pairing-review-terminal-row {
@@ -3177,4 +3200,190 @@ a.upozornenie-title:hover {
 .pairing-review-manual-row input {
   flex: 1 1 0%;
   min-width: 12rem;
+}
+
+/* ---------------- 20. ESHOP → OBJEDNÁVKY PREDAJŇA (issue 410) ----------------
+   Nahrádza Štěpánovo Discord vlákno. `.floor-notes-panel` ohraničuje šírku
+   presne ako `.ulohy-panel` (issue 403's ustálený vzor) — hustý stĺpec
+   kariet je čitateľnejší než roztiahnutý cez celú `main-wide` šírku. */
+.floor-notes-panel {
+  max-width: 44rem;
+}
+.floor-note-add-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--fs-space-2);
+  margin-bottom: var(--fs-space-4);
+}
+.floor-note-add-row textarea {
+  min-height: 3rem;
+  resize: vertical;
+  overflow: hidden;
+}
+.floor-notes-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--fs-space-3);
+}
+.floor-note-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--fs-space-2);
+}
+/* Vybavené zápisy OSTÁVAJÚ v zozname (design rozhodnutie na tickete — Štěpán
+   si ich v Discorde tiež necháva), len vizuálne stlmené — rovnaký "jeden
+   jasný signál" princíp ako `.uloha-row.done`/`.upozornenie-nove`. */
+.floor-note-resolved {
+  opacity: 0.65;
+}
+.floor-note-head {
+  display: flex;
+  align-items: center;
+  gap: var(--fs-space-2);
+}
+.floor-note-markers {
+  display: flex;
+  gap: var(--fs-space-1);
+  flex: 0 0 auto;
+}
+/* Tri nezávislé prepínače bez ďalšej funkcie (len označenie, ako Discord
+   reakcie) — `active` je jediný vizuálny signál (rámik + jemné pozadie),
+   samotný emoji ostáva rovnaký v oboch stavoch. */
+.floor-note-marker {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--fs-radius-sm);
+  cursor: pointer;
+  font-size: var(--fs-text-md);
+  line-height: 1;
+  padding: var(--fs-space-1);
+}
+.floor-note-marker:hover {
+  background: var(--fs-surface-alt);
+}
+.floor-note-marker.active {
+  background: var(--fs-brand-soft);
+  border-color: var(--fs-brand);
+}
+.floor-note-marker:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.floor-note-time {
+  margin-left: auto;
+  font-size: var(--fs-text-xs);
+  color: var(--fs-ink-faint);
+  flex: 0 0 auto;
+}
+.floor-note-icon-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: var(--fs-text-sm);
+  line-height: 1;
+  padding: var(--fs-space-1);
+  flex: 0 0 auto;
+}
+.floor-note-icon-btn:hover {
+  background: var(--fs-surface-alt);
+  border-radius: var(--fs-radius-sm);
+}
+.floor-note-icon-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.floor-note-text-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--fs-space-2);
+}
+.floor-note-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+.floor-note-edit {
+  display: flex;
+  flex-direction: column;
+  gap: var(--fs-space-2);
+}
+.floor-note-textarea {
+  width: 100%;
+  min-height: 3rem;
+  resize: vertical;
+  overflow: hidden;
+  padding: var(--fs-space-1) var(--fs-space-2);
+}
+.floor-note-products {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--fs-space-2);
+}
+.floor-note-product-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--fs-space-1);
+  background: var(--fs-surface-alt);
+  border-radius: var(--fs-radius-sm);
+  padding: var(--fs-space-1) var(--fs-space-2);
+  max-width: 100%;
+}
+.floor-note-product-link {
+  color: var(--fs-brand-strong);
+  text-decoration: none;
+  overflow-wrap: break-word;
+}
+.floor-note-product-link:hover {
+  text-decoration: underline;
+}
+/* issue 402's vzor (`PairingReviewCard.tsx`'s `.pairing-review-name-fallback`)
+   znovu použitý tu — vyhľadávací náhradný odkaz sa NESMIE tváriť ako priamy
+   odkaz na produkt (tlmená farba + prerušovaná čiara), plus samostatná
+   poznámka, aby farba nebola jediný signál. */
+.floor-note-product-link-fallback {
+  color: var(--fs-ink-muted);
+  text-decoration: underline dashed;
+}
+.floor-note-product-link-fallback:hover {
+  color: var(--fs-brand-strong);
+}
+.floor-note-product-fallback-note {
+  font-size: var(--fs-text-xs);
+  color: var(--fs-ink-faint);
+  font-style: italic;
+}
+.floor-note-product-search {
+  margin-top: var(--fs-space-2);
+  padding: var(--fs-space-2);
+  background: var(--fs-surface-alt);
+  border-radius: var(--fs-radius-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--fs-space-2);
+}
+.floor-note-product-search-row {
+  display: flex;
+  gap: var(--fs-space-2);
+}
+.floor-note-product-search-row input {
+  flex: 1 1 0%;
+  min-width: 8rem;
+  width: auto;
+}
+.floor-note-product-search-results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--fs-space-1);
+}
+.floor-note-product-search-hit {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--fs-space-2);
+  font-size: var(--fs-text-sm);
 }

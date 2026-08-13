@@ -75,6 +75,24 @@ paths:
   over na čistom Postgrese (`docker run … postgres:18` + `db:migrate`;
   premenovanie nemení hash — drizzle hashuje OBSAH .sql). Prevencia: dvom
   súbežným workerom, čo oba pridajú migráciu, prideľ čísla dopredu ako verzie.
+  **Overený druhý výskyt (issue 410, 13. 8. 2026):** namiesto ručného
+  splicovania konfliktného snapshot JSON-u (`git diff`-om na `meta/00NN_
+  snapshot.json` medzi dvomi vetvami je to veľký, krehký diff) je
+  SPOĽAHLIVEJŠIE ho REGENEROVAŤ: (1) vezmi PRIJATÚ (dev-ovú) `.sql`/
+  `snapshot.json` dvojicu ako-je, (2) oprav `meta/_journal.json` tak, aby
+  posledný záznam bol presne TÁ prijatá migrácia, (3) zmaž VLASTNÝ konfliktný
+  `.sql`/`snapshot.json` úplne, (4) spusti `db:generate` znova — vygeneruje
+  correct `.sql` + snapshot s `prevId` nadväzujúcim na prijatú migráciu,
+  lebo schéma (`schema.ts` + všetky `schema-*.ts`) v tom bode už obsahuje OBE
+  vetvy zlúčené. **Pasca:** ak si PRED regenerovaním ručne dopísal do
+  `_journal.json` provizórny záznam pre svoje PÔVODNÉ (kolízne) číslo (napr.
+  aby si si zapamätal poradie), NEZABUDNI ho zase odstrániť pred spustením
+  `db:generate` — inak `db:generate` uvidí, že to číslo je "už obsadené" a
+  vygeneruje o JEDNO VYŠŠIE (napr. namiesto voľného `0052` skočí na `0053`),
+  čo treba potom RUČNE premenovať (`.sql` súbor, `meta/00NN_snapshot.json`
+  súbor, `_journal.json`'s `idx`/`tag`) na správne nasledujúce číslo —
+  premenovanie samo je bezpečné (obsah/`id`/`prevId` sa nemenia), len
+  netreba zabudnúť, že bez tejto pasce by bolo netreba vôbec.
 - **Funkcia, ktorá má bežať AJ na top-level `db`, AJ vnútri `db.transaction(async (tx) => ...)`,
   nesmie typovať svoj parameter ako `Database`** (`db/client.ts`'s
   `NodePgDatabase<schema> & {$client: Pool}`) — `tx` je `PgTransaction`,

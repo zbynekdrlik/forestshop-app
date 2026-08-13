@@ -16,3 +16,4 @@ export * from "./schema-upozornenia.js";
 export * from "./schema-dpd.js";
 export * from "./schema-daily-tasks.js";
 export * from "./schema-pairing-review.js";
+export * from "./schema-floor-notes.js";
