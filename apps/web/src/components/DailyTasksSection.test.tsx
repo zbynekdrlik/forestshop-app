@@ -122,6 +122,19 @@ it("označí úlohu ako vybavenú — riadok dostane triedu 'done'", async () =>
   });
 });
 
+// Issue 403: prepínač je teraz skutočný `<input type="checkbox">` (predtým
+// `<button>` s Unicode ☐/☑) — regresný test na skutočnú rolu/`checked`
+// atribút, nielen na testid (ten by prešiel pre hocijaký element).
+it("prepínač 'vybavené' je skutočný checkbox s rolou a atribútom checked, nie textové tlačidlo", async () => {
+  fetchDailyTasks.mockResolvedValueOnce([ROW_A]);
+  render(<DailyTasksSection onSessionExpired={vi.fn()} />);
+  await screen.findByTestId("uloha-row-task-a");
+
+  const checkbox = screen.getByRole<HTMLInputElement>("checkbox", { name: "Označiť ako vybavené" });
+  expect(checkbox.type).toBe("checkbox");
+  expect(checkbox.checked).toBe(false);
+});
+
 it("vybavená úloha OSTÁVA v zozname (nezmizne), len je stlmená", async () => {
   fetchDailyTasks.mockResolvedValueOnce([ROW_DONE]);
   render(<DailyTasksSection onSessionExpired={vi.fn()} />);
