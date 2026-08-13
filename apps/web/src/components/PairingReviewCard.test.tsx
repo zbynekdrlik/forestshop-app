@@ -38,7 +38,13 @@ const MATCHED_ITEM = {
   confidence: "high" as const,
   chosenReason: "najlepší nájdený",
   verdict: "ok" as const,
-  chosenCandidate: { name: "Bunda Alfa", url: "https://dodavatel.example.com/bunda-alfa", rawScore: 1080.5, codeHit: true },
+  chosenCandidate: {
+    name: "Bunda Alfa",
+    url: "https://dodavatel.example.com/bunda-alfa",
+    imageUrl: "https://dodavatel.example.com/img/bunda-alfa.jpg",
+    rawScore: 1080.5,
+    codeHit: true,
+  },
   decision: null,
 };
 
@@ -88,6 +94,22 @@ it("napárovaný produkt bez rozhodnutia ukáže ✓ Dobré / ✗ Zlé; klik na 
   await waitFor(() => {
     expect(onDecided).toHaveBeenCalledTimes(1);
   });
+});
+
+it("issue 397: karta ukazuje obrázok kandidáta AJ nášho produktu vedľa seba; chýbajúci obrázok kandidáta ukáže 'bez obrázka'", async () => {
+  render(<PairingReviewCard item={MATCHED_ITEM} role="citanie" onDecided={() => {}} onSessionExpired={() => {}} />);
+  const card = await screen.findByTestId("pairing-review-card-PR-1");
+  const images = card.querySelectorAll("img");
+  expect(images).toHaveLength(2);
+  expect(images[0]?.getAttribute("src")).toBe(MATCHED_ITEM.ourImageUrl);
+  expect(images[1]?.getAttribute("src")).toBe(MATCHED_ITEM.chosenCandidate.imageUrl);
+
+  cleanup();
+  const bezObrazka = { ...MATCHED_ITEM, productKey: "PR-NOIMG", chosenCandidate: { ...MATCHED_ITEM.chosenCandidate, imageUrl: null } };
+  render(<PairingReviewCard item={bezObrazka} role="citanie" onDecided={() => {}} onSessionExpired={() => {}} />);
+  const cardBezObrazka = await screen.findByTestId("pairing-review-card-PR-NOIMG");
+  expect(cardBezObrazka.querySelectorAll("img")).toHaveLength(1); // len naša strana
+  expect(cardBezObrazka.querySelectorAll(".pairing-review-noimg")).toHaveLength(1);
 });
 
 it("klik na ✗ Zlé ROZBALÍ panel NA MIESTE (karta ostáva) a načíta kandidátov; 'Vybrať' odošle manual s URL toho kandidáta", async () => {

@@ -206,6 +206,13 @@ export function PairingReviewCard({
                   {VERDICT_LABELS[item.verdict]}
                 </div>
               )}
+              <div className="pairing-review-imgbox">
+                {item.chosenCandidate.imageUrl !== null ? (
+                  <img src={item.chosenCandidate.imageUrl} alt={item.chosenCandidate.name} loading="lazy" />
+                ) : (
+                  <span className="pairing-review-noimg">bez obrázka</span>
+                )}
+              </div>
             </div>
           )}
 
