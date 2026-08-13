@@ -304,3 +304,27 @@ paths:
   "noc funguje, deň nefunguje" bol len zhoda okolností (kontajner bol
   reštartovaný v ten deň krátko pred zlyhaniami), nie skutočná časová
   závislosť.
+- **`shoptet-writeback-sequence.integration.test.ts`'s "state writeback
+  enabled" test má DVA nahlásené (issue 405), NEDETERMINISTICKY sa
+  striedajúce zlyhania — OBIDVA sú odtlačok zdieľanej-Postgres TRUNCATE
+  kolízie (`.claude/rules/local-dev.md`), NIE appkin bug.** Tento test beží
+  dlho (LINK import ~13-15s, celá sekvencia LINK+STATE ~30s+) a `state:`
+  výsledok sa číta cez `isStateWritebackEnabled` (fail-closed `row?.enabled
+  ?? false`) AŽ PO dokončení LINK importu — dostatočne dlhé okno na to, aby
+  súbežný `scripts/e2e-setup.ts`'s NEZAMKNUTÝ TRUNCATE (iný worktree na tom
+  istom zdieľanom `forestshop_app-postgres-1`, port 5433) stihol vyprázdniť
+  tabuľku SPOD tohto testu. **Deterministicky reprodukované na vlastnej
+  izolovanej throwaway Postgres inštancii** (nulové riziko pre zdieľaný box):
+  `TRUNCATE TABLE pairing_state_writeback_settings;` vykonaný ~6s do behu dá
+  presne `expected {..., state:{status:'ok',...}} to deeply equal {...,
+  state:{status:'disabled'}}` (prvý nahlásený tvar zlyhania);
+  `TRUNCATE TABLE product_supplier_link_override;` vykonaný ~20s do behu dá
+  presne `expected undefined to be '2026-02-01T00:00:00.000Z'` (druhý
+  nahlásený tvar zlyhania, `link?.syncedAt` na chýbajúcom riadku). 4/4 čisté
+  izolované behy (žiadna súbežná aktivita na DB) prešli bez jediného flaku —
+  appkin/testovací kód je korektný, keď nič iné DB nekolíduje. **Pri
+  ĎALŠOM výskyte JEDNÉHO z týchto dvoch presných tvarov zlyhania na tomto
+  teste:** podozrievaj NAJPRV zdieľanú-DB kolíziu (over súbežné worktree
+  procesy/`docker ps`, spusti izolovaný re-beh na throwaway Postgres inštancii,
+  presne ako `.claude/rules/local-dev.md`'s vlastný postup pre iné testy) —
+  nehľadaj appkin bug, kým izolovaný beh sám neflaká.
