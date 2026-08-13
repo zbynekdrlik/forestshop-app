@@ -17,11 +17,19 @@
 // `fixtures/odimon-prazdne-vysledky.html`) — selektory aj `.product-
 // list__results`/`a.product-card` tvar sa zhodujú so starou appka's
 // dokumentáciou z 27. 6. 2026.
+//
+// issue 397: obrázok kandidáta (MIMO doslovného portu) — z TOHO ISTÉHO
+// `img` elementu, čo už dnes dáva `alt`/`title` pre meno. **KRITICKÉ: `src`
+// je na tejto doméne VŽDY `.../no-image.png` placeholder (lazy-load cez
+// JS) — skutočný obrázok nesie `data-src`.** Živo overené: `data-src`
+// ukazuje na TEN ISTÝ súbor, čo aj detailnej stránky `og:image`.
+// `resolveImageUrl`'s poradie (`data-src` pred `src`) je preto nutné, nie
+// len štylistická preferencia.
 
 import * as cheerio from "cheerio";
 import type { PairingCandidate } from "../types.js";
 import type { SupplierAdapter } from "./types.js";
-import { belongsToBase, resolveAndStripFragment } from "./url.js";
+import { belongsToBase, resolveAndStripFragment, resolveImageUrl } from "./url.js";
 
 const BASE_URL = "https://www.odimon.sk";
 
@@ -47,7 +55,8 @@ export function parseOdimonSearch(html: string): PairingCandidate[] {
 
     const img = anchor.find("img").first();
     const name = (img.attr("alt") ?? img.attr("title") ?? "").trim();
-    out.push({ name, url, code: null, price: null, rawScore: 0, codeHit: false });
+    const imageUrl = resolveImageUrl([img.attr("data-src"), img.attr("src")], BASE_URL);
+    out.push({ name, url, code: null, price: null, imageUrl, rawScore: 0, codeHit: false });
   });
 
   return out;

@@ -63,6 +63,12 @@ export const pairingCandidates = pgTable(
     // AŽ E4's overenie na detaile kandidáta.
     code: text("code"),
     price: numeric("price", { precision: 12, scale: 2 }),
+    // issue 397 (mimo doslovného portu — stará appka obrázok kandidáta z
+    // výsledkovej karty nikdy neparsovala) — adaptéry ho na rozdiel od
+    // `code`/`price` NAPĹŇAJÚ priamo pri parsovaní výsledkov, keď ho karta
+    // nesie; `verify.ts`'s `og:image` fallback (LEN pre chosen kandidáta)
+    // ho vie doplniť dodatočne v TOM ISTOM upserte (`run.ts`).
+    imageUrl: text("image_url"),
     // Repo konvencia: numeric floaty sa ukladajú cez `numeric` (string na
     // JS strane), nikdy `real`/`doublePrecision` (`.claude/rules/
     // database.md`) — `raw_score` nie je peniaze, ale konzistencia s

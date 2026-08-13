@@ -20,6 +20,24 @@ paths:
   (obrazovky→e2e, DB/prihlásenie→integration), nikdy obe naraz, nikdy
   súbežne s ničím iným. Plný dôvod + namerané čísla: `.claude/rules/local-
   dev.md`.
+- **Worktree-izolovaný autopilot dispatch (issue #317) pre tento repo môže
+  reálne bežať PRIAMO na `forestshop-dev` (zdieľaný produkčný stroj), nie
+  na `dev1` — over `hostname` PRED spustením ťažkej lokálnej sady, nikdy
+  to nepredpokladaj len z projektového CLAUDE.md.** Zistené issue 397: `ps
+  aux`/`hostname` ukázali, že worktree bežal na `forestshop-dev`, s
+  DVOMA súbežnými sesterskými procesmi (background lint job + `pnpm
+  install` iného paralelného worktree workera) — presne tá istá "preťažený
+  zdieľaný box" kolízna trieda nižšie v tomto súbore, len s DOPLNKOVOU
+  stávkou, že ten istý box beží aj ŽIVÚ PRODUKCIU (`.claude/rules/
+  deploy.md`'s "Vývoj a produkcia bežia na TOM ISTOM 2-jadrovom stroji" —
+  ťažký lokálny beh tam vie zhodiť produkčný Cloudflare tunel cez
+  hladovanie po CPU, aj keď to cgroup `CPUWeight` mitigácia od 12. 8. 2026
+  výrazne obmedzuje). Pri červenom e2e/integration výsledku na TOMTO repe
+  over VŽDY najprv `hostname` + `ps aux | grep -E "vitest|playwright
+  test|npm run|pnpm install"` (nielen `ps aux | grep vitest`, ako
+  existujúci vzor nižšie predpokladá) — sesterský worktree worker nemusí
+  spúšťať vitest/playwright priamo, môže bežať lint/install/iný unrelated
+  príkaz, čo tiež zaberá CPU na 2-jadrovom stroji.
 - **`apps/api` má dve úrovne testov, oddelené priečinkom aj scriptom:**
   - `src/**/*.test.ts` → `pnpm --filter @forestshop/api test` (`vitest run
     src`) — bežia BEZ databázy, čisto unit (napr. rate-limiter, password
