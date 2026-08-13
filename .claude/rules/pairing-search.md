@@ -674,3 +674,111 @@ vyradilo #311 aj jeho playbook súbor (návrh, sekcia 4); router v
   session cookie aj same-origin sú splnené. Ak niekedy pribudne požiadavka
   na vypínač v UI, je to nový ticket (endpoint je hotový, chýba len
   komponent).
+
+## issue 399 — ✂ Rozdeliť na veľkosti + Hľadať/opraviť (mimo E1-E9)
+
+- **`pairing_decision_status` enum + jej CHECK constraint POUŽÍVAJÚCI novú
+  hodnotu MUSIA byť DVE SAMOSTATNÉ migrácie, nikdy jedna.** Naživo overené
+  na throwaway Postgrese 18: `ALTER TYPE ... ADD VALUE 'split'` a CHECK
+  constraint/INSERT používajúci `'split'` v TEJ ISTEJ transakcii vyhodí
+  `unsafe use of new value "split" ... New enum values must be committed
+  before they can be used` — KEĎ sa príkazy posielajú ako samostatné
+  príkazy v transakcii (presne to, čo `drizzle-kit`'s migrátor aj `psql`
+  skript robia). Jediný spôsob, ako to naživo prejde v JEDNEJ session, je
+  poslať VŠETKY príkazy naraz ako JEDNU multi-statement `simple query`
+  protokolovú správu (`psql -c "a; b; c;"`) — nikdy sa na to nespoliehaj,
+  to nie je tvar, akým appka migrácie reálne aplikuje. Postup na vyrobenie
+  dvoch migrácií z jednej schéma zmeny: dočasne zakomentuj/vráť CHECK a
+  novú tabuľku, `db:generate` (dá enum-only migráciu), obnov plnú schému,
+  `db:generate` znova (dá zvyšok). Test pri KAŽDEJ ĎALŠEJ novej hodnote
+  existujúceho `pgEnum`u, ktorú POUŽIJE aj CHECK constraint/iná DDL v tej
+  istej zmene: over TÝMTO postupom na throwaway Postgrese PRED tým, než sa
+  jedna migrácia s oboma príkazmi vôbec commitne.
+- **Nová `pairing_variant_link` tabuľka (PK `variant.code`) je ÚPLNE
+  NEZÁVISLÁ od `product_supplier_link_override` (#121/#239) aj od
+  existujúcej `pairing` tabuľky (F4, `schema-pairing.ts`) — design komentár
+  na tickete zdôvodňuje OBIDVE zamietnuté alternatívy.** `pairing` (F4)
+  vyzerá ako najbližší kandidát na reuse (je UŽ `variant.code`-kľúčovaná,
+  má UŽ URL pole) — ale jej dátový model (`navrhnute`/`potvrdene` stavy)
+  patrí BUDÚCEMU auto-matching automatu (#46/#48), NIKDY sa nezapisuje do
+  Shoptetu, a zlúčenie s "chýbajúce linky" bolo na tickete #239 UŽ RAZ
+  explicitne zamietnuté (`.claude/rules/product-links.md`). Reuse `pairing`
+  tabuľky pre split by resuscitoval presne to zamietnuté zlúčenie.
+- **`isUnreviewed` (queries.ts) MUSÍ zahrnúť `split` do TERMINÁLNEJ vetvy**
+  (spolu s `unavailable`/`discontinued`) — split produkt má `hasEffectiveLink
+  === false` NAVŽDY (jeho reálne linky žijú v `pairing_variant_link`, nikdy
+  v `product_supplier_link_override`), takže bez tejto výnimky by sa NIKDY
+  neprestal hlásiť ako "nezrevidovaný" napriek tomu, že JE vyriešený.
+- **`getPairingReviewItem`/`buildPairingReviewItems` (jednoproduktová
+  verzia `listPairingReview`, "Hľadať / opraviť") je ZÁMERNE SCOPED
+  (`inArray`), nikdy nenačíta celý katalóg** — na rozdiel od
+  `listPairingReview`'s vlastnej `determineReviewPopulationKeys` (tá MUSÍ
+  prejsť celý katalóg, aby zistila populáciu). Refaktor vyčlenil ITEM-
+  BUILDING (per-kľúč, scoped) od POPULATION-DETERMINATION (celý katalóg) —
+  `listPairingReview` teraz volá OBOJE (najprv určí kľúče, potom postaví
+  karty len pre ne), `getPairingReviewItem` volá LEN item-building s
+  `[productKey]`. Test pri ĎALŠEJ zmene tejto oblasti: nepridávaj žiadnu
+  ďalšiu čítaciu cestu, čo by znova načítala celý katalóg len na
+  vyhľadanie JEDNÉHO produktu — scoped dopyt je vždy lacnejší aj správnejší.
+- **"Hľadať / opraviť" ZDIEĽA `PairingReviewCard.tsx` NEZMENENÚ** (klik na
+  výsledok vyhľadávania → `fetchPairingReviewItem` → tá istá karta, čo
+  vidno na "Prehľad") — žiadna druhá kópia rozhodovacej/terminálnej/split
+  UI. `GET /api/search` vracia PER-VARIANT riadky (search modul, #240),
+  preto `PairingSearchFixTab.tsx` dedupuje podľa `productKey` (prvý výskyt
+  vyhráva) predtým, než ich zobrazí — Párovanie je produktovo-úrovňová
+  obrazovka, na rozdiel od "Vyhľadať", čo per-variant riadky ukazuje priamo.
+- **Karta bola vyčlenená na TRI súbory kvôli eslint `max-lines: 400`**
+  (pridanie split trigger + branch by inak `PairingReviewCard.tsx` poslalo
+  cez limit, rovnaký vzor ako issue 60/398/409 pred týmto): panel
+  (kandidáti/manuál/terminál/Zavrieť) → `PairingReviewDecisionPanel.tsx`
+  (čisto presentational, celý stav ostáva v `PairingReviewCard.tsx`); split
+  editor → `PairingReviewSplitPanel.tsx` (VLASTNÝ stav — `variants`
+  fetchnuté vo `useEffect`, per-riadok `busy`/draft — ale `candidates`/
+  `busy`/`submit` dostáva ako props z karty, žiadny druhý fetch top-8
+  kandidátov).
+- **Split editor NAHRADÍ celú pravú stranu karty** (`showSplitPanel =
+  splitOpen || item.decision?.status === "split"`), presne ako stará
+  appka's `renderCard`'s `splitOpen.has(p.key) || s === 'split'` early
+  return — "Navrhnutý kandidát" blok aj kolektívny riadok akcií SA
+  NEVYKRESLIA súčasne so split panelom, nikdy oba naraz.
+- **"✂ Rozdeliť na veľkosti" trigger je dostupný VŽDY, keď `item.decision
+  === null && item.variantCount > 1`, NEZÁVISLE od toho, či produkt má
+  navrhnutého kandidáta** (rovnaký zámer ako stará appky's `splitButton` —
+  žiadna podmienka na `chosenCandidate`). Trigger aj "vyber url" zdieľajú
+  TEN ISTÝ `loadCandidates()` (žiadny druhý fetch top-8 zoznamu) —
+  `openSplit`/`openPanel` sa navzájom VYLUČUJÚ (`setSplitOpen(false)`
+  v `openPanel`, `setPanelOpen(false)` v `openSplit`).
+- **"↩ Zrušiť rozdelenie" (revert na `split`) NIKDY nemaže per-veľkosť
+  linky** (`pairing_variant_link` riadky) — presne rovnaká asymetria/
+  konvencia ako "↩ Vrátiť" na `unavailable`/`discontinued` nikdy nemaže
+  `product_supplier_link_override`. Opätovné rozdelenie ukáže predtým
+  uložené hodnoty, integračný test (`pairing-review-variant-links-http
+  .integration.test.ts`) dokazuje explicitne.
+- **E2E fixtúra "E2E-PR-SPLIT" (2 varianty S/M) je JEDINÝ viacveľkostný
+  produkt v `scripts/e2e-fixtures-pairing-review.ts`** — `seedProdukt`
+  helper vytvára VŽDY presne jeden variant (`code === productKey`), takže
+  split test potreboval VLASTNÉ (nie helperom vyrobené) vloženie
+  `products`/`variants` s dvomi riadkami. Posunulo `catalog.spec.ts`'s
+  pevné počty o +2 (total 107→109, "sellable" 77→79) — zdokumentované
+  priamo tam (`.claude/rules/testing.md`'s "nový variant posunie počty" past).
+- **E2E testy zdieľajúce TEN ISTÝ fixtúrový produkt v jednom spec súbore
+  potrebujú VEDOMÉ PORADIE, nielen izolovaný účet.** `scripts/
+  e2e-setup.ts` sa seeduje LEN RAZ pri štarte `webServer`u (nie pred
+  KAŽDÝM testom) — `pairing-review-split.spec.ts`'s dva split testy oba
+  mutujú "E2E-PR-SPLIT"'s `decision`, takže test bežiaci DRUHÝ vidí stav,
+  aký zanechal PRVÝ. Riešenie: test, čo KONČÍ s `decision === null`
+  (revert), musí bežať PRED testom, čo očakáva split TRIGGER tlačidlo
+  (zobrazí sa len keď `decision === null`) — poradie v súbore = poradie
+  behu. Druhý test navyše explicitne PREPÍŠE obe veľkosti vlastnými
+  hodnotami, nezávisle od toho, čo prvý test zanechal v `pairing_variant_link`.
+- **`window.confirm()` (missing-link varovanie pri "✓ Hotovo") potrebuje
+  `page.on("dialog", d => void d.accept())` v e2e teste — Playwright BEZ
+  registrovaného handlera dialóg AUTOMATICKY ZAMIETNE**, takže test bez
+  neho by tichoTIMEOUTol/nezapísal rozhodnutie namiesto skutočného
+  overenia "potvrdenie prejde ďalej".
+- **Bare `getByRole("button", {name: "Hľadať"})` na obrazovke "Párovanie"
+  koliduje s DVOMA inými prvkami naraz** (`.claude/rules/testing.md`'s
+  zdokumentovaná trieda) — sidebarov "Vyhľadať" nav tab (case-insensitive
+  substring "hľadať" ⊂ "vyhľadať") AJ VLASTNÁ "Hľadať / opraviť" pod-
+  záložka (prefix). `{ name: "Hľadať", exact: true }` je jediná
+  jednoznačná cesta k skutočnému submit tlačidlu.
