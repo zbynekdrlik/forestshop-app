@@ -2,7 +2,7 @@ import { useCallback, useRef, useState, type RefObject } from "react";
 
 // issue 337: "Načítať ďalšie" — zdieľaný mechanizmus pre KAŽDÚ stránkovanú
 // vyhľadávaciu obrazovku (Katalóg/Kontrola párovania/Eshop → Párovanie
-// produktov/Vypredané → Skladom: návrhy odkazov). Backend `page`/`pageSize`
+// produktov/Eshop → Párovanie, issue 387 E5). Backend `page`/`pageSize`
 // už podporuje plnohodnotne (viď `.claude/rules` per-modul poznámky) — chýbal
 // len spôsob, ako sa z frontendu dostať za prvú stranu. Rieši VÝHRADNE
 // "načítaj ĎALŠIU stranu a pripoj k existujúcim položkám" — samotné NOVÉ

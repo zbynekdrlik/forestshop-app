@@ -14,8 +14,9 @@ paths:
 Port starej appky (`https://github.com/zbynekdrlik/parovanie-produktov`,
 commit `60b6164`) do tejto appky, po etapách (E1..E9 — návrh
 https://github.com/zbynekdrlik/forestshop-app/issues/387#issuecomment-5273377438).
-**Tento súbor NAHRADÍ `.claude/rules/restock-links.md`, keď E8 vyradí #311**
-(návrh, sekcia 4) — dovtedy existujú vedľa seba.
+**Tento súbor NAHRADIL `.claude/rules/restock-links.md`** — issue 387 E8
+vyradilo #311 aj jeho playbook súbor (návrh, sekcia 4); router v
+`CLAUDE.md` má odvtedy len tento riadok.
 
 - **`rapidfuzz.fuzz.token_set_ratio` je CASE-SENSITIVE bez akéhokoľvek
   predspracovania (žiadne `.lower()`) a stará appka ho volá presne takto
@@ -509,3 +510,36 @@ https://github.com/zbynekdrlik/forestshop-app/issues/387#issuecomment-5273377438
   behu potrebuje VLASTNÝ `try`/`catch` v KAŽDOM podbehu** — plný
   mechanizmus + review nález (`e6c2695`) zdokumentovaný v `.claude/rules/
   shoptet-writeback.md` (hľadaj "VYHADZUJE"), nie duplikovaný tu.
+
+## E8 — Vyradenie #311 (`restock-links` — modul, route, screen, api, nav, badge, e2e, rule súbor)
+
+- **Odstránenie fixtúrových produktov posúva pevné e2e počty PRESNE
+  SYMETRICKY k ich pridaniu** — `.claude/rules/testing.md`'s
+  zdokumentovaná pasca ("pridanie jedného variantu do e2e seedu posunie
+  pevné počty v `catalog.spec.ts`") platí aj naopak: odstránenie
+  `scripts/e2e-fixtures-restock-links.ts` (3 produkty, 2 `sellable`)
+  posunulo `catalog.spec.ts`'s `Nájdených:` 106→103 a filter "sellable"
+  75→73, `nav.spec.ts`'s dve `toHaveCount` asercie záložiek 21→20,
+  `nav.test.ts`'s `NAV[3].tabs` 5→4. Aritmetika sa NEODVODZUJE z pamäte
+  ticketu — prečítaj ODSTRAŇOVANÚ fixtúru (kým ešte existuje, `git show
+  HEAD^:<súbor>` ak už zmazaná) a spočítaj presne, koľko produktov/z toho
+  koľko `sellable`, PRED úpravou čísel.
+- **Design komentár tvrdil "badge sa presmeruje na nový počet" — v
+  skutočnosti sa má len ODSTRÁNIŤ, keďže cieľová obrazovka (E5, "Párovanie")
+  UŽ MÁ vlastný nezávislý odznak (`pairingReviewUnreviewedCount`) od svojej
+  vlastnej etapy.** Žiadne prepojenie/presmerovanie netreba — `App.tsx`'s
+  starý `restockLinksMissingCount` stav/efekt/`useCallback`/Context
+  Provider (vrátane JSX wrapperu, ktorý treba správne od-indentovať/
+  vyvážiť) sa jednoducho vymaže celý. Overuj DESIGN VETY o "presmerovaní"
+  proti aktuálnemu kódu pred písaním — návrh mohol vzniknúť skôr, než
+  cieľová funkcionalita (tu E5's vlastný odznak) existovala.
+- **Overenie "táto zmena sa NEDOTKLA susednej/podobne pomenovanej
+  automatiky" (tu: #212/#213 "Vypredané → Skladom", zdieľa miesto v menu aj
+  prefix mena s odstráneným #311) ide najspoľahlivejšie cez `git diff
+  <base> <head> -- <cesty-suseda>` vrátený PRÁZDNY, nie len "jeho testy
+  prešli"** — testy prejdú aj keď je súbor nedotknutý ALEBO keď sa
+  zhodou okolností správa rovnako; prázdny `git diff` na konkrétne súbory
+  (`RestockSection.tsx`, `restock`/`supplier-stock` moduly,
+  `restock-waiting.spec.ts`/`restock-events.spec.ts`) je priamy dôkaz.
+  Použi rovnaký vzor pri E9 (vyradenie starého #239 UI + F4) na dôkaz, že
+  `/api/product-links` route a jej zapisovacia cesta ostali nedotknuté.

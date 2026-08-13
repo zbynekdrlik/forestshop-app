@@ -15,7 +15,6 @@ import { OrdersSection } from "./components/OrdersSection.js";
 import { PairingReviewSection } from "./components/PairingReviewSection.js";
 import { PairingSection } from "./components/PairingSection.js";
 import { PostaUncollectedSection } from "./components/PostaUncollectedSection.js";
-import { RestockLinkSuggestionsSection } from "./components/RestockLinkSuggestionsSection.js";
 import { RestockSection } from "./components/RestockSection.js";
 import { ReturnedOrdersSection } from "./components/ReturnedOrdersSection.js";
 import { SchedulerSection } from "./components/SchedulerSection.js";
@@ -193,12 +192,6 @@ export const NAV: readonly NavFolder[] = [
       // dodávateľ zase má skladom — beží na plán a má Štart/Stop, takže
       // patrí sem, nie do Systému (tam je len scraper, ktorý nič neprepína).
       { id: "restock", label: "Vypredané → Skladom", icon: "🔁", Component: RestockSection, wide: true },
-      // issue 311: diagnostika #307 zistila, že 91 zo 130 vypredaných
-      // produktov nemá VÔBEC žiadnu linku na dodávateľa — automatika ich
-      // preto nikdy neposúdi. Táto obrazovka NAVRHNE kandidáta, patrí hneď
-      // vedľa "Vypredané → Skladom" (rovnaká automatizácia, jedna sa stará
-      // o prepínanie, druhá o doplnenie chýbajúcich odkazov, ktoré ju živia).
-      { id: "restock-links", label: "Vypredané → Skladom: návrhy odkazov", icon: "🪄", Component: RestockLinkSuggestionsSection, wide: true },
       { id: "posta-uncollected", label: "Nevyzdvihnuté zásielky", icon: "📮", Component: PostaUncollectedSection },
       { id: "order-reminder", label: "Pripomienky objednávok", icon: "⏰", Component: OrderReminderSection },
       { id: "mail-log", label: "Odoslané e-maily", icon: "📨", Component: MailLogSection, wide: true },

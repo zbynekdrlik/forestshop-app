@@ -73,7 +73,7 @@ test("predvolený filter 'Nezrevidované' ukáže produkty bez linky (s aj bez k
 // issue 387 E5 (design komentár na tickete): odznak v ľavom menu = počet
 // "nezrevidovaných" (bez efektívnej linky), viditeľný AJ pri nasledujúcom
 // prihlásení bez otvorenia záložky (rovnaký priamy vzor ako issue 331's
-// `nav-badge-restock-links`).
+// pôvodný `nav-badge-restock-links`, odstránený issue 387 E8).
 test("odznak v menu ukazuje počet nezrevidovaných HNEĎ po prihlásení, bez otvorenia záložky; konzola je čistá", async ({ page }) => {
   const chyby: string[] = [];
   page.on("console", (m) => {
