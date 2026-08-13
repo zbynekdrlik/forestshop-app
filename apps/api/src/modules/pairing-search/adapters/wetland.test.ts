@@ -21,11 +21,18 @@ describe("parseWetlandSearch", () => {
       url: "https://www.wetland.sk/nohavice/deerhunter-pro-gamekeeper-boot-trousers-polovnicke-nohavice-111-592",
       code: null,
       price: null,
+      // issue 397: prvá karta má REÁLNU `.product-miniature` obal-struktúru
+      // (`data-full-size-image-url` uprednostnené pred menším `src`).
+      imageUrl: "https://www.wetland.sk/7593-home_default/deerhunter-pro-gamekeeper-boot-trousers-polovnicke-nohavice.jpg",
       rawScore: 0,
       codeHit: false,
     });
     expect(candidates[1]?.name).toBe("DEERHUNTER Strike Extreme Pull-Over Trousers - ochranné nohavice");
+    // issue 397: karty 2-3 nemajú `.product-miniature` obal vo fixtúre
+    // (zámerne, viď fixtúrov komentár) -> žiadny obrázok sa nájsť nedá.
+    expect(candidates[1]?.imageUrl).toBeNull();
     expect(candidates[2]?.name).toBe("DEERHUNTER Lady Excape Winter Trousers - dámske nohavice");
+    expect(candidates[2]?.imageUrl).toBeNull();
   });
 
   it("strips the #/variant fragment and dedups the two occurrences by canonical URL", () => {
@@ -51,7 +58,7 @@ describe("parseWetlandSearch", () => {
       '<a class="product-miniature__link" href="/x" title="Miniatúra produktu">' +
       '<img alt="obrázok"></a>';
     expect(parseWetlandSearch(html)).toEqual([
-      { name: "Miniatúra produktu", url: "https://www.wetland.sk/x", code: null, price: null, rawScore: 0, codeHit: false },
+      { name: "Miniatúra produktu", url: "https://www.wetland.sk/x", code: null, price: null, imageUrl: null, rawScore: 0, codeHit: false },
     ]);
   });
 
@@ -65,6 +72,7 @@ describe("parseWetlandSearch", () => {
         url: "https://www.wetland.sk/nohavice/dobra",
         code: null,
         price: null,
+        imageUrl: null,
         rawScore: 0,
         codeHit: false,
       },

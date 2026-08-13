@@ -42,3 +42,38 @@ export function resolveAndStripFragment(href: string, baseUrl: string): string |
 export function belongsToBase(url: string, baseUrl: string): boolean {
   return url === baseUrl || url.startsWith(`${baseUrl}/`);
 }
+
+// Doslovný port starej appka's `_IMG_NOISE` (`webreview/app.py`) — URL
+// fragmenty, ktoré NIKDY nie sú produktová fotka, aj keď sedia v inak
+// platnom obrázkovom atribúte. Živo overené (issue 397): BETALOV's
+// (huntingshop.eu) detailná `og:image` je VŽDY stránkové logo
+// (`.../svg/logo2.svg`) — presne dôvod, prečo starú appku tento filter
+// mal už pred rokom, nie len teoretická obrana.
+const IMAGE_NOISE_MARKERS = ["logo", "/producer/", ".svg", "/svg/", "placeholder", "no-image", "banner", "/img/m/"] as const;
+
+function isNoiseImage(url: string): boolean {
+  const low = url.toLowerCase();
+  return IMAGE_NOISE_MARKERS.some((marker) => low.includes(marker));
+}
+
+/**
+ * Vyberie prvý NEPRÁZDNY, nie-šumový obrázkový atribút z `candidates` (v
+ * poradí priority — napr. `[data-src, src]`, keď `src` je na danej doméne
+ * lazy-load placeholder) a vyrieši ho na absolútnu URL voči `baseUrl`.
+ * `null`, keď žiadny kandidát nenesie použiteľnú hodnotu — chýbajúca/
+ * prázdna, nespracovateľná (`resolveAndStripFragment`), alebo šumová
+ * (`IMAGE_NOISE_MARKERS` vyššie). Živo overené (issue 397): ODIMON's
+ * výsledková karta má `src="…/no-image.png"` VŽDY (skutočný obrázok je len
+ * v `data-src`, lazy-load) — bez tohto poradia by sa placeholder bral ako
+ * platný obrázok.
+ */
+export function resolveImageUrl(candidates: readonly (string | undefined)[], baseUrl: string): string | null {
+  for (const raw of candidates) {
+    const trimmed = raw?.trim();
+    if (trimmed === undefined || trimmed === "") continue;
+    const resolved = resolveAndStripFragment(trimmed, baseUrl);
+    if (resolved === null || isNoiseImage(resolved)) continue;
+    return resolved;
+  }
+  return null;
+}

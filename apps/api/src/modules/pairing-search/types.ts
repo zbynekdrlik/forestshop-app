@@ -34,12 +34,20 @@ export interface PairingProduct {
  * `rawScore`/`codeHit` sú diagnostické polia, ktoré dopĺňa `ranking.ts`'s
  * `rank()` (a zodpovedajú `pairing_candidate`'s `raw_score`/`code_hit`
  * stĺpcom z návrhu, sekcia „DB schéma" — pripravené na E3).
+ *
+ * `imageUrl` (issue 397, MIMO doslovného portu — stará appka obrázok
+ * kandidáta z výsledkovej karty nikdy neparsovala, ťahala ho až naživo z
+ * detailu pri otvorení webreview) — adaptéry ho čítajú priamo z výsledkovej
+ * karty (`adapters/url.ts`'s `resolveImageUrl`), `verify.ts` ho pri overení
+ * kódu vie doplniť z `og:image` detailu ako fallback (LEN pre chosen
+ * kandidáta, viď design komentár na tickete).
  */
 export interface PairingCandidate {
   readonly name: string;
   readonly url: string;
   readonly code: string | null;
   readonly price: string | null;
+  readonly imageUrl: string | null;
   readonly rawScore: number;
   readonly codeHit: boolean;
 }
