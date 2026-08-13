@@ -891,6 +891,21 @@ vyradilo #311 aj jeho playbook súbor (návrh, sekcia 4); router v
   " / " — pri ~2700 jednovariantných produktoch (playbook, E5 sekcia) je
   toto v praxi takmer vždy jeden text, viacnásobný join je len pre
   viacveľkostné produkty s odlišnou dostupnosťou per veľkosť.
+- **Per-URL/per-kľúč in-memory cache BEZ TTL je v tejto appke tichá staleness
+  chyba, nie len teoretická obava — appka beží ako DLHOŽIVÝ kontajner (dni,
+  nie jeden request).** Self-review nález (🟡) na `live-detail-info.ts`'s
+  pôvodnú implementáciu: cache bez TTL by "živé" info navždy zamrazila na
+  PRVEJ hodnote — vrátane PRVÉHO ZLYHANIA (transientný sieťový výpadok by
+  produkt navždy nechal bez live infa, kým appka nereštartuje). Fix:
+  `CACHE_TTL_MS = 15 min` na úspech AJ zlyhanie (injektovateľné `now()` pre
+  testy), ale URL MIMO známych adaptérov (štrukturálny fakt o URL, nikdy sa
+  nemení) sa cachuje BEZ TTL — nie každá cache v tejto appke potrebuje TTL,
+  len tá, čo drží HODNOTU, ktorá sa v čase reálne mení. Test pri KAŽDEJ
+  ĎALŠEJ novej module-level/factory-scoped cache v tomto repe (nielen
+  live-fetch): drží HODNOTU, čo sa môže zmeniť (cena, dostupnosť, externý
+  stav), alebo len ŠTRUKTÚRU (dispatch rozhodnutie, statický fakt)? Prvé
+  potrebuje TTL, druhé nie — a nikdy sa nespoliehaj na to, že "cache
+  re-renders don't re-fetch" zámer implicitne znamená "navždy".
 - **`variant_money_needs_currency_ck` CHECK constraint (`.claude/rules/
   database.md`) zachytí KAŽDÝ nový test/fixtúru, čo nastaví `price`/
   `standardPrice` bez `currency`** — oba seed helpery

@@ -4065,9 +4065,28 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
   lokálna e2e sada 60/60 zelená (žiadny nový console error, `catalog
   .spec.ts`'s pevné počty nedotknuté — žiadny nový produkt/variant, len
   price/standardPrice/stock na existujúcom fixtúrovom variante).
+- Self-review (fresh-context `general-purpose` subagent, plný diff proti
+  `cc174bb`): VERDICT 0 🔴, 1 🟡, 4 🔵. Opravené `c5d88a5`: 🟡
+  `live-detail-info.ts`'s cache dostala `CACHE_TTL_MS = 15 min` (appka
+  beží ako dlhoživý kontajner, cache bez TTL by "živé" info navždy
+  zamrazila na prvej hodnote/zlyhaní) + 3 nové testy; 🔵 `<div>` vnútri
+  `<span>` v `PairingReviewPanelParts.tsx` (neplatný HTML5) opravené na
+  `<div>` obal. Zvyšné 3 🔵 nálezy ponechané s dôvodom (komentár na
+  tickete: https://github.com/zbynekdrlik/forestshop-app/issues/422#issuecomment-5286854484)
+  — client-side dedup (server cache už rieši reálny prípad), JSON-LD
+  price-loss-on-unknown-token (existujúce, inde spoliehané `supplier-
+  stock` správanie, mimo rozsahu), case-sensitive `belongsToBase`
+  (existujúca, nezmenená funkcia, potvrdené nezneužiteľné). Opravy
+  overené: typecheck+lint čisté, `live-detail-info.test.ts` 8/8 (5+3 nové
+  TTL testy), `apps/api` plný unit balík 981/981 (978+3 po review
+  testoch), scoped
+  integračné testy (`pairing-review-http`/`pairing-review-live-supplier-
+  info-http`) 23/23, `pairing-review.spec.ts` + `pairing-review-split
+  .spec.ts` e2e 9/9.
 - Playbook: `.claude/rules/pairing-search.md`'s nová sekcia "issue 422 —
   AI zdôvodnenie zhody + živé ceny/dostupnosť" — `chosenReason` auto-fill
   odchýlka, trojica RÔZNYCH extrakcií (JSON-LD zdieľané WETLAND/ODIMON,
   vlastná `prodData` pre BETALOV), ODIMON JSON-LD-môže-klamať akceptované
   riziko pre informatívny náhľad, `adapterForUrl` zámerné zúženie rozsahu,
-  `variant_money_needs_currency_ck` past v seed helperoch.
+  `variant_money_needs_currency_ck` past v seed helperoch, a (po review)
+  "hodnota vs. štruktúra" pravidlo pre TTL na module-level cache.
