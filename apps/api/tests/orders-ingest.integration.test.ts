@@ -407,92 +407,69 @@ it("re-import NIKDY neprepíše ručne nastavený stav riadku ani komentár obje
   expect(rereadLine?.quantity).toBe(3); // množstvo sa AJ TAK osviežuje
 });
 
-it("prázdny (0 bajtov) export sa odmietne bez zápisu", async () => {
+// issue 412: majiteľ nahlásil, že objednávka 20261306 zmenená v Shoptete na
+// úplne iný produkt stále ukazuje STARÝ, dávno vymenený produkt — import
+// dovtedy len INSERToval/UPDATEoval, nikdy nemazal riadok, ktorého
+// (objednávka, variant) dvojica z novšieho exportu zmizla. Scenár nižšie
+// pokrýva OBE tvrdenia zadania naraz: (1) vymenený produkt sa NAHRADÍ (stará
+// položka zmizne, nová sa objaví s predvolenými hodnotami — nezačala sa ešte
+// vybavovať), (2) SÚRODENECKÝ riadok tej istej objednávky, ktorého produkt sa
+// NEZMENIL, si ZACHOVÁ manažérom nastavený stav — dôkaz, že reconciliation je
+// CIELENÝ (mazacia množina = presne to, čo z exportu zmizlo), nie plný
+// replace celej objednávky (ktorý by reštartoval aj nezmenené riadky).
+it("re-import ODSTRÁNI riadok produktu, ktorý Shoptet z objednávky vymenil, a zachová stav nezmeneného súrodeneckého riadku", async () => {
   const { db, dir } = await boot();
-  const result = await ingestOrders(db, {
-    fetchExport: fetcherOf(Buffer.alloc(0)),
-    now: NOW,
-    rawDir: dir,
-    windowStart: WINDOW_START,
-    windowEnd: WINDOW_END,
-  });
-  expect(result.status).toBe("rejected");
-  expect(await db.select().from(orders)).toHaveLength(0);
-});
+  await insertTestVariant(db, "40237/XL"); // "A" — bude vymenený
+  await insertTestVariant(db, "40238/M"); // "B" — nahradí A
+  await insertTestVariant(db, "40239/S"); // "C" — ostáva nezmenený súrodenec
 
-it("export bez povinného stĺpca (napr. 'date') sa odmietne", async () => {
-  const { db, dir } = await boot();
-  const header = HEADER.filter((c) => c !== "date");
-  const csv = buildCsv(header, [
-    { code: "1", billFullName: "X", itemName: "Y", itemAmount: "1", itemCode: "40237/XL" },
+  const povodna = buildCsv(HEADER, [
+    { code: "9201", date: "2026-07-01 10:00:00", statusName: "Vybavuje sa", billFullName: "Pavol Bajčičák", itemName: "Produkt A", itemAmount: "1", itemCode: "40237/XL" },
+    { code: "9201", date: "2026-07-01 10:00:00", statusName: "Vybavuje sa", billFullName: "Pavol Bajčičák", itemName: "Produkt C", itemAmount: "1", itemCode: "40239/S" },
   ]);
-  const result = await ingestOrders(db, {
-    fetchExport: fetcherOf(csv),
-    now: NOW,
-    rawDir: dir,
-    windowStart: WINDOW_START,
-    windowEnd: WINDOW_END,
-  });
-  expect(result.status).toBe("rejected");
-  if (result.status === "rejected") expect(result.reason).toContain("date");
-});
+  await ingestOrders(db, { fetchExport: fetcherOf(povodna), now: NOW, rawDir: dir, windowStart: WINDOW_START, windowEnd: WINDOW_END });
 
-it("poškodený riadok (počet polí nesedí s hlavičkou) sa odmietne ako celok", async () => {
-  const { db, dir } = await boot();
-  const good = HEADER.map((c) => `"${c === "code" ? "1" : c === "date" ? "2026-01-01 00:00:00" : c === "itemAmount" ? "1" : c === "itemCode" ? "40237/XL" : "x"}"`).join(";") + ";";
-  const malformed = `"1";"2026-01-01 00:00:00";"x"` + ";"; // menej polí než hlavička
-  const csv = Buffer.from([HEADER.map((c) => `"${c}"`).join(";") + ";", good, malformed].join("\r\n") + "\r\n", "utf-8");
+  const [order9201] = await db.select().from(orders).where(eq(orders.externalOrderId, "9201"));
+  if (order9201 === undefined) throw new Error("objednávka sa nenašla");
+  const povodneRiadky = await db.select().from(orderLines).where(eq(orderLines.orderId, order9201.id));
+  expect(povodneRiadky).toHaveLength(2);
+  const [lineA] = povodneRiadky.filter((l) => l.variantCode === "40237/XL");
+  const [lineC] = povodneRiadky.filter((l) => l.variantCode === "40239/S");
+  if (lineA === undefined || lineC === undefined) throw new Error("riadok sa nenašiel");
+  // Manažér oba riadky ručne spracoval PRED tým, než Shoptet vymenil produkt A.
+  await db.update(orderLines).set({ state: "nedostupne", ordered: false }).where(eq(orderLines.id, lineA.id));
+  await db.update(orderLines).set({ state: "caka_sa", ordered: true }).where(eq(orderLines.id, lineC.id));
 
-  const result = await ingestOrders(db, {
-    fetchExport: fetcherOf(csv),
-    now: NOW,
-    rawDir: dir,
-    windowStart: WINDOW_START,
-    windowEnd: WINDOW_END,
-  });
-  expect(result.status).toBe("rejected");
-  if (result.status === "rejected") expect(result.reason).toContain("poškodený riadok");
-});
-
-it("prvý import okna s NULA použiteľnými riadkami sa PRIJME (trust-on-first-use)", async () => {
-  const { db, dir } = await boot();
-  const csv = buildCsv(HEADER, [
-    { code: "1", billFullName: "X", itemName: "Doprava", itemAmount: "1", itemCode: "SHIPPING6" },
+  // Shoptet: produkt A vymenený za B, C ostáva nezmenený (rovnaké množstvo).
+  const zmenena = buildCsv(HEADER, [
+    { code: "9201", date: "2026-07-01 10:00:00", statusName: "Vybavuje sa", billFullName: "Pavol Bajčičák", itemName: "Produkt B", itemAmount: "1", itemCode: "40238/M" },
+    { code: "9201", date: "2026-07-01 10:00:00", statusName: "Vybavuje sa", billFullName: "Pavol Bajčičák", itemName: "Produkt C", itemAmount: "1", itemCode: "40239/S" },
   ]);
-  const result = await ingestOrders(db, {
-    fetchExport: fetcherOf(csv),
-    now: NOW,
-    rawDir: dir,
-    windowStart: WINDOW_START,
-    windowEnd: WINDOW_END,
-  });
+  const result = await ingestOrders(db, { fetchExport: fetcherOf(zmenena), now: NOW, rawDir: dir, windowStart: WINDOW_START, windowEnd: WINDOW_END });
   expect(result.status).toBe("accepted");
+
+  const noveRiadky = await db.select().from(orderLines).where(eq(orderLines.orderId, order9201.id));
+  // Presne 2 riadky — STARÝ "A" je preč, "B" pribudol, "C" ostal (nie 3).
+  expect(noveRiadky).toHaveLength(2);
+  const zostavaA = noveRiadky.find((l) => l.variantCode === "40237/XL");
+  expect(zostavaA).toBeUndefined(); // obrazovka "Na objednanie" už NESMIE ukázať vymenený produkt A
+
+  const novyB = noveRiadky.find((l) => l.variantCode === "40238/M");
+  expect(novyB).toBeDefined(); // obrazovka MUSÍ ukázať nový produkt B
+  expect(novyB?.state).toBe("objednane"); // nový riadok, predvolený stav — vybavovanie začína odznova
+  expect(novyB?.ordered).toBe(false);
+
+  const zachovanyC = noveRiadky.find((l) => l.variantCode === "40239/S");
+  expect(zachovanyC).toBeDefined();
+  // C sa v exporte nezmenil — jeho manažérom nastavený stav MUSÍ prežiť,
+  // presne ako existujúci test vyššie dokazuje pre celú nezmenenú objednávku.
+  expect(zachovanyC?.state).toBe("caka_sa");
+  expect(zachovanyC?.ordered).toBe(true);
 });
 
-it("drastický pokles oproti tomu, čo je už v databáze pre TO ISTÉ okno, sa odmietne bez zápisu", async () => {
-  const { db, dir } = await boot();
-  await insertTestVariant(db, "40999/X");
-  for (let i = 0; i < 20; i += 1) {
-    const [order] = await db
-      .insert(orders)
-      .values({ externalOrderId: `BASE-${String(i)}`, customerName: "Test", placedAt: new Date("2026-05-01T00:00:00Z") })
-      .returning();
-    if (order === undefined) throw new Error("insert zlyhal");
-    await db.insert(orderLines).values({ orderId: order.id, variantCode: "40999/X", quantity: 1 });
-  }
-
-  // Podlaha = floor(20 * 0.2) = 4; táto fixtúra dá len 1 použiteľný riadok.
-  const csv = buildCsv(HEADER, [
-    { code: "NEW-1", date: "2026-05-02 10:00:00", billFullName: "Y", itemName: "Z", itemAmount: "1", itemCode: "40999/X" },
-  ]);
-  const result = await ingestOrders(db, {
-    fetchExport: fetcherOf(csv),
-    now: NOW,
-    rawDir: dir,
-    windowStart: WINDOW_START,
-    windowEnd: WINDOW_END,
-  });
-  expect(result.status).toBe("rejected");
-  if (result.status === "rejected") expect(result.reason).toContain("20");
-  expect(await db.select().from(orders)).toHaveLength(20); // žiadny nový riadok nepribudol
-});
+// issue 412: prijímacia brána (prázdny export, chýbajúci povinný stĺpec,
+// poškodený riadok, trust-on-first-use, drastický pokles) presunutá do
+// `orders-ingest-acceptance.integration.test.ts` — pridanie nového
+// reconciliation testu priamo sem by poslalo tento súbor cez eslint
+// `max-lines: 400` (rovnaký dôvod/vzor ako `orders-ingest-posta-fields
+// .integration.test.ts`'s split vyššie).

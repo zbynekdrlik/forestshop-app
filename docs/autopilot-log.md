@@ -3716,6 +3716,51 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
   cez dočasný `git show HEAD:` revert implementácie).
 - Worktree mode (izolácia #317) — commit ostáva na vlastnej vetve,
   supervisor mergne + spustí CI pri round-integrácii.
+## Issue 412 — Na objednanie: zmenená objednávka v Shoptete stále ukazuje starý produkt
+
+- Root cause naživo overený proti produkčnej DB (`docker exec
+  forestshop-postgres-1`) VS. aktuálnemu živému Shoptet exportu (stiahnutý
+  priamo cez skompilovanú `fetcher.ts`/`parser.ts` cestu z bežiaceho
+  `forestshop-app-1` kontajnera, žiadny hash/URL nikde vypísaný): objednávka
+  20261306 mala v DB 8 `order_line` riadkov, aktuálny export niesol len 6
+  reálnych — `61729/M` ("Flisová bunda Percussion Scotland - zelená M",
+  presne produkt zo screenshotu) a `40674/S` boli STARÉ, dávno vymenené
+  produkty, ktoré Shoptet už vôbec nehlási. `ingestOrders`'s `order_line`
+  upsert (keyed `(order_id, variant_code)`) NOVÝ produkt vždy pridal, ale
+  STARÝ riadok nikdy nezmazal.
+- Design comment (root cause/3 zvážené prístupy/FK prieskum) PRED prvým
+  code commitom:
+  https://github.com/zbynekdrlik/forestshop-app/issues/412#issuecomment-5278871919
+- Commits: `e3f527c` (chore: version bump .243), `e550fc8` (test: RED),
+  `d3a1650` (fix: GREEN — cielený reconciliation DELETE po existujúcom
+  upsert cykle), `6941896` (chore: fixture fixy pre nové
+  `deletedStaleLineCount` pole + rozdelenie test súboru pod eslint
+  `max-lines`), `21be123` (refactor: review nálezy — dávkovaný set-based
+  DELETE cez `chunk()`, zdokumentované poradie zamykania).
+- RED→GREEN: `orders-ingest.integration.test.ts`'s "re-import ODSTRÁNI
+  riadok produktu, ktorý Shoptet z objednávky vymenil, a zachová stav
+  nezmeneného súrodeneckého riadku" — RED zlyhal na `e550fc8` (3 riadky
+  namiesto 2), GREEN prešiel na `d3a1650`. Test dokazuje OBOJE naraz:
+  vymenený produkt sa nahradí (starý zmizne, nový má predvolený stav) A
+  súrodenecký nezmenený riadok si zachová manažérom nastavený stav
+  (dôkaz, že reconciliation je cielený, nie plný replace objednávky).
+- Independent review dispatch (fresh general-purpose subagent, celý diff +
+  priama kontrola schema/adjacent modulov): 0 🔴 2 🟡 1 🔵 — batching
+  (dávkovaný DELETE namiesto po-jednej-objednávke) a teoretický (nie
+  novozavedený) lock-ordering vzor s `setSupplierLinesOrdered`
+  zdokumentované v `21be123`; vyhradený deterministický deadlock-regresný
+  test presahuje rozsah tohto bugfixu, filed as #416.
+- Testy: unit 962 (api) + 602 (web), integration 98 súborov/745 testov (2×
+  zelené, pred aj po review-fixe), lokálna e2e sada 55/55 — všetky zelené.
+  Izolovaný throwaway Postgres (vlastný kontajner, nie zdieľaný
+  `forestshop-postgres-1`/`forestshop_app-postgres-1` port 5433) —
+  `forestshop-dev` je zdieľaný 2-CPU box aj s produkciou.
+- Playbook: `.claude/rules/orders.md` (nová #412 sekcia — mazacia logika,
+  FK prieskum, poradie zamykania), `.claude/rules/local-dev.md` (nový
+  gotcha — `vitest`/esbuild vo worktree si vie "koreň" nájsť až v
+  hlavnom checkoute, keď supervisor práve integruje súbežnú vetvu).
+- Worktree mode (izolácia #317) — commit ostáva na vlastnej vetve,
+  supervisor mergne + spustí CI pri round-integrácii.
 ## 2026-08-13 — #398 + #401 + #409 (Parovanie: vsetky moznosti na karte, plna populacia, obrazky v paneli)
 
 - Batch (worktree isolation, #317), version bump `d504053` (0.3.0-dev.239→.241).
