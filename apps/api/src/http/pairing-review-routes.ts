@@ -6,7 +6,8 @@ import { log } from "../logger.js";
 import { record } from "../modules/audit/service.js";
 import { supplierLinkUrlBody } from "../modules/orders/supplier-link-assignment.js";
 import { setPairingDecision } from "../modules/pairing-review/decisions.js";
-import { listPairingCandidatesForProduct, listPairingReview } from "../modules/pairing-review/queries.js";
+import { getPairingReviewItem, listPairingCandidatesForProduct, listPairingReview } from "../modules/pairing-review/queries.js";
+import { listPairingVariantLinks, setPairingVariantLink } from "../modules/pairing-review/variant-links.js";
 import { isStateWritebackEnabled, setStateWritebackEnabled } from "../modules/shoptet-writeback/state-writeback-settings.js";
 import { requireRole, requireUser, type AppBindings } from "./middleware.js";
 import { requireSameOrigin } from "./origin-check.js";
@@ -40,16 +41,29 @@ const pairingReviewProductParam = z.object({ productKey: z.string().min(1).max(2
 // issue 387 E6 — diskriminovaná únia presne podľa design komentára:
 // `good` nenesie žiadne telo (server sám dohľadá `chosenUrl`), `manual`
 // nesie `url` (zdieľaná zod validácia `supplierLinkUrlBody`, rovnaká ako
-// `product-links`), zvyšné tri nenesú nič.
+// `product-links`), zvyšné (`unavailable`/`discontinued`/`split`/`revert`) nenesú nič.
 const pairingDecisionBody = z.discriminatedUnion("status", [
   z.object({ status: z.literal("good") }),
   z.object({ status: z.literal("manual"), url: supplierLinkUrlBody.shape.url }),
   z.object({ status: z.literal("unavailable") }),
   z.object({ status: z.literal("discontinued") }),
+  // issue 399 — manažér už uložil per-veľkosť linky cez `variant-link`
+  // trasu nižšie (samostatné volania); toto len OZNAČÍ produkt rozdelený.
+  z.object({ status: z.literal("split") }),
   z.object({ status: z.literal("revert") }),
 ]);
 
 const setStateWritebackEnabledBody = z.object({ enabled: z.boolean() });
+
+// issue 399 — `code` v TELE (nie ceste), rovnaký dôvod ako `pairing.md`'s
+// `variantCode`-v-tele pravidlo (kód variantu nesie lomku, napr.
+// "40237/3XL" — necháva sa neoverené, či by prešiel cez URL cestový
+// segment). `url`: validovaná http(s) adresa (zdieľaná `supplierLinkUrlBody`),
+// ALEBO prázdny reťazec/`null` = vymazať per-veľkosť link.
+const pairingVariantLinkBody = z.object({
+  code: z.string().min(1).max(200),
+  url: z.union([supplierLinkUrlBody.shape.url, z.literal("")]).nullable(),
+});
 
 export function registerPairingReviewRoutes(app: Hono<AppBindings>, db: Database): void {
   // issue 387 E7 — `/api/pairing-review/state-writeback-enabled` má INÝ
@@ -92,6 +106,23 @@ export function registerPairingReviewRoutes(app: Hono<AppBindings>, db: Database
     c.json(await listPairingReview(db, c.req.valid("query"))),
   );
 
+  // issue 399 — "Hľadať / opraviť" tab: jedna karta pre AKÝKOĽVEK produkt
+  // (nájdený cez `GET /api/search`), nezávisle od `listPairingReview`'s
+  // populácie (design komentár na tickete). `:productKey` je JEDINÝ
+  // segment za prefixom (rovnaká hĺbka ako literálne `state-writeback-
+  // enabled` GET vyššie, registrované PRED touto trasou — `.claude/rules/
+  // http-routes.md`'s literal-pred-param pravidlo).
+  app.get(
+    "/api/pairing-review/:productKey",
+    requireUser(db),
+    zValidator("param", pairingReviewProductParam),
+    async (c) => {
+      const item = await getPairingReviewItem(db, c.req.valid("param").productKey);
+      if (item === null) return c.json({ error: "Produkt sa nenašiel" }, 404);
+      return c.json({ item });
+    },
+  );
+
   // issue 387 E6 — lazy top-8 kandidátov pre rozhodovací panel (design
   // komentár: volané AŽ pri otvorení panelu, nikdy vložené do hlavného
   // zoznamu). Rovnaké oprávnenie ako čítanie vyššie — panel smie OTVORIŤ
@@ -125,6 +156,41 @@ export function registerPairingReviewRoutes(app: Hono<AppBindings>, db: Database
 
       log.info({ actorUserId: user.userId, productKey, status: body.status }, "rozhodnutie o párovaní produktu");
       return c.json({ ok: true as const, status: body.status });
+    },
+  );
+
+  // issue 399 — "✂ Rozdeliť na veľkosti": zoznam variantov produktu s ich
+  // AKTUÁLNYM per-veľkosť linkom. Rovnaké oprávnenie ako kandidáti vyššie
+  // (`requireUser`, panel smie otvoriť ktokoľvek prihlásený).
+  app.get(
+    "/api/pairing-review/:productKey/variants",
+    requireUser(db),
+    zValidator("param", pairingReviewProductParam),
+    async (c) => c.json({ variants: await listPairingVariantLinks(db, c.req.valid("param").productKey) }),
+  );
+
+  // issue 399 — nastavenie/vymazanie PER-VEĽKOSŤ linku (SAMOSTATNÝ zápis,
+  // nezdieľanú transakciu s `.../decision` vyššie — design komentár na
+  // tickete). Rovnaké oprávnenie ako rozhodnutie (`requireRole("admin",
+  // "manazer")`).
+  app.post(
+    "/api/pairing-review/:productKey/variant-link",
+    requireSameOrigin(),
+    requireUser(db),
+    requireRole("admin", "manazer"),
+    zValidator("param", pairingReviewProductParam),
+    zValidator("json", pairingVariantLinkBody),
+    async (c) => {
+      const { productKey } = c.req.valid("param");
+      const { code, url } = c.req.valid("json");
+      const user = c.get("user");
+      const now = new Date();
+
+      const result = await setPairingVariantLink(db, { productKey, code, url: url === "" ? null : url, actorUserId: user.userId, now });
+      if (result === "not_found") return c.json({ error: "Variant sa nenašiel u tohto produktu" }, 404);
+
+      log.info({ actorUserId: user.userId, productKey, code, cleared: url === null || url === "" }, "úprava per-veľkosť linku (Párovanie)");
+      return c.json({ ok: true as const, code, url: url === "" ? null : url });
     },
   );
 }
