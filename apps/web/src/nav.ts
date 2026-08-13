@@ -19,7 +19,6 @@ import { RestockSection } from "./components/RestockSection.js";
 import { ReturnedOrdersSection } from "./components/ReturnedOrdersSection.js";
 import { SchedulerSection } from "./components/SchedulerSection.js";
 import { SearchSection } from "./components/SearchSection.js";
-import { SupplierLinksSection } from "./components/SupplierLinksSection.js";
 import { SupplierStockSection } from "./components/SupplierStockSection.js";
 import { SyncSection } from "./components/SyncSection.js";
 import { UpozorneniaSection } from "./components/UpozorneniaSection.js";
@@ -125,27 +124,22 @@ export const NAV: readonly NavFolder[] = [
       { id: "exchange", label: "Výmena tovaru", icon: "🔃", Component: ExchangeOrdersSection, wide: true },
       { id: "returned", label: "Vrátený tovar", icon: "↩️", Component: ReturnedOrdersSection, wide: true },
       { id: "claims", label: "Reklamácie", icon: "⚠️", Component: ClaimOrdersSection, wide: true },
-      // issue 239: majiteľ, "vypisovat produkty ktore nemaju dodavatelsku
-      // linku, dat moznost ju tam rovno vlozit, a poslat do Shoptetu" — patrí
-      // sem (nie do Automatizácie), je to obrazovka, na ktorej obsluha
-      // pracuje, presne ako "Na objednanie"/"Nedostupné tovary".
-      { id: "supplier-links", label: "Párovanie produktov", icon: "🔗", Component: SupplierLinksSection, wide: true },
       // issue 387 E5: "profesionálne párovanie" — port starej appky
       // (`webreview`), karty (náš produkt vs. dodávateľov navrhnutý kandidát)
-      // nad tým, čo E3 (gather)/E4 (verify) zozbierali. Patrí HNEĎ ZA
-      // "Párovanie produktov" (#239) — najbližší príbuzný obsah, obe zatiaľ
-      // BEŽIA VEDĽA SEBA (design komentár na tickete: prípadné vyradenie
-      // #239/F4 je E9, len po výslovnom súhlase majiteľa). Rozhodnutia (E6)
-      // tu ešte nie sú — obrazovka je LEN čítanie.
+      // nad tým, čo E3 (gather)/E4 (verify) zozbierali. issue 400 (E9)
+      // odstránilo staršiu obrazovku "Párovanie produktov" (#239, majiteľ:
+      // "a stare parovanie produktov z apky odober") — tá bola predtým
+      // HNEĎ PRED touto, robila to isté cez rovnaké zápisové jadro. Rozhodnutia
+      // (E6) tu ešte nie sú — obrazovka je LEN čítanie.
       { id: "pairing-review", label: "Párovanie", icon: "🧩", Component: PairingReviewSection, wide: true },
       // issue 240: "rýchla ruka" na JEDEN konkrétny kus tovaru/objednávku —
       // nájsť + rovno opraviť dodávateľskú linku. Patrí sem z rovnakého
-      // dôvodu ako "Párovanie produktov" vyššie (obsluha na nej pracuje,
+      // dôvodu ako "Párovanie" vyššie (obsluha na nej pracuje,
       // žiadny plán/zapnuté-vypnuté koncept).
       { id: "search", label: "Vyhľadať", icon: "🔍", Component: SearchSection, wide: true },
       // issue 257: majiteľ, "malo by to byt zalozka v eshope a mali by tam
       // vyskocit ak su dve objedanvky na toho isteho zakaznika" — patrí sem
-      // z rovnakého dôvodu ako "Párovanie produktov"/"Vyhľadať" vyššie
+      // z rovnakého dôvodu ako "Párovanie"/"Vyhľadať" vyššie
       // (obsluha na nej pracuje, žiadny plán/zapnuté-vypnuté koncept).
       { id: "order-merge", label: "Zlúčenie objednávok", icon: "🔀", Component: OrderMergeSection, wide: true },
       // issue 292: majiteľ (Discord, 6.8.2026) — jedno tlačidlo na objednanie
