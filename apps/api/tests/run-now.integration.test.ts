@@ -1,5 +1,6 @@
 import pg from "pg";
 import { afterEach, describe, expect, it } from "vitest";
+import type { Database } from "../src/db/client.js";
 import { getLatestJobRun } from "../src/modules/scheduler/queries.js";
 import { startRunNow, type RunNowOutcome } from "../src/modules/scheduler/run-now.js";
 import { withCleanDb } from "./helpers/db.js";
@@ -115,6 +116,50 @@ describe("startRunNow — zlyhaný beh", () => {
     expect(settled[0]?.status).toBe("failure");
 
     expect(await tryLockFromSeparateConnection(process.env["DATABASE_URL"] ?? "")).toBe(true);
+  });
+});
+
+describe("startRunNow — zlyhanie PRI VKLADANÍ 'running' riadku (zámok už bol získaný)", () => {
+  // Code review nález (issue 413): zámok sa berie PRED `db.insert(jobRuns)`.
+  // Bez explicitného try/catch okolo insertu by JEHO zlyhanie (napr.
+  // dočasný sieťový výpadok DB) nechalo zámok NAVŽDY držaný — `job.run()` sa
+  // nikdy nespustí, takže fire-and-forget reťaz (a jej `.finally()`, čo by
+  // inak zámok uvoľnilo) sa vôbec nezostaví. Rovnaký kľúč používa aj
+  // NAPLÁNOVANÝ beh (`scheduler/jobs.ts`), takže by sa zablokoval tiež, až
+  // do reštartu procesu.
+  it("uvoľní zámok a vyhodí ĎALEJ — zámok NEOSTANE navždy držaný", async () => {
+    const ctx = await withCleanDb();
+    close = ctx.close;
+    // Atrapa, ktorá prepustí VŠETKO na skutočnú `db` (vrátane `$client`u
+    // potrebného na získanie zámku) okrem `.insert`, ktoré synchrónne
+    // vyhodí — rovnaký `Proxy`-vzor ako `shop-feed/run.test.ts`'s
+    // `forbiddenDb`.
+    const insertFailingDb = new Proxy(ctx.db, {
+      get(target, prop, receiver: unknown) {
+        if (prop === "insert") {
+          return () => {
+            throw new Error("simulované zlyhanie vloženia job_run riadku");
+          };
+        }
+        return Reflect.get(target, prop, receiver);
+      },
+    }) as Database;
+
+    await expect(
+      startRunNow(
+        insertFailingDb,
+        { jobName: TEST_JOB_NAME, lockKey: TEST_RUN_NOW_LOCK_KEY, run: () => Promise.resolve({ marker: "nikdy" }) },
+        new Date(),
+        () => {
+          throw new Error("onSettled sa nikdy nemá zavolať, keď insert zlyhá PRED spustením run()");
+        },
+      ),
+    ).rejects.toThrow("simulované zlyhanie vloženia job_run riadku");
+
+    // Zámok sa uvoľnil aj napriek zlyhaniu insertu — druhé pripojenie ho
+    // dostane HNEĎ, nikdy nezostane navždy zablokovaný.
+    expect(await tryLockFromSeparateConnection(process.env["DATABASE_URL"] ?? "")).toBe(true);
+    expect(await getLatestJobRun(ctx.db, TEST_JOB_NAME)).toBeNull();
   });
 });
 
