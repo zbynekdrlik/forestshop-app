@@ -1,0 +1,1 @@
+ALTER TABLE "pairing_candidate" ADD COLUMN "image_url" text;

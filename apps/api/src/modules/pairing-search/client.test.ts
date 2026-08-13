@@ -91,7 +91,7 @@ describe("SearchClient", () => {
     const candidates = await client.search("odimon", "test");
 
     expect(candidates).toEqual<readonly PairingCandidate[]>([
-      { name: "Test produkt", url: "https://www.odimon.sk/p", code: null, price: null, rawScore: 0, codeHit: false },
+      { name: "Test produkt", url: "https://www.odimon.sk/p", code: null, price: null, imageUrl: null, rawScore: 0, codeHit: false },
     ]);
   });
 });
