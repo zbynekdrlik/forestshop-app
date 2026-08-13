@@ -11,7 +11,7 @@ import { upsertProductSupplierLink, type UpsertExecutor } from "../orders/suppli
 // zámok — konflikt sa zaznamenáva SPÄTNE cez audit (`previousStatus`/
 // `previousUrl`), nikdy sa mu nepredchádza zamykaním.
 
-export type PairingDecisionStatus = "good" | "manual" | "unavailable" | "discontinued";
+export type PairingDecisionStatus = "good" | "manual" | "unavailable" | "discontinued" | "split";
 
 interface BaseInput {
   readonly productKey: string;
@@ -25,11 +25,19 @@ interface BaseInput {
 // vybraný kandidát ALEBO ručne vpísaná adresa, zod validácia na HTTP hranici
 // rovnaká ako `product-links`), `unavailable`/`discontinued` (žiadna URL),
 // `revert` (DELETE riadku).
+//
+// issue 399 — `split` (žiadna URL, rovnaký tvar ako `unavailable`/
+// `discontinued`): manažér už nastavil per-veľkosť linky cez
+// `POST .../variant-link` (`variant-links.ts`, samostatná zápisová cesta,
+// NEZDIEĽANÁ transakcia — per-veľkosť riadky sa ukladajú NEZÁVISLE, jeden
+// po druhom, PRED týmto rozhodnutím) — toto len OZNAČÍ produkt ako
+// rozdelený/zrevidovaný. Design komentár na tickete, sekcia "Prístup 1".
 export type SetPairingDecisionInput =
   | (BaseInput & { readonly status: "good" })
   | (BaseInput & { readonly status: "manual"; readonly url: string })
   | (BaseInput & { readonly status: "unavailable" })
   | (BaseInput & { readonly status: "discontinued" })
+  | (BaseInput & { readonly status: "split" })
   | (BaseInput & { readonly status: "revert" });
 
 export type SetPairingDecisionResult = "ok" | "not_found" | "no_candidate";
@@ -172,7 +180,9 @@ export async function setPairingDecision(db: Database, input: SetPairingDecision
       return "ok";
     }
 
-    // "unavailable" | "discontinued" — žiadna URL, žiadny link-override zápis.
+    // "unavailable" | "discontinued" | "split" — žiadna URL, žiadny
+    // link-override zápis (issue 399: split's per-veľkosť linky žijú v
+    // `pairingVariantLinks`, zapísané samostatne cez `variant-links.ts`).
     const [product] = await tx.select({ key: products.key }).from(products).where(eq(products.key, input.productKey)).limit(1);
     if (product === undefined) return "not_found";
 
