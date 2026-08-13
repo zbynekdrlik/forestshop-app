@@ -211,7 +211,10 @@ export function PairingReviewCard({
 
           {!canEdit ? (
             item.decision !== null && (
-              <span className="pairing-review-decision-badge" data-testid={`pairing-review-decision-badge-${item.productKey}`}>
+              <span
+                className={"pairing-review-decision-badge pairing-review-decision-" + item.decision.status}
+                data-testid={`pairing-review-decision-badge-${item.productKey}`}
+              >
                 {DECISION_BADGE_LABELS[item.decision.status]}
               </span>
             )
@@ -221,7 +224,10 @@ export function PairingReviewCard({
 
               {item.decision !== null && !panelOpen && (
                 <div className="pairing-review-actions">
-                  <span className="pairing-review-decision-badge" data-testid={`pairing-review-decision-badge-${item.productKey}`}>
+                  <span
+                    className={"pairing-review-decision-badge pairing-review-decision-" + item.decision.status}
+                    data-testid={`pairing-review-decision-badge-${item.productKey}`}
+                  >
                     {DECISION_BADGE_LABELS[item.decision.status]}
                   </span>
                   {(item.decision.status === "good" || item.decision.status === "manual") && (

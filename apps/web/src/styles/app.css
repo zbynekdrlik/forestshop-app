@@ -3069,8 +3069,24 @@ a.upozornenie-title:hover {
   font-weight: var(--fs-weight-semibold);
   padding: var(--fs-space-1) var(--fs-space-3);
   border-radius: 999px;
+}
+/* Odlíšené farby PODĽA STATUSU (review nález, issue 387 E6) — rovnaký
+   princíp ako `.pairing-review-state-*` vyššie: "good"/"manual" (odkaz
+   potvrdený) je pozitívna zelená, "unavailable" (dočasný, čaká na
+   re-kontrolu) je varovná žltá, "discontinued" (konečný, žiadny odkaz už
+   netreba) je neutrálna sivá. */
+.pairing-review-decision-good,
+.pairing-review-decision-manual {
   background: var(--fs-success-bg);
   color: var(--fs-success);
+}
+.pairing-review-decision-unavailable {
+  background: var(--fs-warning-bg);
+  color: var(--fs-warning);
+}
+.pairing-review-decision-discontinued {
+  background: var(--fs-surface-alt);
+  color: var(--fs-ink-muted);
 }
 .pairing-review-panel {
   margin-top: var(--fs-space-3);
