@@ -48,6 +48,15 @@ export interface PairingCandidate {
 export type PairingConfidence = "high" | "medium" | "low" | "none";
 
 /**
+ * Výsledok kódového overenia (issue 387 E4, port `verify.py`'s
+ * `code_verdict`) — `ok` = kód produktu bol nájdený na stránke kandidáta,
+ * `unsure` = nenašiel sa (alebo produkt nemá žiadny kód na overenie, alebo
+ * sa stránku nepodarilo stiahnuť). Overenie NIKDY nevráti "false-ok" —
+ * chýbajúci dôkaz vždy znamená `unsure`, nikdy `ok`.
+ */
+export type PairingVerdict = "ok" | "unsure";
+
+/**
  * Adaptér: (produkt, jeho varianty) → `PairingProduct`. Deduplikuje
  * `externalCode`, zahadzuje prázdne/`null` hodnoty, zachováva poradie
  * prvého výskytu (rovnaká disciplína ako `queries.ts`'s dedup).
