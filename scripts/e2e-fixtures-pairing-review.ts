@@ -61,7 +61,19 @@ export async function seedPairingReviewFixtures(db: Database, teraz: Date, snaps
     adapterKey: "wetland",
   });
 
-  async function seedProdukt(key: string, name: string, over: { readonly internalNote?: string | null; readonly supplier?: string } = {}): Promise<void> {
+  async function seedProdukt(
+    key: string,
+    name: string,
+    over: {
+      readonly internalNote?: string | null;
+      readonly supplier?: string;
+      // issue 422 — voliteľné, chýbajúce necháva PÔVODNÉ správanie
+      // (žiadna cena, stock 5, "Skladom") — existujúce volania sa nemenia.
+      readonly price?: string;
+      readonly standardPrice?: string;
+      readonly stock?: number;
+    } = {},
+  ): Promise<void> {
     await db.insert(products).values({
       key,
       name,
@@ -77,7 +89,12 @@ export async function seedPairingReviewFixtures(db: Database, teraz: Date, snaps
       guid: key,
       externalCode: `${key}-KOD`,
       name,
-      stock: 5,
+      // `variant_money_needs_currency_ck` (`.claude/rules/database.md`) —
+      // menu treba nastaviť VŽDY, keď je nastavená hociktorá cena.
+      currency: over.price !== undefined || over.standardPrice !== undefined ? "EUR" : null,
+      price: over.price ?? null,
+      standardPrice: over.standardPrice ?? null,
+      stock: over.stock ?? 5,
       availabilityInStockText: "Skladom",
       availabilityOutOfStockText: "Vypredané",
       availabilityText: "Skladom",
@@ -89,7 +106,10 @@ export async function seedPairingReviewFixtures(db: Database, teraz: Date, snaps
     });
   }
 
-  await seedProdukt("E2E-PR-CHYBA", "E2E Bunda Alfa Nezrevidovaná");
+  // issue 422 — cena/pôvodná cena/sklad na TOMTO produkte, aby jediný e2e
+  // test (`pairing-review.spec.ts`'s prvý test) overil AJ "naša strana" polia
+  // (chosenReason už mala táto fixtúra dávno, pozri pairingCandidateSets nižšie).
+  await seedProdukt("E2E-PR-CHYBA", "E2E Bunda Alfa Nezrevidovaná", { price: "49.90", standardPrice: "59.90", stock: 3 });
   await db.insert(pairingCandidateSets).values({
     productKey: "E2E-PR-CHYBA",
     gatheredAt: teraz,
