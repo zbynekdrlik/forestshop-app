@@ -1299,3 +1299,29 @@ paths:
   one-line invariant (too narrow) or needlessly suppress multi-column
   layout on common viewports (too wide, e.g. picking 600px+ "to be
   safe").
+- **A NEW nav tab whose label is a strict PREFIX of an ALREADY-EXISTING
+  tab's label (`nav.ts`) AND which ALSO carries a left-menu badge count
+  cannot be found unambiguously by `getByRole` at all — neither
+  `{ exact: true }` nor a plain substring query.** Issue 387 E5's new
+  "Párovanie" tab sits alongside the existing "Párovanie produktov" (#239) —
+  a classic prefix collision (`.claude/rules/testing.md`'s established
+  class, issues 240/311), but this one has an EXTRA twist: `Sidebar.tsx`'s
+  badge-carrying `<span>` sets its OWN `aria-label` (`${tab.label}:
+  ${count}`) as a CHILD of the tab `<button>`, and a descendant's
+  `aria-label` concatenates into the ANCESTOR button's computed accessible
+  name — so once the badge attaches (count resolves from `null`), the
+  button's real name becomes `"Párovanie Párovanie: 2"`, not bare
+  `"Párovanie"`. `{ name: "Párovanie", exact: true }` then finds ZERO
+  matches (the real name has the badge suffix); a bare substring query for
+  `"Párovanie"` finds TWO matches (both this tab AND "Párovanie produktov",
+  since "Párovanie" is a substring of both). Neither Playwright locator
+  option resolves it. **Fix: `data-testid="nav-tab-${tab.id}"` added
+  directly to `Sidebar.tsx`'s tab `<button>` (additive — every tab gets
+  one, unique by construction, zero collision risk with anything
+  accessible-name-based)** — `page.getByTestId("nav-tab-<id>")` sidesteps
+  the whole accessible-name computation. Test for ANY future nav tab whose
+  label is a prefix/substring of an existing one: does it ALSO carry a
+  `badgeCounts`/`badgeStatus` entry (`App.tsx`)? If yes, `exact: true` will
+  NOT work once the badge is populated (only works for a badge-less tab,
+  the `restock-links.md`'s "Vypredané → Skladom" precedent) — reach for the
+  `data-testid` instead of trying to out-clever the accessible-name string.
