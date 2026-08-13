@@ -704,6 +704,25 @@ tr:last-child td {
 .btn.ghost:hover {
   background: var(--fs-border-soft);
 }
+/* issue 387 E6 — ✗ Zlé / terminálne rozhodnutia (`.claude/rules/frontend-
+   design.md`: nové varianty na EXISTUJÚCICH `--fs-danger`/`--fs-warning`
+   tokenoch, nikdy nová surová farba). */
+.btn.bad {
+  background: var(--fs-danger-bg);
+  color: var(--fs-danger);
+}
+.btn.bad:hover {
+  background: var(--fs-danger);
+  color: #fff;
+}
+.btn.warn {
+  background: var(--fs-warning-bg);
+  color: var(--fs-warning);
+}
+.btn.warn:hover {
+  background: var(--fs-warning);
+  color: #fff;
+}
 .btn:disabled {
   opacity: 0.55;
   cursor: not-allowed;
@@ -3035,9 +3054,66 @@ a.upozornenie-title:hover {
 .pairing-review-verdict-unsure {
   color: var(--fs-warning);
 }
-.pairing-review-placeholder {
-  font-size: var(--fs-text-xs);
-  color: var(--fs-ink-faint);
-  font-style: italic;
+/* issue 387 E6 — rozhodovacia UX (nahradzuje E5's statický "Rozhodovanie
+   príde v ďalšej etape" placeholder text). */
+.pairing-review-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--fs-space-2);
+  flex-wrap: wrap;
   margin-top: var(--fs-space-3);
+}
+.pairing-review-decision-badge {
+  display: inline-block;
+  font-size: var(--fs-text-xs);
+  font-weight: var(--fs-weight-semibold);
+  padding: var(--fs-space-1) var(--fs-space-3);
+  border-radius: 999px;
+}
+/* Odlíšené farby PODĽA STATUSU (review nález, issue 387 E6) — rovnaký
+   princíp ako `.pairing-review-state-*` vyššie: "good"/"manual" (odkaz
+   potvrdený) je pozitívna zelená, "unavailable" (dočasný, čaká na
+   re-kontrolu) je varovná žltá, "discontinued" (konečný, žiadny odkaz už
+   netreba) je neutrálna sivá. */
+.pairing-review-decision-good,
+.pairing-review-decision-manual {
+  background: var(--fs-success-bg);
+  color: var(--fs-success);
+}
+.pairing-review-decision-unavailable {
+  background: var(--fs-warning-bg);
+  color: var(--fs-warning);
+}
+.pairing-review-decision-discontinued {
+  background: var(--fs-surface-alt);
+  color: var(--fs-ink-muted);
+}
+.pairing-review-panel {
+  margin-top: var(--fs-space-3);
+  padding: var(--fs-space-3);
+  background: var(--fs-surface-alt);
+  border: 1px solid var(--fs-border);
+  border-radius: var(--fs-radius-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--fs-space-2);
+}
+.pairing-review-panel-candidate {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--fs-space-2);
+  font-size: var(--fs-text-sm);
+  overflow-wrap: break-word;
+}
+.pairing-review-manual-row,
+.pairing-review-terminal-row {
+  display: flex;
+  align-items: center;
+  gap: var(--fs-space-2);
+  flex-wrap: wrap;
+}
+.pairing-review-manual-row input {
+  flex: 1 1 0%;
+  min-width: 12rem;
 }

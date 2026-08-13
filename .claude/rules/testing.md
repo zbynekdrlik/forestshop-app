@@ -689,3 +689,34 @@ paths:
   (potvrdí/vyvráti, že komponent je naozaj rýchly), potom hľadaj v súbore
   JEDEN `it()` s viacerými `waitFor` volaniami — to je takmer vždy skutočná
   príčina, nie testovacie prostredie.
+- **`pnpm --filter @forestshop/web e2e -- <súbor1> <súbor2>` NEFILTRUJE na
+  tie súbory — spustí CELÚ e2e sadu.** `package.json`'s `"e2e": "playwright
+  test"` skript už je len 2 slová; pnpm-ov vlastný `--` pred argumentmi PRE
+  skript sa cez `pnpm --filter X e2e --` odovzdá do PRÍKAZU AKO DOSLOVNÝ
+  ĎALŠÍ ARGUMENT (`playwright test "--" "<súbor1>" "<súbor2>"`), nie ako
+  oddeľovač, ktorý pnpm sám skonzumuje — Playwright potom dostane `--` ako
+  neplatný prvý filter, čo v praxi znamená "žiadny filter", takže beží
+  úplne všetko (issue 387 E6, naživo overené: namiesto 2 zadaných spec
+  súborov sa spustilo 61 testov naprieč celým `tests/e2e/`, vrátane
+  nesúvisiaceho `catalog.spec.ts`). **Funkčný spôsob, ako lokálne spustiť
+  LEN vybrané spec súbory:** obísť `package.json`'s `e2e` skript úplne,
+  volať `playwright` priamo cez `pnpm --filter @forestshop/web exec
+  playwright test tests/e2e/<súbor1>.spec.ts tests/e2e/<súbor2>.spec.ts`
+  (`exec`, nie samotný skript-alias) — `webServer`'s `reuseExistingServer:
+  false` (`playwright.config.ts`) navyše znamená, že KAŽDÉ takéto
+  spustenie reseeduje appku odznova (nikdy nezdieľa už bežiaci server z
+  predošlého volania), takže postupné volania sú vzájomne bezpečné.
+  **Ten istý príkaz navyše potrebuje `DATABASE_URL` NASTAVENÉ v
+  spúšťajúcom shelli** (`DATABASE_URL=postgres://forestshop:forestshop
+  @127.0.0.1:5433/forestshop pnpm --filter @forestshop/web exec playwright
+  test ...`) — `playwright.config.ts`'s `webServer` (`e2e-setup.ts` +
+  `api start`) žiadnu predvolenú hodnotu NEMÁ, na rozdiel od CI (kde ju
+  GitHub Actions-ov Postgres service kontajner nastavuje automaticky);
+  bez nej appka's `env.ts` zhodí `webServer` proces hneď pri štarte
+  ("Chybná konfigurácia prostredia... DATABASE_URL... Required"), a
+  Playwright to nahlási len ako všeobecné "Process from config.webServer
+  was not able to start" bez zjavnej príčiny v prvom riadku výstupu — nie
+  je to samostatná, dovtedy nezdokumentovaná medzera (líši sa od "Live
+  pixel meranie" vzoru v `.claude/rules/local-dev.md`, ktorý rieši
+  `db:migrate`/`api start` priamo, nie `pnpm ... e2e`'s vlastný webServer
+  subproces).

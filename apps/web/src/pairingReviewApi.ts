@@ -1,8 +1,9 @@
 import { z } from "zod";
 
 // issue 387 E5: "Eshop → Párovanie" — zrkadlí `GET /api/pairing-review`
-// (`apps/api/src/http/pairing-review-routes.ts`). LEN čítanie — rozhodnutia
-// (E6) tu ešte neexistujú, žiadna zapisovacia funkcia v tomto súbore.
+// (`apps/api/src/http/pairing-review-routes.ts`). issue 387 E6 pridáva
+// rozhodnutia: `sendPairingDecision`/`fetchPairingCandidates` + `decision`
+// pole v položke.
 
 export const PAIRING_REVIEW_FILTERS = ["unreviewed", "matched", "unmatched", "st1", "st2", "st3", "all"] as const;
 export type PairingReviewFilter = (typeof PAIRING_REVIEW_FILTERS)[number];
@@ -13,6 +14,16 @@ const chosenCandidateSchema = z.object({
   rawScore: z.number(),
   codeHit: z.boolean(),
 });
+
+export const PAIRING_DECISION_STATUSES = ["good", "manual", "unavailable", "discontinued"] as const;
+export type PairingDecisionStatus = (typeof PAIRING_DECISION_STATUSES)[number];
+
+const decisionSchema = z.object({
+  status: z.enum(PAIRING_DECISION_STATUSES),
+  url: z.string().nullable(),
+  decidedAt: z.string(),
+});
+export type PairingReviewDecision = z.infer<typeof decisionSchema>;
 
 const itemSchema = z.object({
   productKey: z.string(),
@@ -32,6 +43,7 @@ const itemSchema = z.object({
   chosenReason: z.string().nullable(),
   verdict: z.enum(["ok", "unsure"]).nullable(),
   chosenCandidate: chosenCandidateSchema.nullable(),
+  decision: decisionSchema.nullable(),
 });
 export type PairingReviewItem = z.infer<typeof itemSchema>;
 
@@ -91,4 +103,38 @@ export async function fetchPairingReviewUnreviewedCount(): Promise<number> {
   if (!response.ok) return 0;
   const parsed = countSchema.safeParse(await response.json());
   return parsed.success ? parsed.data.total : 0;
+}
+
+const candidateSchema = z.object({
+  name: z.string(),
+  url: z.string(),
+  rawScore: z.number(),
+  codeHit: z.boolean(),
+});
+export type PairingReviewCandidate = z.infer<typeof candidateSchema>;
+const candidatesSchema = z.object({ candidates: z.array(candidateSchema) });
+
+// issue 387 E6 — lazy top-8 kandidátov pre rozhodovací panel (design komentár
+// na tickete: volané AŽ pri otvorení panelu ✗ Zlé, nikdy vopred).
+export async function fetchPairingCandidates(productKey: string): Promise<readonly PairingReviewCandidate[]> {
+  const response = await fetch(`/api/pairing-review/${encodeURIComponent(productKey)}/candidates`);
+  return candidatesSchema.parse(await readJson(response, "Zoznam kandidátov sa nepodarilo načítať")).candidates;
+}
+
+// issue 387 E6 — diskriminovaná únia presne zrkadliaca server (`http/pairing-
+// review-routes.ts`'s `pairingDecisionBody`).
+export type PairingDecisionAction =
+  | { readonly status: "good" }
+  | { readonly status: "manual"; readonly url: string }
+  | { readonly status: "unavailable" }
+  | { readonly status: "discontinued" }
+  | { readonly status: "revert" };
+
+export async function sendPairingDecision(productKey: string, action: PairingDecisionAction): Promise<void> {
+  const response = await fetch(`/api/pairing-review/${encodeURIComponent(productKey)}/decision`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(action),
+  });
+  await readJson(response, "Uloženie rozhodnutia sa nepodarilo");
 }

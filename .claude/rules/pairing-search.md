@@ -405,3 +405,80 @@ https://github.com/zbynekdrlik/forestshop-app/issues/387#issuecomment-5273377438
   presne rovnaká past ako `aria-label`/`getByRole`/nav-záložka kolízie
   zdokumentované v `.claude/rules/testing.md`, len tentoraz cez ZDIEĽANÝ
   POČET namiesto zdieľaného selektora.**
+
+## E6 — Rozhodnutia (`pairing-review/decisions.ts`, `pairing_decision`, `PairingReviewCard.tsx`)
+
+- **Guard proti súbežnému prepisu je "posledný zápis vyhráva"
+  (`onConflictDoUpdate`), NIE optimistický zámok** — design komentár na
+  tickete (issue 387 E6) zvažoval aj `updated_at` round-trip aj
+  `SELECT ... FOR UPDATE`, oboje zamietnuté ako zbytočná zložitosť pre
+  nízkofrekventovanú ručnú akciu bez precedensu v appke. `decided_at`/
+  `updated_at` stĺpce napriek tomu existujú OBIDVA (vždy tá istá hodnota v
+  tejto verzii) — čisto ako príprava, keby to niekedy bolo treba zmeniť bez
+  ďalšej migrácie. Konflikt sa NIKDY nepredchádza, len sa SPÄTNE zaznamená
+  do auditu (`previousStatus`/`previousUrl`) — rovnaký princíp ako
+  `upsertProductSupplierLink` už dnes robí pre samotnú linku.
+- **`upsertProductSupplierLink` (`orders/supplier-link-assignment.ts`, #239)
+  dostalo `export` — jediná zmena existujúceho súboru, čisto aditívna.**
+  Dôvod: `setPairingDecision`'s `good`/`manual` vetva potrebuje zapísať
+  `pairing_decision` AJ `product_supplier_link_override` v JEDNEJ
+  transakcii, ale `setProductSupplierLinkForProduct` (existujúci wrapper)
+  SAMA otvára `db.transaction(...)` — vnorená transakcia by nefungovala.
+  Zdieľané jadro (`upsertProductSupplierLink`, prijíma `UpsertExecutor` =
+  `Pick<Database, "select"|"insert">`) sa preto volá PRIAMO s VLASTNÝM `tx`.
+  Rovnaký vzor pri KAŽDEJ ďalšej potrebe "spoj DVA existujúce zápisy do
+  jednej transakcie": exportuj zdieľané JADRO (nie wrapper), nikdy nevnáraj
+  `db.transaction` do `db.transaction`.
+- **"unreviewed" (E5's `!hasEffectiveLink`) sa E6 NEZUŽUJE naivne na "žiadne
+  rozhodnutie vôbec"** (to bol starej appky's doslovný `status === null`) —
+  produkt s efektívnou linkou ZALOŽENOU MIMO tejto obrazovky (napr. cez
+  "Párovanie produktov" #239 predtým, než sa naň niekedy rozhodlo tu) sa
+  bez rozhodnutia stále počíta ako "má odkaz, netreba naň upozorňovať".
+  Skutočná zmena: `unreviewed` = `!hasEffectiveLink && !(decision existuje
+  && status IN (unavailable, discontinued))` — TERMINÁLNE rozhodnutia
+  (čo linku NIKDY nedostanú) sa vyradia AJ bez linky, `good`/`manual` sú už
+  vyradené cez prvú podmienku (vždy majú linku). Over toto pri KAŽDEJ ďalšej
+  úprave predikátu — doslovný port starej appky by tu bol TICHO nesprávny.
+- **"↩ Vrátiť" NIKDY nemaže `product_supplier_link_override`** (dizajnové
+  rozhodnutie, design komentár na tickete) — dôsledok je ASYMETRIA, ktorú
+  treba poznať pred ďalšou zmenou: revert `unavailable`/`discontinued`
+  (žiadna linka) VRÁTI produkt do "unreviewed" (presne "Vrátiť vracia do
+  nezrevidovaných", zadaniev akceptácia). Revert `good`/`manual` NEVRÁTI —
+  linka naďalej existuje, takže produkt zostáva MIMO "unreviewed" (nájditeľný
+  cez "Všetky"/"Napárované", už bez odznaku/rozhodnutia). Toto NIE JE bug —
+  je to priamy dôsledok E5's vlastnej `unreviewed` definície (bez linky), nie
+  "bez rozhodnutia". Integračný test `pairing-review-decisions-http
+  .integration.test.ts` dokazuje OBE vetvy explicitne oddelene.
+- **`GET /:productKey/candidates` je LAZY (fetchne sa AŽ pri otvorení panelu
+  "✗ Zlé"/"✗ Zmeniť"), nikdy vložené do hlavného `GET /api/pairing-review`
+  zoznamu** — E5 už zamietla živý meta-fetch (obrázok/cena) ako zbytočnú
+  záťaž; E6 pridáva len malý endpoint nad UŽ perzistovanými `pairing_
+  candidate` riadkami (meno/URL/skóre/kód-zhoda), volaný len keď ho
+  reviewer skutočne potrebuje. Vloženie všetkých top-8 do KAŽDEJ položky
+  zoznamu by zbytočne nafúklo payload kariet, čo sa nikdy nerozbalia.
+- **Karta (`PairingReviewCard.tsx`) je od E6 STAVOVÁ, ale panel/busy/
+  candidates stav je PER-KARTE lokálny `useState`, nikdy globálny scalar**
+  (na rozdiel od `DailyTasksSection.tsx`'s `editingXId` vzoru, ktorý issue
+  381 dokumentuje ako past — `.claude/rules/frontend-design.md`). Viac
+  kariet smie mať panel otvorený súčasne bez kolízie, jeden zdieľaný `busy`
+  guard na karte blokuje VŠETKY jej vlastné akčné tlačidlá naraz. Po
+  úspešnom zápise sa NEROBÍ optimistický lokálny update poľa `item` —
+  `PairingReviewSection`'s `onDecided` prop znova načíta AKTUÁLNY filter na
+  stranu 1 zo servera (jediný zdroj pravdy, žiadna duplicitná klientská
+  filter-logika).
+- **Farba odznaku rozhodnutia (`pairing-review-decision-<status>`) je PODĽA
+  STATUSU, nie jedna pevná farba pre všetky štyri** (review nález) —
+  `good`/`manual` zelená (`--fs-success`), `unavailable` žltá
+  (`--fs-warning`, dočasný/re-kontrola), `discontinued` sivá
+  (`--fs-surface-alt`/`--fs-ink-muted`, konečný) — rovnaký princíp ako
+  `.pairing-review-state-*` (produkt stav Skladom/Nie je skladom/Ukončené).
+- **Plný lokálny e2e beh (nie len kolízna dvojica pairing-review+nav) pri
+  E6 objavil PREDOŠLÚ (E5) medzeru** — `catalog.spec.ts`'s natvrdo napísané
+  počty (103/72) nikdy nezohľadnili E5's 3 nové sellable varianty
+  (`E2E-PR-CHYBA`/`NENAJDENY`/`SLINKOU`), presne ten "pridanie jedného
+  variantu do e2e seedu posunie pevné počty" gotcha z `.claude/rules/
+  testing.md`. Oprava (106/75) je v E6's PR, mimo E6's vlastného kódu.
+  **Poučenie pre KAŽDÚ ĎALŠIU etapu tejto sériovej reťaze:** spustiť PLNÝ
+  lokálny e2e beh aspoň RAZ za pár etáp (nielen kolíznu dvojicu) — kolízna
+  dvojica chytá len PRIAME substring/aria kolízie, nikdy vzdialené číselné
+  závislosti ako `catalog.spec.ts`'s celkový počet.
