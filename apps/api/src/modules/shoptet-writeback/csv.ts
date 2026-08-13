@@ -100,3 +100,71 @@ export function buildRestockCsv(rows: readonly RestockCsvRow[]): Buffer {
   const bom = "﻿";
   return Buffer.from(bom + lines.join("\r\n") + "\r\n", "utf8");
 }
+
+// issue 387 E7: stavový zápis (rozhodnutia "📦 Nie je skladom"/"🚫 Už sa
+// nebude predávať" z obrazovky Párovanie) — DRUHÝ, SAMOSTATNÝ CSV import,
+// nikdy kombinovaný s linkovým vyššie. Vlastný tvar riadku (stĺpce sú
+// DISJUNKTNÉ od `WritebackRow` — žiadny `internalNote`, takže existujúce
+// dodávateľské odkazy ostávajú nedotknuté), ale ZÁMERNE v tomto súbore a
+// cez to isté `dataRowToLine` — CSV-injection ochrana platí pre KAŽDÚ
+// cestu zápisu do Shoptetu.
+export type StateWritebackStatus = "unavailable" | "discontinued";
+
+export interface StateCsvRow {
+  readonly code: string;
+  readonly pairCode: string;
+  readonly status: StateWritebackStatus;
+}
+
+const STATE_HEADER = ["code", "pairCode", "productVisibility", "stock", "availabilityInStock", "availabilityOutOfStock"] as const;
+
+// Mapovanie stavov — presne stará appka's zákon (`import_builder.py`'s
+// `state_rows`/`export_helpers.py`'s `_VYPREDANE`/`_SKONCIL`): unavailable →
+// visible/Vypredané (produkt ostáva viditeľný, môže sa neskôr prepnúť späť —
+// `.claude/rules/supplier-stock.md`'s restock automatika naň smie zareagovať),
+// discontinued → detailOnly/Predaj výrobku skončil (stránka ostáva kvôli
+// Google, ale restock ho už nikdy neprepne späť — `detailOnly` je mimo
+// `HIDDEN_VISIBILITIES`, ale AJ mimo `SELLABLE_VISIBILITY`). `stock` sa
+// nezapisuje (issue 219's dôvod platí rovnako — majiteľ zásobu neudržiava),
+// oba dostupnostné texty sa zapisujú NARAZ (issue 219).
+const STATE_VISIBILITY: Record<StateWritebackStatus, string> = { unavailable: "visible", discontinued: "detailOnly" };
+const STATE_AVAILABILITY_TEXT: Record<StateWritebackStatus, string> = {
+  unavailable: "Vypredané",
+  discontinued: "Predaj výrobku skončil",
+};
+
+/**
+ * Dedup podľa `code`, PRVÝ výskyt vyhráva — stará appka's zákon ("Each code
+ * appears ONCE — Shoptet aborts the whole import on a duplicate code").
+ * `variants.code` je v tejto appke DB primárny kľúč (`schema-catalog.ts`),
+ * takže skutočný duplikát v `rows` je štrukturálne nedosiahnuteľný pri
+ * korektnom volajúcom — táto funkcia je obranná vrstva navyše, nikdy
+ * jediná ochrana. Exportovaná samostatne (nie len vnorená v
+ * `buildStatesCsv`), aby volajúci (`run-state-writeback.ts`) mohol z NEJ
+ * istej odvodiť presný `expectedRows` pre Log-overenie výsledku importu —
+ * jeden zdroj pravdy pre "koľko riadkov sa reálne zapíše".
+ */
+export function dedupeStateRowsByCode(rows: readonly StateCsvRow[]): readonly StateCsvRow[] {
+  const seen = new Set<string>();
+  return rows.filter((r) => {
+    if (seen.has(r.code)) return false;
+    seen.add(r.code);
+    return true;
+  });
+}
+
+export function buildStatesCsv(rows: readonly StateCsvRow[]): Buffer {
+  if (rows.length === 0) {
+    throw new Error("buildStatesCsv: žiadne riadky na zápis — CSV sa nesmie nahrať prázdne");
+  }
+  const deduped = dedupeStateRowsByCode(rows);
+  const lines = [
+    rowToLine(STATE_HEADER),
+    ...deduped.map((r) => {
+      const text = STATE_AVAILABILITY_TEXT[r.status];
+      return dataRowToLine([r.code, r.pairCode, STATE_VISIBILITY[r.status], "0", text, text]);
+    }),
+  ];
+  const bom = "﻿";
+  return Buffer.from(bom + lines.join("\r\n") + "\r\n", "utf8");
+}

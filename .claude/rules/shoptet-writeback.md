@@ -261,6 +261,39 @@ paths:
   úplne prázdneho súboru obchádza tento guard bez toho, aby sa oň muselo
   zasahovať, a je aj bližšie realistickej ceste, akou by appka skutočný
   import poslala.
+- **`runShoptetImportIsolated` VYHADZUJE (rejectne promise) na TVRDOM
+  zlyhaní — nenájde prihlasovací formulár, nenájde bezpečný radio
+  (`ensureSafeSettings`), dieťa proces skončí bez výsledku (`child-
+  runner.ts`) — nie len vracia `{ok:false}` (to je LEN pre mäkké zlyhania,
+  keď sa CSV reálne odoslalo, ale Log ukázal chybu/nejednoznačný text).**
+  Kým `run-writeback.ts` bolo JEDINÝM krokom celého behu (issue 122), táto
+  výnimka jednoducho zastavila celý job — `shoptetWritebackJob`
+  (`scheduler/jobs.ts`) ju odchytí a zapíše ako `job_run.status =
+  "failure"`, presne podľa zámeru. **Akonáhle vznikne DRUHÝ nezávislý
+  krok volajúci TÚ ISTÚ funkciu v sekvencii (issue 387 E7's `run-writeback-
+  sequence.ts`: linkový → stavový), táto výnimka by BEZ VLASTNÉHO
+  `try`/`catch` v KAŽDOM podbehu prešla priamo cez orchestrátor a
+  zastavila by aj pokus o ĎALŠÍ krok** — presný opak "nezávislosti", ktorú
+  taký orchestrátor sľubuje (review nález, opravené commitom `e6c2695`:
+  `run-writeback.ts`/`run-state-writeback.ts` teraz OBIDVA obaľujú svoje
+  `runShoptetImportIsolated` volanie a premieňajú výnimku na normálny
+  `{status:"failed", processed:null, failed:null, errorDetail:...}`
+  výsledok). **Pri KAŽDOM ďalšom orchestrátore, čo reťazí VIAC volaní
+  tejto (alebo `runOrderNoteWritebackIsolated`) funkcie za sebou:** over,
+  že KAŽDÉ volanie má VLASTNÝ `try`/`catch`, nikdy sa nespoliehaj na to, že
+  doterajší jediný-krokový vzor (bez `try`/`catch`) je bezpečný aj vo
+  viackrokovom kontexte.
+- **Testovanie "prvé z N sekvenčných volaní tvrdo zlyhá, druhé uspeje" BEZ
+  mockovania internej logiky (repo zakazuje mock reálneho kódu, len
+  externých sieťových hraníc):** `shoptet-fixture.ts`'s
+  `failNextImportFormOnce()` (issue 387 E7) — jednorazovo vynechá bezpečný
+  radio na ĎALŠOM `GET /admin/import-produktov/` (spotrebuje sa, ďalší
+  request je normálny). Na rozdiel od konštruktorového `omitSafeRadio`
+  (platí na KAŽDÝ request rovnako, takže dve sekvenčné volania by boli
+  nerozlíšiteľné — obe by zlyhali identicky), tento toggle robí presne
+  JEDNO volanie tvrdo zlyhať a nasledujúce prejsť normálne — jediný
+  spôsob, ako naživo (nie mockom) dokázať, že DRUHÉ volanie orchestrátora
+  sa SKUTOČNE spustilo, nielen že prvé zlyhalo.
 - **PÔVODNÝ (mylný) nález, ponechaný pre históriu — pozri opravu vyššie:**
   Ručný ("Spustiť teraz") beh Playwright login flow-u DO Shoptet
   administrácie cez DEŇ vie zlyhať s "prihlasovací formulár stále
