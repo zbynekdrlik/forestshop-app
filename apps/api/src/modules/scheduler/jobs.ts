@@ -15,6 +15,8 @@ import type { RestockRunResult } from "../restock/run.js";
 import { isRestockEnabled } from "../restock/run.js";
 import { SHOP_FEED_JOB_NAME } from "../shop-feed/constants.js";
 import type { ShopFeedRunResult } from "../shop-feed/run.js";
+import { SHOP_SITEMAP_JOB_NAME } from "../shop-sitemap/constants.js";
+import type { ShopSitemapRunResult } from "../shop-sitemap/run.js";
 import { SUPPLIER_STOCK_JOB_NAME } from "../supplier-stock/constants.js";
 import type { SupplierStockRunResult } from "../supplier-stock/run.js";
 import { PAIRING_SEARCH_JOB_NAME } from "../pairing-search/constants.js";
@@ -379,6 +381,35 @@ export function shopFeedJob(run: RunShopFeed): ScheduledJob {
   return {
     name: SHOP_FEED_JOB_NAME,
     schedule: { kind: "daily", hourLocal: 3, minuteLocal: 50 },
+    async run(db, now) {
+      return { detail: await run(db, now) };
+    },
+  };
+}
+
+export type RunShopSitemap = (db: Database, now: Date) => Promise<ShopSitemapRunResult>;
+
+/**
+ * "Adresy z sitemapy + HTTP sonda" (issue 402) — doplnok `shopFeedJob`u pre
+ * kódy, čo `google.xml` feed nepokrýva. Denne o **04:05** Europe/Bratislava
+ * — NIE 04:20, ako navrhoval pôvodný dispatch (ten slot patrí
+ * `supplierStockJob`u, viď nižšie) — 04:05 je presne 15 min PO
+ * `shopFeedJob`e (03:50, aby pracoval s čerstvou feed mapou z tejto noci) A
+ * 15 min PRED `supplierStockJob`om (04:20), teda "aspoň 15 min od každého
+ * suseda" (`.claude/rules/scheduler.md`).
+ *
+ * Žiadny `enabled` prepínač: job NEZAPISUJE do živého e-shopu (len číta
+ * verejnú sitemapu + sonduje VLASTNÝ web), rovnaká úvaha ako `shopFeedJob`/
+ * `supplierStockJob`. MÁ VLASTNÝ advisory zámok VNÚTRI `runShopSitemap`
+ * (`SHOP_SITEMAP_RUN_LOCK_KEY`) — na rozdiel od `shopFeedJob`u (bez
+ * manuálneho spúšťača) tento job MÁ "Spustiť teraz" (`http/shop-sitemap-
+ * routes.ts`), takže potrebuje zámok proti súbežnému behu, rovnaký dôvod
+ * ako `pairingSearchJob`/`postaUncollectedJob`.
+ */
+export function shopSitemapJob(run: RunShopSitemap): ScheduledJob {
+  return {
+    name: SHOP_SITEMAP_JOB_NAME,
+    schedule: { kind: "daily", hourLocal: 4, minuteLocal: 5 },
     async run(db, now) {
       return { detail: await run(db, now) };
     },
