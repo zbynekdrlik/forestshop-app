@@ -47,12 +47,14 @@ Smer je preto obrátený:
   `/srv/forestshop/backups/forestshop-<STAMP>.dump` + `.env.gpg`.
 - **dev1 si súbory STIAHNE vlastným pull cronom** —
   `~/backups/pull-forestshop-dev-backup.sh` (žije len na dev1, mimo tohto
-  repa). **Presný riadok dev1's crontabu (issue 376) ZOSTÁVA UNVERIFIED —
-  ale nie preto, že by sa to nedalo overiť z `forestshop-dev`.** `ssh
-  dev1`/`ssh 100.104.8.125` z tohto boxu naozaj zlyhávajú (žiadna sieťová
-  cesta, potvrdené), no dá sa to overiť NEPRIAMO — `forestshop-dev`'s
-  vlastný `auth.log` zaznamenáva KAŽDÉ prihlásenie reštrikovaným pull
-  kľúčom aj s presným časom. Postup, opakovateľný kýmkoľvek na tomto boxi:
+  repa). **Presný čas dev1's crontabu je OVERENÝ** (issue 376, overené
+  13. 8. 2026 z prvej reálnej noci 12.→13. 8. 2026): cron beží
+  **`30 4 * * *` Bratislava-local = 04:30 Europe/Bratislava = 02:30 UTC
+  (v CEST).** `ssh dev1`/`ssh 100.104.8.125` z tohto boxu naozaj zlyhávajú
+  (žiadna sieťová cesta, potvrdené), no overilo sa to NEPRIAMO —
+  `forestshop-dev`'s vlastný `auth.log` zaznamenáva KAŽDÉ prihlásenie
+  reštrikovaným pull kľúčom aj s presným časom. Postup, opakovateľný
+  kýmkoľvek na tomto boxi:
   1. zisti fingerprint kľúča z `~/.ssh/authorized_keys` (riadok
      `command="/usr/bin/rrsync -ro ..." ssh-ed25519 ...
      forestshop-dev-backup-pull@dev1`) cez `ssh-keygen -lf`;
@@ -60,23 +62,24 @@ Smer je preto obrátený:
      `Accepted publickey for admin ... ssh2: ED25519 SHA256:<fingerprint>`
      je jeden reálny pull, s UTC časovou pečiatkou v samotnom logu
      (nezávisle od box-lokálneho `timedatectl` nastavenia vyššie).
+     **POZOR na formát:** tento box's `auth.log` má ISO časové pečiatky
+     (`2026-08-13T02:30:02...`), NIE tradičný syslog tvar (`Aug 13 ...`) —
+     `grep 'Aug 13'` nenájde nič, hľadaj rok-mesiac-deň prefix (`2026-08-`).
 
   K 12. 8. 2026 19:xx (deň, keď box vôbec prvýkrát začal bežať ako
   `forestshop-dev` — `journalctl --list-boots` ukazuje prvý boot tejto
-  identity 12. 8. 2026 13:14 CEST) toto našlo presne 7 úspešných
+  identity 12. 8. 2026 13:14 CEST) tento postup našiel presne 7 úspešných
   prihlásení tým kľúčom, VŠETKY zhlukovo medzi 12:46:44–13:06:03 UTC toho
   istého dňa — zjavne ručné testovanie pri zapájaní (issue 366/367 setup:
-  7× pripojenie za 20 minút, nie raz-denne opakovaný cron vzor). Nočné
-  okno `backup-db-local.sh`'s cronu (bullet vyššie) v tejto podobe boxu
-  ešte VÔBEC nenastalo (dnešné 02:15 už prešlo predtým, než box v tejto
-  identite existoval) — teda ani dev1's nadväzujúci pull cron nemal
-  doteraz ŽIADNU reálnu produkčnú príležitosť spustiť sa. Prvá reálna
-  noc je až 12.→13. 8. **Skutočný cyklický čas preto zatiaľ nemá dôkaz —
-  ani jeden z dvoch pôvodne citovaných zdrojov (02:25 UTC / cron
-  `30 4 * * *` Bratislava-local) sa nedal ani potvrdiť, ani vyvrátiť.**
-  Až po prvej reálnej noci zopakuj krok 2 vyššie — nový výsledok bude mať
-  presne jeden riadok s pravidelným denným časom namiesto zhluku, a ten
-  čas nahraď sem.
+  7× pripojenie za 20 minút, nie raz-denne opakovaný cron vzor), takže
+  vtedy skutočný cyklus ešte nemal dôkaz — nočné okno v tejto podobe boxu
+  ešte vôbec nenastalo. **Prvá reálna noc (12.→13. 8. 2026) to potvrdila:**
+  ten istý kľúč sa prihlásil PRESNE RAZ, z `85.248.11.235`, s časovou
+  pečiatkou `Accepted publickey ...` **2026-08-13T02:30:02** v `auth.log`
+  (= 02:30 UTC = 04:30 Europe/Bratislava v CEST). To potvrdzuje hypotézu
+  cronu `30 4 * * *` Bratislava-local (a vyvracia dovtedy súbežne
+  zvažovanú hypotézu ~02:25 UTC z `backup-db-local.sh`'s hlavičkového
+  komentára).
   Cieľ na dev1: **`~/backups/forestshop-dev/`** — samostatný adresár,
   ODDELENE od dev2's `~/backups/forestshop/` (nižšie), aby sa dve
   nezávislé zálohovacie histórie nikdy nepomiešali.
@@ -109,10 +112,9 @@ crontab súbor, obsah `~/backups/forestshop-dev/`) sa naďalej NEDÁ overiť z
 tohto stroja** — `forestshop-dev` nemá k dev1 žiadnu sieťovú cestu (`ssh
 dev1`/`ssh 100.104.8.125` obe zlyhali). **Dev1's SKUTOČNÉ SPRÁVANIE (kedy sa
 naozaj pripája) sa ale DÁ overiť nepriamo** cez `forestshop-dev`'s vlastný
-`auth.log` (issue 376 — postup + zatiaľ nerozhodnutý výsledok pozri bullet
-"dev1 si súbory STIAHNE" vyššie): box beží v aktuálnej podobe len od
-12. 8. 2026, žiadna reálna noc ešte neprebehla, takže presný cyklický čas
-zatiaľ nemá dôkaz ani z jedného smeru.
+`auth.log` (issue 376 — postup + overený výsledok pozri bullet "dev1 si
+súbory STIAHNE" vyššie): prvá reálna noc (12.→13. 8. 2026) potvrdila cron
+`30 4 * * *` Bratislava-local (04:30 = 02:30 UTC v CEST).
 
 ## dev2 (statická rollback kópia)
 
