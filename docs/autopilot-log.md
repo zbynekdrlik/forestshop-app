@@ -3681,3 +3681,39 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
   frontend-design.md` (CSS špecificita vs. globálny `input` reset).
 - Worktree mode (izolácia #317) — commit ostáva na vlastnej vetve,
   supervisor mergne + spustí CI pri round-integrácii.
+
+## Issue 410 — Objednávky predajňa: nahradiť Shoptet zoznam vlastnými zápismi z predajne
+
+- Nahrádza Shoptet-viazanú obrazovku (issue 345) vlastnou nástenkou zápisov z predajne
+  (Štěpánovo Discord vlákno). Commity: `8695a4d` (verzia 0.3.0-dev.240), `46b8c6a` (feat —
+  schéma `floor_note`/`floor_note_product` (migrácia `0051_nasty_garia.sql`, pôvodne, viď
+  nižšie), `apps/api/src/modules/floor-notes/{queries,service}.ts`,
+  `floor-notes-routes.ts`, `FloorNotesSection.tsx`/`FloorNoteRow.tsx`/
+  `FloorNoteProductSearch.tsx`, `floorNotesApi.ts`, `autoResizeTextarea.ts`, staré
+  `floor-orders-*` odstránené), `d82387d` (merge origin/dev — renumbering na `0052_
+  thankful_invisible_woman.sql` po kolízii s issue 397's `0051_dusty_marrow.sql`, plný
+  postup v `.claude/rules/database.md`), `3faed72` (review-fix testy: priama DB kontrola
+  cascade delete + regresný test na variantový kód s `/`).
+- Design komentár PRED prvým kódom:
+  https://github.com/zbynekdrlik/forestshop-app/issues/410#issuecomment-5278232200
+  (Triage: non-trivial, 3 zvážené prístupy, Architektúra sekcia). STEP 0 validácia:
+  https://github.com/zbynekdrlik/forestshop-app/issues/410#issuecomment-5278226924.
+  Review pass (fresh-context general-purpose subagent, 0🔴0🟡3🔵, všetky 3 opravené):
+  https://github.com/zbynekdrlik/forestshop-app/issues/410#issuecomment-5279065199.
+- Testy: nové unit (web: `FloorNotesSection*.test.tsx` ×3, `autoResizeTextarea.test.ts`),
+  integration (api: `floor-notes-http.integration.test.ts` 16, `floor-notes-products-http
+  .integration.test.ts` 10), e2e (`floor-notes.spec.ts` — plný tok: napísať, pripnúť
+  produkt s priamou aj náhradnou adresou, prepnúť značky, upraviť, odopnúť, zmazať).
+  `catalog.spec.ts`'s pevné počty zvýšené o 2 (103→105, 73→75) — nová e2e fixtúra vkladá 2
+  varianty priamo, rovnaká past ako issue 217/337/atď (`.claude/rules/testing.md`).
+- Plný lokálny beh po zlúčení s origin/dev (issue 397's paralelná integrácia): typecheck +
+  lint čisté, unit web 614 + api 960 zelené, CELÁ integračná sada 98 súborov/760 testov
+  zelená, CELÁ e2e sada 55/55 zelená (2 behy — druhý po oprave `catalog.spec.ts`'s počtov).
+  Overené na izolovanej throwaway Postgres inštancii (port 5440), nie na zdieľanej 5433 —
+  paralelný worktree (issue 397) bežal súbežne na tomto boxe.
+- Playbook: nový `.claude/rules/floor-notes.md` (celý dizajn + gotchas), addendum do
+  `.claude/rules/database.md` (druhý overený výskyt migračnej kolízie — REGENEROVAŤ cez
+  `db:generate`, nie ručne splicovať snapshot JSON; pasca so zabudnutým provizórnym
+  journal záznamom).
+- Worktree mode (#317) — commit ostáva na vlastnej vetve `worktree-agent-aeefd434be27ba402`,
+  supervisor mergne priamo z tejto REF-y a spustí CI pri round-integrácii.
