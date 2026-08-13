@@ -17,6 +17,15 @@ it("jobLabel vráti holý technický názov pre naozaj neznámy job (fallback ne
   expect(jobLabel("neexistujuci-job")).toBe("neexistujuci-job");
 });
 
-it("JOB_LABELS pozná presne 9 jobov (5 pôvodných + 4 z issue 185) — žiadny sa nestratil", () => {
-  expect(Object.keys(JOB_LABELS)).toHaveLength(9);
+// Issue 387 (dolaďovačka z prvého ostrého behu): "pairing-search"
+// (`PAIRING_SEARCH_JOB_NAME`, apps/api/src/modules/pairing-search/
+// constants.ts) chýbalo v JOB_LABELS, takže Plánovač ukazoval surový
+// technický názov namiesto slovenského popisu — presne ten istý nález
+// ako issue 185, len o job neskôr.
+it("jobLabel pozná pairing-search (issue 387) — nevracia holý technický názov", () => {
+  expect(jobLabel("pairing-search")).toBe("Párovanie: nočný zber kandidátov u dodávateľov");
+});
+
+it("JOB_LABELS pozná presne 10 jobov (5 pôvodných + 4 z issue 185 + 1 z issue 387) — žiadny sa nestratil", () => {
+  expect(Object.keys(JOB_LABELS)).toHaveLength(10);
 });
