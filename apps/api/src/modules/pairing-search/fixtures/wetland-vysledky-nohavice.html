@@ -9,13 +9,35 @@
   jav, ktorý `urldefrag` + dedup podľa URL musí zvládnuť (mechanizmus, nie
   naživo nájdená vzorka — rovnaký princíp ako `supplier-stock/fixtures/
   rosler-vypredane-noz-entita.html`).
+
+  issue 397: PRVÁ karta má naviac plný `article.product-miniature` obal so
+  `<picture><img>` (doslovne skopírované z reálnej odpovede, 13. 8. 2026) —
+  overuje `.closest(".product-miniature")` obrázkovú extrakciu naživo
+  overenou štruktúrou. Karty 2-4 ZÁMERNE ostávajú bez obalu (mechanizmus
+  "žiadny .product-miniature predok -> imageUrl null", nie chyba).
 -->
 <html lang="sk">
 <head><title>Vyhľadávanie: nohavice | wetland.sk</title></head>
 <body>
-  <div class="product-miniature__title">
-    <a class="link" href="https://www.wetland.sk/nohavice/deerhunter-pro-gamekeeper-boot-trousers-polovnicke-nohavice-111-592#/9-velkost-48">DEERHUNTER Pro Gamekeeper Boot Trousers - poľovnícke nohavice</a>
-  </div>
+  <article class="product-miniature js-product-miniature col-6 col-md-4 col-xl-3" data-id-product="111" data-id-product-attribute="592">
+    <div class="product-miniature__inner">
+      <a href="https://www.wetland.sk/nohavice/deerhunter-pro-gamekeeper-boot-trousers-polovnicke-nohavice-111-592#/9-velkost-48" class="product-miniature__link">
+        <div class="product-miniature__image-container thumbnail-container">
+          <picture>
+            <img
+              class="product-miniature__image card-img-top"
+              src="https://www.wetland.sk/7593-default_md/deerhunter-pro-gamekeeper-boot-trousers-polovnicke-nohavice.jpg"
+              alt="Obrázok"
+              data-full-size-image-url="https://www.wetland.sk/7593-home_default/deerhunter-pro-gamekeeper-boot-trousers-polovnicke-nohavice.jpg"
+            >
+          </picture>
+        </div>
+      </a>
+      <div class="product-miniature__title">
+        <a class="link" href="https://www.wetland.sk/nohavice/deerhunter-pro-gamekeeper-boot-trousers-polovnicke-nohavice-111-592#/9-velkost-48">DEERHUNTER Pro Gamekeeper Boot Trousers - poľovnícke nohavice</a>
+      </div>
+    </div>
+  </article>
   <div class="product-miniature__title">
     <a class="link" href="https://www.wetland.sk/nohavice/deerhunter-strike-extreme-pull-over-trousers-ochranne-nohavice-60-19897#/46-velkost-l_xl">DEERHUNTER Strike Extreme Pull-Over Trousers - ochranné nohavice</a>
   </div>

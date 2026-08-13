@@ -1,6 +1,6 @@
 {
   "name": "forestshop",
-  "version": "0.3.0-dev.238",
+  "version": "0.3.0-dev.239",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.0.0",
@@ -15,7 +15,8 @@
     "gates:local": "pnpm typecheck && pnpm lint && pnpm test",
     "catalog:ingest": "tsx scripts/catalog-ingest.ts",
     "catalog:prune-raw": "tsx scripts/catalog-prune-raw.ts",
-    "orders:ingest": "tsx scripts/orders-ingest.ts"
+    "orders:ingest": "tsx scripts/orders-ingest.ts",
+    "pairing:backfill-images": "tsx scripts/pairing-backfill-images.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",
