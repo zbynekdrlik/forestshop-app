@@ -11,6 +11,7 @@ import { fetchOrderFlagCounts } from "./orderFlagsApi.js";
 import { OrderFlagsBadgeRefreshContext } from "./orderFlagsBadgeContext.js";
 import { fetchOrderReminderStatus } from "./orderReminderApi.js";
 import { OrdersRemainingCountContext } from "./ordersRemainingCountContext.js";
+import { fetchPairingReviewUnreviewedCount } from "./pairingReviewApi.js";
 import { fetchPostaUncollectedStatus } from "./postaUncollectedApi.js";
 import { fetchRestockLinksMissingCount } from "./restockLinksApi.js";
 import { RestockLinksBadgeRefreshContext } from "./restockLinksBadgeContext.js";
@@ -108,6 +109,29 @@ export function App(): JSX.Element {
     };
   }, [me, activeTabId, restockLinksRefreshNonce]);
 
+  // issue 387 E5: odznak "Párovanie" — rovnaký PRIAMY vzor ako
+  // `restockLinksMissingCount` vyššie (musí byť známy hneď po prihlásení,
+  // viditeľný AJ pri nule — issue 331's poučenie o VIDITEĽNOSTI). "unreviewed"
+  // (design komentár na tickete) = koľko produktov z gather populácie ešte
+  // NEMÁ efektívnu dodávateľskú linku — E5 nemá ŽIADNU mutáciu, ktorá by toto
+  // číslo menila (rozhodnutia prídu v E6), preto ŽIADEN refresh-nonce/context
+  // navyše — len fetch pri prihlásení/zmene záložky, presne ako `automationStatus`.
+  const [pairingReviewUnreviewedCount, setPairingReviewUnreviewedCount] = useState<number | null>(null);
+  useEffect(() => {
+    if (me === null) return;
+    let cancelled = false;
+    fetchPairingReviewUnreviewedCount()
+      .then((count) => {
+        if (!cancelled) setPairingReviewUnreviewedCount(count);
+      })
+      .catch(() => {
+        // Sieťový výpadok — odznak zostane na poslednej známej hodnote.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [me, activeTabId]);
+
   // issue 290: odznaky "Výmena tovaru"/"Vrátený tovar"/"Reklamácie" — rovnaký
   // priamy vzor ako `upozorneniaCount` vyššie (JEDEN endpoint, `App.tsx` si
   // ho volá sám, počty musia byť známe hneď po prihlásení). Na rozdiel od
@@ -150,6 +174,8 @@ export function App(): JSX.Element {
     // presne to majiteľovi chýbalo, keď číslo poznal len z ručného SQL
     // dopytu).
     if (restockLinksMissingCount !== null) counts["restock-links"] = restockLinksMissingCount;
+    // issue 387 E5: rovnaký princíp ako "restock-links" vyššie — vidno AJ pri nule.
+    if (pairingReviewUnreviewedCount !== null) counts["pairing-review"] = pairingReviewUnreviewedCount;
     // issue 290: na rozdiel od "orders"/"upozornenia" vyššie (odznak sa
     // ukazuje AJ pri nule — appka tým hovorí "toto číslo poznám, je 0")
     // tieto tri odznaky sa VÔBEC nezobrazujú pri nule (ticket: "shown only
@@ -166,7 +192,7 @@ export function App(): JSX.Element {
     // istý tvar bugu ako `UpozorneniaSection.tsx`'s `withBusy`), takže lint
     // to nezachytí a stará hodnota (chýbajúce odznaky hneď po prihlásení,
     // kým sa nespustí NEJAKÝ INÝ trigger) prežije bez varovania.
-  }, [ordersRemainingCount, upozorneniaCount, restockLinksMissingCount, orderFlagCounts]);
+  }, [ordersRemainingCount, upozorneniaCount, restockLinksMissingCount, pairingReviewUnreviewedCount, orderFlagCounts]);
 
   // issue 185: stav zapnuté/vypnuté pre "Automatizácie" priečinok v menu.
   // Na rozdiel od `ordersRemainingCount` vyššie (publikované OBRAZOVKOU

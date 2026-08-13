@@ -12,6 +12,7 @@ import { NedostupneSection } from "./components/NedostupneSection.js";
 import { OrderMergeSection } from "./components/OrderMergeSection.js";
 import { OrderReminderSection } from "./components/OrderReminderSection.js";
 import { OrdersSection } from "./components/OrdersSection.js";
+import { PairingReviewSection } from "./components/PairingReviewSection.js";
 import { PairingSection } from "./components/PairingSection.js";
 import { PostaUncollectedSection } from "./components/PostaUncollectedSection.js";
 import { RestockLinkSuggestionsSection } from "./components/RestockLinkSuggestionsSection.js";
@@ -130,6 +131,14 @@ export const NAV: readonly NavFolder[] = [
       // sem (nie do Automatizácie), je to obrazovka, na ktorej obsluha
       // pracuje, presne ako "Na objednanie"/"Nedostupné tovary".
       { id: "supplier-links", label: "Párovanie produktov", icon: "🔗", Component: SupplierLinksSection, wide: true },
+      // issue 387 E5: "profesionálne párovanie" — port starej appky
+      // (`webreview`), karty (náš produkt vs. dodávateľov navrhnutý kandidát)
+      // nad tým, čo E3 (gather)/E4 (verify) zozbierali. Patrí HNEĎ ZA
+      // "Párovanie produktov" (#239) — najbližší príbuzný obsah, obe zatiaľ
+      // BEŽIA VEDĽA SEBA (design komentár na tickete: prípadné vyradenie
+      // #239/F4 je E9, len po výslovnom súhlase majiteľa). Rozhodnutia (E6)
+      // tu ešte nie sú — obrazovka je LEN čítanie.
+      { id: "pairing-review", label: "Párovanie", icon: "🧩", Component: PairingReviewSection, wide: true },
       // issue 240: "rýchla ruka" na JEDEN konkrétny kus tovaru/objednávku —
       // nájsť + rovno opraviť dodávateľskú linku. Patrí sem z rovnakého
       // dôvodu ako "Párovanie produktov" vyššie (obsluha na nej pracuje,
