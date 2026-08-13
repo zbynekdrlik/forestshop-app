@@ -186,3 +186,29 @@ paths:
   inštancia, žiadny cleanup skript netreba. Použi UNIKÁTNY názov kontajnera
   a VOĽNÝ port (`ss -ltnp | grep :<port>` najprv) — súbežný worktree môže
   robiť to isté.
+- **`vitest`/esbuild spustený VNÚTRI worktree si vie svoj "koreň" nájsť
+  AŽ v HLAVNOM checkoute, nie vo worktree samotnom — pretože worktree je
+  FYZICKY VNORENÝ pod ním (`.claude/worktrees/agent-<id>/`), nie
+  súrodenský adresár.** Zistené issue 412: `pnpm --filter @forestshop/api
+  exec vitest run ...` spadol na `Expected string in JSON but found "<<"`
+  pri čítaní `../../../../../package.json` — presne 5 adresárov nad
+  `apps/api/` je HLAVNÝ checkout (`apps/api → apps → <worktree-root> →
+  worktrees → .claude → forestshop_app`), ktorého `package.json` mal v
+  danej chvíli živé merge-konfliktové značky (`<<<<<<< HEAD`) — supervisor
+  ho práve integroval so súbežným worktree. Vlastný `package.json`
+  WORKTREE-u (2 úrovne nad `apps/api/`) bol celý čas v poriadku — esbuild-
+  ova/vite-ova detekcia "koreňa" (pravdepodobne hľadanie NAJBLIŽŠIEHO
+  SKUTOČNÉHO `.git` ADRESÁRA, nie súboru — worktree má `.git` len ako
+  SÚBOR-odkaz na zdieľaný `.git`) ho obišla a doliezla až po skutočný
+  `.git` adresár v hlavnom checkoute. **Toto NIE JE chyba vo worktree ani
+  v jeho `package.json`** — je to dôsledok toho, že worktree fyzicky sedí
+  POD hlavným checkoutom, kombinovaný s tým, že hlavný checkout môže mať
+  KEDYKOĽVEK dočasne nevalidný `package.json` (prebiehajúci merge). Fix
+  NIE JE dotknúť sa hlavného checkoutu (zakázané, `WORKTREE AWARENESS`) —
+  počkaj (ohraničený poll na `node -e "JSON.parse(readFileSync(hlavný
+  package.json))"`, nie slepý sleep) a skús znova; supervisor-ov merge je
+  prechodný stav, o pár desiatok sekúnd/minút zmizne. Príznak na
+  rozoznanie od skutočnej chyby vo vlastnom kóde: chybová cesta v hláške
+  (`../../../../../package.json` alebo podobný dlhý reťazec `../`)
+  ukazuje MIMO worktree — over ju `readlink -f`/počítaním `../` PRED tým,
+  než začneš ladiť vlastný `vitest.config.ts`.
