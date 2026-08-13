@@ -9,7 +9,7 @@ import type { PostaUncollectedRunResult } from "../posta-uncollected/run.js";
 import { isOrderReminderEnabled } from "../order-reminder/settings.js";
 import type { OrderReminderRunResult } from "../order-reminder/run.js";
 import type { OrderNoteWritebackRunResult } from "../shoptet-writeback/run-order-note-writeback.js";
-import type { WritebackRunResult } from "../shoptet-writeback/run-writeback.js";
+import type { ShoptetWritebackSequenceResult } from "../shoptet-writeback/run-writeback-sequence.js";
 import { RESTOCK_JOB_NAME } from "../restock/constants.js";
 import type { RestockRunResult } from "../restock/run.js";
 import { isRestockEnabled } from "../restock/run.js";
@@ -166,21 +166,26 @@ export function pruneRawOrdersJob(rawDir: string, keepDays = 30): ScheduledJob {
   };
 }
 
-export type RunShoptetWriteback = (db: Parameters<ScheduledJob["run"]>[0], now: Date) => Promise<WritebackRunResult>;
+export type RunShoptetWriteback = (
+  db: Parameters<ScheduledJob["run"]>[0],
+  now: Date,
+) => Promise<ShoptetWritebackSequenceResult>;
 
 /**
- * Spätný zápis odkazov na dodávateľa do Shoptetu (issue 122) — hodinovo, na
- * :50 (mimo kolízie s `ordersImportJob`'s :45). Rovnaký vzor ako
- * `catalogImportJob`/`ordersImportJob`: dostáva injektovanú `runWriteback`
- * closure (môže byť `undefined`, keď `SHOPTET_ADMIN_USER`/`PASSWORD` nie sú
- * nakonfigurované — `index.ts` ju zostaví z `runShoptetWriteback`
- * (`shoptet-writeback/run-writeback.ts`) + `shoptetImportConfigFromBaseUrl`),
- * nikdy si business logiku nezostavuje sama. Žiadny nový advisory lock
- * (rovnaký dôvod ako pri tamtých dvoch: v tomto tickete niet manuálneho
- * triggeru, teda niet s čím pretekať — `job_run` periodicita scheduler.ts
- * sama vylučuje duplicitný beh v tej istej hodine). Keď `runWriteback` je
- * `undefined`, job VYHODÍ — rovnaký vzor ako ostatné nepovinne-nakonfigurované
- * joby vyššie.
+ * Spätný zápis do Shoptetu (issue 122 + issue 387 E7) — hodinovo, na :50
+ * (mimo kolízie s `ordersImportJob`'s :45). Od E7 volá `run-writeback-
+ * sequence.ts`'s `runShoptetWritebackSequence` — DVA nezávislé importy v
+ * sekvencii (linkový, potom stavový, ten druhý gatovaný vlastným Štart/Stop
+ * prepínačom), nie priamo `runShoptetWriteback`. Rovnaký injektovaná-
+ * closure vzor ako `catalogImportJob`/`ordersImportJob`: `runWriteback` môže
+ * byť `undefined`, keď `SHOPTET_ADMIN_USER`/`PASSWORD` nie sú nakonfigurované
+ * (`index.ts` ju zostaví z `runShoptetWritebackSequence` +
+ * `shoptetImportConfigFromBaseUrl` — OBIDVA podbehy zdieľajú tie isté
+ * prihlasovacie údaje). Žiadny nový advisory lock (rovnaký dôvod ako pri
+ * tamtých dvoch: v tomto tickete niet manuálneho triggeru, teda niet s čím
+ * pretekať — `job_run` periodicita scheduler.ts sama vylučuje duplicitný
+ * beh v tej istej hodine). Keď `runWriteback` je `undefined`, job VYHODÍ —
+ * rovnaký vzor ako ostatné nepovinne-nakonfigurované joby vyššie.
  */
 export function shoptetWritebackJob(runWriteback: RunShoptetWriteback | undefined): ScheduledJob {
   return {

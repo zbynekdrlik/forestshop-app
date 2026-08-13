@@ -344,6 +344,13 @@
       "when": 1786589109618,
       "tag": "0048_brave_iron_patriot",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1786594123925,
+      "tag": "0049_plain_metal_master",
+      "breakpoints": true
     }
   ]
 }
