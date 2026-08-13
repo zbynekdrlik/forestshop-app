@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type JSX } from "react";
 import type { Me } from "../api.js";
 import { formatSkDateTime } from "../formatDate.js";
+import { pollUntilJobDone } from "../pollJobRun.js";
 import {
   fetchPostaUncollectedPreview,
   fetchPostaUncollectedStatus,
@@ -71,15 +72,31 @@ export function PostaUncollectedSection({
       });
   }, [status, load, onSessionExpired]);
 
+  // issue 413: "Spustiť teraz" beží odteraz ASYNC — server vráti 202 hneď
+  // (beh pokračuje na pozadí), výsledok sa PREBERIE opakovaným čítaním
+  // stavu (`pollUntilJobDone`), nie z priamej POST odpovede.
   const runNow = useCallback(() => {
     setRunBusy(true);
-    setRunNotice("");
+    setRunNotice("Beh spustený na pozadí…");
     runPostaUncollectedNow()
-      .then((result) => {
-        setRunNotice(
-          `Skontrolovaných ${String(result.stats.checked)}, nevyzdvihnutých ${String(result.stats.uncollectedCount)}, e-mailov odoslaných ${String(result.stats.emailsSent)}.`,
-        );
-        load();
+      .then(() => pollUntilJobDone(fetchPostaUncollectedStatus))
+      .then((polled) => {
+        setStatus(polled);
+        const { lastRun } = polled;
+        if (lastRun === null) {
+          setRunNotice("");
+        } else if (lastRun.status === "failure") {
+          setRunNotice(lastRun.errorMessage ?? "Beh zlyhal.");
+        } else if (lastRun.status === "running") {
+          setRunNotice("Beh stále prebieha — skúste obnoviť stránku o chvíľu.");
+        } else if (lastRun.result !== null) {
+          const { result } = lastRun;
+          setRunNotice(
+            `Skontrolovaných ${String(result.stats.checked)}, nevyzdvihnutých ${String(result.stats.uncollectedCount)}, e-mailov odoslaných ${String(result.stats.emailsSent)}.`,
+          );
+        } else {
+          setRunNotice("");
+        }
       })
       .catch((err: unknown) => {
         if (err instanceof PostaUncollectedUnauthorizedError) {
@@ -91,7 +108,7 @@ export function PostaUncollectedSection({
       .finally(() => {
         setRunBusy(false);
       });
-  }, [load, onSessionExpired]);
+  }, [onSessionExpired]);
 
   const openPreview = useCallback(
     (packageNumber: string) => {

@@ -153,8 +153,12 @@ it("bez odkazov na vlastný e-shop sa upozornenie nezobrazí", async () => {
 });
 
 it("„Spustiť teraz\" spustí kontrolu a znovu načíta prehľad", async () => {
+  // issue 413: run-now je ASYNC — `runSupplierStockNow()` už neresolvuje
+  // výsledok priamo (server 202-ne hneď), komponent ho PREBERIE opakovaným
+  // čítaním stavu (`pollUntilJobDone`, tu ihneď "success" — `STATUS` slúži
+  // zároveň ako počiatočný AJ polovaný stav).
   fetchSupplierStockStatus.mockResolvedValue(STATUS);
-  runSupplierStockNow.mockResolvedValue(STATUS.lastRun.result);
+  runSupplierStockNow.mockResolvedValue(undefined);
   render(<SupplierStockSection role="admin" onSessionExpired={vi.fn()} />);
 
   fireEvent.click(await screen.findByTestId("ss-run-now"));

@@ -188,8 +188,12 @@ it("preskočený riadok (AI kontaktovaný) má náhľad a klik zobrazí presne t
 });
 
 it("'Spustiť teraz' zavolá beh a obnoví stav", async () => {
+  // issue 413: run-now je ASYNC — `runOrderReminderNow()` už neresolvuje
+  // výsledok priamo (server 202-ne hneď), komponent ho PREBERIE
+  // opakovaným čítaním stavu (`pollUntilJobDone`), preto tu netreba mock
+  // rozlíšenej hodnoty niesť.
   fetchOrderReminderStatus.mockResolvedValueOnce({ enabled: true, lastRun: null }).mockResolvedValue(STATUS_WITH_RESULT);
-  runOrderReminderNow.mockResolvedValue(RUN_RESULT);
+  runOrderReminderNow.mockResolvedValue(undefined);
 
   render(<OrderReminderSection role="manazer" onSessionExpired={() => {}} />);
   await screen.findByTestId("order-reminder-run-now");

@@ -5,7 +5,9 @@ import { resetLoginRateLimit } from "../src/http/login-rate-limit.js";
 import { hashPassword } from "../src/modules/auth/passwords.js";
 import type { UserRole } from "../src/modules/auth/service.js";
 import type { MailMessage } from "../src/modules/mail/transport.js";
+import { ORDER_REMINDER_JOB_NAME } from "../src/modules/scheduler/jobs.js";
 import { withCleanDb } from "./helpers/db.js";
+import { waitForJobRunSettled } from "./helpers/job-run.js";
 
 // issue 173: HTTP vrstva pre "Pripomienky objednávok". Falošný AI
 // klasifikátor + falošný mail transport — NIKDY skutočné OpenAI ani
@@ -96,6 +98,9 @@ it("manazer prepne Štart/Stop a GET to hneď odzrkadlí", async () => {
   expect(body.enabled).toBe(true);
 });
 
+// issue 413: run-now je odteraz ASYNC — POST vráti 202 HNEĎ (beh pokračuje
+// na pozadí), výsledok sa overuje AŽ po dobehnutí (`waitForJobRunSettled`),
+// nie priamo z POST odpovede.
 it("'Spustiť teraz' funguje BEZ ohľadu na enabled=false, ale bez BCC neposlé nič", async () => {
   const sent: MailMessage[] = [];
   const { app, cookie, db } = await boot("manazer", { sent });
@@ -109,15 +114,33 @@ it("'Spustiť teraz' funguje BEZ ohľadu na enabled=false, ale bez BCC neposlé 
   });
 
   const res = await app.request("/api/order-reminder/run-now", { method: "POST", headers: { cookie } });
-  expect(res.status).toBe(200);
-  const body = (await res.json()) as { ok: boolean; result: { pending: unknown[] } };
-  expect(body.ok).toBe(true);
-  expect(body.result.pending).toHaveLength(1); // chýba BCC → čaká
+  expect(res.status).toBe(202);
+  const body = (await res.json()) as { ok: boolean; started: boolean };
+  expect(body).toEqual({ ok: true, started: true });
+
+  const finished = await waitForJobRunSettled(db, ORDER_REMINDER_JOB_NAME);
+  expect(finished.status).toBe("success");
+  const detail = finished.detail as { pending: unknown[] };
+  expect(detail.pending).toHaveLength(1); // chýba BCC → čaká
   expect(sent).toHaveLength(0);
 
   const status = await app.request("/api/order-reminder", { headers: { cookie } });
   const statusBody = (await status.json()) as { lastRun: { result: { pending: unknown[] } } | null };
   expect(statusBody.lastRun?.result.pending).toHaveLength(1);
+});
+
+it("'Spustiť teraz' druhý raz PRESNE počas prebiehajúceho behu vráti 200 'beh už prebieha'", async () => {
+  const { app, cookie, db } = await boot("manazer");
+
+  const first = app.request("/api/order-reminder/run-now", { method: "POST", headers: { cookie } });
+  const second = await app.request("/api/order-reminder/run-now", { method: "POST", headers: { cookie } });
+  expect(second.status).toBe(200);
+  const secondBody = (await second.json()) as { error: string };
+  expect(secondBody.error).toContain("Beh už prebieha");
+
+  const firstResponse = await first;
+  expect(firstResponse.status).toBe(202);
+  await waitForJobRunSettled(db, ORDER_REMINDER_JOB_NAME);
 });
 
 it("s BCC adresou 'Spustiť teraz' pošle e-mail zákazníkovi", async () => {
@@ -133,6 +156,7 @@ it("s BCC adresou 'Spustiť teraz' pošle e-mail zákazníkovi", async () => {
   });
 
   await app.request("/api/order-reminder/run-now", { method: "POST", headers: { cookie } });
+  await waitForJobRunSettled(db, ORDER_REMINDER_JOB_NAME);
   expect(sent).toHaveLength(1);
   expect(sent[0]?.bcc).toBe("majitel@forestshop.sk");
 });
@@ -149,6 +173,7 @@ it("náhľad e-mailu (preview) vráti presne to, čo by odišlo — bez odoslani
     shopRemark: "volať zákazníka",
   });
   await app.request("/api/order-reminder/run-now", { method: "POST", headers: { cookie } });
+  await waitForJobRunSettled(db, ORDER_REMINDER_JOB_NAME);
   expect(sent).toHaveLength(1);
 
   const preview = await app.request("/api/order-reminder/preview/20600103", { headers: { cookie } });
@@ -218,6 +243,7 @@ it("ručná akcia 'kontaktované' PRESUNIE riadok z 'bez poznámky' do 'preskoč
     shopRemark: null,
   });
   await app.request("/api/order-reminder/run-now", { method: "POST", headers: { cookie } });
+  await waitForJobRunSettled(db, ORDER_REMINDER_JOB_NAME);
   const before = await app.request("/api/order-reminder", { headers: { cookie } });
   const beforeBody = (await before.json()) as { lastRun: { result: { noNote: { orderCode: string }[] } } | null };
   expect(beforeBody.lastRun?.result.noNote.map((r) => r.orderCode)).toContain("20600106");

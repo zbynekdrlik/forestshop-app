@@ -156,7 +156,9 @@ interface StockRowInput {
   readonly source: SupplierStockSource;
 }
 
-async function runSupplierStockLocked(options: RunSupplierStockOptions): Promise<SupplierStockRunResult> {
+// issue 413: exportované pre `startRunNow` (`modules/scheduler/run-now.ts`),
+// rovnaký dôvod ako `posta-uncollected/run.ts`'s `runPostaUncollectedLocked`.
+export async function runSupplierStockLocked(options: RunSupplierStockOptions): Promise<SupplierStockRunResult> {
   const { db, now, fetchPage } = options;
   const sleep = options.sleep ?? defaultSleep;
 

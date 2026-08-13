@@ -3836,3 +3836,53 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
   journal záznamom).
 - Worktree mode (#317) — commit ostáva na vlastnej vetve `worktree-agent-aeefd434be27ba402`,
   supervisor mergne priamo z tejto REF-y a spustí CI pri round-integrácii.
+
+## Issue 413 — run-now joby: async 202 + advisory try-lock, orphaned job_run cleanup pri štarte
+
+- Salvage worker (predošlý worker zomrel na session limit, práca ostala necommitnutá v
+  existujúcom worktree `worktree-agent-a702ceb9bd8f82553`). Verzia zlúčená na 0.3.0-dev.248
+  (merge `4c5927b` — dev medzitým postúpil na .247 issue 412's integráciou; konflikt
+  vyriešený priamo na .248, žiadny amend).
+- Design komentár + STEP 0 validácia (obe posunuté PRED prvým code commitom, oba PÔVODNÝM
+  workerom): https://github.com/zbynekdrlik/forestshop-app/issues/413#issuecomment-5279794989
+  (validácia) a https://github.com/zbynekdrlik/forestshop-app/issues/413#issuecomment-5279795618
+  (Triage: non-trivial, 3 zvážené prístupy, Architektúra sekcia).
+- Jadro (commity `568bb65` RED / `f29cd77` GREEN): nový zdieľaný `modules/scheduler/
+  run-now.ts`'s `startRunNow` — `pg_try_advisory_lock` (neblokujúci), busy=200 bez zápisu,
+  acquired=202 hneď + fire-and-forget `job.run()` (držiaci zámok po celý beh, uvoľní sa až
+  v `.finally()`). Všetkých šesť `run.ts` súborov (`shop-sitemap`/`pairing-search`/
+  `posta-uncollected`/`order-reminder`/`supplier-stock`/`restock`) exportuje svoj interný
+  "Locked" variant; `http/*-routes.ts` nahradili vlastnú kópiu `runAndRecord` volaním
+  `startRunNow`. Naplánovaný beh (`scheduler/jobs.ts`) beží nezmenene cez pôvodný `runXxx()`.
+  Frontend: nový `apps/web/src/pollJobRun.ts`'s `pollUntilJobDone` (exponenciálny backoff,
+  ~2 min strop) namiesto priameho čítania POST odpovede, na 4 obrazovkách s tlačidlom.
+  Osirotené `job_run` riadky: nový `modules/scheduler/startup-cleanup.ts`'s
+  `cleanOrphanedJobRuns`, volaná raz z `index.ts` hneď po migráciách.
+- Vlastný review nález počas salvage (commity `0bbb6ee` RED / `3801692` GREEN, `37d8061`
+  lint-fix): `db.insert(jobRuns)` vkladajúci "running" riadok nemal `try/catch` — zlyhanie by
+  nechalo advisory zámok navždy držaný (aj pre naplánovaný beh s tým istým kľúčom). RED→GREEN
+  overené priamo (dočasné odstránenie fixu → beh → hang/cascade timeout na ďalších testoch v
+  súbore → fix vrátený → 5/5 čisto).
+- Nezávislý fresh-context `general-purpose` review dispatch (rozsah `4c5927b..HEAD`, opravený
+  cez `SendMessage` po počiatočnom zlom `cc4ba84..HEAD` rozsahu, čo omylom zahŕňal issue 412's
+  zlúčenú prácu): 0🔴, 2🟡 (oba opravené), 2🔵 (pred-existujúce, nedotknuté). 🟡#1 (commity
+  `3c977f5` RED / `19c7999` GREEN): zápis KONEČNÉHO stavu (`db.update` v `.then()`u) mohol
+  zlyhať a nechať riadok navždy "running" — fix `writeTerminalOutcome` s núdzovým `failure`
+  zápisom. 🟡#2 (commit `1fb856d`): len 2 zo 6 trás mali HTTP-úrovňový test na 202/busy
+  kontrakt — doplnené 3 nové súbory (`restock`/`shop-sitemap`/`pairing-search`-run-now-http)
+  + rozšírený `supplier-stock-http.integration.test.ts`, všetky proti PRÁZDNEJ DB (každá
+  business funkcia má vlastný "0 kandidátov" skorý návrat pred prvým dotykom reálnej externej
+  závislosti — overené priamo v zdroji, nie predpokladom). Review komentár:
+  https://github.com/zbynekdrlik/forestshop-app/issues/413#issuecomment-5281136318 (aj s
+  poznámkou, že design komentár spomína 409 pre busy — implementácia správne skončila na 200,
+  `.claude/rules/testing.md`'s konvencia).
+- Plný lokálny beh na FINÁLNOM commitnutom stave: typecheck + lint čisté, unit web 630 + api
+  962 zelené, CELÁ integračná sada 104 súborov/786 testov zelená (2 nezávislé behy), CELÁ e2e
+  sada 57/57 zelená (2 behy). Overené na izolovanej throwaway Postgres inštancii (port 5440).
+- Playbook: addendum do `.claude/rules/scheduler.md` (zámok-medzi-acquire-a-finally
+  disciplína — KAŽDÝ krok potrebuje vlastný try/catch; prázdna-DB HTTP test vzor pre run-now)
+  a `.claude/rules/local-dev.md` (dvojbodkový `git diff A..B` cez merge commit zahŕňa cudziu
+  prácu — over `git log --oneline A..B` najprv).
+- Worktree mode (#317) — commit ostáva na vlastnej vetve `worktree-agent-a702ceb9bd8f82553`,
+  supervisor mergne priamo z tejto REF-y a spustí CI pri round-integrácii. Throwaway Postgres
+  kontajner (`agent-a702ceb9-pg`, port 5440) odstránený na konci.

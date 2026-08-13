@@ -84,8 +84,11 @@ const statusSchema = z.object({
 });
 export type SupplierStockStatus = z.infer<typeof statusSchema>;
 
+// issue 413: run-now beží odteraz ASYNC — 202 `{ok:true, started:true}`
+// namiesto pôvodného synchrónneho `{ok:true, result}`, "beh už prebieha"
+// je 200 `{ok:false, error}` (`.claude/rules/testing.md`).
 const runNowResultSchema = z.union([
-  z.object({ ok: z.literal(true), result: runResultSchema }),
+  z.object({ ok: z.literal(true), started: z.literal(true) }),
   z.object({ ok: z.literal(false), error: z.string() }),
 ]);
 
@@ -118,9 +121,8 @@ export async function fetchSupplierStockStatus(): Promise<SupplierStockStatus> {
   return statusSchema.parse(await readJson(response, "Dodávateľský sklad sa nepodarilo načítať"));
 }
 
-export async function runSupplierStockNow(): Promise<SupplierStockRunResult> {
+export async function runSupplierStockNow(): Promise<void> {
   const response = await fetch("/api/supplier-stock/run-now", { method: "POST" });
   const parsed = runNowResultSchema.parse(await readJson(response, "Beh sa nepodarilo spustiť"));
   if (!parsed.ok) throw new Error(parsed.error);
-  return parsed.result;
 }

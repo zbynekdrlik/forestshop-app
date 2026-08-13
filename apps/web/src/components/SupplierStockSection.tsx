@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type JSX } from "react";
 import type { Me } from "../api.js";
 import { formatSkDateTime } from "../formatDate.js";
+import { pollUntilJobDone } from "../pollJobRun.js";
 import {
   fetchSupplierStockStatus,
   runSupplierStockNow,
@@ -53,19 +54,40 @@ export function SupplierStockSection({
 
   useEffect(load, [load]);
 
+  // issue 413: "Spustiť teraz" beží odteraz ASYNC — server vráti 202 hneď
+  // (beh pokračuje na pozadí), výsledok sa PREBERIE opakovaným čítaním
+  // stavu (`pollUntilJobDone`), nie z priamej POST odpovede. Tento beh
+  // trvá reálne desiatky minút (`.claude/rules/supplier-stock.md`) —
+  // `pollUntilJobDone`'s predvolený strop (~2 min) sa preto ČASTO vyčerpá
+  // skôr, než beh dobehne, a ukáže "Beh stále prebieha" hlášku namiesto
+  // čísel; to je ZÁMER (poctivá informácia, nie chyba) — obsluha si stav
+  // pozrie neskôr na obrazovke Automatizácie/obnovením stránky.
   const runNow = useCallback(() => {
     setRunBusy(true);
-    setRunNotice("");
+    setRunNotice("Beh spustený na pozadí…");
     runSupplierStockNow()
-      .then((result) => {
-        // issue 224: `checked` je počet ODKAZOV, ale skladom/vypredané/neviem
-        // sú počty ZÁZNAMOV (odkaz × veľkosť) — odkaz s viacerými veľkosťami
-        // prispieva do rozpisu viac než raz, takže sa nesmú tváriť ako súčet
-        // rovnakej jednotky.
-        setRunNotice(
-          `Skontrolovaných ${String(result.checked)} odkazov · zlyhalo ${String(result.failed)}. Záznamy: skladom ${String(result.available)} · vypredané ${String(result.unavailable)} · neviem ${String(result.unknown)}.`,
-        );
-        load();
+      .then(() => pollUntilJobDone(fetchSupplierStockStatus))
+      .then((polled) => {
+        setStatus(polled);
+        const { lastRun } = polled;
+        if (lastRun === null) {
+          setRunNotice("");
+        } else if (lastRun.status === "failure") {
+          setRunNotice(lastRun.errorMessage ?? "Beh zlyhal.");
+        } else if (lastRun.status === "running") {
+          setRunNotice("Beh stále prebieha — skúste obnoviť stránku o chvíľu.");
+        } else if (lastRun.result !== null) {
+          // issue 224: `checked` je počet ODKAZOV, ale skladom/vypredané/
+          // neviem sú počty ZÁZNAMOV (odkaz × veľkosť) — odkaz s viacerými
+          // veľkosťami prispieva do rozpisu viac než raz, takže sa nesmú
+          // tváriť ako súčet rovnakej jednotky.
+          const { result } = lastRun;
+          setRunNotice(
+            `Skontrolovaných ${String(result.checked)} odkazov · zlyhalo ${String(result.failed)}. Záznamy: skladom ${String(result.available)} · vypredané ${String(result.unavailable)} · neviem ${String(result.unknown)}.`,
+          );
+        } else {
+          setRunNotice("");
+        }
       })
       .catch((err: unknown) => {
         if (err instanceof SupplierStockUnauthorizedError) {
@@ -77,7 +99,7 @@ export function SupplierStockSection({
       .finally(() => {
         setRunBusy(false);
       });
-  }, [load, onSessionExpired]);
+  }, [onSessionExpired]);
 
   if (!loaded) return <p role="status">Načítavam…</p>;
   if (status === null) return <p role="alert">{error === "" ? "Nepodarilo sa načítať." : error}</p>;

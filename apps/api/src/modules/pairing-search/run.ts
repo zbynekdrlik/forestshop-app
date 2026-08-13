@@ -83,7 +83,9 @@ export async function runPairingSearch(options: RunPairingSearchOptions): Promis
   }
 }
 
-async function runPairingSearchLocked(options: RunPairingSearchOptions): Promise<PairingSearchRunResult> {
+// issue 413: exportované pre `startRunNow` (`modules/scheduler/run-now.ts`),
+// rovnaký dôvod ako `posta-uncollected/run.ts`'s `runPostaUncollectedLocked`.
+export async function runPairingSearchLocked(options: RunPairingSearchOptions): Promise<PairingSearchRunResult> {
   const { db, now } = options;
   const searchClient = options.searchClient ?? new SearchClient();
   const timeBudgetMs = options.timeBudgetMs ?? RUN_TIME_BUDGET_MS;

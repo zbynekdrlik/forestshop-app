@@ -1,11 +1,10 @@
-import { eq } from "drizzle-orm";
 import type { Hono } from "hono";
 import type { Database } from "../db/client.js";
-import { jobRuns } from "../db/schema.js";
 import { log } from "../logger.js";
 import { record } from "../modules/audit/service.js";
 import { getLatestJobRun } from "../modules/scheduler/queries.js";
-import { SUPPLIER_STOCK_JOB_NAME } from "../modules/supplier-stock/constants.js";
+import { startRunNow, type RunNowStart } from "../modules/scheduler/run-now.js";
+import { SUPPLIER_STOCK_JOB_NAME, SUPPLIER_STOCK_RUN_LOCK_KEY } from "../modules/supplier-stock/constants.js";
 import type { PageFetcher } from "../modules/supplier-stock/page-fetcher.js";
 import {
   getSupplierStockHostOverview,
@@ -14,7 +13,7 @@ import {
   listUnreadableHosts,
 } from "../modules/supplier-stock/queries.js";
 import type { SupplierStockRunResult } from "../modules/supplier-stock/run.js";
-import { countOwnShopLinks, runSupplierStock } from "../modules/supplier-stock/run.js";
+import { countOwnShopLinks, runSupplierStockLocked } from "../modules/supplier-stock/run.js";
 import { requireRole, requireUser, type AppBindings } from "./middleware.js";
 import { requireSameOrigin } from "./origin-check.js";
 
@@ -22,43 +21,10 @@ function isRunResult(detail: unknown): detail is SupplierStockRunResult {
   return typeof detail === "object" && detail !== null && "checked" in detail;
 }
 
-/**
- * Manuálny beh zapisuje `job_run` tým istým tvarom ako scheduler, aby
- * obrazovka videla ručné spustenie HNEĎ (rovnaký vzor a rovnaký dôvod ako
- * `posta-uncollected-routes.ts`'s `runAndRecord` — `executeJob` nie je
- * exportované).
- */
-async function runAndRecord(
-  db: Database,
-  fetchPage: PageFetcher,
-  now: Date,
-): Promise<SupplierStockRunResult> {
-  const [inserted] = await db
-    .insert(jobRuns)
-    .values({ jobName: SUPPLIER_STOCK_JOB_NAME, startedAt: now, status: "running" })
-    .returning({ id: jobRuns.id });
-  const runId = inserted?.id;
-  try {
-    const result = await runSupplierStock({ db, now, fetchPage });
-    if (runId !== undefined) {
-      await db
-        .update(jobRuns)
-        .set({ status: "success", finishedAt: new Date(), detail: result })
-        .where(eq(jobRuns.id, runId));
-    }
-    return result;
-  } catch (error) {
-    const rawErrorMessage = error instanceof Error ? error.message : String(error);
-    log.error({ rawErrorMessage }, "Dodávateľský sklad: ručný beh zlyhal");
-    if (runId !== undefined) {
-      await db
-        .update(jobRuns)
-        .set({ status: "failure", finishedAt: new Date(), errorMessage: rawErrorMessage })
-        .where(eq(jobRuns.id, runId));
-    }
-    throw error;
-  }
-}
+// issue 413: manuálne "Spustiť teraz" ide cez zdieľaný `startRunNow`
+// (`modules/scheduler/run-now.ts`) — vloží "running" riadok HNEĎ a vráti
+// odpoveď BEZ čakania na celý ~72-minútový beh (predtým synchrónne,
+// `.claude/rules/supplier-stock.md`), viď design komentár na tikete.
 
 export function registerSupplierStockRoutes(
   app: Hono<AppBindings>,
@@ -105,23 +71,36 @@ export function registerSupplierStockRoutes(
     async (c) => {
       const user = c.get("user");
       const now = new Date();
-      let result: SupplierStockRunResult;
+      let outcome: RunNowStart;
       try {
-        result = await runAndRecord(db, fetchPage, now);
+        outcome = await startRunNow(
+          db,
+          {
+            jobName: SUPPLIER_STOCK_JOB_NAME,
+            lockKey: SUPPLIER_STOCK_RUN_LOCK_KEY,
+            run: (runNow) => runSupplierStockLocked({ db, now: runNow, fetchPage }),
+          },
+          now,
+          async (settled) => {
+            if (settled.status !== "success") return;
+            await record(db, {
+              at: now,
+              actorUserId: user.userId,
+              action: "supplier_stock.run_now",
+              entity: "supplier_stock",
+              data: { checked: settled.result.checked, failed: settled.result.failed },
+            });
+            log.info({ actorUserId: user.userId, ...settled.result }, "Dodávateľský sklad: ručný beh");
+          },
+        );
       } catch {
         // Presné znenie chyby je už v logu aj v `job_run` — používateľovi sa
-        // vracia len to, že beh zlyhal (rovnako ako ostatné "Spustiť teraz").
-        return c.json({ ok: false as const, error: "Beh zlyhal." }, 500);
+        // vracia len to, že beh sa nepodarilo spustiť (rovnako ako ostatné
+        // "Spustiť teraz").
+        return c.json({ ok: false as const, error: "Beh sa nepodarilo spustiť." }, 500);
       }
-      await record(db, {
-        at: now,
-        actorUserId: user.userId,
-        action: "supplier_stock.run_now",
-        entity: "supplier_stock",
-        data: { checked: result.checked, failed: result.failed },
-      });
-      log.info({ actorUserId: user.userId, ...result }, "Dodávateľský sklad: ručný beh");
-      return c.json({ ok: true as const, result });
+      if (outcome.status === "busy") return c.json({ ok: false as const, error: outcome.message }, 200);
+      return c.json({ ok: true as const, started: true as const }, 202);
     },
   );
 }

@@ -1,9 +1,7 @@
 import { zValidator } from "@hono/zod-validator";
 import type { Hono } from "hono";
-import { eq } from "drizzle-orm";
 import { z } from "zod";
 import type { Database } from "../db/client.js";
-import { jobRuns } from "../db/schema.js";
 import { log } from "../logger.js";
 import { record } from "../modules/audit/service.js";
 import { MAX_EMAILS } from "../modules/posta-uncollected/constants.js";
@@ -11,8 +9,9 @@ import { resolveTemplate } from "../modules/mail-templates/store.js";
 import { buildEmail, postaTemplateKey } from "../modules/posta-uncollected/logic.js";
 import { POSTA_UNCOLLECTED_JOB_NAME } from "../modules/scheduler/jobs.js";
 import { getLatestJobRun } from "../modules/scheduler/queries.js";
+import { startRunNow, type RunNowStart } from "../modules/scheduler/run-now.js";
 import type { PostaUncollectedRunResult, RunPostaUncollectedOptions } from "../modules/posta-uncollected/run.js";
-import { runPostaUncollected } from "../modules/posta-uncollected/run.js";
+import { POSTA_UNCOLLECTED_RUN_LOCK_KEY, runPostaUncollectedLocked } from "../modules/posta-uncollected/run.js";
 import { isPostaUncollectedEnabled, setPostaUncollectedEnabled } from "../modules/posta-uncollected/settings.js";
 import { requireRole, requireUser, type AppBindings } from "./middleware.js";
 import { requireSameOrigin } from "./origin-check.js";
@@ -30,36 +29,13 @@ function isRunResult(detail: unknown): detail is PostaUncollectedRunResult {
   return typeof detail === "object" && detail !== null && "uncollected" in detail;
 }
 
-/**
- * Manuálne "Spustiť teraz" aj naplánovaný beh zapisujú job_run TÝM ISTÝM
- * vzorom, aký `scheduler.ts`'s `executeJob` používa interne — tá funkcia nie
- * je exportovaná (scheduler-interná), takže táto malá kópia zapisuje
- * rovnaký tvar riadku priamo, aby `GET /api/posta-uncollected` videl
- * manuálny beh HNEĎ, nielen po ďalšom pravidelnom ticku.
- */
-async function runAndRecord(db: Database, deps: PostaUncollectedRunDeps, now: Date, actorUserId: string): Promise<PostaUncollectedRunResult> {
-  const [inserted] = await db
-    .insert(jobRuns)
-    .values({ jobName: POSTA_UNCOLLECTED_JOB_NAME, startedAt: now, status: "running" })
-    .returning({ id: jobRuns.id });
-  const runId = inserted?.id;
-  try {
-    // issue 193: "Spustiť teraz" je RUČNÁ akcia — kniha odoslaných e-mailov
-    // to musí odlíšiť od nočného behu (`trigger`), aj s menom zamestnanca.
-    const result = await runPostaUncollected({ db, now, ...deps, trigger: "manual", actorUserId });
-    if (runId !== undefined) {
-      await db.update(jobRuns).set({ status: "success", finishedAt: new Date(), detail: result }).where(eq(jobRuns.id, runId));
-    }
-    return result;
-  } catch (error) {
-    const rawErrorMessage = error instanceof Error ? error.message : String(error);
-    log.error({ rawErrorMessage }, "Nevyzdvihnuté zásielky: ručný beh zlyhal");
-    if (runId !== undefined) {
-      await db.update(jobRuns).set({ status: "failure", finishedAt: new Date(), errorMessage: rawErrorMessage }).where(eq(jobRuns.id, runId));
-    }
-    throw error;
-  }
-}
+// issue 413: `startRunNow` (zdieľané naprieč všetkými 6 run-now
+// automatizáciami) — vloží "running" riadok HNEĎ a vráti odpoveď BEZ
+// čakania na celý beh (predtým synchrónne, viď design komentár na tikete —
+// Cloudflare tunel 100s timeout spôsoboval 524 + duplicitný beh). Audit
+// (`record()`) sa zapisuje AŽ keď beh na pozadí dobehne úspešne — presne
+// TÁ ISTÁ podmienka, akú mal pôvodný synchrónny kód (žiadny audit riadok
+// pri zlyhaní, len `job_run.status = "failure"`).
 
 export function registerPostaUncollectedRoutes(app: Hono<AppBindings>, db: Database, deps: PostaUncollectedRunDeps): void {
   // Čítanie — každý prihlásený zamestnanec (rovnaká úroveň ako "Sync zo
@@ -125,21 +101,43 @@ export function registerPostaUncollectedRoutes(app: Hono<AppBindings>, db: Datab
     async (c) => {
       const user = c.get("user");
       const now = new Date();
-      let result: PostaUncollectedRunResult;
+      let outcome: RunNowStart;
       try {
-        result = await runAndRecord(db, deps, now, user.userId);
+        outcome = await startRunNow(
+          db,
+          {
+            jobName: POSTA_UNCOLLECTED_JOB_NAME,
+            lockKey: POSTA_UNCOLLECTED_RUN_LOCK_KEY,
+            // issue 193: "Spustiť teraz" je RUČNÁ akcia — kniha odoslaných
+            // e-mailov to musí odlíšiť od nočného behu (`trigger`), aj s
+            // menom zamestnanca.
+            run: (runNow) => runPostaUncollectedLocked({ db, now: runNow, ...deps, trigger: "manual", actorUserId: user.userId }),
+          },
+          now,
+          async (settled) => {
+            // Audit sa zapisuje LEN pri úspechu — presne ako pôvodný
+            // synchrónny kód (žiadny audit riadok pri zlyhaní, len
+            // `job_run.status = "failure"`, ktoré `startRunNow` už zapísalo).
+            if (settled.status !== "success") return;
+            await record(db, {
+              at: now,
+              actorUserId: user.userId,
+              action: "posta_uncollected.run_now",
+              entity: "job_run",
+              data: { stats: settled.result.stats },
+            });
+            log.info({ actorUserId: user.userId, stats: settled.result.stats }, "Nevyzdvihnuté zásielky: ručné spustenie");
+          },
+        );
       } catch {
-        return c.json({ error: "Beh zlyhal — skúste to znova o chvíľu." }, 502);
+        return c.json({ error: "Beh sa nepodarilo spustiť — skúste to znova o chvíľu." }, 500);
       }
-      await record(db, {
-        at: now,
-        actorUserId: user.userId,
-        action: "posta_uncollected.run_now",
-        entity: "job_run",
-        data: { stats: result.stats },
-      });
-      log.info({ actorUserId: user.userId, stats: result.stats }, "Nevyzdvihnuté zásielky: ručné spustenie");
-      return c.json({ ok: true as const, result });
+      // issue 413: "busy" je BEŽNÝ, OČAKÁVANÝ doménový výsledok (druhý klik/
+      // Cloudflare retry počas prebiehajúceho behu) — 200, nikdy 4xx/5xx
+      // (`.claude/rules/testing.md`'s "Chromium loguje KAŽDÚ 4xx/5xx do
+      // konzoly" disciplína).
+      if (outcome.status === "busy") return c.json({ error: outcome.message }, 200);
+      return c.json({ ok: true as const, started: true as const }, 202);
     },
   );
 

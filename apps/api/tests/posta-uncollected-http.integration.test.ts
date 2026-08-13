@@ -5,7 +5,9 @@ import { resetLoginRateLimit } from "../src/http/login-rate-limit.js";
 import { hashPassword } from "../src/modules/auth/passwords.js";
 import type { UserRole } from "../src/modules/auth/service.js";
 import type { MailMessage } from "../src/modules/mail/transport.js";
+import { POSTA_UNCOLLECTED_JOB_NAME } from "../src/modules/scheduler/jobs.js";
 import { withCleanDb } from "./helpers/db.js";
+import { waitForJobRunSettled } from "./helpers/job-run.js";
 
 // issue 172: HTTP vrstva pre "Nevyzdvihnuté zásielky". Falošný tracking klient
 // + falošný mail transport — NIKDY skutočné api.posta.sk ani skutočný SMTP
@@ -95,6 +97,9 @@ it("manazer prepne Štart/Stop a GET to hneď odzrkadlí", async () => {
   expect(body.enabled).toBe(true);
 });
 
+// issue 413: run-now je odteraz ASYNC — POST vráti 202 HNEĎ (beh pokračuje
+// na pozadí), výsledok sa overuje AŽ po dobehnutí (`waitForJobRunSettled`),
+// nie priamo z POST odpovede.
 it("'Spustiť teraz' funguje BEZ ohľadu na enabled=false, ale bez BCC neposlé nič", async () => {
   const sent: MailMessage[] = [];
   const { app, cookie, db } = await boot("manazer", { sent });
@@ -112,16 +117,51 @@ it("'Spustiť teraz' funguje BEZ ohľadu na enabled=false, ale bez BCC neposlé 
     method: "POST",
     headers: { cookie },
   });
-  expect(res.status).toBe(200);
-  const body = (await res.json()) as { ok: boolean; result: { stats: { emailsBlocked: number }; uncollected: unknown[] } };
-  expect(body.ok).toBe(true);
-  expect(body.result.stats.emailsBlocked).toBe(1);
+  expect(res.status).toBe(202);
+  const body = (await res.json()) as { ok: boolean; started: boolean };
+  expect(body).toEqual({ ok: true, started: true });
+
+  const finished = await waitForJobRunSettled(db, POSTA_UNCOLLECTED_JOB_NAME);
+  expect(finished.status).toBe("success");
+  const detail = finished.detail as { stats: { emailsBlocked: number } };
+  expect(detail.stats.emailsBlocked).toBe(1);
   expect(sent).toHaveLength(0);
 
-  // GET hneď odzrkadlí manuálny beh (žiadny ďalší tick netreba čakať).
+  // GET odzrkadlí manuálny beh AKO DOBEHNUTÝ (žiadny ďalší tick netreba čakať).
   const status = await app.request("/api/posta-uncollected", { headers: { cookie } });
   const statusBody = (await status.json()) as { lastRun: { result: { uncollected: unknown[] } } | null };
   expect(statusBody.lastRun?.result.uncollected).toHaveLength(1);
+});
+
+it("'Spustiť teraz' druhý raz PRESNE počas prebiehajúceho behu vráti 200 'beh už prebieha' (žiadny duplicitný e-mail)", async () => {
+  const sent: MailMessage[] = [];
+  const { app, cookie, db } = await boot("manazer", { sent, bccEmail: "majitel@forestshop.sk" });
+  await db.insert(orders).values({
+    externalOrderId: "20600004",
+    customerName: "Test",
+    statusName: "Vybavená",
+    placedAt: new Date("2026-07-25T00:00:00Z"),
+    email: "zakaznik@example.sk",
+    packageNumber: "EF4SK",
+    shippingCarrierName: "Kuriér",
+  });
+
+  const first = app.request("/api/posta-uncollected/run-now", { method: "POST", headers: { cookie } });
+  // Druhý pokus IHNEĎ, bez čakania na prvý — advisory zámok (nie časovanie)
+  // je to, čo garantuje, že tento vidí "busy", nie náhoda v poradí promises.
+  const second = await app.request("/api/posta-uncollected/run-now", { method: "POST", headers: { cookie } });
+  expect(second.status).toBe(200);
+  const secondBody = (await second.json()) as { error: string };
+  expect(secondBody.error).toContain("Beh už prebieha");
+
+  const firstResponse = await first;
+  expect(firstResponse.status).toBe(202);
+
+  await waitForJobRunSettled(db, POSTA_UNCOLLECTED_JOB_NAME);
+  // Presne JEDEN e-mail sa poslal — druhý (odmietnutý) pokus nikdy nespustil
+  // vlastný beh, takže nikdy nemohol poslať duplicitný e-mail (issue 402's
+  // pôvodný nález, kde CF retry spôsobil práve toto).
+  expect(sent).toHaveLength(1);
 });
 
 it("s BCC adresou 'Spustiť teraz' pošle e-mail zákazníkovi", async () => {
@@ -138,6 +178,7 @@ it("s BCC adresou 'Spustiť teraz' pošle e-mail zákazníkovi", async () => {
   });
 
   await app.request("/api/posta-uncollected/run-now", { method: "POST", headers: { cookie } });
+  await waitForJobRunSettled(db, POSTA_UNCOLLECTED_JOB_NAME);
   expect(sent).toHaveLength(1);
   expect(sent[0]?.bcc).toBe("majitel@forestshop.sk");
 });
@@ -155,6 +196,7 @@ it("náhľad e-mailu (preview) vráti presne to, čo by odišlo — bez odoslani
     shippingCarrierName: "Kuriér",
   });
   await app.request("/api/posta-uncollected/run-now", { method: "POST", headers: { cookie } });
+  await waitForJobRunSettled(db, POSTA_UNCOLLECTED_JOB_NAME);
   expect(sent).toHaveLength(1); // prvý e-mail sa reálne poslal
 
   const preview = await app.request("/api/posta-uncollected/preview/EF3SK", { headers: { cookie } });
