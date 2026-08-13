@@ -89,6 +89,9 @@ paths:
   `787_878_002` (`SCHEDULER_ADVISORY_LOCK_KEY`, `scheduler.ts`),
   `787_878_003` (`INGEST_ORDERS_ADVISORY_LOCK_KEY`, `orders/ingest.ts`, #21),
   `787_878_100` (`TEST_DB_ISOLATION_LOCK_KEY`, `tests/helpers/db.ts`),
+  `787_878_101` (`TEST_RUN_NOW_LOCK_KEY`, `tests/run-now.integration.test.ts`,
+  issue 413 — vlastný testovací kľúč pre `startRunNow`u priame testy, mimo
+  produkčného rozsahu presne ako `787_878_100`),
   `787_878_004` (`POSTA_UNCOLLECTED_RUN_LOCK_KEY`, `posta-uncollected/run.ts`,
   issue 172 — pozri nižšie), `787_878_005` (`ORDER_REMINDER_RUN_LOCK_KEY`,
   `order-reminder/constants.ts`, issue 173), `787_878_006`
@@ -145,3 +148,50 @@ paths:
   ingest.ts` vedľa `CatalogIngestResult`, `catalog-routes.ts` ho odtiaľ
   len re-exportuje. Rovnaký test pri KAŽDOM ďalšom type zdieľanom medzi
   vrstvami: ktorá vrstva ho logicky vlastní?
+- **"Spustiť teraz" (manuálny HTTP trigger) je od issue 413 ASYNC pre
+  VŠETKÝCH šesť automatizácií s `job_run`-based stavom** (`shop-sitemap`,
+  `pairing-search`, `posta-uncollected`, `order-reminder`, `supplier-stock`,
+  `restock`) — **PRED touto zmenou bol synchrónny, zámerne a zdokumentovane
+  (issue 387's "appka NEMÁ v sebe žiadny background/fire-and-forget vzor
+  pre run-now"), kým prvý ostrý ~72-min beh (`supplier-stock`) a opakovaný
+  ~21-min beh (`pairing-search`) neukázali, že Cloudflare tunel's ~100s
+  proxy timeout (`.claude/rules/deploy.md`) spôsobuje klientsky HTTP 524 +
+  ZOPAKOVANÝ POST od klienta/proxy — a druhý pokus predtým ČAKAL (blokujúci
+  `pg_advisory_lock` vnútri `runXxx()`) na uvoľnenie zámku prvým behom a
+  POTOM spustil DRUHÝ, úplne zbytočný beh** (naživo pozorované na
+  shop-sitemap, issue 402: 08:55 aj 09:01 v ten istý deň). **Nový vzor
+  (`modules/scheduler/run-now.ts`'s `startRunNow`, zdieľaný naprieč
+  všetkými šiestimi):** `pg_try_advisory_lock` (NEBLOKUJÚCI) — keď zámok
+  drží niekto iný, HNEĎ 200 `{error: "Beh už prebieha…"}` (nikdy 4xx/5xx,
+  `.claude/rules/testing.md`'s "bežný doménový výsledok" disciplína) BEZ
+  vloženia `job_run` riadku a BEZ volania `run()`; keď zámok získa, vloží
+  "running" riadok, vráti 202 `{ok:true, started:true}` HNEĎ a `run()`
+  spustí BEZ `await`-u v HTTP handleri (fire-and-forget) — zámok DRŽÍ PO
+  CELÝ ČAS behu (nie peek-a-pusti), takže `run()` MUSÍ byť "odomknutý"
+  jadrový variant (`runXxxLocked`, teraz `export`-nutý zo všetkých šiestich
+  `run.ts` súborov) — inak by si vnútri seba skúsil vziať TEN ISTÝ zámok
+  znova (na inom pripojení) a deadlockol by proti `startRunNow`, čo ho už
+  drží. NAPLÁNOVANÝ beh (`scheduler/jobs.ts` cez `index.ts`) POUŽÍVA
+  NEZMENENÝ pôvodný `runXxx()` export (vlastný zámok dnu) — scheduler↔
+  run-now serializácia (druhý sa ČAKAJÚCO zaradí) ostáva pre TÚTO cestu
+  úplne nedotknutá. Frontend (4 zo 6 majú tlačidlo — `pairing-search`/
+  `shop-sitemap` nemajú vlastné UI) prestal čítať výsledok priamo z POST
+  odpovede a namiesto toho volá zdieľaný `apps/web/src/pollJobRun.ts`'s
+  `pollUntilJobDone` (opakovaný `fetchXxxStatus()`, kým `lastRun.status
+  === "running"`, ohraničené ~2 min) — presne rovnaký DRY dôvod ako
+  `useLoadMore.ts` (issue 337). **Ďalšia budúca automatizácia s manuálnym
+  HTTP run-now triggerom** (nová `{X}_RUN_LOCK_KEY` + `job_run` vzor) MÁ
+  ísť ROVNO cez `startRunNow` (export-ni `runXxxLocked`, volaj `startRunNow`
+  z routes súboru) — nikdy nekopíruj pôvodný pred-413 `runAndRecord` vzor,
+  ten je odstránený zo všetkých šiestich `http/*-routes.ts` súborov.
+- **Osirotené `job_run` riadky (appka reštart/deploy zabije rozbehnutý beh,
+  `status='running'` ostane navždy — issue 413, nález b) sa čistia
+  `modules/scheduler/startup-cleanup.ts`'s `cleanOrphanedJobRuns`, volanou
+  RAZ z `index.ts` HNEĎ PO migráciách, PRED `createApp`/`startScheduler`/
+  `serve()`.** `UPDATE job_run SET status='failure' WHERE status='running'
+  AND started_at < <čas štartu procesu>` — appka beží vždy ako PRESNE JEDNA
+  inštancia (`.claude/rules/database.md`), takže "running" riadok STARŠÍ
+  než štart TOHOTO procesu patrí nevyhnutne MŔTVEMU procesu; poradie v
+  `index.ts` (cleanup PRED čímkoľvek, čo by mohlo vložiť NOVÝ riadok)
+  garantuje nulový race. Platí VŠEOBECNE pre KAŽDÝ job (plánovaný aj
+  run-now), nielen tých šesť s manuálnym HTTP triggerom.

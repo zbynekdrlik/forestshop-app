@@ -98,7 +98,13 @@ export async function runOrderReminder(options: RunOrderReminderOptions): Promis
   }
 }
 
-async function runOrderReminderLocked(options: RunOrderReminderOptions): Promise<OrderReminderRunResult> {
+// issue 413: exportované pre `startRunNow` (`modules/scheduler/run-now.ts`)
+// z rovnakého dôvodu ako `posta-uncollected/run.ts`'s `runPostaUncollectedLocked`
+// — `startRunNow` drží `ORDER_REMINDER_RUN_LOCK_KEY` SÁM po celý čas behu.
+// `runOrderReminderOverrideLocked` (samostatný per-riadkový zámok nižšie)
+// NEEXPORTUJEME — override je rýchla akcia (jeden e-mail), nemá CF 524 riziko,
+// jej HTTP trasa zostáva nezmenená (`http/order-reminder-routes.ts`).
+export async function runOrderReminderLocked(options: RunOrderReminderOptions): Promise<OrderReminderRunResult> {
   const { db, now, classifyClient, mailTransport, bccEmail, adminBaseUrl } = options;
   const eligible = await loadEligibleOrders(db);
   const candidates = eligible.filter((o) => isOldEnough(o.placedAt, now));

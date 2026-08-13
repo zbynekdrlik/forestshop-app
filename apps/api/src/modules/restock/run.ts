@@ -54,7 +54,9 @@ export async function runRestock(options: RunRestockOptions): Promise<RestockRun
   }
 }
 
-async function runRestockLocked(options: RunRestockOptions): Promise<RestockRunResult> {
+// issue 413: exportované pre `startRunNow` (`modules/scheduler/run-now.ts`),
+// rovnaký dôvod ako `posta-uncollected/run.ts`'s `runPostaUncollectedLocked`.
+export async function runRestockLocked(options: RunRestockOptions): Promise<RestockRunResult> {
   const { db, now, config } = options;
   const importToShoptet = options.importToShoptet ?? runShoptetImportIsolated;
   const limit = options.limit ?? MAX_PER_RUN;

@@ -1,17 +1,16 @@
 import { zValidator } from "@hono/zod-validator";
-import { eq } from "drizzle-orm";
 import type { Hono } from "hono";
 import { z } from "zod";
 import type { Database } from "../db/client.js";
-import { jobRuns } from "../db/schema.js";
 import { log } from "../logger.js";
 import { record } from "../modules/audit/service.js";
 import { findFeedStateConflicts } from "../modules/catalog/feed-cross-check.js";
-import { MAX_PER_RUN, RESTOCK_JOB_NAME } from "../modules/restock/constants.js";
+import { MAX_PER_RUN, RESTOCK_JOB_NAME, RESTOCK_RUN_LOCK_KEY } from "../modules/restock/constants.js";
 import { listRestockEvents, listRestockWaiting, selectRestockCandidates } from "../modules/restock/queries.js";
 import type { RestockRunResult, RunRestockOptions } from "../modules/restock/run.js";
-import { isRestockEnabled, runRestock, setRestockEnabled } from "../modules/restock/run.js";
+import { isRestockEnabled, runRestockLocked, setRestockEnabled } from "../modules/restock/run.js";
 import { getLatestJobRun } from "../modules/scheduler/queries.js";
+import { startRunNow, type RunNowStart } from "../modules/scheduler/run-now.js";
 import { requireRole, requireUser, type AppBindings } from "./middleware.js";
 import { requireSameOrigin } from "./origin-check.js";
 
@@ -33,33 +32,9 @@ function isRunResult(detail: unknown): detail is RestockRunResult {
   return typeof detail === "object" && detail !== null && "status" in detail;
 }
 
-async function runAndRecord(db: Database, deps: RestockRunDeps, now: Date): Promise<RestockRunResult> {
-  const [inserted] = await db
-    .insert(jobRuns)
-    .values({ jobName: RESTOCK_JOB_NAME, startedAt: now, status: "running" })
-    .returning({ id: jobRuns.id });
-  const runId = inserted?.id;
-  try {
-    const result = await runRestock({ db, now, ...deps });
-    if (runId !== undefined) {
-      await db
-        .update(jobRuns)
-        .set({ status: "success", finishedAt: new Date(), detail: result })
-        .where(eq(jobRuns.id, runId));
-    }
-    return result;
-  } catch (error) {
-    const rawErrorMessage = error instanceof Error ? error.message : String(error);
-    log.error({ rawErrorMessage }, "Vypredané → Skladom: ručný beh zlyhal");
-    if (runId !== undefined) {
-      await db
-        .update(jobRuns)
-        .set({ status: "failure", finishedAt: new Date(), errorMessage: rawErrorMessage })
-        .where(eq(jobRuns.id, runId));
-    }
-    throw error;
-  }
-}
+// issue 413: manuálne "Spustiť teraz" ide cez zdieľaný `startRunNow`
+// (`modules/scheduler/run-now.ts`) — vloží "running" riadok HNEĎ a vráti
+// odpoveď BEZ čakania na celý beh, viď design komentár na tikete.
 
 export function registerRestockRoutes(app: Hono<AppBindings>, db: Database, deps: RestockRunDeps): void {
   app.get("/api/restock", requireUser(db), async (c) => {
@@ -150,21 +125,33 @@ export function registerRestockRoutes(app: Hono<AppBindings>, db: Database, deps
     async (c) => {
       const user = c.get("user");
       const now = new Date();
-      let result: RestockRunResult;
+      let outcome: RunNowStart;
       try {
-        result = await runAndRecord(db, deps, now);
+        outcome = await startRunNow(
+          db,
+          {
+            jobName: RESTOCK_JOB_NAME,
+            lockKey: RESTOCK_RUN_LOCK_KEY,
+            run: (runNow) => runRestockLocked({ db, now: runNow, ...deps }),
+          },
+          now,
+          async (settled) => {
+            if (settled.status !== "success") return;
+            await record(db, {
+              at: now,
+              actorUserId: user.userId,
+              action: "restock.run_now",
+              entity: "restock_event",
+              data: { status: settled.result.status },
+            });
+            log.info({ actorUserId: user.userId, ...settled.result }, "Vypredané → Skladom: ručný beh");
+          },
+        );
       } catch {
-        return c.json({ ok: false as const, error: "Beh zlyhal." }, 500);
+        return c.json({ ok: false as const, error: "Beh sa nepodarilo spustiť." }, 500);
       }
-      await record(db, {
-        at: now,
-        actorUserId: user.userId,
-        action: "restock.run_now",
-        entity: "restock_event",
-        data: { status: result.status },
-      });
-      log.info({ actorUserId: user.userId, ...result }, "Vypredané → Skladom: ručný beh");
-      return c.json({ ok: true as const, result });
+      if (outcome.status === "busy") return c.json({ ok: false as const, error: outcome.message }, 200);
+      return c.json({ ok: true as const, started: true as const }, 202);
     },
   );
 }

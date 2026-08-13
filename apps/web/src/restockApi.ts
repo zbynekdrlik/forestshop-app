@@ -72,8 +72,11 @@ const statusSchema = z.object({
 export type RestockStatus = z.infer<typeof statusSchema>;
 
 const setEnabledResultSchema = z.object({ ok: z.literal(true), enabled: z.boolean() });
+// issue 413: run-now beží odteraz ASYNC — 202 `{ok:true, started:true}`
+// namiesto pôvodného synchrónneho `{ok:true, result}`, "beh už prebieha"
+// je 200 `{ok:false, error}` (`.claude/rules/testing.md`).
 const runNowResultSchema = z.union([
-  z.object({ ok: z.literal(true), result: runResultSchema }),
+  z.object({ ok: z.literal(true), started: z.literal(true) }),
   z.object({ ok: z.literal(false), error: z.string() }),
 ]);
 
@@ -152,9 +155,8 @@ export async function setRestockEnabled(enabled: boolean): Promise<boolean> {
   return parsed.enabled;
 }
 
-export async function runRestockNow(): Promise<RestockRunResult> {
+export async function runRestockNow(): Promise<void> {
   const response = await fetch("/api/restock/run-now", { method: "POST" });
   const parsed = runNowResultSchema.parse(await readJson(response, "Beh sa nepodarilo spustiť"));
   if (!parsed.ok) throw new Error(parsed.error);
-  return parsed.result;
 }
