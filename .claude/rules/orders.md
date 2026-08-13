@@ -502,6 +502,20 @@ paths:
   (pondelok toho istého týždňa, 2026-08-03) dá TEN ISTÝ UTC okamih ako
   "dnes" — nesprávne, sú to DVA rôzne kalendárne dni, teda dva rôzne
   okamihy (`2026-08-02T22:00:00Z`, nie `2026-08-03T22:00:00Z`).
+- **Pre "1 kalendárny mesiac dozadu"/clamp-ové prípady (issue 407,
+  `subtractOneMonthClamped`) holý `date -d "1 month ago"` NESTAČÍ na
+  ručné overenie — GNU `date`'s vlastná mesačná aritmetika sa nespráva
+  rovnako ako Postgresov `interval '1 month'` clamp (`31.3. - 1 mesiac`
+  môže GNU date-om vyjsť inak než `28.2.`).** Presnejší postup: throwaway
+  `node -e` skript, čo verne skopíruje SKUTOČNÚ implementáciu
+  (`getZonedDateParts`/`parseShopLocalDateTime`/`subtractOneMonthClamped`
+  inline) a vytlačí `.toISOString()` pre kandidátne `now` hodnoty PRED
+  napísaním testu s očakávanou hodnotou — presne tak sa odhalilo, že
+  clamp-testy cez DST hranicu (marec CEST → február CET) musia dať iný
+  UTC čas (`T11:00:00Z`), než mechanické zachovanie tej istej UTC hodiny
+  hodiny (`T10:00:00Z`) by naznačovalo. Rovnaký princíp ako existujúci
+  `date -u -d @$(...)` trik vyššie, len pre prípady, kde jednoduchý shell
+  `date` výpočet nevie verne reprodukovať vlastnú clamp/DST logiku appky.
 - **Slovenské skloňovanie POČTU objednávok potrebuje TROJTVAROVÝ (paucal)
   pomocník, nie holé "N objednávok".** Code review PR #244 (issue 237):
   `OrdersOverviewTiles.tsx` pôvodne vypisovala vždy "N objednávok", čo je

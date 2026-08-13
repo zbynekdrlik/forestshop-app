@@ -740,3 +740,23 @@ paths:
   súbor), PRED zmazaním — presne ako `.claude/rules/pairing-search.md`'s
   E8 sekcia dokumentuje pre `git diff` dôkaz na strane API/modulov, tu ten
   istý princíp na strane e2e krížových testov.
+- **RED-pred-GREEN dôkaz pre bug-fix, čo v JEDNOM edite zároveň
+  PREMENUJE a MENÍ SPRÁVANIE existujúcej funkcie (žiadny prirodzený "starý
+  test/nová funkcia" rozdiel): dočasne VRÁŤ len implementačné súbory na
+  `git show HEAD:<súbor> > <súbor>`, nechaj NOVÉ testové súbory v pracovnom
+  strome, spusti ich a potvrď zlyhanie, potom implementáciu vráť späť.**
+  Issue 407 (`overview.ts`'s `computeBratislavaPeriodBoundaries` →
+  `computeOrdersDashboardBoundaries`, kalendárne → kĺzavé okná): keďže
+  testy aj implementácia boli upravené v tom istom pracovnom kroku, nešlo
+  jednoducho "spustiť staré testy proti novej implementácii" — dočasné
+  obnovenie STARÝCH `overview.ts`/`timezone.ts` súborov (zo `HEAD`) pri
+  ponechaní NOVÝCH testov ukázalo skutočné zlyhanie (8/15 unit testov,
+  `TypeError` na premenovanej funkcii + zvyšné testy by zlyhali na
+  logike), čím sa RED reálne overil (nie len predpokladal) predtým, než sa
+  fix commitol ako samostatný GREEN commit za ním. Rovnaký postup pre
+  KAŽDÝ ĎALŠÍ bug-fix v tomto repe, kde sa test aj implementácia menia v
+  jednom priechode: `cp <súbor> <scratch>` (záloha opravenej verzie),
+  `git show HEAD:<súbor> > <súbor>` (dočasný revert), spusti dotknuté
+  testy → potvrď RED, `cp <scratch> <súbor>` (obnov fix) → potvrď GREEN,
+  commituj testy a implementáciu ako DVA samostatné commity v tomto
+  poradí.

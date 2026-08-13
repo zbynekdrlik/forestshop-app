@@ -3681,3 +3681,38 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
   frontend-design.md` (CSS špecificita vs. globálny `input` reset).
 - Worktree mode (izolácia #317) — commit ostáva na vlastnej vetve,
   supervisor mergne + spustí CI pri round-integrácii.
+
+## Issue 407 — Na objednanie: súhrnné čísla nesedeli so Shoptetom
+
+- Root cause naživo overený proti produkčnej DB (`docker exec
+  forestshop-postgres-1`, box je priamo `forestshop-dev`): appka počítala
+  "Týždeň"/"Mesiac" ako KALENDÁRNE okná (appky pôvodné čísla presne sedeli
+  s kalendárnym výpočtom), Shoptet ich ráta KĹZAVÉ (`now - 7 dní`/`now - 1
+  kalendárny mesiac`) — binárnym hľadaním hranice v DB sa dokázalo na cent
+  presne (49 obj/4868€, 171 obj/14767€). "Dnes" ostáva kalendárny deň
+  (Shoptetova samostatná "24 hodín" dlaždica to naživo dokazuje). Navyše
+  "Stornovaná" objednávky sa už do počtu nezarátavajú (explicitný filter,
+  aj keď na tržbu v dnešných dátach nemal vplyv — všetky storno majú
+  `total_price_with_vat=0.00`). Import je kompletný (čísla po oprave
+  presne sedia so Shoptetom, žiadna medzera v `shop_order`).
+- Commits: `e70020b` (test: RED), `79c0439` (fix: rolling okná + storno
+  filter, `computeBratislavaPeriodBoundaries` → `computeOrdersDashboardBoundaries`),
+  `3602dd6` (fix: review nález — mesačná hranica v miestnom, nie UTC
+  kalendári; `subtractOneMonthClamped` teraz cez zdieľanú
+  `getZonedDateParts`).
+- RED→GREEN: `overview.test.ts` (15 testov, 8 RED proti nezmenenej
+  implementácii) + `orders-overview.integration.test.ts` (9 testov,
+  storno-exclusion + inclusive-boundary testy).
+- Independent review dispatch: 0 🔴 2 🟡 2 🔵 → oba 🟡 opravené (UTC vs.
+  miestny kalendár pri mesačnej hranici; zastarané playbook odkazy),
+  oba 🔵 vyriešené (krížový komentár k duplicitnému `STORNO_STATUS_NAME`;
+  odstránený redundantný test).
+- Testy: unit 889 (api) + 599 (web), integration 94 súborov/717 testov,
+  lokálna e2e sada 55/55 — všetky zelené po oprave.
+- Playbook: `.claude/rules/orders.md` (prepísaná dashboard sekcia — nová
+  issue 407 sekcia + `subtractOneMonthClamped` clamp/DST poznámka + Node-
+  skript verifikačná technika pre mesačnú aritmetiku), `.claude/rules/
+  testing.md` (RED-pred-GREEN technika pre premenuj+zmeň-správanie fix
+  cez dočasný `git show HEAD:` revert implementácie).
+- Worktree mode (izolácia #317) — commit ostáva na vlastnej vetve,
+  supervisor mergne + spustí CI pri round-integrácii.
