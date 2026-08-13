@@ -212,3 +212,19 @@ paths:
   (`../../../../../package.json` alebo podobný dlhý reťazec `../`)
   ukazuje MIMO worktree — over ju `readlink -f`/počítaním `../` PRED tým,
   než začneš ladiť vlastný `vitest.config.ts`.
+- **`git diff <base>..HEAD` (dvojbodkový tvar) v salvage/pokračovacom
+  worktree-i, ktorý PRED implementáciou robil `git merge origin/dev`,
+  zahŕňa AJ zmeny z toho mergu — nielen prácu na aktuálnom tikete.**
+  Issue 413 (salvage): `<base>` bol commit PRED `git merge origin/dev`
+  (ktorý priniesol issue 412's samostatnú prácu), takže `git diff
+  <base>..HEAD` ukázal issue 412's súbory (`modules/orders/`, `cli/
+  orders-ingest.ts`, ...) POMIEŠANÉ s issue 413's reálnym diffom — dvojbodkové
+  `diff` je čistá stromová diferencia dvoch commitov, nerozlišuje "reachable
+  vs. ancestor" tak, ako to robí `git log A..B`. Dispatch pre nezávislý
+  review subagent, čo dostal tento zlý rozsah, musel byť opravený `SendMessage`-om
+  s presným príkazom `git diff <merge-commit>..HEAD` (rozsah AŽ OD merge
+  commitu, nie od pôvodného base). Pri KAŽDOM ĎALŠOM "recenzuj rozsah
+  A..B" dispatch-i na vetve, čo obsahovala `git merge origin/<base>`
+  UPROSTRED práce: over `git log --oneline A..B` NAJPRV (mal by ukázať LEN
+  commity tohto tiketu), a ak zoznam obsahuje cudzie SHA, posuň `A` na
+  merge commit samotný.

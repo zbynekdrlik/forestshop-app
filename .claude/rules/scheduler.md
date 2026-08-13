@@ -195,3 +195,32 @@ paths:
   `index.ts` (cleanup PRED čímkoľvek, čo by mohlo vložiť NOVÝ riadok)
   garantuje nulový race. Platí VŠEOBECNE pre KAŽDÝ job (plánovaný aj
   run-now), nielen tých šesť s manuálnym HTTP triggerom.
+- **Každý krok medzi `pg_try_advisory_lock`-om a bodom, kde je uvoľnenie
+  zámku GARANTOVANÉ cez `.finally()` (`startRunNow`, `run-now.ts`), musí
+  mať VLASTNÝ `try/catch` uvoľňujúci zámok pred `throw`/`return` — inak
+  zámok ostane držaný NAVŽDY.** Dva takéto nálezy počas review issue 413
+  (oba opravené, oba s regresným testom): (1) `db.insert(jobRuns)` vkladajúci
+  "running" riadok — bez `try/catch` by jeho zlyhanie nechalo zámok
+  navždy zablokovaný (aj pre NAPLÁNOVANÝ beh s tým istým kľúčom); (2)
+  samotný ZÁPIS konečného stavu (`db.update(...)` v `.then()`'s success/
+  failure vetve) — bez ochrany by jeho zlyhanie NEuniklo zámok (ten sa aj
+  tak uvoľní v `.finally()`), ale nechalo by `job_run` riadok navždy
+  `status: "running"`, hoci beh v skutočnosti dobehol; fix je
+  `writeTerminalOutcome` helper, čo skúsi JEDEN núdzový zápis `failure` s
+  vysvetľujúcou správou, keď hlavný zápis zlyhá. Test na KAŽDÝ ĎALŠÍ krok
+  pridaný medzi zámok a garantované uvoľnenie: čo sa stane, ak TENTO krok
+  vyhodí? Zámok aj riadok musia oba dosiahnuť definovaný koncový stav,
+  nikdy nie "zostane visieť napospas".
+- **HTTP-level test na "Spustiť teraz" endpoint NEPOTREBUJE fixtúru ani
+  fake override, keď zdrojová funkcia má vlastný "0 kandidátov" skorý
+  návrat PRED prvým dotykom reálnej externej závislosti** (Shoptet
+  prihlásenie, sitemap fetch, search provider, dodávateľská stránka) —
+  over to PRIAMO v zdrojovom kóde funkcie (nie predpokladom), potom stačí
+  úplne PRÁZDNA `withCleanDb()` databáza. Issue 413 review nález: len 2 zo
+  6 run-now trás mali skutočný `app.request()` test dokazujúci 202/busy
+  kontrakt na HTTP úrovni (`order-reminder`/`posta-uncollected`-http.
+  integration.test.ts) — `restock-run-now-http`/`shop-sitemap-run-now-http`/
+  `pairing-search-run-now-http`.integration.test.ts (nové súbory) a
+  `supplier-stock-http.integration.test.ts` (rozšírený, `boot()` dostal
+  parameter role namiesto natvrdo "citanie") to doplnili presne týmto
+  vzorom — žiadny z nich nikdy nedotkne živú tretiu stranu.
