@@ -3681,3 +3681,43 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
   frontend-design.md` (CSS špecificita vs. globálny `input` reset).
 - Worktree mode (izolácia #317) — commit ostáva na vlastnej vetve,
   supervisor mergne + spustí CI pri round-integrácii.
+
+## 2026-08-13 — #398 + #401 + #409 (Parovanie: vsetky moznosti na karte, plna populacia, obrazky v paneli)
+
+- Batch (worktree isolation, #317), version bump `d504053` (0.3.0-dev.239→.241).
+- Design comment BEFORE first code commit (root cause/pristup/zamietnuta
+  alternativa/Architektura, spolocny pre vsetky tri tikety):
+  https://github.com/zbynekdrlik/forestshop-app/issues/398#issuecomment-5278355746
+  (link z #401/#409).
+- Implementacia `3779235`:
+  - #398: `PairingReviewCard.tsx` — zrusenie "Zle" medzikroku, kolektivny
+    riadok (Dobre/vyber url/Nie skladom/Uz nepredava) priamo na karte,
+    vysvetlujuca poznamka pri terminalnom rozhodnuti (nocna automatika),
+    filtre rozsirene o "decided"/"terminal" (API zod enum + web).
+  - #401: `queries.ts`'s `listPairingReview` — populacia = unia (ma
+    candidate_set RIADOK, ALEBO nema efektivnu linku, ALEBO ma
+    pairing_decision riadok), nove pole `supplierHasAdapter`, `gatheredAt`
+    nullable.
+  - #409: `listPairingCandidatesForProduct` vracia `imageUrl` pre kazdeho
+    z top-8 (uz perzistovane z gather behu, ziadny live-fetch).
+  - Novy subor `PairingReviewPanelParts.tsx` (extrakcia `TerminalButtons`/
+    `PanelCandidateRow` — eslint `max-lines: 400`).
+- Review (`fa22d5d`, jeden samostatny `general-purpose` subagent nad celym
+  diffom): 2 🟡 opravene — auto-show panel nikdy nevolal
+  `fetchPairingCandidates` (bug od E6, #401 ho spravil bezneho), stary
+  intro odstavec tvrdil "rozhodovanie pride neskor".
+- Testy: unit (web `PairingReviewCard.test.tsx`/`PairingReviewSection
+  .test.tsx`, +regresny test na auto-fetch), integration (2 nove testy v
+  `pairing-review-http.integration.test.ts` pre plnu populaciu +
+  `supplierHasAdapter`, 2 nove v `-decisions-http` pre rozhodnutie na
+  produkte bez candidateSet), e2e (2 nove testy — E2E-PR-BEZADAPTERA,
+  E2E-PR-PANEL, + 3 existujuce testy rozsirene). Cely lokalny beh (web
+  607/607, api 960/960 unit + 744/744 integration, e2e 57/57) zeleny —
+  izolovany throwaway Postgres (port 5442→5443), box zdielany s inymi
+  worktree workermi (forestshop-dev).
+- Playbook: `.claude/rules/pairing-search.md` — nova sekcia "issues
+  398/401/409" (populacna unia, `supplierHasAdapter` vs. gather stav,
+  `suppliers` TRUNCATE-bez-reseedu past, auto-show fetch gotcha, zdielany
+  testid vzor).
+- Worktree mode (izolacia #317) — commit ostava na vlastnej vetve,
+  supervisor mergne + spusti CI pri round-integracii.
