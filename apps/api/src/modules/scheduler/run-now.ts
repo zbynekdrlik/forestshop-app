@@ -94,8 +94,22 @@ export async function startRunNow<T>(
     return { status: "busy", message: await buildBusyMessage(db, job.jobName) };
   }
 
-  const [inserted] = await db.insert(jobRuns).values({ jobName: job.jobName, startedAt: now, status: "running" }).returning({ id: jobRuns.id });
-  const runId = inserted?.id;
+  let runId: string | undefined;
+  try {
+    const [inserted] = await db.insert(jobRuns).values({ jobName: job.jobName, startedAt: now, status: "running" }).returning({ id: jobRuns.id });
+    runId = inserted?.id;
+  } catch (insertError) {
+    // Zámok bol UŽ získaný, ale "running" riadok sa nepodarilo vložiť —
+    // `job.run()` sa NIKDY nespustí, takže fire-and-forget reťaz nižšie (a
+    // jej `.finally()`, ktoré by inak zámok uvoľnilo) sa vôbec nezostaví.
+    // Bez tohto by zámok ostal držaný NAVŽDY (rovnaký kľúč používa aj
+    // NAPLÁNOVANÝ beh, takže by sa zablokoval tiež) — uvoľni ho TU a
+    // vyhoď ďalej, presne ako "busy" vetva vyššie robí `lockClient
+    // .release()` pred návratom.
+    await lockClient.query("select pg_advisory_unlock($1)", [job.lockKey]).catch(() => undefined);
+    lockClient.release();
+    throw insertError;
+  }
 
   // Fire-and-forget — HTTP handler NIKDY nečaká na toto (issue 413's hlavná
   // oprava). `lockClient` zostáva pripojený/zamknutý po CELÝ beh, uvoľní sa
