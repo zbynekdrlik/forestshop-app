@@ -5,7 +5,7 @@
 
 import { sql } from "drizzle-orm";
 import { boolean, check, foreignKey, index, integer, jsonb, numeric, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
-import { products } from "./schema-catalog.js";
+import { products, variants } from "./schema-catalog.js";
 // `users` sa importuje PRIAMO zo svojho sibling súboru, nikdy cez barrel
 // `schema.js` — ten by vytvoril kruhový import (`.claude/rules/database.md`).
 import { users } from "./schema-users.js";
@@ -102,7 +102,46 @@ export const pairingSearchSettings = pgTable("pairing_search_settings", {
 // riadku = "nezrevidované" (`pairing-review/queries.ts`'s `unreviewed`
 // filter, forward-kompat rozšírené o TENTO stĺpec — design komentár na
 // tickete, issue 387 E5). "↩ Vrátiť" = DELETE riadku (nikdy status navyše).
-export const pairingDecisionStatus = pgEnum("pairing_decision_status", ["good", "manual", "unavailable", "discontinued"]);
+//
+// issue 399 — piaty stav `split`: produkt s VIAC veľkosťami, ktorý má
+// KAŽDÁ svoj vlastný link u dodávateľa namiesto jedného spoločného. Rovnaký
+// tvar ako `unavailable`/`discontinued` (žiadna `url` na TOMTO riadku —
+// per-veľkosť linky žijú vo `pairingVariantLinks` nižšie, design komentár
+// na tickete, sekcia "Prístup 1"). **Pridanie hodnoty `split` MUSÍ byť
+// SAMOSTATNÁ migrácia (0053) od CHECK constraintu, čo ju používa (0054) —
+// naživo overené proti Postgresu 18 (throwaway kontajner): `ALTER TYPE ...
+// ADD VALUE` v tej istej transakcii ako CHECK constraint POUŽÍVAJÚCI novú
+// hodnotu vyhadzuje `unsafe use of new value "split" ... New enum values
+// must be committed before they can be used`, KEĎ sa príkazy posielajú
+// ako samostatné príkazy v rámci transakcie (presne to, čo drizzle-kit's
+// migrátor aj `psql` skript robia) — jediný spôsob, ako to naživo prejde v
+// JEDNEJ session, je poslať VŠETKY príkazy naraz ako JEDNU multi-statement
+// `simple query` protokolovú správu (`psql -c "a; b; c;"`), čo NIE JE tvar,
+// akým appka migrácie reálne aplikuje. `.claude/rules/database.md`'s
+// "nová pgEnum hodnota" bod sa netýka tohto — ten je o LOKÁLNOM `db:migrate`
+// zabudnutom kroku, nie o tomto DVOJTRANZAKČNOM obmedzení.**
+export const pairingDecisionStatus = pgEnum("pairing_decision_status", ["good", "manual", "unavailable", "discontinued", "split"]);
+
+// issue 399 — per-VEĽKOSŤ manuálny override odkazu na dodávateľa, pre
+// produkty rozdelené cez `pairing_decision.status = 'split'`. ÚPLNE
+// NEZÁVISLÁ od `product_supplier_link_override` (#121/#239, produktová
+// úroveň) — design komentár na tickete zdôvodňuje, prečo NIE syntetický
+// kľúč v tamtej tabuľke (rozbilo by to nočný Shoptet writeback aj
+// #212/#213's "Vypredané → Skladom" prepínanie, obe predpokladajú "jeden
+// riadok = celý produkt") a prečo NIE reuse existujúcej `pairing` tabuľky
+// (F4, `schema-pairing.ts` — zámerne SAMOSTATNÝ dátový model pre BUDÚCI
+// auto-matching automat, zlúčenie bolo na tickete #239 už raz zamietnuté,
+// `.claude/rules/product-links.md`). Chýbajúci riadok pre daný variant =
+// appka o jeho per-veľkosť linku ešte nevie. `url NOT NULL` (na rozdiel od
+// `pairingDecisions.url`) — riadok existuje len VTEDY, keď manažér reálne
+// niečo zadal; vymazanie linku = DELETE riadku, nikdy `url = null`.
+export const pairingVariantLinks = pgTable("pairing_variant_link", {
+  code: text("code")
+    .primaryKey()
+    .references(() => variants.code, { onDelete: "cascade" }),
+  url: text("url").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 // issue 387 E7 — Singleton Štart/Stop prepínač PRE STAVOVÝ WRITEBACK
 // (rovnaký vzor ako `pairingSearchSettings`/`restock_settings` vyššie —
@@ -158,7 +197,9 @@ export const pairingDecisions = pgTable(
   (t) => [
     check(
       "pairing_decision_url_ck",
-      sql`(${t.status} IN ('good','manual') AND ${t.url} IS NOT NULL) OR (${t.status} IN ('unavailable','discontinued') AND ${t.url} IS NULL)`,
+      // issue 399 — `split` pridané do NULOVEJ vetvy (žiadna URL na tomto
+      // riadku, per-veľkosť linky žijú v `pairingVariantLinks`).
+      sql`(${t.status} IN ('good','manual') AND ${t.url} IS NOT NULL) OR (${t.status} IN ('unavailable','discontinued','split') AND ${t.url} IS NULL)`,
     ),
   ],
 );
