@@ -104,7 +104,7 @@ Per-area rules live in `.claude/rules/<area>.md` with `paths:` frontmatter.
   žiadne AI dohady) → `.claude/rules/supplier-stock.md`
 - adresy našich produktov z feedu google.xml (#220) → `.claude/rules/shop-feed.md`
 - Kniha odoslaných e-mailov (F193 — jediná odosielacia cesta, dedup okno preskočení) → `.claude/rules/mail-log.md`
-- Párovanie produktov (#239 — samostatná od `pairing`, zdieľaný upsert s #121, live-overenie bez AI-dohady) → `.claude/rules/product-links.md`
+- Zápisová cesta `product_supplier_link_override` (#239, obrazovka odstránená #400 — API + zdieľaný upsert s #121 ostávajú, volajú ich Vyhľadať #240 a Párovanie #387 E6) → `.claude/rules/product-links.md`
 - Eshop → Vyhľadať (#240 — dve oddelené polia produkty/objednávky, detail produktu, zdieľaná zapisovacia cesta s #239) → `.claude/rules/search.md`
 - Eshop → Upozornenia (#267 — nástenka, čiastočný unique dedup index, počítaný stav bez cron-u, zdieľaná zapisovacia cesta pre budúce #268/#269) → `.claude/rules/upozornenia.md`
 - Preprava DPD (#292 — per-zásielkový Playwright robot na dpdshipper.sk, appka-vlastný `dpd_shipment`/`dpd_pickup_request` záznam, náhľad pred odoslaním, fail-loud nedomapovaný formulár) → `.claude/rules/dpd.md`

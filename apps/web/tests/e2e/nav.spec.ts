@@ -26,7 +26,10 @@ const E2E_NAV_EMAIL = "e2e-nav@forestshop.sk";
 // samostatnom `order-flags.spec.ts`, rovnaký vzor). Issue 311 (2026-08-07)
 // pridalo "Vypredané → Skladom: návrhy odkazov" HNEĎ ZA "Vypredané →
 // Skladom" — issue 387 E8 (2026-08-13) ju ODSTRÁNILO (nahradená obrazovkou
-// "Párovanie", pozri nižšie), takže sa do celkového počtu už nepočíta.
+// "Párovanie", pozri nižšie), takže sa do celkového počtu už nepočíta. Issue
+// 400 (issue 387 E9, 2026-08-13) odstránilo aj samotnú "Párovanie produktov"
+// (#239, majiteľ ju výslovne schválil na odstránenie) — takže sa do
+// celkového počtu záložiek už tiež nepočíta.
 // Issue 292 (2026-08-08) pridáva "Preprava DPD" NA KONIEC priečinka "Eshop"
 // (funkčný test v samostatnom `dpd.spec.ts`, rovnaký vzor). Issue 342
 // (2026-08-11) pridáva ŠTVRTÝ priečinok "Dôležité" (PRED "Eshop" — hlavný
@@ -73,9 +76,10 @@ test("ľavé menu má štyri priečinky (Dôležité/Eshop/Systém/Automatizáci
   await expect(page.getByRole("button", { name: "Systém" })).toHaveAttribute("aria-expanded", "true");
   await expect(page.getByRole("button", { name: "Automatizácie" })).toHaveAttribute("aria-expanded", "true");
 
-  // Presne dvadsať záložiek v CELOM menu (issue 387 E5 pridalo "Párovanie",
-  // E8 odstránilo "Vypredané → Skladom: návrhy odkazov").
-  await expect(page.locator(".side-nav .tab")).toHaveCount(20);
+  // Presne devätnásť záložiek v CELOM menu (issue 387 E5 pridalo "Párovanie",
+  // E8 odstránilo "Vypredané → Skladom: návrhy odkazov", issue 400/E9
+  // odstránilo "Párovanie produktov").
+  await expect(page.locator(".side-nav .tab")).toHaveCount(19);
   await expect(page.getByRole("button", { name: "Sync zo Shoptetu" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Texty e-mailov" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Na objednanie" })).toBeVisible();
@@ -86,12 +90,13 @@ test("ľavé menu má štyri priečinky (Dôležité/Eshop/Systém/Automatizáci
   await expect(page.getByRole("button", { name: "Výmena tovaru" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Vrátený tovar" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Reklamácie" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Párovanie produktov" })).toBeVisible();
-  // issue 387 E5: nová záložka "Párovanie" — substring-om obsiahnuté v
-  // "Párovanie produktov" vyššie AJ vo VLASTNOM odznakovom aria-label
-  // ("Párovanie Párovanie: N" — ani `exact: true`, ani obyčajný substring
-  // ju jednoznačne nenájdu naraz), preto `data-testid` (`Sidebar.tsx`'s
-  // `nav-tab-${tab.id}`), nie `getByRole`.
+  // issue 387 E5: záložka "Párovanie" — jej VLASTNÝ odznakový aria-label
+  // ("Párovanie Párovanie: N") kolíduje s jej vlastným accessible name (ani
+  // `exact: true`, ani obyčajný substring `getByRole` ju jednoznačne
+  // nenájdu), preto `data-testid` (`Sidebar.tsx`'s `nav-tab-${tab.id}`),
+  // nie `getByRole`. issue 400 (E9) odstránilo predtým kolidujúcu
+  // "Párovanie produktov" (#239) — ten dôvod pre `data-testid` tu už
+  // neplatí, ale vlastný-badge dôvod stále áno.
   await expect(page.getByTestId("nav-tab-pairing-review")).toBeVisible();
   await expect(page.getByRole("button", { name: "Vyhľadať" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Zlúčenie objednávok" })).toBeVisible();
@@ -169,13 +174,7 @@ test("ľavé menu má štyri priečinky (Dôležité/Eshop/Systém/Automatizáci
   await expect(page.getByRole("heading", { name: "Reklamácie" })).toBeVisible();
   await expect(page.getByTestId("nav-status-claims")).toHaveCount(0);
 
-  // issue 239: rovnaký dôvod ako "Nedostupné tovary" vyššie — žiadny
-  // plán/zapnuté-vypnuté koncept, teda žiadny stavový odznak v menu.
-  await page.getByRole("button", { name: "Párovanie produktov" }).click();
-  await expect(page.getByRole("heading", { name: "Párovanie produktov" })).toBeVisible();
-  await expect(page.getByTestId("nav-status-supplier-links")).toHaveCount(0);
-
-  // issue 240: rovnaký dôvod ako "Párovanie produktov" vyššie — žiadny
+  // issue 240: rovnaký dôvod ako "Nedostupné tovary" vyššie — žiadny
   // plán/zapnuté-vypnuté koncept, teda žiadny stavový odznak v menu.
   await page.getByRole("button", { name: "Vyhľadať" }).click();
   await expect(page.getByRole("heading", { name: "Vyhľadať" })).toBeVisible();
@@ -223,7 +222,7 @@ test("ľavé menu má štyri priečinky (Dôležité/Eshop/Systém/Automatizáci
 
   // Hlavičky priečinkov zmiznú, ikony všetkých modulov ostanú.
   await expect(page.getByRole("button", { name: "Systém" })).toHaveCount(0);
-  await expect(page.locator(".side-nav .tab")).toHaveCount(20);
+  await expect(page.locator(".side-nav .tab")).toHaveCount(19);
   // Názov sa v lište ukáže bublinou pri prejdení myšou.
   await expect(page.getByRole("button", { name: "Na objednanie" })).toHaveAttribute(
     "title",

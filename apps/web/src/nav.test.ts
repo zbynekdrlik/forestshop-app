@@ -12,7 +12,10 @@ import { DEFAULT_TAB_ID, HIDDEN_TABS, NAV, findTab, isVisibleTabId } from "./nav
 // pridalo "Zlúčenie objednávok" pod "Eshop" z rovnakého dôvodu (majiteľ:
 // vlastná záložka, nie tlačidlo pri objednávke). Issue 267 pridalo
 // "Upozornenia" pod "Eshop" z rovnakého dôvodu (pracovná obrazovka bez
-// plánu/zapnuté-vypnuté konceptu). Issue 287 preusporiadalo poradie SAMOTNÝCH
+// plánu/zapnuté-vypnuté konceptu). Issue 400 (issue 387 E9) odstránilo
+// "Párovanie produktov" (#239) — majiteľ ju výslovne schválil na
+// odstránenie, nahradená obrazovkou "Párovanie" (#387 E5). Issue 287
+// preusporiadalo poradie SAMOTNÝCH
 // priečinkov (majiteľ: "Eshop dať uplne ako prvý... šéf ho používa
 // najčastejšie") — Eshop je teraz prvý, Systém druhý, Automatizácie tretie;
 // položky vnútri každého priečinka ostali nezmenené.
@@ -28,14 +31,14 @@ import { DEFAULT_TAB_ID, HIDDEN_TABS, NAV, findTab, isVisibleTabId } from "./nav
 // "Upozornenia" doňho a pridalo novú záložku "Úlohy na dnes".
 // Issue 345 pridalo "Objednávky predajňa" hneď za "Na objednanie" (obe sú
 // "zoznam objednávok" obrazovky).
-// Issue 387 E5 pridalo "Párovanie" hneď za "Párovanie produktov" (#239) —
-// najbližší príbuzný obsah, obe zatiaľ bežia vedľa seba.
+// Issue 387 E5 pridalo "Párovanie" — pôvodne hneď za "Párovanie produktov"
+// (#239), ktorú issue 400 (E9) odstránilo (majiteľ ju výslovne schválil).
 // Tento test je najbližšie k tomu, čo strojovo overiť dá (registrácia, nie DOM).
-it("NAV má štyri priečinky (Dôležité/Eshop/Systém/Automatizácie), s 2/11/3/4 záložkami v poradí podľa dôležitosti", () => {
+it("NAV má štyri priečinky (Dôležité/Eshop/Systém/Automatizácie), s 2/10/3/4 záložkami v poradí podľa dôležitosti", () => {
   expect(NAV).toHaveLength(4);
   expect(NAV.map((f) => f.label)).toEqual(["Dôležité", "Eshop", "Systém", "Automatizácie"]);
   expect(NAV[0]?.tabs).toHaveLength(2);
-  expect(NAV[1]?.tabs).toHaveLength(11);
+  expect(NAV[1]?.tabs).toHaveLength(10);
   expect(NAV[2]?.tabs).toHaveLength(3);
   expect(NAV[3]?.tabs).toHaveLength(4);
   expect(NAV[0]?.tabs.map((t) => t.label)).toEqual(["Upozornenia", "Úlohy na dnes"]);
@@ -46,7 +49,6 @@ it("NAV má štyri priečinky (Dôležité/Eshop/Systém/Automatizácie), s 2/11
     "Výmena tovaru",
     "Vrátený tovar",
     "Reklamácie",
-    "Párovanie produktov",
     "Párovanie",
     "Vyhľadať",
     "Zlúčenie objednávok",
