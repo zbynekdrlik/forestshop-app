@@ -26,6 +26,7 @@ import { registerOrderFlagsRoutes } from "./order-flags-routes.js";
 import { registerOrderMergeRoutes, type OrderMergeRunDeps } from "./order-merge-routes.js";
 import { requireSameOrigin } from "./origin-check.js";
 import { registerPairingRoutes } from "./pairing-routes.js";
+import { registerPairingSearchRoutes } from "./pairing-search-routes.js";
 import { registerPostaUncollectedRoutes, type PostaUncollectedRunDeps } from "./posta-uncollected-routes.js";
 import { registerProductLinksRoutes } from "./product-links-routes.js";
 import { registerProductDetailRoutes } from "./product-detail-routes.js";
@@ -209,6 +210,11 @@ export function createApp(
   registerSchedulerRoutes(app, db);
   registerSupplierRoutes(app, db, options.sendSupplierMail);
   registerPairingRoutes(app, db);
+  // issue 387 E3: "Profesionálne párovanie produktov" — gather beh, žiadne
+  // prihlasovacie údaje netreba (SearchClient je vždy reálny, čítanie
+  // verejných vyhľadávacích stránok dodávateľov), na rozdiel od
+  // `restock`/`shoptet-writeback` vyššie.
+  registerPairingSearchRoutes(app, db);
   // issue 239: "Eshop → Párovanie produktov" — zoznam produktov bez
   // dodávateľskej linky + doplnenie/oprava (zapisuje do rovnakej
   // `product_supplier_link_override` tabuľky ako #121, žiadna nová cesta do
