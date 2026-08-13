@@ -28,6 +28,7 @@ import { requireSameOrigin } from "./origin-check.js";
 import { registerPairingRoutes } from "./pairing-routes.js";
 import { registerPairingReviewRoutes } from "./pairing-review-routes.js";
 import { registerPairingSearchRoutes } from "./pairing-search-routes.js";
+import type { SearchClient } from "../modules/pairing-search/client.js";
 import { registerPostaUncollectedRoutes, type PostaUncollectedRunDeps } from "./posta-uncollected-routes.js";
 import { registerProductLinksRoutes } from "./product-links-routes.js";
 import { registerProductDetailRoutes } from "./product-detail-routes.js";
@@ -104,6 +105,13 @@ export function createApp(
     // vyššie) — `index.ts` ju v produkcii nahradí LEN keď je nastavená
     // `GOOGLE_CALENDAR_ICS_URL` (`env.ts`).
     readonly nextEvent?: NextEventService;
+    // issue 422: "Živé ceny/dostupnosť" — voliteľný `SearchClient` pre
+    // `GET /api/pairing-review/live-supplier-info`. Rovnaký dôvod ako
+    // `fetchSupplierPage`/`restock` vyššie: `undefined` necháva
+    // `registerPairingReviewRoutes`'s vlastný default (REÁLNy klient,
+    // rovnaký vzor ako `pairing-search/run.ts`) — testy dodajú vlastný s
+    // injektovaným `Fetcher`, NIKDY nechodia na skutočnú sieť.
+    readonly pairingSearchClient?: SearchClient;
   },
 ): Hono<AppBindings> {
   const app = new Hono<AppBindings>();
@@ -225,7 +233,7 @@ export function createApp(
   // (skrytá F4 "Kontrola párovania") aj `registerProductLinksRoutes` nižšie
   // (#239 "Párovanie produktov") — obe ostávajú nedotknuté (design komentár
   // na tickete: E9 ich prípadné vyradenie potrebuje výslovný súhlas majiteľa).
-  registerPairingReviewRoutes(app, db);
+  registerPairingReviewRoutes(app, db, options.pairingSearchClient);
   // issue 239: "Eshop → Párovanie produktov" — zoznam produktov bez
   // dodávateľskej linky + doplnenie/oprava (zapisuje do rovnakej
   // `product_supplier_link_override` tabuľky ako #121, žiadna nová cesta do
