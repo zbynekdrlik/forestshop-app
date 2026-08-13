@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { and, between, eq, inArray, notInArray, sql } from "drizzle-orm";
+import { and, between, eq, inArray, notInArray, or, sql } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
 import { orderLines, orders, variants } from "../../db/schema.js";
 import { log } from "../../logger.js";
@@ -540,19 +540,49 @@ export async function ingestOrders(db: Database, options: OrdersIngestOptions): 
       // zmazaný riadok narazí na už existujúcu "not_found" vetvu
       // (`state.ts`), rovnaká neškodná zhoda ako pri akejkoľvek inej
       // súbežnej úprave.
+      //
+      // Poradie zamykania (code review, issue 416): táto transakcia drží
+      // `order` riadky zamknuté už od hlavného upsertu vyššie a TERAZ
+      // navyše zamyká `order_line` riadky — teoreticky sa to môže stretnúť
+      // s `queries.ts`'s `listOpenOrderLineIdsForSupplier`'s `.for("update",
+      // { of: [orderLines, orders] })` (`setSupplierLinesOrdered`, hromadné
+      // "objednané" na celú skupinu dodávateľa), ktorý OBE tabuľky zamyká v
+      // poradí, aké si zvolí Postgres-ov plánovač JOINu — teoreticky
+      // opačnom (AB-BA cyklus). Toto NIE JE nová trieda rizika zavedená
+      // TÝMTO krokom — presne to isté poradie (`order` → `order_line`) už
+      // roky drží existujúci upsert cyklus vyššie v TEJ istej transakcii;
+      // tento krok len pridáva ĎALŠIE dotyky `order_line`. Postgres-ov
+      // deadlock detektor takú kolíziu bezpečne vyrieši (jedna strana sa
+      // abortne, žiadne poškodené dáta) — import sa zopakuje o hodinu,
+      // manažérov klik dostane chybu a smie ho zopakovať. Vyhradený
+      // deterministický regresný test tejto interakcie je #416 (presahuje
+      // rozsah tohto bugfixu — concurrency analýza naprieč dvomi inak
+      // nezávislými modulmi).
+      //
+      // Dávkovaný (nie po jednej objednávke) set-based DELETE — rovnaký
+      // dôvod ako `chunk()` batching všade inde v tomto súbore (menej
+      // round-tripov) a NAVYŠE skracuje okno, počas ktorého táto
+      // transakcia drží `order_line` zámky (relevantné pre poradie
+      // zamykania vyššie). Čisto drizzle query builder (`and`/`or`/
+      // `notInArray`), žiadny raw `sql` VALUES trik — `database.md`'s
+      // vlastná skúsenosť (`\s` escape past v `sql` šablóne) je presne
+      // dôvod, prečo sa tu radšej nezavádza nový raw-SQL vzor, keď
+      // existujúci query builder to isté vyjadrí bezpečne.
       let deletedStaleLineCount = 0;
-      for (const [externalOrderId, orderId] of orderIdByExternalId) {
-        const byVariant = lineTotals.get(externalOrderId);
-        // Nemôže nastať v praxi (`orderIdByExternalId` aj `lineTotals` sa
-        // plnia z toho istého `candidates` prechodu vyššie) — defenzívne,
-        // aby prípadný budúci refaktor tento predpoklad nikdy ticho
-        // neporušil zmazaním všetkých riadkov danej objednávky.
-        if (byVariant === undefined) continue;
-        const keepVariantCodes = [...byVariant.keys()];
-        const deleted = await tx
-          .delete(orderLines)
-          .where(and(eq(orderLines.orderId, orderId), notInArray(orderLines.variantCode, keepVariantCodes)))
-          .returning({ id: orderLines.id });
+      for (const batch of chunk([...orderIdByExternalId.entries()], ORDERS_INGEST_BATCH_SIZE)) {
+        const conditions = batch
+          .map(([externalOrderId, orderId]) => {
+            const byVariant = lineTotals.get(externalOrderId);
+            // Nemôže nastať v praxi (`orderIdByExternalId` aj `lineTotals`
+            // sa plnia z toho istého `candidates` prechodu vyššie) —
+            // defenzívne, aby prípadný budúci refaktor tento predpoklad
+            // nikdy ticho neporušil zmazaním všetkých riadkov objednávky.
+            if (byVariant === undefined || byVariant.size === 0) return undefined;
+            return and(eq(orderLines.orderId, orderId), notInArray(orderLines.variantCode, [...byVariant.keys()]));
+          })
+          .filter((condition) => condition !== undefined);
+        if (conditions.length === 0) continue;
+        const deleted = await tx.delete(orderLines).where(or(...conditions)).returning({ id: orderLines.id });
         deletedStaleLineCount += deleted.length;
       }
 
