@@ -24,19 +24,19 @@ const E2E_NAV_EMAIL = "e2e-nav@forestshop.sk";
 // ďalšie záložky HNEĎ POD "Nedostupné tovary" — "Výmena tovaru"/"Vrátený
 // tovar"/"Reklamácie" — šestnásta záložka celkovo (funkčný test v
 // samostatnom `order-flags.spec.ts`, rovnaký vzor). Issue 311 (2026-08-07)
-// pridáva "Vypredané → Skladom: návrhy odkazov" HNEĎ ZA "Vypredané →
-// Skladom" — sedemnásta záložka celkovo (funkčný test v samostatnom
-// `restock-links.spec.ts`, rovnaký vzor). Issue 292 (2026-08-08) pridáva
-// "Preprava DPD" NA KONIEC priečinka "Eshop" — osemnásta záložka celkovo
+// pridalo "Vypredané → Skladom: návrhy odkazov" HNEĎ ZA "Vypredané →
+// Skladom" — issue 387 E8 (2026-08-13) ju ODSTRÁNILO (nahradená obrazovkou
+// "Párovanie", pozri nižšie), takže sa do celkového počtu už nepočíta.
+// Issue 292 (2026-08-08) pridáva "Preprava DPD" NA KONIEC priečinka "Eshop"
 // (funkčný test v samostatnom `dpd.spec.ts`, rovnaký vzor). Issue 342
 // (2026-08-11) pridáva ŠTVRTÝ priečinok "Dôležité" (PRED "Eshop" — hlavný
 // login screen odteraz vidí menu v poradí Dôležité/Eshop/Systém/
 // Automatizácie), presúva "Upozornenia" doňho (z priečinka "Eshop") a pridáva
-// novú záložku "Úlohy na dnes" — devätnásta záložka celkovo (funkčný test v
-// samostatnom `daily-tasks.spec.ts`, rovnaký vzor). Issue 345 (2026-08-11)
-// pridáva "Objednávky predajňa" HNEĎ ZA "Na objednanie" — dvadsiata záložka
-// celkovo (funkčný test v samostatnom `floor-orders.spec.ts`, rovnaký vzor).
-test("ľavé menu má štyri priečinky (Dôležité/Eshop/Systém/Automatizácie) s dvadsiatimi jeden záložkami, klik prepne obrazovku, panel sa zbalí do lišty a stav si pamätá, konzola je čistá", async ({
+// novú záložku "Úlohy na dnes" (funkčný test v samostatnom
+// `daily-tasks.spec.ts`, rovnaký vzor). Issue 345 (2026-08-11) pridáva
+// "Objednávky predajňa" HNEĎ ZA "Na objednanie" (funkčný test v samostatnom
+// `floor-orders.spec.ts`, rovnaký vzor).
+test("ľavé menu má štyri priečinky (Dôležité/Eshop/Systém/Automatizácie) s dvadsiatimi záložkami, klik prepne obrazovku, panel sa zbalí do lišty a stav si pamätá, konzola je čistá", async ({
   page,
 }) => {
   const chyby: string[] = [];
@@ -73,8 +73,9 @@ test("ľavé menu má štyri priečinky (Dôležité/Eshop/Systém/Automatizáci
   await expect(page.getByRole("button", { name: "Systém" })).toHaveAttribute("aria-expanded", "true");
   await expect(page.getByRole("button", { name: "Automatizácie" })).toHaveAttribute("aria-expanded", "true");
 
-  // Presne dvadsaťjeden záložiek v CELOM menu (issue 387 E5 pridalo "Párovanie").
-  await expect(page.locator(".side-nav .tab")).toHaveCount(21);
+  // Presne dvadsať záložiek v CELOM menu (issue 387 E5 pridalo "Párovanie",
+  // E8 odstránilo "Vypredané → Skladom: návrhy odkazov").
+  await expect(page.locator(".side-nav .tab")).toHaveCount(20);
   await expect(page.getByRole("button", { name: "Sync zo Shoptetu" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Texty e-mailov" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Na objednanie" })).toBeVisible();
@@ -222,7 +223,7 @@ test("ľavé menu má štyri priečinky (Dôležité/Eshop/Systém/Automatizáci
 
   // Hlavičky priečinkov zmiznú, ikony všetkých modulov ostanú.
   await expect(page.getByRole("button", { name: "Systém" })).toHaveCount(0);
-  await expect(page.locator(".side-nav .tab")).toHaveCount(21);
+  await expect(page.locator(".side-nav .tab")).toHaveCount(20);
   // Názov sa v lište ukáže bublinou pri prejdení myšou.
   await expect(page.getByRole("button", { name: "Na objednanie" })).toHaveAttribute(
     "title",
