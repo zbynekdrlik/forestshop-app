@@ -665,3 +665,12 @@ vyradilo #311 aj jeho playbook súbor (návrh, sekcia 4); router v
   vzore: zdieľaj testid len PO overení, že podmienky sú GENUINELY
   disjunktné (nie len "vyzerá to tak"), inak dvojznačný Playwright/RTL
   dotaz.
+- **Prepínač spätného zápisu stavov NEMÁ UI — zapína sa LEN cez API** (issue
+  418, 13. 8. 2026, zapnuté rozhodnutím majiteľa): `PUT /api/pairing-review/
+  state-writeback-enabled` s telom `{"enabled": true|false}` (same-origin +
+  rola admin/manazer; read-back GET vráti `{"enabled": ...}`). Singleton
+  riadok `pairing_state_writeback_settings` id=`default` (upsert). Z
+  prihláseného Playwright sedenia stačí `fetch()` v `browser_evaluate` —
+  session cookie aj same-origin sú splnené. Ak niekedy pribudne požiadavka
+  na vypínač v UI, je to nový ticket (endpoint je hotový, chýba len
+  komponent).
