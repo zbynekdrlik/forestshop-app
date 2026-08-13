@@ -186,6 +186,28 @@ paths:
   inštancia, žiadny cleanup skript netreba. Použi UNIKÁTNY názov kontajnera
   a VOĽNÝ port (`ss -ltnp | grep :<port>` najprv) — súbežný worktree môže
   robiť to isté.
+- **Podozrenie "flaky integračný test = zdieľaná-Postgres TRUNCATE kolízia"
+  (bod vyššie) sa dá DOKÁZAŤ, nielen odvodiť z toho, že izolovaný beh
+  prešiel — spusti test na VLASTNEJ throwaway inštancii (postup vyššie) a v
+  strede jeho behu ZÁMERNE vykonaj presne taký TRUNCATE, aký by
+  `scripts/e2e-setup.ts` spravil, priamo cez `docker exec <kontajner> psql
+  -U forestshop -d forestshop -c "TRUNCATE TABLE <tabuľka>;"`.** Issue 405
+  (`shoptet-writeback-sequence.integration.test.ts`): timing na základe
+  reálnych log časových pečiatok testu (kedy appka danú tabuľku číta/píše)
+  + `sleep <N> && docker exec ...` spustený na pozadí PRED foreground
+  behom testu — obidva nahlásené, na prvý pohľad nesúvisiace tvary
+  zlyhania sa takto reprodukovali 1:1 (bajt-za-bajt zhodná chybová
+  hláška), na NULOVOM riziku pre zdieľaný box (vlastný kontajner). Toto je
+  silnejší dôkaz než "izolovaný beh prešiel N-krát" samotné — priamo
+  potvrdzuje MECHANIZMUS, nie len koreláciu. Cielené spustenie LEN jedného
+  súboru/testu proti vlastnému `DATABASE_URL` (namiesto celej `test:
+  integration` sady): `DATABASE_URL=postgres://forestshop:forestshop
+  @127.0.0.1:<port>/forestshop pnpm --filter @forestshop/api exec vitest
+  run tests/<súbor>.integration.test.ts -t "<časť názvu testu>"` — `exec`
+  (nie `test:integration` skript) obchádza balíkov skript a nechá vitest-ov
+  vlastný `-t` filter fungovať priamo (na rozdiel od `pnpm ... e2e --`
+  vyššie v tomto súbore, `vitest run` NEMÁ ten istý `--`-argument problém —
+  `exec vitest run <cesta> -t <vzor>` filtruje správne).
 - **`vitest`/esbuild spustený VNÚTRI worktree si vie svoj "koreň" nájsť
   AŽ v HLAVNOM checkoute, nie vo worktree samotnom — pretože worktree je
   FYZICKY VNORENÝ pod ním (`.claude/worktrees/agent-<id>/`), nie

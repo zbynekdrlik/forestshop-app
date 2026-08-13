@@ -3886,3 +3886,52 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
 - Worktree mode (#317) — commit ostáva na vlastnej vetve `worktree-agent-a702ceb9bd8f82553`,
   supervisor mergne priamo z tejto REF-y a spustí CI pri round-integrácii. Throwaway Postgres
   kontajner (`agent-a702ceb9-pg`, port 5440) odstránený na konci.
+
+## Issues 416 + 405 (2026-08-13, worktree agent-a5e9dfcc17ee273e4)
+
+- Verzia: `0.3.0-dev.249` (commit `b33e356`).
+- **Issue 416** (teoretický deadlock: `ingestOrders`'s reconciliation DELETE
+  vs. `setSupplierLinesOrdered`'s bulk `.for("update")` JOIN, review nález na
+  issue 412): design komentár (Triage: netriviálne, 3 zvážené prístupy,
+  Architektúra sekcia) na tickete PRED kódom. Nový test
+  `tests/orders-ingest-supplier-bulk-deadlock.integration.test.ts` (commit
+  `d9ebcce`) — DETERMINISTICKY orchestruje skutočný AB-BA cyklus (druhé
+  pripojenie zamkne `order_line` PRED `order`, reálny `ingestOrders` sa
+  zasekne naň, druhé pripojenie sa POTOM zaseknutím na `order` samo zacyklí)
+  cez dve nové pomôcky (`findBackendBlockedBy`/`waitUntilBlockedBy`,
+  `pg_blocking_pids` polling, rovnaká technika ako `orders-supplier-bulk-
+  lock.integration.test.ts`). 5/5 lokálnych behov: Postgresov deadlock
+  detektor vyrieši cyklus vždy do ~1.2s, kód `40P01`, DB ostáva konzistentná
+  (žiadny čiastočný zápis) bez ohľadu na to, ktorá strana bola obeťou. Žiadna
+  zmena produkčného kódu — appka to už bezpečne zvláda (outer catch/rethrow +
+  Postgresova transakčná atomicita).
+- **Issue 405** (flaky `shoptet-writeback-sequence.integration.test.ts`'s
+  "state writeback enabled" test, dva rôzne nahlásené tvary zlyhania): design
+  komentár (Triage: triviálne) na tickete pred akoukoľvek zmenou. Príčina
+  identifikovaná analyticky (`isStateWritebackEnabled`'s fail-closed `row?.
+  enabled ?? false` + `link?.syncedAt` čítaný AŽ po celej ~30s sekvencii —
+  dosť dlhé okno pre súbežný `scripts/e2e-setup.ts`'s nezamknutý TRUNCATE z
+  iného worktree) a POTVRDENÁ DELIBERÉRNOU reprodukciou na vlastnej throwaway
+  Postgres inštancii: timovaný `docker exec ... psql -c "TRUNCATE TABLE
+  pairing_state_writeback_settings;"` (~6s do behu) dal presne prvý nahlásený
+  tvar zlyhania (`state:{status:'disabled'}`), `TRUNCATE TABLE product_
+  supplier_link_override` (~20s do behu) dal presne druhý (`link?.syncedAt`
+  undefined). 4x čistý izolovaný beh (žiadna kolízia) — 0 flakov. Žiadna
+  zmena kódu — čisto dokumentačný commit (`49b3b21`).
+- Nezávislý fresh-context `general-purpose` review dispatch (rozsah
+  `origin/dev..HEAD`): pozri report nižšie / na tickete.
+- Plný lokálny beh na izolovanej throwaway Postgres inštancii (port 5440):
+  typecheck + lint čisté, unit web 630 + api 962 zelené, CELÁ integračná
+  sada 105 súborov / 787 testov zelená (vrátane nového deadlock testu),
+  CELÁ e2e sada 57/57 zelená.
+- Playbook: `.claude/rules/shoptet-writeback.md` (presný symptóm-podpis
+  oboch nahlásených zlyhaní pre budúcu session), `.claude/rules/local-dev.md`
+  (technika deliberérnej TRUNCATE reprodukcie na throwaway inštancii + cielené
+  spustenie jedného vitest súboru/testu cez `exec vitest run ... -t`),
+  `.claude/rules/database.md` (technika orchestrácie skutočného obojsmerného
+  deadlock cyklu, nie len jednosmerného TOCTOU čakania).
+- Worktree mode (izolácia, viď skoršie záznamy vyššie v tomto súbore) —
+  commity ostávajú na vlastnej vetve `worktree-agent-a5e9dfcc17ee273e4`,
+  supervisor mergne priamo z tejto REF-y a spustí CI pri round-integrácii.
+  Throwaway Postgres kontajner (`agent-a5e9dfcc17ee273e4-pg`, port 5440)
+  odstránený na konci.
