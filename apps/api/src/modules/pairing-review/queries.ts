@@ -3,21 +3,24 @@
 // KANDIDÁTMI" (INNER JOIN na `pairing_candidate_set` — produkt, ktorý gather
 // ešte nespracoval, sa tu nezobrazuje vôbec, presne ako zadanie žiada).
 //
-// Filtre/badge/progress bez `pairing_decision` (E6, tu ešte neexistuje) —
-// pozri design komentár na tickete (issue 387 E5): "unreviewed" ZNAMENÁ
-// "produkt z gather populácie BEZ efektívnej dodávateľskej linky" (doslovná
-// zhoda so zadaním "nezrevidovaných BEZ ODKAZU"), nie "bez rozhodnutia" (to
-// pole tu neexistuje). Rovnaký MVP vzor ako `product-links/queries.ts`/
+// issue 387 E6: `pairing_decision` (E5's forward-kompat poznámka) teraz
+// EXISTUJE — "unreviewed" ostáva PRIMÁRNE "bez efektívnej linky" (E5's
+// doslovná zhoda so zadaním), ĎALEJ ZÚŽENÉ o produkty, čo už dostali
+// TERMINÁLNE rozhodnutie (`unavailable`/`discontinued` — tie linku NIKDY
+// nedostanú, ale SÚ zrevidované, netreba na ne ďalej upozorňovať). Design
+// komentár na tickete (issue 387 E6): API kontrakt sa nemení, len sa
+// definícia SPRESŇUJE. Rovnaký MVP vzor ako `product-links/queries.ts`/
 // `restock-links/queries.ts`/`pairing-search/select.ts` — celá relevantná
 // populácia (rádovo stovky, nie celý katalóg) sa načíta a filtruje/triedi/
 // stránkuje v JS, keďže `resolveEffectiveSupplierLink` je čistá JS funkcia
 // nad `internalNote`, nedá sa vyjadriť ako SQL predikát bez duplicity.
 
-import { inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
 import {
   pairingCandidates,
   pairingCandidateSets,
+  pairingDecisions,
   productSupplierLinkOverrides,
   products,
   shopProductUrl,
@@ -26,6 +29,7 @@ import {
 import { resolveEffectiveSupplierLink } from "../orders/effective-supplier-link.js";
 import type { PairingConfidence, PairingVerdict } from "../pairing-search/types.js";
 import { SELLABLE_VISIBILITY } from "../restock/constants.js";
+import type { PairingDecisionStatus } from "./decisions.js";
 
 export type PairingReviewFilter = "unreviewed" | "matched" | "unmatched" | "st1" | "st2" | "st3" | "all";
 export type PairingReviewProductState = "sellable" | "out_of_stock" | "discontinued";
@@ -40,6 +44,15 @@ export interface PairingReviewChosenCandidate {
   readonly url: string;
   readonly rawScore: number;
   readonly codeHit: boolean;
+}
+
+// issue 387 E6 — posledné (jediné, appka nedrží históriu) rozhodnutie o
+// produkte, `null` = nezrevidované vôbec. Karta ho potrebuje na vykreslenie
+// odznaku/panelu "↩ Vrátiť"/"Zmeniť" bez ďalšieho volania.
+export interface PairingReviewDecision {
+  readonly status: PairingDecisionStatus;
+  readonly url: string | null;
+  readonly decidedAt: string;
 }
 
 export interface PairingReviewItem {
@@ -65,6 +78,8 @@ export interface PairingReviewItem {
   readonly verdict: PairingVerdict | null;
   /** `null` presne keď `confidence === "none"` (gather nenašiel u dodávateľa nič). */
   readonly chosenCandidate: PairingReviewChosenCandidate | null;
+  /** issue 387 E6 — posledné rozhodnutie, `null` = nezrevidované vôbec (viď `PairingReviewDecision`). */
+  readonly decision: PairingReviewDecision | null;
 }
 
 export interface PairingReviewSearchInput {
@@ -182,7 +197,22 @@ export async function listPairingReview(db: Database, input: PairingReviewSearch
   // vlastný `UNIQUE(product_key, url)` index vynucuje, takže zhoda je vždy
   // jednoznačná. Len kandidát rovný `chosenUrl` sa naozaj vyhľadá nižšie
   // (E5 ukazuje LEN navrhnutého kandidáta, nie všetkých top-8 — design komentár).
-  const candidateByKey = new Map(candidateRows.map((r) => [`${r.productKey} ${r.url}`, r]));
+  const candidateByKey = new Map(candidateRows.map((r) => [`${r.productKey} ${r.url}`, r]));
+
+  // issue 387 E6 — posledné rozhodnutie na produkt, `undefined` keď žiadne.
+  // Samostatný dopyt + Mapa (nie SQL JOIN), rovnaký MVP vzor ako každý iný
+  // spájaný zdroj v tejto funkcii — appka vždy spája v JS, nikdy v SQL, keď
+  // ide o odvodenú/filtrovanú obrazovkovú logiku (hlavička súboru).
+  const decisionRows = await db
+    .select({
+      productKey: pairingDecisions.productKey,
+      status: pairingDecisions.status,
+      url: pairingDecisions.url,
+      decidedAt: pairingDecisions.decidedAt,
+    })
+    .from(pairingDecisions)
+    .where(inArray(pairingDecisions.productKey, productKeys));
+  const decisionByProduct = new Map(decisionRows.map((r) => [r.productKey, r]));
 
   const allItems: PairingReviewItem[] = [];
   for (const set of setRows) {
@@ -229,11 +259,15 @@ export async function listPairingReview(db: Database, input: PairingReviewSearch
 
     const effective = resolveEffectiveSupplierLink(product.internalNote, overrideByProduct.get(set.productKey) ?? null);
 
-    const chosenCandidateRow = set.chosenUrl === null ? undefined : candidateByKey.get(`${set.productKey} ${set.chosenUrl}`);
+    const chosenCandidateRow = set.chosenUrl === null ? undefined : candidateByKey.get(`${set.productKey} ${set.chosenUrl}`);
     const chosenCandidate: PairingReviewChosenCandidate | null =
       chosenCandidateRow === undefined
         ? null
         : { name: chosenCandidateRow.name, url: chosenCandidateRow.url, rawScore: Number(chosenCandidateRow.rawScore), codeHit: chosenCandidateRow.codeHit };
+
+    const decisionRow = decisionByProduct.get(set.productKey);
+    const decision: PairingReviewDecision | null =
+      decisionRow === undefined ? null : { status: decisionRow.status, url: decisionRow.url, decidedAt: decisionRow.decidedAt.toISOString() };
 
     allItems.push({
       productKey: set.productKey,
@@ -253,16 +287,29 @@ export async function listPairingReview(db: Database, input: PairingReviewSearch
       chosenReason: set.chosenReason,
       verdict: set.verdict,
       chosenCandidate,
+      decision,
     });
   }
 
   const gatheredTotal = allItems.length;
   const linkedTotal = allItems.filter((item) => item.hasEffectiveLink).length;
 
+  // issue 387 E6 — "unreviewed" (design komentár na tickete): bez efektívnej
+  // linky A bez TERMINÁLNEHO rozhodnutia (unavailable/discontinued nikdy
+  // nedostanú linku, ale SÚ zrevidované — netreba na ne ďalej upozorňovať).
+  // `good`/`manual` rozhodnutia VŽDY produkujú `hasEffectiveLink === true`
+  // (zdieľaný zápis vždy nastaví override), takže pre ne je táto podmienka
+  // redundantná s prvou časťou — ponechaná explicitne pre čitateľnosť.
+  function isUnreviewed(item: PairingReviewItem): boolean {
+    if (item.hasEffectiveLink) return false;
+    if (item.decision !== null && (item.decision.status === "unavailable" || item.decision.status === "discontinued")) return false;
+    return true;
+  }
+
   const filtered = allItems.filter((item) => {
     switch (input.filter) {
       case "unreviewed":
-        return !item.hasEffectiveLink;
+        return isUnreviewed(item);
       case "matched":
         return item.chosenCandidate !== null;
       case "unmatched":
@@ -292,4 +339,34 @@ export async function listPairingReview(db: Database, input: PairingReviewSearch
   const items = filtered.slice(start, start + input.pageSize);
 
   return { total, gatheredTotal, linkedTotal, items };
+}
+
+export interface PairingReviewCandidate {
+  readonly name: string;
+  readonly url: string;
+  readonly rawScore: number;
+  readonly codeHit: boolean;
+}
+
+// issue 387 E6 — top-8 kandidátov produktu pre rozhodovací panel ("✗ Zlé" →
+// zoznam s "Vybrať"). LAZY (volá sa AŽ pri otvorení panelu, design komentár
+// na tickete) — hlavný zoznam vyššie ukazuje len `chosenCandidate`, nikdy
+// všetkých 8, aby sa nezaťažoval payload každej karty, čo sa nikdy
+// nerozbalí. Dáta sú UŽ perzistované z E2-E4 (`pairing_candidate`), žiadny
+// živý fetch (E5 to explicitne zamietla, kým to nebolo treba).
+export async function listPairingCandidatesForProduct(db: Database, productKey: string): Promise<readonly PairingReviewCandidate[]> {
+  const rows = await db
+    .select({
+      name: pairingCandidates.name,
+      url: pairingCandidates.url,
+      rawScore: pairingCandidates.rawScore,
+      codeHit: pairingCandidates.codeHit,
+      position: pairingCandidates.position,
+    })
+    .from(pairingCandidates)
+    .where(eq(pairingCandidates.productKey, productKey));
+
+  return rows
+    .sort((a, b) => a.position - b.position)
+    .map((r) => ({ name: r.name, url: r.url, rawScore: Number(r.rawScore), codeHit: r.codeHit }));
 }

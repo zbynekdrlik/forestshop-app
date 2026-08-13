@@ -1,20 +1,15 @@
 import { afterEach, expect, it } from "vitest";
-import type { Database } from "../src/db/client.js";
-import {
-  pairingCandidates,
-  pairingCandidateSets,
-  productSupplierLinkOverrides,
-  products,
-  shopProductUrl,
-  users,
-  variants,
-} from "../src/db/schema.js";
+import { productSupplierLinkOverrides, shopProductUrl, users } from "../src/db/schema.js";
 import { createApp } from "../src/http/app.js";
 import { resetLoginRateLimit } from "../src/http/login-rate-limit.js";
 import { hashPassword } from "../src/modules/auth/passwords.js";
 import type { UserRole } from "../src/modules/auth/service.js";
 import { insertTestSnapshot } from "./helpers/catalog.js";
 import { withCleanDb } from "./helpers/db.js";
+// issue 387 E6: `seedProduct`/`seedCandidateSet` vyčlenené do zdieľaného
+// helpera (`helpers/pairing-review.ts`), aby ich vedel použiť aj nový
+// `pairing-review-decisions-http.integration.test.ts` bez duplikácie.
+import { seedPairingCandidateSet as seedCandidateSet, seedPairingReviewProduct as seedProduct } from "./helpers/pairing-review.js";
 
 // issue 387 E5: "Eshop → Párovanie" — LEN čítanie (`GET /api/pairing-review`).
 // Rozhodnutia (E6) tu ešte neexistujú.
@@ -68,90 +63,6 @@ interface Telo {
     readonly verdict: "ok" | "unsure" | null;
     readonly chosenCandidate: { readonly name: string; readonly url: string; readonly rawScore: number; readonly codeHit: boolean } | null;
   }[];
-}
-
-async function seedProduct(
-  db: Database,
-  snapshotId: string,
-  productKey: string,
-  over: {
-    readonly name: string;
-    readonly supplier?: string | null;
-    readonly internalNote?: string | null;
-    readonly variants?: readonly {
-      readonly code: string;
-      readonly externalCode?: string | null;
-      readonly state?: "sellable" | "out_of_stock" | "discontinued";
-      readonly productVisibility?: string;
-      readonly missingSince?: Date | null;
-      readonly price?: string | null;
-    }[];
-  },
-): Promise<void> {
-  const now = new Date("2026-08-13T00:00:00Z");
-  await db.insert(products).values({
-    key: productKey,
-    name: over.name,
-    supplier: over.supplier ?? null,
-    internalNote: over.internalNote ?? null,
-    firstSeenAt: now,
-    lastSeenAt: now,
-    lastSeenSnapshotId: snapshotId,
-  });
-  const variantSpecs = over.variants ?? [{ code: `${productKey}/1` }];
-  for (const v of variantSpecs) {
-    await db.insert(variants).values({
-      code: v.code,
-      productKey,
-      guid: productKey,
-      externalCode: v.externalCode ?? null,
-      name: over.name,
-      price: v.price ?? null,
-      stock: 0,
-      availabilityInStockText: "Skladom",
-      availabilityOutOfStockText: "Vypredané",
-      availabilityText: v.state === "out_of_stock" ? "Vypredané" : "Skladom",
-      productVisibility: v.productVisibility ?? "visible",
-      state: v.state ?? "sellable",
-      missingSince: v.missingSince ?? null,
-      firstSeenAt: now,
-      lastSeenAt: now,
-      lastSeenSnapshotId: snapshotId,
-    });
-  }
-}
-
-async function seedCandidateSet(
-  db: Database,
-  productKey: string,
-  over: {
-    readonly chosenUrl?: string | null;
-    readonly confidence?: "high" | "medium" | "low" | "none";
-    readonly verdict?: "ok" | "unsure" | null;
-    readonly candidates?: readonly { readonly url: string; readonly name: string; readonly rawScore: string; readonly codeHit: boolean }[];
-  } = {},
-): Promise<void> {
-  await db.insert(pairingCandidateSets).values({
-    productKey,
-    gatheredAt: new Date("2026-08-13T03:35:00Z"),
-    queries: ["dopyt"],
-    inputHash: "hash-" + productKey,
-    chosenUrl: over.chosenUrl ?? null,
-    chosenReason: over.chosenUrl !== undefined && over.chosenUrl !== null ? "najlepší nájdený" : null,
-    confidence: over.confidence ?? (over.chosenUrl !== undefined && over.chosenUrl !== null ? "medium" : "none"),
-    verdict: over.verdict ?? null,
-    verdictCheckedAt: over.verdict !== undefined && over.verdict !== null ? new Date("2026-08-13T03:36:00Z") : null,
-  });
-  for (const [i, c] of (over.candidates ?? []).entries()) {
-    await db.insert(pairingCandidates).values({
-      productKey,
-      position: i,
-      name: c.name,
-      url: c.url,
-      rawScore: c.rawScore,
-      codeHit: c.codeHit,
-    });
-  }
 }
 
 it("bez prihlásenia vráti 401", async () => {

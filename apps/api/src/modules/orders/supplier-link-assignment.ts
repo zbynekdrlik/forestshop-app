@@ -37,9 +37,9 @@ export const supplierLinkUrlBody = z.object({
 // Zúžený parameter (rovnaký vzor ako `audit/service.ts`'s `AuditExecutor`,
 // `.claude/rules/database.md`) — musí bežať aj s `tx` (`PgTransaction`),
 // ktorý zdieľa `.select()`/`.insert()` s `Database`, ale nemá jej `$client`.
-type UpsertExecutor = Pick<Database, "select" | "insert">;
+export type UpsertExecutor = Pick<Database, "select" | "insert">;
 
-interface UpsertProductSupplierLinkInput {
+export interface UpsertProductSupplierLinkInput {
   readonly productKey: string;
   readonly url: string;
   readonly actorUserId: string;
@@ -49,11 +49,15 @@ interface UpsertProductSupplierLinkInput {
   readonly lineId: string | null;
 }
 
-// Zdieľané jadro OBOCH zápisových ciest nižšie (`setProductSupplierLink`
-// cez `lineId`, `setProductSupplierLinkForProduct` cez priamy `productKey`)
-// — rovnaký upsert + audit záznam, líšia sa len v tom, AKO sa `productKey`
-// zistí a či existuje `lineId` na zaznamenanie do auditu.
-async function upsertProductSupplierLink(
+// Zdieľané jadro VŠETKÝCH zápisových ciest nižšie/inde (`setProductSupplierLink`
+// cez `lineId`, `setProductSupplierLinkForProduct` cez priamy `productKey`,
+// issue 387 E6's `pairing-review/decisions.ts` cez VLASTNÚ transakciu, keď
+// treba `pairing_decision` upsert + túto linku zapísať ATOMICKY spolu) —
+// rovnaký upsert + audit záznam. Exportované (issue 387 E6) presne preto,
+// aby VLASTNÁ transakcia mohla toto jadro zavolať s SVOJÍM `tx`, namiesto
+// volania `setProductSupplierLinkForProduct` (tá by otvorila DRUHÚ,
+// vnorenú transakciu).
+export async function upsertProductSupplierLink(
   tx: UpsertExecutor,
   input: UpsertProductSupplierLinkInput,
 ): Promise<"ok"> {
