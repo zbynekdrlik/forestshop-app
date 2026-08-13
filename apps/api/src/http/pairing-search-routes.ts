@@ -34,6 +34,18 @@ function isRunResult(detail: unknown): detail is PairingSearchRunResult {
  * `posta-uncollected-routes.ts`/`restock-routes.ts`'s vlastné
  * `runAndRecord`) — aby `GET /api/pairing-search/status` videl ručný beh
  * HNEĎ, nielen po ďalšom nočnom ticku.
+ *
+ * SYNCHRÓNNE ZÁMERNE (issue 387, overené po prvom ostrom ~21-min behu):
+ * appka NEMÁ v sebe žiadny background/fire-and-forget vzor pre `run-now` —
+ * VŠETKY existujúce trasy (`posta-uncollected`, `restock`,
+ * `supplier-stock`, `order-reminder`) sú rovnako synchrónne. Cloudflare
+ * tunel má vlastný ~100s proxy timeout (`.claude/rules/deploy.md`, issue
+ * 227) — dlhý beh cez tunel dostane klientsky HTTP 524, hoci appka beh na
+ * `app:3000` dokončí normálne (`job_run` sa zapíše `success`). Toto NIE JE
+ * prehliadnutý bug, je to zdieľané, zdokumentované a majiteľom akceptované
+ * správanie naprieč VŠETKÝMI päť automatizáciami — never meň LEN túto trasu
+ * na async bez toho, aby sa zmenili aj ostatné štyri (inak appka získa dva
+ * nekonzistentné vzory naraz).
  */
 async function runAndRecord(db: Database, now: Date): Promise<PairingSearchRunResult> {
   const [inserted] = await db
