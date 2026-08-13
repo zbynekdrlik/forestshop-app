@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState, type JSX } from "react";
+import { useCallback, useContext, useEffect, useRef, useState, type JSX } from "react";
+import type { Me } from "../api.js";
 import {
   PAGE_SIZE,
   PAIRING_REVIEW_FILTERS,
@@ -7,15 +8,20 @@ import {
   type PairingReviewFilter,
   type PairingReviewItem,
 } from "../pairingReviewApi.js";
+import { PairingReviewBadgeRefreshContext } from "../pairingReviewBadgeContext.js";
 import { useLoadMore } from "../useLoadMore.js";
 import { PairingReviewCard } from "./PairingReviewCard.js";
 
 // issue 387 E5: "Eshop → Párovanie" — čítacia obrazovka (karty + filtre) nad
-// tým, čo E3 (gather)/E4 (verify) zozbierali. LEN čítanie, žiadne akcie
-// (rozhodnutia prídu v E6). Design komentár na tickete (issue 387 E5):
-// "unreviewed" (default filter, aj badge v `App.tsx`) = "produkt z gather
-// populácie BEZ efektívnej dodávateľskej linky" — pairing_decision (E6) tu
-// ešte neexistuje.
+// tým, čo E3 (gather)/E4 (verify) zozbierali. Design komentár na tickete
+// (issue 387 E5): "unreviewed" (default filter, aj badge v `App.tsx`) =
+// "produkt z gather populácie BEZ efektívnej dodávateľskej linky".
+//
+// issue 387 E6: pridáva rozhodovanie (`PairingReviewCard`'s akčné tlačidlá).
+// Po úspešnom zápise karta zavolá `onDecided` (znova načíta AKTUÁLNY filter
+// na stranu 1 — rovnaký serverový zdroj pravdy ako pri zmene filtra, žiadna
+// duplicitná klientská filter-logika, design komentár na tickete) a
+// `PairingReviewBadgeRefreshContext.refresh()` (odznak v menu).
 //
 // Konvencie appky (`.claude/rules/frontend-design.md`): `useLoadMore` pre
 // stránkovanie, "latest ref" vzor pre `.then()`, `mountedRef` StrictMode-
@@ -46,12 +52,11 @@ function readStoredFilter(): PairingReviewFilter {
   return "unreviewed";
 }
 
-// issue 342 vzor (`DailyTasksSection.tsx`): obrazovka nemá žiadne rolové
-// rozlíšenie (E5 je čisto čítanie, bez akcií) — užší typ props než zdieľané
-// `SectionProps` je platný podtyp `ComponentType<SectionProps>` (nav.ts),
-// keďže `App.tsx` odovzdáva SKUTOČNÝ objekt, nie literál (žiadna "excess
-// property" kontrola).
-export function PairingReviewSection({ onSessionExpired }: { readonly onSessionExpired: () => void }): JSX.Element {
+// issue 387 E6: `role` teraz TREBA (rozhodovacie tlačidlá sa gatujú rovnako
+// ako `RestockLinkSuggestionsSection.tsx`'s `CAN_EDIT_ROLES`) — plný
+// `SectionProps` tvar (`nav.ts`), na rozdiel od E5's užšieho podtypu.
+export function PairingReviewSection({ role, onSessionExpired }: { readonly role: Me["role"]; readonly onSessionExpired: () => void }): JSX.Element {
+  const pairingReviewBadge = useContext(PairingReviewBadgeRefreshContext);
   const [filter, setFilter] = useState<PairingReviewFilter>(readStoredFilter);
   const [items, setItems] = useState<readonly PairingReviewItem[]>([]);
   const [total, setTotal] = useState(0);
@@ -122,6 +127,17 @@ export function PairingReviewSection({ onSessionExpired }: { readonly onSessionE
     // Filter sa mení LEN explicitným klikom nižšie (ktorý sám volá `load`) —
     // tento efekt beží iba raz pri mounte, presne ako sesterské obrazovky.
   }, []);
+
+  // issue 387 E6 — po úspešnom rozhodnutí: znova načítaj AKTUÁLNY filter na
+  // stranu 1 (rovnaký serverový zdroj pravdy, design komentár na tickete —
+  // žiadna duplicitná klientská filter-logika) + odznak v menu. `load()` je
+  // stabilné (prázdne závislosti), `loadedFilterRef` nesie filter, čo
+  // vyprodukoval AKTUÁLNE zobrazené `items` — čítanie `.current` v ceallbacku
+  // je zámerné, nie chýbajúca závislosť (ref).
+  const onDecided = useCallback(() => {
+    load(loadedFilterRef.current);
+    pairingReviewBadge.refresh();
+  }, [load, pairingReviewBadge]);
 
   const changeFilter = useCallback(
     (next: PairingReviewFilter) => {
@@ -214,7 +230,7 @@ export function PairingReviewSection({ onSessionExpired }: { readonly onSessionE
       ) : (
         <div className="pairing-review-list">
           {items.map((item) => (
-            <PairingReviewCard key={item.productKey} item={item} />
+            <PairingReviewCard key={item.productKey} item={item} role={role} onDecided={onDecided} onSessionExpired={onSessionExpired} />
           ))}
         </div>
       )}

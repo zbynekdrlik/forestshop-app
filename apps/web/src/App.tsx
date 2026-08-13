@@ -12,6 +12,7 @@ import { OrderFlagsBadgeRefreshContext } from "./orderFlagsBadgeContext.js";
 import { fetchOrderReminderStatus } from "./orderReminderApi.js";
 import { OrdersRemainingCountContext } from "./ordersRemainingCountContext.js";
 import { fetchPairingReviewUnreviewedCount } from "./pairingReviewApi.js";
+import { PairingReviewBadgeRefreshContext } from "./pairingReviewBadgeContext.js";
 import { fetchPostaUncollectedStatus } from "./postaUncollectedApi.js";
 import { fetchRestockLinksMissingCount } from "./restockLinksApi.js";
 import { RestockLinksBadgeRefreshContext } from "./restockLinksBadgeContext.js";
@@ -109,14 +110,20 @@ export function App(): JSX.Element {
     };
   }, [me, activeTabId, restockLinksRefreshNonce]);
 
-  // issue 387 E5: odznak "Párovanie" — rovnaký PRIAMY vzor ako
+  // issue 387 E5/E6: odznak "Párovanie" — rovnaký PRIAMY vzor ako
   // `restockLinksMissingCount` vyššie (musí byť známy hneď po prihlásení,
   // viditeľný AJ pri nule — issue 331's poučenie o VIDITEĽNOSTI). "unreviewed"
   // (design komentár na tickete) = koľko produktov z gather populácie ešte
-  // NEMÁ efektívnu dodávateľskú linku — E5 nemá ŽIADNU mutáciu, ktorá by toto
-  // číslo menila (rozhodnutia prídu v E6), preto ŽIADEN refresh-nonce/context
-  // navyše — len fetch pri prihlásení/zmene záložky, presne ako `automationStatus`.
+  // NEMÁ efektívnu dodávateľskú linku A nemá TERMINÁLNE rozhodnutie. issue 387
+  // E6 pridalo mutácie (rozhodnutia) — `PairingReviewCard`/`Section` zavolá
+  // `refresh()` (cez `PairingReviewBadgeRefreshContext`) po každom úspešnom
+  // zápise, rovnaký vzor ako `restockLinksBadgeRefresh` vyššie.
   const [pairingReviewUnreviewedCount, setPairingReviewUnreviewedCount] = useState<number | null>(null);
+  const [pairingReviewRefreshNonce, setPairingReviewRefreshNonce] = useState(0);
+  const pairingReviewBadgeRefresh = useCallback(() => {
+    setPairingReviewRefreshNonce((n) => n + 1);
+  }, []);
+  const pairingReviewBadgeContextValue = useMemo(() => ({ refresh: pairingReviewBadgeRefresh }), [pairingReviewBadgeRefresh]);
   useEffect(() => {
     if (me === null) return;
     let cancelled = false;
@@ -130,7 +137,7 @@ export function App(): JSX.Element {
     return () => {
       cancelled = true;
     };
-  }, [me, activeTabId]);
+  }, [me, activeTabId, pairingReviewRefreshNonce]);
 
   // issue 290: odznaky "Výmena tovaru"/"Vrátený tovar"/"Reklamácie" — rovnaký
   // priamy vzor ako `upozorneniaCount` vyššie (JEDEN endpoint, `App.tsx` si
@@ -314,36 +321,38 @@ export function App(): JSX.Element {
     <OrdersRemainingCountContext.Provider value={ordersRemainingCountContextValue}>
       <UpozorneniaBadgeRefreshContext.Provider value={upozorneniaBadgeContextValue}>
         <RestockLinksBadgeRefreshContext.Provider value={restockLinksBadgeContextValue}>
-          <OrderFlagsBadgeRefreshContext.Provider value={orderFlagsBadgeContextValue}>
-            <div className="app-shell">
-              <Sidebar
-                folders={NAV}
-                activeTabId={activeTabId}
-                onSelectTab={selectTab}
-                badgeCounts={badgeCounts}
-                badgeStatus={automationStatus}
-              />
-              <div className="main">
-                <Topbar
-                  title={isVisibleTabId(activeTabId) ? (tab?.label ?? null) : null}
-                  greeting={`Prihlásený: ${me.displayName} (${me.role})`}
-                  role={me.role}
-                  onSessionExpired={reload}
-                  onLogout={logout}
-                  passwordPanelOpen={passwordPanelOpen}
-                  onTogglePasswordPanel={() => {
-                    setPasswordPanelOpen((open) => !open);
-                  }}
-                >
-                  <ChangePasswordForm email={me.email} onSessionExpired={reload} />
-                </Topbar>
-                <main className={tab?.wide === true ? "main-wide" : undefined}>
-                  {logoutError !== "" && <p role="alert">{logoutError}</p>}
-                  {ActiveComponent !== null && <ActiveComponent role={me.role} onSessionExpired={reload} />}
-                </main>
+          <PairingReviewBadgeRefreshContext.Provider value={pairingReviewBadgeContextValue}>
+            <OrderFlagsBadgeRefreshContext.Provider value={orderFlagsBadgeContextValue}>
+              <div className="app-shell">
+                <Sidebar
+                  folders={NAV}
+                  activeTabId={activeTabId}
+                  onSelectTab={selectTab}
+                  badgeCounts={badgeCounts}
+                  badgeStatus={automationStatus}
+                />
+                <div className="main">
+                  <Topbar
+                    title={isVisibleTabId(activeTabId) ? (tab?.label ?? null) : null}
+                    greeting={`Prihlásený: ${me.displayName} (${me.role})`}
+                    role={me.role}
+                    onSessionExpired={reload}
+                    onLogout={logout}
+                    passwordPanelOpen={passwordPanelOpen}
+                    onTogglePasswordPanel={() => {
+                      setPasswordPanelOpen((open) => !open);
+                    }}
+                  >
+                    <ChangePasswordForm email={me.email} onSessionExpired={reload} />
+                  </Topbar>
+                  <main className={tab?.wide === true ? "main-wide" : undefined}>
+                    {logoutError !== "" && <p role="alert">{logoutError}</p>}
+                    {ActiveComponent !== null && <ActiveComponent role={me.role} onSessionExpired={reload} />}
+                  </main>
+                </div>
               </div>
-            </div>
-          </OrderFlagsBadgeRefreshContext.Provider>
+            </OrderFlagsBadgeRefreshContext.Provider>
+          </PairingReviewBadgeRefreshContext.Provider>
         </RestockLinksBadgeRefreshContext.Provider>
       </UpozorneniaBadgeRefreshContext.Provider>
     </OrdersRemainingCountContext.Provider>
