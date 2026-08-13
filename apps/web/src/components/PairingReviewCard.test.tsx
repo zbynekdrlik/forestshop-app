@@ -32,6 +32,7 @@ const MATCHED_ITEM = {
   priceMax: "64.90",
   currency: "EUR",
   ourUrl: "https://www.forestshop.sk/bunda-alfa",
+  ourUrlIsSearchFallback: false,
   ourImageUrl: "https://www.forestshop.sk/img/bunda.jpg",
   hasEffectiveLink: false,
   gatheredAt: "2026-08-13T03:35:00.000Z",
@@ -66,6 +67,22 @@ const DECIDED_GOOD_ITEM = {
 afterEach(() => {
   cleanup();
   vi.resetAllMocks();
+});
+
+// issue 402: majiteľ — "otvorí sa vyhľadávanie namiesto produktu, nič to
+// nehovorí" — odkaz na vyhľadávací fallback sa MUSÍ dať vizuálne odlíšiť od
+// priameho odkazu na produkt.
+it("ourUrlIsSearchFallback=true pridá vizuálne odlíšenie (trieda + poznámka), false ho vynechá", async () => {
+  const { unmount } = render(<PairingReviewCard item={{ ...MATCHED_ITEM, ourUrlIsSearchFallback: true }} role="manazer" onDecided={() => {}} onSessionExpired={() => {}} />);
+  const fallbackLink = await screen.findByTestId("pairing-review-our-link-PR-1");
+  expect(fallbackLink.className).toContain("pairing-review-name-fallback");
+  expect(screen.getByTestId("pairing-review-fallback-note-PR-1")).toBeDefined();
+  unmount();
+
+  render(<PairingReviewCard item={MATCHED_ITEM} role="manazer" onDecided={() => {}} onSessionExpired={() => {}} />);
+  const directLink = await screen.findByTestId("pairing-review-our-link-PR-1");
+  expect(directLink.className).not.toContain("pairing-review-name-fallback");
+  expect(screen.queryByTestId("pairing-review-fallback-note-PR-1")).toBeNull();
 });
 
 it("'citanie' rola nevidí ŽIADNE akčné tlačidlo", async () => {

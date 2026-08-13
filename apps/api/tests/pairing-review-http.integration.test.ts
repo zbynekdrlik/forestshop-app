@@ -57,6 +57,7 @@ interface Telo {
     readonly priceMin: string | null;
     readonly priceMax: string | null;
     readonly ourUrl: string;
+    readonly ourUrlIsSearchFallback: boolean;
     readonly ourImageUrl: string | null;
     readonly hasEffectiveLink: boolean;
     readonly confidence: "high" | "medium" | "low" | "none";
@@ -209,10 +210,14 @@ it("naša URL/obrázok prichádza zo shop_product_url zhody podľa kódu variant
   const telo = (await (await app.request("/api/pairing-review?filter=all", { headers: { cookie } })).json()) as Telo;
   const withFeed = telo.items.find((i) => i.productKey === "PR-FEED");
   expect(withFeed?.ourUrl).toBe("https://www.forestshop.sk/produkt-s-feedom");
+  expect(withFeed?.ourUrlIsSearchFallback).toBe(false);
   expect(withFeed?.ourImageUrl).toBe("https://www.forestshop.sk/img/x.jpg");
 
   const withoutFeed = telo.items.find((i) => i.productKey === "PR-NOFEED");
   expect(withoutFeed?.ourUrl).toBe("https://www.forestshop.sk/vyhladavanie/?string=" + encodeURIComponent("Produkt Bez Feedu"));
+  // issue 402: fallback bez akéhokoľvek shop_product_url riadku sa MUSÍ dať
+  // rozlíšiť od priameho odkazu — karta ho vizuálne odlíši práve podľa tohto poľa.
+  expect(withoutFeed?.ourUrlIsSearchFallback).toBe(true);
   expect(withoutFeed?.ourImageUrl).toBeNull();
 });
 
