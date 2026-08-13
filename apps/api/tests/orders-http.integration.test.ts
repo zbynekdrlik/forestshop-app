@@ -250,6 +250,7 @@ const fakeAcceptedResult: OrdersIngestResult = {
   pseudoItemCount: 0,
   issueCount: 0,
   skippedResolvedReturnCount: 0,
+  deletedStaleLineCount: 0,
   rawPath: "/tmp/fake.csv.gz",
 };
 
@@ -278,6 +279,7 @@ it("import objednávok s cudzím Origin je odmietnutý (403), rovnaký pôvod pr
       pseudoItemCount: 0,
       issueCount: 0,
       skippedResolvedReturnCount: 0,
+      deletedStaleLineCount: 0,
       rawPath: "/tmp/fake.csv.gz",
     });
   const { app, cookie } = await boot("manazer", runOrdersIngest);
@@ -327,6 +329,7 @@ it("ručný import spustí manažér a zapíše sa do auditu so skutočným výs
     pseudoItemCount: 0,
     issueCount: 0,
     skippedResolvedReturnCount: 0,
+    deletedStaleLineCount: 0,
     rawPath: "/tmp/fake.csv.gz",
   };
   const runOrdersIngest: RunOrdersIngest = () => Promise.resolve(fakeResult);
@@ -371,6 +374,7 @@ it("druhé súbežné spustenie importu vráti busy namiesto paralelného behu",
     pseudoItemCount: 0,
     issueCount: 0,
     skippedResolvedReturnCount: 0,
+    deletedStaleLineCount: 0,
     rawPath: "/tmp/fake.csv.gz",
   });
   const prvy = await prvyPromise;

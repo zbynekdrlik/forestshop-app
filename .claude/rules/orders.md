@@ -668,3 +668,44 @@ paths:
   `desc(fetchedAt), desc(id)`. Test na KAŽDÝ ĎALŠÍ nový `ORDER BY placedAt`
   dopyt s LIMIT/OFFSET: pridaj rovnaký tie-breaker, inak stránkovanie môže
   riadok zopakovať alebo stratiť pri zhode timestampu.
+- **Issue 412: `ingestOrders` teraz `order_line` riadky AJ MAŽE, nielen
+  INSERTuje/UPDATEuje — zosúladenie s aktuálnym exportom, keď Shoptet
+  vymení/odstráni produkt na už prijatej objednávke.** Predtým: upsert
+  keyed na `(order_id, variant_code)` NOVÝ produkt vždy pridal (INSERT
+  vetva ON CONFLICT), ale STARÝ riadok, ktorého dvojica z novšieho
+  exportu zmizla, navždy zostal v DB — presne bug #412 (objednávka
+  20261306 stále ukazovala dávno vymenenú "Flisová bunda Percussion
+  Scotland"). Fix: po existujúcom upsert cykle, pre KAŽDÚ objednávku,
+  ktorú TENTO beh spracoval (`orderIdByExternalId`), zmaž `order_line`
+  riadky, ktorých `variant_code` NIE JE medzi kľúčmi
+  `lineTotals.get(externalOrderId)` — surová množina variantov, ČO
+  TENTO EXPORT hlási, PRED filtrom na "známy variant v katalógu" (inak
+  by sa mohol zmazať legitímny existujúci riadok len preto, že
+  katalógové overenie preň v TOMTO JEDNOM behu zlyhalo). Riadky
+  objednávok MIMO tohto behu (staršie než okno, objednávka bez
+  jediného reálneho produktu v tomto behu) sa vôbec nedotýkajú.
+  Dávkovaný set-based DELETE cez `chunk()` (rovnaký vzor ako zvyšok
+  súboru), postavený VÝHRADNE z existujúceho drizzle query builderu
+  (`and`/`or`/`notInArray`) — žiadny nový raw-SQL VALUES trik (review
+  finding, issue 412 — vyhol sa tomuto zámerne, viď `\s`-escape past
+  vyššie v tomto súbore aj v `.claude/rules/database.md`).
+  **FK prieskum (design komentár na tickete, over pred KAŽDOU ďalšou
+  zmenou tejto oblasti, ktorá by chcela `order_line` mazať/nahrádzať):
+  NIČ v appke nemá cudzí kľúč na `order_line.id` ani na dvojicu
+  (order_id, variant_code)** — `order_reminder_state` (kľúč
+  `order_code`), `dpd_shipment` (kľúč `order_id`),
+  `product_supplier_override`/`product_supplier_link_override` (kľúč
+  `product_key`) a Zlúčenie objednávok (číta LEN `order`) prežijú
+  zmazanie bez zmeny; `audit_events.entity_id` je prostý text bez FK;
+  frontendov `lineId` je len dočasný React stav, súbežný zápis na
+  medzičasom zmazaný riadok narazí na už existujúcu "not_found" vetvu
+  (`state.ts`). **Poradie zamykania:** táto DELETE (rovnako ako
+  existujúci `order_line` upsert PRED ňou) drží `order` riadky
+  zamknuté z hlavného upsertu a POTOM zamyká `order_line` — teoreticky
+  sa to môže stretnúť s `setSupplierLinesOrdered`'s `.for("update", {
+  of: [orderLines, orders] })` v OPAČNOM poradí (AB-BA cyklus,
+  Postgres deadlock detektor to bezpečne vyrieši, žiadna korupcia).
+  Toto NIE JE nová trieda rizika (appka ju má už roky cez existujúci
+  upsert) — vyhradený deterministický regresný test tejto interakcie
+  (rovnaká technika ako `orders-supplier-bulk-lock.integration.test.ts`)
+  je samostatný ticket #416, mimo rozsahu #412.
