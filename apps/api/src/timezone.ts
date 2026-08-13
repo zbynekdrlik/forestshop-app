@@ -6,7 +6,7 @@
 // nečitateľnom UTC tvare namiesto slovenského. Predtým existovali DVE
 // samostatné implementácie toho istého triku (`modules/orders/parser.ts`'s
 // `parseShopLocalDateTime`, `modules/orders/overview.ts`'s
-// `computeBratislavaPeriodBoundaries`) — tento modul je JEDNO spoločné
+// `computeOrdersDashboardBoundaries`) — tento modul je JEDNO spoločné
 // miesto na koreňovej `src/` úrovni (rovnaká úroveň ako `logger.ts`/
 // `env.ts` — cross-cutting utilita, nepatrí žiadnemu konkrétnemu
 // `modules/*`), obe znovu použijú `getZonedDateParts` namiesto duplicitného
