@@ -2371,6 +2371,20 @@ a.upozornenie-title:hover {
    Majiteľova požiadavka: "space-effective", "nieže dám 4 na stranu" — riadky
    sú preto ÚZKE (žiadne karty s tieňom/rámikom ako Upozornenia, len tenká
    deliaca čiara), aby sa na obrazovku zmestilo veľa úloh naraz. */
+/* issue 403 (majiteľ: "stale to je otras"): `.uloha-text`ov `flex:1 1 auto`
+   + `.uloha-actions`ov `margin-left:auto` (nižšie) sa bez OHRANIČENIA šírky
+   rodiča naťahovali cez CELÚ neohraničenú `<section>` — pri 1440px okne
+   nameraná priemerná mŕtva medzera medzi textom a ikonami (✏️😊🗑) bola
+   771px. `.ulohy-panel` (obaľuje `addRow` + zoznam/empty/error stavy,
+   `DailyTasksSection.tsx`) obmedzuje šírku na `max-width: 40rem` — rovnaký
+   ustálený vzor ako `.ord-supplier-link-edit` (issue 162's komentár vyššie
+   v tomto súbore). Naživo overené na produkcii: mŕtva medzera klesla na
+   priemerne 338px (-56 %), riadková výška ostala nezmenená (30-31px) —
+   ide o šírku PANELU, nie o "karty", takže vyššie zaznamenané rozhodnutie
+   proti Upozornenia-štýlu kartám ostáva v platnosti.  */
+.ulohy-panel {
+  max-width: 40rem;
+}
 .ulohy-add-row {
   display: flex;
   gap: var(--fs-space-2);
@@ -2391,7 +2405,12 @@ a.upozornenie-title:hover {
 }
 .uloha-row {
   display: flex;
-  align-items: center;
+  /* issue 403: `flex-start`, nie `center` — pri zalomení textu na užšom
+     okne (viac riadkov) drží checkbox/ikony pri PRVOM riadku textu, nie v
+     strede celého zalomeného bloku. Pri bežnom jednoriadkovom texte (drvivá
+     väčšina úloh) je vizuálny rozdiel nulový — všetky flex-item majú
+     rovnakú výšku ako jediný riadok textu. */
+  align-items: flex-start;
   gap: var(--fs-space-2);
   padding: var(--fs-space-1) var(--fs-space-2);
   border-bottom: 1px solid var(--fs-border-soft);
@@ -2399,6 +2418,13 @@ a.upozornenie-title:hover {
 }
 .uloha-row:first-child {
   border-top: 1px solid var(--fs-border-soft);
+}
+/* issue 403: nenápadné zvýraznenie riadku pod kurzorom — teraz, keď je
+   ovládanie ohraničené na `.ulohy-panel`'s 640px (nie roztiahnuté cez
+   celú stránku), pomáha oku pri prehľadávaní dlhšieho zoznamu spojiť
+   text riadku s jeho vlastnými ikonami vpravo. */
+.uloha-row:hover {
+  background: var(--fs-surface-alt);
 }
 /* Vybavené úlohy OSTÁVAJÚ v zozname (design rozhodnutie na tickete — poradie
    je čisto chronologické), len vizuálne stlmené: prečiarknutý text + nižší
@@ -2410,14 +2436,32 @@ a.upozornenie-title:hover {
 .uloha-row.done .uloha-text {
   text-decoration: line-through;
 }
-.uloha-done-toggle {
+/* issue 403: skutočný `<input type="checkbox">` namiesto `<button>`u s
+   Unicode ☐/☑ (13.5×15px, tenké) — jediné miesto v appke, kde hlavný
+   ovládací prvok obrazovky bol len text namiesto skutočného UI prvku.
+   Rovnaký `accent-color` token ako `.order-group input[type="checkbox"]`
+   (Objednávky), o niečo menšia veľkosť (1.125rem vs. 1.375rem), aby sa
+   zmestila do 30px riadku bez zvýšenia jeho výšky. `margin-top` opticky
+   zarovná checkbox s prvým riadkom textu pod `.uloha-row`ov nový
+   `align-items: flex-start`.
+   Selektor MUSÍ byť `.uloha-row .uloha-done-toggle` (nie bare
+   `.uloha-done-toggle`) — globálny reset `input:not([type="hidden"])`
+   (tento súbor, riadok ~161: `width:100%`) má špecificitu (0,0,1,1)
+   (1 trieda z `:not([...])` + `input` element), zatiaľ čo samotná
+   `.uloha-done-toggle` má len (0,0,1,0) a globálny reset by ju PREBIL —
+   naživo reprodukované: checkbox dostal `width:100%`, ukradol takmer celú
+   šírku riadku a `.uloha-text` skončil s vypočítanou šírkou 0px (Playwright
+   e2e to nahlásilo ako "hidden"). Vzor s rodičovskou triedou (`.uloha-row
+   .uloha-done-toggle` = (0,0,2,0)) porazí globálny reset BEZPODMIENEČNE,
+   rovnako ako existujúci vzor `.order-group input[type="checkbox"]`
+   ((0,0,2,1)) o kus vyššie v tomto súbore. */
+.uloha-row .uloha-done-toggle {
   flex: 0 0 auto;
-  background: none;
-  border: none;
+  width: 1.125rem;
+  height: 1.125rem;
+  margin: 0.1rem 0 0;
+  accent-color: var(--fs-brand);
   cursor: pointer;
-  font-size: var(--fs-text-md);
-  line-height: 1;
-  padding: 0;
 }
 .uloha-done-toggle:disabled {
   opacity: 0.5;
