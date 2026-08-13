@@ -162,25 +162,58 @@ async function loadAdapterByNormalizedSupplier(db: Database): Promise<ReadonlyMa
   return map;
 }
 
-export async function listPairingReview(db: Database, input: PairingReviewSearchInput): Promise<PairingReviewSearchResult> {
-  // issue 401 — populácia je ÚNIA troch množín (design komentár na tickete
-  // 398/401): (1) produkty S `pairing_candidate_set` riadkom (gatherované,
-  // akéhokoľvek dodávateľa), (2) produkty BEZ efektívnej dodávateľskej linky
-  // (akéhokoľvek dodávateľa — adaptér alebo nie), (3) produkty S
-  // `pairing_decision` riadkom (rozhodnuté cez TÚTO obrazovku — zostávajú
-  // viditeľné aj keď medzitým získajú efektívnu linku, napr. "manual").
-  // Rovnaký MVP vzor ako `pairing-search/select.ts`/`product-links`/
-  // `restock-links` — celý katalóg do JS, filtrovanie/spájanie tam
-  // (`resolveEffectiveSupplierLink` je čistá JS funkcia, nedá sa vyjadriť
-  // ako SQL predikát bez duplicity — súborová hlavička).
+// issue 401 — populácia obrazovky je ÚNIA troch množín (design komentár na
+// tickete 398/401): (1) produkty S `pairing_candidate_set` riadkom
+// (gatherované, akéhokoľvek dodávateľa), (2) produkty BEZ efektívnej
+// dodávateľskej linky (akéhokoľvek dodávateľa — adaptér alebo nie), (3)
+// produkty S `pairing_decision` riadkom (rozhodnuté cez TÚTO obrazovku —
+// zostávajú viditeľné aj keď medzitým získajú efektívnu linku, napr.
+// "manual"). Rovnaký MVP vzor ako `pairing-search/select.ts`/`product-links`/
+// `restock-links` — celý katalóg do JS, filtrovanie/spájanie tam
+// (`resolveEffectiveSupplierLink` je čistá JS funkcia, nedá sa vyjadriť ako
+// SQL predikát bez duplicity). Vyčlenené z `listPairingReview` (issue 399) —
+// TOTO je jediné miesto, čo naozaj potrebuje CELÝ katalóg; `getPairingReviewItem`
+// nižšie (jednoproduktové vyhľadanie pre "Hľadať / opraviť") ho nepotrebuje.
+async function determineReviewPopulationKeys(db: Database): Promise<string[]> {
+  const productRows = await db.select({ key: products.key, internalNote: products.internalNote }).from(products);
+  if (productRows.length === 0) return [];
+
+  const overrideRowsAll = await db.select({ productKey: productSupplierLinkOverrides.productKey, url: productSupplierLinkOverrides.url }).from(productSupplierLinkOverrides);
+  const overrideByProduct = new Map(overrideRowsAll.map((r) => [r.productKey, r.url]));
+
+  const setKeyRows = await db.select({ productKey: pairingCandidateSets.productKey }).from(pairingCandidateSets);
+  const setKeys = new Set(setKeyRows.map((r) => r.productKey));
+
+  const decisionKeyRows = await db.select({ productKey: pairingDecisions.productKey }).from(pairingDecisions);
+  const decisionKeys = new Set(decisionKeyRows.map((r) => r.productKey));
+
+  const productKeys: string[] = [];
+  for (const product of productRows) {
+    const effective = resolveEffectiveSupplierLink(product.internalNote, overrideByProduct.get(product.key) ?? null);
+    if (setKeys.has(product.key) || effective.url === null || decisionKeys.has(product.key)) productKeys.push(product.key);
+  }
+  return productKeys;
+}
+
+// issue 399 — zdieľané budovanie karty(-diet) pre KONKRÉTNU množinu
+// `productKeys` — SCOPED dopyty (`inArray`), nikdy celý katalóg. Používané
+// AJ z `listPairingReview` (nad populáciou určenou vyššie), AJ z
+// `getPairingReviewItem` (jeden kľúč, "Hľadať / opraviť" tab — produkt MIMO
+// dnešnej populácie, napr. už s efektívnou linkou bez kandidáta/rozhodnutia,
+// sa tak dá otvoriť/opraviť rovnako ako ktorýkoľvek iný).
+async function buildPairingReviewItems(db: Database, productKeys: string[]): Promise<PairingReviewItem[]> {
+  if (productKeys.length === 0) return [];
+
   const productRows = await db
     .select({ key: products.key, name: products.name, supplier: products.supplier, internalNote: products.internalNote })
-    .from(products);
-  if (productRows.length === 0) return { total: 0, gatheredTotal: 0, linkedTotal: 0, items: [] };
+    .from(products)
+    .where(inArray(products.key, productKeys));
+  const productByKey = new Map(productRows.map((r) => [r.key, r]));
 
   const overrideRowsAll = await db
     .select({ productKey: productSupplierLinkOverrides.productKey, url: productSupplierLinkOverrides.url })
-    .from(productSupplierLinkOverrides);
+    .from(productSupplierLinkOverrides)
+    .where(inArray(productSupplierLinkOverrides.productKey, productKeys));
   const overrideByProduct = new Map(overrideRowsAll.map((r) => [r.productKey, r.url]));
 
   const setRowsAll = await db
@@ -192,7 +225,8 @@ export async function listPairingReview(db: Database, input: PairingReviewSearch
       confidence: pairingCandidateSets.confidence,
       verdict: pairingCandidateSets.verdict,
     })
-    .from(pairingCandidateSets);
+    .from(pairingCandidateSets)
+    .where(inArray(pairingCandidateSets.productKey, productKeys));
   const setByProduct = new Map(setRowsAll.map((r) => [r.productKey, r]));
 
   const decisionRowsAll = await db
@@ -202,21 +236,11 @@ export async function listPairingReview(db: Database, input: PairingReviewSearch
       url: pairingDecisions.url,
       decidedAt: pairingDecisions.decidedAt,
     })
-    .from(pairingDecisions);
+    .from(pairingDecisions)
+    .where(inArray(pairingDecisions.productKey, productKeys));
   const decisionByProduct = new Map(decisionRowsAll.map((r) => [r.productKey, r]));
 
   const adapterByNormalizedSupplier = await loadAdapterByNormalizedSupplier(db);
-
-  const productKeys: string[] = [];
-  for (const product of productRows) {
-    const effective = resolveEffectiveSupplierLink(product.internalNote, overrideByProduct.get(product.key) ?? null);
-    const hasCandidateSet = setByProduct.has(product.key);
-    const hasDecision = decisionByProduct.has(product.key);
-    if (hasCandidateSet || effective.url === null || hasDecision) productKeys.push(product.key);
-  }
-  if (productKeys.length === 0) return { total: 0, gatheredTotal: 0, linkedTotal: 0, items: [] };
-
-  const productByKey = new Map(productRows.map((r) => [r.key, r]));
 
   const variantRows: VariantRow[] = await db
     .select({
@@ -268,8 +292,8 @@ export async function listPairingReview(db: Database, input: PairingReviewSearch
   const allItems: PairingReviewItem[] = [];
   for (const productKey of productKeys) {
     const product = productByKey.get(productKey);
-    // Nedosiahnuteľné (`productKey` vzišlo priamo z `productRows` vyššie) —
-    // len na uspokojenie `noUncheckedIndexedAccess`/typovej kontroly.
+    // Produkt so zadaným kľúčom neexistuje (napr. neplatný `getPairingReviewItem`
+    // vstup) — jednoducho sa preskočí, volajúci to rieši ako "nenájdené".
     if (product === undefined) continue;
 
     const set = setByProduct.get(productKey);
@@ -356,12 +380,36 @@ export async function listPairingReview(db: Database, input: PairingReviewSearch
     });
   }
 
+  return allItems;
+}
+
+// issue 399 — jednoproduktová verzia `buildPairingReviewItems` pre "Hľadať /
+// opraviť" tab: nájde/postaví kartu pre AKÝKOĽVEK produkt (kód/názov/
+// dodávateľ, `GET /api/search`), NEZÁVISLE od toho, či je v `listPairingReview`'s
+// populácii (design komentár na tickete, sekcia "Prístup 1" — únia troch
+// množín vylučuje napr. produkt, čo už má efektívnu linku, ale žiadny
+// `pairing_candidate_set`/`pairing_decision` riadok). `null` = neznámy `productKey`.
+export async function getPairingReviewItem(db: Database, productKey: string): Promise<PairingReviewItem | null> {
+  const items = await buildPairingReviewItems(db, [productKey]);
+  return items[0] ?? null;
+}
+
+export async function listPairingReview(db: Database, input: PairingReviewSearchInput): Promise<PairingReviewSearchResult> {
+  const productKeys = await determineReviewPopulationKeys(db);
+  if (productKeys.length === 0) return { total: 0, gatheredTotal: 0, linkedTotal: 0, items: [] };
+
+  const allItems = await buildPairingReviewItems(db, productKeys);
+
   // issue 401 — mená polí (`gatheredTotal`/`linkedTotal`) ostávajú NEZMENENÉ
   // (API kontrakt), ale VÝZNAM sa rozšíril spolu s populáciou vyššie —
   // `gatheredTotal` je teraz "koľko produktov appka na tejto obrazovke
   // sleduje" (nie len "koľko bolo gatherovaných"), badge/progress bar
   // (`PairingReviewSection.tsx`) tak automaticky počítajú novú, plnú
-  // populáciu bez zmeny na strane frontendu.
+  // populáciu bez zmeny na strane frontendu. issue 399: `linkedTotal` zostáva
+  // ZÁMERNE VÝHRADNE `hasEffectiveLink` (produktová úroveň) — split produkt sa
+  // sem NEPOČÍTA, hoci má reálne per-veľkosť linky (`pairingVariantLinks`);
+  // jeho vlastný stav je viditeľný cez `decision.status === "split"` na karte
+  // samej, tento súčet zostáva o produktovej linke, nie o "je vyriešené".
   const gatheredTotal = allItems.length;
   const linkedTotal = allItems.filter((item) => item.hasEffectiveLink).length;
 
@@ -371,9 +419,12 @@ export async function listPairingReview(db: Database, input: PairingReviewSearch
   // `good`/`manual` rozhodnutia VŽDY produkujú `hasEffectiveLink === true`
   // (zdieľaný zápis vždy nastaví override), takže pre ne je táto podmienka
   // redundantná s prvou časťou — ponechaná explicitne pre čitateľnosť.
+  // issue 399: `split` PRIDANÉ do TERMINÁLNEJ vetvy — rozdelený produkt má
+  // svoje linky uložené per veľkosť (nikdy `hasEffectiveLink`), ale JE
+  // zrevidovaný, netreba naň ďalej upozorňovať v "Nezrevidované".
   function isUnreviewed(item: PairingReviewItem): boolean {
     if (item.hasEffectiveLink) return false;
-    if (item.decision !== null && (item.decision.status === "unavailable" || item.decision.status === "discontinued")) return false;
+    if (item.decision !== null && (item.decision.status === "unavailable" || item.decision.status === "discontinued" || item.decision.status === "split")) return false;
     return true;
   }
 

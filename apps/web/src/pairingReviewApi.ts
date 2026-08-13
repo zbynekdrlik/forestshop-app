@@ -17,7 +17,9 @@ const chosenCandidateSchema = z.object({
   codeHit: z.boolean(),
 });
 
-export const PAIRING_DECISION_STATUSES = ["good", "manual", "unavailable", "discontinued"] as const;
+// issue 399 — `split`: produkt rozdelený na per-veľkosť linky (žiadna `url`
+// na TOMTO stĺpci, presne ako `unavailable`/`discontinued`).
+export const PAIRING_DECISION_STATUSES = ["good", "manual", "unavailable", "discontinued", "split"] as const;
 export type PairingDecisionStatus = (typeof PAIRING_DECISION_STATUSES)[number];
 
 const decisionSchema = z.object({
@@ -130,12 +132,13 @@ export async function fetchPairingCandidates(productKey: string): Promise<readon
 }
 
 // issue 387 E6 — diskriminovaná únia presne zrkadliaca server (`http/pairing-
-// review-routes.ts`'s `pairingDecisionBody`).
+// review-routes.ts`'s `pairingDecisionBody`). issue 399 — `split` pridané.
 export type PairingDecisionAction =
   | { readonly status: "good" }
   | { readonly status: "manual"; readonly url: string }
   | { readonly status: "unavailable" }
   | { readonly status: "discontinued" }
+  | { readonly status: "split" }
   | { readonly status: "revert" };
 
 export async function sendPairingDecision(productKey: string, action: PairingDecisionAction): Promise<void> {
@@ -145,4 +148,37 @@ export async function sendPairingDecision(productKey: string, action: PairingDec
     body: JSON.stringify(action),
   });
   await readJson(response, "Uloženie rozhodnutia sa nepodarilo");
+}
+
+// issue 399 — "Hľadať / opraviť": jedna karta pre AKÝKOĽVEK produkt, `null`
+// = neznámy `productKey` (404 sa NIKDY nehádže — volajúci to rieši ako
+// "nenájdené", nie ako sieťovú/serverovú chybu).
+export async function fetchPairingReviewItem(productKey: string): Promise<PairingReviewItem | null> {
+  const response = await fetch(`/api/pairing-review/${encodeURIComponent(productKey)}`);
+  if (response.status === 401) throw new PairingReviewUnauthorizedError();
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error(await serverErrorMessage(response, "Produkt sa nepodarilo načítať"));
+  const itemSchemaWrap = z.object({ item: itemSchema });
+  return itemSchemaWrap.parse(await response.json()).item;
+}
+
+// issue 399 — "✂ Rozdeliť na veľkosti": zoznam variantov produktu s ich
+// AKTUÁLNYM per-veľkosť linkom.
+const variantLinkSchema = z.object({ code: z.string(), sizeLabel: z.string().nullable(), url: z.string().nullable() });
+export type PairingVariantLink = z.infer<typeof variantLinkSchema>;
+const variantLinksSchema = z.object({ variants: z.array(variantLinkSchema) });
+
+export async function fetchPairingVariantLinks(productKey: string): Promise<readonly PairingVariantLink[]> {
+  const response = await fetch(`/api/pairing-review/${encodeURIComponent(productKey)}/variants`);
+  return variantLinksSchema.parse(await readJson(response, "Zoznam veľkostí sa nepodarilo načítať")).variants;
+}
+
+// `url: null`/`""` vymaže per-veľkosť link (server ich rieši rovnako).
+export async function savePairingVariantLink(productKey: string, code: string, url: string | null): Promise<void> {
+  const response = await fetch(`/api/pairing-review/${encodeURIComponent(productKey)}/variant-link`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ code, url }),
+  });
+  await readJson(response, "Uloženie linku sa nepodarilo");
 }

@@ -10,16 +10,22 @@ import { PairingReviewCard } from "./PairingReviewCard.js";
 // issue 398/401/409 — testy prerobené na novú UX (žiadne "✗ Zlé", priamy
 // riadok ✓ Dobré/„vyber url"/📦/🚫, adapterless hláška, obrázky v paneli).
 
-const { fetchPairingCandidates, sendPairingDecision } = vi.hoisted(() => ({
+const { fetchPairingCandidates, sendPairingDecision, fetchPairingVariantLinks, savePairingVariantLink } = vi.hoisted(() => ({
   fetchPairingCandidates: vi.fn(),
   sendPairingDecision: vi.fn(),
+  fetchPairingVariantLinks: vi.fn(),
+  savePairingVariantLink: vi.fn(),
 }));
 
 // `PairingReviewUnauthorizedError` ostáva SKUTOČNÁ trieda (rovnaký dôvod ako
 // `PairingReviewSection.test.tsx` — `instanceof` v komponente musí fungovať).
+// issue 399 — `fetchPairingVariantLinks`/`savePairingVariantLink` mockované
+// TU, lebo `PairingReviewCard` vykresľuje `PairingReviewSplitPanel` priamo
+// (rovnaký modul, rovnaký mock) — `PairingReviewSplitPanel` samo nemá
+// vlastný test súbor, jeho pokrytie je celé cez tento súbor.
 vi.mock("../pairingReviewApi.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../pairingReviewApi.js")>();
-  return { ...actual, fetchPairingCandidates, sendPairingDecision };
+  return { ...actual, fetchPairingCandidates, sendPairingDecision, fetchPairingVariantLinks, savePairingVariantLink };
 });
 
 const { PairingReviewUnauthorizedError } = await import("../pairingReviewApi.js");
@@ -338,4 +344,131 @@ it("401 pri odoslaní rozhodnutia zavolá onSessionExpired namiesto zobrazenia v
   await waitFor(() => {
     expect(onSessionExpired).toHaveBeenCalledTimes(1);
   });
+});
+
+// issue 399 — "✂ Rozdeliť na veľkosti": dostupné len keď produkt MÁ viac než
+// 1 veľkosť A ešte nemá rozhodnutie (MATCHED_ITEM má variantCount:2).
+it("'✂ Rozdeliť na veľkosti' tlačidlo je vidno pri viacveľkostnom nerozhodnutom produkte, chýba pri jednovariantnom", () => {
+  render(<PairingReviewCard item={MATCHED_ITEM} role="manazer" onDecided={() => {}} onSessionExpired={() => {}} />);
+  expect(screen.getByTestId("pairing-review-split-PR-1")).toBeDefined();
+  cleanup();
+
+  render(<PairingReviewCard item={{ ...MATCHED_ITEM, variantCount: 1 }} role="manazer" onDecided={() => {}} onSessionExpired={() => {}} />);
+  expect(screen.queryByTestId("pairing-review-split-PR-1")).toBeNull();
+});
+
+it("'citanie' rola nevidí '✂ Rozdeliť na veľkosti' tlačidlo (nemá žiadne akčné tlačidlo vôbec)", () => {
+  render(<PairingReviewCard item={MATCHED_ITEM} role="citanie" onDecided={() => {}} onSessionExpired={() => {}} />);
+  expect(screen.queryByTestId("pairing-review-split-PR-1")).toBeNull();
+});
+
+it("klik na '✂ Rozdeliť na veľkosti' NAHRADÍ celú pravú stranu split editorom (kandidát/akcie zmiznú), načíta veľkosti", async () => {
+  fetchPairingCandidates.mockResolvedValue([]);
+  fetchPairingVariantLinks.mockResolvedValue([
+    { code: "PR-1/S", sizeLabel: "S", url: null },
+    { code: "PR-1/M", sizeLabel: "M", url: null },
+  ]);
+
+  render(<PairingReviewCard item={MATCHED_ITEM} role="manazer" onDecided={() => {}} onSessionExpired={() => {}} />);
+  fireEvent.click(screen.getByTestId("pairing-review-split-PR-1"));
+
+  expect(await screen.findByTestId("pairing-review-split-panel-PR-1")).toBeDefined();
+  expect(screen.queryByTestId("pairing-review-candidate-PR-1")).toBeNull();
+  expect(screen.queryByTestId("pairing-review-good-PR-1")).toBeNull();
+  await waitFor(() => {
+    expect(fetchPairingVariantLinks).toHaveBeenCalledWith("PR-1");
+  });
+  expect(await screen.findByTestId("pairing-review-split-row-PR-1/S")).toBeDefined();
+  expect(screen.getByTestId("pairing-review-split-row-PR-1/M")).toBeDefined();
+});
+
+it("split riadok: uloženie manuálnej URL zavolá savePairingVariantLink a prepne stav na '✓ link nastavený'", async () => {
+  fetchPairingCandidates.mockResolvedValue([]);
+  fetchPairingVariantLinks.mockResolvedValue([{ code: "PR-1/S", sizeLabel: "S", url: null }]);
+  savePairingVariantLink.mockResolvedValue(undefined);
+
+  render(<PairingReviewCard item={MATCHED_ITEM} role="manazer" onDecided={() => {}} onSessionExpired={() => {}} />);
+  fireEvent.click(screen.getByTestId("pairing-review-split-PR-1"));
+  await screen.findByTestId("pairing-review-split-row-PR-1/S");
+
+  const input = screen.getByTestId<HTMLInputElement>("pairing-review-split-input-PR-1/S");
+  fireEvent.change(input, { target: { value: "https://dodavatel.example.com/velkost-s" } });
+  fireEvent.click(screen.getByTestId("pairing-review-split-save-PR-1/S"));
+
+  await waitFor(() => {
+    expect(savePairingVariantLink).toHaveBeenCalledWith("PR-1", "PR-1/S", "https://dodavatel.example.com/velkost-s");
+  });
+  await waitFor(() => {
+    expect(screen.getByTestId("pairing-review-split-state-PR-1/S").textContent).toBe("✓ link nastavený");
+  });
+});
+
+// issue 399 (review finding, #423 self-review) — "✓ Hotovo" musí zostať
+// disabled, kým NIEKTORÝ riadok ešte čaká na svoj VLASTNÝ zápis, inak by
+// klik mohol vidieť ešte-nezapísaný (starý) stav a zbytočne (konzervatívne)
+// ukázať potvrdzovací dialóg o chýbajúcom linku napriek zápisu v letu.
+it("'✓ Hotovo – rozdelené' je disabled, kým beží zápis JEDNÉHO riadku (rowBusy), aj keď hlavný 'busy' guard je voľný", async () => {
+  fetchPairingCandidates.mockResolvedValue([]);
+  fetchPairingVariantLinks.mockResolvedValue([{ code: "PR-1/S", sizeLabel: "S", url: null }]);
+  let resolveSave: (() => void) | undefined;
+  savePairingVariantLink.mockImplementation(
+    () =>
+      new Promise<void>((resolve) => {
+        resolveSave = resolve;
+      }),
+  );
+
+  render(<PairingReviewCard item={MATCHED_ITEM} role="manazer" onDecided={() => {}} onSessionExpired={() => {}} />);
+  fireEvent.click(screen.getByTestId("pairing-review-split-PR-1"));
+  await screen.findByTestId("pairing-review-split-row-PR-1/S");
+
+  const doneButton = screen.getByTestId<HTMLButtonElement>("pairing-review-split-done-PR-1");
+  expect(doneButton.disabled).toBe(false);
+
+  const input = screen.getByTestId<HTMLInputElement>("pairing-review-split-input-PR-1/S");
+  fireEvent.change(input, { target: { value: "https://dodavatel.example.com/velkost-s" } });
+  fireEvent.click(screen.getByTestId("pairing-review-split-save-PR-1/S"));
+
+  await waitFor(() => {
+    expect(doneButton.disabled).toBe(true);
+  });
+
+  resolveSave?.();
+  await waitFor(() => {
+    expect(doneButton.disabled).toBe(false);
+  });
+});
+
+it("'✓ Hotovo – rozdelené' s chýbajúcimi linkami sa OPÝTA (confirm) pred odoslaním split rozhodnutia; potvrdenie odošle {status:'split'}", async () => {
+  fetchPairingCandidates.mockResolvedValue([]);
+  fetchPairingVariantLinks.mockResolvedValue([{ code: "PR-1/S", sizeLabel: "S", url: null }]);
+  sendPairingDecision.mockResolvedValue(undefined);
+  const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+  const onDecided = vi.fn();
+
+  render(<PairingReviewCard item={MATCHED_ITEM} role="manazer" onDecided={onDecided} onSessionExpired={() => {}} />);
+  fireEvent.click(screen.getByTestId("pairing-review-split-PR-1"));
+  await screen.findByTestId("pairing-review-split-row-PR-1/S");
+
+  fireEvent.click(screen.getByTestId("pairing-review-split-done-PR-1"));
+  expect(confirmSpy).toHaveBeenCalledTimes(1);
+  await waitFor(() => {
+    expect(sendPairingDecision).toHaveBeenCalledWith("PR-1", { status: "split" });
+  });
+  await waitFor(() => {
+    expect(onDecided).toHaveBeenCalledTimes(1);
+  });
+  confirmSpy.mockRestore();
+});
+
+it("produkt UŽ rozdelený (decision.status==='split') ukáže odznak + editor priamo, bez kliku, s '↩ Zrušiť rozdelenie'", async () => {
+  fetchPairingCandidates.mockResolvedValue([]);
+  fetchPairingVariantLinks.mockResolvedValue([{ code: "PR-5/S", sizeLabel: "S", url: "https://dodavatel.example.com/s" }]);
+  const SPLIT_ITEM = { ...MATCHED_ITEM, productKey: "PR-5", decision: { status: "split" as const, url: null, decidedAt: "2026-08-13T04:00:00.000Z" } };
+
+  render(<PairingReviewCard item={SPLIT_ITEM} role="manazer" onDecided={() => {}} onSessionExpired={() => {}} />);
+  expect(screen.getByTestId("pairing-review-decision-badge-PR-5").textContent).toBe("✂ Rozdelené na veľkosti");
+  expect(await screen.findByTestId("pairing-review-split-panel-PR-5")).toBeDefined();
+  expect(screen.getByTestId("pairing-review-split-cancel-PR-5")).toBeDefined();
+  expect(screen.queryByTestId("pairing-review-split-done-PR-5")).toBeNull();
 });

@@ -11,6 +11,7 @@ import {
 import { PairingReviewBadgeRefreshContext } from "../pairingReviewBadgeContext.js";
 import { useLoadMore } from "../useLoadMore.js";
 import { PairingReviewCard } from "./PairingReviewCard.js";
+import { PairingSearchFixTab } from "./PairingSearchFixTab.js";
 
 // issue 387 E5: "Eshop → Párovanie" — čítacia obrazovka (karty + filtre) nad
 // tým, čo E3 (gather)/E4 (verify) zozbierali. Design komentár na tickete
@@ -70,6 +71,12 @@ export function PairingReviewSection({ role, onSessionExpired }: { readonly role
   const [linkedTotal, setLinkedTotal] = useState(0);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState("");
+  // issue 399 — "Hľadať / opraviť" pod-záložka, NEZÁVISLÁ od "Prehľad"'s
+  // vlastného načítavania/chybového stavu (`.claude/rules/frontend-design.md`'s
+  // "druhá pod-obrazovka nesmie zdediť prvej gate" pravidlo — táto obrazovka
+  // navyše ani žiadnu blokujúcu gate nemala, ale tabBar sa napriek tomu
+  // počíta a vetví AŽ v návratovom JSX, nikdy skorším `return`om).
+  const [activeTab, setActiveTab] = useState<"prehlad" | "hladat">("prehlad");
 
   const searchSeq = useRef(0);
   const mountedRef = useRef(true);
@@ -193,8 +200,46 @@ export function PairingReviewSection({ role, onSessionExpired }: { readonly role
   const progressPct = gatheredTotal > 0 ? Math.round((100 * linkedTotal) / gatheredTotal) : 0;
   const showingAll = total === 0 || items.length >= total;
 
+  // issue 399 — pod-záložky (rovnaký vzor ako Upozornenia Otvorené/Vybavené):
+  // vždy vykreslené OBIDVE, jedna aktívna cez `hidden`/podmienený obsah, nikdy
+  // skorší `return` blokujúci prepínač.
+  const tabBar = (
+    <div className="chip-row" data-testid="pairing-review-tabs">
+      <button
+        type="button"
+        className={"chip" + (activeTab === "prehlad" ? " active" : " chip-neutral")}
+        data-testid="pairing-review-tab-prehlad"
+        onClick={() => {
+          setActiveTab("prehlad");
+        }}
+      >
+        Prehľad
+      </button>
+      <button
+        type="button"
+        className={"chip" + (activeTab === "hladat" ? " active" : " chip-neutral")}
+        data-testid="pairing-review-tab-hladat"
+        onClick={() => {
+          setActiveTab("hladat");
+        }}
+      >
+        Hľadať / opraviť
+      </button>
+    </div>
+  );
+
+  if (activeTab === "hladat") {
+    return (
+      <section data-testid="pairing-review-section">
+        {tabBar}
+        <PairingSearchFixTab role={role} onSessionExpired={onSessionExpired} />
+      </section>
+    );
+  }
+
   return (
     <section data-testid="pairing-review-section">
+      {tabBar}
       <p>
         Produkty bez napárovaného odkazu na dodávateľa — vľavo náš produkt, vpravo najlepší nájdený kandidát (ak ho
         appka u dodávateľa s automatickým vyhľadávaním našla). Na karte priamo potvrdíš navrhnutý odkaz, vyberieš

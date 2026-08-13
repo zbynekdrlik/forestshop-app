@@ -3201,6 +3201,78 @@ a.upozornenie-title:hover {
   flex: 1 1 0%;
   min-width: 12rem;
 }
+/* issue 399 — "✂ Rozdeliť na veľkosti": piaty stav dostáva VLASTNÚ farbu
+   (rovnaký princíp ako good/manual/unavailable/discontinued vyššie) —
+   fialová, aby sa vizuálne odlíšila od produktovo-úrovňových stavov (toto
+   je jediný stav BEZ produktovej efektívnej linky, čo je napriek tomu
+   zrevidovaný/vyriešený). */
+.pairing-review-decision-split {
+  background: var(--fs-brand-soft);
+  color: var(--fs-brand-strong);
+}
+.pairing-review-split-panel {
+  margin-top: var(--fs-space-3);
+  padding: var(--fs-space-3);
+  background: var(--fs-surface-alt);
+  border: 1px solid var(--fs-border);
+  border-radius: var(--fs-radius-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--fs-space-3);
+}
+.pairing-review-split-hint {
+  font-size: var(--fs-text-sm);
+  color: var(--fs-ink-muted);
+  margin: 0;
+}
+.pairing-review-split-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--fs-space-1);
+  padding: var(--fs-space-2);
+  background: var(--fs-surface);
+  border: 1px solid var(--fs-border);
+  border-radius: var(--fs-radius-sm);
+}
+.pairing-review-split-row-head {
+  display: flex;
+  align-items: center;
+  gap: var(--fs-space-2);
+  flex-wrap: wrap;
+}
+.pairing-review-split-size {
+  font-weight: var(--fs-weight-semibold);
+}
+.pairing-review-split-code {
+  font-size: var(--fs-text-xs);
+  color: var(--fs-ink-faint);
+}
+.pairing-review-split-state {
+  font-size: var(--fs-text-xs);
+  color: var(--fs-ink-faint);
+}
+.pairing-review-split-state.has {
+  color: var(--fs-success);
+}
+.pairing-review-split-candidates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--fs-space-2);
+}
+.pairing-review-split-manual {
+  display: flex;
+  align-items: center;
+  gap: var(--fs-space-2);
+  flex-wrap: wrap;
+}
+.pairing-review-split-manual input {
+  flex: 1 1 0%;
+  min-width: 12rem;
+}
+.pairing-review-split-foot {
+  display: flex;
+  gap: var(--fs-space-2);
+}
 
 /* ---------------- 20. ESHOP → OBJEDNÁVKY PREDAJŇA (issue 410) ----------------
    Nahrádza Štěpánovo Discord vlákno. `.floor-notes-panel` ohraničuje šírku
