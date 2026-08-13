@@ -58,4 +58,48 @@ describe("createLiveSupplierInfoFetcher", () => {
     expect(fetcherA).toHaveBeenCalledTimes(1);
     expect(fetcherB).toHaveBeenCalledTimes(1);
   });
+
+  // issue 422 review nález (🟡) — appka beží ako dlhoživý kontajner, cache
+  // BEZ TTL by "živé" info navždy zamrazila na prvej hodnote/zlyhaní.
+  it("cache VYPRŠÍ po CACHE_TTL_MS (15 min) — ĎALŠIE volanie po vypršaní znova fetchne", async () => {
+    let currentTime = 0;
+    const fetcher = vi.fn<Fetcher>().mockResolvedValue(WETLAND_HTML);
+    const fetchInfo = createLiveSupplierInfoFetcher(clientWithFetcher(fetcher), { now: () => currentTime });
+
+    await fetchInfo("https://www.wetland.sk/nohavice/x-1");
+    expect(fetcher).toHaveBeenCalledTimes(1);
+
+    currentTime = 10 * 60 * 1000; // 10 min neskôr — ešte v rámci TTL
+    await fetchInfo("https://www.wetland.sk/nohavice/x-1");
+    expect(fetcher).toHaveBeenCalledTimes(1); // stále z cache
+
+    currentTime = 15 * 60 * 1000 + 1; // presne za hranicou TTL
+    await fetchInfo("https://www.wetland.sk/nohavice/x-1");
+    expect(fetcher).toHaveBeenCalledTimes(2); // znova fetchnuté
+  });
+
+  it("cache VYPRŠÍ aj pre ZLYHANÝ výsledok — transientný sieťový výpadok sa nezamrazí navždy", async () => {
+    let currentTime = 0;
+    const fetcher = vi.fn<Fetcher>().mockRejectedValueOnce(new Error("timeout")).mockResolvedValueOnce(WETLAND_HTML);
+    const fetchInfo = createLiveSupplierInfoFetcher(clientWithFetcher(fetcher), { now: () => currentTime });
+
+    const first = await fetchInfo("https://www.wetland.sk/nohavice/x-1");
+    expect(first).toEqual({ price: null, availabilityText: null });
+
+    currentTime = 15 * 60 * 1000 + 1;
+    const second = await fetchInfo("https://www.wetland.sk/nohavice/x-1");
+    expect(second).toEqual({ price: "99.00", availabilityText: "Skladom" });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it("URL mimo troch známych adaptérov ostáva cachovaná AJ PO CACHE_TTL_MS — žiadny nový fetch (štrukturálny fakt, nikdy sa nemení)", async () => {
+    let currentTime = 0;
+    const fetcher = vi.fn<Fetcher>().mockResolvedValue(WETLAND_HTML);
+    const fetchInfo = createLiveSupplierInfoFetcher(clientWithFetcher(fetcher), { now: () => currentTime });
+
+    await fetchInfo("https://e2e-dodavatel.example.com/produkt");
+    currentTime = 60 * 60 * 1000; // hodinu neskôr, ďaleko za TTL
+    await fetchInfo("https://e2e-dodavatel.example.com/produkt");
+    expect(fetcher).not.toHaveBeenCalled();
+  });
 });

@@ -112,7 +112,12 @@ export function PanelCandidateRow({
           <span className="pairing-review-noimg">bez obrázka</span>
         )}
       </div>
-      <span className="pairing-review-panel-candidate-text">
+      {/* issue 422 review nález (🔵) — `<div>` (blokový obsah) vnútri `<span>`
+          (len frázový obsah podľa HTML5 špecifikácie) je neplatný markup —
+          prehliadače to vykreslia bez viditeľnej chyby, ale a11y/HTML
+          validátor by to nahlásil. Obalový prvok je odteraz `<div>` (CSS
+          `flex: 1 1 auto` naň už aj tak pôsobí ako na blokový prvok). */}
+      <div className="pairing-review-panel-candidate-text">
         <span>
           {candidate.name}: {candidate.url}
           {candidate.codeHit && " (kód sedí)"}
@@ -124,7 +129,7 @@ export function PanelCandidateRow({
             {liveInfo.availabilityText}
           </div>
         )}
-      </span>
+      </div>
       <button
         type="button"
         className="btn good sm"
