@@ -27,6 +27,7 @@
 
 import * as cheerio from "cheerio";
 import type { PairingCandidate } from "../types.js";
+import { jsonLdSupplierDetailMeta } from "./detail-meta.js";
 import type { SupplierAdapter } from "./types.js";
 import { belongsToBase, resolveAndStripFragment, resolveImageUrl } from "./url.js";
 
@@ -70,4 +71,6 @@ export const wetlandAdapter: SupplierAdapter = {
   baseUrl: BASE_URL,
   buildSearchUrl: (query) => `${BASE_URL}/vyhladavanie?controller=search&s=${encodeURIComponent(query)}`,
   parseSearchResults: parseWetlandSearch,
+  // issue 422 — JSON-LD `Offer` (živo overené, `detail-meta.ts`).
+  extractDetailMeta: jsonLdSupplierDetailMeta,
 };

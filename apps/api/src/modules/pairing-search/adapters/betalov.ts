@@ -34,7 +34,7 @@
 
 import * as cheerio from "cheerio";
 import type { PairingCandidate } from "../types.js";
-import type { SupplierAdapter } from "./types.js";
+import type { SupplierAdapter, SupplierDetailMeta } from "./types.js";
 import { belongsToBase, resolveAndStripFragment, resolveImageUrl } from "./url.js";
 
 const BASE_URL = "https://www.huntingshop.eu";
@@ -104,9 +104,39 @@ export function parseBetalovSearch(html: string): PairingCandidate[] {
   return out;
 }
 
+// issue 422 — huntingshop.eu NEMÁ ŽIADNE JSON-LD ani `og:price`/
+// `og:availability` meta značky na detailnej stránke (živo overené 13. 8.
+// 2026, design komentár na tickete) — jediný spoľahlivý zdroj je táto GA
+// dataLayer-prípravná JS premenná, JEDEN výskyt na stránke, priamo pri
+// hlavnom produkte (na rozdiel od `.actual-price`/`.badge-stock` CSS
+// tried, čo sa opakujú 4-6× v karuseli súvisiacich produktov — presne tá
+// istá "karuselová kolízia" trieda chýb ako issue 223,
+// `.claude/rules/supplier-stock.md`). Živo overené na 2 reálnych
+// produktoch: `var prodData = {"item_name":"...","price":36.5,
+// "is_item_in_stock":1,...};`.
+const PRODATA_RE = /var\s+prodData\s*=\s*(\{[^}]*\})\s*;/;
+
+export function parseBetalovDetailMeta(html: string): SupplierDetailMeta {
+  const match = PRODATA_RE.exec(html);
+  const raw = match?.[1];
+  if (raw === undefined) return { price: null, availabilityText: null };
+  try {
+    const data = JSON.parse(raw) as Record<string, unknown>;
+    const priceValue = data["price"];
+    const price = typeof priceValue === "number" && Number.isFinite(priceValue) ? priceValue.toFixed(2) : null;
+    const inStock = data["is_item_in_stock"];
+    const availabilityText = inStock === 1 || inStock === true ? "Skladom" : inStock === 0 || inStock === false ? "Nedostupné" : null;
+    return { price, availabilityText };
+  } catch {
+    // Nevalidný JSON (drift markupu) — best-effort, nikdy nezhodí volajúceho.
+    return { price: null, availabilityText: null };
+  }
+}
+
 export const betalovAdapter: SupplierAdapter = {
   adapterKey: "betalov",
   baseUrl: BASE_URL,
   buildSearchUrl: (query) => `${BASE_URL}/hladanie?search=${encodeURIComponent(query)}`,
   parseSearchResults: parseBetalovSearch,
+  extractDetailMeta: parseBetalovDetailMeta,
 };

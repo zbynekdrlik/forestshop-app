@@ -28,6 +28,7 @@
 
 import * as cheerio from "cheerio";
 import type { PairingCandidate } from "../types.js";
+import { jsonLdSupplierDetailMeta } from "./detail-meta.js";
 import type { SupplierAdapter } from "./types.js";
 import { belongsToBase, resolveAndStripFragment, resolveImageUrl } from "./url.js";
 
@@ -67,4 +68,11 @@ export const odimonAdapter: SupplierAdapter = {
   baseUrl: BASE_URL,
   buildSearchUrl: (query) => `${BASE_URL}/vysledky-vyhladavania?term=${encodeURIComponent(query)}`,
   parseSearchResults: parseOdimonSearch,
+  // issue 422 — JSON-LD `Offer` (živo overené, `detail-meta.ts`). POZOR:
+  // `.claude/rules/supplier-stock.md` (issue 225) dokumentuje, že JSON-LD
+  // na TEJTO doméne vie klamať o dostupnosti (hlási InStock, hoci viditeľný
+  // prvok pri produkte hovorí "Nedostupný") — akceptované riziko pre TENTO
+  // čisto informatívny náhľad (reviewer vidí aj samotný odkaz), na rozdiel
+  // od `restock`'s automatického prepínania, kde by to bolo neprijateľné.
+  extractDetailMeta: jsonLdSupplierDetailMeta,
 };
