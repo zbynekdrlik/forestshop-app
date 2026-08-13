@@ -4,21 +4,46 @@ paths:
   - "apps/api/src/http/product-links-routes.ts"
   - "apps/api/tests/product-links-http.integration.test.ts"
   - "apps/web/src/supplierLinksApi.ts"
-  - "apps/web/src/components/SupplierLinksSection.tsx"
+  - "apps/web/src/components/SearchSection.tsx"
 ---
 
-# Párovanie produktov (issue 239)
+# Zápisová cesta `product_supplier_link_override` (pôvodne issue 239)
 
-- **Zámerne SAMOSTATNÁ obrazovka od skrytej `pairing` záložky, nie
-  rozšírenie.** `pairing` (`.claude/rules/pairing.md`) je kľúčovaná
-  `variant.code` a má vlastný `navrhnute → potvrdene` stavový automat pre
-  BUDÚCE automatické hľadanie kandidátov u veľkoobchodného dodávateľa
-  (#46/#48) — nezapisuje do Shoptetu vôbec. Táto obrazovka je kľúčovaná
-  `product.key` (rovnako ako `product_supplier_link_override`, #121) a
-  zapisuje VÝHRADNE do tej istej override tabuľky, ktorú existujúci
-  `shoptet-writeback` job (#122) posiela do Shoptetu. Návrh na rozšírenie
-  `pairing` o "chýbajúce linky" mód bol zámerne zamietnutý — zmiešalo by to
-  dva nezávislé dátové modely do jednej tabuľky/obrazovky.
+**Obrazovka "Párovanie produktov" (issue 239) bola ODSTRÁNENÁ issue 400
+(2026-08-13, issue 387 E9) — majiteľ ju výslovne schválil ("a stare
+parovanie produktov z apky odober"), po tom, čo ju nahradila nová obrazovka
+"Párovanie" (issue 387 E5+, `.claude/rules/pairing-search.md`).** Odstránené
+bolo VÝHRADNE UI: `SupplierLinksSection.tsx`, jej dva testové súbory, jej
+e2e (`supplier-links.spec.ts`), jej nav položka (`supplier-links`) a časti
+`supplierLinksApi.ts` používané VÝHRADNE ňou (`searchProductLinks`,
+`ProductLinkState`, `ProductLinkItem`, `PAGE_SIZE`). **Backend (`GET`/`POST
+/api/product-links(...)`, `apps/api/src/modules/product-links/**`) a
+zdieľané zápisové jadro NEBOLI odstránené vôbec** — dôkaz živým `git diff`
+naprieč commitmi issue 400, presne ako issue 387 E8 dokumentuje pre svoj
+vlastný precedens (`.claude/rules/pairing-search.md`, sekcia E8, posledný
+bod).
+
+**Dnešní volajúci zdieľaného zápisu (obaja MIMO tejto obrazovky, MUSIA
+ostať funkční pri akejkoľvek ďalšej zmene tu):**
+- `apps/web/src/components/SearchSection.tsx` ("Eshop → Vyhľadať", #240) —
+  cez `POST /api/product-links/:productKey`
+  (`supplierLinksApi.ts`'s `saveProductLink`, ktorý v súbore OSTAL, lebo je
+  zdieľaný — `.claude/rules/search.md`).
+- `apps/api/src/modules/pairing-review/decisions.ts` ("Eshop → Párovanie",
+  issue 387 E6) — priamo cez `upsertProductSupplierLink` (nie cez HTTP
+  trasu), v JEDNEJ transakcii so zápisom `pairing_decision`.
+
+- **Zámerne SAMOSTATNÁ od skrytej `pairing` záložky (F4), nie rozšírenie.**
+  `pairing` (`.claude/rules/pairing.md`) je kľúčovaná `variant.code` a má
+  vlastný `navrhnute → potvrdene` stavový automat pre BUDÚCE automatické
+  hľadanie kandidátov u veľkoobchodného dodávateľa (#46/#48) — nezapisuje
+  do Shoptetu vôbec. Táto zápisová cesta je kľúčovaná `product.key`
+  (rovnako ako `product_supplier_link_override`, #121) a zapisuje VÝHRADNE
+  do tej istej override tabuľky, ktorú existujúci `shoptet-writeback` job
+  (#122) posiela do Shoptetu. Návrh na rozšírenie `pairing` o "chýbajúce
+  linky" mód bol zámerne zamietnutý — zmiešalo by to dva nezávislé dátové
+  modely do jednej tabuľky/obrazovky. F4 (obrazovka aj tabuľka `pairings`)
+  čaká na samostatné rozhodnutie majiteľa (issue 400 sa jej netýka).
 - **Zápisové jadro je zdieľané s #121's riadkovou cestou.**
   `supplier-link-assignment.ts`'s `upsertProductSupplierLink` (zúžený `tx`
   parameter `Pick<Database, "select" | "insert">`, presne podľa

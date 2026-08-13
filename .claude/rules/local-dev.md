@@ -127,3 +127,35 @@ paths:
   behu identické (rovnaký kód); jediný rozdiel sú zdrojové dáta v
   tabuľkách, čo neovplyvňuje výšku/rozloženie blokov závislých len od CSS a
   počtu položiek.
+- **`docker-compose.yml`'s host port (5433) je NAPEVNO — DVA súbežné
+  `docker compose up -d postgres` z RÔZNYCH worktree adresárov (paralelný
+  autopilot-worker dispatch, issue #317) sa preto NIKDY nedostanú každý k
+  vlastnému kontajneru, hoci docker-compose-ov projektový názov (odvodený z
+  adresára) je pre každý worktree iný.** Issue 400 (13. 8. 2026, súbežne s
+  worktree pre issue 397): `docker ps -a` ukázal `forestshop_app-postgres-1`
+  (z HLAVNÉHO checkoutu, bežal už 20+ hodín) v stave `Up`, a
+  `agent-<worktree-id>-postgres-1` (zo SÚBEŽNÉHO worktree) v stave
+  `Created` — teda vytvorený, ale NIKDY neštartol, presne preto, že port
+  5433 už držal ten prvý. **Toto NIE JE bug, je to zámerný zdieľaný
+  prostriedok** — `.claude/rules/local-dev.md`'s vlastný postup vyššie
+  ("over, či `forestshop_app-postgres-1` na 5433 už beží") to už
+  predpokladá. Dôsledok pre KAŽDÝ worktree/session na tomto boxe: NIKDY
+  nepredpokladaj, že tvoj vlastný `docker compose up -d postgres` naozaj
+  bežal — over `docker ps --format '{{.Names}}\t{{.Status}}'`, priprav sa
+  použiť `forestshop_app-postgres-1` (port 5433) priamo bez ohľadu na to, z
+  ktorého adresára/worktree beží tvoja relácia.
+- **Ten istý zdieľaný Postgres znamená REÁLNE riziko kolízie medzi
+  SÚBEŽNÝMI e2e/integration behmi z RÔZNYCH worktree — `scripts/
+  e2e-setup.ts`'s TRUNCATE nemá `withCleanDb()`'s advisory zámok
+  (`.claude/rules/testing.md`).** Pred spustením `pnpm --filter
+  @forestshop/web e2e`/`pnpm test:integration` na zdieľanom boxe over NAJPRV
+  `ps aux | grep -E "vitest|playwright test|e2e-setup"` (žiadny bežiaci
+  proces INÉHO worktree) A `docker exec forestshop_app-postgres-1 psql -U
+  forestshop -d forestshop -t -c "select count(*) from pg_stat_activity
+  where state != 'idle' and pid != pg_backend_pid();"` (očakávaj `0`) — až
+  potom spusti. Issue 400 malo súbežne bežiaci worker na issue 397 v inom
+  worktree; overenie pred spustením ukázalo pokojné okno (0 aktívnych
+  spojení), e2e beh (55/55 testov) prebehol bez viditeľnej kolízie. Toto
+  je RUČNÁ disciplína (žiadny zámok to nevynucuje) — pri podozrení na
+  "cudzie" dáta/zlyhanie počas e2e behu na tomto boxe najprv over súbežné
+  procesy, až potom hľadaj regresiu vo vlastnom diffe.

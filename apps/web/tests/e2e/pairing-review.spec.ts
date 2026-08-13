@@ -13,9 +13,10 @@ const E2E_PAROVANIE_REVIEW_EMAIL = "e2e-parovanie-review@forestshop.sk";
 // "E2E-PR-NENAJDENY" (bez efektívnej linky, ŽIADNY kandidát — dokazuje
 // "Nenašiel sa žiadny kandidát" stav) a "E2E-PR-SLINKOU" (UŽ MÁ efektívnu
 // linku — dokazuje, že predvolený "Nezrevidované" filter ho VYLÚČI, viditeľný
-// len pri "Všetky"). Substring kolízia s "Párovanie produktov" (#239) —
-// `{ name: "Párovanie", exact: true }` je POVINNÉ na tejto záložke, presne
-// ako `nav.spec.ts`.
+// len pri "Všetky"). Táto záložka má VLASTNÝ odznakový aria-label ("Párovanie
+// Párovanie: N"), ktorý kolíduje s jej vlastným accessible name — preto
+// `data-testid` na tlačidle nav-tab (`nav.spec.ts`'s rovnaký komentár), a
+// `{ name: "Párovanie", exact: true }` na jej `<h1>` nadpise.
 //
 // issue 387 E6: pridáva rozhodovanie — "E2E-PR-CHYBA" (má kandidáta) a
 // "E2E-PR-NENAJDENY" (nemá kandidáta, panel je hneď otvorený) sú fixtúry E5,
@@ -38,9 +39,9 @@ test("predvolený filter 'Nezrevidované' ukáže produkty bez linky (s aj bez k
   await page.getByLabel("Heslo").fill(E2E_HESLO);
   await page.getByRole("button", { name: "Prihlásiť sa" }).click();
 
-  // `data-testid`, nie `getByRole` — "Párovanie" je substring-om AJ
-  // "Párovanie produktov" AJ VLASTNÉHO odznakového aria-label ("Párovanie
-  // Párovanie: N"), viď `nav.spec.ts`'s rovnaký komentár.
+  // `data-testid`, nie `getByRole` — "Párovanie" je substring-om VLASTNÉHO
+  // odznakového aria-label ("Párovanie Párovanie: N"), viď `nav.spec.ts`'s
+  // rovnaký komentár.
   await page.getByTestId("nav-tab-pairing-review").click();
   await expect(page.getByRole("heading", { name: "Párovanie", exact: true })).toBeVisible();
 
@@ -102,9 +103,13 @@ test("odznak v menu ukazuje počet nezrevidovaných HNEĎ po prihlásení, bez o
 // issue 387 E6 — "✓ Dobré": karta vypadne z predvoleného "Nezrevidované"
 // filtra (presne "unreviewed" definícia — bez efektívnej linky), dostane
 // odznak "✓ Dobré" pod filtrom "Všetky", A efektívny odkaz sa OKAMŽITE
-// prejaví aj na sesterskej obrazovke "Párovanie produktov" (#239) — obe
-// čítajú TÚ ISTÚ `product_supplier_link_override` tabuľku, zdieľaný zápis.
-test("'✓ Dobré' rozhodnutie zapíše efektívny odkaz — viditeľný na tejto AJ na 'Párovanie produktov' obrazovke; konzola je čistá", async ({ page }) => {
+// prejaví aj na obrazovke "Vyhľadať" (#240) — obe čítajú TÚ ISTÚ
+// `product_supplier_link_override` tabuľku, zdieľaný zápis
+// (`.claude/rules/product-links.md`). Pôvodne toto krížové overenie
+// išlo cez sesterskú obrazovku "Párovanie produktov" (#239) — issue 400
+// (E9) ju odstránilo (majiteľ ju výslovne schválil na odstránenie),
+// `/api/product-links` route aj jej zapisovacia cesta ostali nedotknuté.
+test("'✓ Dobré' rozhodnutie zapíše efektívny odkaz — viditeľný na tejto AJ na 'Vyhľadať' obrazovke; konzola je čistá", async ({ page }) => {
   const chyby: string[] = [];
   page.on("console", (m) => {
     if (m.type() === "error" || m.type() === "warning") chyby.push(m.text());
@@ -134,13 +139,13 @@ test("'✓ Dobré' rozhodnutie zapíše efektívny odkaz — viditeľný na tejt
   await expect(kartaVsetky).toBeVisible();
   await expect(kartaVsetky.getByTestId("pairing-review-decision-badge-E2E-PR-CHYBA")).toHaveText("✓ Dobré");
 
-  // Krížové overenie na "Párovanie produktov" (#239) — zdieľaná zapisovacia
-  // cesta, `.claude/rules/product-links.md`.
-  await page.getByTestId("nav-tab-supplier-links").click();
-  await page.getByLabel("Hľadať produkt (kód alebo názov)").fill("E2E-PR-CHYBA");
-  await page.getByLabel("Zobraziť produkty").selectOption("all");
-  await page.getByRole("button", { name: "Zobraziť" }).click();
-  await expect(page.getByTestId("product-link-url-E2E-PR-CHYBA")).toHaveText("https://e2e-dodavatel.example.com/bunda-alfa-navrh");
+  // Krížové overenie na "Vyhľadať" (#240) — zdieľaná zapisovacia cesta,
+  // rovnaký vzor ako `search.spec.ts`'s "Hľadať produkt".
+  await page.getByRole("button", { name: "Vyhľadať" }).click();
+  await page.getByLabel("Produkt").fill("E2E-PR-CHYBA");
+  await page.getByRole("button", { name: "Hľadať produkt" }).click();
+  await page.getByTestId("search-product-open-E2E-PR-CHYBA").click();
+  await expect(page.getByTestId("search-detail-link-value")).toHaveText("https://e2e-dodavatel.example.com/bunda-alfa-navrh");
 
   expect(chyby).toEqual([]);
 });
