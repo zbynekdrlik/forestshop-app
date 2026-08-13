@@ -122,6 +122,78 @@ export async function seedPairingReviewFixtures(db: Database, teraz: Date, snaps
     fetchedAt: teraz,
   });
 
+  // issue 399 — "✂ Rozdeliť na veľkosti" + "Hľadať / opraviť": jediný
+  // fixtúrový produkt v tomto súbore s VIAC ako 1 variantom (`seedProdukt`
+  // vyššie vždy vytvorí presne jeden, `code === productKey`) — potrebný na
+  // to, aby `PairingReviewCard.tsx`'s `variantCount > 1` podmienka split
+  // tlačidlo vôbec zobrazila. Dva sellable/visible varianty (S/M) posúvajú
+  // `catalog.spec.ts`'s pevné počty o +2 (`.claude/rules/testing.md`'s
+  // dokumentovaná pasca) — zdokumentované priamo tam.
+  await db.insert(products).values({
+    key: "E2E-PR-SPLIT",
+    name: "E2E Bunda Gama Viacveľkostná",
+    supplier: ADAPTER_SUPPLIER_NAME,
+    internalNote: null,
+    firstSeenAt: teraz,
+    lastSeenAt: teraz,
+    lastSeenSnapshotId: snapshotId,
+  });
+  await db.insert(variants).values([
+    {
+      code: "E2E-PR-SPLIT/S",
+      productKey: "E2E-PR-SPLIT",
+      guid: "E2E-PR-SPLIT",
+      sizeLabel: "S",
+      externalCode: "E2E-PR-SPLIT-S-KOD",
+      name: "E2E Bunda Gama Viacveľkostná",
+      stock: 5,
+      availabilityInStockText: "Skladom",
+      availabilityOutOfStockText: "Vypredané",
+      availabilityText: "Skladom",
+      productVisibility: "visible",
+      state: "sellable",
+      firstSeenAt: teraz,
+      lastSeenAt: teraz,
+      lastSeenSnapshotId: snapshotId,
+    },
+    {
+      code: "E2E-PR-SPLIT/M",
+      productKey: "E2E-PR-SPLIT",
+      guid: "E2E-PR-SPLIT",
+      sizeLabel: "M",
+      externalCode: "E2E-PR-SPLIT-M-KOD",
+      name: "E2E Bunda Gama Viacveľkostná",
+      stock: 5,
+      availabilityInStockText: "Skladom",
+      availabilityOutOfStockText: "Vypredané",
+      availabilityText: "Skladom",
+      productVisibility: "visible",
+      state: "sellable",
+      firstSeenAt: teraz,
+      lastSeenAt: teraz,
+      lastSeenSnapshotId: snapshotId,
+    },
+  ]);
+  await db.insert(pairingCandidateSets).values({
+    productKey: "E2E-PR-SPLIT",
+    gatheredAt: teraz,
+    queries: ["e2e bunda gama"],
+    inputHash: "e2e-hash-split",
+    chosenUrl: "https://e2e-dodavatel.example.com/bunda-gama-navrh",
+    chosenReason: "najlepší nájdený",
+    confidence: "medium",
+    verdict: null,
+  });
+  await db.insert(pairingCandidates).values({
+    productKey: "E2E-PR-SPLIT",
+    position: 0,
+    name: "E2E Bunda Gama u dodávateľa",
+    url: "https://e2e-dodavatel.example.com/bunda-gama-navrh",
+    imageUrl: null,
+    rawScore: "80.0000",
+    codeHit: false,
+  });
+
   await seedProdukt("E2E-PR-NENAJDENY", "E2E Produkt Bez Kandidáta");
   await db.insert(pairingCandidateSets).values({
     productKey: "E2E-PR-NENAJDENY",

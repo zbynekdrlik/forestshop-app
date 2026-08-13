@@ -9,7 +9,9 @@ import {
   type PairingReviewCandidate,
   type PairingReviewItem,
 } from "../pairingReviewApi.js";
-import { PanelCandidateRow, TerminalButtons } from "./PairingReviewPanelParts.js";
+import { PairingReviewDecisionPanel } from "./PairingReviewDecisionPanel.js";
+import { TerminalButtons } from "./PairingReviewPanelParts.js";
+import { PairingReviewSplitPanel } from "./PairingReviewSplitPanel.js";
 
 // issue 387 E5: karta jedného produktu, vyčlenená VOPRED z `PairingReviewSection.tsx`
 // (rovnaký princíp ako `OrderLineRow.tsx`/`UpozornenieCard.tsx` — dvojstĺpcová
@@ -61,6 +63,7 @@ const DECISION_BADGE_LABELS: Readonly<Record<NonNullable<PairingReviewItem["deci
   manual: "✓ Vybraný link",
   unavailable: "📦 Nie je skladom",
   discontinued: "🚫 Už sa nebude predávať",
+  split: "✂ Rozdelené na veľkosti",
 };
 
 const CAN_EDIT_ROLES: ReadonlySet<Me["role"]> = new Set(["admin", "manazer"]);
@@ -93,6 +96,13 @@ export function PairingReviewCard({
   const [manualUrl, setManualUrl] = useState("");
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState("");
+  // issue 399 — "✂ Rozdeliť na veľkosti": prechodný (transient) stav, či
+  // manažér PRÁVE TERAZ otvoril split editor — rovnaký princíp ako stará
+  // appky's `splitOpen` Set, len tu PER-KARTE `useState` (karta je od E6
+  // stavová per-inštancia, `.claude/rules/pairing-search.md`). Editor sa
+  // ukazuje AJ keď `!splitOpen`, ale produkt UŽ MÁ `decision.status ===
+  // "split"` — `showSplitPanel` nižšie zjednocuje oba prípady.
+  const [splitOpen, setSplitOpen] = useState(false);
 
   // "Latest ref" vzor (`.claude/rules/frontend-design.md`) — panel sa môže
   // zavrieť/znovu otvoriť skôr, než dobehne pôvodný `fetchPairingCandidates`.
@@ -127,6 +137,7 @@ export function PairingReviewCard({
 
   const openPanel = useCallback(() => {
     setPanelOpen(true);
+    setSplitOpen(false); // vzájomne sa vylučujúce editory na jednej karte
     setActionError("");
     // Predvyplní vlastnú URL len keď ide o EXISTUJÚCE manuálne rozhodnutie,
     // čo NESEDÍ so žiadnym kandidátom (rovnaký vzor ako stará appka's
@@ -134,6 +145,16 @@ export function PairingReviewCard({
     setManualUrl(item.decision?.status === "manual" ? (item.decision.url ?? "") : "");
     loadCandidates();
   }, [item.decision, loadCandidates]);
+
+  // issue 399 — "✂ Rozdeliť na veľkosti" trigger: zdieľa TEN ISTÝ
+  // `loadCandidates()` ako "vyber url" (top-8 kandidátov slúžia ako
+  // quick-picky PER veľkosť v `PairingReviewSplitPanel.tsx`, žiadny druhý fetch).
+  const openSplit = useCallback(() => {
+    setSplitOpen(true);
+    setPanelOpen(false);
+    setActionError("");
+    loadCandidates();
+  }, [loadCandidates]);
 
   const autoShowsPanel = item.decision === null && item.chosenCandidate === null;
   // Beží pri MOUNTE (keď karta odrazu štartuje v "bez kandidáta" stave) AJ
@@ -161,6 +182,7 @@ export function PairingReviewCard({
       sendPairingDecision(item.productKey, action)
         .then(() => {
           setPanelOpen(false);
+          setSplitOpen(false); // úspešné "split"/"revert" zavrie prechodný split editor
           onDecided();
         })
         .catch((err: unknown) => {
@@ -186,6 +208,11 @@ export function PairingReviewCard({
     }
     submit({ status: "manual", url: trimmed });
   }, [manualUrl, submit]);
+
+  // issue 399 — zjednocuje "editor PRÁVE TERAZ otvorený" (`splitOpen`) s
+  // "produkt UŽ MÁ rozhodnutie split" (rovnaký princíp ako stará appky's
+  // `splitOpen.has(p.key) || s === 'split'`).
+  const showSplitPanel = splitOpen || item.decision?.status === "split";
 
   return (
     <div className="card pairing-review-card" data-testid={`pairing-review-card-${item.productKey}`}>
@@ -231,155 +258,176 @@ export function PairingReviewCard({
         </div>
 
         <div className="pairing-review-side">
-          <div className="pairing-review-label">Navrhnutý kandidát</div>
-          {item.chosenCandidate === null ? (
-            item.supplierHasAdapter ? (
-              <p className="pairing-review-nocandidate" data-testid={`pairing-review-no-candidate-${item.productKey}`}>
-                Nenašiel sa žiadny kandidát u dodávateľa.
-              </p>
-            ) : (
-              // issue 401 — dodávateľ NEMÁ automatický adaptér (nie
-              // WETLAND/BETALOV/ODIMON) — gather preň vôbec nebehal, na
-              // rozdiel od "gather behal, nič nenašiel" vyššie.
-              <p className="pairing-review-nocandidate" data-testid={`pairing-review-no-adapter-${item.productKey}`}>
-                Tento dodávateľ zatiaľ nemá automatické vyhľadávanie — link treba zadať ručne.
-              </p>
-            )
-          ) : (
-            <div data-testid={`pairing-review-candidate-${item.productKey}`}>
-              <a
-                className="pairing-review-name"
-                href={item.chosenCandidate.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                data-testid={`pairing-review-candidate-link-${item.productKey}`}
-              >
-                {item.chosenCandidate.name}
-              </a>
-              <div className="pairing-review-meta">
-                skóre {item.chosenCandidate.rawScore.toFixed(1)} · {CONFIDENCE_LABELS[item.confidence]}
-                {item.chosenCandidate.codeHit && " · kód sedí"}
-              </div>
-              {item.verdict !== null && (
-                <div className={"pairing-review-verdict pairing-review-verdict-" + item.verdict} data-testid={`pairing-review-verdict-${item.productKey}`}>
-                  {VERDICT_LABELS[item.verdict]}
-                </div>
+          {/* issue 399 — split editor (transientne otvorený, ALEBO produkt
+              UŽ MÁ decision.status === "split") NAHRADÍ CELÚ pravú stranu,
+              presne ako stará appky's `splitOpen.has(p.key) || s === 'split'`
+              early-return v `renderCard`. */}
+          {showSplitPanel ? (
+            <>
+              <div className="pairing-review-label">Rozdelenie na veľkosti</div>
+              {item.decision?.status === "split" && (
+                <span
+                  className="pairing-review-decision-badge pairing-review-decision-split"
+                  data-testid={`pairing-review-decision-badge-${item.productKey}`}
+                >
+                  {DECISION_BADGE_LABELS.split}
+                </span>
               )}
-              <div className="pairing-review-imgbox">
-                {item.chosenCandidate.imageUrl !== null ? (
-                  <img src={item.chosenCandidate.imageUrl} alt={item.chosenCandidate.name} loading="lazy" />
-                ) : (
-                  <span className="pairing-review-noimg">bez obrázka</span>
-                )}
-              </div>
-            </div>
-          )}
-
-          {!canEdit ? (
-            item.decision !== null && (
-              <span
-                className={"pairing-review-decision-badge pairing-review-decision-" + item.decision.status}
-                data-testid={`pairing-review-decision-badge-${item.productKey}`}
-              >
-                {DECISION_BADGE_LABELS[item.decision.status]}
-              </span>
-            )
+              {canEdit && (
+                <PairingReviewSplitPanel
+                  item={item}
+                  busy={busy}
+                  submit={submit}
+                  candidates={candidates}
+                  candidatesError={candidatesError}
+                  onSessionExpired={onSessionExpired}
+                />
+              )}
+            </>
           ) : (
             <>
-              {actionError !== "" && <p role="alert">{actionError}</p>}
+              <div className="pairing-review-label">Navrhnutý kandidát</div>
+              {item.chosenCandidate === null ? (
+                item.supplierHasAdapter ? (
+                  <p className="pairing-review-nocandidate" data-testid={`pairing-review-no-candidate-${item.productKey}`}>
+                    Nenašiel sa žiadny kandidát u dodávateľa.
+                  </p>
+                ) : (
+                  // issue 401 — dodávateľ NEMÁ automatický adaptér (nie
+                  // WETLAND/BETALOV/ODIMON) — gather preň vôbec nebehal, na
+                  // rozdiel od "gather behal, nič nenašiel" vyššie.
+                  <p className="pairing-review-nocandidate" data-testid={`pairing-review-no-adapter-${item.productKey}`}>
+                    Tento dodávateľ zatiaľ nemá automatické vyhľadávanie — link treba zadať ručne.
+                  </p>
+                )
+              ) : (
+                <div data-testid={`pairing-review-candidate-${item.productKey}`}>
+                  <a
+                    className="pairing-review-name"
+                    href={item.chosenCandidate.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    data-testid={`pairing-review-candidate-link-${item.productKey}`}
+                  >
+                    {item.chosenCandidate.name}
+                  </a>
+                  <div className="pairing-review-meta">
+                    skóre {item.chosenCandidate.rawScore.toFixed(1)} · {CONFIDENCE_LABELS[item.confidence]}
+                    {item.chosenCandidate.codeHit && " · kód sedí"}
+                  </div>
+                  {item.verdict !== null && (
+                    <div className={"pairing-review-verdict pairing-review-verdict-" + item.verdict} data-testid={`pairing-review-verdict-${item.productKey}`}>
+                      {VERDICT_LABELS[item.verdict]}
+                    </div>
+                  )}
+                  <div className="pairing-review-imgbox">
+                    {item.chosenCandidate.imageUrl !== null ? (
+                      <img src={item.chosenCandidate.imageUrl} alt={item.chosenCandidate.name} loading="lazy" />
+                    ) : (
+                      <span className="pairing-review-noimg">bez obrázka</span>
+                    )}
+                  </div>
+                </div>
+              )}
 
-              {item.decision !== null && !panelOpen && (
-                <div className="pairing-review-actions">
+              {!canEdit ? (
+                item.decision !== null && (
                   <span
                     className={"pairing-review-decision-badge pairing-review-decision-" + item.decision.status}
                     data-testid={`pairing-review-decision-badge-${item.productKey}`}
                   >
                     {DECISION_BADGE_LABELS[item.decision.status]}
                   </span>
-                  {(item.decision.status === "good" || item.decision.status === "manual") && (
-                    <button type="button" className="btn ghost sm" disabled={busy} onClick={openPanel} data-testid={`pairing-review-change-${item.productKey}`}>
-                      ✗ Zmeniť / iný link
-                    </button>
+                )
+              ) : (
+                <>
+                  {actionError !== "" && <p role="alert">{actionError}</p>}
+
+                  {item.decision !== null && !panelOpen && (
+                    <div className="pairing-review-actions">
+                      <span
+                        className={"pairing-review-decision-badge pairing-review-decision-" + item.decision.status}
+                        data-testid={`pairing-review-decision-badge-${item.productKey}`}
+                      >
+                        {DECISION_BADGE_LABELS[item.decision.status]}
+                      </span>
+                      {(item.decision.status === "good" || item.decision.status === "manual") && (
+                        <button type="button" className="btn ghost sm" disabled={busy} onClick={openPanel} data-testid={`pairing-review-change-${item.productKey}`}>
+                          ✗ Zmeniť / iný link
+                        </button>
+                      )}
+                      <button type="button" className="btn ghost sm" disabled={busy} onClick={() => { submit({ status: "revert" }); }} data-testid={`pairing-review-revert-${item.productKey}`}>
+                        ↩ Vrátiť
+                      </button>
+                    </div>
                   )}
-                  <button type="button" className="btn ghost sm" disabled={busy} onClick={() => { submit({ status: "revert" }); }} data-testid={`pairing-review-revert-${item.productKey}`}>
-                    ↩ Vrátiť
-                  </button>
-                </div>
-              )}
 
-              {/* issue 398 — vysvetlenie dôsledku pri už rozhodnutom
-                  terminálnom stave: appka SAMA nič na eshope nemení hneď,
-                  reálne prepnutie robí nočná automatika (E7 stavový writeback). */}
-              {item.decision !== null && !panelOpen && (item.decision.status === "unavailable" || item.decision.status === "discontinued") && (
-                <p className="pairing-review-terminal-note" data-testid={`pairing-review-terminal-note-${item.productKey}`}>
-                  Reálne prepnutie viditeľnosti na eshope urobí nočná automatika (stavový zápis) — toto rozhodnutie je len príprava naň.
-                </p>
-              )}
+                  {/* issue 398 — vysvetlenie dôsledku pri už rozhodnutom
+                      terminálnom stave: appka SAMA nič na eshope nemení hneď,
+                      reálne prepnutie robí nočná automatika (E7 stavový writeback). */}
+                  {item.decision !== null && !panelOpen && (item.decision.status === "unavailable" || item.decision.status === "discontinued") && (
+                    <p className="pairing-review-terminal-note" data-testid={`pairing-review-terminal-note-${item.productKey}`}>
+                      Reálne prepnutie viditeľnosti na eshope urobí nočná automatika (stavový zápis) — toto rozhodnutie je len príprava naň.
+                    </p>
+                  )}
 
-              {/* issue 398 — posledná podoba starej appky: KOLEKTÍVNY riadok
-                  všetkých možností priamo na karte, žiadny "✗ Zlé" medzikrok. */}
-              {item.decision === null && item.chosenCandidate !== null && !panelOpen && (
-                <div className="pairing-review-actions">
-                  <button
-                    type="button"
-                    className="btn good sm"
-                    disabled={busy}
-                    onClick={() => {
-                      submit({ status: "good" });
-                    }}
-                    data-testid={`pairing-review-good-${item.productKey}`}
-                  >
-                    ✓ Dobré
-                  </button>
-                  <button type="button" className="btn ghost sm" disabled={busy} onClick={openPanel} data-testid={`pairing-review-open-panel-${item.productKey}`}>
-                    vyber url
-                  </button>
-                  <TerminalButtons busy={busy} submit={submit} productKey={item.productKey} />
-                </div>
-              )}
+                  {/* issue 398 — posledná podoba starej appky: KOLEKTÍVNY riadok
+                      všetkých možností priamo na karte, žiadny "✗ Zlé" medzikrok. */}
+                  {item.decision === null && item.chosenCandidate !== null && !panelOpen && (
+                    <div className="pairing-review-actions">
+                      <button
+                        type="button"
+                        className="btn good sm"
+                        disabled={busy}
+                        onClick={() => {
+                          submit({ status: "good" });
+                        }}
+                        data-testid={`pairing-review-good-${item.productKey}`}
+                      >
+                        ✓ Dobré
+                      </button>
+                      <button type="button" className="btn ghost sm" disabled={busy} onClick={openPanel} data-testid={`pairing-review-open-panel-${item.productKey}`}>
+                        vyber url
+                      </button>
+                      <TerminalButtons busy={busy} submit={submit} productKey={item.productKey} />
+                    </div>
+                  )}
 
-              {/* Bez kandidáta niet čo "prijať" — panel (kandidáti/manuál/terminálne stavy) sa ukazuje priamo, presne ako stará appka. */}
-              {(panelOpen || (item.decision === null && item.chosenCandidate === null)) && (
-                <div className="pairing-review-panel" data-testid={`pairing-review-panel-${item.productKey}`}>
-                  {candidatesError !== "" && <p role="alert">{candidatesError}</p>}
-                  {candidates === null && candidatesError === "" && <p>Načítavam kandidátov…</p>}
-                  {candidates !== null &&
-                    candidates.map((c, i) => (
-                      <PanelCandidateRow key={c.url} candidate={c} index={i} busy={busy} submit={submit} productKey={item.productKey} />
-                    ))}
+                  {/* issue 399 — "✂ Rozdeliť na veľkosti": dostupné VŽDY, kým
+                      produkt nemá rozhodnutie a má viac než 1 veľkosť —
+                      nezávisle od toho, či má navrhnutého kandidáta (rovnaký
+                      zámer ako stará appky's `splitButton`). */}
+                  {item.decision === null && item.variantCount > 1 && !panelOpen && (
+                    <div className="pairing-review-actions">
+                      <button
+                        type="button"
+                        className="btn ghost sm"
+                        disabled={busy}
+                        onClick={openSplit}
+                        title="Nastaviť iný dodávateľský link pre každú veľkosť"
+                        data-testid={`pairing-review-split-${item.productKey}`}
+                      >
+                        ✂ Rozdeliť na veľkosti
+                      </button>
+                    </div>
+                  )}
 
-                  <div className="pairing-review-manual-row">
-                    <input
-                      type="url"
-                      placeholder="Vlož vlastnú URL dodávateľa…"
-                      value={manualUrl}
-                      disabled={busy}
-                      data-testid={`pairing-review-manual-input-${item.productKey}`}
-                      onChange={(e) => {
-                        setManualUrl(e.target.value);
-                      }}
+                  {/* Bez kandidáta niet čo "prijať" — panel (kandidáti/manuál/terminálne stavy) sa ukazuje priamo, presne ako stará appka. */}
+                  {(panelOpen || (item.decision === null && item.chosenCandidate === null)) && (
+                    <PairingReviewDecisionPanel
+                      productKey={item.productKey}
+                      busy={busy}
+                      candidatesError={candidatesError}
+                      candidates={candidates}
+                      manualUrl={manualUrl}
+                      onManualUrlChange={setManualUrl}
+                      onSaveManual={saveManual}
+                      submit={submit}
+                      panelOpen={panelOpen}
+                      onClose={closePanel}
                     />
-                    <button
-                      type="button"
-                      className="btn good sm"
-                      disabled={busy || manualUrl.trim() === ""}
-                      onClick={saveManual}
-                      data-testid={`pairing-review-manual-save-${item.productKey}`}
-                    >
-                      Uložiť URL
-                    </button>
-                  </div>
-
-                  <div className="pairing-review-terminal-row">
-                    <TerminalButtons busy={busy} submit={submit} productKey={item.productKey} />
-                  </div>
-
-                  {panelOpen && (
-                    <button type="button" className="btn ghost sm" disabled={busy} onClick={closePanel} data-testid={`pairing-review-panel-cancel-${item.productKey}`}>
-                      Zavrieť
-                    </button>
                   )}
-                </div>
+                </>
               )}
             </>
           )}

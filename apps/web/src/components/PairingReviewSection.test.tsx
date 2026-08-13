@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { PairingReviewSection } from "./PairingReviewSection.js";
 
@@ -163,4 +163,32 @@ it("hlavička karty 'Náš produkt' je odlíšená od 'Navrhnutý kandidát' —
   await screen.findByTestId("pairing-review-card-PR-1");
 
   expect(screen.queryByRole("heading")).toBeNull();
+});
+
+// issue 399 — "Hľadať / opraviť" pod-záložka: prepínač NIKDY nie je
+// blokovaný "Prehľad"'s vlastným načítavaním (`.claude/rules/frontend-
+// design.md`'s "druhá pod-obrazovka nesmie zdediť prvej gate" pravidlo).
+it("klik na 'Hľadať / opraviť' prepne na vyhľadávaciu záložku, aj keď 'Prehľad' ešte nedokončil svoje vlastné načítanie", async () => {
+  // Nikdy sa nevyrieši — simuluje "Prehľad" večne visiaci v načítavaní.
+  searchPairingReview.mockImplementation(() => new Promise(() => undefined));
+
+  render(<PairingReviewSection role="manazer" onSessionExpired={() => {}} />);
+  fireEvent.click(screen.getByTestId("pairing-review-tab-hladat"));
+
+  expect(await screen.findByTestId("pairing-search-fix")).toBeDefined();
+  expect(screen.queryByTestId("pairing-review-filters")).toBeNull();
+});
+
+it("prepnutie späť na 'Prehľad' ukáže pôvodný zoznam bez nového vyhľadávania", async () => {
+  searchPairingReview.mockResolvedValue({ total: 0, gatheredTotal: 0, linkedTotal: 0, items: [] });
+
+  render(<PairingReviewSection role="manazer" onSessionExpired={() => {}} />);
+  await screen.findByTestId("pairing-review-empty");
+
+  fireEvent.click(screen.getByTestId("pairing-review-tab-hladat"));
+  await screen.findByTestId("pairing-search-fix");
+
+  fireEvent.click(screen.getByTestId("pairing-review-tab-prehlad"));
+  expect(await screen.findByTestId("pairing-review-empty")).toBeDefined();
+  expect(searchPairingReview).toHaveBeenCalledTimes(1); // žiadne ĎALŠIE volanie pri prepnutí späť
 });
