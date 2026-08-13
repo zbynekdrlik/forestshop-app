@@ -28,7 +28,7 @@ const pageParam = z.preprocess(
 );
 
 const pairingReviewQuery = z.object({
-  filter: z.enum(["unreviewed", "matched", "unmatched", "st1", "st2", "st3", "all"]).default("unreviewed"),
+  filter: z.enum(["unreviewed", "matched", "unmatched", "st1", "st2", "st3", "decided", "terminal", "all"]).default("unreviewed"),
   page: pageParam,
   pageSize: z.coerce.number().int().min(1).max(200).default(50),
 });

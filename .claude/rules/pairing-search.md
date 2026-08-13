@@ -605,3 +605,63 @@ vyradilo #311 aj jeho playbook súbor (návrh, sekcia 4); router v
   `.claude/rules/shop-feed.md`), NIE bug tejto appky ani tohto tiketu.
   Zlepšenie by znamenalo vylepšiť Shoptet feed/vyhľadávací fallback —
   samostatný tiket, mimo rozsahu "ukáž oba obrázky".
+
+## issues 398/401/409 — všetky možnosti priamo na karte, plná populácia, obrázky v paneli
+
+- **Populácia obrazovky sa zmenila z "INNER JOIN na `pairing_candidate_set`"
+  (E5's pôvodná hranica) na ÚNIU troch množín** (`listPairingReview`,
+  `queries.ts`): (1) má `pairing_candidate_set` riadok, ALEBO (2) nemá
+  efektívnu dodávateľskú linku, ALEBO (3) má `pairing_decision` riadok.
+  Bod (2) je to, čo produkty dodávateľov BEZ automatického adaptéra vôbec
+  prvýkrát sprístupní na tejto obrazovke; bod (3) drží produkt viditeľný
+  aj POTOM, čo "manual"/"good" rozhodnutie medzitým získa efektívnu linku
+  (inak by zmizol skôr, než ho reviewer stihne skontrolovať/zmeniť). Celý
+  katalóg sa načíta do JS a filtruje tam (rovnaký MVP vzor ako `select.ts`/
+  `product-links`/`restock-links` — `resolveEffectiveSupplierLink` je
+  čistá JS funkcia, nedá sa vyjadriť ako SQL predikát bez duplicity).
+- **`supplierHasAdapter` (nové pole) je vlastnosť DODÁVATEĽA
+  (`suppliers.adapter_key !== null`), NIE vlastnosť "má/nemá gather
+  riadok".** Karta ho používa na rozlíšenie "dodávateľ zatiaľ nemá
+  automatické vyhľadávanie" (`pairing-review-no-adapter-*`) od "adaptér
+  MÁ, gather prehľadal a nič nenašiel" (`pairing-review-no-candidate-*`)
+  — pozor, TEORETICKY existuje tretí, nepokrytý stav (adaptérový
+  dodávateľ, čo ešte NIKDY negatheroval — `gatheredAt === null` aj
+  `supplierHasAdapter === true` naraz), vtedy karta ukáže "Nenašiel sa
+  žiadny kandidát" hlášku, hoci presnejšie by bolo "ešte nebehalo" —
+  zámerné zjednodušenie (dizajnová poznámka na tickete), keďže nočný beh
+  tento stav prakticky vždy vyrieši do 24 h.
+- **`withCleanDb()` (integračné testy) AJ `scripts/e2e-setup.ts` (e2e)
+  TRUNCATE-ujú `supplier` tabuľku BEZ reseedu migračného WETLAND/BETALOV/
+  ODIMON seedu (`0047_brief_yellowjacket.sql`)** — `supplierHasAdapter`
+  preto vyjde `false` pre ÚPLNE VŠETKY produkty, pokiaľ si test/fixtúra
+  VLASTNÝ `suppliers` riadok sám nevloží. Zavedený vzor (`pairing-search-
+  run.integration.test.ts`/`pairing-search-verify.integration.test.ts`,
+  teraz aj `e2e-fixtures-pairing-review.ts`): `db.insert(suppliers)
+  .values({name, currency:"EUR", wholesaleBaseUrl, adapterKey})` priamo v
+  seed/setup kóde — nikdy sa nespoliehaj na migračný seed prežívajúci
+  TRUNCATE.
+- **Review nález (opravené pred mergom): panel, čo sa ukazuje AUTOMATICKY
+  (karta bez kandidáta, nič na "prijatie"), musí SÁM zavolať
+  `fetchPairingCandidates` — inak "Načítavam kandidátov…" ostáva navždy
+  zobrazené.** Pôvodný E6 kód volal fetch LEN z `openPanel`u (explicitný
+  klik "vyber url"/"Zmeniť"), nikdy z auto-show vetvy. Bug existoval od
+  E6, ale #401 ho spravil OVEĽA bežnejším (každý produkt bez adaptéra ho
+  má). Fix: zdieľaná `loadCandidates()` funkcia + `useEffect` sledujúci
+  `item.decision === null && item.chosenCandidate === null` (spustí sa
+  PRI MOUNTE aj pri KAŽDOM neskoršom false→true prechode na TEJ ISTEJ
+  inštancii — napr. "↩ Vrátiť" na produkte bez kandidáta). **Test pri
+  KAŽDOM ďalšom "panel/sekcia sa ukáže bez explicitného kliku" vzore v
+  tejto appke: over, či dátový fetch, čo by normálne vyvolal explicitný
+  handler, MÁ AJ svoj vlastný `useEffect` spúšťač pre auto-show cestu —
+  jeden UI stav vie mať DVA rôzne spôsoby, ako sa zobrazí, a fetch
+  potrebuje pokrytie OBOCH.**
+- **Nové priame 📦/🚫 tlačidlá (kolektívny riadok na karte, #398) ZDIEĽAJÚ
+  `data-testid` s panelovými verziami TÝCH ISTÝCH tlačidiel** (`Terminal
+  Buttons`, `PairingReviewPanelParts.tsx`) — bezpečné, lebo obe vetvy sú
+  vzájomne VYLUČUJÚCE (priamy riadok len keď `chosenCandidate !== null &&
+  decision === null && !panelOpen`, panel len keď `panelOpen || (decision
+  === null && chosenCandidate === null)`) — nikdy oba naraz pre ten istý
+  produkt. Pri ĎALŠOM podobnom "tá istá akcia na DVOCH miestach karty"
+  vzore: zdieľaj testid len PO overení, že podmienky sú GENUINELY
+  disjunktné (nie len "vyzerá to tak"), inak dvojznačný Playwright/RTL
+  dotaz.

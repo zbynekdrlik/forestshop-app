@@ -1,15 +1,19 @@
 // issue 387 E5: "Eshop → Párovanie" — vyčlenené z `e2e-setup.ts` (eslint
 // `max-lines: 400`, `.claude/rules/testing.md`), rovnaký vzor ako existujúci
-// `e2e-fixtures-restock-links.ts` (#311). TRI VLASTNÉ, dovtedy nepoužité
-// jednovariantné produkty, každý s vlastným `pairing_candidate_set` riadkom
-// (E5's populácia = "produkty S kandidátmi", INNER JOIN): jeden BEZ
-// efektívnej linky s napárovaným kandidátom ("unreviewed" + "matched"),
-// jeden BEZ efektívnej linky bez kandidáta ("unreviewed" + "unmatched" —
-// dokazuje "Nenašiel sa žiadny kandidát" stav), a jeden UŽ S linkou
-// (dokazuje, že "unreviewed" filter/odznak ho vylúči — design komentár na
-// tickete, issue 387 E5).
+// `e2e-fixtures-restock-links.ts` (#311).
+//
+// issue 398/401/409 — fixtúry rozšírené o: `suppliers` riadok pre "E2E
+// Dodávateľ Párovanie" (adapterKey vyplnený — bez neho by `supplierHasAdapter`
+// vyšlo `false` pre VŠETKY existujúce fixtúry, keďže `withCleanDb`/
+// `e2e-setup.ts` truncatuje `supplier` tabuľku a NEreseeduje migračný
+// WETLAND/BETALOV/ODIMON seed — rovnaký ustálený vzor, aký `pairing-search
+// -run.integration.test.ts`/`pairing-search-verify.integration.test.ts` už
+// používajú: test si vlastný `suppliers` riadok vloží SÁM, nikdy sa
+// nespolieha na migračný seed), produkt BEZ adaptéra (#401 — nová plná
+// populácia) a produkt s DRUHÝM (nevybraným) kandidátom s vlastným
+// obrázkom (#409 — panel ukazuje obrázok KAŽDÉHO z top-8).
 import type { Database } from "../apps/api/src/db/client.js";
-import { pairingCandidates, pairingCandidateSets, products, shopProductUrl, users, variants } from "../apps/api/src/db/schema.js";
+import { pairingCandidates, pairingCandidateSets, products, shopProductUrl, suppliers, users, variants } from "../apps/api/src/db/schema.js";
 import { hashPassword } from "../apps/api/src/modules/auth/passwords.js";
 
 // Musí sa zhodovať s hodnotou v `apps/web/tests/e2e/pairing-review.spec.ts` —
@@ -32,6 +36,15 @@ export const E2E_OUR_IMAGE_DATA_URI =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC";
 export const E2E_CANDIDATE_IMAGE_DATA_URI =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNgYPgPAAEDAQAIicLsAAAAAElFTkSuQmCC";
+// issue 409 — TRETÍ, odlišný obrázok pre ALTERNATÍVNEHO (nevybraného)
+// kandidáta v paneli (E2E-PR-PANEL nižšie) — zelený 1×1px PNG.
+export const E2E_ALT_CANDIDATE_IMAGE_DATA_URI =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==";
+
+const ADAPTER_SUPPLIER_NAME = "E2E Dodávateľ Párovanie";
+// issue 401 — dodávateľ ZÁMERNE bez `suppliers` riadku vôbec — presne
+// scenár "dodávateľ zatiaľ nemá automatické vyhľadávanie".
+const NO_ADAPTER_SUPPLIER_NAME = "E2E Dodávateľ Bez Adaptéra";
 
 export async function seedPairingReviewFixtures(db: Database, teraz: Date, snapshotId: string, heslo: string): Promise<void> {
   await db.insert(users).values({
@@ -41,11 +54,18 @@ export async function seedPairingReviewFixtures(db: Database, teraz: Date, snaps
     role: "manazer",
   });
 
-  async function seedProdukt(key: string, name: string, over: { readonly internalNote?: string | null } = {}): Promise<void> {
+  await db.insert(suppliers).values({
+    name: ADAPTER_SUPPLIER_NAME,
+    currency: "EUR",
+    wholesaleBaseUrl: "https://e2e-dodavatel.example.com",
+    adapterKey: "wetland",
+  });
+
+  async function seedProdukt(key: string, name: string, over: { readonly internalNote?: string | null; readonly supplier?: string } = {}): Promise<void> {
     await db.insert(products).values({
       key,
       name,
-      supplier: "E2E Dodávateľ Párovanie",
+      supplier: over.supplier ?? ADAPTER_SUPPLIER_NAME,
       internalNote: over.internalNote ?? null,
       firstSeenAt: teraz,
       lastSeenAt: teraz,
@@ -127,4 +147,46 @@ export async function seedPairingReviewFixtures(db: Database, teraz: Date, snaps
     confidence: "none",
     verdict: null,
   });
+
+  // issue 401 — dodávateľ BEZ adaptéra: ŽIADEN `pairing_candidate_set`
+  // riadok vôbec (gather preň nikdy nebeží), ŽIADNA efektívna linka —
+  // ukazuje kartu bez kandidátov, s hláškou "zatiaľ nemá automatické
+  // vyhľadávanie" (nie "Nenašiel sa žiadny kandidát").
+  await seedProdukt("E2E-PR-BEZADAPTERA", "E2E Produkt Bez Adaptéra", { supplier: NO_ADAPTER_SUPPLIER_NAME });
+
+  // issue 409 — DVA kandidáti: prvý (chosen) MÁ obrázok, druhý (alternatívny,
+  // nevybraný) MÁ VLASTNÝ iný obrázok — panel musí ukázať OBA nezávisle.
+  // Vlastný, dovtedy nepoužitý produkt (nikdy sa nerozhoduje inde v súbore),
+  // aby ho žiadny INÝ test v behu netrafil/nezmenil.
+  await seedProdukt("E2E-PR-PANEL", "E2E Bunda Beta Panel");
+  await db.insert(pairingCandidateSets).values({
+    productKey: "E2E-PR-PANEL",
+    gatheredAt: teraz,
+    queries: ["e2e bunda beta"],
+    inputHash: "e2e-hash-panel",
+    chosenUrl: "https://e2e-dodavatel.example.com/bunda-beta-navrh",
+    chosenReason: "najlepší nájdený",
+    confidence: "medium",
+    verdict: null,
+  });
+  await db.insert(pairingCandidates).values([
+    {
+      productKey: "E2E-PR-PANEL",
+      position: 0,
+      name: "E2E Bunda Beta u dodávateľa",
+      url: "https://e2e-dodavatel.example.com/bunda-beta-navrh",
+      imageUrl: E2E_CANDIDATE_IMAGE_DATA_URI,
+      rawScore: "85.0000",
+      codeHit: false,
+    },
+    {
+      productKey: "E2E-PR-PANEL",
+      position: 1,
+      name: "E2E Bunda Beta Alternatíva",
+      url: "https://e2e-dodavatel.example.com/bunda-beta-alt",
+      imageUrl: E2E_ALT_CANDIDATE_IMAGE_DATA_URI,
+      rawScore: "60.0000",
+      codeHit: false,
+    },
+  ]);
 }
