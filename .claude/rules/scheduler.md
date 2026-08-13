@@ -84,7 +84,17 @@ paths:
   issue 172 — pozri nižšie), `787_878_005` (`ORDER_REMINDER_RUN_LOCK_KEY`,
   `order-reminder/constants.ts`, issue 173), `787_878_006`
   (`NEDOSTUPNE_SEND_LOCK_KEY`, `nedostupne/constants.ts`, issue 176 —
-  serializuje jedno odoslanie, tento modul nemá naplánovaný beh).
+  serializuje jedno odoslanie, tento modul nemá naplánovaný beh),
+  `787_878_007` (`SUPPLIER_STOCK_RUN_LOCK_KEY`, `supplier-stock/constants.ts`,
+  issue 212), `787_878_008` (`RESTOCK_RUN_LOCK_KEY`, `restock/constants.ts`,
+  issue 213), `787_878_009` (`PAIRING_SEARCH_RUN_LOCK_KEY`,
+  `pairing-search/constants.ts`, issue 387 E3 — **tento zoznam bol PRED
+  touto opravou zastaraný a nezahŕňal `007`/`008` vôbec** — E3's návrh aj
+  zadanie preto omylom menovali `007` ako "voľný", hoci už mesiace patril
+  `supplier-stock`u; review na E3 to našlo predtým, než sa dostalo do
+  produkcie. Over TOTO CELÉ znenie (nielen posledné číslo) pred pridaním
+  ĎALŠIEHO kľúča — zastaraný zoznam je presne to, čo spôsobilo túto
+  kolíziu).
   `ordersImportJob`/`pruneRawOrdersJob` (#22/#28) nepridali žiadny nový kľúč
   (pozri bod vyššie). `shoptetWritebackJob` (issue 122) tiež žiadny nepridal
   — v tomto tickete niet manuálneho HTTP triggeru na tú istú prácu (na

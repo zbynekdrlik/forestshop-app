@@ -3,7 +3,7 @@
 // 5273377438, sekcia "DB schéma"). `pairing_decision` (E6) sa v tomto
 // súbore ZÁMERNE NEROBÍ — mimo rozsahu E3.
 
-import { boolean, index, integer, jsonb, numeric, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { boolean, foreignKey, index, integer, jsonb, numeric, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { products } from "./schema-catalog.js";
 
 export const pairingConfidence = pgEnum("pairing_confidence", ["high", "medium", "low", "none"]);
@@ -41,9 +41,15 @@ export const pairingCandidates = pgTable(
   "pairing_candidate",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    productKey: text("product_key")
-      .notNull()
-      .references(() => pairingCandidateSets.productKey, { onDelete: "cascade" }),
+    // Bez `.references()` priamo tu — FK je nižšie explicitne pomenovaná
+    // `foreignKey({...})` (review nález: drizzle-ov AUTO-generovaný názov
+    // `pairing_candidate_product_key_pairing_candidate_set_product_key_fk`
+    // má 69 znakov, nad Postgres-ovým 63-bajtovým `NAMEDATALEN` limitom —
+    // Postgres ho TICHO orezáva pri vytvorení, ale `drizzle-kit`'s snapshot
+    // JSON si pamätá plný, nikdy-neintrospektovaný 69-znakový názov, takže
+    // budúci `db:generate`, ktorý by túto FK menil, by vygeneroval `ALTER
+    // TABLE ... DROP CONSTRAINT` na názov, ktorý v živej DB neexistuje).
+    productKey: text("product_key").notNull(),
     // Poradie v rámci top-8 (0 = najlepší podľa `rank()`), 0..7.
     position: integer("position").notNull(),
     name: text("name").notNull(),
@@ -63,6 +69,11 @@ export const pairingCandidates = pgTable(
   (t) => [
     uniqueIndex("pairing_candidate_product_url_uq").on(t.productKey, t.url),
     index("pairing_candidate_product_idx").on(t.productKey),
+    foreignKey({
+      name: "pairing_candidate_product_key_fk",
+      columns: [t.productKey],
+      foreignColumns: [pairingCandidateSets.productKey],
+    }).onDelete("cascade"),
   ],
 );
 

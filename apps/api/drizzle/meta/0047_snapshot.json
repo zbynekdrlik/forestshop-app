@@ -1,5 +1,5 @@
 {
-  "id": "1cdc7427-2efe-4dfe-9c05-68125894b285",
+  "id": "432c39b3-8681-49d6-b5d0-ce4f777f837c",
   "prevId": "ef8c57c1-5648-4c6b-890b-8a9124745b67",
   "version": "7",
   "dialect": "postgresql",
@@ -3139,8 +3139,8 @@
         }
       },
       "foreignKeys": {
-        "pairing_candidate_product_key_pairing_candidate_set_product_key_fk": {
-          "name": "pairing_candidate_product_key_pairing_candidate_set_product_key_fk",
+        "pairing_candidate_product_key_fk": {
+          "name": "pairing_candidate_product_key_fk",
           "tableFrom": "pairing_candidate",
           "tableTo": "pairing_candidate_set",
           "columnsFrom": [

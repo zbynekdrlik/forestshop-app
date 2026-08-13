@@ -295,7 +295,7 @@ describe("pairing-search: gather beh (issue 387 E3)", () => {
   // .test.ts`'s "dva súbežné behy sa serializujú" — `pg_try_advisory_lock`
   // (neblokujúci) z DRUHÉHO pripojenia MUSÍ zlyhať, kým je beh zaseknutý na
   // falošnom, ešte nevyriešenom sieťovom volaní.
-  it("dva súbežné behy sa serializujú (advisory zámok 787_878_007), nikdy neprebehnú naraz", async () => {
+  it("dva súbežné behy sa serializujú (advisory zámok PAIRING_SEARCH_RUN_LOCK_KEY), nikdy neprebehnú naraz", async () => {
     const db = await boot();
     await seedSupplier(db, "WETLAND", "wetland");
     await seedProduct(db, "P1", { name: "Bunda Wetland" });

@@ -31,7 +31,7 @@ CREATE TABLE "pairing_search_settings" (
 );
 --> statement-breakpoint
 ALTER TABLE "pairing_candidate_set" ADD CONSTRAINT "pairing_candidate_set_product_key_product_key_fk" FOREIGN KEY ("product_key") REFERENCES "public"."product"("key") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "pairing_candidate" ADD CONSTRAINT "pairing_candidate_product_key_pairing_candidate_set_product_key_fk" FOREIGN KEY ("product_key") REFERENCES "public"."pairing_candidate_set"("product_key") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "pairing_candidate" ADD CONSTRAINT "pairing_candidate_product_key_fk" FOREIGN KEY ("product_key") REFERENCES "public"."pairing_candidate_set"("product_key") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX "pairing_candidate_product_url_uq" ON "pairing_candidate" USING btree ("product_key","url");--> statement-breakpoint
 CREATE INDEX "pairing_candidate_product_idx" ON "pairing_candidate" USING btree ("product_key");--> statement-breakpoint
 -- issue 387 E3: "suppliers" (schema-pairing.ts, #44) UŽ EXISTUJE, len bola
