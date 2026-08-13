@@ -720,3 +720,21 @@ paths:
   pixel meranie" vzoru v `.claude/rules/local-dev.md`, ktorý rieši
   `db:migrate`/`api start` priamo, nie `pnpm ... e2e`'s vlastný webServer
   subproces).
+- **Odstránenie CELEJ OBRAZOVKY (nie len stĺpca/triedy) potrebuje grep
+  CELÉHO `apps/web/tests/e2e/` na jej `nav-tab-<id>`/testid-y — nielen
+  kontrolu, ktoré MODULY z nej importujú.** Issue 400 (odstránenie
+  "Párovanie produktov", #239): žiadny INÝ komponent ju neimportoval, ale
+  `pairing-review.spec.ts` (úplne INÝ, nesúvisiaci spec súbor) mal vlastný
+  test, ktorý PO uložení rozhodnutia klikol `nav-tab-supplier-links` a
+  overil hodnotu na odstraňovanej obrazovke — ako KRÍŽOVÝ dôkaz, že
+  zdieľané zápisové jadro (`upsertProductSupplierLink`) naozaj zapisuje do
+  tej istej tabuľky, čo číta INÁ obrazovka. Takýto test NEPADNE na
+  `grep -rn "SupplierLinksSection"` (nič z neho neimportuje), len na
+  skutočnom BEHU e2e balíka. Fix: prerobiť krížové overenie cez INÚ
+  ŽIJÚCU obrazovku so zdieľanou zápisovou cestou (tu: "Vyhľadať", #240) —
+  nikdy len vymazať test/asserciu. Test na KAŽDÉ ĎALŠIE odstránenie celej
+  obrazovky v tomto repe: `grep -rn "nav-tab-<id>\|<jej-testid-prefix>"
+  apps/web/tests/e2e/` naprieč CELÝM priečinkom (nielen jej vlastný spec
+  súbor), PRED zmazaním — presne ako `.claude/rules/pairing-search.md`'s
+  E8 sekcia dokumentuje pre `git diff` dôkaz na strane API/modulov, tu ten
+  istý princíp na strane e2e krížových testov.
