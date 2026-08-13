@@ -542,8 +542,10 @@ paths:
   `2026-08-03/04`. Test prešiel mesiace, kým vývoj tohto ticketu (2026-08-04
   → 2026-08-05) skutočne neprekročil polnoc a test spadol so zdanlivo
   nesúvisiacou chybou (`orderCount: 0` namiesto `1`). Fix: hranica sa
-  prepočíta PRI BEHU testu cez existujúcu `computeBratislavaPeriodBoundaries
-  (new Date())` (tá istá funkcia, akú používa aj samotná trasa), nie
+  prepočíta PRI BEHU testu cez existujúcu `computeOrdersDashboardBoundaries
+  (new Date())` (tá istá funkcia, akú používa aj samotná trasa — premenovaná
+  z `computeBratislavaPeriodBoundaries` v issue 407, viď `.claude/rules/
+  orders.md`), nie
   literál napísaný v deň písania testu. **Test na KAŽDÝ ďalší
   "dnes/týždeň/mesiac" integračný test, čo ide cez HTTP trasu (nie priamo
   cez funkciu s explicitným `now`):** vkladá fixtúru s PEVNÝM dátumovým

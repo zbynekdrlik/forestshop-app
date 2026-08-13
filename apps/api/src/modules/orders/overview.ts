@@ -1,6 +1,7 @@
 import { and, gte, ne } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
 import { orders } from "../../db/schema.js";
+import { getZonedDateParts } from "../../timezone.js";
 import { parseShopLocalDateTime } from "./parser.js";
 
 // issue 237: "Prehľad e-shopu" na obrazovke "Na objednanie" — počet
@@ -23,57 +24,73 @@ import { parseShopLocalDateTime } from "./parser.js";
 // deň, nie kĺzavých 24 hodín. Plné dôkazy (SQL dopyty, presné čísla) v
 // issue 407's komentári.
 
+// Rovnaká hodnota ako `modules/posta-uncollected/constants.ts`'s
+// `CANCELLED_STATUSES` (`new Set(["Stornovaná"])`) — VEDOME NEZDIEĽANÁ:
+// import odtiaľ SEM by obrátil prirodzený smer závislosti (`orders` je
+// základnejší modul, `posta-uncollected` je na ňom postavený). Ak niekedy
+// pribudne TRETIE miesto potrebujúce tento literál, hoď ho do vlastného
+// zdieľaného miesta vnútri `orders` modulu (napr. vedľa `open-statuses.ts`)
+// a nechaj `posta-uncollected` importovať odtiaľ — nie naopak.
 const STORNO_STATUS_NAME = "Stornovaná";
 
 /**
  * "Dnes" v Europe/Bratislava, vrátené ako UTC `Date` (dolná hranica
- * intervalu `>= hranica`). Zámerne ZNOVA POUŽÍVA `parser.ts`'s
- * `parseShopLocalDateTime` (naivný lokálny čas → UTC, DST-vedomé,
- * `Intl.DateTimeFormat`-guess-format-diff trik) namiesto vlastnej
- * reimplementácie tej istej offset aritmetiky — vytvorí kandidátny
- * "YYYY-MM-DD 00:00:00" reťazec a nechá ho previesť už existujúcou,
- * otestovanou funkciou.
+ * intervalu `>= hranica`). Zámerne ZNOVA POUŽÍVA `timezone.ts`'s zdieľanú
+ * `getZonedDateParts` (namiesto vlastného `Intl.DateTimeFormat` volania) a
+ * `parser.ts`'s `parseShopLocalDateTime` (naivný lokálny čas → UTC,
+ * DST-vedomé, `Intl.DateTimeFormat`-guess-format-diff trik) — vytvorí
+ * kandidátny "YYYY-MM-DD 00:00:00" reťazec a nechá ho previesť už
+ * existujúcou, otestovanou funkciou.
  */
 function localMidnightUtc(now: Date, timeZone: string): Date {
-  const dtf = new Intl.DateTimeFormat("en-US", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  });
-  const parts = dtf.formatToParts(now);
-  const get = (type: string): number => Number(parts.find((p) => p.type === type)?.value ?? "0");
+  const { year, month, day } = getZonedDateParts(now, timeZone);
   const pad = (n: number): string => String(n).padStart(2, "0");
   // `parseShopLocalDateTime` nikdy nevráti `null` pre vstup, ktorý SAMA táto
   // funkcia zostavila v presnom `DATETIME_RE` tvare.
-  return parseShopLocalDateTime(`${String(get("year"))}-${pad(get("month"))}-${pad(get("day"))} 00:00:00`, timeZone) as Date;
+  return parseShopLocalDateTime(`${String(year)}-${pad(month)}-${pad(day)} 00:00:00`, timeZone) as Date;
 }
 
 /**
- * `date` mínus presne 1 kalendárny mesiac, s CLAMPOM na posledný deň
- * cieľového mesiaca (rovnaké správanie ako Postgres-ov `timestamp - interval
- * '1 month'`, overené priamo v produkčnej DB: `date '2026-03-31' - interval
- * '1 month'` = `2026-02-28`, NIE prepad do marca) — na rozdiel od JS
- * `Date.prototype.setUTCMonth`, ktorý by prepočítaný deň mimo cieľového
- * mesiaca ticho PRETIEKOL do nasledujúceho mesiaca (31.3. − 1 mesiac by dal
- * 3.3., nie 28.2.). Operuje na UTC kalendárnych poliach okamihu — žiadna
- * TZ-konverzia netreba, keďže ide o čisté odčítanie trvania od okamihu, nie
- * o miestnu polnoc (na rozdiel od `localMidnightUtc` vyššie).
+ * `now` mínus presne 1 kalendárny mesiac V DANOM PÁSME (Europe/Bratislava),
+ * s CLAMPOM na posledný deň cieľového mesiaca (rovnaké správanie ako
+ * Postgres-ov `timestamp - interval '1 month'`, overené priamo v produkčnej
+ * DB: `date '2026-03-31' - interval '1 month'` = `2026-02-28`, NIE prepad do
+ * marca).
+ *
+ * KRITICKY dôležité — narozdiel od "týždňa" (čistá 7×24h dĺžka trvania,
+ * TZ-nezávislá), "mesiac" JE kalendárny pojem, takže MUSÍ počítať v
+ * MIESTNOM (Bratislava) kalendári, nie v UTC (code review na issue 407 —
+ * prvý pokus autora počítal cez `date.getUTC*()`, čo by ~2 hodiny denne
+ * (rozdiel UTC vs. CEST, v zime 1 hodinu) — presne okolo miestnej polnoci —
+ * odvodilo hranicu z NESPRÁVNEHO kalendárneho dňa/mesiaca, keďže UTC deň sa
+ * mení až 1-2 hodiny PO miestnej polnoci). Preto rovnaký vzor ako
+ * `localMidnightUtc` vyššie: rozlož `now` na MIESTNE kalendárne/časové
+ * zložky (`getZonedDateParts`), počítaj clamp na nich, zostav kandidátny
+ * "YYYY-MM-DD HH:mm:ss" miestny reťazec a nechaj `parseShopLocalDateTime`
+ * previesť späť na UTC (DST-vedomé, rovnaká funkcia ako všade inde v tomto
+ * module).
  */
-function subtractOneMonthClamped(date: Date): Date {
-  const year = date.getUTCFullYear();
-  const month = date.getUTCMonth();
+function subtractOneMonthClamped(now: Date, timeZone: string): Date {
+  const { year, month, day, hour, minute, second } = getZonedDateParts(now, timeZone);
+
   let targetYear = year;
-  let targetMonth = month - 1;
-  if (targetMonth < 0) {
-    targetMonth = 11;
+  let targetMonth = month - 1; // `month` je 1-12; 1 (január) − 1 = 0 → preklopiť na december minulého roka
+  if (targetMonth < 1) {
+    targetMonth = 12;
     targetYear -= 1;
   }
-  const daysInTargetMonth = new Date(Date.UTC(targetYear, targetMonth + 1, 0)).getUTCDate();
-  const clampedDay = Math.min(date.getUTCDate(), daysInTargetMonth);
-  return new Date(
-    Date.UTC(targetYear, targetMonth, clampedDay, date.getUTCHours(), date.getUTCMinutes(), date.getUTCSeconds(), date.getUTCMilliseconds()),
-  );
+  // Počet dní v cieľovom mesiaci — čisto kalendárny fakt (nezávislý od
+  // pásma), preto bezpečné počítať cez `Date.UTC`. `targetMonth` (1-12) sa
+  // dá priamo použiť ako 0-indexovaný "nasledujúci mesiac" argument — deň 0
+  // toho mesiaca JE posledný deň cieľového mesiaca.
+  const daysInTargetMonth = new Date(Date.UTC(targetYear, targetMonth, 0)).getUTCDate();
+  const clampedDay = Math.min(day, daysInTargetMonth);
+
+  const pad = (n: number): string => String(n).padStart(2, "0");
+  const localCandidate = `${String(targetYear)}-${pad(targetMonth)}-${pad(clampedDay)} ${pad(hour)}:${pad(minute)}:${pad(second)}`;
+  // `parseShopLocalDateTime` nikdy nevráti `null` pre vstup v presnom
+  // `DATETIME_RE` tvare, ktorý sama táto funkcia zostavila.
+  return parseShopLocalDateTime(localCandidate, timeZone) as Date;
 }
 
 /**
@@ -89,7 +106,7 @@ export function computeOrdersDashboardBoundaries(
 ): { readonly today: Date; readonly week: Date; readonly month: Date } {
   const today = localMidnightUtc(now, timeZone);
   const week = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-  const month = subtractOneMonthClamped(now);
+  const month = subtractOneMonthClamped(now, timeZone);
 
   return { today, week, month };
 }

@@ -434,30 +434,64 @@ paths:
   duplicitná money-parsovacia logika.**
 - **Dashboard "Prehľad e-shopu" (issue 237, `orders/overview.ts`) je
   ZÁMERNE samostatný od "Na objednanie"'s zoznamu — číta PRIAMO `order`
-  tabuľku (nie cez `order_line` JOIN) a počíta VŠETKY objednávky bez
-  ohľadu na `status_name`, na rozdiel od `listOpenOrderLinesBySupplier`'s
-  open-status filtra.** Dôvod: ide o celoobchodnú štatistiku (rovnakú, akú
-  ukazuje Shoptet-ov vlastný dashboard), nie o dodávateľský pracovný
-  zoznam — uzavretá ("Vybavená") objednávka sa preto MUSÍ zarátať rovnako
-  ako otvorená (`orders-overview.integration.test.ts`'s dedikovaný test).
-  **Otvorená otázka pre budúce naživo overenie:** appka dnes zaráta AJ
-  prípadné storno/zrušené objednávky do "dnes/týždeň/mesiac" — nie je
-  overené, či Shoptet-ov vlastný dashboard robí to isté; ak naživo
-  porovnanie ukáže rozdiel, treba doplniť filter do `overview.ts`'s
-  `getOrdersDashboardOverview`, nie predpokladať zhodu.
-- **Hranice "dnes"/"tento týždeň" (pondelok)/"tento mesiac" v Europe/
-  Bratislava (`overview.ts`'s `computeBratislavaPeriodBoundaries`) ZNOVA
-  POUŽÍVAJÚ `parser.ts`'s `parseShopLocalDateTime`** (zostaví kandidátny
-  `"YYYY-MM-DD 00:00:00"` reťazec a nechá ho previesť už existujúcou, DST-
-  otestovanou funkciou) — nikdy nereimplementuj tú istú UTC-konverznú
-  offset aritmetiku druhýkrát. Prvý pokus autora TOTO pravidlo porušil
-  (vlastná offset-počítacia funkcia LEN s dátumovými, nie časovými,
-  `Intl.DateTimeFormat` poľami) a dal ŠPATNÝ výsledok — polnoc formátovaná
-  cez date-only polia stratí celý hodinový posun zóny (viď dôkaz nižšie),
-  odhalené AŽ pri ručnom prepočte cez `TZ=Europe/Bratislava date`, nie
-  testom (test by len potvrdil vlastnú chybnú implementáciu). Súčet peňazí
-  (`sumMoneyCents`) beží cez BigInt centy, nikdy cez `number` — rovnaká
-  disciplína ako `catalog/money.ts`.
+  tabuľku (nie cez `order_line` JOIN), na rozdiel od
+  `listOpenOrderLinesBySupplier`'s open-status filtra.** Dôvod: ide o
+  celoobchodnú štatistiku (rovnakú, akú ukazuje Shoptet-ov vlastný
+  dashboard), nie o dodávateľský pracovný zoznam — uzavretá ("Vybavená")
+  objednávka sa preto MUSÍ zarátať rovnako ako otvorená
+  (`orders-overview.integration.test.ts`'s dedikovaný test). **Jedna
+  výnimka od issue 407 (pozri ďalší bod): "Stornovaná" sa NEZARÁTA.**
+- **issue 407 (majiteľ: "tieto čísla mi nejako nesedia oproti shoptetu") —
+  DVE opravy oproti pôvodnému (issue 237) dizajnu, obe naživo overené
+  binárnym hľadaním hranice v produkčnej DB proti Shoptet-ovým reálnym
+  číslam (plný dôkaz + presné SQL v issue 407's komentári):**
+  1. **"Týždeň"/"Mesiac" sú KĹZAVÉ (rolling) okná, NIE kalendárne**
+     (pôvodne pondelok tohto týždňa / 1. deň tohto mesiaca — appky
+     pôvodné čísla PRESNE sedeli s kalendárnym výpočtom, kým Shoptet
+     ukazoval iné, vyššie čísla). `now - 7 dní` / `now - 1 kalendárny
+     mesiac` dali PRESNE Shoptetove čísla. **"Dnes" OSTÁVA kalendárny
+     deň** — Shoptetova samostatná "24 hodín" dlaždica (iná hodnota než
+     jeho "Dnes" v tom istom momente) to naživo dokazuje.
+  2. **"Stornovaná" objednávky sa NEZARÁTAJÚ** (do počtu; na tržbu to v
+     dnešných dátach nevplýva, keďže KAŽDÁ stornovaná objednávka má
+     `total_price_with_vat = 0.00`, no filter je explicitný podľa
+     `status_name`, nespolieha sa na túto zhodu — pozri
+     `STORNO_STATUS_NAME` v `overview.ts`).
+- **Hranice "dnes" (kalendárny deň)/"tento týždeň" (kĺzavých 7 dní)/"tento
+  mesiac" (kĺzavý kalendárny mesiac) v Europe/Bratislava (`overview.ts`'s
+  `computeOrdersDashboardBoundaries`, premenované z pôvodného
+  `computeBratislavaPeriodBoundaries` v issue 407 — pôvodný názov už
+  nesedel, keď dve z troch hraníc prestali byť "kalendárne Bratislava")
+  ZNOVA POUŽÍVAJÚ `timezone.ts`'s zdieľanú `getZonedDateParts` +
+  `parser.ts`'s `parseShopLocalDateTime`** (zostaví kandidátny
+  `"YYYY-MM-DD HH:mm:ss"` miestny reťazec a nechá ho previesť už
+  existujúcou, DST-otestovanou funkciou) — nikdy nereimplementuj tú istú
+  UTC-konverznú offset aritmetiku druhýkrát. Prvý pokus autora TOTO
+  pravidlo porušil (vlastná offset-počítacia funkcia LEN s dátumovými, nie
+  časovými, `Intl.DateTimeFormat` poľami) a dal ŠPATNÝ výsledok — polnoc
+  formátovaná cez date-only polia stratí celý hodinový posun zóny (viď
+  dôkaz nižšie), odhalené AŽ pri ručnom prepočte cez `TZ=Europe/Bratislava
+  date`, nie testom (test by len potvrdil vlastnú chybnú implementáciu).
+  **"Mesiac" (issue 407, `subtractOneMonthClamped`) MUSÍ počítať v
+  MIESTNOM (Bratislava) kalendári, nie v UTC** — code review na issue 407
+  chytilo prvý pokus autora, ktorý počítal cez `date.getUTC*()`: keďže
+  "teraz" a cieľový mesiac môžu mať ROZDIELNY DST offset (napr. "teraz" v
+  marci = CEST +2, cieľový február = CET +1), UTC-only výpočet by ~1-2
+  hodiny denne (okolo miestnej polnoci, keď sa UTC deň/mesiac líši od
+  miestneho) odvodil hranicu zo ŠPATNÉHO kalendárneho dňa — presne to
+  isté, kvôli čomu bol pridaný `getZonedDateParts` na "dnes". Regresný
+  test (`overview.test.ts`) overuje presne tento prípad (31.8. 22:30 UTC =
+  1.9. 00:30 CEST — UTC mesiac (august) sa líši od miestneho (september)).
+  Súčet peňazí (`sumMoneyCents`) beží cez BigInt centy, nikdy cez `number`
+  — rovnaká disciplína ako `catalog/money.ts`.
+- **`subtractOneMonthClamped` CLAMPuje na posledný deň cieľového mesiaca
+  (rovnaké správanie ako Postgres-ov `timestamp - interval '1 month'`,
+  overené priamo v produkčnej DB: `date '2026-03-31' - interval '1 month'`
+  = `2026-02-28`, NIE prepad do marca ako by dal holý JS
+  `setUTCMonth`/`setMonth`)** — naživo overené AJ ako jediná definícia, čo
+  presne reprodukuje Shoptetove čísla (fixných "posledných 30 dní" bolo
+  priamo v DB vyvrátené: v 31-dňovom mesiaci dáva iné číslo, než Shoptet
+  skutočne ukazuje).
 - **Test na KAŽDÝ ĎALŠÍ "naivný lokálny čas → UTC" výpočet v tomto module:
   over HODNOTU (nie len že kód "vyzerá správne") ručným prepočtom
   `date -u -d @$(TZ=Europe/Bratislava date -d "<Y-M-D> 00:00:00" +%s)

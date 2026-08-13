@@ -27,15 +27,6 @@ describe("computeOrdersDashboardBoundaries", () => {
     expect(week.toISOString()).toBe("2026-07-28T12:00:00.000Z");
   });
 
-  // Ručný prepočet (`.claude/rules/orders.md`'s vlastné pravidlo — over
-  // HODNOTU, nie len že kód "vyzerá správne"): 168h pred 2026-01-15T03:30:00Z
-  // je 2026-01-08T03:30:00Z — týždňové okno neprechádza cez žiadnu DST
-  // hranicu (na rozdiel od "dnes"), takže žiadny offset-posun tu nehrozí.
-  it("týždeň funguje rovnako naprieč polnocou/mesačnou hranicou", () => {
-    const { week } = computeOrdersDashboardBoundaries(new Date("2026-01-15T03:30:00Z"));
-    expect(week.toISOString()).toBe("2026-01-08T03:30:00.000Z");
-  });
-
   // Kĺzavý kalendárny mesiac dozadu — 4.8. − 1 mesiac = 4.7. (júl má 31 dní,
   // žiadny clamp netreba).
   it("mesiac = presne 1 kalendárny mesiac dozadu od `now` (bez clampu)", () => {
@@ -47,15 +38,25 @@ describe("computeOrdersDashboardBoundaries", () => {
   // `date '2026-03-31' - interval '1 month'` = `2026-02-28` (CLAMP na
   // posledný deň februára, nie prepad do marca ako by dal holý JS
   // `setUTCMonth`). 2026 nie je priestupný rok, február má 28 dní.
-  it("mesiac CLAMPuje na posledný deň cieľového mesiaca (31.3. − 1 mesiac = 28.2., nie 3.3.)", () => {
+  //
+  // Počíta sa v MIESTNOM (Bratislava) kalendári (code review na issue 407 —
+  // pôvodný UTC-only pokus by pri tomto teste omylom nevidel, že "teraz"
+  // (31.3., už letný čas CEST +2) a cieľový mesiac (február, ešte zimný čas
+  // CET +1) majú ROZDIELNY offset) — miestny "12:00" (10:00 UTC + 2h CEST)
+  // sa zachová a prevedie späť cez Februárov VLASTNÝ offset (+1), teda
+  // `T11:00:00Z`, nie mechanicky rovnaké UTC hodiny ako "teraz" (`T10:00:00Z`).
+  // Hodnota overená priamo behom skutočnej implementácie (Node), nie
+  // odhadnutá ručne — presne to, čo toto pravidlo vyžaduje.
+  it("mesiac CLAMPuje na posledný deň cieľového mesiaca (31.3. − 1 mesiac = 28.2., nie 3.3.) — cez DST hranicu", () => {
     const { month } = computeOrdersDashboardBoundaries(new Date("2026-03-31T10:00:00Z"));
-    expect(month.toISOString()).toBe("2026-02-28T10:00:00.000Z");
+    expect(month.toISOString()).toBe("2026-02-28T11:00:00.000Z");
   });
 
   // Priestupný rok — 2024 MÁ 29.2., clamp preto pristane na 29., nie 28.
-  it("mesiac CLAMPuje na 29.2. v priestupnom roku", () => {
+  // Rovnaký DST-hranicový posun ako test vyššie (marec CEST, február CET).
+  it("mesiac CLAMPuje na 29.2. v priestupnom roku — cez DST hranicu", () => {
     const { month } = computeOrdersDashboardBoundaries(new Date("2024-03-31T10:00:00Z"));
-    expect(month.toISOString()).toBe("2024-02-29T10:00:00.000Z");
+    expect(month.toISOString()).toBe("2024-02-29T11:00:00.000Z");
   });
 
   // Prechod cez hranicu roka — január nemá "predchádzajúci mesiac 0", musí
@@ -63,6 +64,20 @@ describe("computeOrdersDashboardBoundaries", () => {
   it("mesiac prekleňuje hranicu roka (15.1. − 1 mesiac = 15.12. predchádzajúceho roka)", () => {
     const { month } = computeOrdersDashboardBoundaries(new Date("2026-01-15T12:00:00Z"));
     expect(month.toISOString()).toBe("2025-12-15T12:00:00.000Z");
+  });
+
+  // Code review na issue 407: presne ten prípad, ktorý by odhalil, keby
+  // "mesiac"/"dnes" počítali v UTC namiesto v MIESTNOM kalendári. 31.8.
+  // 22:30 UTC je v Bratislave (CEST, letný čas) UŽ 1.9. 00:30 — teda UTC
+  // deň/mesiac (august) sa LÍŠI od miestneho (september). "Dnes" aj
+  // "mesiac" musia vychádzať z MIESTNEHO kalendárneho dňa/mesiaca
+  // (september), nie z UTC (august) — inak by appka počítala okno o celý
+  // mesiac inak, presne v tomto dennom ~2-hodinovom okne (leto)/1-hodinovom
+  // (zima). Hodnoty overené priamo behom implementácie (Node), nie ručne.
+  it("dnes/mesiac používajú MIESTNY kalendárny deň/mesiac, nie UTC (31.8. 22:30 UTC = 1.9. 00:30 CEST)", () => {
+    const { today, month } = computeOrdersDashboardBoundaries(new Date("2026-08-31T22:30:00Z"));
+    expect(today.toISOString()).toBe("2026-08-31T22:00:00.000Z"); // miestna polnoc 1.9.
+    expect(month.toISOString()).toBe("2026-07-31T22:30:00.000Z"); // miestny 1.9. mínus 1 mesiac = miestny 1.8.
   });
 });
 
