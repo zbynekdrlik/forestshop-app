@@ -1,5 +1,5 @@
 import { afterEach, expect, it } from "vitest";
-import { productSupplierLinkOverrides, shopProductUrl, users } from "../src/db/schema.js";
+import { productSupplierLinkOverrides, shopProductUrl, suppliers, users } from "../src/db/schema.js";
 import { createApp } from "../src/http/app.js";
 import { resetLoginRateLimit } from "../src/http/login-rate-limit.js";
 import { hashPassword } from "../src/modules/auth/passwords.js";
@@ -60,6 +60,8 @@ interface Telo {
     readonly ourUrlIsSearchFallback: boolean;
     readonly ourImageUrl: string | null;
     readonly hasEffectiveLink: boolean;
+    readonly supplierHasAdapter: boolean;
+    readonly gatheredAt: string | null;
     readonly confidence: "high" | "medium" | "low" | "none";
     readonly verdict: "ok" | "unsure" | null;
     readonly chosenCandidate: {
@@ -77,14 +79,57 @@ it("bez prihlásenia vráti 401", async () => {
   expect((await app.request("/api/pairing-review")).status).toBe(401);
 });
 
-it("produkt BEZ pairing_candidate_set riadku (gather ho ešte nespracoval) sa v zozname vôbec nezobrazí", async () => {
+// issue 401 — populácia je teraz ÚNIA (gatherované ∪ bez efektívnej linky ∪
+// rozhodnuté), nie len INNER JOIN na `pairing_candidate_set` (E5's pôvodná
+// hranica). Produkt bez gather riadku, ale AJ BEZ efektívnej linky (typicky
+// dodávateľ bez adaptéra — tu žiadny `suppliers` riadok vôbec neexistuje) sa
+// TERAZ zobrazí, s `gatheredAt: null` a `supplierHasAdapter: false`.
+it("issue 401: produkt BEZ pairing_candidate_set riadku A BEZ efektívnej linky SA ZOBRAZÍ (dodávateľ bez adaptéra) — plná populácia", async () => {
   const { app, cookie, db } = await boot("citanie");
   const snapshotId = await insertTestSnapshot(db);
-  await seedProduct(db, snapshotId, "PR-NEGATHER", { name: "Negatherovaný produkt" });
+  await seedProduct(db, snapshotId, "PR-NEGATHER", { name: "Negatherovaný produkt", supplier: "DODAVATEL-BEZ-ADAPTERA" });
 
   const telo = (await (await app.request("/api/pairing-review?filter=all", { headers: { cookie } })).json()) as Telo;
-  expect(telo.items.some((i) => i.productKey === "PR-NEGATHER")).toBe(false);
+  const item = telo.items.find((i) => i.productKey === "PR-NEGATHER");
+  expect(item).toBeDefined();
+  expect(item?.gatheredAt).toBeNull();
+  expect(item?.supplierHasAdapter).toBe(false);
+  expect(item?.chosenCandidate).toBeNull();
+  expect(item?.confidence).toBe("none");
+  expect(telo.gatheredTotal).toBe(1);
+
+  // "unreviewed" (bez efektívnej linky, bez terminálneho rozhodnutia) ho tiež zahŕňa.
+  const unreviewedTelo = (await (await app.request("/api/pairing-review?filter=unreviewed", { headers: { cookie } })).json()) as Telo;
+  expect(unreviewedTelo.items.some((i) => i.productKey === "PR-NEGATHER")).toBe(true);
+});
+
+// Prevrátený prípad — produkt BEZ gather riadku, ktorý UŽ MÁ efektívnu linku
+// (napr. založenú cez #239/#240 predtým, než sem raz zavítal gather) sa
+// NEZOBRAZÍ — netreba naň upozorňovať (rovnaká "má odkaz, netreba upozorniť"
+// zásada ako E6's `unreviewed` predikát).
+it("issue 401: produkt BEZ pairing_candidate_set riadku, ktorý UŽ MÁ efektívnu linku (mimo tejto obrazovky), sa NEZOBRAZÍ", async () => {
+  const { app, cookie, db } = await boot("citanie");
+  const snapshotId = await insertTestSnapshot(db);
+  await seedProduct(db, snapshotId, "PR-LINKED-NOGATHER", { name: "Produkt s linkou bez gatheru", internalNote: "https://dodavatel.example.com/uz-ma-linku" });
+
+  const telo = (await (await app.request("/api/pairing-review?filter=all", { headers: { cookie } })).json()) as Telo;
+  expect(telo.items.some((i) => i.productKey === "PR-LINKED-NOGATHER")).toBe(false);
   expect(telo.gatheredTotal).toBe(0);
+});
+
+// issue 401 — `supplierHasAdapter` je `true` PRIAMO pre dodávateľa s
+// registrovaným `suppliers.adapter_key`, nezávisle od toho, či preň gather
+// UŽ prebehol (rovnaká `suppliers` tabuľka ako `pairing-search/select.ts`).
+it("issue 401: supplierHasAdapter je true pre dodávateľa s registrovaným adaptérom, aj keď preň gather ešte nebehal", async () => {
+  const { app, cookie, db } = await boot("citanie");
+  const snapshotId = await insertTestSnapshot(db);
+  await db.insert(suppliers).values({ name: "WETLAND", currency: "EUR", wholesaleBaseUrl: "https://www.wetland.sk", adapterKey: "wetland" });
+  await seedProduct(db, snapshotId, "PR-ADAPTER-NEGATHER", { name: "Adaptérový, ešte negatherovaný", supplier: "WETLAND" });
+
+  const telo = (await (await app.request("/api/pairing-review?filter=all", { headers: { cookie } })).json()) as Telo;
+  const item = telo.items.find((i) => i.productKey === "PR-ADAPTER-NEGATHER");
+  expect(item?.supplierHasAdapter).toBe(true);
+  expect(item?.gatheredAt).toBeNull();
 });
 
 it("napárovaný produkt (chosenUrl) nesie navrhnutého kandidáta so skóre/istotou/kódovým overením", async () => {

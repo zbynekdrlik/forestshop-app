@@ -6,6 +6,9 @@ import { PairingReviewCard } from "./PairingReviewCard.js";
 // toggle-open panel vzor). Vyčlenené OD `PairingReviewSection.test.tsx` (E5,
 // list-rendering), rovnaký princíp ako `OrderLineRow.*.test.tsx`/
 // `UpozornenieCard.*.test.ts` — karta má VLASTNÝ test súbor.
+//
+// issue 398/401/409 — testy prerobené na novú UX (žiadne "✗ Zlé", priamy
+// riadok ✓ Dobré/„vyber url"/📦/🚫, adapterless hláška, obrázky v paneli).
 
 const { fetchPairingCandidates, sendPairingDecision } = vi.hoisted(() => ({
   fetchPairingCandidates: vi.fn(),
@@ -35,6 +38,7 @@ const MATCHED_ITEM = {
   ourUrlIsSearchFallback: false,
   ourImageUrl: "https://www.forestshop.sk/img/bunda.jpg",
   hasEffectiveLink: false,
+  supplierHasAdapter: true,
   gatheredAt: "2026-08-13T03:35:00.000Z",
   confidence: "high" as const,
   chosenReason: "najlepší nájdený",
@@ -55,6 +59,16 @@ const UNMATCHED_ITEM = {
   chosenCandidate: null,
   confidence: "none" as const,
   verdict: null,
+};
+
+// issue 401 — dodávateľ BEZ adaptéra: rovnaký tvar ako UNMATCHED_ITEM
+// (žiadny kandidát), ale gather pre TAKÝTO produkt nikdy nebeží vôbec.
+const NO_ADAPTER_ITEM = {
+  ...UNMATCHED_ITEM,
+  productKey: "PR-NOADAPTER",
+  supplier: "DODAVATEL-BEZ-ADAPTERA",
+  supplierHasAdapter: false,
+  gatheredAt: null,
 };
 
 const DECIDED_UNAVAILABLE_ITEM = {
@@ -97,12 +111,20 @@ it("'citanie' rola nevidí ŽIADNE akčné tlačidlo", async () => {
   expect(card.querySelectorAll("button")).toHaveLength(0);
 });
 
-it("napárovaný produkt bez rozhodnutia ukáže ✓ Dobré / ✗ Zlé; klik na ✓ Dobré odošle {status:'good'} a zavolá onDecided", async () => {
+// issue 398 — posledná podoba starej appky: žiadny "✗ Zlé" medzikrok, VŠETKY
+// štyri možnosti (✓ Dobré / „vyber url" / 📦 / 🚫) sú priamo na karte naraz.
+it("napárovaný produkt bez rozhodnutia ukáže priamo VŠETKY štyri možnosti (✓ Dobré/vyber url/📦/🚫); klik na ✓ Dobré odošle {status:'good'} a zavolá onDecided", async () => {
   sendPairingDecision.mockResolvedValue(undefined);
   const onDecided = vi.fn();
   render(<PairingReviewCard item={MATCHED_ITEM} role="manazer" onDecided={onDecided} onSessionExpired={() => {}} />);
 
   expect(screen.getByTestId("pairing-review-good-PR-1")).toBeDefined();
+  expect(screen.getByTestId("pairing-review-open-panel-PR-1").textContent).toBe("vyber url");
+  expect(screen.getByTestId("pairing-review-unavailable-PR-1")).toBeDefined();
+  expect(screen.getByTestId("pairing-review-discontinued-PR-1")).toBeDefined();
+  // Panel NIE JE otvorený — žiadny z jeho prvkov (napr. "Zavrieť") ešte neexistuje.
+  expect(screen.queryByTestId("pairing-review-panel-cancel-PR-1")).toBeNull();
+
   fireEvent.click(screen.getByTestId("pairing-review-good-PR-1"));
 
   await waitFor(() => {
@@ -111,6 +133,20 @@ it("napárovaný produkt bez rozhodnutia ukáže ✓ Dobré / ✗ Zlé; klik na 
   await waitFor(() => {
     expect(onDecided).toHaveBeenCalledTimes(1);
   });
+});
+
+// issue 398 — priame 📦/🚫 tlačidlá v riadku (nie len v paneli) skutočne
+// fungujú, bez toho, že by treba najprv otvoriť panel.
+it("priame 📦 tlačidlo (bez otvorenia panelu) odošle {status:'unavailable'}", async () => {
+  sendPairingDecision.mockResolvedValue(undefined);
+  render(<PairingReviewCard item={MATCHED_ITEM} role="manazer" onDecided={() => {}} onSessionExpired={() => {}} />);
+
+  fireEvent.click(screen.getByTestId("pairing-review-unavailable-PR-1"));
+  await waitFor(() => {
+    expect(sendPairingDecision).toHaveBeenCalledWith("PR-1", { status: "unavailable" });
+  });
+  // Panel sa NIKDY neotvoril — `fetchPairingCandidates` sa nezavolalo.
+  expect(fetchPairingCandidates).not.toHaveBeenCalled();
 });
 
 it("issue 397: karta ukazuje obrázok kandidáta AJ nášho produktu vedľa seba; chýbajúci obrázok kandidáta ukáže 'bez obrázka'", async () => {
@@ -129,10 +165,30 @@ it("issue 397: karta ukazuje obrázok kandidáta AJ nášho produktu vedľa seba
   expect(cardBezObrazka.querySelectorAll(".pairing-review-noimg")).toHaveLength(1);
 });
 
-it("klik na ✗ Zlé ROZBALÍ panel NA MIESTE (karta ostáva) a načíta kandidátov; 'Vybrať' odošle manual s URL toho kandidáta", async () => {
+// issue 401 — dodávateľ bez adaptéra dostáva VLASTNÚ hlášku, nie "Nenašiel
+// sa žiadny kandidát" (tá je vyhradená pre "gather behal, nič nenašiel").
+it("issue 401: dodávateľ BEZ adaptéra ukáže 'zatiaľ nemá automatické vyhľadávanie', nikdy 'Nenašiel sa žiadny kandidát'", async () => {
+  fetchPairingCandidates.mockResolvedValue([]);
+  render(<PairingReviewCard item={NO_ADAPTER_ITEM} role="manazer" onDecided={() => {}} onSessionExpired={() => {}} />);
+
+  expect(screen.getByTestId("pairing-review-no-adapter-PR-NOADAPTER").textContent).toContain("nemá automatické vyhľadávanie");
+  expect(screen.queryByTestId("pairing-review-no-candidate-PR-NOADAPTER")).toBeNull();
+  // Bez kandidáta -> panel (manuálne URL pole + 📦/🚫) je vidno priamo.
+  expect(await screen.findByTestId("pairing-review-manual-input-PR-NOADAPTER")).toBeDefined();
+});
+
+it("issue 401: naopak — adaptérový dodávateľ, ktorý gather prehľadal a nič nenašiel, ukáže 'Nenašiel sa žiadny kandidát'", () => {
+  fetchPairingCandidates.mockResolvedValue([]);
+  render(<PairingReviewCard item={UNMATCHED_ITEM} role="manazer" onDecided={() => {}} onSessionExpired={() => {}} />);
+
+  expect(screen.getByTestId("pairing-review-no-candidate-PR-2").textContent).toContain("Nenašiel sa žiadny kandidát");
+  expect(screen.queryByTestId("pairing-review-no-adapter-PR-2")).toBeNull();
+});
+
+it("klik na „vyber url\" ROZBALÍ panel NA MIESTE (karta ostáva) a načíta kandidátov S OBRÁZKAMI; 'Vybrať' odošle manual s URL toho kandidáta", async () => {
   fetchPairingCandidates.mockResolvedValue([
-    { name: "Top kandidát", url: "https://dodavatel.example.com/top", rawScore: 90, codeHit: true },
-    { name: "Druhý kandidát", url: "https://dodavatel.example.com/druhy", rawScore: 60, codeHit: false },
+    { name: "Top kandidát", url: "https://dodavatel.example.com/top", imageUrl: "https://dodavatel.example.com/img/top.jpg", rawScore: 90, codeHit: true },
+    { name: "Druhý kandidát", url: "https://dodavatel.example.com/druhy", imageUrl: null, rawScore: 60, codeHit: false },
   ]);
   sendPairingDecision.mockResolvedValue(undefined);
 
@@ -144,6 +200,11 @@ it("klik na ✗ Zlé ROZBALÍ panel NA MIESTE (karta ostáva) a načíta kandid�
   const panel = await screen.findByTestId("pairing-review-panel-PR-1");
   expect(panel.textContent).toContain("Top kandidát");
   expect(panel.textContent).toContain("Druhý kandidát");
+
+  // issue 409 — prvý kandidát MÁ obrázok (vlastný <img>), druhý nemá (fallback "bez obrázka").
+  expect(panel.querySelectorAll("img")).toHaveLength(1);
+  expect(panel.querySelector("img")?.getAttribute("src")).toBe("https://dodavatel.example.com/img/top.jpg");
+  expect(panel.querySelectorAll(".pairing-review-noimg")).toHaveLength(1);
 
   fireEvent.click(screen.getByTestId("pairing-review-panel-pick-PR-1-1"));
   await waitFor(() => {
@@ -171,7 +232,7 @@ it("ručná URL: neplatná adresa sa NEODOŠLE (klientská validácia), platná 
   });
 });
 
-it("📦 Nie je skladom / 🚫 Už sa nebude predávať odošlú príslušný terminálny status", async () => {
+it("📦 Nie je skladom / 🚫 Už sa nebude predávať v PANELI odošlú príslušný terminálny status", async () => {
   fetchPairingCandidates.mockResolvedValue([]);
   sendPairingDecision.mockResolvedValue(undefined);
 
@@ -184,7 +245,7 @@ it("📦 Nie je skladom / 🚫 Už sa nebude predávať odošlú príslušný te
   });
 });
 
-it("už rozhodnutý produkt (terminálny stav) ukáže odznak + '↩ Vrátiť'; klik odošle {status:'revert'}", async () => {
+it("už rozhodnutý produkt (terminálny stav) ukáže odznak + vysvetľujúcu poznámku o nočnej automatike + '↩ Vrátiť'; klik odošle {status:'revert'}", async () => {
   sendPairingDecision.mockResolvedValue(undefined);
   const onDecided = vi.fn();
   render(<PairingReviewCard item={DECIDED_UNAVAILABLE_ITEM} role="manazer" onDecided={onDecided} onSessionExpired={() => {}} />);
@@ -193,6 +254,8 @@ it("už rozhodnutý produkt (terminálny stav) ukáže odznak + '↩ Vrátiť'; 
   // Terminálny stav (unavailable/discontinued) nemá "Zmeniť" tlačidlo —
   // len napárované/manuálne rozhodnutia sa dajú "zmeniť na iný link".
   expect(screen.queryByTestId("pairing-review-change-PR-3")).toBeNull();
+  // issue 398 — vysvetlenie, že reálne prepnutie robí nočná automatika.
+  expect(screen.getByTestId("pairing-review-terminal-note-PR-3").textContent).toContain("nočná automatika");
 
   fireEvent.click(screen.getByTestId("pairing-review-revert-PR-3"));
   await waitFor(() => {
@@ -203,17 +266,18 @@ it("už rozhodnutý produkt (terminálny stav) ukáže odznak + '↩ Vrátiť'; 
   });
 });
 
-it("rozhodnutie 'good' ukáže AJ '✗ Zmeniť / iný link' — klik otvorí panel s kandidátmi", async () => {
-  fetchPairingCandidates.mockResolvedValue([{ name: "Top kandidát", url: "https://dodavatel.example.com/bunda-alfa", rawScore: 90, codeHit: true }]);
+it("rozhodnutie 'good' ukáže AJ '✗ Zmeniť / iný link' — klik otvorí panel s kandidátmi, ŽIADNA terminálna poznámka", async () => {
+  fetchPairingCandidates.mockResolvedValue([{ name: "Top kandidát", url: "https://dodavatel.example.com/bunda-alfa", imageUrl: null, rawScore: 90, codeHit: true }]);
 
   render(<PairingReviewCard item={DECIDED_GOOD_ITEM} role="manazer" onDecided={() => {}} onSessionExpired={() => {}} />);
+  expect(screen.queryByTestId("pairing-review-terminal-note-PR-4")).toBeNull();
   fireEvent.click(screen.getByTestId("pairing-review-change-PR-4"));
 
   await screen.findByTestId("pairing-review-panel-PR-4");
   expect(fetchPairingCandidates).toHaveBeenCalledWith("PR-4");
 });
 
-it("busy guard: kým prvý zápis beží, ✓ Dobré AJ ✗ Zlé sú disabled (jeden zdieľaný guard)", async () => {
+it("busy guard: kým prvý zápis beží, VŠETKY štyri priame tlačidlá (✓ Dobré/vyber url/📦/🚫) sú disabled (jeden zdieľaný guard)", async () => {
   let resolveDecision: (() => void) | undefined;
   sendPairingDecision.mockImplementation(
     () =>
@@ -224,15 +288,21 @@ it("busy guard: kým prvý zápis beží, ✓ Dobré AJ ✗ Zlé sú disabled (j
 
   render(<PairingReviewCard item={MATCHED_ITEM} role="manazer" onDecided={() => {}} onSessionExpired={() => {}} />);
   const good = screen.getByTestId<HTMLButtonElement>("pairing-review-good-PR-1");
-  const bad = screen.getByTestId<HTMLButtonElement>("pairing-review-open-panel-PR-1");
+  const chooseUrl = screen.getByTestId<HTMLButtonElement>("pairing-review-open-panel-PR-1");
+  const unavailable = screen.getByTestId<HTMLButtonElement>("pairing-review-unavailable-PR-1");
+  const discontinued = screen.getByTestId<HTMLButtonElement>("pairing-review-discontinued-PR-1");
   expect(good.disabled).toBe(false);
-  expect(bad.disabled).toBe(false);
+  expect(chooseUrl.disabled).toBe(false);
+  expect(unavailable.disabled).toBe(false);
+  expect(discontinued.disabled).toBe(false);
 
   fireEvent.click(good);
   await waitFor(() => {
     expect(good.disabled).toBe(true);
   });
-  expect(bad.disabled).toBe(true);
+  expect(chooseUrl.disabled).toBe(true);
+  expect(unavailable.disabled).toBe(true);
+  expect(discontinued.disabled).toBe(true);
 
   resolveDecision?.();
   await waitFor(() => {

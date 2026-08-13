@@ -29,6 +29,10 @@ import { PairingReviewCard } from "./PairingReviewCard.js";
 // efektu, nielen v `useRef` počiatočnej hodnote). Viditeľná záložka v `NAV`
 // (`nav.ts`) — ŽIADEN vlastný `<h1>`/`<h2>`, `App.tsx`/`Topbar` ho vykreslí sám.
 
+// issue 398 — plný zoznam z majiteľovho komentára na tickete (poslednej
+// podoby starej appky): Nezrevidované · Napárované (AI) · Nenapárované ·
+// 🟢 Skladom · 📦 Nie skladom · 🚫 Nepredáva sa · ✓ Dobré/Vybrané ·
+// ⛔ Vyriešené-vypnuté · Všetky — presne v tomto poradí.
 const FILTER_LABELS: Readonly<Record<PairingReviewFilter, string>> = {
   unreviewed: "Nezrevidované",
   matched: "Napárované (AI)",
@@ -36,6 +40,8 @@ const FILTER_LABELS: Readonly<Record<PairingReviewFilter, string>> = {
   st1: "🟢 Skladom",
   st2: "📦 Nie skladom",
   st3: "🚫 Nepredáva sa",
+  decided: "✓ Dobré/Vybrané",
+  terminal: "⛔ Vyriešené-vypnuté",
   all: "Všetky",
 };
 

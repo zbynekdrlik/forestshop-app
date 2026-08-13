@@ -28,11 +28,12 @@ const MATCHED_ITEM = {
   ourUrlIsSearchFallback: false,
   ourImageUrl: "https://www.forestshop.sk/img/bunda.jpg",
   hasEffectiveLink: false,
+  supplierHasAdapter: true,
   gatheredAt: "2026-08-13T03:35:00.000Z",
   confidence: "high" as const,
   chosenReason: "najlepší nájdený",
   verdict: "ok" as const,
-  chosenCandidate: { name: "Bunda Alfa", url: "https://dodavatel.example.com/bunda-alfa", rawScore: 1080.5, codeHit: true },
+  chosenCandidate: { name: "Bunda Alfa", url: "https://dodavatel.example.com/bunda-alfa", imageUrl: null, rawScore: 1080.5, codeHit: true },
   decision: null,
 };
 
@@ -50,6 +51,7 @@ const UNMATCHED_ITEM = {
   ourUrlIsSearchFallback: true,
   ourImageUrl: null,
   hasEffectiveLink: false,
+  supplierHasAdapter: true,
   gatheredAt: "2026-08-13T03:35:00.000Z",
   confidence: "none" as const,
   chosenReason: null,
@@ -128,6 +130,26 @@ it("klik na iný filter znova načíta zoznam s novým filtrom a zapamätá si h
     expect(searchPairingReview).toHaveBeenCalledWith({ filter: "matched", page: 1 });
   });
   expect(window.localStorage.getItem("pairingReviewFilter")).toBe("matched");
+});
+
+// issue 398 — plný zoznam z majiteľovho komentára na tickete musí byť
+// naozaj VYKRESLENÝ, nielen definovaný v type/kóde.
+it("issue 398: filtre '✓ Dobré/Vybrané' a '⛔ Vyriešené-vypnuté' sú vykreslené a fungujú", async () => {
+  searchPairingReview.mockResolvedValue({ total: 0, gatheredTotal: 0, linkedTotal: 0, items: [] });
+
+  render(<PairingReviewSection role="citanie" onSessionExpired={() => {}} />);
+  await screen.findByTestId("pairing-review-empty");
+
+  expect(screen.getByTestId("pairing-review-filter-decided").textContent).toBe("✓ Dobré/Vybrané");
+  expect(screen.getByTestId("pairing-review-filter-terminal").textContent).toBe("⛔ Vyriešené-vypnuté");
+
+  searchPairingReview.mockClear();
+  searchPairingReview.mockResolvedValue({ total: 0, gatheredTotal: 0, linkedTotal: 0, items: [] });
+  screen.getByTestId("pairing-review-filter-terminal").click();
+
+  await waitFor(() => {
+    expect(searchPairingReview).toHaveBeenCalledWith({ filter: "terminal", page: 1 });
+  });
 });
 
 // Substring kolízia s "Párovanie produktov" (#239) — pozri design komentár
