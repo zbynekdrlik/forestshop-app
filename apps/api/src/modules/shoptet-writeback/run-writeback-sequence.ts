@@ -17,7 +17,11 @@ export interface ShoptetWritebackSequenceResult {
  * gatovaný vlastným Štart/Stop prepínačom, default VYPNUTÝ). Zámerne
  * NEZÁVISLÉ (design komentár na tickete, "Zvažované prístupy" bod 2):
  * zlyhanie linkového importu nesmie zabrániť POKUSU o stavový — ide o inú,
- * disjunktnú množinu riadkov v inom súbore.
+ * disjunktnú množinu riadkov v inom súbore. Nezávislosť platí AJ pre TVRDÉ
+ * zlyhanie (vyhodenú výnimku, nie len `{ok:false}` Log výsledok) — obe
+ * `runShoptetWriteback`/`runShoptetStateWriteback` majú VLASTNÝ `try`/`catch`
+ * okolo `runShoptetImportIsolated` (review nález, issue 387 E7), takže ani
+ * jeden podbeh sem výnimku nikdy nepošle.
  *
  * `now` sa zachytí RAZ (job-level, `scheduler.ts`) a odovzdá OBOM
  * podbehom — rovnaký "čas štartu CELÉHO behu" race guard vzor ako dnešný

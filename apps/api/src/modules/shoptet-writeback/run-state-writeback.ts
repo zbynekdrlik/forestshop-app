@@ -2,7 +2,7 @@ import type { Database } from "../../db/client.js";
 import { buildStatesCsv, dedupeStateRowsByCode } from "./csv.js";
 import type { ShoptetImportConfig } from "./config.js";
 import { markStateSynced } from "./mark-state-synced.js";
-import { runShoptetImportIsolated } from "./playwright-import.js";
+import { runShoptetImportIsolated, type ShoptetImportOutcome } from "./playwright-import.js";
 import { selectChangedStateDecisions } from "./select-states.js";
 
 export type StateWritebackRunResult =
@@ -27,6 +27,12 @@ export type StateWritebackRunResult =
  * nejednoznačnom výsledku sa `stateSyncedAt` NIKDY nezmení — nasledujúci
  * beh (`shoptetWritebackJob`, cez `run-writeback-sequence.ts`) tie isté
  * produkty pošle znova.
+ *
+ * Review nález (rovnaký ako `run-writeback.ts`): `runShoptetImportIsolated`
+ * VYHADZUJE na tvrdom zlyhaní (nie len `{ok:false}`) — `try`/`catch` nižšie
+ * to premieňa na normálny `{status:"failed"}` výsledok, aby výnimka NIKDY
+ * neprešla do `run-writeback-sequence.ts` a nezastavila (v opačnom poradí
+ * volania) linkový podbeh.
  */
 export async function runShoptetStateWriteback(
   db: Database,
@@ -41,7 +47,19 @@ export async function runShoptetStateWriteback(
   // sedelo s tým, čo `buildStatesCsv` skutočne zapíše — jeden zdroj pravdy.
   const deduped = dedupeStateRowsByCode(rows);
   const csv = buildStatesCsv(rows);
-  const outcome = await runShoptetImportIsolated({ config, csv, expectedRows: deduped.length });
+  let outcome: ShoptetImportOutcome;
+  try {
+    outcome = await runShoptetImportIsolated({ config, csv, expectedRows: deduped.length });
+  } catch (error) {
+    return {
+      status: "failed",
+      productCount: productKeys.length,
+      rowCount: deduped.length,
+      processed: null,
+      failed: null,
+      errorDetail: error instanceof Error ? error.message : String(error),
+    };
+  }
 
   if (!outcome.ok) {
     return {

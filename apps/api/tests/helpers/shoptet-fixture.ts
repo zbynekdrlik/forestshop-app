@@ -42,6 +42,16 @@ export interface ShoptetFixture {
    * seeding this, matching production instead of the never-happens "log
    * truly empty" edge case. */
   seedPastEntry(): void;
+  /** issue 387 E7: makes the NEXT import attempt's `/admin/import-produktov/`
+   * page render WITHOUT the safe-mode radio — one-shot (consumed on the next
+   * `GET`, then reverts to normal), so `ensureSafeSettings` (`playwright-
+   * import.ts`) throws (a genuine HARD failure, not a soft `{ok:false}` Log
+   * result) on that ONE attempt only. Lets a test prove that a hard failure
+   * in ONE of two sequential import calls (`run-writeback-sequence.ts`) does
+   * NOT prevent the OTHER from being genuinely attempted — a static
+   * `omitSafeRadio` (constructor option, above) would trip on EVERY attempt
+   * against the same fixture, making the two calls indistinguishable. */
+  failNextImportFormOnce(): void;
   close(): Promise<void>;
 }
 
@@ -96,6 +106,7 @@ export async function startShoptetFixture(options: ShoptetFixtureOptions): Promi
   let entries: string[] = [];
   let nextId = 100;
   let outcome: FixtureOutcomeMode = "success";
+  let failNextImportForm = false; // issue 387 E7 — one-shot, see failNextImportFormOnce() below
 
   app.get("/admin/", (c) => {
     const cookie = getCookie(c, COOKIE_NAME);
@@ -115,6 +126,10 @@ export async function startShoptetFixture(options: ShoptetFixtureOptions): Promi
 
   app.get("/admin/import-produktov/", (c) => {
     if (getCookie(c, COOKIE_NAME) !== "ok") return c.redirect("/admin/", 303);
+    if (failNextImportForm) {
+      failNextImportForm = false; // one-shot — consumed, next request is normal again
+      return c.html(importPage(true));
+    }
     return c.html(importPage(options.omitSafeRadio ?? false));
   });
 
@@ -161,6 +176,9 @@ export async function startShoptetFixture(options: ShoptetFixtureOptions): Promi
       const id = nextId;
       nextId += 1;
       entries = [`#${String(id)} 01.08.2026 09:00 Spracované: 9. Upravené: 9. Zlyhanie variantov: 0.`, ...entries];
+    },
+    failNextImportFormOnce: () => {
+      failNextImportForm = true;
     },
     close: () =>
       new Promise<void>((resolve, reject) => {
