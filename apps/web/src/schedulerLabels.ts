@@ -10,7 +10,11 @@ import type { JobRun } from "./schedulerApi.js";
 // (rovnaké slovenské názvy ako ich `NavTab.label` v `nav.ts`) a
 // "shoptet-writeback"/"order-note-writeback" (skrátené znenie ich
 // "*_NOT_CONFIGURED" hlášok v `modules/scheduler/jobs.ts` — sem sa zmestí
-// len krátky popis stĺpca "Úloha", nie celá veta).
+// len krátky popis stĺpca "Úloha", nie celá veta). Issue 387 (dolaďovačka
+// z prvého ostrého behu párovania): doplnené "pairing-search"
+// (`PAIRING_SEARCH_JOB_NAME`, apps/api/src/modules/pairing-search/
+// constants.ts, E3) — presne ten istý typ medzery ako issue 185, len o
+// job neskôr.
 export const JOB_LABELS: Readonly<Record<string, string>> = {
   "catalog-import": "Import katalógu",
   "prune-raw-exports": "Mazanie starých surových exportov (katalóg)",
@@ -21,6 +25,7 @@ export const JOB_LABELS: Readonly<Record<string, string>> = {
   "order-reminder": "Pripomienky objednávok",
   "shoptet-writeback": "Spätný zápis dodávateľa do Shoptetu",
   "order-note-writeback": "Spätný zápis poznámky do Shoptetu",
+  "pairing-search": "Párovanie: nočný zber kandidátov u dodávateľov",
 };
 
 export const STATUS_LABELS: Record<JobRun["status"], string> = {
