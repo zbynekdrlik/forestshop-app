@@ -2419,6 +2419,10 @@ a.upozornenie-title:hover {
 .uloha-row:first-child {
   border-top: 1px solid var(--fs-border-soft);
 }
+/* issue 403: nenápadné zvýraznenie riadku pod kurzorom — teraz, keď je
+   ovládanie ohraničené na `.ulohy-panel`'s 640px (nie roztiahnuté cez
+   celú stránku), pomáha oku pri prehľadávaní dlhšieho zoznamu spojiť
+   text riadku s jeho vlastnými ikonami vpravo. */
 .uloha-row:hover {
   background: var(--fs-surface-alt);
 }

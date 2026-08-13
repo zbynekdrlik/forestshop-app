@@ -35,7 +35,9 @@ import {
 //    namiesto `<button>`u s Unicode ☐/☑ — jediné miesto v appke, kde hlavný
 //    ovládací prvok obrazovky bol len text namiesto skutočného UI prvku
 //    (OrderLineRow.tsx/UpozorneniaSection.tsx/DpdSection.tsx majú všade
-//    skutočný checkbox).
+//    skutočný checkbox — CSS špecificitu proti globálnemu resetu, pozri
+//    app.css, si však rieši výslovne len OrderLineRow.tsx's
+//    `.order-group input[type="checkbox"]`, viď fix nižšie).
 // 3) `.uloha-row`'s `align-items` je `flex-start` namiesto `center` — pri
 //    zalomení textu na užšom okne (viac riadkov) drží checkbox/ikony pri
 //    PRVOM riadku textu namiesto stredu celého zalomeného bloku.
