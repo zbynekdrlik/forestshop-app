@@ -82,6 +82,18 @@ function wetlandCard(name: string, href: string): string {
   return `<div class="product-miniature__title"><a class="link" href="${href}">${name}</a></div>`;
 }
 
+/** issue 397 — plná `.product-miniature` obal-štruktúra s obrázkom, presne
+ * ako `wetland.ts`'s `.closest(".product-miniature")` obrázková extrakcia
+ * očakáva. */
+function wetlandCardWithImage(name: string, href: string, imageSrc: string): string {
+  return (
+    `<article class="product-miniature">` +
+    `<a class="product-miniature__link"><img class="product-miniature__image" src="${imageSrc}"></a>` +
+    `<div class="product-miniature__title"><a class="link" href="${href}">${name}</a></div>` +
+    `</article>`
+  );
+}
+
 function fakeWetlandFetcher(html: string, onCall?: (url: string) => void): Fetcher {
   return (url) => {
     onCall?.(url);
@@ -112,6 +124,23 @@ describe("pairing-search: gather beh (issue 387 E3)", () => {
     const candidates = await db.select().from(pairingCandidates).where(eq(pairingCandidates.productKey, "P1"));
     expect(candidates).toHaveLength(2);
     expect(candidates.find((c) => c.position === 0)?.url).toBe("https://www.wetland.sk/p/1");
+  });
+
+  // issue 397: adaptér už NAPĺŇA `imageUrl` priamo z výsledkovej karty —
+  // over, že sa nesie AŽ do DB, žiadny extra fetch navyše (dispatch, "adaptéry
+  // čítajú obrázok priamo z výsledkovej karty").
+  it("issue 397: obrázok kandidáta z výsledkovej karty (adaptér) sa uloží do pairing_candidate.image_url", async () => {
+    const db = await boot();
+    await seedSupplier(db, "WETLAND", "wetland");
+    await seedProduct(db, "P1", { name: "Bunda Wetland" });
+
+    const html = `<div>${wetlandCardWithImage("Bunda Wetland", "https://www.wetland.sk/p/1", "/img/bunda.jpg")}</div>`;
+    const searchClient = new SearchClient({ fetcher: fakeWetlandFetcher(html) });
+
+    await runPairingSearch({ db, now: NOW, searchClient });
+
+    const [candidate] = await db.select().from(pairingCandidates).where(eq(pairingCandidates.productKey, "P1"));
+    expect(candidate?.imageUrl).toBe("https://www.wetland.sk/img/bunda.jpg");
   });
 
   it("kódová zhoda vždy vyhrá nad menovou (confidence high, aj keď meno nesedí)", async () => {

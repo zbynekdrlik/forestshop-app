@@ -6,7 +6,7 @@
 import { eq } from "drizzle-orm";
 import { afterEach, describe, expect, it } from "vitest";
 import type { Database } from "../src/db/client.js";
-import { pairingCandidateSets, products, suppliers, variants } from "../src/db/schema.js";
+import { pairingCandidates, pairingCandidateSets, products, suppliers, variants } from "../src/db/schema.js";
 import { SearchClient, type Fetcher } from "../src/modules/pairing-search/client.js";
 import { runPairingSearch } from "../src/modules/pairing-search/run.js";
 import { insertTestSnapshot } from "./helpers/catalog.js";
@@ -84,6 +84,17 @@ function wetlandDetailPage(code: string | null): string {
       ? ""
       : `<li class="detail"><div class="detail__left"><span class="detail__title">Kód</span></div><div class="detail__right"><span>${code}</span></div></li>`;
   return `<html><body><h1>Detail kandidáta</h1><ul class="product__details">${codeBlock}</ul></body></html>`;
+}
+
+/** issue 397 — rovnaká detailná stránka, naviac s `og:image` — dokazuje
+ *  fallback (`applyImageFallback`, `run.ts`) na TEJ ISTEJ HTML, čo E4 aj
+ *  tak sťahuje na kódovú kaskádu. */
+function wetlandDetailPageWithImage(code: string | null, imageContent: string): string {
+  const codeBlock =
+    code === null
+      ? ""
+      : `<li class="detail"><div class="detail__left"><span class="detail__title">Kód</span></div><div class="detail__right"><span>${code}</span></div></li>`;
+  return `<html><head><meta property="og:image" content="${imageContent}"></head><body><h1>Detail kandidáta</h1><ul class="product__details">${codeBlock}</ul></body></html>`;
 }
 
 /** Smeruje podľa URL: `vyhladavanie` -> search výsledky, inak (kandidátova
@@ -172,5 +183,43 @@ describe("pairing-search: kódové overenie (issue 387 E4)", () => {
     // externalCodes.length === 0`) — žiadne ĎALŠIE volanie na
     // "/p/medium" nad rámec search dopytov.
     expect(calls.some((url) => url === "https://www.wetland.sk/p/medium")).toBe(false);
+  });
+
+  // issue 397 (mimo doslovného portu) — `og:image` fallback z TEJ ISTEJ
+  // detailnej stránky, čo E4 už aj tak fetchuje na kódovú kaskádu. Design
+  // komentár na tickete: fallback platí LEN pre CHOSEN kandidáta (adaptér
+  // vlastný obrázok z `wetlandCard` helperu tu nikdy nedostane, keďže ten
+  // nenesie žiadny `.product-miniature` obal — presne prípad, kde fallback
+  // musí zaskočiť).
+  it("issue 397: vysoká istota + adaptér bez obrázka -> chosen kandidát dostane og:image fallback z detailu", async () => {
+    const db = await boot();
+    await seedSupplier(db);
+    await seedProduct(db, "P1", { name: "Nohavice X", externalCode: "KOD777" });
+
+    const searchHtml = wetlandCard("Úplne iný text KOD777 model", "https://www.wetland.sk/p/kod");
+    const calls: string[] = [];
+    const detailHtml = wetlandDetailPageWithImage("KOD777", "/img/kod777.jpg");
+    const client = new SearchClient({ fetcher: routingFetcher(searchHtml, detailHtml, calls) });
+
+    await runPairingSearch({ db, now: NOW, searchClient: client });
+
+    const [chosen] = await db.select().from(pairingCandidates).where(eq(pairingCandidates.url, "https://www.wetland.sk/p/kod"));
+    expect(chosen?.imageUrl).toBe("https://www.wetland.sk/img/kod777.jpg");
+  });
+
+  it("issue 397: fallback sa NIKDY neuplatní, keď verify vôbec nebeží (low confidence)", async () => {
+    const db = await boot();
+    await seedSupplier(db);
+    await seedProduct(db, "P1", { name: "Bunda Wetland" });
+
+    const searchHtml = wetlandCard("Úplne nesúvisiaci produkt XYZ", "https://www.wetland.sk/p/low");
+    const calls: string[] = [];
+    const detailHtml = wetlandDetailPageWithImage("HOCICO", "/img/nikdy-pouzity.jpg");
+    const client = new SearchClient({ fetcher: routingFetcher(searchHtml, detailHtml, calls) });
+
+    await runPairingSearch({ db, now: NOW, searchClient: client });
+
+    const [chosen] = await db.select().from(pairingCandidates).where(eq(pairingCandidates.url, "https://www.wetland.sk/p/low"));
+    expect(chosen?.imageUrl).toBeNull();
   });
 });
