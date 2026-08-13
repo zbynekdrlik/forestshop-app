@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, type JSX } from "react";
+import { useCallback, useEffect, useRef, useState, type JSX } from "react";
 import type { Me } from "../api.js";
 import { validateSupplierLinkUrl } from "../ordersApi.js";
 import {
@@ -98,15 +98,17 @@ export function PairingReviewCard({
   // zavrieť/znovu otvoriť skôr, než dobehne pôvodný `fetchPairingCandidates`.
   const openSeq = useRef(0);
 
-  const openPanel = useCallback(() => {
+  // issue 398/401 review nález: panel sa ukazuje AJ AUTOMATICKY (bez kliku na
+  // "vyber url"), keď karta nemá kandidáta vôbec — pred touto opravou sa v
+  // tom prípade `fetchPairingCandidates` NIKDY nezavolalo (volalo sa len z
+  // `openPanel`u), takže "Načítavam kandidátov…" ostávalo navždy zobrazené aj
+  // keď v skutočnosti niet čo načítať (item.chosenCandidate === null vždy
+  // znamená `confidence === "none"`, teda top-8 zoznam je prázdny — `.claude/
+  // rules/pairing-search.md`'s E5 sekcia). issue 401 tento stav sprístupnilo
+  // OVEĽA ČASTEJŠIE (každý produkt bez adaptéra ho má), preto oprava patrí sem.
+  const loadCandidates = useCallback(() => {
     const seq = (openSeq.current += 1);
-    setPanelOpen(true);
-    setActionError("");
     setCandidatesError("");
-    // Predvyplní vlastnú URL len keď ide o EXISTUJÚCE manuálne rozhodnutie,
-    // čo NESEDÍ so žiadnym kandidátom (rovnaký vzor ako stará appka's
-    // `resolutionPanel`) — inak prázdne, nikdy neuhádnuté.
-    setManualUrl(item.decision?.status === "manual" ? (item.decision.url ?? "") : "");
     setCandidates(null);
     fetchPairingCandidates(item.productKey)
       .then((result) => {
@@ -121,7 +123,30 @@ export function PairingReviewCard({
         }
         setCandidatesError("Zoznam kandidátov sa nepodarilo načítať.");
       });
-  }, [item.productKey, item.decision, onSessionExpired]);
+  }, [item.productKey, onSessionExpired]);
+
+  const openPanel = useCallback(() => {
+    setPanelOpen(true);
+    setActionError("");
+    // Predvyplní vlastnú URL len keď ide o EXISTUJÚCE manuálne rozhodnutie,
+    // čo NESEDÍ so žiadnym kandidátom (rovnaký vzor ako stará appka's
+    // `resolutionPanel`) — inak prázdne, nikdy neuhádnuté.
+    setManualUrl(item.decision?.status === "manual" ? (item.decision.url ?? "") : "");
+    loadCandidates();
+  }, [item.decision, loadCandidates]);
+
+  const autoShowsPanel = item.decision === null && item.chosenCandidate === null;
+  // Beží pri MOUNTE (keď karta odrazu štartuje v "bez kandidáta" stave) AJ
+  // pri KAŽDOM prechode false→true PO mounte (napr. "↩ Vrátiť" na produkte
+  // bez kandidáta vráti `decision` na `null`, karta ostáva TOU ISTOU
+  // inštanciou — žiadny remount, žiadny iný spúšťač by fetch nespustil).
+  // Pole závislostí je ÚPLNÉ (tento repo nemá `eslint-plugin-react-hooks`,
+  // `.claude/rules/frontend-design.md` — kontrola je ručná, nie lintová):
+  // `loadCandidates` je stabilné (memoizované na `[item.productKey,
+  // onSessionExpired]`, oboje stabilné hodnoty).
+  useEffect(() => {
+    if (autoShowsPanel) loadCandidates();
+  }, [autoShowsPanel, loadCandidates]);
 
   const closePanel = useCallback(() => {
     openSeq.current += 1; // zahodí prípadnú ešte-bežiacu odpoveď na kandidátov

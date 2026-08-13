@@ -177,6 +177,24 @@ it("issue 401: dodávateľ BEZ adaptéra ukáže 'zatiaľ nemá automatické vyh
   expect(await screen.findByTestId("pairing-review-manual-input-PR-NOADAPTER")).toBeDefined();
 });
 
+// Review nález (issue 398/401 review): panel, čo sa ukazuje AUTOMATICKY (bez
+// kliku na "vyber url", keď karta nemá kandidáta), musí SÁM zavolať
+// `fetchPairingCandidates` — predtým sa to volalo LEN z `openPanel`u, takže
+// "Načítavam kandidátov…" ostávalo navždy zobrazené. issue 401 tento stav
+// spraví oveľa bežnejším (každý produkt bez adaptéra ho má), preto je
+// regresný test tu.
+it("panel, čo sa ukáže AUTOMATICKY (bez kandidáta), SÁM zavolá fetchPairingCandidates — 'Načítavam kandidátov…' zmizne", async () => {
+  fetchPairingCandidates.mockResolvedValue([]);
+  render(<PairingReviewCard item={NO_ADAPTER_ITEM} role="manazer" onDecided={() => {}} onSessionExpired={() => {}} />);
+
+  await waitFor(() => {
+    expect(fetchPairingCandidates).toHaveBeenCalledWith("PR-NOADAPTER");
+  });
+  await waitFor(() => {
+    expect(screen.queryByText("Načítavam kandidátov…")).toBeNull();
+  });
+});
+
 it("issue 401: naopak — adaptérový dodávateľ, ktorý gather prehľadal a nič nenašiel, ukáže 'Nenašiel sa žiadny kandidát'", () => {
   fetchPairingCandidates.mockResolvedValue([]);
   render(<PairingReviewCard item={UNMATCHED_ITEM} role="manazer" onDecided={() => {}} onSessionExpired={() => {}} />);

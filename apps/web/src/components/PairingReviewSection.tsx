@@ -196,9 +196,10 @@ export function PairingReviewSection({ role, onSessionExpired }: { readonly role
   return (
     <section data-testid="pairing-review-section">
       <p>
-        Produkty, ktoré appka už porovnala s ponukou dodávateľov (WETLAND/BETALOV/ODIMON) — vľavo náš produkt, vpravo
-        najlepší nájdený kandidát. Rozhodovanie (potvrdenie odkazu, „Nie je skladom“, „Už sa nebude predávať“) príde v
-        ďalšej etape; táto obrazovka zatiaľ len ukazuje stav.
+        Produkty bez napárovaného odkazu na dodávateľa — vľavo náš produkt, vpravo najlepší nájdený kandidát (ak ho
+        appka u dodávateľa s automatickým vyhľadávaním našla). Na karte priamo potvrdíš navrhnutý odkaz, vyberieš
+        iného kandidáta alebo zadáš vlastnú URL, prípadne označíš produkt ako „Nie je skladom“/„Už sa nebude
+        predávať“.
       </p>
 
       <div className="pairing-review-progress" data-testid="pairing-review-progress">
