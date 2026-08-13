@@ -66,7 +66,9 @@ test("napísať jedno za druhým, upraviť, pridať emoji, vybaviť (ostáva vid
   await expect(upravenyRiadok.locator(".uloha-emoji")).toHaveText("🛍️");
 
   // Označiť ako vybavené — úloha OSTÁVA v zozname (nezmizne), len stlmená.
-  await upravenyRiadok.getByRole("button", { name: "Označiť ako vybavené" }).click();
+  // issue 403: skutočný `<input type="checkbox">` namiesto `<button>`u —
+  // rola je teraz "checkbox", nie "button" (meno ostáva rovnaké).
+  await upravenyRiadok.getByRole("checkbox", { name: "Označiť ako vybavené" }).click();
   await expect(upravenyRiadok).toHaveClass(/done/);
   await expect(riadky).toHaveCount(2); // stále obe, žiadna nezmizla
 
