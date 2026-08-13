@@ -803,3 +803,116 @@ vyradilo #311 aj jeho playbook súbor (návrh, sekcia 4); router v
   zoznamom nezávisle sa ukladajúcich riadkov" v tejto appke over, či
   riadky majú VLASTNÝ busy stav, ktorý treba vyzdvihnúť rovnakým
   callback vzorom.
+
+## issue 422 — AI zdôvodnenie zhody + živé ceny/dostupnosť (audit úplnosti vs stará appka)
+
+- **`chosenReason` je v TEJTO appke ŠTRUKTURÁLNE VŽDY `null` pre nenapárované
+  produkty — na rozdiel od starej appky, kde `ai_reason` niesol dôvod aj pre
+  "nenašla sa istá zhoda".** `run.ts`'s `buildChosenReason()` vracia `null`
+  vždy, keď `pick.candidate === null`; `pickBest()` (`ranking.ts`) je
+  "auto-fill" — vráti `candidate: null` (teda `chosenCandidate === null`)
+  LEN keď je zoznam kandidátov PRÁZDNY, inak VŽDY vyberie najlepšieho
+  nájdeného (aj slabého). Teda "žiadny kandidát" v tejto appke VŽDY znamená
+  "gather nenašiel u dodávateľa nič" — presne to, čo existujúca "Nenašiel sa
+  žiadny kandidát" hláška (E5/#401) už hovorí. `chosenReason` sa preto
+  renderuje LEN vedľa `chosenCandidate !== null` (`ChosenCandidateExtras`,
+  `PairingReviewPanelParts.tsx`) — pri ĎALŠOM porte podobného "dôvod aj pre
+  negatívny prípad" poľa zo starej appky over najprv, či cieľové pole v TEJTO
+  appke skutočne nesie hodnotu aj v negatívnom stave, nikdy nepredpokladaj
+  paritu len z podobnosti mena poľa.
+- **Živá cena/dostupnosť dodávateľa potrebuje TROJICU RÔZNYCH extrakcií, nie
+  jeden zdieľaný regex — živo overené 13. 8. 2026 (curl cez session
+  warm-up, reálne produktové stránky z E2 search-fixtúr).** WETLAND
+  (wetland.sk) aj ODIMON (odimon.sk) nesú platné JSON-LD `Offer`
+  (`price`/`availability`) — zdieľaný helper `adapters/detail-meta.ts`'s
+  `jsonLdSupplierDetailMeta`, znovupoužíva `supplier-stock/parse.ts`'s už
+  otestovanú `fromJsonLd` (DRY, spoľahlivejšie než vlastný regex bez
+  ohľadu na poradie `property=`/`content=` atribútov). **BETALOV
+  (huntingshop.eu) NEMÁ žiadne JSON-LD ani `og:price`/`og:availability`
+  meta značky vôbec** — naivný CSS-triedový výber (`.actual-price`/
+  `.badge-stock`) je NEBEZPEČNÝ, tie isté triedy sa na stránke opakujú
+  4-6× v karuseli súvisiacich produktov (presne tá istá "karuselová
+  kolízia" trieda chýb ako issue 223, `.claude/rules/supplier-stock.md`).
+  Skutočný spoľahlivý zdroj: `var prodData = {"price":36.5,
+  "is_item_in_stock":1,...};` JS premenná (GA dataLayer prípravok),
+  JEDINÝ výskyt na stránke, priamo pri hlavnom produkte — vlastná
+  extrakcia `parseBetalovDetailMeta` v `betalov.ts` (regex na `var
+  prodData = ({[^}]*});`, `JSON.parse` s try/catch). Test pri KAŽDOM
+  ĎALŠOM podobnom "extrahuj X z detailnej stránky dodávateľa": over živo
+  KAŽDÉHO z troch dodávateľov osobitne, nikdy nepredpokladaj, že jeden
+  mechanizmus pokryje všetkých — presne tento ticket dokázal, že dvaja
+  majú JSON-LD a jeden potrebuje úplne iný zdroj.
+- **ODIMON's JSON-LD vie KLAMAŤ o dostupnosti (issue 225, `.claude/rules/
+  supplier-stock.md`) — akceptované riziko PRE TENTO ticket, lebo ide o
+  čisto INFORMATÍVNY náhľad pre reviewera (link je viditeľný vedľa), nie o
+  automatické prepínanie ako `restock`.** Pri rozšírení tohto live-info
+  mechanizmu na ĎALŠIE, automatizované rozhodovanie (napr. auto-schválenie
+  kandidáta na základe dostupnosti) by bolo treba to isté krížové overenie
+  proti viditeľnému textu, aké `restock`'s `parsePage()` už robí — never
+  preniesť "akceptované pre informatívny náhľad" riziko do automatizácie
+  bez opätovného zváženia.
+- **Live-info endpoint dispatchuje VÝHRADNE cez `adapterForUrl` (host-based
+  lookup, `registry.ts`) — URL mimo troch známych adaptérov degraduje TICHO
+  na `{price:null, availabilityText:null}`, BEZ akéhokoľvek sieťového
+  volania.** Zámerné zúženie rozsahu (design komentár na tickete): candidate/
+  `chosenCandidate` URL sú VŽDY adaptérového pôvodu (gather beží len cez tieto
+  tri adaptéry) — jediný degradovaný prípad je zriedkavá plne ručne zadaná
+  linka od neznámeho dodávateľa (`decision.url` pri `status: "manual"`), čo
+  sa v tejto appke NIKDY nezobrazuje ako živé info (na rozdiel od starej
+  appky, čo aj manuálnu URL live-fetchovala) — vedomá, dokumentovaná
+  odchýlka od 1:1 portu, nie medzera.
+- **`registerPairingReviewRoutes`'s nový `searchClient?: SearchClient`
+  parameter (default `new SearchClient()`) je rovnaká DI disciplína ako
+  `fetchSupplierPage`/`restock`'s config v `http/app.ts`** — testy
+  (integračné aj e2e) NIKDY nechodia na skutočnú sieť: integračné testy
+  injektujú vlastný `Fetcher` cez `createApp(db, {pairingSearchClient: new
+  SearchClient({fetcher})})`; e2e fixtúry (`e2e-fixtures-pairing-review.ts`)
+  majú VŠETKY candidate URL na `e2e-dodavatel.example.com` (mimo troch
+  známych adaptérov) — to isté zúženie rozsahu vyššie preto e2e beh
+  automaticky drží mimo skutočnej siete, bez potreby vlastného mock servera.
+- **`var prodData` regex fixtúra (`fixtures/betalov-detail-cena-
+  dostupnost.html`) MUSÍ zostať PLOCHÝ JS objekt (žiadne vnorené `{}`)** —
+  `PRODATA_RE`'s `[^}]*` capture group (jednoduchšie a bezpečnejšie než
+  `[\s\S]*?` pri drift-e markupu) sa zastaví na PRVEJ `}`, takže reálny
+  vnorený objekt v `prodData` by extrakciu odrezal uprostred. Živo overené
+  (2 reálne huntingshop.eu produkty): `prodData` je VŽDY plochý (žiadne
+  vnorené polia/objekty), takže tento zjednodušený regex je bezpečný pre
+  REÁLNY tvar, nie len pre testovaciu fixtúru — pri budúcej zmene markupu
+  over znova `curl`om, či `prodData` ostáva plochý, predtým než sa regex
+  "vylepší" na `[\s\S]*?`.
+- **"Naša strana" agregácia (`standardPriceMin/Max`/`stockTotal`/
+  `availabilityText`, `pairing-review/queries.ts`) kopíruje presne ten istý
+  vzor ako existujúce `priceMin/Max` — min/max cez `Number`/`toFixed(2)`,
+  distinct-join pre text.** `stockTotal` je SÚČET (nie min/max) naprieč
+  variantmi — zásoba je v tomto obchode dekoratívna (`.claude/rules/
+  catalog.md`'s "stock NEVSTUPUJE do odvodenia stavu"), ale súčet je stále
+  najzmysluplnejšia agregácia na zobrazenie (koľko kusov spolu, nie rozsah).
+  `availabilityText` sú DISTINCT neprázdne texty naprieč variantmi spojené
+  " / " — pri ~2700 jednovariantných produktoch (playbook, E5 sekcia) je
+  toto v praxi takmer vždy jeden text, viacnásobný join je len pre
+  viacveľkostné produkty s odlišnou dostupnosťou per veľkosť.
+- **Per-URL/per-kľúč in-memory cache BEZ TTL je v tejto appke tichá staleness
+  chyba, nie len teoretická obava — appka beží ako DLHOŽIVÝ kontajner (dni,
+  nie jeden request).** Self-review nález (🟡) na `live-detail-info.ts`'s
+  pôvodnú implementáciu: cache bez TTL by "živé" info navždy zamrazila na
+  PRVEJ hodnote — vrátane PRVÉHO ZLYHANIA (transientný sieťový výpadok by
+  produkt navždy nechal bez live infa, kým appka nereštartuje). Fix:
+  `CACHE_TTL_MS = 15 min` na úspech AJ zlyhanie (injektovateľné `now()` pre
+  testy), ale URL MIMO známych adaptérov (štrukturálny fakt o URL, nikdy sa
+  nemení) sa cachuje BEZ TTL — nie každá cache v tejto appke potrebuje TTL,
+  len tá, čo drží HODNOTU, ktorá sa v čase reálne mení. Test pri KAŽDEJ
+  ĎALŠEJ novej module-level/factory-scoped cache v tomto repe (nielen
+  live-fetch): drží HODNOTU, čo sa môže zmeniť (cena, dostupnosť, externý
+  stav), alebo len ŠTRUKTÚRU (dispatch rozhodnutie, statický fakt)? Prvé
+  potrebuje TTL, druhé nie — a nikdy sa nespoliehaj na to, že "cache
+  re-renders don't re-fetch" zámer implicitne znamená "navždy".
+- **`variant_money_needs_currency_ck` CHECK constraint (`.claude/rules/
+  database.md`) zachytí KAŽDÝ nový test/fixtúru, čo nastaví `price`/
+  `standardPrice` bez `currency`** — oba seed helpery
+  (`tests/helpers/pairing-review.ts`, `scripts/e2e-fixtures-pairing-
+  review.ts`) museli dostať `currency: "EUR"` VŽDY, keď je nastavená
+  hociktorá cena (predtým currency vôbec nesetovali, lebo žiadny existujúci
+  test/fixtúra predtým price nepoužívala/nepoužívala ho SAMOSTATNE od
+  currency). Test pri KAŽDOM ĎALŠOM seed helperi, čo dostane nové
+  peňažné pole: over CHECK constraint PRIAMO na throwaway Postgrese pred
+  spoliehaním sa na to, že `?? null` default v inserte stačí.

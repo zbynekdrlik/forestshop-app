@@ -39,6 +39,12 @@ const itemSchema = z.object({
   priceMin: z.string().nullable(),
   priceMax: z.string().nullable(),
   currency: z.string().nullable(),
+  // issue 422 — "naša strana": pôvodná (pred zľavou) cena, súčet zásoby,
+  // dostupnostný text (persistované, žiadny live-fetch).
+  standardPriceMin: z.string().nullable(),
+  standardPriceMax: z.string().nullable(),
+  stockTotal: z.number(),
+  availabilityText: z.string().nullable(),
   ourUrl: z.string(),
   ourUrlIsSearchFallback: z.boolean(),
   ourImageUrl: z.string().nullable(),
@@ -181,4 +187,24 @@ export async function savePairingVariantLink(productKey: string, code: string, u
     body: JSON.stringify({ code, url }),
   });
   await readJson(response, "Uloženie linku sa nepodarilo");
+}
+
+// issue 422 — "Živé ceny/dostupnosť" dodávateľa (lazy, na viditeľnosť karty/
+// otvorenie panelu). `null`/`null` = žiadne info (neznáma doména, sieťová
+// chyba, alebo ešte nenačítané) — TICHO, NIKDY sa nehádže: quiet-failure
+// požiadavka ticketu (žiadna konzolová chyba pri zlyhanom/neexistujúcom
+// live-info).
+const liveSupplierInfoSchema = z.object({ price: z.string().nullable(), availabilityText: z.string().nullable() });
+export type LiveSupplierInfo = z.infer<typeof liveSupplierInfoSchema>;
+export const EMPTY_LIVE_SUPPLIER_INFO: LiveSupplierInfo = { price: null, availabilityText: null };
+
+export async function fetchLiveSupplierInfo(url: string): Promise<LiveSupplierInfo> {
+  try {
+    const response = await fetch(`/api/pairing-review/live-supplier-info?url=${encodeURIComponent(url)}`);
+    if (!response.ok) return EMPTY_LIVE_SUPPLIER_INFO;
+    const parsed = liveSupplierInfoSchema.safeParse(await response.json());
+    return parsed.success ? parsed.data : EMPTY_LIVE_SUPPLIER_INFO;
+  } catch {
+    return EMPTY_LIVE_SUPPLIER_INFO;
+  }
 }

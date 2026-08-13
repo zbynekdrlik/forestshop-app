@@ -1,0 +1,28 @@
+<!--
+  Orezaná vzorka https://www.wetland.sk/nohavice/deerhunter-pro-gamekeeper-
+  boot-trousers-polovnicke-nohavice-111-592 (issue 422, živý fetch
+  13. 8. 2026). JSON-LD `Product` blok s vnorenou `Offer` — presne to, čo
+  `detail-meta.ts`'s `jsonLdSupplierDetailMeta` (cez `supplier-stock/
+  parse.ts`'s `fromJsonLd`) číta. `availability` je `BackOrder`, ZÁMERNE
+  (reálna hodnota zo živej stránky) — over, že sa mapuje na "Nedostupné"
+  (`SCHEMA_UNAVAILABLE` obsahuje "backorder"), nie na "Skladom".
+-->
+<html lang="sk">
+<head><title>DEERHUNTER Pro Gamekeeper Boot Trousers | wetland.sk</title></head>
+<body>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org/",
+    "@type": "Product",
+    "name": "DEERHUNTER Pro Gamekeeper Boot Trousers",
+    "sku": "3726-391",
+    "offers": {
+      "@type": "Offer",
+      "priceCurrency": "EUR",
+      "price": "149.9",
+      "availability": "https://schema.org/BackOrder"
+    }
+  }
+  </script>
+</body>
+</html>
