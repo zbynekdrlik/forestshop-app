@@ -3,8 +3,12 @@
 // 5273377438, sekcia "DB schéma"). `pairing_decision` (E6) sa v tomto
 // súbore ZÁMERNE NEROBÍ — mimo rozsahu E3.
 
-import { boolean, foreignKey, index, integer, jsonb, numeric, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { boolean, check, foreignKey, index, integer, jsonb, numeric, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { products } from "./schema-catalog.js";
+// `users` sa importuje PRIAMO zo svojho sibling súboru, nikdy cez barrel
+// `schema.js` — ten by vytvoril kruhový import (`.claude/rules/database.md`).
+import { users } from "./schema-users.js";
 
 export const pairingConfidence = pgEnum("pairing_confidence", ["high", "medium", "low", "none"]);
 export const pairingVerdict = pgEnum("pairing_verdict", ["ok", "unsure"]);
@@ -86,3 +90,55 @@ export const pairingSearchSettings = pgTable("pairing_search_settings", {
   enabled: boolean("enabled").notNull().default(false),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
 });
+
+// issue 387 E6 — človekove rozhodnutie o produkte, presne štvorica starej
+// appky (`webreview/app.py`'s DECISIONS status hodnoty). Neprítomnosť
+// riadku = "nezrevidované" (`pairing-review/queries.ts`'s `unreviewed`
+// filter, forward-kompat rozšírené o TENTO stĺpec — design komentár na
+// tickete, issue 387 E5). "↩ Vrátiť" = DELETE riadku (nikdy status navyše).
+export const pairingDecisionStatus = pgEnum("pairing_decision_status", ["good", "manual", "unavailable", "discontinued"]);
+
+export const pairingDecisions = pgTable(
+  "pairing_decision",
+  {
+    productKey: text("product_key")
+      .primaryKey()
+      .references(() => products.key, { onDelete: "cascade" }),
+    status: pairingDecisionStatus("status").notNull(),
+    // `good`/`manual` ⇒ NOT NULL (potvrdená/vybraná dodávateľská URL);
+    // `unavailable`/`discontinued` ⇒ vždy NULL (žiadny odkaz, len stav) —
+    // vynútené `pairing_decision_url_ck` nižšie.
+    url: text("url"),
+    // RESTRICT (nie CASCADE/SET NULL) — zmazanie používateľa nesmie ticho
+    // stratiť, KTO rozhodol (`.claude/rules/database.md`'s poučenie: FK
+    // "set null" pri stĺpci, čo CHECK viaže na iný stav, sa v praxi nikdy
+    // neuplatní; tu navyše ide o priamu auditnú stopu, RESTRICT je
+    // pravdivejší popis zámeru).
+    decidedBy: uuid("decided_by")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    // Business čas TOHTO rozhodnutia (obnovuje sa pri KAŽDOM prepísaní, nie
+    // len pri prvom vytvorení riadku — appka nedrží históriu rozhodnutí,
+    // len posledné). `updatedAt` nesie v tejto verzii VŽDY tú istú hodnotu
+    // ako `decidedAt` (obe stĺpce sa nastavujú v tom istom upserte) —
+    // ponechané ako samostatný technický stĺpec (rovnaká konvencia ako
+    // `productSupplierLinkOverrides.updatedAt`) len preto, aby prípadný
+    // BUDÚCI optimistický zámok (design komentár, zamietnutý variant 1)
+    // nevyžadoval ďalšiu migráciu — guard proti súbežnému prepisu je dnes
+    // "posledný zápis vyhráva" (`onConflictDoUpdate`, atomický v Postgrese),
+    // konflikt sa zaznamenáva SPÄTNE cez audit, nie PREDCHÁDZA.
+    decidedAt: timestamp("decided_at", { withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+    // Nullable — vyplní AŽ E7 (stavový writeback do Shoptetu), keď reálne
+    // odošle STAV (unavailable/discontinued) dodávateľovi. Táto etapa ho
+    // len VŽDY nuluje pri každom novom/zmenenom rozhodnutí (predošlý sync,
+    // ak nejaký bol, sa týkal STARÉHO stavu).
+    stateSyncedAt: timestamp("state_synced_at", { withTimezone: true }),
+  },
+  (t) => [
+    check(
+      "pairing_decision_url_ck",
+      sql`(${t.status} IN ('good','manual') AND ${t.url} IS NOT NULL) OR (${t.status} IN ('unavailable','discontinued') AND ${t.url} IS NULL)`,
+    ),
+  ],
+);
