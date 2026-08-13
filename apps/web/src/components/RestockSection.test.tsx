@@ -169,14 +169,22 @@ it("Štart/Stop prepne automatizáciu a znovu načíta stav", async () => {
 
 // Zlyhanie zápisu do Shoptetu sa NESMIE tváriť ako úspech — obsluha musí
 // vidieť, že sa nič nepreplo.
+// issue 413: run-now je odteraz ASYNC — `runRestockNow()` už nevracia
+// výsledok priamo (server 202-ne hneď), obrazovka ho PREBERIE opakovaným
+// `fetchRestockStatus()` volaním (`pollUntilJobDone`). Mock preto nesie
+// zlyhaný DOMÉNOVÝ výsledok (`result.status === "failed"`) na `lastRun`,
+// nie na `runRestockNow`'s rozlíšenej hodnote — `lastRun.status` samotné
+// zostáva "success" (beh ako job doiel bez výnimky, len zápis do
+// Shoptetu vnútri neuspel).
 it("po zlyhaní zápisu povie, že sa nič neprepínalo", async () => {
-  fetchRestockStatus.mockResolvedValue(STATUS);
-  runRestockNow.mockResolvedValue({
-    status: "failed",
-    attempted: 3,
-    overLimit: 0,
-    errorDetail: "prihlásenie zlyhalo",
+  fetchRestockStatus.mockResolvedValue({
+    ...STATUS,
+    lastRun: {
+      ...STATUS.lastRun,
+      result: { status: "failed", attempted: 3, overLimit: 0, errorDetail: "prihlásenie zlyhalo" },
+    },
   });
+  runRestockNow.mockResolvedValue(undefined);
   render(<RestockSection role="admin" onSessionExpired={vi.fn()} />);
 
   fireEvent.click(await screen.findByTestId("restock-run-now"));
