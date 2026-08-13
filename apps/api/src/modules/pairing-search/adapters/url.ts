@@ -57,22 +57,40 @@ function isNoiseImage(url: string): boolean {
 }
 
 /**
+ * `true` LEN pre `http:`/`https:` — obranná vrstva navyše (review nález,
+ * issue 397): rezolvovaná obrázková URL sa priamo ukladá do DB a renderuje
+ * do `<img src>` na prihlásenej review obrazovke (`PairingReviewCard.tsx`),
+ * bez akéhokoľvek ďalšieho scheme obmedzenia. Dodávateľská karta by teoreticky
+ * mohla niesť `data:`/iný neobrázkový scheme v inak platnom atribúte — `img
+ * src` `javascript:`/`data:` nie je XSS vektor, ale nie je dôvod ukladať
+ * niečo iné, než skutočne stiahnuteľný obrázok.
+ */
+function isHttpUrl(url: string): boolean {
+  try {
+    const protocol = new URL(url).protocol;
+    return protocol === "http:" || protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Vyberie prvý NEPRÁZDNY, nie-šumový obrázkový atribút z `candidates` (v
  * poradí priority — napr. `[data-src, src]`, keď `src` je na danej doméne
  * lazy-load placeholder) a vyrieši ho na absolútnu URL voči `baseUrl`.
  * `null`, keď žiadny kandidát nenesie použiteľnú hodnotu — chýbajúca/
- * prázdna, nespracovateľná (`resolveAndStripFragment`), alebo šumová
- * (`IMAGE_NOISE_MARKERS` vyššie). Živo overené (issue 397): ODIMON's
- * výsledková karta má `src="…/no-image.png"` VŽDY (skutočný obrázok je len
- * v `data-src`, lazy-load) — bez tohto poradia by sa placeholder bral ako
- * platný obrázok.
+ * prázdna, nespracovateľná (`resolveAndStripFragment`), šumová
+ * (`IMAGE_NOISE_MARKERS` vyššie), alebo nie-`http(s)` scheme (`isHttpUrl`).
+ * Živo overené (issue 397): ODIMON's výsledková karta má `src="…/no-image
+ * .png"` VŽDY (skutočný obrázok je len v `data-src`, lazy-load) — bez tohto
+ * poradia by sa placeholder bral ako platný obrázok.
  */
 export function resolveImageUrl(candidates: readonly (string | undefined)[], baseUrl: string): string | null {
   for (const raw of candidates) {
     const trimmed = raw?.trim();
     if (trimmed === undefined || trimmed === "") continue;
     const resolved = resolveAndStripFragment(trimmed, baseUrl);
-    if (resolved === null || isNoiseImage(resolved)) continue;
+    if (resolved === null || isNoiseImage(resolved) || !isHttpUrl(resolved)) continue;
     return resolved;
   }
   return null;

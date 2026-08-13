@@ -80,4 +80,17 @@ describe("resolveImageUrl", () => {
   it("trims whitespace before resolving", () => {
     expect(resolveImageUrl(["  /a.jpg  "], "https://www.wetland.sk")).toBe("https://www.wetland.sk/a.jpg");
   });
+
+  // Review nález, issue 397: rezolvovaná URL sa priamo ukladá do DB a
+  // renderuje do `<img src>` na prihlásenej review obrazovke — len
+  // `http:`/`https:` je platný scheme, aj keď je inak nespracovateľný.
+  it("rejects a non-http(s) scheme (e.g. data:) and falls through to the next candidate", () => {
+    expect(resolveImageUrl(["data:image/png;base64,AAAA", "/product.jpg"], "https://www.wetland.sk")).toBe(
+      "https://www.wetland.sk/product.jpg",
+    );
+  });
+
+  it("returns null when the ONLY candidate is a non-http(s) scheme", () => {
+    expect(resolveImageUrl(["javascript:alert(1)"], "https://www.wetland.sk")).toBeNull();
+  });
 });

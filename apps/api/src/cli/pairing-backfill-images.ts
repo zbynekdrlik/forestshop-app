@@ -32,4 +32,14 @@ try {
 console.log(
   `Obrázok kandidáta doplnený pre ${String(result.updated)} z ${String(result.checked)} skontrolovaných (${String(result.failed)} zlyhaní).`,
 );
+for (const [host, count] of Object.entries(result.noImageFoundByHost)) {
+  console.log(`  ${host}: ${String(count)} riadkov bez použiteľného og:image (stránka sa stiahla, ale nemala čo ponúknuť).`);
+}
 console.log(JSON.stringify(result));
+
+// Review nález, issue 397: predtým vždy exit 0 aj keď VŠETKO zlyhalo —
+// operátor/wrapper skript pod `set -e` by to prečítal ako úspech.
+// `failed > 0` je vždy SIEŤOVÁ/parse chyba (nikdy "stránka bez obrázka" —
+// to sa počíta do `checked - updated - failed`, viď `BackfillCandidateImagesResult`
+// dokumentácia v `backfill.ts`), teda skutočný dôvod na nenulový exit kód.
+if (result.failed > 0) process.exitCode = 1;

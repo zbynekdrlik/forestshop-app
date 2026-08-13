@@ -43,6 +43,14 @@ export interface BackfillCandidateImagesResult {
   readonly updated: number;
   readonly failed: number;
   readonly errors: readonly BackfillCandidateImagesError[];
+  /** Review nález (issue 397): PRE KAŽDÝ HOST, koľko riadkov malo stránku
+   *  stiahnuteľnú, ale BEZ použiteľného `og:image` (šumový/chýbajúci —
+   *  `resolveImageUrl`). Toto NIE JE náhodné — BETALOV (huntingshop.eu) je
+   *  tu ŠTRUKTÚROVANE VŽDY 100 % (jeho detailná `og:image` je vždy stránkové
+   *  logo, živo overené, playbook), takže operátor musí vedieť "60 z 177
+   *  doplnených" znamená AJ "zvyšok je z domény, kde to backfill nikdy
+   *  nevie splniť", nie len "náhodné zlyhania". */
+  readonly noImageFoundByHost: Readonly<Record<string, number>>;
 }
 
 export interface BackfillCandidateImagesOptions {
@@ -51,14 +59,32 @@ export interface BackfillCandidateImagesOptions {
   readonly searchClient?: SearchClient;
 }
 
+/**
+ * Review nález (issue 397): pôvodne `pg_advisory_lock` (BLOKUJÚCI) — keď
+ * nočný gather beh zámok už držal, tento interaktívny CLI by ticho visel
+ * (177 riadkov × throttle/retry v gather behu môže trvať hodiny) bez
+ * akéhokoľvek výstupu. `pg_try_advisory_lock` (NEBLOKUJÚCI) zlyhá NAHLAS
+ * hneď — operátor vie okamžite, že má skúsiť neskôr, namiesto zaseknutého
+ * terminálu.
+ */
 export async function backfillCandidateImages(options: BackfillCandidateImagesOptions): Promise<BackfillCandidateImagesResult> {
   const { db } = options;
   const lockClient = await db.$client.connect();
   try {
-    await lockClient.query("select pg_advisory_lock($1)", [PAIRING_SEARCH_RUN_LOCK_KEY]);
-    return await backfillCandidateImagesLocked(options);
+    const acquired = await lockClient.query<{ pg_try_advisory_lock: boolean }>("select pg_try_advisory_lock($1)", [
+      PAIRING_SEARCH_RUN_LOCK_KEY,
+    ]);
+    if (acquired.rows[0]?.pg_try_advisory_lock !== true) {
+      throw new Error(
+        "backfill obrázkov kandidáta: advisory zámok (PAIRING_SEARCH_RUN_LOCK_KEY) je obsadený — pravdepodobne beží nočný gather beh. Skús znova neskôr.",
+      );
+    }
+    try {
+      return await backfillCandidateImagesLocked(options);
+    } finally {
+      await lockClient.query("select pg_advisory_unlock($1)", [PAIRING_SEARCH_RUN_LOCK_KEY]);
+    }
   } finally {
-    await lockClient.query("select pg_advisory_unlock($1)", [PAIRING_SEARCH_RUN_LOCK_KEY]);
     lockClient.release();
   }
 }
@@ -78,6 +104,7 @@ async function backfillCandidateImagesLocked(options: BackfillCandidateImagesOpt
 
   let updated = 0;
   const errors: BackfillCandidateImagesError[] = [];
+  const noImageFoundByHost: Record<string, number> = {};
 
   for (const row of rows) {
     try {
@@ -89,6 +116,12 @@ async function backfillCandidateImagesLocked(options: BackfillCandidateImagesOpt
           .set({ imageUrl: image })
           .where(and(eq(pairingCandidates.productKey, row.productKey), eq(pairingCandidates.url, row.url)));
         updated += 1;
+      } else {
+        // `new URL(row.url).host` nikdy nevyhodí — `row.url` je vždy
+        // predtým uložená, už-validovaná absolútna URL (adaptér/`og:image`
+        // fallback ju cez `resolveAndStripFragment` vytvorili).
+        const host = new URL(row.url).host;
+        noImageFoundByHost[host] = (noImageFoundByHost[host] ?? 0) + 1;
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -100,5 +133,12 @@ async function backfillCandidateImagesLocked(options: BackfillCandidateImagesOpt
     }
   }
 
-  return { checked: rows.length, updated, failed: errors.length, errors };
+  for (const [host, count] of Object.entries(noImageFoundByHost)) {
+    log.warn(
+      { host, count },
+      "pairing-search: backfill nenašiel použiteľný og:image pre tento host — over, či doména vôbec obrázok v og:image ponúka (napr. BETALOV ho tam nikdy nemá, je to vždy stránkové logo)",
+    );
+  }
+
+  return { checked: rows.length, updated, failed: errors.length, errors, noImageFoundByHost };
 }

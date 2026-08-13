@@ -86,6 +86,19 @@ function wetlandDetailPage(code: string | null): string {
   return `<html><body><h1>Detail kandidáta</h1><ul class="product__details">${codeBlock}</ul></body></html>`;
 }
 
+/** issue 397 — plná `.product-miniature` obal-štruktúra s obrázkom
+ *  (mirror `pairing-search-run.integration.test.ts`'s rovnomenného
+ *  helperu) — pre karty, kde chceme dokázať, že adaptérov OBRÁZOK vyhráva
+ *  nad `og:image` fallbackom, nikdy naopak. */
+function wetlandCardWithImage(name: string, href: string, imageSrc: string): string {
+  return (
+    `<article class="product-miniature">` +
+    `<a class="product-miniature__link"><img class="product-miniature__image" src="${imageSrc}"></a>` +
+    `<div class="product-miniature__title"><a class="link" href="${href}">${name}</a></div>` +
+    `</article>`
+  );
+}
+
 /** issue 397 — rovnaká detailná stránka, naviac s `og:image` — dokazuje
  *  fallback (`applyImageFallback`, `run.ts`) na TEJ ISTEJ HTML, čo E4 aj
  *  tak sťahuje na kódovú kaskádu. */
@@ -205,6 +218,34 @@ describe("pairing-search: kódové overenie (issue 387 E4)", () => {
 
     const [chosen] = await db.select().from(pairingCandidates).where(eq(pairingCandidates.url, "https://www.wetland.sk/p/kod"));
     expect(chosen?.imageUrl).toBe("https://www.wetland.sk/img/kod777.jpg");
+  });
+
+  // Review nález (issue 397): oba guardy vnútri `applyImageFallback`
+  // (run.ts) — "nikdy neprepíš adaptérov obrázok" a "dotkni sa LEN chosen
+  // riadku top-8 poľa" — sa dali vymazať bez toho, aby padol ktorýkoľvek
+  // existujúci test (predošlý fallback test mal LEN JEDNÉHO kandidáta bez
+  // vlastného obrázka). Tento test má DVOCH kandidátov naraz: chosen (kód
+  // sedí) UŽ MÁ adaptérov obrázok, druhý (nie chosen) obrázok nemá vôbec —
+  // dokazuje OBE vlastnosti v jednom behu.
+  it("issue 397: og:image fallback NIKDY neprepíše existujúci adaptérov obrázok chosen kandidáta, ani sa nedotkne iného top-8 riadku", async () => {
+    const db = await boot();
+    await seedSupplier(db);
+    await seedProduct(db, "P1", { name: "Nohavice X", externalCode: "KOD777" });
+
+    const searchHtml = `<div>${wetlandCardWithImage("Úplne iný text KOD777 model", "https://www.wetland.sk/p/kod", "/img/adapter-kod.jpg")}${wetlandCard("Úplne nesúvisiaci iný produkt", "https://www.wetland.sk/p/other")}</div>`;
+    const calls: string[] = [];
+    // og:image fallback by (nesprávne) ponúklo TENTO obrázok — dôkaz, že sa
+    // NIKDY nepoužije, keďže chosen už má vlastný adaptérov obrázok.
+    const detailHtml = wetlandDetailPageWithImage("KOD777", "/img/og-image-fallback-nikdy-pouzity.jpg");
+    const client = new SearchClient({ fetcher: routingFetcher(searchHtml, detailHtml, calls) });
+
+    await runPairingSearch({ db, now: NOW, searchClient: client });
+
+    const [chosen] = await db.select().from(pairingCandidates).where(eq(pairingCandidates.url, "https://www.wetland.sk/p/kod"));
+    expect(chosen?.imageUrl).toBe("https://www.wetland.sk/img/adapter-kod.jpg"); // adaptérov, nikdy og:image
+
+    const [other] = await db.select().from(pairingCandidates).where(eq(pairingCandidates.url, "https://www.wetland.sk/p/other"));
+    expect(other?.imageUrl).toBeNull(); // NIE chosen -> fallback sa ho vôbec netýka
   });
 
   it("issue 397: fallback sa NIKDY neuplatní, keď verify vôbec nebeží (low confidence)", async () => {

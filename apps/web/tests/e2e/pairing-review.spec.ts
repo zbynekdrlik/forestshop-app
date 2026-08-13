@@ -6,6 +6,15 @@ const E2E_HESLO = "e2e-test-heslo"; // účet existuje len v testovacej databáz
 // na hranici `MAX_ATTEMPTS`. Musí sa zhodovať s `scripts/e2e-fixtures-
 // pairing-review.ts`'s `E2E_PAROVANIE_REVIEW_EMAIL`.
 const E2E_PAROVANIE_REVIEW_EMAIL = "e2e-parovanie-review@forestshop.sk";
+// issue 397 — musia sa zhodovať s `E2E_OUR_IMAGE_DATA_URI`/`E2E_CANDIDATE_
+// IMAGE_DATA_URI` v `scripts/e2e-fixtures-pairing-review.ts` (rovnaký
+// "musí sa zhodovať" vzor ako heslo/email vyššie — `data:` URI, nikdy
+// skutočná `https://` adresa, inak prehliadač reálne skúsi obrázok
+// stiahnuť a zapíše `net::ERR_NAME_NOT_RESOLVED`/404 do konzoly).
+const E2E_OUR_IMAGE_DATA_URI =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC";
+const E2E_CANDIDATE_IMAGE_DATA_URI =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNgYPgPAAEDAQAIicLsAAAAAElFTkSuQmCC";
 
 // issue 387 E5: "Eshop → Párovanie" — VIDITEĽNÁ záložka (`nav.ts`, priečinok
 // Eshop). Fixtúry (`scripts/e2e-fixtures-pairing-review.ts`): "E2E-PR-CHYBA"
@@ -53,6 +62,13 @@ test("predvolený filter 'Nezrevidované' ukáže produkty bez linky (s aj bez k
   await expect(page.getByTestId("pairing-review-candidate-E2E-PR-CHYBA")).toContainText("E2E Bunda Alfa u dodávateľa");
   await expect(chybaKarta.getByTestId("pairing-review-good-E2E-PR-CHYBA")).toBeVisible();
   await expect(chybaKarta.getByTestId("pairing-review-open-panel-E2E-PR-CHYBA")).toBeVisible();
+
+  // issue 397 — karta ukazuje OBA obrázky vedľa seba (náš produkt aj
+  // navrhnutý kandidát), nielen text okolo nich (`scripts/e2e-fixtures-
+  // pairing-review.ts` seeduje OBE obrázkové URL pre "E2E-PR-CHYBA").
+  await expect(chybaKarta.locator("img")).toHaveCount(2);
+  await expect(chybaKarta.locator("img").nth(0)).toHaveAttribute("src", E2E_OUR_IMAGE_DATA_URI);
+  await expect(chybaKarta.locator("img").nth(1)).toHaveAttribute("src", E2E_CANDIDATE_IMAGE_DATA_URI);
 
   // Nenapárovaný produkt (gather nenašiel u dodávateľa nič) — vlastná hláška.
   const nenajdenyKarta = page.getByTestId("pairing-review-card-E2E-PR-NENAJDENY");
