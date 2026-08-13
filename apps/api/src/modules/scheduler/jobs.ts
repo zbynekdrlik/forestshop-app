@@ -17,6 +17,9 @@ import { SHOP_FEED_JOB_NAME } from "../shop-feed/constants.js";
 import type { ShopFeedRunResult } from "../shop-feed/run.js";
 import { SUPPLIER_STOCK_JOB_NAME } from "../supplier-stock/constants.js";
 import type { SupplierStockRunResult } from "../supplier-stock/run.js";
+import { PAIRING_SEARCH_JOB_NAME } from "../pairing-search/constants.js";
+import { isPairingSearchEnabled } from "../pairing-search/settings.js";
+import type { PairingSearchRunResult } from "../pairing-search/run.js";
 import type { ScheduledJob } from "./types.js";
 
 export const CATALOG_IMPORT_JOB_NAME = "catalog-import";
@@ -373,6 +376,35 @@ export function shopFeedJob(run: RunShopFeed): ScheduledJob {
     schedule: { kind: "daily", hourLocal: 3, minuteLocal: 50 },
     async run(db, now) {
       return { detail: await run(db, now) };
+    },
+  };
+}
+
+export type RunPairingSearch = (db: Database, now: Date) => Promise<PairingSearchRunResult>;
+
+/**
+ * "Profesionálne párovanie produktov" — gather beh (issue 387 E3), denne o
+ * 03:35 Europe/Bratislava (zadanie), teda pred `shopFeedJob` (03:50) aj
+ * ostatnými nočnými jobmi nižšie (04:20/04:50).
+ *
+ * MÁ `enabled` prepínač, default VYPNUTÝ — na rozdiel od `shopFeedJob`
+ * (číta len verejný feed) tento beh reálne obieha weby dodávateľov
+ * (WETLAND/BETALOV/ODIMON), čo appka nemá začať robiť v noci skôr, než
+ * bude čo ukazovať (E4/E5 dodá overenie + obrazovku). "Spustiť teraz"
+ * (`http/pairing-search-routes.ts`) beží VŽDY bez ohľadu naň — rovnaká
+ * úvaha ako `postaUncollectedJob`/`orderReminderJob`/`restockJob` vyššie.
+ */
+export function pairingSearchJob(run: RunPairingSearch): ScheduledJob {
+  return {
+    name: PAIRING_SEARCH_JOB_NAME,
+    schedule: { kind: "daily", hourLocal: 3, minuteLocal: 35 },
+    async run(db, now) {
+      const enabled = await isPairingSearchEnabled(db);
+      if (!enabled) {
+        return { detail: { skipped: true, reason: "automatizácia je vypnutá (Štart/Stop)" } };
+      }
+      const result = await run(db, now);
+      return { detail: result };
     },
   };
 }

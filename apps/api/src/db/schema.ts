@@ -15,3 +15,4 @@ export * from "./schema-theme-colors.js";
 export * from "./schema-upozornenia.js";
 export * from "./schema-dpd.js";
 export * from "./schema-daily-tasks.js";
+export * from "./schema-pairing-review.js";
