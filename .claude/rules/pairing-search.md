@@ -241,3 +241,74 @@ https://github.com/zbynekdrlik/forestshop-app/issues/387#issuecomment-5273377438
   cez `numeric` (peňažné polia), žiadny natívny float typ sa nikde
   nepoužíva. `rawScore` (number z `ranking.ts`) sa pri zápise konvertuje
   `.toFixed(4)`.
+
+## E4 — Verify + auto-výber (`verify.ts`)
+
+- **`verify.py`'s `code_verdict`/`extract_page` NEBOLI volané zo starej
+  appky's hlavného pipeline (`matcher.py`) vôbec** — grep celého `src/`
+  ukázal jediné volania z `webreview/app.py` (len title, live náhľad) a z
+  testov. Skutočným účelom bola pravdepodobne príprava pre externý AI-
+  verifikačný krok, ktorý sa NEportuje (design komentár, sekcia 5,
+  posledný odsek — "voliteľné neskôr"). Táto appka repurpose-uje presne
+  TÚ ISTÚ kaskádu ako AUTOMATICKÝ (ne-AI) OK/UNSURE gate priamo nad
+  `pick_best()`'s `chosen_url`. Test pri porte ĎALŠEJ funkcie zo starej
+  appky: over `grep`om, KTO ju reálne volá v `src/`, nikdy nepredpokladaj
+  účel len z jej mena/umiestnenia — dva rôzne, podobne znejúce
+  "verifikačné" mechanizmy (AI-krok vs. deterministický kód-gate) môžu
+  zdieľať tú istú portovanú funkciu s úplne iným volajúcim kontextom.
+- **ODIMON (BUXUS) NEMÁ vlastný kódový selektor v starej appke — žiadna
+  fixtúra, generický fallback (`[itemprop=sku]`/`.product-code`/`.sku`/
+  `.kod`/`[data-code]`) na živej stránke NIČ netrafí.** Živo overené
+  13. 8. 2026: skutočný markup je `<li class="product-property-item">
+  <span class="product-property__title">Kód produktu:</span><span
+  class="product-property__value">PO22811</span></li>` — úplne iná
+  trieda selektorov než WETLAND (`.detail__title`/`.detail__right`) aj
+  BETALOV (`.fs-5` regex). `verify.ts` preto pridáva ŠTVRTÝ kaskádový
+  krok (`.product-property-item` → `.product-property__title` obsahujúce
+  "kód" → `.product-property__value`), zaradený PRED generický fallback —
+  toto je NOVÝ krok mimo doslovného portu, nie chyba pri kopírovaní.
+  Zdôvodnené v design komentári na tickete ako technické rozhodnutie
+  (žiadny používateľský dôsledok sa nemení — stále len OK/UNSURE, nikdy
+  false-ok), nie majiteľova otázka. Test pri PORTE ĎALŠIEHO Python
+  kódu, ktorého docstring/komentár tvrdí "generický fallback pokrýva
+  zvyšok" bez fixtúry pre KAŽDÉHO dodávateľa: over živo proti REÁLNEJ
+  stránke KAŽDÉHO dodávateľa, ktorého sa to týka — "generický" nemusí
+  znamenať univerzálny, len že autor nenašiel čas/dôvod na vlastný krok.
+- **Cheerio's `??` reťazec na `.attr()`/`.text()` fallbacku sa RÔZNI od
+  Pythonovho `or` — `or` padá na ĎALŠÍ zdroj aj pri PRÁZDNOM (nie len
+  chýbajúcom/None) reťazci, `??` len pri `null`/`undefined`.** Review
+  nález (issue 387 E4): `el.get("content") or el.get("data-code") or
+  el.get_text(...)` (Python) vs. pôvodné `el.attr("content") ??
+  el.attr("data-code") ?? el.text()` (TS) — `content=""` by v TS verzii
+  celú cestu zastavilo namiesto skúsenia `data-code`/textu na TOM ISTOM
+  elemente. Fix: `||` namiesto `??` pre TENTO KONKRÉTNY vzor ("skús
+  viacero zdrojov, prvý NEPRÁZDNY vyhráva") — `pnpm lint` ostal čistý
+  (`@typescript-eslint/prefer-nullish-coalescing` je type-aware a na
+  potenciálne prázdnom `string` type `||` nehlási). Test pri KAŽDOM
+  ĎALŠOM porte Pythonovho `a or b or c` vzoru na string hodnoty (nie
+  booleans/objekty): `||` je SPRÁVNY preklad, `??` je TICHÁ zmena
+  správania pri prázdnom (nie chýbajúcom) reťazci.
+- **Funkcia, ktorej DOKSTRING sľubuje "sieťová AJ parse chyba sa nikdy
+  nevyhodí ďalej", musí mať OBE kroky v JEDNOM `try`/`catch` — try len
+  okolo fetchu, dokstring sľubujúci aj parse-bezpečnosť, je TICHO
+  nepravdivý.** Review nález: pôvodná `verifyCandidateCode` mala
+  `try { html = await fetch(...) } catch {...}` a `codeVerdict(extractPage(
+  html))` AŽ ZA týmto blokom (mimo try) — parse-krokový throw (cheerio/
+  regex) by prešiel cez `verifyPickIfWarranted` až do `run.ts`'s
+  per-produkt `try`, čo by zahodilo CELÝ gathered candidate set daného
+  produktu (nielen krok overenia) až do ďalšieho nočného behu. Fix: jeden
+  spoločný `try` okolo fetch AJ `extractPage`/`codeVerdict`. Test pri
+  KAŽDEJ ĎALŠEJ funkcii s podobným "nikdy nezhodí volajúceho" sľubom vo
+  vlastnom dokstringu: over, že KAŽDÝ krok, ktorý dokstring menuje, je
+  SKUTOČNE vnútri chráneného bloku — nie len ten najzrejmejší (sieť).
+- **`SearchClient.fetchPage(url)` (NOVÁ verejná metóda) zdieľa `this.
+  fetcher` (per-host cookie jar + retry + warm-up) aj throttle-if-real
+  logiku so `.search()`, ZÁMERNE nie samostatný fetcher z `supplier-
+  stock/page-fetcher.ts`.** Dôvod: kandidátova detailná URL je na TOM
+  ISTOM hoste ako search výsledky, a Nette (BETALOV)/BUXUS (ODIMON)
+  vyžadujú platnú session cookie pre OBOJE — zdieľaný fetcher profituje
+  zo session už zohriatej `.search()` volaniami v tom istom gather
+  cykle, samostatný `supplier-stock`-štýl fetcher (bez cookie jaru) by
+  musel host znova warm-upovať a strácal by session medzi search a
+  detail fetchmi. Bez cache (na rozdiel od `.search()`) — detailná URL
+  je vždy jedinečná, cache by nikdy nehitla.
