@@ -98,6 +98,20 @@ export const pairingSearchSettings = pgTable("pairing_search_settings", {
 // tickete, issue 387 E5). "↩ Vrátiť" = DELETE riadku (nikdy status navyše).
 export const pairingDecisionStatus = pgEnum("pairing_decision_status", ["good", "manual", "unavailable", "discontinued"]);
 
+// issue 387 E7 — Singleton Štart/Stop prepínač PRE STAVOVÝ WRITEBACK
+// (rovnaký vzor ako `pairingSearchSettings`/`restock_settings` vyššie —
+// ŽIADEN migračný seed riadok, chýbajúci riadok = `false`, fail-closed).
+// Stavový zápis MENÍ VIDITEĽNOSŤ produktov na živom shope (na rozdiel od
+// linkového `internalNote` zápisu, ktorý žiadny prepínač nemá — issue
+// 122's zdôvodnenie: ten iba dopĺňa privátnu poznámku, nikdy nemení, čo
+// zákazník vidí), preto dostáva VLASTNÝ, defaultne VYPNUTÝ prepínač
+// (design komentár na tickete, E7 sekcia "Architektúra").
+export const pairingStateWritebackSettings = pgTable("pairing_state_writeback_settings", {
+  id: text("id").primaryKey(),
+  enabled: boolean("enabled").notNull().default(false),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+});
+
 export const pairingDecisions = pgTable(
   "pairing_decision",
   {

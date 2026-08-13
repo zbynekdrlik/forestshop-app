@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildRestockCsv, buildWritebackCsv } from "./csv.js";
+import { buildRestockCsv, buildStatesCsv, buildWritebackCsv, dedupeStateRowsByCode } from "./csv.js";
 
 describe("buildWritebackCsv", () => {
   it("has the canonical Shoptet import header + BOM + CRLF + ';' delimiter", () => {
@@ -74,5 +74,89 @@ describe("buildRestockCsv", () => {
 
   it("odmietne prázdny zoznam — prázdny import do Shoptetu sa nikdy nenahráva", () => {
     expect(() => buildRestockCsv([])).toThrow(/žiadne riadky/);
+  });
+});
+
+// issue 387 E7: stavový writeback — druhý, samostatný import (nikdy
+// kombinovaný s linkovým `buildWritebackCsv` vyššie). Mapovanie stavov +
+// stĺpce presne podľa starej appky (`import_builder.py`'s `state_rows`):
+// unavailable → visible/0/Vypredané, discontinued → detailOnly/0/Predaj
+// výrobku skončil. Stĺpce sú DISJUNKTNÉ od linkového CSV — žiadny
+// `internalNote`, takže existujúce dodávateľské odkazy ostávajú nedotknuté.
+describe("buildStatesCsv", () => {
+  it("má stavovú hlavičku (disjunktnú od linkového CSV) + BOM + CRLF + ';' oddeľovač", () => {
+    const csv = buildStatesCsv([{ code: "123/S", pairCode: "456", status: "unavailable" }]);
+    const text = csv.toString("utf8");
+    expect(text.charCodeAt(0)).toBe(0xfeff);
+    const lines = text.slice(1).split("\r\n");
+    expect(lines[0]).toBe("code;pairCode;productVisibility;stock;availabilityInStock;availabilityOutOfStock");
+    expect(lines[1]).toBe("123/S;456;visible;0;Vypredané;Vypredané");
+    expect(lines.at(-1)).toBe("");
+  });
+
+  it("mapuje 'unavailable' na visible/0/Vypredané (oba dostupnostné texty rovnaké)", () => {
+    const csv = buildStatesCsv([{ code: "A", pairCode: "", status: "unavailable" }]);
+    const rows = csv.toString("utf8").slice(1).split("\r\n").filter(Boolean);
+    expect(rows[1]).toBe("A;;visible;0;Vypredané;Vypredané");
+  });
+
+  it("mapuje 'discontinued' na detailOnly/0/Predaj výrobku skončil (oba texty rovnaké)", () => {
+    const csv = buildStatesCsv([{ code: "B", pairCode: "77", status: "discontinued" }]);
+    const rows = csv.toString("utf8").slice(1).split("\r\n").filter(Boolean);
+    expect(rows[1]).toBe("B;77;detailOnly;0;Predaj výrobku skončil;Predaj výrobku skončil");
+  });
+
+  it("odmietne prázdny zoznam — prázdny import do Shoptetu sa nikdy nenahráva", () => {
+    expect(() => buildStatesCsv([])).toThrow(/žiadne riadky/i);
+  });
+
+  // issue 153: rovnaká CSV-injection ochrana ako `buildWritebackCsv` —
+  // `code`/`pairCode` prichádzajú z katalógového importu bez inej kontroly.
+  it("neutralizuje bunku začínajúcu znakom vzorca v KTOROMKOĽVEK stĺpci", () => {
+    const csv = buildStatesCsv([{ code: "=SUM(A1:A9)", pairCode: "+1", status: "unavailable" }]);
+    const rows = csv.toString("utf8").slice(1).split("\r\n").filter(Boolean);
+    expect(rows[1]).toBe("'=SUM(A1:A9);'+1;visible;0;Vypredané;Vypredané");
+  });
+
+  // Dedup podľa `code`, PRVÝ vyhráva — stará appka's zákon
+  // (`import_builder.py`'s `state_rows`/`link_rows`: Shoptet aborduje celý
+  // import na duplicitnom kóde). V tejto appke je `variants.code` DB
+  // primárny kľúč, takže skutočný duplikát je štrukturálne nedosiahnuteľný
+  // pri korektnom volajúcom — táto funkcia je obranná vrstva navyše.
+  it("dedupuje podľa 'code' — prvý výskyt vyhráva, druhý (aj s iným stavom) sa zahodí", () => {
+    const csv = buildStatesCsv([
+      { code: "DUP", pairCode: "1", status: "unavailable" },
+      { code: "DUP", pairCode: "2", status: "discontinued" },
+      { code: "OK", pairCode: "3", status: "discontinued" },
+    ]);
+    const rows = csv.toString("utf8").slice(1).split("\r\n").filter(Boolean);
+    expect(rows).toEqual([
+      "code;pairCode;productVisibility;stock;availabilityInStock;availabilityOutOfStock",
+      "DUP;1;visible;0;Vypredané;Vypredané",
+      "OK;3;detailOnly;0;Predaj výrobku skončil;Predaj výrobku skončil",
+    ]);
+  });
+});
+
+describe("dedupeStateRowsByCode", () => {
+  it("necháva neduplicitné riadky bezo zmeny (rovnaký poradie)", () => {
+    const rows = [
+      { code: "A", pairCode: "", status: "unavailable" as const },
+      { code: "B", pairCode: "", status: "discontinued" as const },
+    ];
+    expect(dedupeStateRowsByCode(rows)).toEqual(rows);
+  });
+
+  it("zahodí KAŽDÝ ďalší výskyt toho istého 'code', zachová prvý", () => {
+    const rows = [
+      { code: "X", pairCode: "1", status: "unavailable" as const },
+      { code: "X", pairCode: "2", status: "unavailable" as const },
+      { code: "X", pairCode: "3", status: "unavailable" as const },
+    ];
+    expect(dedupeStateRowsByCode(rows)).toEqual([{ code: "X", pairCode: "1", status: "unavailable" }]);
+  });
+
+  it("je no-op pre prázdny zoznam", () => {
+    expect(dedupeStateRowsByCode([])).toEqual([]);
   });
 });

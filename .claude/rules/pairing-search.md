@@ -482,3 +482,30 @@ https://github.com/zbynekdrlik/forestshop-app/issues/387#issuecomment-5273377438
   lokálny e2e beh aspoň RAZ za pár etáp (nielen kolíznu dvojicu) — kolízna
   dvojica chytá len PRIAME substring/aria kolízie, nikdy vzdialené číselné
   závislosti ako `catalog.spec.ts`'s celkový počet.
+
+## E7 — Stavový writeback (`shoptet-writeback/{csv,select-states,mark-state-synced,run-state-writeback,run-writeback-sequence,state-writeback-settings}.ts`)
+
+- **`variants.code` je v tejto appke DB PRIMÁRNY KĽÚČ (`schema-catalog.ts`)
+  — starej appky's "dedup podľa code, first-wins" zákon je tu preto
+  ŠTRUKTÚROVANE nedosiahnuteľná situácia pri korektnom volajúcom, nikdy
+  reálna možnosť ako v starej appke (kde CSV-grouping raw Shoptet exportu
+  vedel produkovať skutočné duplikáty naprieč "produktmi").**
+  `dedupeStateRowsByCode`/`buildStatesCsv` napriek tomu implementujú dedup
+  doslovne (zadanie to explicitne žiada + je to obranná vrstva navyše) —
+  ale nikdy sa naň nespoliehaj ako na JEDINÚ ochranu proti duplicitnému
+  `code` v CSV; skutočná ochrana je DB unikátnosť. Pri ĎALŠOM porte
+  "dedup/first-wins" pravidla zo starej appky do tejto appky vždy over
+  najprv, či cieľový stĺpec tu má DB unikátnosť — ak áno, dedup kód je len
+  dokumentácia zámeru/obranná vrstva, nie skutočná nutnosť.
+- **Read-back kontrola bezpečných nastavení importu (`_ensure_safe_settings`
+  starej appky) UŽ existovala pred E7** — `playwright-import.ts`'s
+  `ensureSafeSettings` (zavedená issue 122) nastavuje AJ číta späť oba
+  prvky (`.isChecked()` po `.check()`/`.uncheck()`, abort pri nezhode) a je
+  zdieľaná KAŽDÝM importom cez `runShoptetImportIsolated` (linkový aj
+  stavový). Zadania bod "doplniť, ak chýba" bol teda "over, nie doplň" —
+  potvrdené v design komentári na tickete PRED kódovaním, nikdy netreba
+  znova písať/kontrolovať pri ĎALŠOM novom CSV type v tomto module.
+- **Sekvenčná nezávislosť dvoch Playwright importov v jednom scheduler
+  behu potrebuje VLASTNÝ `try`/`catch` v KAŽDOM podbehu** — plný
+  mechanizmus + review nález (`e6c2695`) zdokumentovaný v `.claude/rules/
+  shoptet-writeback.md` (hľadaj "VYHADZUJE"), nie duplikovaný tu.
