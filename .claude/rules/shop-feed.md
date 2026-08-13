@@ -6,6 +6,14 @@ paths:
 
 # Adresy našich produktov z feedu pre porovnávače (issue 220)
 
+- **`shop_product_url` má od issue 402 stĺpec `source` (`feed`/`sitemap`/
+  `probe`) — tento job je AUTORITATÍVNY zdroj a jeho UPSERT (`run.ts`)
+  PREPÍŠE `source` na `'feed'` pri KAŽDOM behu, aj keď kód predtým patril
+  doplnkovému `shop-sitemap` behu (`.claude/rules/shop-sitemap.md`).** Bez
+  tohto by feedom-znovupokrytý kód ostal ticho označený ako `sitemap`/
+  `probe`, a `shop-sitemap`'s vlastný populačný dopyt (ktorý sa vyhýba LEN
+  kódom BEZ akéhokoľvek riadku) by sa toho nedotkol — funkčne neškodné (kód
+  má správnu URL tak či tak), ale `source` by klamal o pôvode.
 - **`https://www.forestshop.sk/google.xml` je JEDINÝ známy verejný zdroj, ktorý
   má naraz náš kód variantu aj priamu adresu detailu.** Je to Shoptetom
   generovaný Google Merchant feed: `<g:id>` je presne `variant.code` vrátane

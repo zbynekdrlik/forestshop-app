@@ -39,7 +39,7 @@ export async function runShopFeed(options: RunShopFeedOptions): Promise<ShopFeed
   }
 
   for (let i = 0; i < rows.length; i += CHUNK) {
-    const chunk = rows.slice(i, i + CHUNK).map((row) => ({ ...row, fetchedAt: now }));
+    const chunk = rows.slice(i, i + CHUNK).map((row) => ({ ...row, fetchedAt: now, source: "feed" as const }));
     await db
       .insert(shopProductUrl)
       .values(chunk)
@@ -57,6 +57,13 @@ export async function runShopFeed(options: RunShopFeedOptions): Promise<ShopFeed
           // inak by stará adresa obrázka z predošlého behu ticho prežívala.
           imageUrl: sql`excluded.image_url`,
           fetchedAt: sql`excluded.fetched_at`,
+          // issue 402: feed je AUTORITATÍVNY — kód, čo `shop-sitemap`u
+          // predtým doplnil (`source: 'sitemap'/'probe'`), sa PREPÍŠE späť
+          // na `'feed'`, hneď ako ho feed odteraz sám pokrýva. Bez tohto by
+          // `source` ostal na starej hodnote a `shop-sitemap`'s populačný
+          // dopyt (`select.ts`) by taký kód mylne stále považoval za "mimo
+          // feedu".
+          source: sql`excluded.source`,
         },
       });
   }

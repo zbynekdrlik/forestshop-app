@@ -26,6 +26,12 @@ it("jobLabel pozná pairing-search (issue 387) — nevracia holý technický ná
   expect(jobLabel("pairing-search")).toBe("Párovanie: nočný zber kandidátov u dodávateľov");
 });
 
-it("JOB_LABELS pozná presne 10 jobov (5 pôvodných + 4 z issue 185 + 1 z issue 387) — žiadny sa nestratil", () => {
-  expect(Object.keys(JOB_LABELS)).toHaveLength(10);
+// Issue 402: "shop-sitemap" (`SHOP_SITEMAP_JOB_NAME`) — rovnaká medzera ako
+// issue 185/387 vyššie, chytená TOTO ISTÝM regresným testom nižšie.
+it("jobLabel pozná shop-sitemap (issue 402) — nevracia holý technický názov", () => {
+  expect(jobLabel("shop-sitemap")).toBe("Adresy z mapy stránok (doplnok k feedu)");
+});
+
+it("JOB_LABELS pozná presne 11 jobov (5 pôvodných + 4 z issue 185 + 1 z issue 387 + 1 z issue 402) — žiadny sa nestratil", () => {
+  expect(Object.keys(JOB_LABELS)).toHaveLength(11);
 });

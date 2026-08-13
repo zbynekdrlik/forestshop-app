@@ -153,14 +153,24 @@ export function PairingReviewCard({
         <div className="pairing-review-side">
           <div className="pairing-review-label">Náš produkt</div>
           <a
-            className="pairing-review-name"
+            className={item.ourUrlIsSearchFallback ? "pairing-review-name pairing-review-name-fallback" : "pairing-review-name"}
             href={item.ourUrl}
             target="_blank"
             rel="noopener noreferrer"
             data-testid={`pairing-review-our-link-${item.productKey}`}
+            title={item.ourUrlIsSearchFallback ? "Priama adresa produktu nie je známa — otvorí vyhľadávanie na eshope" : undefined}
           >
             {item.productName}
           </a>
+          {/* issue 402: majiteľ — "otvorí sa vyhľadávanie namiesto produktu" —
+              odkaz vyššie preto pri fallbacku NEVYZERÁ ako priamy odkaz
+              (tlmená farba/prerušovaná čiara) A dostáva TÚTO explicitnú
+              poznámku, aby farba nebola jediný signál. */}
+          {item.ourUrlIsSearchFallback && (
+            <div className="pairing-review-fallback-note" data-testid={`pairing-review-fallback-note-${item.productKey}`}>
+              🔎 hľadať na eshope — priama adresa nie je známa
+            </div>
+          )}
           <div className="pairing-review-meta">
             {item.supplier ?? "(bez dodávateľa)"} · kódy: {codes} · {String(item.variantCount)} variant(ov)
           </div>

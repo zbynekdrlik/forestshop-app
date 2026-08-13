@@ -1,4 +1,12 @@
-import { pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { pgEnum, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+
+// issue 402: odkiaľ POCHÁDZA riadok — `feed` (google.xml, `shop-feed/
+// run.ts`) je AUTORITATÍVNY zdroj a smie prepísať čokoľvek; `sitemap`/
+// `probe` (`shop-sitemap/run.ts`) zapisuje LEN kódy, ktoré `feed` nepokrýva,
+// a NIKDY neprepíše riadok, čo už feed potvrdil. Bez tohto rozlíšenia by
+// `shop-sitemap`'s beh nevedel, KTORÉ riadky smie obnoviť/nechať tak a
+// KTORÉ patria feedu.
+export const shopProductUrlSource = pgEnum("shop_product_url_source", ["feed", "sitemap", "probe"]);
 
 // Mapa „kód variantu → adresa detailu na NAŠOM e-shope" (issue 220).
 //
@@ -27,4 +35,10 @@ export const shopProductUrl = pgTable("shop_product_url", {
   // tovaru" (`nedostupne/resolve-products.ts`). Nullable rovnako ako
   // `availability` vyššie — nie každá položka feedu obrázok nesie.
   imageUrl: text("image_url"),
+  // issue 402: additive stĺpec, existujúce riadky (všetky doteraz pochádzali
+  // z feedu) dostanú default `'feed'` pri migrácii — `shop-feed/run.ts`'s
+  // UPSERT ho odteraz zapisuje explicitne pri KAŽDOM behu (rovnaká
+  // disciplína ako `availability`/`imageUrl` — feed VŽDY reklamuje kód
+  // späť, ak ho odteraz pokrýva).
+  source: shopProductUrlSource("source").notNull().default("feed"),
 });

@@ -36,6 +36,7 @@ const itemSchema = z.object({
   priceMax: z.string().nullable(),
   currency: z.string().nullable(),
   ourUrl: z.string(),
+  ourUrlIsSearchFallback: z.boolean(),
   ourImageUrl: z.string().nullable(),
   hasEffectiveLink: z.boolean(),
   gatheredAt: z.string(),

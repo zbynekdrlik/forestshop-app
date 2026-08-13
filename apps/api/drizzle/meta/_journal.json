@@ -351,6 +351,13 @@
       "when": 1786594123925,
       "tag": "0049_plain_metal_master",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1786605971188,
+      "tag": "0050_sour_living_mummy",
+      "breakpoints": true
     }
   ]
 }
