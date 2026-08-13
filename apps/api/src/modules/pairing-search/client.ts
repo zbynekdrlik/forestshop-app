@@ -265,4 +265,19 @@ export class SearchClient {
     this.cache.set(cacheKey, candidates);
     return candidates;
   }
+
+  /**
+   * Stiahne DETAILNÚ stránku kandidáta (issue 387 E4's `verify.ts`) — ROVNAKÝ
+   * throttle-if-real ako `.search()`, ale BEZ cache (detailná URL je vždy
+   * jedinečná, na rozdiel od (adapterKey, query) párov). Zdieľa TEN ISTÝ
+   * `this.fetcher` (session cookie jar + retry + warm-up z `.search()`
+   * volaní v tom istom gather cykle), takže detail-page fetch profituje z
+   * už zohriatej relácie na daný host namiesto opätovného warm-upu.
+   */
+  async fetchPage(url: string): Promise<string> {
+    if (this.isReal && this.throttleMs > 0) {
+      await this.sleep(this.throttleMs);
+    }
+    return this.fetcher(url);
+  }
 }
