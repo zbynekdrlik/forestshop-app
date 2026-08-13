@@ -38,12 +38,14 @@ test("manažér vidí stav katalógu, vyhľadá variant a konzola je čistá", a
   // Skladom: návrhy odkazov" ("E2E-RL-CHYBA"/"E2E-RL-NAVRH"/"E2E-RL-CUDZI",
   // issue 311, `scripts/e2e-fixtures-restock-links.ts`)
   // + 60 seedovaných produktov pre "Načítať ďalšie" (issue 337, "E2E-PAGE-
-  // 001".."E2E-PAGE-060", `scripts/e2e-fixtures-pagination.ts`) + 3 seedované
-  // produkty pre "Eshop → Párovanie" ("E2E-PR-CHYBA"/"E2E-PR-NENAJDENY"/
-  // "E2E-PR-SLINKOU", issue 387 E5, `scripts/e2e-fixtures-pairing-review.ts`)
-  // = 106.
+  // 001".."E2E-PAGE-060", `scripts/e2e-fixtures-pagination.ts`)
+  // + 3 seedované produkty pre "Eshop → Párovanie" ("E2E-PR-CHYBA"/
+  // "E2E-PR-NENAJDENY"/"E2E-PR-SLINKOU", issue 387 E5,
+  // `scripts/e2e-fixtures-pairing-review.ts` — chýbalo tu pri E5, doplnené
+  // issue 387 E6 pri prvom behu CELEJ e2e sady proti tomuto fixtúrovému
+  // súboru) = 106.
   // Prví dvaja (PREP-1/PREP-2) aj "E2E-RL-CHYBA" sú `out_of_stock` (nemenia
-  // "sellable"/"missing" nižšie), zvyšných 5 aj všetkých 60 "E2E-PAGE-*" aj
+  // "sellable"/"missing" nižšie), zvyšných 5, všetkých 60 "E2E-PAGE-*" aj
   // všetky 3 "E2E-PR-*" sú `sellable` (posúvajú filter "sellable" 7→75
   // nižšie), "missing"(1) sa nemení ani jedným z nich.
   await expect(page.getByTestId("snapshot")).toContainText("Posledný import: prijatý");
@@ -78,8 +80,8 @@ test("filter podľa stavu zúži zoznam na predajné varianty", async ({ page })
   // + 1 sellable produkt issue 240's fixtúry ("E2E-SEARCH-1") + 2 sellable
   // produkty issue 311's fixtúry ("E2E-RL-NAVRH"/"E2E-RL-CUDZI") + 60 sellable
   // produktov issue 337's fixtúry ("E2E-PAGE-001".."E2E-PAGE-060") + 3
-  // sellable produkty issue 387 E5's fixtúry ("E2E-PR-CHYBA"/"E2E-PR-
-  // NENAJDENY"/"E2E-PR-SLINKOU").
+  // sellable produkty issue 387 E5's fixtúry ("E2E-PR-CHYBA"/
+  // "E2E-PR-NENAJDENY"/"E2E-PR-SLINKOU").
   await expect(page.getByTestId("total")).toHaveText("Nájdených: 75 (zobrazených prvých 50)");
   await expect(page.getByTestId("variant-40237/M")).toBeVisible();
 });

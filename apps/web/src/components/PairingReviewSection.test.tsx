@@ -32,6 +32,7 @@ const MATCHED_ITEM = {
   chosenReason: "najlepší nájdený",
   verdict: "ok" as const,
   chosenCandidate: { name: "Bunda Alfa", url: "https://dodavatel.example.com/bunda-alfa", rawScore: 1080.5, codeHit: true },
+  decision: null,
 };
 
 const UNMATCHED_ITEM = {
@@ -52,6 +53,7 @@ const UNMATCHED_ITEM = {
   chosenReason: null,
   verdict: null,
   chosenCandidate: null,
+  decision: null,
 };
 
 afterEach(() => {
@@ -63,7 +65,7 @@ afterEach(() => {
 it("zobrazí karty pre napárovaný aj nenapárovaný produkt s progress počítadlom", async () => {
   searchPairingReview.mockResolvedValue({ total: 2, gatheredTotal: 5, linkedTotal: 3, items: [MATCHED_ITEM, UNMATCHED_ITEM] });
 
-  render(<PairingReviewSection onSessionExpired={() => {}} />);
+  render(<PairingReviewSection role="citanie" onSessionExpired={() => {}} />);
 
   const matchedCard = await screen.findByTestId("pairing-review-card-PR-1");
   expect(matchedCard.textContent).toContain("Bunda Alfa Zimná");
@@ -80,7 +82,7 @@ it("zobrazí karty pre napárovaný aj nenapárovaný produkt s progress počít
 it("keď zoznam nezodpovedá žiadnemu produktu, zobrazí informačnú vetu", async () => {
   searchPairingReview.mockResolvedValue({ total: 0, gatheredTotal: 0, linkedTotal: 0, items: [] });
 
-  render(<PairingReviewSection onSessionExpired={() => {}} />);
+  render(<PairingReviewSection role="citanie" onSessionExpired={() => {}} />);
 
   await screen.findByTestId("pairing-review-empty");
 });
@@ -89,7 +91,7 @@ it("pri 401 zavolá onSessionExpired namiesto zobrazenia všeobecnej chyby", asy
   searchPairingReview.mockRejectedValue(new PairingReviewUnauthorizedError());
   const onSessionExpired = vi.fn();
 
-  render(<PairingReviewSection onSessionExpired={onSessionExpired} />);
+  render(<PairingReviewSection role="citanie" onSessionExpired={onSessionExpired} />);
 
   await waitFor(() => {
     expect(onSessionExpired).toHaveBeenCalledTimes(1);
@@ -102,7 +104,7 @@ it("pri 401 zavolá onSessionExpired namiesto zobrazenia všeobecnej chyby", asy
 it("predvolený filter pri prvom otvorení je 'unreviewed'", async () => {
   searchPairingReview.mockResolvedValue({ total: 0, gatheredTotal: 0, linkedTotal: 0, items: [] });
 
-  render(<PairingReviewSection onSessionExpired={() => {}} />);
+  render(<PairingReviewSection role="citanie" onSessionExpired={() => {}} />);
 
   await waitFor(() => {
     expect(searchPairingReview).toHaveBeenCalledWith({ filter: "unreviewed", page: 1 });
@@ -112,7 +114,7 @@ it("predvolený filter pri prvom otvorení je 'unreviewed'", async () => {
 it("klik na iný filter znova načíta zoznam s novým filtrom a zapamätá si ho do localStorage", async () => {
   searchPairingReview.mockResolvedValue({ total: 0, gatheredTotal: 0, linkedTotal: 0, items: [] });
 
-  render(<PairingReviewSection onSessionExpired={() => {}} />);
+  render(<PairingReviewSection role="citanie" onSessionExpired={() => {}} />);
   await screen.findByTestId("pairing-review-empty");
 
   searchPairingReview.mockClear();
@@ -133,7 +135,7 @@ it("klik na iný filter znova načíta zoznam s novým filtrom a zapamätá si h
 it("hlavička karty 'Náš produkt' je odlíšená od 'Navrhnutý kandidát' — bez vlastného <h1>/<h2> obrazovky", async () => {
   searchPairingReview.mockResolvedValue({ total: 1, gatheredTotal: 1, linkedTotal: 0, items: [MATCHED_ITEM] });
 
-  render(<PairingReviewSection onSessionExpired={() => {}} />);
+  render(<PairingReviewSection role="citanie" onSessionExpired={() => {}} />);
   await screen.findByTestId("pairing-review-card-PR-1");
 
   expect(screen.queryByRole("heading")).toBeNull();

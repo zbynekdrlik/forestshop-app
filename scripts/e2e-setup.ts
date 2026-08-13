@@ -263,7 +263,10 @@ await db.execute(
   // uvedenia — pridané ručne rovnako ako riadok vyššie. "pairing_search_
   // settings" je rovnaká situácia ako "restock_settings" (žiadny FK,
   // singleton id, žiadny migračný seed riadok — netreba reseed nižšie).
-  'TRUNCATE TABLE ingest_issue, variant, product, catalog_snapshot, job_run, audit_events, sessions, users, order_line, "order", supplier_contact, pairing, supplier, order_open_status, posta_uncollected_settings, posta_uncollected_state, order_reminder_settings, order_reminder_state, nedostupne_state, nedostupne_replacement_link, mail_template, mail_template_history, supplier_stock, restock_settings, restock_event, shop_product_url, theme_color, dpd_pickup_request, upozornenie, daily_task, mail_log, dpd_shipment, product_supplier_override, product_supplier_link_override, pairing_candidate, pairing_candidate_set, pairing_search_settings RESTART IDENTITY CASCADE',
+  // issue 387 E6: "pairing_decision" má reálny FK do "product" AJ "users"
+  // (TRUNCATE CASCADE ignoruje ON DELETE RESTRICT), pridané ručne rovnako
+  // ako riadok vyššie.
+  'TRUNCATE TABLE ingest_issue, variant, product, catalog_snapshot, job_run, audit_events, sessions, users, order_line, "order", supplier_contact, pairing, supplier, order_open_status, posta_uncollected_settings, posta_uncollected_state, order_reminder_settings, order_reminder_state, nedostupne_state, nedostupne_replacement_link, mail_template, mail_template_history, supplier_stock, restock_settings, restock_event, shop_product_url, theme_color, dpd_pickup_request, upozornenie, daily_task, mail_log, dpd_shipment, product_supplier_override, product_supplier_link_override, pairing_candidate, pairing_candidate_set, pairing_search_settings, pairing_decision RESTART IDENTITY CASCADE',
 );
 // Rovnaký dôvod ako `tests/helpers/db.ts`: bez tohto by "Na objednanie" bolo
 // v CELOM e2e behu prázdne pre KAŽDÚ objednávku (žiadny nastavený otvorený
