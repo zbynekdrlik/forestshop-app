@@ -13,7 +13,16 @@ paths:
 
 - **Pridanie ŠTVRTEJ naplánovanej úlohy = jedna nová `ScheduledJob` v
   `modules/scheduler/jobs.ts` + jeden riadok v `index.ts`'s
-  `startScheduler(db, [...])` zozname.** Job's `run(db, now)` MUSÍ volať
+  `startScheduler(db, [...])` zozname + jeden riadok v `apps/web/src/
+  schedulerLabels.ts`'s `JOB_LABELS`.** Tretí krok sa oddeľuje ĽAHKO —
+  žiadny typecheck/build ho nevynúti (mapa má fallback na surový
+  `jobName`), takže appka bez neho ticho ukazuje technický názov namiesto
+  slovenského popisu v "Plánovač"/"Sync zo Shoptetu"'s histórii behov.
+  Stalo sa to UŽ DVAKRÁT (issue 185 pre štyri joby naraz, issue 387 pre
+  `pairing-search`) — pri KAŽDOM ďalšom novom jobe (naplánovanom AJ
+  čisto manuálnom "Spustiť teraz") skontroluj `JOB_LABELS` HNEĎ vedľa
+  týchto dvoch krokov, nie až keď si niekto všimne surový názov na
+  obrazovke. Job's `run(db, now)` MUSÍ volať
   existujúcu, už otestovanú business-logickú funkciu (rovnaký vzor ako
   `catalogImportJob`/`pruneRawExportsJob`/`sessionCleanupJob`) — scheduler
   sám žiadnu doménovú logiku nemá a nemá ju ani získať. `run()` nikdy
