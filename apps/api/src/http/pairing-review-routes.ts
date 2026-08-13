@@ -3,9 +3,11 @@ import type { Hono } from "hono";
 import { z } from "zod";
 import type { Database } from "../db/client.js";
 import { log } from "../logger.js";
+import { record } from "../modules/audit/service.js";
 import { supplierLinkUrlBody } from "../modules/orders/supplier-link-assignment.js";
 import { setPairingDecision } from "../modules/pairing-review/decisions.js";
 import { listPairingCandidatesForProduct, listPairingReview } from "../modules/pairing-review/queries.js";
+import { isStateWritebackEnabled, setStateWritebackEnabled } from "../modules/shoptet-writeback/state-writeback-settings.js";
 import { requireRole, requireUser, type AppBindings } from "./middleware.js";
 import { requireSameOrigin } from "./origin-check.js";
 
@@ -13,7 +15,10 @@ import { requireSameOrigin } from "./origin-check.js";
 // E3/E4 zozbierali a overili). issue 387 E6: pridáva rozhodnutia (POST) +
 // lazy zoznam kandidátov pre panel (GET) — rovnaké oprávnenie ako
 // `product-links-routes.ts`'s zápisová trasa (`requireRole("admin",
-// "manazer")` + `requireSameOrigin()`).
+// "manazer")` + `requireSameOrigin()`). issue 387 E7: pridáva Štart/Stop
+// prepínač pre STAVOVÝ writeback (mení viditeľnosť produktov na živom
+// shope) — rovnaké miesto ako zvyšok obrazovky Párovanie, rovnaký vzor ako
+// existujúca `PUT /api/pairing-search/enabled`.
 
 // Prázdna hodnota (`page=`) sa má správať ako neprítomný parameter, rovnaký
 // vzor ako `restock-links-routes.ts`/`product-links-routes.ts`'s `pageParam`.
@@ -44,7 +49,42 @@ const pairingDecisionBody = z.discriminatedUnion("status", [
   z.object({ status: z.literal("revert") }),
 ]);
 
+const setStateWritebackEnabledBody = z.object({ enabled: z.boolean() });
+
 export function registerPairingReviewRoutes(app: Hono<AppBindings>, db: Database): void {
+  // issue 387 E7 — `/api/pairing-review/state-writeback-enabled` má INÝ
+  // segmentový tvar než `:productKey/candidates`/`:productKey/decision`
+  // nižšie (2 segmenty za prefixom, nie `:productKey` + ďalší literál), takže
+  // tu nehrozí `.claude/rules/http-routes.md`'s literal-vs-`:param` kolízia —
+  // ponechané na tomto mieste kvôli tematickému zoskupeniu (Štart/Stop je
+  // súčasťou tej istej obrazovky Párovanie).
+  app.get("/api/pairing-review/state-writeback-enabled", requireUser(db), async (c) =>
+    c.json({ enabled: await isStateWritebackEnabled(db) }),
+  );
+
+  app.put(
+    "/api/pairing-review/state-writeback-enabled",
+    requireSameOrigin(),
+    requireUser(db),
+    requireRole("admin", "manazer"),
+    zValidator("json", setStateWritebackEnabledBody),
+    async (c) => {
+      const { enabled } = c.req.valid("json");
+      const user = c.get("user");
+      const now = new Date();
+      await setStateWritebackEnabled(db, enabled, now);
+      await record(db, {
+        at: now,
+        actorUserId: user.userId,
+        action: "pairing_state_writeback.enabled.set",
+        entity: "pairing_state_writeback_settings",
+        data: { enabled },
+      });
+      log.info({ actorUserId: user.userId, enabled }, "Párovanie: Štart/Stop stavového writebacku");
+      return c.json({ ok: true as const, enabled });
+    },
+  );
+
   // Rovnaké oprávnenie ako `restock-links`/`product-links` čítanie
   // (`requireUser`, žiadne rolové obmedzenie) — každý prihlásený smie vidieť
   // stav párovania.

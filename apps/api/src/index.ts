@@ -45,7 +45,7 @@ import { startScheduler } from "./modules/scheduler/scheduler.js";
 import { orderNoteWritebackConfigFromBaseUrl, shoptetImportConfigFromBaseUrl } from "./modules/shoptet-writeback/config.js";
 import { dpdPortalConfigFromBaseUrl } from "./modules/dpd/config.js";
 import { runOrderNoteWritebackJob } from "./modules/shoptet-writeback/run-order-note-writeback.js";
-import { runShoptetWriteback } from "./modules/shoptet-writeback/run-writeback.js";
+import { runShoptetWritebackSequence } from "./modules/shoptet-writeback/run-writeback-sequence.js";
 import { createShutdownHandler } from "./shutdown.js";
 import { appVersion } from "./version.js";
 
@@ -134,19 +134,22 @@ const sendSupplierMail =
         replyTo: env.MAIL_REPLY_TO,
       });
 
-// issue 122: spätný zápis odkazu na dodávateľa do Shoptetu — rovnaká úvaha
-// ako `runIngest`/`runOrdersIngest`/`sendSupplierMail` vyššie:
+// issue 122 + issue 387 E7: spätný zápis do Shoptetu — rovnaká úvaha ako
+// `runIngest`/`runOrdersIngest`/`sendSupplierMail` vyššie:
 // `SHOPTET_ADMIN_USER`/`PASSWORD` sú nepovinné (`env.ts`), appka beží ďalej
 // bez nich, len naplánovaná úloha zaznamená "nenakonfigurované"
 // (`scheduler/jobs.ts`'s `shoptetWritebackJob`). Žiadna HTTP cesta ich
 // nepotrebuje (na rozdiel od tamtých troch) — toto je LEN scheduler.
+// E7: `runShoptetWritebackSequence` robí OBIDVA podbehy (linkový + stavový,
+// ten druhý gatovaný vlastným Štart/Stop prepínačom) s TÝMITO ISTÝMI
+// prihlasovacími údajmi — žiadne nové premenné.
 const shoptetAdminUser = env.SHOPTET_ADMIN_USER;
 const shoptetAdminPassword = env.SHOPTET_ADMIN_PASSWORD;
 const runShoptetWritebackFn =
   shoptetAdminUser === undefined || shoptetAdminPassword === undefined
     ? undefined
     : (db2: typeof db, now: Date) =>
-        runShoptetWriteback(
+        runShoptetWritebackSequence(
           db2,
           shoptetImportConfigFromBaseUrl(env.SHOPTET_ADMIN_BASE_URL, shoptetAdminUser, shoptetAdminPassword),
           now,

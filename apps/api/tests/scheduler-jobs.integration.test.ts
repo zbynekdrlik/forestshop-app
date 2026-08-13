@@ -206,7 +206,10 @@ it("shoptetWritebackJob bez nakonfigurovaného runWriteback VYHODÍ (zachytí ho
 });
 
 it("shoptetWritebackJob s nakonfigurovaným runWriteback naň deleguje a vráti jeho výsledok ako detail", async () => {
-  const fakeResult = { status: "nothing_changed" } as const;
+  // issue 387 E7: `runWriteback` teraz vracia KOMBINOVANÝ výsledok oboch
+  // podbehov (linkový + stavový) — `run-writeback-sequence.ts`'s
+  // `ShoptetWritebackSequenceResult`.
+  const fakeResult = { link: { status: "nothing_changed" }, state: { status: "disabled" } } as const;
   let receivedNow: Date | undefined;
   const job = shoptetWritebackJob((_db, now) => {
     receivedNow = now;
