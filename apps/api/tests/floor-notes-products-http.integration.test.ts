@@ -1,5 +1,6 @@
+import { eq } from "drizzle-orm";
 import { afterEach, describe, expect, it } from "vitest";
-import { shopProductUrl, users } from "../src/db/schema.js";
+import { floorNoteProducts, shopProductUrl, users } from "../src/db/schema.js";
 import { createApp } from "../src/http/app.js";
 import { resetLoginRateLimit } from "../src/http/login-rate-limit.js";
 import { hashPassword } from "../src/modules/auth/passwords.js";
@@ -158,10 +159,35 @@ describe("DELETE /api/floor-notes/:id/products/:variantCode", () => {
     expect(res.status).toBe(200);
     expect((await res.json()) as { removed: boolean }).toEqual({ ok: true, removed: false });
   });
+
+  // Code review (issue 410): variantové kódy v tejto appke bežne nesú
+  // veľkosť za lomítkom ("40237/L", `.claude/rules/database.md`'s
+  // `variant.code` komentár) — frontend (`floorNotesApi.ts`) preto pošle
+  // `encodeURIComponent(variantCode)` ako súčasť cesty (`%2F`). Over, že
+  // Hono-ov `:variantCode` param dostane SPÄŤ dekódovanú hodnotu s
+  // LOMÍTKOM, nie skrátený/rozdelený segment.
+  it("odopnutie produktu, ktorého kód obsahuje '/' (veľkosť), funguje cez zakódovanú cestu", async () => {
+    const { app, cookie, db } = await bootUser("manazer@forestshop.sk", "manazer");
+    await insertTestVariant(db, "E2E-PIN-8/L");
+    const id = await createNote(app, cookie, "zápis");
+    await app.request(`/api/floor-notes/${id}/products`, {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({ variantCode: "E2E-PIN-8/L" }),
+    });
+
+    const res = await app.request(`/api/floor-notes/${id}/products/${encodeURIComponent("E2E-PIN-8/L")}`, { method: "DELETE", headers: { cookie } });
+    expect(res.status).toBe(200);
+    expect((await res.json()) as { removed: boolean }).toEqual({ ok: true, removed: true });
+
+    const list = await app.request("/api/floor-notes", { headers: { cookie } });
+    const row = ((await list.json()) as { rows: readonly { products: readonly unknown[] }[] }).rows[0];
+    expect(row?.products).toEqual([]);
+  });
 });
 
 describe("zmazanie zápisu odstráni aj jeho pripnuté produkty (cascade)", () => {
-  it("po DELETE .../floor-notes/:id zápis aj jeho pripnuté produkty zmiznú zo zoznamu", async () => {
+  it("po DELETE .../floor-notes/:id zápis aj jeho pripnuté produkty zmiznú zo zoznamu A z floor_note_product tabuľky", async () => {
     const { app, cookie, db } = await bootUser("manazer@forestshop.sk", "manazer");
     await insertTestVariant(db, "E2E-PIN-7");
     const id = await createNote(app, cookie, "zápis s produktom");
@@ -172,5 +198,11 @@ describe("zmazanie zápisu odstráni aj jeho pripnuté produkty (cascade)", () =
 
     const list = await app.request("/api/floor-notes", { headers: { cookie } });
     expect(((await list.json()) as { rows: readonly unknown[] }).rows).toEqual([]);
+
+    // Code review (issue 410): overiť PRIAMO v DB, že `floor_note_product`
+    // riadok skutočne ZMIZOL (cascade), nie len že ho zoznam nezobrazuje —
+    // zoznam by mlčal aj pri osirotenom riadku bez zodpovedajúceho zápisu.
+    const zvysneRiadky = await db.select().from(floorNoteProducts).where(eq(floorNoteProducts.floorNoteId, id));
+    expect(zvysneRiadky).toEqual([]);
   });
 });
