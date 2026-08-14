@@ -41,6 +41,7 @@ const makeLine = (overrides: Partial<OrderLine> = {}): OrderLine => ({
   externalCode: null,
   supplierAssignable: false,
   manualSupplierOverride: null,
+  customerOpenOrderCount: 0,
   ourUrl: null,
   ...overrides,
 });

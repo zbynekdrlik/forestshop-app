@@ -3,6 +3,7 @@ import { formatSkDate } from "../formatDate.js";
 import type { OrderLine } from "../ordersApi.js";
 import { STATE_LABELS } from "../orderLineStateLabels.js";
 import { formatVariantTotalChip, isStaleOrderLine, orderLineAgeDays, type VariantTotal } from "../ordersSummary.js";
+import { CustomerOrderCountBadge } from "./CustomerOrderCountBadge.js";
 import { OrderLineStateButtons } from "./OrderLineStateButtons.js";
 
 // issue 162: počet stĺpcov "Na objednanie" tabuľky — MUSÍ sedieť s počtom
@@ -272,7 +273,12 @@ export function OrderLineRow({
             )}
           </div>
         </td>
-        <td>{line.customerName}</td>
+        {/* issue 431: odznak s počtom otvorených objednávok zákazníka pri
+            mene — logika prahu (≥2) žije v `CustomerOrderCountBadge`. */}
+        <td>
+          {line.customerName}
+          <CustomerOrderCountBadge count={line.customerOpenOrderCount} lineId={line.lineId} />
+        </td>
         {/* issue 171: majiteľ, doslovne "poznamka zakaznika daj pod text
             produktu" — zákaznícka poznámka (🛈, `remark`) sa vzťahuje na
             TENTO produkt, nie na "poznámky" všeobecne, takže sa presunula

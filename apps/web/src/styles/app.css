@@ -472,6 +472,28 @@ tr:last-child td {
   font-weight: var(--fs-weight-semibold);
   line-height: 1.25rem;
 }
+
+/* issue 431: odznak s počtom otvorených objednávok zákazníka pri mene v "Na
+   objednanie" (signál "zváž zlúčenie"). Vizuál ako Shoptet modrý krúžok —
+   modrá (--fs-focus) ho zámerne odlišuje od zelených navigačných odznakov
+   (.tab-badge). Inline vedľa mena, `vertical-align: middle` ho zvislo
+   zarovná k textu mena. */
+.cust-order-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.125rem;
+  height: 1.125rem;
+  margin-left: var(--fs-space-2);
+  padding: 0 var(--fs-space-1);
+  border-radius: var(--fs-radius-lg);
+  background: var(--fs-focus);
+  color: #fff;
+  font-size: var(--fs-text-xs);
+  font-weight: var(--fs-weight-semibold);
+  line-height: 1;
+  vertical-align: middle;
+}
 /* issue 185: stav zapnuté/vypnuté per záložka ("Automatizácie" priečinok) —
    znovupoužíva `.pill`/`.pill.off` (rovnaký vizuál ako vnútri
    PostaUncollectedSection/OrderReminderSection, samotná trieda `.pill` dáva

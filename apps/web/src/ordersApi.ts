@@ -54,6 +54,9 @@ const orderLineSchema = z.object({
   // zatiaľ žiadne nie je.
   supplierAssignable: z.boolean(),
   manualSupplierOverride: z.string().nullable(),
+  // issue 431: počet OTVORENÝCH objednávok toho istého zákazníka (`apps/api`'s
+  // `customerOpenOrderCount`). Odznak pri mene sa ukáže len keď ≥ 2.
+  customerOpenOrderCount: z.number(),
 });
 
 // issue 63: zrkadlí `queries.ts`'s `NEZNAMY_DODAVATEL` — musí byť IDENTICKÝ
