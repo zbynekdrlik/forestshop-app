@@ -487,3 +487,26 @@ beží PRODUKCIA aj VÝVOJ. Ťažký lokálny beh (plná sada testov, build,
 (pozri `.claude/rules/testing.md`). Keď appka odpovedá `502`, najprv over
 `cat /proc/loadavg` a `docker logs forestshop-cloudflared-1 | grep -i
 "handshake"`, až potom hľadaj chybu v kóde.
+
+- **Cloudflare kešuje statické cesty na okraji — a cesta, ktorá PREDTÝM
+  padala na SPA fallback (napr. `/favicon.ico` → `index.html`, `text/html`),
+  drží STARÚ odpoveď aj po nasadení skutočného súboru** (issue 430, overené
+  naživo). Po nasadení favicony vracal `/favicon.ico` cez CF stále
+  `text/html` (`cf-cache-status: HIT`, `last-modified` z PRED nasadenia),
+  hoci origin už servíroval správny obrázok. **Diagnostika:** origin over
+  cache-busterom `curl -s -o /dev/null -w "%{content_type}"
+  "https://forestshop.newlevel.media/favicon.ico?cb=$(date +%s)"` (querystring
+  = iný CF cache kľúč → čerstvá odpoveď z originu) — ak vráti `image/x-icon`,
+  je to čisto stará CF keš, appka je v poriadku. NOVÉ cesty (`/favicon.svg`,
+  `/favicon-32.png`, `/apple-touch-icon.png`) nikdy neboli kešované, takže
+  idú hneď správne — problém je LEN pri ceste, čo existovala už predtým.
+  **Pracovný token `CF_API_TOKEN` (`/srv/forestshop/.env`) NEMÁ právo Cache
+  Purge** (má len Tunnel + DNS Write + Zone Read) — `POST
+  /zones/<zone>/purge_cache` vráti `Authentication error`. Keš sa aj tak sama
+  vyprázdni podľa `max-age` (favicon `14400` s = 4 h). Moderné prehliadače
+  aj tak berú favicon z `<link rel="icon" type="image/svg+xml">` (`/favicon.svg`,
+  servírovaný správne), takže karta ukazuje ikonu okamžite; stará keš
+  `/favicon.ico` je len kozmetika, ktorá do ~4 h zmizne. Ak by bolo treba
+  purge hneď, vytvor purge-schopný token zo správcovského tokenu
+  (`.claude` memory `cloudflare-access`) — na 3-hodinovú self-healing keš to
+  ale zvyčajne nestojí za nový prod token.
