@@ -48,6 +48,7 @@ const RIADOK_1 = {
   externalCode: null,
   supplierAssignable: false,
   manualSupplierOverride: null,
+  customerOpenOrderCount: 1,
   ourUrl: null,
 };
 

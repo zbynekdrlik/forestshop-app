@@ -37,6 +37,7 @@ const ZAKLAD = {
   supplierNote: null,
   externalCode: null,
   manualSupplierOverride: null,
+  customerOpenOrderCount: 1,
   ourUrl: null,
 };
 

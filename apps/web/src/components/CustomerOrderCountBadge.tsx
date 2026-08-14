@@ -17,11 +17,13 @@ export function CustomerOrderCountBadge({
   readonly lineId: string;
 }): JSX.Element | null {
   if (count < 2) return null;
-  // Slovenské skloňovanie: 2-4 → "objednávky", 5+ → "objednávok" (odznak sa
-  // zobrazuje len pri count ≥ 2, jednotné číslo teda netreba). Rovnaký 2-4 vs
-  // 5+ rozdiel ako backendový `pluralWord` (`apps/api`'s `orders/pluralize.ts`)
-  // — frontend a backend sú samostatné balíčky bez zdieľaného kódu, preto
-  // krátka lokálna forma namiesto importu. `title` aj `aria-label` sú ZHODNÉ.
+  // Slovenské skloňovanie: 2-4 → "otvorené objednávky", 5+ → "otvorených
+  // objednávok" (odznak sa zobrazuje len pri count ≥ 2, jednotné číslo netreba).
+  // Tá istá 2-4 vs 5+ hranica ako `ordersSummary.ts`'s `formatOrderCount` —
+  // ten skloňuje len holé "objednávky"/"objednávok" (bez prídavného mena),
+  // tu ale musí súhlasiť aj prídavné meno "otvorené"/"otvorených", preto
+  // krátka lokálna forma namiesto priameho volania. `title` aj `aria-label`
+  // sú ZHODNÉ.
   const noun = count <= 4 ? "otvorené objednávky" : "otvorených objednávok";
   const label = `zákazník má ${String(count)} ${noun} — zvážiť zlúčenie`;
   return (

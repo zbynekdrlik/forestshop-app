@@ -494,6 +494,7 @@ tr:last-child td {
   line-height: 1;
   vertical-align: middle;
 }
+
 /* issue 185: stav zapnuté/vypnuté per záložka ("Automatizácie" priečinok) —
    znovupoužíva `.pill`/`.pill.off` (rovnaký vizuál ako vnútri
    PostaUncollectedSection/OrderReminderSection, samotná trieda `.pill` dáva
