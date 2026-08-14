@@ -133,6 +133,14 @@ export interface PairingReviewSearchResult {
   /** Koľko z `gatheredTotal` už MÁ efektívnu linku — čitateľ pre progress
    * (doplnok `unreviewed` počtu, ktorý číta rovnaký endpoint s `filter=unreviewed`). */
   readonly linkedTotal: number;
+  /** issue 432 — SKUTOČNÉ katalógové pokrytie linkami (na rozdiel od
+   * `gatheredTotal`/`linkedTotal`, ktoré merajú veľkosť recenznej FRONTY):
+   * `catalogActive` = počet produktov s aspoň jedným PREDAJNÝM (`variant.state
+   * === "sellable"`) variantom (menovateľ); `catalogLinked` = koľko z NICH má
+   * efektívnu dodávateľskú linku (čitateľ). Počítané NEZÁVISLE od populácie
+   * fronty — `computeCatalogCoverage`. */
+  readonly catalogLinked: number;
+  readonly catalogActive: number;
   readonly items: readonly PairingReviewItem[];
 }
 
@@ -211,6 +219,40 @@ async function determineReviewPopulationKeys(db: Database): Promise<string[]> {
     if (setKeys.has(product.key) || effective.url === null || decisionKeys.has(product.key)) productKeys.push(product.key);
   }
   return productKeys;
+}
+
+// issue 432 — SKUTOČNÉ katalógové pokrytie linkami. NA ROZDIEL od
+// `gatheredTotal`/`linkedTotal` (veľkosť recenznej FRONTY = únia gatherované ∪
+// bez-linky ∪ rozhodnuté) toto meria KATALÓG: `catalogActive` = produkty s
+// aspoň jedným PREDAJNÝM (`variant.state === "sellable"`) variantom, `catalogLinked`
+// = koľko z NICH má EFEKTÍVNU dodávateľskú linku (`resolveEffectiveSupplierLink`
+// = override ∪ `internalNote` extrakcia — TÁ ISTÁ čítacia logika, žiadny
+// duplicitný regex). Rovnaký MVP "načítaj celý katalóg do JS" vzor ako
+// `determineReviewPopulationKeys` (efektívna linka je čistá JS funkcia, nedá sa
+// vyjadriť ako SQL predikát bez duplicity). Počíta sa NEZÁVISLE od populácie
+// fronty — aktívny olinkovaný produkt MIMO populácie (má linku, nebol
+// gatherovaný ani rozhodnutý) sa v pokrytí správne objaví, hoci `linkedTotal`
+// (odvodený z fronty) ho minie.
+async function computeCatalogCoverage(db: Database): Promise<{ readonly catalogActive: number; readonly catalogLinked: number }> {
+  const sellableRows = await db.selectDistinct({ productKey: variants.productKey }).from(variants).where(eq(variants.state, "sellable"));
+  const activeKeys = sellableRows.map((r) => r.productKey);
+  if (activeKeys.length === 0) return { catalogActive: 0, catalogLinked: 0 };
+
+  const productRows = await db.select({ key: products.key, internalNote: products.internalNote }).from(products).where(inArray(products.key, activeKeys));
+  const internalNoteByKey = new Map(productRows.map((r) => [r.key, r.internalNote]));
+
+  const overrideRows = await db
+    .select({ productKey: productSupplierLinkOverrides.productKey, url: productSupplierLinkOverrides.url })
+    .from(productSupplierLinkOverrides)
+    .where(inArray(productSupplierLinkOverrides.productKey, activeKeys));
+  const overrideByProduct = new Map(overrideRows.map((r) => [r.productKey, r.url]));
+
+  let catalogLinked = 0;
+  for (const key of activeKeys) {
+    const effective = resolveEffectiveSupplierLink(internalNoteByKey.get(key) ?? null, overrideByProduct.get(key) ?? null);
+    if (effective.url !== null) catalogLinked += 1;
+  }
+  return { catalogActive: activeKeys.length, catalogLinked };
 }
 
 // issue 399 — zdieľané budovanie karty(-diet) pre KONKRÉTNU množinu
@@ -445,8 +487,11 @@ export async function getPairingReviewItem(db: Database, productKey: string): Pr
 }
 
 export async function listPairingReview(db: Database, input: PairingReviewSearchInput): Promise<PairingReviewSearchResult> {
+  // issue 432 — katalógové pokrytie sa počíta NEZÁVISLE od populácie fronty
+  // (aj keď je fronta prázdna — napr. všetko olinkované — pokrytie ostáva správne).
+  const { catalogActive, catalogLinked } = await computeCatalogCoverage(db);
   const productKeys = await determineReviewPopulationKeys(db);
-  if (productKeys.length === 0) return { total: 0, gatheredTotal: 0, linkedTotal: 0, items: [] };
+  if (productKeys.length === 0) return { total: 0, gatheredTotal: 0, linkedTotal: 0, catalogLinked, catalogActive, items: [] };
 
   const allItems = await buildPairingReviewItems(db, productKeys);
 
@@ -514,7 +559,7 @@ export async function listPairingReview(db: Database, input: PairingReviewSearch
   const start = (input.page - 1) * input.pageSize;
   const items = filtered.slice(start, start + input.pageSize);
 
-  return { total, gatheredTotal, linkedTotal, items };
+  return { total, gatheredTotal, linkedTotal, catalogLinked, catalogActive, items };
 }
 
 export interface PairingReviewCandidate {

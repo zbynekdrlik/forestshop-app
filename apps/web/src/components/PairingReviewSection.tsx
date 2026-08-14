@@ -68,7 +68,12 @@ export function PairingReviewSection({ role, onSessionExpired }: { readonly role
   const [items, setItems] = useState<readonly PairingReviewItem[]>([]);
   const [total, setTotal] = useState(0);
   const [gatheredTotal, setGatheredTotal] = useState(0);
-  const [linkedTotal, setLinkedTotal] = useState(0);
+  // issue 432 — katalógové pokrytie (hlavný ukazovateľ): `catalogLinked` /
+  // `catalogActive` = aktívne produkty (s aspoň jedným predajným variantom) s
+  // efektívnou linkou / všetky aktívne produkty. NEZÁVISLÉ od `gatheredTotal`
+  // (veľkosť recenznej fronty, teraz už len samostatný menší riadok).
+  const [catalogLinked, setCatalogLinked] = useState(0);
+  const [catalogActive, setCatalogActive] = useState(0);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState("");
   // issue 399 — "Hľadať / opraviť" pod-záložka, NEZÁVISLÁ od "Prehľad"'s
@@ -115,7 +120,8 @@ export function PairingReviewSection({ role, onSessionExpired }: { readonly role
         setItems(result.items);
         setTotal(result.total);
         setGatheredTotal(result.gatheredTotal);
-        setLinkedTotal(result.linkedTotal);
+        setCatalogLinked(result.catalogLinked);
+        setCatalogActive(result.catalogActive);
         setLoaded(true);
       })
       .catch((err: unknown) => {
@@ -197,7 +203,8 @@ export function PairingReviewSection({ role, onSessionExpired }: { readonly role
     // Obnoviť scroll len RAZ, hneď po prvom úspešnom načítaní.
   }, [loaded]);
 
-  const progressPct = gatheredTotal > 0 ? Math.round((100 * linkedTotal) / gatheredTotal) : 0;
+  // issue 432 — progres z katalógového pokrytia (nie z veľkosti recenznej fronty).
+  const progressPct = catalogActive > 0 ? Math.round((100 * catalogLinked) / catalogActive) : 0;
   const showingAll = total === 0 || items.length >= total;
 
   // issue 399 — pod-záložky (rovnaký vzor ako Upozornenia Otvorené/Vybavené):
@@ -248,12 +255,17 @@ export function PairingReviewSection({ role, onSessionExpired }: { readonly role
       </p>
 
       <div className="pairing-review-progress" data-testid="pairing-review-progress">
-        <span className="pairing-review-progress-text">
-          {String(linkedTotal)} / {String(gatheredTotal)} s odkazom
-        </span>
-        <div className="pairing-review-progress-bar">
-          <div className="pairing-review-progress-bar-fill" style={{ width: `${String(progressPct)}%` }} />
+        <div className="pairing-review-progress-row">
+          <span className="pairing-review-progress-text">
+            {String(catalogLinked)} / {String(catalogActive)} aktívnych produktov s odkazom na dodávateľa
+          </span>
+          <div className="pairing-review-progress-bar">
+            <div className="pairing-review-progress-bar-fill" style={{ width: `${String(progressPct)}%` }} />
+          </div>
         </div>
+        <span className="pairing-review-progress-queue" data-testid="pairing-review-progress-queue">
+          vo fronte na revíziu: {String(gatheredTotal)}
+        </span>
       </div>
 
       <div className="chip-row" data-testid="pairing-review-filters">
