@@ -1,0 +1,1 @@
+ALTER TABLE "pairing_variant_link" ADD COLUMN "synced_at" timestamp with time zone;

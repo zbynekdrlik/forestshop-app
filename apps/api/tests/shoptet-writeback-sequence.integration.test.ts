@@ -84,7 +84,7 @@ describe("runShoptetWritebackSequence (end-to-end proti fixture)", () => {
 
       const result = await runShoptetWritebackSequence(db, fixtureConfig(), new Date("2026-02-01T00:00:00Z"));
       expect(result).toEqual({
-        link: { status: "ok", productCount: 1, rowCount: 1 },
+        link: { status: "ok", productCount: 1, variantLinkCount: 0, rowCount: 1 },
         state: { status: "ok", productCount: 1, rowCount: 1 },
       });
       // TWO separate uploads happened — one per import, never a combined file.

@@ -493,3 +493,33 @@ paths:
   jedno-riadkovej vitest fixtúry: `grep` existujúce `screen.getByRole`/
   `screen.getByText` volania v tom istom test súbore — nesporí sa nejaké o
   text, ktorý bude po zmene zdieľaný viacerými riadkami?
+- **Split (per-veľkosť) linky sa do kontroly dostupnosti zapájajú ČÍTANÍM
+  `pairing_variant_link` PRIAMO, nie cez `products.internalNote` (issue 423).**
+  Split produkt (`pairing_decision.status='split'`) nemá produktovú
+  `internalNote` linku — jeho linky žijú per veľkosť. `collectSupplierLinks`
+  (`run.ts`) preto navyše pozbiera split-riadené `pairing_variant_link.url`
+  (gate `status='split'`, rovnaká `extractSupplierLink` normalizácia +
+  vylúčenie vlastného e-shopu ako produktové linky). Každá split linka je
+  JEDNA URL na JEDNU veľkosť (jednoveľkostná stránka), takže sa scrapne ako
+  BLANKET (`size_label=''`) — `collectOurSizesByLink` (per-produkt
+  `internalNote` grouping) ju zámerne NEZAHRNIE, takže sa nikdy neskúša ako
+  viac-veľkostná stránka.
+- **`restock/queries.ts`'s efektívna linka je od issue 423 `coalesce(CASE WHEN
+  decision.status='split' THEN per-veľkosť link END, produktová linka)`.**
+  Split variant sa tak spáruje na svoj BLANKET `supplier_stock` riadok cez
+  existujúcu `size_label=''` vetvu OR-u. **Pasca poradia JOIN-ov:** dva nové
+  LEFT JOINy (`pairing_variant_link` na `variant.code`, `pairing_decision` na
+  `product.key`) MUSIA byť v reťazi PRED `supplierStock` innerJoinom — jeho ON
+  klauzula referencuje `link` (coalesce nad týmito dvoma tabuľkami), a Postgres
+  vyžaduje, aby referencovaná tabuľka bola v JOIN zozname skôr. Non-split
+  variant: `coalesce` padne na produktovú linku → NULOVÁ zmena existujúceho
+  správania (overené restock-run regresiou). Dormantná per-veľkosť linka
+  (produkt nerozdelený) sa ignoruje — `status != 'split'` → produktová linka.
+- **Split-governed predikát (`pairing_variant_link existuje A
+  pairing_decision.status='split'`) sa aplikuje KONZISTENTNE na 4 miestach
+  (issue 423):** `select-variant-links.ts` (writeback vyberie), `select-
+  changes.ts` (writeback vylúči z produktovej cesty), `collectSupplierLinks`
+  (scrape), `restock/queries.ts` (efektívna linka). Dormantná per-veľkosť
+  linka (link nastavený v paneli, ale "✓ Hotovo" nekliknuté, alebo produkt
+  vrátený z rozdelenia) sa VŠADE ignoruje — jej efektívna linka je produktová.
+  Pri KAŽDEJ ďalšej zmene split logiky over všetky štyri miesta naraz.

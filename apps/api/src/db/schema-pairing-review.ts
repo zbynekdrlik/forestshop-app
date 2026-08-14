@@ -141,6 +141,14 @@ export const pairingVariantLinks = pgTable("pairing_variant_link", {
     .references(() => variants.code, { onDelete: "cascade" }),
   url: text("url").notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  // issue 423 — nočný spätný zápis per-veľkosť linkov do Shoptetu. Presný
+  // mirror `product_supplier_link_override.synced_at`: `null` = ešte nikdy
+  // odoslané; `synced_at < updated_at` = odoslané, ale odvtedy znova zmenené.
+  // Táto appka VŠADE sleduje "zmenené od posledného syncu" časovým diffom
+  // (nie value-diffom ako Python stará appka) — konzistentná voľba. Nulluje
+  // sa TÝMTO stĺpcom pri každej zmene linky (`variant-links.ts`'s
+  // `setPairingVariantLink` už `updated_at` obnovuje, čo diff zachytí).
+  syncedAt: timestamp("synced_at", { withTimezone: true }),
 });
 
 // issue 387 E7 — Singleton Štart/Stop prepínač PRE STAVOVÝ WRITEBACK

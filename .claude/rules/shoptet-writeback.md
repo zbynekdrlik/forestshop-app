@@ -328,3 +328,40 @@ paths:
   procesy/`docker ps`, spusti izolovaný re-beh na throwaway Postgres inštancii,
   presne ako `.claude/rules/local-dev.md`'s vlastný postup pre iné testy) —
   nehľadaj appkin bug, kým izolovaný beh sám neflaká.
+- **Split (per-veľkosť) linky sa zapisujú ZLÚČENÉ do EXISTUJÚCEHO linkového
+  importu, NIE tretím samostatným importom (issue 423).** Split produkt
+  (`pairing_decision.status='split'`) má linky per veľkosť vo
+  `pairing_variant_link` (kľúč `variant.code`), NIE v
+  `product_supplier_link_override`. Keďže linkový CSV je aj tak per-variant
+  `code;pairCode;internalNote`, split riadky majú IDENTICKÝ tvar a stačí ich
+  primiešať: `select-variant-links.ts`'s `selectChangedVariantLinks` (gate
+  `status='split'` + časový diff cez nový `pairing_variant_link.synced_at`)
+  dodá per-veľkosť riadky, `run-writeback.ts` ich ZLÚČI s produktovými do
+  JEDNÉHO `runShoptetImportIsolated` behu (žiadny druhý browser child-proces,
+  žiadny nový Štart/Stop prepínač — internalNote je privátna poznámka).
+  **Kľúčová invariant: kódy oboch ciest musia byť DISJUNKTNÉ**, inak Shoptet
+  zruší CELÝ import na duplicitnom kóde — preto `selectChangedSupplierLinks`
+  (produktová cesta) VYLÚČI split-riadené varianty (LEFT JOIN
+  `pairing_variant_link` + `pairing_decision`, `WHERE NOT (link existuje A
+  status='split')`); `dedupeWritebackRowsByCode` (per-veľkosť riadky prvé) je
+  len obranná vrstva. Po úspechu sa označia OBE strany synced
+  (`markSuppliersLinksSynced` + `markVariantLinksSynced`, oba `updated_at <=
+  now` race guard). Rovnaký "časový diff + gate + mark-after-confirm" vzor
+  ako stavový writeback (E7), len nad `pairing_variant_link`.
+- **`selectChangedSupplierLinks`'s marking set je od issue 423 GROUP BY count
+  (zmenené overridy s ≥1 variantom), nie productKeys emitovaných riadkov.**
+  Dôvod: fully-split produkt (override zmenený, VŠETKY varianty split-riadené)
+  vyprodukuje 0 riadkov, ale jeho override je dormantný (pokrytý per-veľkosť
+  linkami) — musí sa označiť synced, inak re-selectuje donekonečna. Skutočná
+  "override na productKey s 0 variantmi" anomália (PR 140) sa STÁLE NEoznačí a
+  zaloguje — jedna GROUP BY otázka rozlíši oboje podľa `count(variants.code) >
+  0`. Test pokrýva oba (`P10` fully-split → marked, `P7` no-variant → warned).
+- **Nová appka NEMÔŽE spoľahnúť sa na round-trip cez Shoptet pre per-veľkosť
+  dáta (issue 423) — na rozdiel od starej appky.** `products.internalNote` je
+  PRODUKTOVÁ úroveň (jedna hodnota na produkt, katalógový import ju kolapsuje),
+  `variants` nemá vlastný `internal_note` stĺpec — takže per-veľkosť link
+  zapísaný do Shoptetu sa round-tripom NEVRÁTI ako per-variant. Preto downstream
+  flow (supplier-stock, `.claude/rules/supplier-stock.md`) čítajú
+  `pairing_variant_link` PRIAMO, nie cez `products.internalNote`. Prieskum
+  starej appky (`parovanie_produktov` @ f76cafa): mala `internalNote` per
+  variant v exporte, takže round-trip tam fungoval — v tejto appke NIE.
