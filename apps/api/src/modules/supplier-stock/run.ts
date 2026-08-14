@@ -6,7 +6,7 @@
 
 import { and, eq, isNotNull, like, notInArray, or } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
-import { products, supplierStock, variants } from "../../db/schema.js";
+import { pairingDecisions, pairingVariantLinks, products, supplierStock, variants } from "../../db/schema.js";
 import { extractSupplierLink } from "../catalog/supplier-link.js";
 import { MAX_AGE_HOURS, OWN_SHOP_HOST, PER_HOST_DELAY_MS, SUPPLIER_STOCK_RUN_LOCK_KEY } from "./constants.js";
 import type { PageFetcher } from "./page-fetcher.js";
@@ -60,7 +60,18 @@ function isOwnShopHost(host: string): boolean {
 
 /** Unikátne dodávateľské linky z katalógu, v stabilnom poradí. Odkazy na NÁŠ
  * VLASTNÝ e-shop (issue 227 — omylom vytiahnuté z `internalNote` tým istým
- * regexom ako skutočné odkazy) sa sem nikdy nedostanú. */
+ * regexom ako skutočné odkazy) sa sem nikdy nedostanú.
+ *
+ * issue 423: navyše split-riadené per-veľkosť linky (`pairing_variant_link`
+ * pre variant produktu s `pairing_decision.status='split'`). Split produkt
+ * NEMÁ produktovú `internalNote` linku (jeho linky žijú per veľkosť), takže
+ * bez tohto by sa jeho veľkosti nikdy nescrapovali. Každá split linka je
+ * jedna URL na jednu veľkosť (jednoveľkostná stránka), takže sa scrapne ako
+ * blanket (`size_label=''`, `collectOurSizesByLink` ju per-produkt grouping
+ * NEZAHRNIE) a `restock/queries.ts`'s JOIN ju cez `size_label=''` vetvu
+ * spáruje. Rovnaká `extractSupplierLink` normalizácia + vylúčenie vlastného
+ * e-shopu ako pri produktových linkách, aby sa kľúč na `supplier_stock`
+ * nemohol rozísť s `restock/queries.ts`. */
 export async function collectSupplierLinks(db: Database): Promise<readonly string[]> {
   const rows = await db
     .select({ internalNote: products.internalNote })
@@ -72,6 +83,19 @@ export async function collectSupplierLinks(db: Database): Promise<readonly strin
     const host = url === null ? "" : hostOf(url);
     if (url !== null && host !== "" && !isOwnShopHost(host)) links.add(url);
   }
+
+  const variantLinkRows = await db
+    .select({ url: pairingVariantLinks.url })
+    .from(pairingVariantLinks)
+    .innerJoin(variants, eq(variants.code, pairingVariantLinks.code))
+    .innerJoin(pairingDecisions, eq(pairingDecisions.productKey, variants.productKey))
+    .where(eq(pairingDecisions.status, "split"));
+  for (const row of variantLinkRows) {
+    const url = extractSupplierLink(row.url).url;
+    const host = url === null ? "" : hostOf(url);
+    if (url !== null && host !== "" && !isOwnShopHost(host)) links.add(url);
+  }
+
   return [...links].sort((a, b) => a.localeCompare(b));
 }
 

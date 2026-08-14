@@ -6,7 +6,7 @@
 
 import { and, asc, desc, eq, isNull, ne, or, sql } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
-import { products, restockEvents, shopProductUrl, supplierStock, variants } from "../../db/schema.js";
+import { pairingDecisions, pairingVariantLinks, products, restockEvents, shopProductUrl, supplierStock, variants } from "../../db/schema.js";
 import { FEED_IN_STOCK } from "../catalog/feed-cross-check.js";
 import {
   CONFIRMATION_MAX_AGE_HOURS,
@@ -86,7 +86,18 @@ async function allRestockCandidates(db: Database, now: Date): Promise<readonly R
   // (`supplier-link.ts` → prvý `http(s)://…` výskyt): `substring` s rovnakým
   // vzorom, aby sa kľúč na `supplier_stock` nemohol rozísť. Koncová
   // interpunkcia sa oreže rovnako ako tam.
-  const link = sql<string>`trim(both from regexp_replace(substring(${products.internalNote} from 'https?://[^[:space:]]+'), '[.,;:)\\]]+$', ''))`;
+  const productLink = sql<string>`trim(both from regexp_replace(substring(${products.internalNote} from 'https?://[^[:space:]]+'), '[.,;:)\\]]+$', ''))`;
+  // issue 423: split-riadený variant (má `pairing_variant_link` A jeho
+  // produkt má `pairing_decision.status='split'`) má VLASTNÚ per-veľkosť
+  // linku namiesto produktovej. Efektívna linka = per-veľkosť linka pri
+  // split produkte, inak produktová — rovnaká trailing-punct normalizácia
+  // oboch strán, aby sa kľúč na `supplier_stock` nemohol rozísť s
+  // `collectSupplierLinks` scraperom (ktorý split linku scrapuje ako
+  // blanket `size_label=''`, čo pod-JOIN nižšie cez `size_label=''` vetvu
+  // spáruje). Dormantná per-veľkosť linka (produkt nerozdelený) sa
+  // ignoruje — `coalesce` padne na produktovú.
+  const variantLink = sql<string>`trim(both from regexp_replace(substring(${pairingVariantLinks.url} from 'https?://[^[:space:]]+'), '[.,;:)\\]]+$', ''))`;
+  const link = sql<string>`coalesce(case when ${pairingDecisions.status} = 'split' then ${variantLink} end, ${productLink})`;
 
   const rows = await db
     .select({
@@ -102,6 +113,11 @@ async function allRestockCandidates(db: Database, now: Date): Promise<readonly R
     })
     .from(variants)
     .innerJoin(products, eq(variants.productKey, products.key))
+    // issue 423: LEFT JOINy PRED `supplierStock` innerJoinom — jeho ON
+    // klauzula (`eq(supplierStock.link, link)`) referencuje `link`, ktorý
+    // referencuje tieto dve tabuľky, takže musia byť v JOIN zozname skôr.
+    .leftJoin(pairingVariantLinks, eq(pairingVariantLinks.code, variants.code))
+    .leftJoin(pairingDecisions, eq(pairingDecisions.productKey, products.key))
     // issue 224: odkaz s pravidlom na veľkosti nesie VIAC riadkov naraz —
     // jeden na KAŽDÚ našu veľkosť. Variant sa spáruje buď na SVOJU vlastnú
     // veľkosť (`size_label = coalesce(variant.size_label,'')`), alebo na
