@@ -128,6 +128,55 @@ describe("runShoptetWriteback (end-to-end proti fixture)", () => {
   );
 
   it(
+    "issue 423: a fully-split product's CHANGED but dormant override is marked synced even with nothing to upload (never re-selects forever)",
+    async () => {
+      const [user] = await db
+        .insert(users)
+        .values({ email: "d2@forestshop.sk", passwordHash: "x", displayName: "D", role: "manazer" })
+        .returning({ id: users.id });
+      if (user === undefined) throw new Error("user");
+
+      // fully-split product: BOTH variants have per-size links, product split
+      await insertTestVariantForProduct(db, "FS", "FS/S", { pairCode: "1", sizeLabel: "S" });
+      await insertTestVariantForProduct(db, "FS", "FS/M", { pairCode: "2", sizeLabel: "M" });
+      await db.insert(pairingDecisions).values({
+        productKey: "FS",
+        status: "split",
+        url: null,
+        decidedBy: user.id,
+        decidedAt: new Date("2026-01-01T00:00:00Z"),
+        updatedAt: new Date("2026-01-01T00:00:00Z"),
+      });
+      // per-size links ALREADY synced (nothing to send for them)
+      await db.insert(pairingVariantLinks).values([
+        { code: "FS/S", url: "https://x.example/S", updatedAt: new Date("2026-01-01T00:00:00Z"), syncedAt: new Date("2026-01-02T00:00:00Z") },
+        { code: "FS/M", url: "https://x.example/M", updatedAt: new Date("2026-01-01T00:00:00Z"), syncedAt: new Date("2026-01-02T00:00:00Z") },
+      ]);
+      // a CHANGED (never-synced) product-level override that is now dormant —
+      // all its variants are split-governed, so nothing to upload for it
+      await db
+        .insert(productSupplierLinkOverrides)
+        .values({ productKey: "FS", url: "https://x.example/dormant", updatedAt: new Date("2026-01-03T00:00:00Z") });
+
+      const result = await runShoptetWriteback(db, fixtureConfig(), new Date("2026-02-01T00:00:00Z"));
+      // nothing to upload — but the dormant override MUST have been marked
+      expect(result).toEqual({ status: "nothing_changed" });
+      expect(fixture.logEntryCount()).toBe(1); // no import happened (only the seed)
+
+      const [row] = await db
+        .select({ syncedAt: productSupplierLinkOverrides.syncedAt })
+        .from(productSupplierLinkOverrides)
+        .where(eq(productSupplierLinkOverrides.productKey, "FS"));
+      expect(row?.syncedAt?.toISOString()).toBe("2026-02-01T00:00:00.000Z");
+
+      // second run: it does NOT re-select the now-marked dormant override
+      const second = await runShoptetWriteback(db, fixtureConfig(), new Date("2026-02-02T00:00:00Z"));
+      expect(second).toEqual({ status: "nothing_changed" });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
     "on a hard Shoptet failure leaves syncedAt untouched, so the same product is retried next run",
     async () => {
       await insertTestVariantForProduct(db, "P2", "P2", {});

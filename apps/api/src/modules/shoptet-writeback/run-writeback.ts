@@ -52,7 +52,18 @@ export async function runShoptetWriteback(
   const product = await selectChangedSupplierLinks(db);
   const variant = await selectChangedVariantLinks(db);
   const rows = dedupeWritebackRowsByCode([...variant.rows, ...product.rows]);
-  if (rows.length === 0) return { status: "nothing_changed" };
+  if (rows.length === 0) {
+    // Žiadny CSV na nahranie — ALE fully-split produkt (override zmenený,
+    // VŠETKY varianty split-riadené) je v `product.productKeys` s 0 riadkami:
+    // jeho override je dormantný (nič sa preň neposiela, per-veľkosť linky ho
+    // pokrývajú) → musí sa označiť synced TERAZ, inak by re-selectoval každý
+    // hodinový beh donekonečna (invariant dokumentovaný v `select-changes.ts`).
+    // `variant.codes` je pri 0 riadkoch prázdny (no-op). Žiadny Shoptet import
+    // sa nedeje ani nepreskakuje — pre dormantný override niet čo poslať;
+    // `updated_at <= now` guard (`mark-synced.ts`) drží race ochranu.
+    await markSuppliersLinksSynced(db, product.productKeys, now);
+    return { status: "nothing_changed" };
+  }
 
   const csv = buildWritebackCsv(rows);
   let outcome: ShoptetImportOutcome;

@@ -109,6 +109,19 @@ describe("restock kandidáti — split per-veľkosť linky (issue 423)", () => {
     expect(picked).toEqual([]);
   });
 
+  it("for a DORMANT per-size link uses the PRODUCT link, not the per-size one (coalesce fallback)", async () => {
+    const PRODUCT_URL = "https://dodavatel.example/produkt-cely";
+    await seedSplitVariant({ split: false, internalNote: PRODUCT_URL });
+    // the per-size link's own supplier row is AVAILABLE but must be IGNORED
+    await seedBlanketSupplierStock(SPLIT_URL, "available");
+    // the PRODUCT link's supplier row is what must drive the candidate
+    await seedBlanketSupplierStock(PRODUCT_URL, "available");
+
+    const { picked } = await selectRestockCandidates(db, NOW);
+    expect(picked.map((c) => c.variantCode)).toEqual(["SPLIT/L"]);
+    expect(picked[0]?.supplierLink).toBe(PRODUCT_URL);
+  });
+
   it("does NOT switch a split variant whose per-size link the supplier reports unavailable", async () => {
     await seedSplitVariant({ split: true, internalNote: null });
     await seedBlanketSupplierStock(SPLIT_URL, "unavailable");
