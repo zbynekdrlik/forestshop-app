@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildRestockCsv, buildStatesCsv, buildWritebackCsv, dedupeStateRowsByCode } from "./csv.js";
+import { buildRestockCsv, buildStatesCsv, buildWritebackCsv, dedupeStateRowsByCode, dedupeWritebackRowsByCode } from "./csv.js";
 
 describe("buildWritebackCsv", () => {
   it("has the canonical Shoptet import header + BOM + CRLF + ';' delimiter", () => {
@@ -135,6 +135,30 @@ describe("buildStatesCsv", () => {
       "DUP;1;visible;0;Vypredané;Vypredané",
       "OK;3;detailOnly;0;Predaj výrobku skončil;Predaj výrobku skončil",
     ]);
+  });
+});
+
+describe("dedupeWritebackRowsByCode (issue 423)", () => {
+  it("necháva neduplicitné riadky bezo zmeny (rovnaké poradie)", () => {
+    const rows = [
+      { code: "A", pairCode: "", internalNote: "https://a.example/x" },
+      { code: "B", pairCode: "", internalNote: "https://b.example/x" },
+    ];
+    expect(dedupeWritebackRowsByCode(rows)).toEqual(rows);
+  });
+
+  it("zachová PRVÝ výskyt kódu — per-veľkosť link (dáva sa prvý) vyhrá nad produktovým override", () => {
+    const rows = [
+      { code: "X/L", pairCode: "1", internalNote: "https://dodavatel.example/velkost-L" }, // per-veľkosť (prvý)
+      { code: "X/L", pairCode: "1", internalNote: "https://dodavatel.example/produkt" }, // produktový override
+    ];
+    expect(dedupeWritebackRowsByCode(rows)).toEqual([
+      { code: "X/L", pairCode: "1", internalNote: "https://dodavatel.example/velkost-L" },
+    ]);
+  });
+
+  it("je no-op pre prázdny zoznam", () => {
+    expect(dedupeWritebackRowsByCode([])).toEqual([]);
   });
 });
 

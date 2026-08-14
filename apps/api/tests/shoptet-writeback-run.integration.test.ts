@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "../src/db/client.js";
-import { productSupplierLinkOverrides } from "../src/db/schema.js";
+import { pairingDecisions, pairingVariantLinks, productSupplierLinkOverrides, users } from "../src/db/schema.js";
 import { runShoptetWriteback } from "../src/modules/shoptet-writeback/run-writeback.js";
 import { withCleanDb } from "./helpers/db.js";
 import { insertTestVariantForProduct } from "./helpers/orders.js";
@@ -61,13 +61,64 @@ describe("runShoptetWriteback (end-to-end proti fixture)", () => {
         .values({ productKey: "P1", url: "https://x.example/p1", updatedAt: new Date("2026-01-01T00:00:00Z") });
 
       const result = await runShoptetWriteback(db, fixtureConfig(), new Date("2026-02-01T00:00:00Z"));
-      expect(result).toEqual({ status: "ok", productCount: 1, rowCount: 2 });
+      expect(result).toEqual({ status: "ok", productCount: 1, variantLinkCount: 0, rowCount: 2 });
 
       const [row] = await db
         .select({ syncedAt: productSupplierLinkOverrides.syncedAt })
         .from(productSupplierLinkOverrides)
         .where(eq(productSupplierLinkOverrides.productKey, "P1"));
       expect(row?.syncedAt?.toISOString()).toBe("2026-02-01T00:00:00.000Z");
+
+      // second run: nothing changed since the sync above
+      const second = await runShoptetWriteback(db, fixtureConfig(), new Date("2026-02-02T00:00:00Z"));
+      expect(second).toEqual({ status: "nothing_changed" });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "issue 423: merges a product override AND a split product's per-size links into ONE import, marking BOTH synced",
+    async () => {
+      const [user] = await db
+        .insert(users)
+        .values({ email: "d@forestshop.sk", passwordHash: "x", displayName: "D", role: "manazer" })
+        .returning({ id: users.id });
+      if (user === undefined) throw new Error("user");
+
+      // non-split product with a product-level override (1 variant)
+      await insertTestVariantForProduct(db, "PROD", "PROD/1", { pairCode: "9" });
+      await db
+        .insert(productSupplierLinkOverrides)
+        .values({ productKey: "PROD", url: "https://x.example/prod", updatedAt: new Date("2026-01-01T00:00:00Z") });
+
+      // split product with 2 per-size links (no product override)
+      await insertTestVariantForProduct(db, "SPLIT", "SPLIT/S", { pairCode: "1", sizeLabel: "S" });
+      await insertTestVariantForProduct(db, "SPLIT", "SPLIT/M", { pairCode: "2", sizeLabel: "M" });
+      await db.insert(pairingDecisions).values({
+        productKey: "SPLIT",
+        status: "split",
+        url: null,
+        decidedBy: user.id,
+        decidedAt: new Date("2026-01-01T00:00:00Z"),
+        updatedAt: new Date("2026-01-01T00:00:00Z"),
+      });
+      await db.insert(pairingVariantLinks).values([
+        { code: "SPLIT/S", url: "https://x.example/velkost-S", updatedAt: new Date("2026-01-01T00:00:00Z") },
+        { code: "SPLIT/M", url: "https://x.example/velkost-M", updatedAt: new Date("2026-01-01T00:00:00Z") },
+      ]);
+
+      const result = await runShoptetWriteback(db, fixtureConfig(), new Date("2026-02-01T00:00:00Z"));
+      // 1 product row + 2 per-size rows = 3 rows in the single merged import
+      expect(result).toEqual({ status: "ok", productCount: 1, variantLinkCount: 2, rowCount: 3 });
+
+      // both the product override AND both per-size links are marked synced
+      const [prod] = await db
+        .select({ syncedAt: productSupplierLinkOverrides.syncedAt })
+        .from(productSupplierLinkOverrides)
+        .where(eq(productSupplierLinkOverrides.productKey, "PROD"));
+      expect(prod?.syncedAt?.toISOString()).toBe("2026-02-01T00:00:00.000Z");
+      const linkRows = await db.select({ code: pairingVariantLinks.code, syncedAt: pairingVariantLinks.syncedAt }).from(pairingVariantLinks);
+      expect(linkRows.every((r) => r.syncedAt?.toISOString() === "2026-02-01T00:00:00.000Z")).toBe(true);
 
       // second run: nothing changed since the sync above
       const second = await runShoptetWriteback(db, fixtureConfig(), new Date("2026-02-02T00:00:00Z"));
