@@ -65,6 +65,11 @@ const searchSchema = z.object({
   total: z.number(),
   gatheredTotal: z.number(),
   linkedTotal: z.number(),
+  // issue 432 — skutočné katalógové pokrytie linkami (menovateľ = aktívne
+  // produkty s aspoň jedným predajným variantom, čitateľ = z nich s efektívnou
+  // linkou), na rozdiel od `gatheredTotal`/`linkedTotal` (veľkosť recenznej fronty).
+  catalogLinked: z.number(),
+  catalogActive: z.number(),
   items: z.array(itemSchema),
 });
 export type PairingReviewSearchResult = z.infer<typeof searchSchema>;
