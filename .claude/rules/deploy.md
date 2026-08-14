@@ -173,10 +173,54 @@ paths:
   `main` mohli spôsobiť, že novší build stiahne starší `:latest`. Workflow má
   aj `concurrency: { group: deploy, cancel-in-progress: false }` — deploy sa
   nikdy nezruší uprostred behu, druhý push len počká vo fronte.
-- **Deploy overuje živú verziu proti `package.json`** — posledný krok
-  `deploy.yml` curluje `https://forestshop.newlevel.media/api/version` a
-  porovná s `require('./package.json').version`; zlyhá nahlas pri
-  nezhode, nikdy nehlási úspech naslepo.
+- **Nasadenie overuje živú verziu s retry a AUTOMATICKÝM rollbackom
+  (`scripts/deploy-verify.sh`, issue 425 — výpadok 13. 8. 2026).** Deploy job
+  už nemá inline `sleep 5` + jeden curl. Celý tok (zapamätaj predošlý image →
+  pull + up → over `/api/version` v retry slučke → pri zlyhaní vráť predošlý
+  image → over zotavenie) je v `scripts/deploy-verify.sh`:
+  - **PRED nasadením** si zapamätá tag práve bežiaceho image
+    (`docker compose ps -q app` → `docker inspect --format '{{.Config.Image}}'`,
+    z neho `${img##*:}`). Deploye vždy pinujú `IMAGE_TAG=<verzia>` (nie
+    `:latest`), takže tag je jednoznačný.
+  - **Overenie je retry slučka** (default `VERIFY_RETRIES=12` × `VERIFY_INTERVAL=5`
+    s = do ~60 s), nie jeden pokus po `sleep 5` — pomalý zdravý štart s
+    migráciami už nie je falošné zlyhanie. 502/nedostupnosť pri jednom pokuse
+    sa CHYTÍ (`if curl ...; then`) a skúša sa znova, `set -euo pipefail` skript
+    nezhodí.
+  - **Pri zlyhaní overenia (alebo pádu `pull`/`up`)** skript automaticky vráti
+    predošlý image (`IMAGE_TAG=<predošlá> docker compose up -d app`) a overí, že
+    sa produkcia zotavila (hlási predošlú verziu). Job **napriek tomu skončí
+    nenulovo** — je červený, aby bolo jasné, že nová verzia nešla — ale
+    produkcia beží ďalej na predošlej verzii namiesto ~10 min výpadku.
+  - **Poradie krokov v `deploy.yml`:** „Upratať staršie obrazy" beží AŽ ZA
+    skriptom (predtým pred overením). Keby bežalo pred ním, zmazalo by práve
+    ten predošlý image, na ktorý rollback potrebuje siahnuť; a keďže Actions po
+    zlyhanom kroku ďalšie preskočí, pri rollbacku sa upratovanie nespustí a
+    predošlý image ostane lokálne.
+  - **Testovanie:** `scripts/deploy-verify.test.sh` (root `pnpm test:deploy-script`,
+    beží v CI `check` jobe pri každom push/PR) mockuje `docker`/`curl` cez PATH
+    stuby a overí 5 vetiev (šťastná cesta, pomalý štart s retry, rollback sa
+    zotaví, žiaden predošlý image, rollback tiež zlyhá). CI skutočný produkčný
+    deploy odbehnúť nevie — táto logika sa testuje takto.
+  - **Ručné overenie / rollback (keď treba zasiahnuť rukou):**
+    ```bash
+    ssh admin@forestshop-dev.newlevel.media
+    cd /srv/forestshop
+    # 1. Aká verzia je práve nasadená (naživo)?
+    curl -fsS https://forestshop.newlevel.media/api/version
+    # 2. Aký image beží kontajner appky (tag na rollback)?
+    docker inspect --format '{{.Config.Image}}' \
+      "$(docker compose -f docker-compose.prod.yml ps -q app)"
+    # 3. Ručný rollback na konkrétnu predošlú verziu (ak by automatika zlyhala):
+    IMAGE_TAG=<predošlá-verzia> docker compose -f docker-compose.prod.yml up -d app
+    # 4. Over zotavenie:
+    curl -fsS https://forestshop.newlevel.media/api/version   # má hlásiť <predošlá-verzia>
+    docker compose -f docker-compose.prod.yml logs --tail 50 app
+    ```
+    Predošlé verzie, čo sú ešte lokálne k dispozícii:
+    `docker images 'ghcr.io/zbynekdrlik/forestshop-app'`. Ak sa image už
+    upratal, dá sa stiahnuť späť: `IMAGE_TAG=<verzia> docker compose -f
+    docker-compose.prod.yml pull app` pred `up -d app`.
 - **Docker build je súčasťou CI (`docker-build` job v `ci.yml`), beží pri
   KAŽDOM push/PR**, nielen pri deploy — deploy cesta sa tak overuje ešte pred
   mergom. `.dockerignore` musí mať `**/`-prefixované vzory
