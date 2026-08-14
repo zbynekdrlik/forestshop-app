@@ -72,8 +72,22 @@ it("zákazník s ≥2 otvorenými objednávkami má pri mene odznak so správnym
   const odznak = within(riadok).getByTestId(`cust-order-badge-${BASE_LINE.lineId}`);
   expect(odznak.textContent).toBe("3");
   expect(odznak.getAttribute("title")).toBe("zákazník má 3 otvorené objednávky — zvážiť zlúčenie");
+  expect(odznak.getAttribute("aria-label")).toBe("zákazník má 3 otvorené objednávky — zvážiť zlúčenie");
   // Meno ostáva vedľa odznaku čitateľné.
   expect(within(riadok).getByText("Juraj Petro")).toBeTruthy();
+});
+
+it("pri 5+ objednávkach použije správny slovenský tvar (objednávok)", async () => {
+  const line5 = { ...BASE_LINE, lineId: "33333333-3333-3333-3333-333333333333", customerOpenOrderCount: 5 };
+  fetchOpenOrders.mockResolvedValue([{ supplier: "Dodávateľ Alfa", lines: [line5], email: null }]);
+
+  render(<OrdersSection role="citanie" onSessionExpired={() => {}} />);
+
+  const riadok = await screen.findByTestId(`order-line-${line5.lineId}`);
+  const odznak = within(riadok).getByTestId(`cust-order-badge-${line5.lineId}`);
+  expect(odznak.textContent).toBe("5");
+  expect(odznak.getAttribute("title")).toBe("zákazník má 5 otvorených objednávok — zvážiť zlúčenie");
+  expect(odznak.getAttribute("aria-label")).toBe("zákazník má 5 otvorených objednávok — zvážiť zlúčenie");
 });
 
 it("zákazník s 1 otvorenou objednávkou odznak nemá", async () => {
