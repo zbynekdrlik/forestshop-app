@@ -47,6 +47,7 @@ const LINE_BEZ_DODAVATELA = {
   externalCode: null,
   supplierAssignable: true,
   manualSupplierOverride: null,
+  customerOpenOrderCount: 1,
   ourUrl: null,
 };
 

@@ -58,6 +58,7 @@ const LINE_NEVYBAVENY = {
   externalCode: null,
   supplierAssignable: false,
   manualSupplierOverride: null,
+  customerOpenOrderCount: 1,
   ourUrl: null,
 };
 

@@ -36,6 +36,7 @@ const LINE = {
   externalCode: null,
   supplierAssignable: false,
   manualSupplierOverride: null,
+  customerOpenOrderCount: 1,
   ourUrl: null,
 };
 

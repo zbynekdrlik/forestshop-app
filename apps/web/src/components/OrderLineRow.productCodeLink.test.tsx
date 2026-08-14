@@ -37,6 +37,7 @@ const LINE_ZNAMY = {
   externalCode: null,
   supplierAssignable: false,
   manualSupplierOverride: null,
+  customerOpenOrderCount: 1,
   ourUrl: "https://www.forestshop.sk/nohavice-hart-wild-t/?variantId=60542",
 };
 

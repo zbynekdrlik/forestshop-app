@@ -12,6 +12,7 @@ import {
   type OrderLineState,
 } from "../../db/schema.js";
 import { extractForeignShopRemark } from "../shoptet-writeback/note-block.js";
+import { customerIdentityKey } from "./customer-identity.js";
 import { resolveEffectiveSupplierLink } from "./effective-supplier-link.js";
 import { listOpenStatusNames } from "./open-statuses.js";
 import { effectiveSupplierSql, normalizedSupplierKeySql, normalizeSupplierKeyJs, pickCanonicalSupplierSpelling } from "./supplier-key.js";
@@ -99,6 +100,13 @@ export interface OpenOrderLine {
   // som priradil ja").
   readonly supplierAssignable: boolean;
   readonly manualSupplierOverride: string | null;
+  // issue 431: počet DISTINCT OTVORENÝCH objednávok TOHO ISTÉHO zákazníka
+  // (`customerIdentityKey` — zdieľaná identita so "Zlúčenie objednávok",
+  // `merge-mail.ts`). Frontend zobrazí odznak pri mene, len keď ≥ 2 (signál
+  // "zváž zlúčenie do jednej zásielky"). "Otvorená" = tá istá definícia ako
+  // celý tento dopyt (`order.status_name ∈ order_open_status`), takže
+  // Stornovaná/Vybavená sa nerátajú.
+  readonly customerOpenOrderCount: number;
 }
 
 export interface SupplierOpenOrders {
@@ -135,6 +143,30 @@ export const NEZNAMY_DODAVATEL = "(bez dodávateľa)";
 // nastaveného stavu (čo `replaceOpenStatusNames` nedovolí) by dopyt nemal
 // podľa čoho filtrovať — vtedy sa vráti prázdny zoznam namiesto behu
 // `inArray` s prázdnym poľom.
+// issue 431: počet OTVORENÝCH objednávok na zákazníka — kľúčované zdieľaným
+// `customerIdentityKey` (email → inak meno), TÁ ISTÁ identita ako "Zlúčenie
+// objednávok" (`merge-mail.ts`). Počíta sa nad SAMOTNOU tabuľkou `order`
+// (jeden riadok = jedna objednávka), nie nad riadkami objednávok, takže je to
+// autoritatívny počet DISTINCT objednávok, nezávislý od toho, koľko riadkov
+// sa práve zobrazuje. `openStatuses` sa odovzdáva (volajúci ho už má), aby sa
+// zoznam otvorených stavov nečítal z DB dvakrát v jednom dopyte "Na objednanie".
+export async function countOpenOrdersByCustomer(
+  db: Pick<Database, "select">,
+  openStatuses: readonly string[],
+): Promise<Map<string, number>> {
+  if (openStatuses.length === 0) return new Map();
+  const rows = await db
+    .select({ customerName: orders.customerName, email: orders.email })
+    .from(orders)
+    .where(inArray(orders.statusName, [...openStatuses]));
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    const key = customerIdentityKey(row.email, row.customerName);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return counts;
+}
+
 export async function listOpenOrderLinesBySupplier(
   db: Database,
   adminBaseUrl: string,
@@ -142,12 +174,18 @@ export async function listOpenOrderLinesBySupplier(
   const openStatuses = await listOpenStatusNames(db);
   if (openStatuses.length === 0) return [];
 
+  // issue 431: počet otvorených objednávok na zákazníka, spočítaný RAZ pre
+  // celý zoznam (nie per riadok) — priloží sa ku každému riadku nižšie podľa
+  // jeho `customerIdentityKey`.
+  const openOrderCountByCustomer = await countOpenOrdersByCustomer(db, openStatuses);
+
   const rows = await db
     .select({
       lineId: orderLines.id,
       orderId: orders.id,
       externalOrderId: orders.externalOrderId,
       customerName: orders.customerName,
+      email: orders.email,
       comment: orders.comment,
       remark: orders.remark,
       shopRemarkRaw: orders.shopRemark,
@@ -223,6 +261,10 @@ export async function listOpenOrderLinesBySupplier(
       externalCode: row.externalCode,
       supplierAssignable: catalogSupplierIsNull,
       manualSupplierOverride: catalogSupplierIsNull ? (row.overrideSupplier ?? null) : null,
+      // issue 431: počet otvorených objednávok toho istého zákazníka (0 nikdy
+      // nenastane — riadok existuje, teda jeho objednávka je otvorená, takže
+      // count je aspoň 1; `?? 0` je len defenzívny fallback).
+      customerOpenOrderCount: openOrderCountByCustomer.get(customerIdentityKey(row.email, row.customerName)) ?? 0,
     };
     const groupKey = row.effectiveSupplier === null ? NULL_GROUP_KEY : normalizeSupplierKeyJs(row.effectiveSupplier);
     let acc = bySupplier.get(groupKey);

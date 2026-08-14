@@ -7,20 +7,13 @@ import { globalContext, textValue } from "../mail-templates/context.js";
 import { renderEditedBody, renderTemplate } from "../mail-templates/render.js";
 import { resolveTemplate } from "../mail-templates/store.js";
 import type { MailTransport } from "../mail/transport.js";
+import { customerIdentityKey } from "./customer-identity.js";
 import { listOpenStatusNames } from "./open-statuses.js";
 
 // issue 257: e-mail zákazníkovi, keď sa jeho viaceré objednávky posielajú
-// spolu ako jedna zásielka. Návrhový komentár na tickete: "ten istý zákazník"
-// = zhoda podľa `order.email` (orezané, malé písmená), keď objednávka e-mail
-// MÁ; inak fallback na `order.customerName` (orezané, malé písmená) —
-// staršie/hosťovské objednávky bez e-mailu (`order.email` je nepovinné,
-// `schema-orders.ts`) by inak nikdy nešlo zlúčiť, hoci zjavne patria tomu
-// istému zákazníkovi.
-function customerIdentityKey(email: string | null, customerName: string): string {
-  const trimmedEmail = (email ?? "").trim().toLowerCase();
-  if (trimmedEmail !== "") return `email:${trimmedEmail}`;
-  return `name:${customerName.trim().toLowerCase()}`;
-}
+// spolu ako jedna zásielka. "Ten istý zákazník" = zdieľaný `customerIdentityKey`
+// (`customer-identity.js`) — tú istú definíciu používa aj odznak počtu
+// otvorených objednávok v "Na objednanie" (#431), aby sa nerozišli.
 
 export interface MergeCandidateOrder {
   readonly orderId: string;
