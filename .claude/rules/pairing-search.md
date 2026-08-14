@@ -916,3 +916,44 @@ vyradilo #311 aj jeho playbook súbor (návrh, sekcia 4); router v
   currency). Test pri KAŽDOM ĎALŠOM seed helperi, čo dostane nové
   peňažné pole: over CHECK constraint PRIAMO na throwaway Postgrese pred
   spoliehaním sa na to, že `?? null` default v inserte stačí.
+
+## issue 432 — DVE RÔZNE metriky na obrazovke Párovanie: veľkosť FRONTY vs. katalógové POKRYTIE
+
+- **`gatheredTotal`/`linkedTotal` (`listPairingReview`, `pairing-review/
+  queries.ts`) merajú VEĽKOSŤ RECENZNEJ FRONTY, NIE pokrytie katalógu
+  linkami — nikdy ich nezameň za "koľko produktov má odkaz".** Populácia
+  fronty je ÚNIA (`determineReviewPopulationKeys`): gatherované ∪ produkty
+  BEZ efektívnej linky ∪ rozhodnuté. Je teda Z DEFINÍCIE zložená hlavne z
+  produktov BEZ linky, takže `linkedTotal / gatheredTotal` vychádza extrémne
+  nízko (na prod ~2/2303) — vyzerá to ako "linky zmizli", hoci dáta sú v
+  poriadku. Presne toto majiteľ nahlásil ako #432; koreň bol commit 3779235
+  (#398/#401), ktorý populáciu rozšíril z "gatherované" na túto úniu, ale
+  frontend text „N / M s odkazom" ostal.
+- **Skutočné katalógové pokrytie = `computeCatalogCoverage(db)`
+  (`catalogActive`/`catalogLinked`).** `catalogActive` = produkty s aspoň
+  jedným PREDAJNÝM variantom (`variant.state === "sellable"`,
+  `db.selectDistinct` — tá istá definícia "sellable" ako `rollupProductState`
+  v tom istom súbore); `catalogLinked` = z NICH tie s efektívnou linkou
+  (`resolveEffectiveSupplierLink` = override ∪ `internalNote` extrakcia,
+  žiadny duplicitný regex). Počíta sa NEZÁVISLE od populácie fronty (aj keď
+  je fronta prázdna — napr. všetko olinkované — pokrytie ostáva správne;
+  aktívny olinkovaný produkt MIMO fronty sa v pokrytí objaví, hoci
+  `linkedTotal` ho minie). Menovateľ ZÁMERNE NIE JE celý katalóg (4547) —
+  ~2000 dávno ukončených produktov linku nikdy nemalo, stláčali by číslo na
+  ~49 % a vyzeralo by to zase ako strata; prod má vyjsť ~2081/2528.
+- **Frontend (`PairingReviewSection.tsx`): hlavný ukazovateľ + progress bar
+  = `catalogLinked`/`catalogActive`; `gatheredTotal` (veľkosť fronty) je len
+  samostatný menší riadok „vo fronte na revíziu: N"** (`data-testid=
+  "pairing-review-progress-queue"`). `linkedTotal` sa už nezobrazuje ako
+  hlavné číslo (state odstránený). Progres text sa smie ZALOMIŤ (žiadny
+  `white-space: nowrap` — dlhší popis by na `wide: true` obrazovke pretiekol,
+  issue 291/382); progress bar má `min-width` + `flex-wrap` na rodičovi, aby
+  sa na úzkej šírke zalomil pod text.
+- **Pri KAŽDOM ĎALŠOM "toto číslo mi nesedí" hlásení o počítadle na tejto
+  obrazovke:** najprv over, ČI daná metrika meria FRONTU (populácia úniou)
+  alebo KATALÓG (pokrytie) — sú to dve rôzne množiny a ľahko sa zamenia v
+  texte UI. Test na logiku (nie presné čísla) je
+  `pairing-review-catalog-coverage-http.integration.test.ts` (override link
+  počíta sa · internal_note URL počíta sa · bez linky len menovateľ · bez
+  sellable variantu ani v menovateli · aktívny olinkovaný MIMO fronty sa
+  ráta).
