@@ -4159,3 +4159,38 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
   riziko pre informatívny náhľad, `adapterForUrl` zámerné zúženie rozsahu,
   `variant_money_needs_currency_ck` past v seed helperoch, a (po review)
   "hodnota vs. štruktúra" pravidlo pre TTL na module-level cache.
+
+## 2026-08-14 — #423 (Split (✂) linky: nočný spätný zápis do Shoptetu + dodávateľský sklad)
+
+- Downstream follow-up issue 399 (Prístup 3, zámerne odložený). Worktree-izolovaný
+  dispatch na `forestshop-dev`, súbežný sibling worker na issue 425.
+- Verzia: 0.3.0-dev.255 (prvý commit; supervisor môže prečíslovať pri integrácii).
+- Migrácia 0055: `ADD COLUMN synced_at` do `pairing_variant_link` (nullable, žiadny
+  enum ADD VALUE → žiadne 55P04 riziko). Vygenerovaná pri poslednom čísle 0054;
+  paralelný worker môže kolidovať na čísle — supervisor rieši pri integrácii
+  (`.claude/rules/database.md`).
+- Flow 1 (writeback, commit 376ee75): `select-variant-links.ts`
+  (`selectChangedVariantLinks`, gate `status='split'` + časový diff),
+  `mark-variant-synced.ts`, `select-changes.ts` VYLÚČENIE split-riadených variantov
+  z produktovej cesty + GROUP BY marking (fully-split override označený, no-variant
+  anomália stále warned), `run-writeback.ts` ZLÚČENIE do JEDNÉHO importu,
+  `csv.ts` `dedupeWritebackRowsByCode`.
+- Flow 2 (supplier-stock, commit 228a4a9): `collectSupplierLinks` pozbiera
+  split-riadené per-veľkosť linky (blanket scrape), `restock/queries.ts` efektívna
+  linka `coalesce(split link, produktová linka)` (LEFT JOINy PRED supplierStock
+  innerJoinom).
+- Prieskum starej appky (`parovanie_produktov` @ f76cafa): per-code model,
+  mark-after-confirm, availability žiadne split-špecifické drôtovanie (round-trip).
+  Nová appka NEMÔŽE round-trip (products.internalNote produktová úroveň) → číta
+  pairing_variant_link priamo.
+- TDD: nové RED→GREEN testy — csv dedupe (unit), select-variant-links (6),
+  mark-variant-synced (4), select-changes split exclusion + fully-split (3 nové),
+  run merge (1 nový), supplier-stock-split-links (3), restock-split-links (3).
+- Overené lokálne (throwaway Postgres 5461, izolovaný od zdieľaného 5433):
+  typecheck+lint+unit (984 API + 658 web) zelené; CELÝ blast radius integrácie
+  (18 test súborov importujúcich zmenené moduly, ~129 testov) zelený. Žiadna UI
+  zmena → e2e nedotknuté (beží CI pri integrácii).
+- Playbook: `.claude/rules/shoptet-writeback.md` (split zlúčený import, GROUP BY
+  marking, round-trip nefunguje) + `.claude/rules/supplier-stock.md` (split čítanie
+  pairing_variant_link priamo, restock coalesce + JOIN poradie, 4-miestny
+  split-governed predikát).
