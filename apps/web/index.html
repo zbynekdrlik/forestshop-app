@@ -3,7 +3,15 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="icon" href="data:," />
+    <!-- issue 430: favicon = sidebar značka appky (🌲 na --fs-brand štvorci).
+         SVG je primárny (škáluje), .ico je legacy fallback + odpoveď na
+         predvolený /favicon.ico dopyt (aby nevracal SPA index.html), PNG
+         varianty pre prehliadače bez SVG a apple-touch pre iOS. -->
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <title>Forestshop</title>
   </head>
   <body>
