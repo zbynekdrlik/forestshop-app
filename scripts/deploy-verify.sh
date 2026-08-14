@@ -32,6 +32,14 @@ APP_SERVICE="${APP_SERVICE:-app}"
 VERIFY_RETRIES="${VERIFY_RETRIES:-12}"
 VERIFY_INTERVAL="${VERIFY_INTERVAL:-5}"
 VERSION_PATH="${VERSION_PATH:-/api/version}"
+# Každý pokus musí byť OHRANIČENÝ v čase — cieľom tiketu je RÝCHLE, ohraničené
+# zotavenie. Crashloopujúca appka odpovedá rýchlo (connection-refused / 502 z
+# tunela), ale appka, ktorá VISÍ na požiadavke (napr. zaseknuté DB spojenie pri
+# štarte), by bez tohto blokovala curl až do vzdialeného edge timeoutu pri
+# KAŽDOM pokuse a odsúvala tak automatický rollback, ktorý má tento skript
+# garantovať. `--max-time` drží každý pokus predvídateľne krátky.
+CURL_CONNECT_TIMEOUT="${CURL_CONNECT_TIMEOUT:-5}"
+CURL_MAX_TIME="${CURL_MAX_TIME:-10}"
 : "${IMAGE_TAG:?chýba IMAGE_TAG (nová verzia na nasadenie)}"
 : "${LIVE_HOSTNAME:?chýba LIVE_HOSTNAME}"
 
@@ -51,7 +59,7 @@ verify_version() {
   local want="$1" attempts="$2" interval="$3"
   local i body live
   for ((i = 1; i <= attempts; i++)); do
-    if body=$(curl -fsS "https://${LIVE_HOSTNAME}${VERSION_PATH}" 2>/dev/null); then
+    if body=$(curl -fsS --connect-timeout "$CURL_CONNECT_TIMEOUT" --max-time "$CURL_MAX_TIME" "https://${LIVE_HOSTNAME}${VERSION_PATH}" 2>/dev/null); then
       live=$(extract_version "$body")
       if [ "$live" = "$want" ]; then
         echo "overenie OK (pokus $i/$attempts): live=$live"
@@ -89,8 +97,13 @@ deploy() {
 # 1 = ani rollback sa nepodaril (treba ručný zásah).
 rollback() {
   local prev_tag="$1"
-  if [ -z "$prev_tag" ]; then
-    echo "::error::žiaden predošlý image na rollback — produkcia môže byť down, treba ručný zásah"
+  # Bezpečný rollback cieľ musí byť konkrétny PREDOŠLÝ verzný tag. Prázdny =
+  # prvé nasadenie. `latest` (kontajner spustený mimo pipeline s nepinnutým
+  # IMAGE_TAG) aj tag ZHODNÝ s novou verziou by rollback nasmerovali na ten
+  # istý práve pokazený image (build job pushuje aj `:latest`) — v oboch
+  # prípadoch nie je na čo bezpečne rollbacknúť.
+  if [ -z "$prev_tag" ] || [ "$prev_tag" = "latest" ] || [ "$prev_tag" = "$NEW_TAG" ]; then
+    echo "::error::žiaden bezpečný predošlý image na rollback (tag='${prev_tag:-<žiaden>}') — produkcia môže byť down, treba ručný zásah"
     return 1
   fi
   echo "vraciam predošlý image: $prev_tag"

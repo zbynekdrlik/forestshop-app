@@ -115,7 +115,15 @@ CASE="4. žiaden predošlý image — nie je na čo rollbacknúť"
 PREV_CONTAINER=""; PREV_IMAGE=""
 run FAIL FAIL FAIL
 assert_rc 1
-assert_out_has "žiaden predošlý image na rollback"
+assert_out_has "žiaden bezpečný predošlý image na rollback"
+assert_log_hasnt "up -d app"
+
+# ---------------------------------------------------------------------------
+CASE="6. predošlý tag je :latest — nie je bezpečný rollback cieľ (ukazuje na nový obraz)"
+PREV_CONTAINER="cid-prev"; PREV_IMAGE="ghcr.io/zbynekdrlik/forestshop-app:latest"
+run FAIL FAIL FAIL
+assert_rc 1
+assert_out_has "žiaden bezpečný predošlý image na rollback (tag='latest')"
 assert_log_hasnt "up -d app"
 
 # ---------------------------------------------------------------------------
