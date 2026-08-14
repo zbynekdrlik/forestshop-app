@@ -4159,3 +4159,22 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
   riziko pre informatívny náhľad, `adapterForUrl` zámerné zúženie rozsahu,
   `variant_money_needs_currency_ck` past v seed helperoch, a (po review)
   "hodnota vs. štruktúra" pravidlo pre TTL na module-level cache.
+- **issue 425** — Deploy: automatický rollback + retry namiesto sleep 5
+  (výpadok 13. 8. 2026). Verzia 0.3.0-dev.255. Koreňová príčina: `deploy.yml`
+  overoval verziu jedným curl-om po `sleep 5` a pri zlyhaní NEROLLBACKOVAL —
+  13. 8. crashloopujúci image (v0.3.0-dev.251, Postgres 55P04) nechal produkciu
+  down ~10 min. Vyčlenené do `scripts/deploy-verify.sh` (nový): zapamätaj
+  predošlý image (`docker compose ps -q app` + `docker inspect`) → pull+up →
+  over `/api/version` v retry slučke (12× 5 s) → pri zlyhaní vráť predošlý
+  image + over zotavenie, job vždy nenulovo (červený), ale produkcia hore.
+  Krok „Upratať staršie obrazy" presunutý AŽ za overenie (inak by zmazal
+  rollback image). Test: `scripts/deploy-verify.test.sh` (root
+  `pnpm test:deploy-script`, wired do CI `check` jobu) mockuje docker/curl cez
+  PATH stuby, 5 scenárov (šťastná/pomalý-štart-retry/rollback-sa-zotaví/
+  žiaden-predošlý/rollback-tiež-zlyhá) — 17/17 asertov zelených lokálne.
+  Skript parsuje JSON portable sed-om, odpadá `node` na runneri pri overení.
+  Lokálne overené: typecheck+lint+test zelené, bash test 17/17.
+- Playbook: `.claude/rules/deploy.md`'s prepísaný bullet o overení nasadenia
+  — nový retry+auto-rollback tok, poradie krokov (upratovanie až za overením)
+  a POSTUP RUČNÉHO overenia/rollbacku (SSH, `docker inspect` tagu, `IMAGE_TAG=
+  <predošlá> docker compose up -d app`, over zotavenie).

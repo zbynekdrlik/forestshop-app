@@ -1,6 +1,6 @@
 {
   "name": "forestshop",
-  "version": "0.3.0-dev.254",
+  "version": "0.3.0-dev.255",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.0.0",
@@ -11,6 +11,7 @@
     "typecheck": "tsc -b && tsc -p scripts/tsconfig.json && tsc -p apps/api/tests/tsconfig.json && tsc -p apps/web/tests/e2e/tsconfig.json",
     "lint": "eslint . --concurrency=off",
     "test": "pnpm -r test",
+    "test:deploy-script": "bash scripts/deploy-verify.test.sh",
     "test:integration": "pnpm --filter @forestshop/api test:integration",
     "gates:local": "pnpm typecheck && pnpm lint && pnpm test",
     "catalog:ingest": "tsx scripts/catalog-ingest.ts",

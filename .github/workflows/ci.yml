@@ -22,6 +22,10 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm test
+      # issue 425: bash-unit test rollback/verify logiky z scripts/deploy-verify.sh
+      # (mockuje docker/curl cez PATH stuby — CI skutočný produkčný deploy
+      # odbehnúť nevie, túto logiku áno). Beží pri každom push/PR.
+      - run: pnpm test:deploy-script
 
   integration:
     runs-on: ubuntu-latest
