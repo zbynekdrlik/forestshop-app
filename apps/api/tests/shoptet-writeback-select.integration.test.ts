@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "../src/db/client.js";
-import { products, productSupplierLinkOverrides } from "../src/db/schema.js";
+import { pairingDecisions, pairingVariantLinks, products, productSupplierLinkOverrides, users } from "../src/db/schema.js";
 import { selectChangedSupplierLinks } from "../src/modules/shoptet-writeback/select-changes.js";
 import { insertTestSnapshot } from "./helpers/catalog.js";
 import { withCleanDb } from "./helpers/db.js";
@@ -18,6 +18,24 @@ describe("selectChangedSupplierLinks", () => {
   afterEach(async () => {
     await close();
   });
+
+  // issue 423: seedne split rozhodnutie na produkte (potrebný používateľ pre
+  // `decidedBy`), aby sa variant s per-veľkosť linkom stal "split-riadeným".
+  async function seedSplitDecision(productKey: string): Promise<void> {
+    const [user] = await db
+      .insert(users)
+      .values({ email: `d-${productKey}@forestshop.sk`, passwordHash: "x", displayName: "D", role: "manazer" })
+      .returning({ id: users.id });
+    if (user === undefined) throw new Error("používateľ sa nepodarilo vložiť");
+    await db.insert(pairingDecisions).values({
+      productKey,
+      status: "split",
+      url: null,
+      decidedBy: user.id,
+      decidedAt: new Date("2026-01-01T00:00:00Z"),
+      updatedAt: new Date("2026-01-01T00:00:00Z"),
+    });
+  }
 
   it("returns no rows when there are no overrides at all", async () => {
     const result = await selectChangedSupplierLinks(db);
@@ -124,5 +142,57 @@ describe("selectChangedSupplierLinks", () => {
     const result = await selectChangedSupplierLinks(db);
     expect(result.productKeys).toEqual([]);
     expect(result.rows).toEqual([]);
+  });
+
+  // ── issue 423: split-governed variants excluded from the product path ──
+
+  it("EXCLUDES a split-governed variant (per-size link AND product split), still emits its non-split siblings", async () => {
+    await insertTestVariantForProduct(db, "P8", "P8/S", { pairCode: "1", sizeLabel: "S" });
+    await insertTestVariantForProduct(db, "P8", "P8/M", { pairCode: "2", sizeLabel: "M" });
+    await seedSplitDecision("P8");
+    // only P8/S has a per-size link → only P8/S is split-governed and excluded
+    await db.insert(pairingVariantLinks).values({ code: "P8/S", url: "https://dodavatel.example/S", updatedAt: new Date("2026-01-02T00:00:00Z") });
+    await db
+      .insert(productSupplierLinkOverrides)
+      .values({ productKey: "P8", url: "https://dodavatel.example/produkt", updatedAt: new Date("2026-01-02T00:00:00Z") });
+
+    const result = await selectChangedSupplierLinks(db);
+    // P8/M (no per-size link) still gets the product override; P8/S excluded
+    expect(result.rows).toEqual([{ code: "P8/M", pairCode: "2", internalNote: "https://dodavatel.example/produkt" }]);
+    // the override still owns a variant → marked (not looped)
+    expect(result.productKeys).toEqual(["P8"]);
+  });
+
+  it("still writes the product override to a variant with a DORMANT per-size link (product NOT split)", async () => {
+    await insertTestVariantForProduct(db, "P9", "P9/S", { pairCode: "1", sizeLabel: "S" });
+    // per-size link exists but no split decision → dormant, product path owns it
+    await db.insert(pairingVariantLinks).values({ code: "P9/S", url: "https://dodavatel.example/S", updatedAt: new Date("2026-01-02T00:00:00Z") });
+    await db
+      .insert(productSupplierLinkOverrides)
+      .values({ productKey: "P9", url: "https://dodavatel.example/produkt", updatedAt: new Date("2026-01-02T00:00:00Z") });
+
+    const result = await selectChangedSupplierLinks(db);
+    expect(result.rows).toEqual([{ code: "P9/S", pairCode: "1", internalNote: "https://dodavatel.example/produkt" }]);
+    expect(result.productKeys).toEqual(["P9"]);
+  });
+
+  it("a FULLY-split product with a changed override emits ZERO rows but is still marked (not a no-variant anomaly)", async () => {
+    await insertTestVariantForProduct(db, "P10", "P10/S", { pairCode: "1", sizeLabel: "S" });
+    await insertTestVariantForProduct(db, "P10", "P10/M", { pairCode: "2", sizeLabel: "M" });
+    await seedSplitDecision("P10");
+    await db.insert(pairingVariantLinks).values([
+      { code: "P10/S", url: "https://dodavatel.example/S", updatedAt: new Date("2026-01-02T00:00:00Z") },
+      { code: "P10/M", url: "https://dodavatel.example/M", updatedAt: new Date("2026-01-02T00:00:00Z") },
+    ]);
+    await db
+      .insert(productSupplierLinkOverrides)
+      .values({ productKey: "P10", url: "https://dodavatel.example/dormant", updatedAt: new Date("2026-01-02T00:00:00Z") });
+
+    const result = await selectChangedSupplierLinks(db);
+    // all variants split-governed → nothing to send from the product path
+    expect(result.rows).toEqual([]);
+    // BUT the override is dormant (covered by per-size links) → marked, so it
+    // never re-selects forever; NOT reported as the "no variant" anomaly
+    expect(result.productKeys).toEqual(["P10"]);
   });
 });

@@ -44,9 +44,31 @@ function dataRowToLine(values: readonly string[]): string {
 }
 
 /**
+ * Dedup podľa `code`, PRVÝ výskyt vyhráva — Shoptet zruší CELÝ import pri
+ * duplicitnom kóde. issue 423: zlúčený linkový import spája produktovú cestu
+ * (`select-changes.ts`, split-riadené varianty VYLÚČENÉ) a per-veľkosť cestu
+ * (`select-variant-links.ts`, LEN split-riadené varianty) — tie sú
+ * konštrukčne DISJUNKTNÉ po kóde, takže tu duplikát nikdy nevznikne;
+ * `variants.code` je navyše DB primárny kľúč. Táto funkcia je obranná vrstva
+ * navyše (rovnaký princíp ako `dedupeStateRowsByCode`), nikdy jediná ochrana.
+ * Volajúci (`run-writeback.ts`) dáva per-veľkosť riadky PRVÉ, aby pri
+ * (nemožnom) strete kódu vyhral konkrétnejší per-veľkosť link, nie produktový
+ * override.
+ */
+export function dedupeWritebackRowsByCode(rows: readonly WritebackRow[]): readonly WritebackRow[] {
+  const seen = new Set<string>();
+  return rows.filter((r) => {
+    if (seen.has(r.code)) return false;
+    seen.add(r.code);
+    return true;
+  });
+}
+
+/**
  * Builds the write-back CSV as a Buffer ready to upload — UTF-8 BOM prefix,
  * one row per given variant (caller decides which variants: one per changed
- * product's variant codes, `select-changes.ts`). Throws when given no rows —
+ * product's variant codes, `select-changes.ts`; plus split per-size links,
+ * `select-variant-links.ts`, issue 423). Throws when given no rows —
  * Shoptet's bulk import must never be invoked with a file that changes
  * nothing.
  */
