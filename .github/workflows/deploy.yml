@@ -74,24 +74,47 @@ jobs:
       IMAGE_TAG: ${{ needs.build.outputs.version }}
     steps:
       - uses: actions/checkout@v4
-      - name: Nasadiť (migrácie si aplikácia spustí sama pri štarte)
+      - name: Priprava súborov na serveri
         working-directory: /srv/forestshop
         run: |
           cp "$GITHUB_WORKSPACE/docker-compose.prod.yml" .
-          # scripts/ (zálohovanie, obnovovací drill) musí byť na serveri vždy presne to,
-          # čo je v repozitári — inak sa tichým opomenutím rozíde od gitu naveky.
+          # scripts/ (zálohovanie, obnovovací drill, deploy-verify.sh) musí byť na
+          # serveri vždy presne to, čo je v repozitári — inak sa tichým opomenutím
+          # rozíde od gitu naveky. Samotné nasadenie robí ďalší krok cez
+          # deploy-verify.sh (volaný z $GITHUB_WORKSPACE checkoutu).
           mkdir -p scripts
           rsync -a --delete "$GITHUB_WORKSPACE/scripts/" scripts/
-          docker compose -f docker-compose.prod.yml pull app
-          docker compose -f docker-compose.prod.yml up -d
+      - name: Nasadiť s overením a automatickým rollbackom
+        # issue 425 (výpadok 13. 8. 2026): skript si PRED nasadením zapamätá tag
+        # práve bežiaceho image, nasadí novú verziu (pull + up), overí
+        # /api/version v retry slučke (12× 5 s — pomalý štart s migráciami nie je
+        # zlyhanie), a pri zlyhaní AUTOMATICKY vráti predošlý image a overí
+        # zotavenie. Logika je vyčlenená do skriptu, aby sa dala jednotkovo
+        # testovať (scripts/deploy-verify.test.sh, beží v CI `check` jobe — CI
+        # skutočný produkčný deploy odbehnúť nevie, túto logiku áno s mocknutým
+        # docker/curl). Skript pri neúspechu novej verzie skončí NENULOVO — job
+        # ostane červený (no-continue-on-error, rollback chybu neskryje) —, ale
+        # produkcia beží ďalej na predošlej verzii.
+        working-directory: /srv/forestshop
+        # LIVE_HOSTNAME (workflow env) aj IMAGE_TAG (job env) sú v rozsahu; retry
+        # parametre (12× 5 s) sú defaulty v skripte. Skript parsuje /api/version
+        # portable sed-om, takže tento krok už nepotrebuje `node` na runneri.
+        run: bash "$GITHUB_WORKSPACE/scripts/deploy-verify.sh"
       - name: Upratať staršie obrazy TEJTO appky
-        # issue 206: dev2 (vtedajší cieľ nasadenia) bol zdieľaný stroj a bol na 100 % disku — jeden náš
-        # obraz má ~1,4 GB, takže každé nasadenie doteraz nechalo po sebe
-        # ďalší. Maže sa VÝHRADNE `ghcr.io/<repo>` (naše vlastné obrazy) a
-        # nikdy ten práve nasadený — cudzie projekty na tom istom stroji sa
-        # tým nikdy nedotkneme. `|| true` je tu zámerne: obraz môže držať
-        # ešte dobiehajúci starý kontajner a nasadenie je v tej chvíli už
-        # hotové a overené — neuprataný obraz nesmie zhodiť úspešný deploy.
+        # issue 206: forestshop-dev je zdieľaný stroj — jeden náš obraz má
+        # ~1,4 GB, takže každé nasadenie doteraz nechalo po sebe ďalší. Maže sa
+        # VÝHRADNE `ghcr.io/<repo>` (naše vlastné obrazy) a nikdy ten práve
+        # nasadený — cudzie projekty na tom istom stroji sa tým nikdy nedotkneme.
+        # `|| true` je tu zámerne: obraz môže držať ešte dobiehajúci starý
+        # kontajner a nasadenie je v tej chvíli už hotové a overené — neuprataný
+        # obraz nesmie zhodiť úspešný deploy.
+        #
+        # issue 425: tento krok beží AŽ ZA overením/rollbackom (predtým bol PRED
+        # ním). GitHub Actions po zlyhanom kroku ďalšie kroky preskočí, takže pri
+        # neúspešnom deployi (rollback) sa upratovanie NEspustí a predošlý image
+        # ostane lokálne k dispozícii pre rollback. Keby upratovanie bežalo pred
+        # overením ako predtým, zmazalo by práve ten image, na ktorý rollback
+        # potrebuje siahnuť.
         run: |
           keep="ghcr.io/${GITHUB_REPOSITORY,,}:${IMAGE_TAG}"
           docker images --format '{{.Repository}}:{{.Tag}}' \
@@ -99,10 +122,3 @@ jobs:
             | grep -v "^${keep}$" \
             | xargs -r -n1 docker rmi || true
           df -h / | tail -1
-      - name: Overiť verziu na živej stránke
-        run: |
-          sleep 5
-          live=$(curl -fsS "https://${LIVE_HOSTNAME}/api/version" | node -p "JSON.parse(require('fs').readFileSync(0,'utf8')).version")
-          want=$(node -p "require('./package.json').version")
-          echo "live=$live want=$want"
-          [ "$live" = "$want" ] || { echo "::error::nasadená verzia $live sa nezhoduje s $want"; exit 1; }
