@@ -63,3 +63,31 @@ paths:
   kniha teraz vie dokázať, ČO presne odišlo, nielen komu/kedy. `MailLogSection
   .tsx` zobrazuje telo cez per-riadkové "👁 zobraziť text" tlačidlo (`row.body
   !== null`), nie vždy — dlhý text by rozbil hustú tabuľku.
+- **issue 433: display meno odosielateľa má KÓDOVÝ default „Forestshop.sk"
+  v `transport.ts`'s `applyDefaultSenderName` — nielen v env `MAIL_FROM`.**
+  `resolveMailSender` obalí výsledok CELEJ fallback reťaze
+  (`config.from ?? config.user ?? config.host`): ak string NEOBSAHUJE `<`
+  (holá adresa/host), vráti `"Forestshop.sk" <adresa>` (RFC 5322
+  quoted-string — bodka v „Forestshop.sk" nedovolí holý atom); ak už `<`
+  obsahuje (`Meno <adresa>` tvar, vrátane produkčného
+  `MAIL_FROM=Forestshop.sk <eshop@forestshop.sk>`), prenesie sa BEZ zmeny —
+  explicitne nastavené meno sa nikdy neprepisuje. Bez holej adresy klienti
+  zobrazovali lokálnu časť („eshop"). `replyTo` (issue 358) sa ZÁMERNE
+  NEobaľuje — explicitný sa prenáša doslovne, nenastavený spadne na
+  už-obalený `from` (adresa vo vnútri `<>` nezmenená, odpovede idú správne).
+  Poistka je v jedinej odosielacej ceste, takže platí pre všetkých 5
+  odosielateľov cez `sendLoggedMail`. Env tvar odosielateľa je preto
+  `Meno <adresa>` (nie holá adresa) — a keďže default je aj v kóde, „eshop"
+  sa pri strate/zmene `MAIL_FROM` už ticho nevráti.
+- **`MAIL_BCC` NIE JE appkina premenná — je to MŔTVA env konfigurácia
+  (pozostatok BCC-vždy konvencie starej appky).** `env.ts` `MAIL_BCC` v zod
+  schéme NEMÁ (len v komentároch, ktoré vysvetľujú, prečo ho appka
+  nepoužíva) — zod neznáme kľúče zahodí, takže hodnota z `.env` sa nikdy
+  nenačíta. BCC, čo REÁLNE funguje, sa plní per-správa (`MailMessage.bcc` →
+  `sendLoggedMail` → `mail_log.bcc`) zo ŠTYROCH samostatných, per-automatizácia
+  premenných (`POSTA_UNCOLLECTED_BCC_EMAIL`/`ORDER_REMINDER_BCC_EMAIL`/
+  `NEDOSTUPNE_BCC_EMAIL`/`ORDER_MERGE_BCC_EMAIL`, drôtované v `index.ts`),
+  nikdy zo zdieľaného `MAIL_BCC`. Kto v budúcnosti uvidí `MAIL_BCC` v
+  `/srv/forestshop/.env` a bude ho chcieť „napojiť": je to zámerné
+  rozhodnutie (viď aj `.claude/rules/orders.md`), nie chýbajúce drôtovanie —
+  BCC už funguje cez vyhradené premenné.

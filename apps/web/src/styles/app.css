@@ -2986,20 +2986,40 @@ a.upozornenie-title:hover {
    presne ako stará appka's `webreview` UX, ale VLASTNÝ dizajn nad appkinými
    tokenmi — `.claude/rules/frontend-design.md`'s "legacy app je referencia
    len na správanie, nikdy na vzhľad"). */
+/* issue 432 — stĺpec: hlavný riadok (pokrytie + progress bar) a pod ním
+   samostatný menší riadok s veľkosťou recenznej fronty. */
 .pairing-review-progress {
   display: flex;
-  align-items: center;
-  gap: var(--fs-space-3);
+  flex-direction: column;
+  gap: var(--fs-space-1);
   margin: var(--fs-space-3) 0;
   font-size: var(--fs-text-sm);
 }
+.pairing-review-progress-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--fs-space-3);
+}
+/* issue 432 — dlhší popis („N / M aktívnych produktov s odkazom na
+   dodávateľa") sa smie zalomiť; NIKDY `white-space: nowrap` (na `wide: true`
+   obrazovke by dlhý nezalomiteľný reťazec pretiekol/orezal `.main-wide` —
+   issue 291/382). Bar má vlastný min-width, takže na úzkej šírke sa zalomí
+   pod text namiesto zmrštenia na sliver. */
 .pairing-review-progress-text {
   color: var(--fs-ink-muted);
-  white-space: nowrap;
+}
+/* issue 432 — veľkosť recenznej fronty ako menší, decentnejší riadok pod
+   hlavným ukazovateľom katalógového pokrytia. */
+.pairing-review-progress-queue {
+  font-size: var(--fs-text-xs);
+  color: var(--fs-ink-muted);
 }
 .pairing-review-progress-bar {
-  flex: 1 1 auto;
-  min-width: 0;
+  /* issue 432 — `min-width` + wrap na rodičovi: na úzkej šírke sa bar zalomí
+     pod text na vlastný (plný) riadok namiesto zmrštenia na nečitateľný sliver. */
+  flex: 1 1 8rem;
+  min-width: 8rem;
   height: 8px;
   background: var(--fs-surface-alt);
   border-radius: 999px;

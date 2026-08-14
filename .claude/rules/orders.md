@@ -709,3 +709,25 @@ paths:
   upsert) — vyhradený deterministický regresný test tejto interakcie
   (rovnaká technika ako `orders-supplier-bulk-lock.integration.test.ts`)
   je samostatný ticket #416, mimo rozsahu #412.
+
+- **Identita zákazníka ("ten istý zákazník naprieč objednávkami") žije v
+  JEDNOM zdieľanom module `modules/orders/customer-identity.ts`
+  (`customerIdentityKey(email, customerName)`: `email:<trim/lower>`, inak
+  fallback `name:<trim/lower>` — zákaznícke id v schéme NEEXISTUJE) —
+  používa ho `merge-mail.ts` (záložka Zlúčenie objednávok, #257) aj
+  `queries.ts`'s odznak počtu otvorených objednávok v "Na objednanie" (#431,
+  `countOpenOrdersByCustomer` + `customerOpenOrderCount` na riadku).
+  KAŽDÁ ďalšia funkcia, čo počíta "ten istý zákazník", MUSÍ znovupoužiť
+  TENTO kľúč — inak sa odznak ("zváž zlúčenie") a samotné zlúčenie rozídu.
+  "Otvorená objednávka" = `order.status_name ∈ order_open_status`
+  (default "Vybavuje sa"; `open-statuses.ts`) — Stornovaná/Vybavená sa nikde
+  nepočítajú.
+- **Odznak (`.cust-order-badge`, `CustomerOrderCountBadge.tsx`) sa zobrazuje
+  LEN pri počte ≥ 2** a `title` == `aria-label`, skloňované podľa počtu
+  (2-4 → "otvorené objednávky", 5+ → "otvorených objednávok" — tá istá 2-4/5+
+  hranica ako `ordersSummary.ts`'s `formatOrderCount`). Pozor: keď sa pridá
+  NOVÉ povinné pole na `OrderLine`, doplň ho do VŠETKÝCH fixtúr (typovaných
+  aj NETYPOVANÝCH cez `vi.fn()` mocky — `grep -rl manualSupplierOverride
+  apps/web/src`), inak netypovaná fixtúra nesie `undefined` a napr.
+  `undefined < 2` je `false`, takže odznak sa VYKRESLÍ s textom "undefined"
+  (pravidlo "každé pole explicitne, nikdy undefined" vyššie v tomto súbore).
