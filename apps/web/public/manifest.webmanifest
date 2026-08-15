@@ -1,0 +1,17 @@
+{
+  "name": "Forestshop Poznámky",
+  "short_name": "Poznámky",
+  "description": "Rýchly zápis zdieľaných poznámok do Forestshop appky.",
+  "lang": "sk",
+  "start_url": "/?tab=poznamky",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#26543a",
+  "theme_color": "#26543a",
+  "icons": [
+    { "src": "/icon-192.png", "type": "image/png", "sizes": "192x192", "purpose": "any" },
+    { "src": "/icon-512.png", "type": "image/png", "sizes": "512x512", "purpose": "any" },
+    { "src": "/icon-512.png", "type": "image/png", "sizes": "512x512", "purpose": "maskable" }
+  ]
+}

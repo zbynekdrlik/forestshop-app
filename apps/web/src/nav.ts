@@ -9,6 +9,7 @@ import { FloorNotesSection } from "./components/FloorNotesSection.js";
 import { MailLogSection } from "./components/MailLogSection.js";
 import { MailTemplatesSection } from "./components/MailTemplatesSection.js";
 import { NedostupneSection } from "./components/NedostupneSection.js";
+import { NotesSection } from "./components/NotesSection.js";
 import { OrderMergeSection } from "./components/OrderMergeSection.js";
 import { OrderReminderSection } from "./components/OrderReminderSection.js";
 import { OrdersSection } from "./components/OrdersSection.js";
@@ -91,6 +92,13 @@ export const NAV: readonly NavFolder[] = [
       // úloh (najnovšie hore). `wide` sa NENASTAVUJE — je to jednoduchý
       // stĺpec riadkov, nie hustá viacstĺpcová tabuľka, čitacia šírka stačí.
       { id: "ulohy", label: "Úlohy na dnes", icon: "📝", Component: DailyTasksSection },
+      // issue 437: "Poznámky" — ZDIEĽANÁ nástenka rýchlych poznámok (mobilný
+      // zápis + PWA). Patrí sem (priečinok „Dôležité", šéfove denné nástroje
+      // vedľa Upozornenia/Úlohy na dnes). `wide` sa NENASTAVUJE — je to
+      // jednoduchý stĺpec (mobile-first), čitacia šírka stačí. PWA
+      // `start_url` (`index.html`/`manifest.webmanifest`) mieri na
+      // `/?tab=poznamky`, aby sa appka z plochy telefónu otvorila rovno sem.
+      { id: "poznamky", label: "Poznámky", icon: "🗒️", Component: NotesSection },
     ],
   },
   {

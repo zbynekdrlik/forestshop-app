@@ -216,6 +216,14 @@ const E2E_MOBIL_EMAIL = "e2e-mobil@forestshop.sk"; // musí sa zhodovať s hodno
 // nevyžaduje admin/manazer, úlohy sú súkromné pre KAŽDÚ rolu, test to overuje).
 const E2E_ULOHY_EMAIL = "e2e-ulohy@forestshop.sk"; // musí sa zhodovať s hodnotou v daily-tasks.spec.ts
 
+// issue 437: rovnaký mechanizmus a dôvod ako `E2E_ULOHY_EMAIL` vyššie — nový
+// spec súbor (`poznamky.spec.ts` — "Poznámky", zdieľaná nástenka + PWA)
+// dostáva VLASTNÝ izolovaný účet. Rola "sef" ZÁMERNE — zrkadlí reálneho
+// používateľa (Štěpán), a test tým dokazuje, že aj rola `sef` môže na
+// zdieľanej nástenke pridávať/vybaviť/mazať (žiadny role-gating,
+// `note-routes.ts`).
+const E2E_POZNAMKY_EMAIL = "e2e-poznamky@forestshop.sk"; // musí sa zhodovať s hodnotou v poznamky.spec.ts
+
 const { db, pool } = createDb();
 // Konštantný literál bez interpolácie — obyčajný reťazec je tu rovnako bezpečný
 // ako `sql` tagovaná šablóna (tú používa ekvivalentný apps/api/tests/helpers/db.ts),
@@ -271,7 +279,10 @@ await db.execute(
   // issue 399: "pairing_variant_link" má reálny FK do "variant" (cascade),
   // takže by ju CASCADE strhol aj bez uvedenia — pridané ručne rovnako ako
   // "pairing" vyššie.
-  'TRUNCATE TABLE ingest_issue, variant, product, catalog_snapshot, job_run, audit_events, sessions, users, order_line, "order", supplier_contact, pairing, supplier, order_open_status, posta_uncollected_settings, posta_uncollected_state, order_reminder_settings, order_reminder_state, nedostupne_state, nedostupne_replacement_link, mail_template, mail_template_history, supplier_stock, restock_settings, restock_event, shop_product_url, theme_color, dpd_pickup_request, upozornenie, daily_task, mail_log, dpd_shipment, product_supplier_override, product_supplier_link_override, pairing_candidate, pairing_candidate_set, pairing_search_settings, pairing_decision, pairing_state_writeback_settings, pairing_variant_link, floor_note, floor_note_product RESTART IDENTITY CASCADE',
+  // issue 437: "note" (Poznámky) má reálny FK do "users" (cascade), takže by
+  // ju CASCADE strhol aj bez uvedenia — pridaná ručne rovnako ako riadok
+  // vyššie (a aby prešiel `truncate-list-completeness.test.ts`, #384).
+  'TRUNCATE TABLE ingest_issue, variant, product, catalog_snapshot, job_run, audit_events, sessions, users, order_line, "order", supplier_contact, pairing, supplier, order_open_status, posta_uncollected_settings, posta_uncollected_state, order_reminder_settings, order_reminder_state, nedostupne_state, nedostupne_replacement_link, mail_template, mail_template_history, supplier_stock, restock_settings, restock_event, shop_product_url, theme_color, dpd_pickup_request, upozornenie, daily_task, mail_log, dpd_shipment, product_supplier_override, product_supplier_link_override, pairing_candidate, pairing_candidate_set, pairing_search_settings, pairing_decision, pairing_state_writeback_settings, pairing_variant_link, floor_note, floor_note_product, note RESTART IDENTITY CASCADE',
 );
 // Rovnaký dôvod ako `tests/helpers/db.ts`: bez tohto by "Na objednanie" bolo
 // v CELOM e2e behu prázdne pre KAŽDÚ objednávku (žiadny nastavený otvorený
@@ -399,6 +410,7 @@ await db.insert(users).values({ email: E2E_FARBY_EMAIL, passwordHash: await hash
 await db.insert(users).values({ email: E2E_UPOZORNENIA_EMAIL, passwordHash: await hashPassword(E2E_HESLO), displayName: "E2E Manažér", role: "manazer" });
 await db.insert(users).values({ email: E2E_MOBIL_EMAIL, passwordHash: await hashPassword(E2E_HESLO), displayName: "E2E Manažér", role: "manazer" });
 await db.insert(users).values({ email: E2E_ULOHY_EMAIL, passwordHash: await hashPassword(E2E_HESLO), displayName: "E2E Čitateľ", role: "citanie" });
+await db.insert(users).values({ email: E2E_POZNAMKY_EMAIL, passwordHash: await hashPassword(E2E_HESLO), displayName: "E2E Šéf", role: "sef" });
 
 // Katalóg pre E2E: tá istá commitnutá fixtúra ako v jednotkových testoch, cez tú istú
 // službu importu — E2E tak overuje skutočnú cestu dát, nie ručne nasypané riadky.

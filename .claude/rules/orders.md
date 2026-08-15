@@ -9,6 +9,19 @@ paths:
 
 # Objednávky zo Shoptetu (F3, #21)
 
+- **Hlásenie „appka nesedí so Shoptetom / Dnes: 0" — NAJPRV latencia, až
+  potom stratené dáta (#436, 14. 8. 2026).** Import beží každú hodinu o :45;
+  objednávka vzniknutá PO poslednom behu je v appke až o ďalšiu hodinu —
+  rozdiel do ~1 h je normálny. Diagnostika v poradí: (1) `job_run` pre
+  `orders-import` (status má byť `accepted`, `detail.orderCount`); (2) živý
+  feed vs. DB `max(placed_at)` — chýba objednávka STARŠIA než posledný beh?
+  Až to je skutočný bug. Pozor na dve neškodné anomálie: `orderCount` cez
+  deň KLESÁ pri polnočnom posune 90-dňového okna (najstarší deň vypadne,
+  by design), a sha256 raw súboru sa mení aj bez nových objednávok (Shoptet
+  regeneruje obsah — mení sa stavové pole existujúcich objednávok). Fail-loud
+  je pokrytý: prázdne telo = `rejected`, non-2xx = throw, HTML/login stránka
+  padne na CSV validácii alebo 20 % acceptance gate — `success` s nulou
+  nových teda znamená „nič nové vo feede", nie prehltnutú chybu.
 - **Export je JEDEN riadok NA POLOŽKU OBJEDNÁVKY, nie na objednávku.**
   Order-level polia (`code`, `date`, `billFullName`, …) sa OPAKUJÚ na
   každom riadku tej istej objednávky — importer si preto vezme prvý
@@ -57,9 +70,11 @@ paths:
   (víkendy, sezónnosť) než počet produktov v katalógu.
 - **Advisory zámok kľúč `787_878_003`** (`INGEST_ORDERS_ADVISORY_LOCK_KEY`)
   — ďalší v registri `.claude/rules/scheduler.md`, nikdy nehádaj nový.
-- **Nočný beh + retencia + HTTP rozhranie existujú (#22/#28/#23).**
-  `ordersImportJob` (01:45 UTC) + `pruneRawOrdersJob` (02:00 UTC) sú
-  registrované v scheduleri (`index.ts`) vedľa katalógových jobov — registrácia
+- **Plánovaný beh + retencia + HTTP rozhranie existujú (#22/#28/#23).**
+  `ordersImportJob` beží KAŽDÚ HODINU o :45 UTC (hodinová kadencia od #115,
+  pôvodne denná 01:45 — `jobs.ts` `schedule: { kind: "hourly", minuteUtc: 45 }`);
+  `pruneRawOrdersJob` ostáva denný (02:00). Oba registrované v scheduleri
+  (`index.ts`) vedľa katalógových jobov — registrácia
   advisory zámkov aj časov je v `.claude/rules/scheduler.md`. Čítanie/ručný
   refresh ide cez `GET /api/orders/open`, `GET /api/orders/:id`,
   `POST /api/orders/ingest` (`http/orders-routes.ts` + `modules/orders/
