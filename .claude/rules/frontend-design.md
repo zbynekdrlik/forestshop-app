@@ -1353,3 +1353,30 @@ paths:
   selector components (a parent-scoped class, or `.class[type="..."]`),
   never a bare single class, or it silently inherits the global
   `width:100%`/border/padding/background reset instead of its own CSS.
+- **Pridanie novej VIDITEĽNEJ záložky do `nav.ts` rozbije PEVNÉ počty na
+  TROCH miestach naraz — nielen jednotkový `nav.test.ts`, ale aj E2E
+  `nav.spec.ts`, ktorý má DVE tvrdenia `page.locator(".side-nav .tab")
+  .toHaveCount(N)`** (jedno v rozbalenom menu, druhé v zbalenej lište).
+  Issue 437 (nová záložka „Poznámky"): pridanie do priečinka „Dôležité"
+  posunulo `nav.test.ts`'s `NAV[0].tabs.toHaveLength(2)` → 3 aj
+  `NAV[0].tabs.map(label)` zoznam, A `nav.spec.ts`'s OBA `.toHaveCount(19)`
+  → 20 (+ vhodné pridať `getByRole("button",{name:"<label>"}).toBeVisible()`
+  k výpočtu záložiek). **Pasca overovania: lokálny beh LEN nového spec
+  súboru (`playwright test poznamky.spec.ts`) tieto count-strážcov v
+  `nav.spec.ts` NEODhalí** — prešiel zeleno, no CI (celý balík) zhodil
+  `nav.spec.ts` na `Expected 19, Received 20`. Pri KAŽDEJ novej/odobranej
+  `nav.ts` záložke: `grep -n 'toHaveCount\|toHaveLength\|dvadsať\|devätnásť'
+  apps/web/tests/e2e/nav.spec.ts apps/web/src/nav.test.ts` a spusti lokálne
+  AJ `nav.spec.ts` (nielen svoj nový spec), inak to chytí až CI. (Meno novej
+  záložky navyše kontroluj na substring-kolíziu podľa vzoru issue 240 vyššie.)
+- **Rastrové ikony (PWA `icon-192/512.png`, apod.) sa dajú vygenerovať z
+  brand SVG cez Playwright chromium, keď na boxe NIE JE `rsvg-convert`/
+  ImageMagick `convert`/`sharp`** (issue 437, PWA ikony z favicon značky
+  #430). Vzor: `createRequire(".../apps/web/")` → `require("@playwright/
+  test").chromium` (pnpm store cesta, nie priamy `import`), `page.setContent`
+  s inline SVG (vrátane emoji 🌲 — chromium na `forestshop-dev` má emoji font,
+  vykreslí ho farebne), `page.setViewportSize({width:px,height:px})`,
+  `page.locator("svg").screenshot()`. Over výsledok VIZUÁLNE (Read na PNG) —
+  ak by chýbal emoji font, dostal by si prázdny farebný štvorec, nie strom.
+  Rovnaká chromium závislosť ako e2e (`.claude/rules/local-dev.md`'s
+  libnspr4 knižnice).

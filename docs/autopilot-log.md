@@ -4214,3 +4214,10 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
   marking, round-trip nefunguje) + `.claude/rules/supplier-stock.md` (split čítanie
   pairing_variant_link priamo, restock coalesce + JOIN poradie, 4-miestny
   split-governed predikát).
+
+## issue 437 — Poznámky (zdieľaná mobilná nástenka, PWA)
+- PR #438 → main merge `611d59` ; nasadené v0.3.0-dev.260 na forestshop.newlevel.media.
+- Nový modul `note`: `schema-note.ts` + migrácia `0056_yummy_sue_storm.sql`; `modules/note/{queries,service}.ts` (ZDIEĽANÉ — JOIN na users pre autora, resolve/delete NIE viazané na autora); `http/note-routes.ts` (requireUser, autor zo session). Web `NotesSection.tsx` + `notesApi.ts`, nav „Poznámky" (Dôležité). PWA: `manifest.webmanifest` + `icon-192/512.png` (chromium z favicon SVG) + `index.html` metá, start_url `/?tab=poznamky`.
+- Testy: `note-http.integration.test.ts` (14, RED nepotrebné — feature), `NotesSection.test.tsx` (7), `poznamky.spec.ts` (e2e 375px). `note` do oboch TRUNCATE zoznamov + `E2E_POZNAMKY_EMAIL` (rola sef). Session TTL už 30 dní (nemenené).
+- CI trap: `nav.spec.ts` mal 2× `.side-nav .tab` toHaveCount(19) → 20 (+ `nav.test.ts` folder count 2→3) — lokálny beh len nového spec to nechytil, až CI. Zapísané do `frontend-design.md`.
+- Playbook: `.claude/rules/frontend-design.md` (nová nav záložka rozbije count-strážcov v nav.test.ts+nav.spec.ts; generovanie PWA ikon cez Playwright chromium).
