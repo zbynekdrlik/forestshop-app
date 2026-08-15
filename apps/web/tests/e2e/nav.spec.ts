@@ -78,10 +78,10 @@ test("ľavé menu má štyri priečinky (Dôležité/Eshop/Systém/Automatizáci
   await expect(page.getByRole("button", { name: "Systém" })).toHaveAttribute("aria-expanded", "true");
   await expect(page.getByRole("button", { name: "Automatizácie" })).toHaveAttribute("aria-expanded", "true");
 
-  // Presne devätnásť záložiek v CELOM menu (issue 387 E5 pridalo "Párovanie",
+  // Presne dvadsať záložiek v CELOM menu (issue 387 E5 pridalo "Párovanie",
   // E8 odstránilo "Vypredané → Skladom: návrhy odkazov", issue 400/E9
-  // odstránilo "Párovanie produktov").
-  await expect(page.locator(".side-nav .tab")).toHaveCount(19);
+  // odstránilo "Párovanie produktov", issue 437 pridalo "Poznámky" — 19 → 20).
+  await expect(page.locator(".side-nav .tab")).toHaveCount(20);
   await expect(page.getByRole("button", { name: "Sync zo Shoptetu" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Texty e-mailov" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Na objednanie" })).toBeVisible();
@@ -105,6 +105,8 @@ test("ľavé menu má štyri priečinky (Dôležité/Eshop/Systém/Automatizáci
   await expect(page.getByRole("button", { name: "Upozornenia" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Preprava DPD" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Úlohy na dnes" })).toBeVisible();
+  // issue 437: nová záložka "Poznámky" v priečinku "Dôležité".
+  await expect(page.getByRole("button", { name: "Poznámky" })).toBeVisible();
 
   // issue 302: predvolená obrazovka (bez kliknutia) je odvtedy "Na
   // objednanie", nie "Sync zo Shoptetu". `scripts/e2e-setup.ts` vždy seeduje
@@ -224,7 +226,7 @@ test("ľavé menu má štyri priečinky (Dôležité/Eshop/Systém/Automatizáci
 
   // Hlavičky priečinkov zmiznú, ikony všetkých modulov ostanú.
   await expect(page.getByRole("button", { name: "Systém" })).toHaveCount(0);
-  await expect(page.locator(".side-nav .tab")).toHaveCount(19);
+  await expect(page.locator(".side-nav .tab")).toHaveCount(20);
   // Názov sa v lište ukáže bublinou pri prejdení myšou.
   await expect(page.getByRole("button", { name: "Na objednanie" })).toHaveAttribute(
     "title",
