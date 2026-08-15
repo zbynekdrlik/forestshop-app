@@ -34,14 +34,15 @@ import { DEFAULT_TAB_ID, HIDDEN_TABS, NAV, findTab, isVisibleTabId } from "./nav
 // Issue 387 E5 pridalo "Párovanie" — pôvodne hneď za "Párovanie produktov"
 // (#239), ktorú issue 400 (E9) odstránilo (majiteľ ju výslovne schválil).
 // Tento test je najbližšie k tomu, čo strojovo overiť dá (registrácia, nie DOM).
-it("NAV má štyri priečinky (Dôležité/Eshop/Systém/Automatizácie), s 2/10/3/4 záložkami v poradí podľa dôležitosti", () => {
+it("NAV má štyri priečinky (Dôležité/Eshop/Systém/Automatizácie), s 3/10/3/4 záložkami v poradí podľa dôležitosti", () => {
   expect(NAV).toHaveLength(4);
   expect(NAV.map((f) => f.label)).toEqual(["Dôležité", "Eshop", "Systém", "Automatizácie"]);
-  expect(NAV[0]?.tabs).toHaveLength(2);
+  // issue 437: "Poznámky" pribudlo do priečinka „Dôležité" (2 → 3 záložky).
+  expect(NAV[0]?.tabs).toHaveLength(3);
   expect(NAV[1]?.tabs).toHaveLength(10);
   expect(NAV[2]?.tabs).toHaveLength(3);
   expect(NAV[3]?.tabs).toHaveLength(4);
-  expect(NAV[0]?.tabs.map((t) => t.label)).toEqual(["Upozornenia", "Úlohy na dnes"]);
+  expect(NAV[0]?.tabs.map((t) => t.label)).toEqual(["Upozornenia", "Úlohy na dnes", "Poznámky"]);
   expect(NAV[1]?.tabs.map((t) => t.label)).toEqual([
     "Na objednanie",
     "Objednávky predajňa",

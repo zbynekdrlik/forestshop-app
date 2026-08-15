@@ -2535,6 +2535,121 @@ a.upozornenie-title:hover {
   cursor: not-allowed;
 }
 
+/* ---------------- POZNÁMKY (issue 437) ----------------
+   ZDIEĽANÁ nástenka rýchlych poznámok (mobilný zápis + PWA). Mobile-first:
+   veľké textové pole hore + Uložiť, pod tým zoznam (autor + čas + telo,
+   akcia vybaviť/zmazať). `max-width` ako `.ulohy-panel` (issue 403) —
+   obmedzuje šírku na desktope, na telefóne je panel aj tak úzky. */
+.poznamky-panel {
+  max-width: 40rem;
+}
+.poznamky-add {
+  display: flex;
+  flex-direction: column;
+  gap: var(--fs-space-2);
+  margin-bottom: var(--fs-space-4);
+}
+/* Veľké textové pole — globálny reset štýluje len `input`, nie `textarea`
+   (tento súbor, riadok ~161), takže `textarea` dostáva vzhľad tu explicitne.
+   `resize: vertical` — používateľ si vie pole zväčšiť pre dlhšiu poznámku,
+   nikdy do šírky (rozbilo by layout). */
+.poznamka-new-input {
+  width: 100%;
+  font: inherit;
+  color: var(--fs-ink);
+  background: var(--fs-surface);
+  border: 1px solid var(--fs-border);
+  border-radius: var(--fs-radius-sm);
+  padding: var(--fs-space-2) var(--fs-space-3);
+  resize: vertical;
+  min-height: 4.5rem;
+}
+/* Uložiť zarovnané doprava pod poľom — na telefóne dosť veľký tap-target
+   (`.btn` predvolený padding), nezaberá celú šírku. */
+.poznamka-new-save {
+  align-self: flex-end;
+}
+.poznamky-list {
+  display: flex;
+  flex-direction: column;
+}
+.poznamka-row {
+  display: flex;
+  /* `flex-start` (rovnako ako `.uloha-row`, issue 403) — pri viacriadkovej
+     poznámke drží checkbox/kôš pri PRVOM riadku, nie v strede bloku. */
+  align-items: flex-start;
+  gap: var(--fs-space-2);
+  padding: var(--fs-space-2);
+  border-bottom: 1px solid var(--fs-border-soft);
+  font-size: var(--fs-text-sm);
+}
+.poznamka-row:first-child {
+  border-top: 1px solid var(--fs-border-soft);
+}
+.poznamka-row:hover {
+  background: var(--fs-surface-alt);
+}
+/* Vybavené poznámky OSTÁVAJÚ v zozname (rovnaké chronologické rozhodnutie
+   ako `.uloha-row.done`), len stlmené: prečiarknuté telo + nižší kontrast. */
+.poznamka-row.done {
+  opacity: 0.6;
+}
+.poznamka-row.done .poznamka-body {
+  text-decoration: line-through;
+}
+/* Selektor MUSÍ byť `.poznamka-row .poznamka-resolve-toggle` (nie holé
+   `.poznamka-resolve-toggle`) — globálny reset `input:not([type="hidden"])`
+   (0,0,1,1) by holú triedu (0,0,1,0) prebil a nastavil checkboxu
+   `width:100%` (past reprodukovaná na `.uloha-done-toggle`, issue 403).
+   Rodičovská trieda (0,0,2,0) porazí reset bezpodmienečne. */
+.poznamka-row .poznamka-resolve-toggle {
+  flex: 0 0 auto;
+  width: 1.125rem;
+  height: 1.125rem;
+  margin: 0.15rem 0 0;
+  accent-color: var(--fs-brand);
+  cursor: pointer;
+}
+.poznamka-resolve-toggle:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.poznamka-content {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+/* `pre-wrap` — poznámka môže byť viacriadková (veľké textové pole), zalomenia
+   riadkov sa zachovajú; `overflow-wrap` zalomí aj dlhé slová/URL bez pretečenia. */
+.poznamka-body {
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+.poznamka-meta {
+  margin-top: 0.15rem;
+  font-size: var(--fs-text-xs);
+  color: var(--fs-ink-faint);
+}
+/* Kôš bez textu — kompaktný, žiadne `.btn` pozadie/padding (rovnako ako
+   `.uloha-icon-btn`). `margin-left:auto` ho drží pri pravom okraji riadku. */
+.poznamka-icon-btn {
+  flex: 0 0 auto;
+  margin-left: auto;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: var(--fs-text-sm);
+  line-height: 1;
+  padding: var(--fs-space-1);
+}
+.poznamka-icon-btn:hover {
+  background: var(--fs-surface-alt);
+  border-radius: var(--fs-radius-sm);
+}
+.poznamka-icon-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* ---------------- MODÁLNY DIALÓG (issue 191) ----------------
    Náhľad e-mailu pred odoslaním sa už nerozbaľuje na spodku stránky —
    otvorí sa cez obrazovku, takže je okamžite v zornom poli. `z-index`

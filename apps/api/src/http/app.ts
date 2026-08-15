@@ -22,6 +22,7 @@ import { registerOrderReminderRoutes, type OrderReminderRunDeps } from "./order-
 import { registerMailLogRoutes } from "./mail-log-routes.js";
 import { registerMailTemplateRoutes } from "./mail-template-routes.js";
 import { registerNedostupneRoutes, type NedostupneRunDeps } from "./nedostupne-routes.js";
+import { registerNoteRoutes } from "./note-routes.js";
 import { registerOrderFlagsRoutes } from "./order-flags-routes.js";
 import { registerOrderMergeRoutes, type OrderMergeRunDeps } from "./order-merge-routes.js";
 import { requireSameOrigin } from "./origin-check.js";
@@ -337,6 +338,11 @@ export function createApp(
   // obrazovka neposiela mail ani nekontaktuje tretiu stranu.
   registerUpozorneniaRoutes(app, db);
   registerDailyTasksRoutes(app, db);
+  // issue 437: "Poznámky" — ZDIEĽANÁ nástenka rýchlych poznámok (mobilný
+  // zápis + PWA). Žiadny voliteľný dependency (na rozdiel od nedostupne/
+  // orderReminder vyššie) — neposiela mail ani nekontaktuje tretiu stranu,
+  // rovnako ako `registerUpozorneniaRoutes`/`registerDailyTasksRoutes`.
+  registerNoteRoutes(app, db);
   // issue 309: rovnaká nástenka, ale NEZÁVISLÝ modul (žiadny dedupKey/
   // resolve/postpone — `upozornenia.md`'s návrhový komentár na tickete).
   registerCalendarRoutes(app, db, options.nextEvent);
