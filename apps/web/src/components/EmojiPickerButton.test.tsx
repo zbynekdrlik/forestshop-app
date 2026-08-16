@@ -52,7 +52,7 @@ describe("EmojiPickerButton (komponent)", () => {
     const ta = screen.getByTestId<HTMLTextAreaElement>("ta");
     ta.focus();
     ta.setSelectionRange(5, 5); // za "test "
-    fireEvent.click(screen.getByRole("menuitem", { name: "Vložiť 👍" }));
+    fireEvent.click(screen.getByRole("button", { name: "Vložiť 👍" }));
     expect(ta.value).toBe("test 👍");
     // Po vložení sa popover ZAVRIE (inak by prekryl tlačidlo Uložiť pod poľom).
     expect(screen.queryByTestId("emoji-popover")).toBeNull();

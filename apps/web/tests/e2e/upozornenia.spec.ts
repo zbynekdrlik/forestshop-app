@@ -290,7 +290,7 @@ test("emoji picker: vloží emoji do nadpisu aj podrobností upozornenia, ulož�
   const nadpis = page.getByTestId("upozornenie-form-title");
   await nadpis.fill("Urgentné ");
   await page.getByTestId("upozornenie-title-emoji").click();
-  await page.getByRole("menuitem", { name: "Vložiť 🔥" }).click();
+  await page.getByRole("button", { name: "Vložiť 🔥" }).click();
   await expect(nadpis).toHaveValue("Urgentné 🔥");
   // (popover sa po vložení emoji zavrie sám — netreba ho ručne zatvárať)
 
@@ -298,7 +298,7 @@ test("emoji picker: vloží emoji do nadpisu aj podrobností upozornenia, ulož�
   const detaily = page.getByTestId("upozornenie-form-details");
   await detaily.fill("Skontrolovať sklad ");
   await page.getByTestId("upozornenie-details-emoji").click();
-  await page.getByRole("menuitem", { name: "Vložiť ✅" }).click();
+  await page.getByRole("button", { name: "Vložiť ✅" }).click();
   await expect(detaily).toHaveValue("Skontrolovať sklad ✅");
 
   await page.getByTestId("upozornenie-form-save").click();

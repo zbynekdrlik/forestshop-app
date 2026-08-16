@@ -102,13 +102,16 @@ export function EmojiPickerButton({ targetRef, value, onChange, testId, disabled
         😊
       </button>
       {open && (
-        <div className="emoji-picker-popover" role="menu" data-testid={`${testId}-popover`}>
+        // `role="group"` (nie `menu`) + `aria-label` — čestný ARIA: je to
+        // pomenovaná skupina obyčajných tlačidiel, nie aplikačné menu s
+        // roving-focus/šípkovou navigáciou (tú tento MVP picker neimplementuje;
+        // ovládanie je myš + Tab/Enter na natívnych `<button>`och).
+        <div className="emoji-picker-popover" role="group" aria-label="Emoji na vloženie" data-testid={`${testId}-popover`}>
           {EMOJI.map((emoji) => (
             <button
               key={emoji}
               type="button"
               className="emoji-picker-option"
-              role="menuitem"
               aria-label={`Vložiť ${emoji}`}
               title={emoji}
               onClick={() => {

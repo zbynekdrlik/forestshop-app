@@ -92,7 +92,7 @@ test("emoji picker (desktop + mobil): vloží emoji cez tlačidlo, uloží, vidn
   // Desktop: napísať text, vložiť emoji cez picker na koniec (kurzor), uložiť.
   await vstup.fill("Objednať sáčky ");
   await page.getByTestId("poznamka-emoji").click();
-  await page.getByRole("menuitem", { name: "Vložiť 👍" }).click();
+  await page.getByRole("button", { name: "Vložiť 👍" }).click();
   await expect(vstup).toHaveValue("Objednať sáčky 👍");
   await page.getByTestId("poznamka-new-save").click();
   await expect(page.getByTestId("poznamky-list").getByText("Objednať sáčky 👍")).toBeVisible();
@@ -101,7 +101,7 @@ test("emoji picker (desktop + mobil): vloží emoji cez tlačidlo, uloží, vidn
   await page.setViewportSize({ width: 375, height: 800 });
   await vstup.fill("Zavolať ");
   await page.getByTestId("poznamka-emoji").click();
-  await page.getByRole("menuitem", { name: "Vložiť 🎉" }).click();
+  await page.getByRole("button", { name: "Vložiť 🎉" }).click();
   await expect(vstup).toHaveValue("Zavolať 🎉");
   await page.getByTestId("poznamka-new-save").click();
   await expect(page.getByTestId("poznamky-list").getByText("Zavolať 🎉")).toBeVisible();
