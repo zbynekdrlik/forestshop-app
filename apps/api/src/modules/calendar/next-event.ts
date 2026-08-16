@@ -60,11 +60,11 @@ function hasNotEnded(candidate: Candidate, now: Date): boolean {
  * udalosť" namiesto toho, aby nahlas zlyhal (dispatch: "Fetch failure /
  * malformed feed → fail loud, never crash, never show raw error").
  *
- * issue 382: majiteľ chce TRI najbližšie udalosti, nie jednu — `limit`
- * rozhoduje koľko sa vráti (zoradené podľa najskoršieho začiatku), NIKDY
- * viac než reálne dostupných kandidátov.
+ * issue 382 → 439: `dayLimit` rozhoduje koľko najbližších DNÍ, v ktorých je
+ * aspoň jedna udalosť, sa vráti — a pre KAŽDÝ taký deň VŠETKY jeho udalosti
+ * (zoradené podľa najskoršieho začiatku). Nie počet udalostí.
  */
-export function resolveNextEvents(icsText: string, now: Date, limit: number): NextCalendarEvent[] {
+export function resolveNextEvents(icsText: string, now: Date, dayLimit: number): NextCalendarEvent[] {
   if (!icsText.includes("BEGIN:VCALENDAR")) {
     throw new Error("Stiahnutý obsah nevyzerá ako platný ICS kalendár (chýba BEGIN:VCALENDAR)");
   }
@@ -90,5 +90,28 @@ export function resolveNextEvents(icsText: string, now: Date, limit: number): Ne
   }
 
   const upcoming = candidates.filter((c) => hasNotEnded(c, now)).sort((a, b) => a.start.getTime() - b.start.getTime());
-  return upcoming.slice(0, limit).map((c) => ({ title: c.title, dateLabel: formatDateLabel(c.start), allDay: c.allDay }));
+
+  // issue 439: `dayLimit` počíta DNI, v ktorých je aspoň jedna udalosť, nie
+  // udalosti. Zoskupenie kľúčom kalendárneho dňa v Europe/Bratislava
+  // (`zonedDateKey`) — rovnaké pásmo ako `formatDateLabel`/`hasNotEnded`, takže
+  // sedí s vypísaným `dateLabel` a je stabilné voči proces-TZ pri celodenných
+  // (`VALUE=DATE`) udalostiach (`.claude/rules/calendar.md`). Iterujeme len cez
+  // udalosti, takže dni bez udalosti do skupiny nikdy nevstúpia — preskočia sa
+  // a NEMINÚ `dayLimit`. `continue` (nie `break`) pri dni nad limitom je
+  // robustné aj voči teoretickému preplietaniu udalostí rôznych dní: ďalšie
+  // udalosti UŽ započítaných dní sa stále pridajú. Prebiehajúca viacdňová
+  // udalosť (začala pred dneškom, ešte neskončila) sa zoskupí pod svoj
+  // ZAČIATOČNÝ deň — konzistentné s doterajším zobrazovaním takej udalosti jej
+  // začiatočným dátumom.
+  const includedDayKeys = new Set<string>();
+  const result: NextCalendarEvent[] = [];
+  for (const candidate of upcoming) {
+    const dayKey = zonedDateKey(candidate.start);
+    if (!includedDayKeys.has(dayKey)) {
+      if (includedDayKeys.size >= dayLimit) continue;
+      includedDayKeys.add(dayKey);
+    }
+    result.push({ title: candidate.title, dateLabel: formatDateLabel(candidate.start), allDay: candidate.allDay });
+  }
+  return result;
 }
