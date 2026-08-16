@@ -17,8 +17,10 @@ export const NEXT_EVENT_ERROR_CACHE_TTL_MS = 2 * 60 * 1000;
  * zachytenie ročne sa opakujúcej udalosti (napr. narodeniny), no konečné. */
 export const RECURRENCE_EXPANSION_WINDOW_DAYS = 400;
 
-/** issue 382: majiteľ chce vidieť TRI najbližšie udalosti, nie jednu. */
-export const NEXT_EVENTS_LIMIT = 3;
+/** issue 382 → 439: majiteľ chce vidieť TRI najbližšie DNI, v ktorých je aspoň
+ * jedna udalosť (a v každom také dni VŠETKY jeho udalosti) — nie tri najbližšie
+ * udalosti. Konštanta preto počíta DNI, nie udalosti. */
+export const NEXT_EVENT_DAYS_LIMIT = 3;
 
 /** Strop veľkosti stiahnutého ICS tela — osobný kalendár je rádovo KB až
  * jednotky MB; 10 MB je veľkorysá, no konečná hranica proti

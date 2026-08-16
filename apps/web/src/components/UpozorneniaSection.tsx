@@ -1,6 +1,7 @@
 import { useCallback, useContext, useEffect, useRef, useState, type JSX } from "react";
 import type { Me } from "../api.js";
 import { UpozorneniaBadgeRefreshContext } from "../upozorneniaBadgeContext.js";
+import { EmojiPickerButton } from "./EmojiPickerButton.js";
 import { NextCalendarEventCard } from "./NextCalendarEventCard.js";
 import { UpozornenieCard } from "./UpozornenieCard.js";
 import { UpozorneniaResolvedList } from "./UpozorneniaResolvedList.js";
@@ -73,6 +74,9 @@ export function UpozorneniaSection({ role, onSessionExpired }: { readonly role: 
   // sa inkrementuje na ZAČIATKU každého `load()` volania; oba `.then()` nižšie
   // sa uplatnia len ak je stále najnovšie.
   const loadSeqRef = useRef(0);
+  // issue 440: emoji picker vkladá na pozíciu kurzora príslušného poľa formulára.
+  const draftTitleRef = useRef<HTMLInputElement>(null);
+  const draftDetailsRef = useRef<HTMLTextAreaElement>(null);
 
   const load = useCallback(() => {
     const seq = ++loadSeqRef.current;
@@ -293,6 +297,7 @@ export function UpozorneniaSection({ role, onSessionExpired }: { readonly role: 
           <label>
             Nadpis
             <input
+              ref={draftTitleRef}
               value={draft.title}
               onChange={(e) => {
                 const value = e.target.value;
@@ -301,10 +306,19 @@ export function UpozorneniaSection({ role, onSessionExpired }: { readonly role: 
               aria-label="Nadpis upozornenia"
               data-testid="upozornenie-form-title"
             />
+            <EmojiPickerButton
+              targetRef={draftTitleRef}
+              value={draft.title}
+              onChange={(next) => {
+                setDraft((d) => (d === null ? d : { ...d, title: next }));
+              }}
+              testId="upozornenie-title-emoji"
+            />
           </label>
           <label>
             Podrobnosti
             <textarea
+              ref={draftDetailsRef}
               value={draft.details}
               onChange={(e) => {
                 const value = e.target.value;
@@ -312,6 +326,14 @@ export function UpozorneniaSection({ role, onSessionExpired }: { readonly role: 
               }}
               aria-label="Podrobnosti upozornenia"
               data-testid="upozornenie-form-details"
+            />
+            <EmojiPickerButton
+              targetRef={draftDetailsRef}
+              value={draft.details}
+              onChange={(next) => {
+                setDraft((d) => (d === null ? d : { ...d, details: next }));
+              }}
+              testId="upozornenie-details-emoji"
             />
           </label>
           <label>

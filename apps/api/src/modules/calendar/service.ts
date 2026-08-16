@@ -9,10 +9,10 @@
 import { log } from "../../logger.js";
 import type { IcsFetcher } from "./fetcher.js";
 import { resolveNextEvents, type NextCalendarEvent } from "./next-event.js";
-import { NEXT_EVENT_ERROR_CACHE_TTL_MS, NEXT_EVENT_OK_CACHE_TTL_MS, NEXT_EVENTS_LIMIT } from "./constants.js";
+import { NEXT_EVENT_DAYS_LIMIT, NEXT_EVENT_ERROR_CACHE_TTL_MS, NEXT_EVENT_OK_CACHE_TTL_MS } from "./constants.js";
 
-// issue 382: pole namiesto singulárnej udalosti — majiteľ chce TRI
-// najbližšie, nie jednu (`NEXT_EVENTS_LIMIT`).
+// issue 382 → 439: pole namiesto singulárnej udalosti — majiteľ chce
+// udalosti z TROCH najbližších dní s udalosťami (`NEXT_EVENT_DAYS_LIMIT`).
 export type NextEventResult = { readonly ok: true; readonly events: readonly NextCalendarEvent[] } | { readonly ok: false };
 
 export interface NextEventService {
@@ -36,7 +36,7 @@ export function createNextEventService(fetchIcs: IcsFetcher): NextEventService {
   async function refresh(now: Date): Promise<CacheEntry> {
     try {
       const icsText = await fetchIcs();
-      const events = resolveNextEvents(icsText, now, NEXT_EVENTS_LIMIT);
+      const events = resolveNextEvents(icsText, now, NEXT_EVENT_DAYS_LIMIT);
       return { result: { ok: true, events }, cachedAtMs: now.getTime(), ttlMs: NEXT_EVENT_OK_CACHE_TTL_MS };
     } catch (error) {
       const rawErrorMessage = error instanceof Error ? error.message : String(error);

@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState, type JSX } from "react";
+import { useCallback, useEffect, useRef, useState, type JSX } from "react";
 import { createNote, deleteNote, fetchNotes, NotesUnauthorizedError, setNoteResolved, type NoteRow } from "../notesApi.js";
+import { EmojiPickerButton } from "./EmojiPickerButton.js";
 
 // issue 437: "Poznámky" — ZDIEĽANÁ nástenka rýchlych poznámok (mobilný zápis +
 // PWA). Na rozdiel od `DailyTasksSection.tsx` (súkromný per-používateľský
@@ -26,6 +27,8 @@ export function NotesSection({ onSessionExpired }: { readonly onSessionExpired: 
   const [newBody, setNewBody] = useState("");
   const [creating, setCreating] = useState(false);
   const [busyId, setBusyId] = useState("");
+  // issue 440: emoji picker vkladá na pozíciu kurzora tohto poľa.
+  const newBodyRef = useRef<HTMLTextAreaElement>(null);
 
   const load = useCallback(() => {
     fetchNotes()
@@ -117,6 +120,7 @@ export function NotesSection({ onSessionExpired }: { readonly onSessionExpired: 
   const addRow = (
     <div className="poznamky-add">
       <textarea
+        ref={newBodyRef}
         className="poznamka-new-input"
         value={newBody}
         onChange={(e) => {
@@ -128,9 +132,12 @@ export function NotesSection({ onSessionExpired }: { readonly onSessionExpired: 
         rows={3}
         disabled={creating}
       />
-      <button type="button" className="btn good" onClick={addNote} disabled={newBody.trim() === "" || creating} data-testid="poznamka-new-save">
-        Uložiť
-      </button>
+      <div className="poznamka-add-actions">
+        <EmojiPickerButton targetRef={newBodyRef} value={newBody} onChange={setNewBody} testId="poznamka-emoji" disabled={creating} />
+        <button type="button" className="btn good" onClick={addNote} disabled={newBody.trim() === "" || creating} data-testid="poznamka-new-save">
+          Uložiť
+        </button>
+      </div>
     </div>
   );
 

@@ -2569,6 +2569,75 @@ a.upozornenie-title:hover {
 .poznamka-new-save {
   align-self: flex-end;
 }
+/* issue 440: spodný riadok pod textovým poľom poznámky — emoji picker vľavo,
+   Uložiť vpravo (zachováva doterajšie "Uložiť vpravo dole"). */
+.poznamka-add-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--fs-space-2);
+}
+
+/* issue 440: vloženie emoji do textu — malý prepínač + popover s kurátorovanou
+   sadou bežných emoji (Poznámky + Nové upozornenie). Bez externej knižnice
+   (MVP). Popover je `position: absolute` s vysokým `z-index`, otvára sa pod
+   prepínačom a prekryje čokoľvek pod ním (dočasný výber). */
+.emoji-picker {
+  position: relative;
+  display: inline-flex;
+}
+/* Vo formulári Upozornenia sedí picker v STĹPCOVOM `<label>` — bez tohto by ho
+   predvolený `align-items: stretch` roztiahol na celú šírku. */
+.upozornenie-form .emoji-picker {
+  align-self: flex-start;
+}
+.emoji-picker-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--fs-surface);
+  border: 1px solid var(--fs-border);
+  border-radius: var(--fs-radius-sm);
+  cursor: pointer;
+  line-height: 1;
+  padding: var(--fs-space-1) var(--fs-space-2);
+  font-size: var(--fs-text-base);
+}
+.emoji-picker-toggle:hover {
+  background: var(--fs-surface-alt);
+}
+.emoji-picker-toggle:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.emoji-picker-popover {
+  position: absolute;
+  top: calc(100% + var(--fs-space-1));
+  left: 0;
+  z-index: 30;
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: var(--fs-space-1);
+  width: max-content;
+  max-width: min(20rem, 90vw);
+  padding: var(--fs-space-2);
+  background: var(--fs-surface);
+  border: 1px solid var(--fs-border);
+  border-radius: var(--fs-radius-md);
+  box-shadow: var(--fs-shadow-md);
+}
+.emoji-picker-option {
+  background: none;
+  border: none;
+  cursor: pointer;
+  line-height: 1;
+  padding: var(--fs-space-1);
+  border-radius: var(--fs-radius-sm);
+  font-size: var(--fs-text-md);
+}
+.emoji-picker-option:hover {
+  background: var(--fs-surface-alt);
+}
 .poznamky-list {
   display: flex;
   flex-direction: column;

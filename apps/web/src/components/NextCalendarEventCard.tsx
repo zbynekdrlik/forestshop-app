@@ -41,9 +41,12 @@ export function NextCalendarEventCard(): JSX.Element | null {
       ) : result.events.length === 0 ? (
         <p className="next-calendar-event-row">V kalendári nie je žiadna nadchádzajúca udalosť.</p>
       ) : (
-        // issue 382: až TRI najbližšie udalosti namiesto jednej — každá
-        // vlastný kompaktný riadok (`.next-calendar-event-row`, žiadny
-        // predvolený prehliadačový `<p>` margin), nie samostatné karty.
+        // issue 382 → 439: udalosti z TROCH najbližších dní s udalosťami
+        // (server ich vráti zoskupené po dňoch, `resolveNextEvents`) — každá
+        // vlastný kompaktný riadok `📅 <deň> — <názov>` (`.next-calendar-event-
+        // row`, žiadny predvolený prehliadačový `<p>` margin), nie samostatné
+        // karty. Rovnaký formát riadku ako predtým, len pribudnú riadky (dni) —
+        // žiadna zmena vzhľadu (zadanie 439).
         result.events.map((event, i) => (
           <p className="next-calendar-event-row" key={`${event.dateLabel}-${event.title}-${String(i)}`}>
             📅 <strong>{event.dateLabel}</strong> — {event.title}

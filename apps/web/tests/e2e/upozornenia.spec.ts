@@ -262,3 +262,54 @@ test("desktop (1600px): dve karty upozornení sa uložia VEDĽA SEBA, nie pod se
 
   expect(chyby).toEqual([]);
 });
+
+// issue 440: emoji picker vo formulári Nové upozornenie — vloženie emoji do
+// NADPISU aj PODROBNOSTÍ cez tlačidlo, uloženie, zobrazenie na karte. Emoji sa
+// ukladá/zobrazuje správne (perzistenciu zamyká `emoji-persist.integration
+// .test.ts`). Popover jedného poľa sa pred prácou na druhom zavrie (klik na
+// prepínač) — inak by dva otvorené popovery mali dva rovnaké menuitem-y.
+test("emoji picker: vloží emoji do nadpisu aj podrobností upozornenia, uloží, vidno na karte, konzola čistá", async ({ page }) => {
+  const chyby: string[] = [];
+  page.on("console", (m) => {
+    if (m.type() === "error" || m.type() === "warning") chyby.push(m.text());
+  });
+  page.on("pageerror", (e) => {
+    chyby.push(e.message);
+  });
+
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/?tab=upozornenia");
+  await page.getByLabel("E-mail").fill(E2E_UPOZORNENIA_EMAIL);
+  await page.getByLabel("Heslo").fill(E2E_HESLO);
+  await page.getByRole("button", { name: "Prihlásiť sa" }).click();
+  await expect(page.getByRole("heading", { name: "Upozornenia" })).toBeVisible();
+
+  await page.getByTestId("upozornenie-new").click();
+
+  // Nadpis: text + emoji cez picker.
+  const nadpis = page.getByTestId("upozornenie-form-title");
+  await nadpis.fill("Urgentné ");
+  await page.getByTestId("upozornenie-title-emoji").click();
+  await page.getByRole("button", { name: "Vložiť 🔥" }).click();
+  await expect(nadpis).toHaveValue("Urgentné 🔥");
+  // (popover sa po vložení emoji zavrie sám — netreba ho ručne zatvárať)
+
+  // Podrobnosti: text + emoji cez picker.
+  const detaily = page.getByTestId("upozornenie-form-details");
+  await detaily.fill("Skontrolovať sklad ");
+  await page.getByTestId("upozornenie-details-emoji").click();
+  await page.getByRole("button", { name: "Vložiť ✅" }).click();
+  await expect(detaily).toHaveValue("Skontrolovať sklad ✅");
+
+  await page.getByTestId("upozornenie-form-save").click();
+  await expect(page.getByTestId("upozornenie-form")).toBeHidden();
+
+  const card = kartaSNadpisom(page, "Urgentné 🔥");
+  await expect(card).toBeVisible();
+  await expect(card).toContainText("Skontrolovať sklad ✅");
+
+  await card.getByRole("button", { name: "Odstrániť", exact: true }).click(); // upratanie po teste
+  await expect(kartaSNadpisom(page, "Urgentné 🔥")).toHaveCount(0);
+
+  expect(chyby).toEqual([]);
+});
