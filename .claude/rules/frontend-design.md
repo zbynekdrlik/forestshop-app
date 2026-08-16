@@ -1380,3 +1380,31 @@ paths:
   ak by chýbal emoji font, dostal by si prázdny farebný štvorec, nie strom.
   Rovnaká chromium závislosť ako e2e (`.claude/rules/local-dev.md`'s
   libnspr4 knižnice).
+- **Emoji picker (issue 440) je ZNOVUPOUŽITEĽNÝ `EmojiPickerButton.tsx` +
+  čistý `insertEmojiAtSelection(value, selStart, selEnd, emoji)` helper —
+  žiadna externá knižnica (kurátorovaná sada ~40 emoji, MVP).** Vkladá na
+  pozíciu kurzora cez `targetRef.current.selectionStart/End` (funguje pre
+  `<textarea>` aj `<input type=text>`); po `onChange` obnoví fokus + caret
+  `requestAnimationFrame`om (kontrolovaná hodnota sa prekreslí AŽ po commite
+  Reactu, rAF beží po ňom, takže DOM už nesie novú hodnotu a
+  `setSelectionRange` sadne). **Popover sa po vložení emoji ZAVRIE
+  (`setOpen(false)`) — je `position: absolute` a otvára sa NADOL nad obsahom
+  pod poľom; OTVORENÝ popover prekryl a „ukradol" klik na tlačidlo Uložiť pod
+  formulárom (nájdené e2e, nie unit — `<button ...>emoji</button> intercepts
+  pointer events`).** Zavrieť sa dá aj Escape/klik-mimo (document listener v
+  `useEffect([open])`, cleanup oboch). Popover je `role="group"` +
+  `aria-label` (NIE `role="menu"`/`menuitem` — to implikuje roving-focus/
+  šípkovú navigáciu, ktorú tento ľahký picker nemá; obyčajné pomenované
+  tlačidlá `aria-label="Vložiť <emoji>"` sú čestnejšie a e2e ich hľadá cez
+  `getByRole("button", {name})`). Zapojenie: `targetRef` (useRef na pole),
+  `value`, `onChange`, unikátny `testId` (viac pickerov na obrazovke — napr.
+  Nadpis + Podrobnosti upozornenia — inak testid kolízia). Vo formulári s
+  STĹPCOVÝM `<label>` (`display:flex; flex-direction:column`) potrebuje
+  `.emoji-picker { align-self: flex-start }` (scoped `.upozornenie-form
+  .emoji-picker`), inak ho `align-items: stretch` roztiahne na celú šírku —
+  ale POZOR ho nedávaj globálne, v ROVNOM riadku (`.poznamka-add-actions`)
+  by vertikálne odsadil od súrodenca. Emoji sa v appke ukladajú/zobrazujú
+  správne bez akejkoľvek úpravy (Postgres `text` + node-postgres nesú
+  4-bajtové UTF-8; zamknuté `emoji-persist.integration.test.ts`
+  POST→GET round-tripom vrátane ZWJ rodiny/vlajky/variation selectora) —
+  „emoji nefunguje" bol vždy len chýbajúci VSTUP, nikdy perzistencia.
