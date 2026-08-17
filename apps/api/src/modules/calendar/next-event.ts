@@ -24,10 +24,10 @@ const WEEKDAY_FORMAT = new Intl.DateTimeFormat("sk-SK", { timeZone: "Europe/Brat
 // žiadna vizuálna zmena tam, kde nebola vypýtaná. Rok sa berie z TOHO ISTÉHO
 // `getZonedDateParts` (Europe/Bratislava) ako deň/mesiac, takže je stabilný aj
 // pri celodenných VALUE=DATE udalostiach (`.claude/rules/calendar.md`).
-function formatDateLabel(instant: Date, now: Date): string {
+function formatDateLabel(instant: Date, nowYear: number): string {
   const { day, month, year } = getZonedDateParts(instant);
   const base = `${WEEKDAY_FORMAT.format(instant)} ${String(day)}. ${String(month)}.`;
-  return year === getZonedDateParts(now).year ? base : `${base} ${String(year)}`;
+  return year === nowYear ? base : `${base} ${String(year)}`;
 }
 
 function textOf(value: ParameterValue): string {
@@ -113,13 +113,17 @@ export function resolveNextEvents(icsText: string, now: Date, dayLimit: number):
   // začiatočným dátumom.
   const includedDayKeys = new Set<string>();
   const result: NextCalendarEvent[] = [];
+  // issue 442: rok dneška (Europe/Bratislava) sa počíta RAZ pred slučkou —
+  // `now` je naprieč všetkými udalosťami nemenné, `formatDateLabel` len
+  // porovná rok výskytu proti nemu.
+  const nowYear = getZonedDateParts(now).year;
   for (const candidate of upcoming) {
     const dayKey = zonedDateKey(candidate.start);
     if (!includedDayKeys.has(dayKey)) {
       if (includedDayKeys.size >= dayLimit) continue;
       includedDayKeys.add(dayKey);
     }
-    result.push({ title: candidate.title, dateLabel: formatDateLabel(candidate.start, now), allDay: candidate.allDay });
+    result.push({ title: candidate.title, dateLabel: formatDateLabel(candidate.start, nowYear), allDay: candidate.allDay });
   }
   return result;
 }
