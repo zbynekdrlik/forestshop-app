@@ -17,9 +17,17 @@ export interface NextCalendarEvent {
 
 const WEEKDAY_FORMAT = new Intl.DateTimeFormat("sk-SK", { timeZone: "Europe/Bratislava", weekday: "long" });
 
-function formatDateLabel(instant: Date): string {
-  const { day, month } = getZonedDateParts(instant);
-  return `${WEEKDAY_FORMAT.format(instant)} ${String(day)}. ${String(month)}.`;
+// issue 442: keď výskyt padá do INÉHO kalendárneho roka než dnešok (napr.
+// ročné narodeniny — najbližší výskyt budúci rok), pripoj ROK: "piatok 26. 2.
+// 2027". Bez roka vyzeral februárový dátum v auguste ako minulosť, hoci je to
+// budúcnosť. Udalosti v aktuálnom roku ostávajú bez roka ("streda 12. 8.") —
+// žiadna vizuálna zmena tam, kde nebola vypýtaná. Rok sa berie z TOHO ISTÉHO
+// `getZonedDateParts` (Europe/Bratislava) ako deň/mesiac, takže je stabilný aj
+// pri celodenných VALUE=DATE udalostiach (`.claude/rules/calendar.md`).
+function formatDateLabel(instant: Date, now: Date): string {
+  const { day, month, year } = getZonedDateParts(instant);
+  const base = `${WEEKDAY_FORMAT.format(instant)} ${String(day)}. ${String(month)}.`;
+  return year === getZonedDateParts(now).year ? base : `${base} ${String(year)}`;
 }
 
 function textOf(value: ParameterValue): string {
@@ -111,7 +119,7 @@ export function resolveNextEvents(icsText: string, now: Date, dayLimit: number):
       if (includedDayKeys.size >= dayLimit) continue;
       includedDayKeys.add(dayKey);
     }
-    result.push({ title: candidate.title, dateLabel: formatDateLabel(candidate.start), allDay: candidate.allDay });
+    result.push({ title: candidate.title, dateLabel: formatDateLabel(candidate.start, now), allDay: candidate.allDay });
   }
   return result;
 }
