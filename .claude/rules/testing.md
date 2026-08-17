@@ -9,6 +9,7 @@ paths:
   - "apps/web/tests/e2e/**"
   - "apps/web/playwright.config.ts"
   - "scripts/e2e-setup.ts"
+  - "scripts/e2e-fixtures-*.ts"
 ---
 
 # Tests
@@ -778,3 +779,20 @@ paths:
   testy → potvrď RED, `cp <scratch> <súbor>` (obnov fix) → potvrď GREEN,
   commituj testy a implementáciu ako DVA samostatné commity v tomto
   poradí.
+- **Nový `externalOrderId` v e2e seede musí byť voľný naprieč `scripts/e2e-setup.ts`
+  AJ VŠETKÝMI `scripts/e2e-fixtures-*.ts` — objednávkové id sa seedujú z viacerých
+  súborov, nielen z `e2e-setup.ts`.** Issue 443 (stálo to DVA CI cykly): pridal
+  som druhú nedostupnú objednávku a vybral `9009` (grepnutý ako voľný LEN v
+  `e2e-setup.ts`) — kolidoval s existujúcou objednávkou v `e2e-setup.ts` samotnom;
+  potom `9012` — kolidoval s `scripts/e2e-fixtures-dpd.ts`'s `seedDpdFixtures`.
+  `e2e-setup.ts` volá ~8 `seed*Fixtures(...)` z oddelených súborov, každý seeduje
+  do TEJ ISTEJ DB, takže `order.external_order_id` unique constraint platí naprieč
+  nimi všetkými. Duplicita nezhodí test asertom — zhodí **e2e webServer pri
+  štarte**: `e2e-setup.ts` hodí `duplicate key value violates unique constraint
+  "order_external_order_id_unique"` (exit 1) a Playwright to hlási len ako
+  všeobecné `Error: Process from config.webServer was not able to start. Exit
+  code: 1` → padnú VŠETKY e2e testy, nielen ten dotknutý. **Pred pridaním
+  objednávky grepni VŠETKY seed súbory naraz:** `grep -rhoE 'externalOrderId:
+  "[0-9]+"' scripts/e2e-setup.ts scripts/e2e-fixtures-*.ts | sort -u` a vyber
+  číslo, ktoré tam NIE JE (napr. `9099`). (Grep len `e2e-setup.ts` je presne tá
+  pasca, čo spôsobila oba zbytočné cykly.)
