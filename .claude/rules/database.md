@@ -406,3 +406,25 @@ paths:
   potom `migrate()`/`drizzle-kit migrate` nad zvyšnými čakajúcimi
   migráciami — presne rovnaký vzor ako issue 400/403 vyššie, len s
   DÔRAZOM na existujúci riadok v cieľovej tabuľke, nie na súbežnosť.
+- **LOKÁLNA dev DB, ktorá zaostala o VIAC migrácií naraz, môže spadnúť na
+  `db:migrate`, kým čerstvá (CI-štýl) DB tie isté migrácie zvládne — lebo
+  drizzle obalí VŠETKY čakajúce migrácie do JEDNEJ transakcie (issue 399
+  vyššie), takže `ADD VALUE` + jeho použitie / CHECK proti existujúcim
+  riadkom sa stretnú v tej istej transakcii.** Objavené pri práci na issue
+  439/440 (16. 8. 2026): lokálna DB na porte 5433 mala aplikovaných 52 z 57
+  migrácií, `db:migrate` (5 čakajúcich naraz) tíško spadol (drizzle-kit
+  neukáže chybu, len „applying migrations..." + exit 1). Produkcie sa to
+  NETÝKA — tá aplikuje migrácie inkrementálne pri každom deploy, a CI beží
+  proti PRÁZDNEJ efemérnej DB (CHECK proti 0 riadkom sa nikdy nevyhodnotí).
+  **Fix pre lokálnu DB (bezpečný, je to len dev scratch):** `docker exec
+  forestshop_app-postgres-1 psql -U forestshop -d forestshop -c "DROP SCHEMA
+  public CASCADE; DROP SCHEMA IF EXISTS drizzle CASCADE; CREATE SCHEMA
+  public;"` (MUSÍ padnúť AJ `drizzle` schéma — nesie `__drizzle_migrations`,
+  bez jej zmazania by opakovaný `db:migrate` ticho preskočil všetko ako „už
+  aplikované", pozri záznam vyššie) → potom `db:migrate` odznova; na
+  PRÁZDNEJ DB prejde všetkých 57 v jednej transakcii bez problému (presne ako
+  CI). **Signál pasce:** `to_regclass('public.<tabuľka>')` vráti prázdno pre
+  tabuľku z novšej migrácie, hoci `select count(*) from
+  drizzle.__drizzle_migrations` ukazuje „nejaké" aplikované — porovnaj počet
+  `.sql` súborov (`ls apps/api/drizzle/*.sql | wc -l`) vs. riadkov v
+  `__drizzle_migrations`.

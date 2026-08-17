@@ -187,6 +187,47 @@ describe("resolveNextEvents — opakujúce sa udalosti (RRULE)", () => {
   });
 });
 
+// issue 442: ročne opakovaná udalosť (napr. narodeniny) — v suite dosiaľ
+// žiadny FREQ=YEARLY fixture. Šéf: "26. 2." v auguste vyzeralo ako minulosť,
+// hoci najbližší výskyt je 26. 2. BUDÚCEHO roka. `formatDateLabel` preto pri
+// výskyte v inom kalendárnom roku než dnešok pripojí ROK; tohtoročný výskyt
+// ostáva bez roka (žiadna vizuálna zmena tam, kde nebola vypýtaná).
+describe("resolveNextEvents — ročné (FREQ=YEARLY) + rok v popisku (issue 442)", () => {
+  it("ročná celodenná udalosť (narodeniny) vyberie NAJBLIŽŠÍ BUDÚCI výskyt a popisok nesie ROK, keď je výskyt v budúcom roku", () => {
+    const text = ics([
+      "BEGIN:VEVENT",
+      "UID:narodeniny@test",
+      "DTSTAMP:20240101T000000Z",
+      "SUMMARY:Narodeniny Adriana",
+      "DTSTART;VALUE=DATE:20240226",
+      "DTEND;VALUE=DATE:20240227",
+      "RRULE:FREQ=YEARLY",
+      "END:VEVENT",
+    ]);
+    // NOW = sobota 2026-08-08 → 2026-02-26 UŽ prešlo, najbližší výskyt je
+    // 2027-02-26 (piatok, budúci rok). Rok sa preto v popisku UKÁŽE.
+    const result = next(text);
+    expect(result).toEqual({ title: "Narodeniny Adriana", dateLabel: "piatok 26. 2. 2027", allDay: true });
+  });
+
+  it("ročná udalosť s najbližším výskytom v AKTUÁLNOM roku ostáva BEZ roka", () => {
+    const text = ics([
+      "BEGIN:VEVENT",
+      "UID:rocna-tento-rok@test",
+      "DTSTAMP:20200101T000000Z",
+      "SUMMARY:Výročie",
+      "DTSTART;TZID=Europe/Bratislava:20200910T090000",
+      "DTEND;TZID=Europe/Bratislava:20200910T093000",
+      "RRULE:FREQ=YEARLY",
+      "END:VEVENT",
+    ]);
+    // NOW = 2026-08-08 → najbližší výskyt 2026-09-10 (štvrtok, TENTO rok) →
+    // popisok BEZ roka, presne ako doteraz.
+    const result = next(text);
+    expect(result?.dateLabel).toBe("štvrtok 10. 9.");
+  });
+});
+
 describe("resolveNextEvents — viacero VEVENT typov naraz", () => {
   it("kombinácia jednorazovej + opakujúcej sa udalosti vyberie skutočne najbližšiu z OBOCH", () => {
     const text = ics([

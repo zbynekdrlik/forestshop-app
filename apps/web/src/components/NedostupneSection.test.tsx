@@ -45,6 +45,17 @@ const GROUP = {
 
 const LIST_WITH_GROUP = { groups: [GROUP], bccMissing: false, mailNotConfigured: false };
 
+// issue 443: dve objednávky toho istého produktu po 1 ks → hlavička skupiny
+// ukáže celkový súčet "Σ 2" (presne šéfov scenár).
+const TWO_ORDER_GROUP = {
+  ...GROUP,
+  orders: [
+    { orderCode: "17600001", adminLink: "https://x/1", customerName: "Prvý Zákazník", email: "a@x.sk", quantity: 1, placedAt: "2026-07-20T10:00:00.000Z", nedostupneSent: false, alternativaSent: false },
+    { orderCode: "17600002", adminLink: "https://x/2", customerName: "Druhý Zákazník", email: "b@x.sk", quantity: 1, placedAt: "2026-07-21T10:00:00.000Z", nedostupneSent: false, alternativaSent: false },
+  ],
+};
+const LIST_TWO_ORDERS = { groups: [TWO_ORDER_GROUP], bccMissing: false, mailNotConfigured: false };
+
 afterEach(() => {
   cleanup();
   vi.resetAllMocks();
@@ -351,4 +362,21 @@ it("dialóg je označený ako modálny a nesie svoj vlastný nadpis", async () =
   const dialog = screen.getByRole("dialog");
   expect(dialog.getAttribute("aria-modal")).toBe("true");
   expect(screen.getByRole("heading", { name: "Náhľad e-mailu — povinné pred odoslaním" })).not.toBeNull();
+});
+
+// issue 443: celkový súčet kusov produktu naprieč objednávkami skupiny.
+it("hlavička skupiny s dvoma objednávkami po 1 ks ukáže odznak súčtu 'Σ 2'", async () => {
+  fetchNedostupneList.mockResolvedValue(LIST_TWO_ORDERS);
+  render(<NedostupneSection role="manazer" onSessionExpired={vi.fn()} />);
+
+  const chip = await screen.findByTestId("nedostupne-total-40237/L");
+  expect(chip.textContent).toBe("Σ 2");
+});
+
+it("hlavička skupiny s jedinou objednávkou NEUKÁŽE odznak súčtu", async () => {
+  fetchNedostupneList.mockResolvedValue(LIST_WITH_GROUP);
+  render(<NedostupneSection role="manazer" onSessionExpired={vi.fn()} />);
+
+  await screen.findByTestId("nedostupne-group-40237/L");
+  expect(screen.queryByTestId("nedostupne-total-40237/L")).toBeNull();
 });

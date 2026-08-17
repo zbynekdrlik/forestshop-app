@@ -42,6 +42,11 @@ test("ručné odkazy náhrad, prekliky na e-shop/dodávateľa, povinný náhľad
   await expect(group).toBeVisible();
   await expect(group.getByText("E2E Zákazník Nedostupné")).toBeVisible();
 
+  // issue 443: skupina má dve nedostupné objednávky toho istého variantu
+  // (9008 + 9009, každá 1 ks) — hlavička ukáže celkový súčtový odznak "Σ 2"
+  // (rovnaký vizuál ako `Σ N` na "Na objednanie").
+  await expect(group.getByTestId("nedostupne-total-40287")).toHaveText("Σ 2");
+
   // issue 238: automatický návrh je PREČ — katalógová fixtúra stále nesie
   // `relatedProduct = "60297"` pre tento variant, appka ho už nesmie
   // zobraziť nikde na karte.

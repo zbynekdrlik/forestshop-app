@@ -12,6 +12,7 @@ import {
   type NedostupneList,
   type NedostupnePreview,
 } from "../nedostupneApi.js";
+import { formatNedostupneTotalChip } from "../nedostupneSummary.js";
 import { MailPreviewDialog } from "./MailPreviewDialog.js";
 
 // Rovnaké dve role, ktoré server vyžaduje na odoslanie (`requireRole("admin",
@@ -192,141 +193,153 @@ export function NedostupneSection({ role, onSessionExpired }: { readonly role: M
         <p data-testid="nedostupne-empty">Žiadny tovar momentálne nie je označený ako nedostupný.</p>
       ) : (
         <div className="nedostupne-groups" data-testid="nedostupne-groups">
-          {list.groups.map((group) => (
-            <div className="card" key={group.variantCode} data-testid={`nedostupne-group-${group.variantCode}`}>
-              <div className="nedostupne-group-header">
-                {/* issue 238: preklik na náš e-shop — `null` = adresu vo
-                    feede nemáme, meno ostáva NEAKTÍVNY plain text (nikdy
-                    vyhľadávací fallback, majiteľova výslovná podmienka). */}
-                <span className="nedostupne-group-name">
-                  {group.ourProductUrl !== null ? (
-                    <a href={group.ourProductUrl} target="_blank" rel="noreferrer" data-testid={`nedostupne-shop-link-${group.variantCode}`}>
-                      {itemLabel(group)}
+          {list.groups.map((group) => {
+            // issue 443: celkový počet kusov produktu naprieč objednávkami
+            // skupiny — rovnaký odznak `Σ N` (`.qty-total-chip`) ako na "Na
+            // objednanie", viditeľný len keď je viac než jedna objednávka.
+            const totalChip = formatNedostupneTotalChip(group.orders);
+            return (
+              <div className="card" key={group.variantCode} data-testid={`nedostupne-group-${group.variantCode}`}>
+                <div className="nedostupne-group-header">
+                  {/* issue 238: preklik na náš e-shop — `null` = adresu vo
+                      feede nemáme, meno ostáva NEAKTÍVNY plain text (nikdy
+                      vyhľadávací fallback, majiteľova výslovná podmienka). */}
+                  <span className="nedostupne-group-name">
+                    {group.ourProductUrl !== null ? (
+                      <a href={group.ourProductUrl} target="_blank" rel="noreferrer" data-testid={`nedostupne-shop-link-${group.variantCode}`}>
+                        {itemLabel(group)}
+                      </a>
+                    ) : (
+                      itemLabel(group)
+                    )}
+                  </span>
+                  {/* issue 238: preklik na dodávateľa — rovnaká funkcia ako
+                      "Na objednanie" (`resolveEffectiveSupplierLink`). */}
+                  {group.supplierUrl !== null ? (
+                    <a className="pill off" href={group.supplierUrl} target="_blank" rel="noreferrer" data-testid={`nedostupne-supplier-link-${group.variantCode}`}>
+                      {group.variantCode}
                     </a>
                   ) : (
-                    itemLabel(group)
+                    <span className="pill off">{group.variantCode}</span>
                   )}
-                </span>
-                {/* issue 238: preklik na dodávateľa — rovnaká funkcia ako
-                    "Na objednanie" (`resolveEffectiveSupplierLink`). */}
-                {group.supplierUrl !== null ? (
-                  <a className="pill off" href={group.supplierUrl} target="_blank" rel="noreferrer" data-testid={`nedostupne-supplier-link-${group.variantCode}`}>
-                    {group.variantCode}
-                  </a>
-                ) : (
-                  <span className="pill off">{group.variantCode}</span>
-                )}
-              </div>
-
-              {/* issue 238: majiteľove RUČNE vložené odkazy náhrad — nahrádza
-                  pôvodný automatický "Náhrada:" zoznam z `product.relatedCodes`
-                  (majiteľ ho zamietol ako "súvisiace produkty, nie náhrady").
-                  Zoznam je viditeľný VŠETKÝM (rovnaká úroveň ako čítanie
-                  zvyšku karty); pridanie/zmazanie je gated na `canControl`. */}
-              {group.replacementLinks.length > 0 && (
-                <ul className="nedostupne-replacement-links" data-testid={`nedostupne-replacement-links-${group.variantCode}`}>
-                  {group.replacementLinks.map((link) => (
-                    <li key={link.id} data-testid={`nedostupne-replacement-link-${link.id}`}>
-                      <a href={link.url} target="_blank" rel="noreferrer">
-                        {link.url}
-                      </a>
-                      {canControl && (
-                        <button
-                          type="button"
-                          className="btn sm ghost"
-                          disabled={linkBusy === link.id}
-                          onClick={() => {
-                            removeLink(link.id);
-                          }}
-                          data-testid={`nedostupne-replacement-link-remove-${link.id}`}
-                        >
-                          ✕ zmazať
-                        </button>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              )}
-
-              {canControl && (
-                <div className="nedostupne-replacement-link-add">
-                  <input
-                    type="url"
-                    placeholder="Odkaz na náhradný produkt (https://…)"
-                    value={linkDrafts[group.variantCode] ?? ""}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      setLinkDrafts((drafts) => ({ ...drafts, [group.variantCode]: value }));
-                    }}
-                    aria-label={`Pridať odkaz náhrady pre ${itemLabel(group)}`}
-                    data-testid={`nedostupne-replacement-link-input-${group.variantCode}`}
-                  />
-                  <button
-                    type="button"
-                    className="btn sm ghost"
-                    disabled={linkBusy === group.variantCode || (linkDrafts[group.variantCode] ?? "").trim() === ""}
-                    onClick={() => {
-                      addLink(group.variantCode);
-                    }}
-                    data-testid={`nedostupne-replacement-link-add-${group.variantCode}`}
-                  >
-                    + Pridať odkaz
-                  </button>
+                  {/* issue 443: celkový počet kusov naprieč objednávkami skupiny. */}
+                  {totalChip !== null && (
+                    <span className="qty-total-chip" data-testid={`nedostupne-total-${group.variantCode}`} title={totalChip.title}>
+                      {totalChip.text}
+                    </span>
+                  )}
                 </div>
-              )}
 
-              {group.orders.map((order) => {
-                const rowBusy = busyKey.startsWith(`${order.orderCode}|${group.variantCode}|`);
-                // issue 344: šéf chce riadok, kde už bol odoslaný AKÝKOĽVEK
-                // z dvoch e-mailov, odlíšiť na prvý pohľad — `handled`
-                // riadi celý riadok (background + ľavý pruh, `app.css`),
-                // nikdy len tlačidlo. Existujúci text "✓ Odoslané" na
-                // tlačidle nižšie ostáva nezmenený ako non-color signál.
-                const handled = order.nedostupneSent || order.alternativaSent;
-                return (
-                  <div
-                    className={`nedostupne-order-row${handled ? " nedostupne-order-row--handled" : ""}`}
-                    key={order.orderCode}
-                    data-testid={`nedostupne-order-${order.orderCode}-${group.variantCode}`}
-                    data-handled={handled ? "true" : "false"}
-                  >
-                    <a href={order.adminLink} target="_blank" rel="noreferrer">
-                      {order.orderCode}
-                    </a>
-                    <span>{order.customerName}</span>
-                    <span>{order.email === "" ? "(bez e-mailu)" : order.email}</span>
-                    <span>{order.quantity} ks</span>
-                    {canControl && (
-                      <div className="nedostupne-order-actions">
-                        <button
-                          type="button"
-                          className="btn lg ghost"
-                          disabled={rowBusy || order.nedostupneSent}
-                          onClick={() => {
-                            openPreview(order.orderCode, group.variantCode, "nedostupne");
-                          }}
-                          data-testid={`nedostupne-send-${order.orderCode}-${group.variantCode}`}
-                        >
-                          {order.nedostupneSent ? "✓ Odoslané" : "Nedostupné — náhľad"}
-                        </button>
-                        <button
-                          type="button"
-                          className="btn lg ghost"
-                          disabled={rowBusy || order.alternativaSent}
-                          onClick={() => {
-                            openPreview(order.orderCode, group.variantCode, "alternativa");
-                          }}
-                          data-testid={`nedostupne-alt-send-${order.orderCode}-${group.variantCode}`}
-                        >
-                          {order.alternativaSent ? "✓ Odoslané" : "S náhradou — náhľad"}
-                        </button>
-                      </div>
-                    )}
+                {/* issue 238: majiteľove RUČNE vložené odkazy náhrad — nahrádza
+                    pôvodný automatický "Náhrada:" zoznam z `product.relatedCodes`
+                    (majiteľ ho zamietol ako "súvisiace produkty, nie náhrady").
+                    Zoznam je viditeľný VŠETKÝM (rovnaká úroveň ako čítanie
+                    zvyšku karty); pridanie/zmazanie je gated na `canControl`. */}
+                {group.replacementLinks.length > 0 && (
+                  <ul className="nedostupne-replacement-links" data-testid={`nedostupne-replacement-links-${group.variantCode}`}>
+                    {group.replacementLinks.map((link) => (
+                      <li key={link.id} data-testid={`nedostupne-replacement-link-${link.id}`}>
+                        <a href={link.url} target="_blank" rel="noreferrer">
+                          {link.url}
+                        </a>
+                        {canControl && (
+                          <button
+                            type="button"
+                            className="btn sm ghost"
+                            disabled={linkBusy === link.id}
+                            onClick={() => {
+                              removeLink(link.id);
+                            }}
+                            data-testid={`nedostupne-replacement-link-remove-${link.id}`}
+                          >
+                            ✕ zmazať
+                          </button>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                {canControl && (
+                  <div className="nedostupne-replacement-link-add">
+                    <input
+                      type="url"
+                      placeholder="Odkaz na náhradný produkt (https://…)"
+                      value={linkDrafts[group.variantCode] ?? ""}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setLinkDrafts((drafts) => ({ ...drafts, [group.variantCode]: value }));
+                      }}
+                      aria-label={`Pridať odkaz náhrady pre ${itemLabel(group)}`}
+                      data-testid={`nedostupne-replacement-link-input-${group.variantCode}`}
+                    />
+                    <button
+                      type="button"
+                      className="btn sm ghost"
+                      disabled={linkBusy === group.variantCode || (linkDrafts[group.variantCode] ?? "").trim() === ""}
+                      onClick={() => {
+                        addLink(group.variantCode);
+                      }}
+                      data-testid={`nedostupne-replacement-link-add-${group.variantCode}`}
+                    >
+                      + Pridať odkaz
+                    </button>
                   </div>
-                );
-              })}
-            </div>
-          ))}
+                )}
+
+                {group.orders.map((order) => {
+                  const rowBusy = busyKey.startsWith(`${order.orderCode}|${group.variantCode}|`);
+                  // issue 344: šéf chce riadok, kde už bol odoslaný AKÝKOĽVEK
+                  // z dvoch e-mailov, odlíšiť na prvý pohľad — `handled`
+                  // riadi celý riadok (background + ľavý pruh, `app.css`),
+                  // nikdy len tlačidlo. Existujúci text "✓ Odoslané" na
+                  // tlačidle nižšie ostáva nezmenený ako non-color signál.
+                  const handled = order.nedostupneSent || order.alternativaSent;
+                  return (
+                    <div
+                      className={`nedostupne-order-row${handled ? " nedostupne-order-row--handled" : ""}`}
+                      key={order.orderCode}
+                      data-testid={`nedostupne-order-${order.orderCode}-${group.variantCode}`}
+                      data-handled={handled ? "true" : "false"}
+                    >
+                      <a href={order.adminLink} target="_blank" rel="noreferrer">
+                        {order.orderCode}
+                      </a>
+                      <span>{order.customerName}</span>
+                      <span>{order.email === "" ? "(bez e-mailu)" : order.email}</span>
+                      <span>{order.quantity} ks</span>
+                      {canControl && (
+                        <div className="nedostupne-order-actions">
+                          <button
+                            type="button"
+                            className="btn lg ghost"
+                            disabled={rowBusy || order.nedostupneSent}
+                            onClick={() => {
+                              openPreview(order.orderCode, group.variantCode, "nedostupne");
+                            }}
+                            data-testid={`nedostupne-send-${order.orderCode}-${group.variantCode}`}
+                          >
+                            {order.nedostupneSent ? "✓ Odoslané" : "Nedostupné — náhľad"}
+                          </button>
+                          <button
+                            type="button"
+                            className="btn lg ghost"
+                            disabled={rowBusy || order.alternativaSent}
+                            onClick={() => {
+                              openPreview(order.orderCode, group.variantCode, "alternativa");
+                            }}
+                            data-testid={`nedostupne-alt-send-${order.orderCode}-${group.variantCode}`}
+                          >
+                            {order.alternativaSent ? "✓ Odoslané" : "S náhradou — náhľad"}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })}
         </div>
       )}
 

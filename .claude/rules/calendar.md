@@ -83,3 +83,25 @@ paths:
   tickete v tomto module: rovnaký vzor (funkcia dostane `limit` parameter,
   vráti pole, `.slice(0, limit)` na konci), nie duplicitná druhá funkcia
   vedľa pôvodnej.
+- **Issue 439 (majiteľ chce 3 najbližšie DNI s udalosťami, nie 3 udalosti):
+  `NEXT_EVENTS_LIMIT` → `NEXT_EVENT_DAYS_LIMIT`, parameter `limit` →
+  `dayLimit`. Záverečné `.slice(0, limit)` (prvých N udalostí) sa nahradilo
+  ZOSKUPENÍM po kalendárnom dni:** iteruj `upcoming` (už zoradené podľa
+  začiatku), kľúč dňa = `zonedDateKey(candidate.start)` (Europe/Bratislava —
+  rovnaké pásmo ako `formatDateLabel`/`hasNotEnded`, takže sedí s vypísaným
+  `dateLabel` aj pri celodenných VALUE=DATE), drž `Set<string>` započítaných
+  dní; nový deň pridaj len ak `size < dayLimit`, inak `continue` (NIE `break`
+  — `continue` je robustné aj voči teoretickému preplietaniu dní, ďalšie
+  udalosti UŽ započítaných dní sa stále pridajú). Návratový tvar (ploché
+  `NextCalendarEvent[]`), service/route/schéma aj karta ostali BEZ zmeny —
+  karta už mapuje každú udalosť na riadok `📅 deň — názov`, takže "viac dní =
+  viac riadkov, rovnaký formát" je zadarmo (žiadna zmena vzhľadu, zadanie to
+  výslovne žiadalo). Dni bez udalosti do `Set`u nikdy nevstúpia (iterujeme
+  len cez udalosti) → preskočia sa a NEMINÚ `dayLimit`. Živo overené na
+  produkcii: 18. 8. (3 udalosti) + 19. 8. (1) + 26. 2. budúci rok (celodenná
+  narodeninová, ~6 mes. medzera preskočená). Test, ktorý ROZLIŠUJE
+  day-grouping od starého event-slicingu: jeden deň s VIAC udalosťami než
+  `dayLimit` (dayLimit 1 → všetky udalosti toho dňa) a viac dní s viacerými
+  udalosťami (dayLimit 2 → 4 udalosti) — výsledky, ktoré `.slice(0,limit)`
+  nedokáže vyrobiť; testy len s 1 udalosťou/deň prejdú aj na starom kóde
+  (nedokazujú nič nové).
