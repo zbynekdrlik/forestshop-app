@@ -12,6 +12,7 @@ import {
   type NedostupneList,
   type NedostupnePreview,
 } from "../nedostupneApi.js";
+import { formatNedostupneTotalChip } from "../nedostupneSummary.js";
 import { MailPreviewDialog } from "./MailPreviewDialog.js";
 
 // Rovnaké dve role, ktoré server vyžaduje na odoslanie (`requireRole("admin",
@@ -192,7 +193,12 @@ export function NedostupneSection({ role, onSessionExpired }: { readonly role: M
         <p data-testid="nedostupne-empty">Žiadny tovar momentálne nie je označený ako nedostupný.</p>
       ) : (
         <div className="nedostupne-groups" data-testid="nedostupne-groups">
-          {list.groups.map((group) => (
+          {list.groups.map((group) => {
+            // issue 443: celkový počet kusov produktu naprieč objednávkami
+            // skupiny — rovnaký odznak `Σ N` (`.qty-total-chip`) ako na "Na
+            // objednanie", viditeľný len keď je viac než jedna objednávka.
+            const totalChip = formatNedostupneTotalChip(group.orders);
+            return (
             <div className="card" key={group.variantCode} data-testid={`nedostupne-group-${group.variantCode}`}>
               <div className="nedostupne-group-header">
                 {/* issue 238: preklik na náš e-shop — `null` = adresu vo
@@ -215,6 +221,12 @@ export function NedostupneSection({ role, onSessionExpired }: { readonly role: M
                   </a>
                 ) : (
                   <span className="pill off">{group.variantCode}</span>
+                )}
+                {/* issue 443: celkový počet kusov naprieč objednávkami skupiny. */}
+                {totalChip !== null && (
+                  <span className="qty-total-chip" data-testid={`nedostupne-total-${group.variantCode}`} title={totalChip.title}>
+                    {totalChip.text}
+                  </span>
                 )}
               </div>
 
@@ -326,7 +338,8 @@ export function NedostupneSection({ role, onSessionExpired }: { readonly role: M
                 );
               })}
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
