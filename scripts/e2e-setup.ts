@@ -654,7 +654,7 @@ await db.insert(orderLines).values({ orderId: objednavkaNedostupne.id, variantCo
 // "(bez dodávateľa) (6)"/"Nedostupné 2"). Meno zákazníka NESMIE obsahovať "E2E
 // Zákazník Nedostupné" (Playwright `getByText` je substring — kolízia s aserciou
 // na prvú objednávku).
-const [objednavkaNedostupne2] = await db.insert(orders).values({ externalOrderId: "9012", customerName: "E2E Druhá Objednávka", statusName: DEFAULT_ORDER_OPEN_STATUS, placedAt: new Date("2026-07-28T09:00:00Z"), email: "e2e-nedostupne@forestshop.sk" }).returning();
+const [objednavkaNedostupne2] = await db.insert(orders).values({ externalOrderId: "9099", customerName: "E2E Druhá Objednávka", statusName: DEFAULT_ORDER_OPEN_STATUS, placedAt: new Date("2026-07-28T09:00:00Z"), email: "e2e-nedostupne@forestshop.sk" }).returning();
 if (objednavkaNedostupne2 === undefined) throw new Error("E2E objednávka (nedostupné 2) sa nepodarila vložiť");
 await db.insert(orderLines).values({ orderId: objednavkaNedostupne2.id, variantCode: "40287", quantity: 1, state: "nedostupne" });
 

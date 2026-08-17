@@ -43,7 +43,7 @@ test("manažér filtruje podľa dodávateľa, vidí súhrn ostáva vybaviť a sk
   // issue 176: fixtúra pridala ĎALŠÍ 1 riadok BEZ dodávateľa ("40287" znova,
   // objednávka "9008" v stave 'nedostupne') — "(bez dodávateľa)" mala preto
   // 5, "Všetci" 8, a súhrn dostal novú vetvu "Nedostupné 1".
-  // issue 443: fixtúra pridala DRUHÚ nedostupnú objednávku "9012" (znova "40287"
+  // issue 443: fixtúra pridala DRUHÚ nedostupnú objednávku "9099" (znova "40287"
   // bez dodávateľa) — aby "Nedostupné tovary" mala skupinu s 2 objednávkami pre
   // súčtový odznak — takže "(bez dodávateľa)" má 6, "Všetci" 9 a "Nedostupné 2".
   await expect(page.getByTestId("supplier-chip-all")).toHaveText("Všetci (9)");
@@ -56,7 +56,7 @@ test("manažér filtruje podľa dodávateľa, vidí súhrn ostáva vybaviť a sk
   // (8)" a pod.) ZOSTÁVAJÚ počtom riadkov (`group.lines.length`, nezmenené).
   // Súčet kusov naprieč 9 riadkami: 4859/46 caka_sa=2, 40287(9002)
   // objednane=1, 60055/10(9004)=3, 60055/10(9005)=2, 60035/L=1, 60035/M=1,
-  // 278=1, 40287(9008) nedostupne=1, 40287(9012) nedostupne=1 (issue 443) →
+  // 278=1, 40287(9008) nedostupne=1, 40287(9099) nedostupne=1 (issue 443) →
   // total 13, z toho nevybavené (všetky okrem caka_sa aj nedostupne)
   // 1+3+2+1+1+1 = 9, "Čaká sa" 2 (caka_sa kus), "Nedostupné" 2.
   await expect(summary).toHaveText("Ostáva vybaviť 9 z 13 · Čaká sa 2 · Nedostupné 2");
@@ -80,7 +80,7 @@ test("manažér filtruje podľa dodávateľa, vidí súhrn ostáva vybaviť a sk
   await page.getByTestId("supplier-chip-(bez dodávateľa)").click();
   await expect(page.getByTestId("supplier-(bez dodávateľa)")).toBeVisible();
   await expect(page.getByTestId("supplier-DODAVATEL-TEST-1")).not.toBeVisible();
-  // issue 176/443: dve 'nedostupne' objednávky "9008"+"9012" patria do "(bez
+  // issue 176/443: dve 'nedostupne' objednávky "9008"+"9099" patria do "(bez
   // dodávateľa)" (variant "40287" nemá dodávateľa) — celkový počet stúpne na
   // 6, "Nedostupné 2", "ostáva vybaviť" ostáva 4 (nedostupné riadky sú už
   // vybavené).
