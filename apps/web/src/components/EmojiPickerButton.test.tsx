@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useRef, useState, type JSX } from "react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { EmojiPickerButton, insertEmojiAtSelection } from "./EmojiPickerButton.js";
 
 // issue 440: emoji picker — čistá vkladacia logika + komponent (prepínač +
@@ -116,5 +116,58 @@ describe("EmojiPickerButton — vloženie použije živú DOM hodnotu, nie zaost
     fireEvent.click(screen.getByTestId("emoji"));
     fireEvent.click(screen.getByRole("button", { name: "Vložiť ✅" }));
     expect(received).toEqual(["Skontrolovať sklad ✅"]);
+  });
+});
+
+// issue 455 (hlbšia príčina flaku upozornenia.spec.ts:271): obnova fokusu +
+// caretu po vložení emoji beží v `requestAnimationFrame`. rAF vystrelí AŽ keď
+// kompozítor vyrobí snímku — na zaťaženom (CI) stroji to môže zaostať o stovky
+// ms, kľudne až do chvíle, keď používateľ (alebo Playwright `.fill()` DRUHÉHO
+// poľa, čo je dvojkroková operácia focus→insertText) už fokusuje INÉ pole.
+// Bezpodmienečná obnova fokusu vtedy UKRADNE fokus späť na pôvodné pole a text
+// sa napíše do zlého poľa (v teste: „Skontrolovať sklad" skončí v nadpise,
+// podrobnosti ostanú prázdne → emoji vyjde ako holé „✅"). rAF musí fokus vrátiť
+// len keď je STÁLE „náš" (aktívny prvok je pole samo, náš popover/root, <body>
+// alebo nič).
+describe("EmojiPickerButton — oneskorený rAF neukradne fokus, keď sa medzičasom presunul inam (issue 455)", () => {
+  it("nevráti fokus na svoje pole, keď je medzičasom fokusnuté iné pole", () => {
+    const rafCbs: FrameRequestCallback[] = [];
+    // Zachytíme rAF callbacky, aby sme ich vystrelili RUČNE až po presune fokusu
+    // — deterministicky modeluje „rAF vystrelil neskoro, počas práce s iným poľom".
+    const rafSpy = vi.spyOn(globalThis, "requestAnimationFrame").mockImplementation((cb: FrameRequestCallback): number => {
+      rafCbs.push(cb);
+      return rafCbs.length;
+    });
+    const cancelSpy = vi.spyOn(globalThis, "cancelAnimationFrame").mockImplementation(() => {});
+    try {
+      function TwoFieldHarness(): JSX.Element {
+        const refA = useRef<HTMLInputElement>(null);
+        const [a, setA] = useState("Urgentné ");
+        return (
+          <>
+            <input ref={refA} value={a} onChange={(e) => { setA(e.target.value); }} data-testid="pole-a" />
+            <EmojiPickerButton targetRef={refA} value={a} onChange={setA} testId="emoji-a" />
+            <input defaultValue="" data-testid="pole-b" />
+          </>
+        );
+      }
+      render(<TwoFieldHarness />);
+      const poleA = screen.getByTestId<HTMLInputElement>("pole-a");
+      const poleB = screen.getByTestId<HTMLInputElement>("pole-b");
+      poleA.focus();
+      poleA.setSelectionRange(9, 9); // za "Urgentné "
+      fireEvent.click(screen.getByTestId("emoji-a"));
+      fireEvent.click(screen.getByRole("button", { name: "Vložiť 🔥" })); // insert() naplánuje rAF (zachytený)
+      // Používateľ / `.fill()` iného poľa medzičasom presunie fokus na pole B:
+      poleB.focus();
+      expect(document.activeElement).toBe(poleB);
+      // Až TERAZ vystrelí oneskorený rAF z insertu poľa A:
+      rafCbs.forEach((cb) => { cb(0); });
+      // Fokus NESMIE byť ukradnutý späť na pole A:
+      expect(document.activeElement).toBe(poleB);
+    } finally {
+      rafSpy.mockRestore();
+      cancelSpy.mockRestore();
+    }
   });
 });
