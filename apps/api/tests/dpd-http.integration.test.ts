@@ -245,3 +245,26 @@ it("GET /api/dpd/orders vylúči terminálne stavy (Stornovaná/Vybavená/Vraten
   const externalIds = body.orders.map((o) => o.preview.externalOrderId).sort();
   expect(externalIds).toEqual(["20700010"]);
 });
+
+it("GET /api/dpd/orders/count bez prihlásenia vráti 401", async () => {
+  const { app } = await boot("manazer");
+  const res = await app.request("/api/dpd/orders/count");
+  expect(res.status).toBe(401);
+});
+
+// issue 445: nav badge — počet MUSÍ sedieť s dĺžkou (filtrovaného) zoznamu.
+it("GET /api/dpd/orders/count vráti počet zhodný s filtrovaným zoznamom (bez terminálnych, bez package_number)", async () => {
+  const { app, cookie, db } = await boot("manazer");
+  await db.insert(orders).values({ ...NEW_ORDER, externalOrderId: "20700020", statusName: "Vybavuje sa" });
+  await db.insert(orders).values({ ...NEW_ORDER, externalOrderId: "20700021", statusName: "Vybavuje sa" });
+  await db.insert(orders).values({ ...NEW_ORDER, externalOrderId: "20700022", statusName: "Stornovaná" });
+  await db.insert(orders).values({ ...NEW_ORDER, externalOrderId: "20700023", packageNumber: "EF999SK" });
+
+  const countRes = await app.request("/api/dpd/orders/count", { headers: { cookie } });
+  const countBody = (await countRes.json()) as { count: number };
+  expect(countBody.count).toBe(2);
+
+  const listRes = await app.request("/api/dpd/orders", { headers: { cookie } });
+  const listBody = (await listRes.json()) as { orders: unknown[] };
+  expect(countBody.count).toBe(listBody.orders.length);
+});
