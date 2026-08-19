@@ -34,7 +34,7 @@ import { DEFAULT_TAB_ID, HIDDEN_TABS, NAV, findTab, isVisibleTabId } from "./nav
 // Issue 387 E5 pridalo "Párovanie" — pôvodne hneď za "Párovanie produktov"
 // (#239), ktorú issue 400 (E9) odstránilo (majiteľ ju výslovne schválil).
 // Tento test je najbližšie k tomu, čo strojovo overiť dá (registrácia, nie DOM).
-it("NAV má štyri priečinky (Dôležité/Eshop/Systém/Automatizácie), s 4/9/3/4 záložkami v poradí podľa dôležitosti", () => {
+it("NAV má štyri priečinky (Dôležité/Eshop/Systém/Automatizácie), s 4/10/3/4 záložkami v poradí podľa dôležitosti", () => {
   expect(NAV).toHaveLength(4);
   expect(NAV.map((f) => f.label)).toEqual(["Dôležité", "Eshop", "Systém", "Automatizácie"]);
   // issue 437: "Poznámky" pribudlo do priečinka „Dôležité" (2 → 3 záložky).
