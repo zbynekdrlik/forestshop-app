@@ -48,6 +48,24 @@ describe("runOrderDpdPickup (proti fixture, nikdy proti reálnemu DPD)", () => {
   );
 
   it(
+    "zavrie prekrývajúci info banner (Štěpánov krok 2) pred vyplnením — inak by klik na formulár zlyhal",
+    async () => {
+      fixture = await startDpdFixture({ user: USER, password: PASSWORD, showInfoBanner: true });
+      const outcome = await runOrderDpdPickup({
+        config: dpdPortalConfigFromBaseUrl(fixture.baseUrl, USER, PASSWORD),
+        pickupDate: "2026-08-10",
+      });
+
+      // Úspech je dôkaz, že banner bol zatvorený: kým prekrýva formulár,
+      // `Pokračovať`/`Uložiť` klik zachytí banner a robot zlyhá (ok:false).
+      expect(outcome.ok).toBe(true);
+      expect(outcome.errorDetail).toBeNull();
+      expect(fixture.lastPickupDate()).toBe("10. 8. 2026");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
     "vráti ok:false s chybovou správou z portálu, keď zvoz odmietne — nikdy tiché ok:true",
     async () => {
       fixture = await startDpdFixture({ user: USER, password: PASSWORD, pickupSaveFails: true });

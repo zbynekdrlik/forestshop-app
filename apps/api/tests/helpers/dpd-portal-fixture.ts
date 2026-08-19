@@ -25,6 +25,11 @@ export interface DpdFixtureOptions {
   readonly stuckDisabled?: boolean;
   /** Krok 2 objednávky zvozu po Uložení ukáže chybu namiesto úspechu. */
   readonly pickupSaveFails?: boolean;
+  /** issue 451 (Štěpánov krok 2): formulár zvozu prekryje celoobrazovkový
+   * info banner („Aktuálne obmedzenia…") so zatváracím ✕ — kým sa nezavrie,
+   * zachytáva kliky na polia/tlačidlá formulára (na overenie, že robot
+   * banner najprv zatvorí, inak by `Pokračovať`/`Uložiť` klik zlyhal). */
+  readonly showInfoBanner?: boolean;
   /** Po uložení zásielky NEUKÁŽE toast — núti appku ísť záložnou cestou
    * (zoznam Zásielky filtrovaný podľa referencie), na overenie, že táto
    * cesta naozaj nájde SKUTOČNÉ číslo zásielky, nie appka's vlastnú
@@ -150,8 +155,26 @@ function shipmentsListPage(reference: string | null): string {
   return `<!doctype html><html><body><table>${row}</table></body></html>`;
 }
 
-function pickupFormPage(): string {
+function pickupFormPage(showInfoBanner: boolean): string {
+  // issue 451: celoobrazovkový prekrývací info banner s ✕ — vysoký z-index
+  // (zachytáva pointer eventy nad formulárom), zatvárateľný `aria-label
+  // "Zavrieť"`/text ✕. Kým sa nezavrie, `Pokračovať`/`Uložiť` klik zachytí
+  // tento banner a zlyhá — presne ten stav, ktorý `dismissInfoBanners`
+  // (Štěpánov krok 2) rieši.
+  const infoBanner = showInfoBanner
+    ? `<div id="dpd-info-banner" style="position:fixed;top:0;left:0;right:0;bottom:0;z-index:2147483647;background:rgba(0,0,0,0.4)">
+        <div class="alert-info" style="padding:1rem">Aktuálne obmedzenia v doručovaní.
+          <button type="button" id="info-banner-close" class="banner-close" aria-label="Zavrieť">✕</button>
+        </div>
+      </div>
+      <script>
+        document.getElementById('info-banner-close').addEventListener('click', function () {
+          var b = document.getElementById('dpd-info-banner'); if (b) b.remove();
+        });
+      </script>`
+    : "";
   return `<!doctype html><html><body>
+    ${infoBanner}
     <div id="pickup-date"><input wj-part="input" id="pickup-date-input" /></div>
     <div id="step1"><button type="button" id="button-confirmation">Pokračovať</button></div>
     <div id="step2" style="display:none"><button type="button" id="save-btn2">Uložiť</button></div>
@@ -203,7 +226,9 @@ export async function startDpdFixture(options: DpdFixtureOptions): Promise<DpdFi
     return c.json({ ok: true });
   });
 
-  app.get("/pickup-orders/0", (c) => (getCookie(c, COOKIE_NAME) === "ok" ? c.html(pickupFormPage()) : c.html(loginPage())));
+  app.get("/pickup-orders/0", (c) =>
+    getCookie(c, COOKIE_NAME) === "ok" ? c.html(pickupFormPage(options.showInfoBanner ?? false)) : c.html(loginPage()),
+  );
 
   app.post("/test/pickup-submit", async (c) => {
     const body = await c.req.json<{ readonly date: string }>();
