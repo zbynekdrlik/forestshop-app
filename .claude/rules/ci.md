@@ -63,3 +63,16 @@ paths:
   bežný malý commit na `dev` (napr. plánovaný playbook/log zápis) — jeho push
   na `main` spustí normálny beh nad CELÝM aktuálnym stromom, teda aj nad
   obsahom, ktorý "zaskočil" bez CI.
+- **Každý `dev→main` PR spustí DVA CI behy nad tým istým head SHA —
+  `event=push` (push do `dev`) + `event=pull_request` (otvorenie PR) — a
+  `ci.yml` nemá `concurrency:` skupinu, takže bežia SÚČASNE.** Keď sa ich
+  `e2e`/`integration` joby na runneri prekryjú, sútažia o zdieľané zdroje
+  (Postgres/porty) a jeden beh `e2e` zamrzne na neurčito (pozorované ~20 min vs
+  normál ~2 min), kým DRUHÝ beh toho istého commitu `e2e` dobehne za ~1 min.
+  **Diagnostika:** ak identický SHA prešiel `e2e`/daný job v druhom behu, kód
+  je preukázateľne v poriadku — je to contention, nie zlyhanie testu; NEPREDLŽUJ
+  timeout (`no-timeout-band-aids` — nie je pomalý, je zaseknutý na zdrojoch).
+  **Postup pri integrácii:** zruš zamrznutý beh (`gh run cancel <id>`, počkaj na
+  `completed cancelled`), potom spusti znova IBA zaseknutý job
+  (`gh run rerun <id> --job <jobid>`) — s voľným runnerom prejde normálne.
+  Trvalá oprava (concurrency skupina / izolácia zdrojov per-beh) je v issue 458.
