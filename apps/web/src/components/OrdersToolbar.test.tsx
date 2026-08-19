@@ -194,3 +194,34 @@ it("prepínač 'skryť vybavené' zobrazí správny text podľa stavu a klik zav
   );
   expect(screen.getByTestId("orders-hide-resolved-toggle").textContent).toBe("🙈 Vybavené skryté");
 });
+
+// issue 452: čipy dodávateľov idú abecedne (case-insensitive, slovenské
+// locale), "Všetci" vždy prvý, "(bez dodávateľa)" naposledy.
+it("čipy dodávateľov sú zoradené abecedne, 'Všetci' prvý a '(bez dodávateľa)' naposledy", () => {
+  const neusporiadané: readonly SupplierOpenOrders[] = [
+    { supplier: "WETLAND", email: null, lines: [makeLine({ lineId: "w1" })] },
+    { supplier: "(bez dodávateľa)", email: null, lines: [makeLine({ lineId: "n1" })] },
+    { supplier: "betalov", email: null, lines: [makeLine({ lineId: "b1" })] },
+    { supplier: "Forest", email: null, lines: [makeLine({ lineId: "f1" })] },
+  ];
+  render(
+    <OrdersToolbar
+      suppliers={neusporiadané}
+      selectedSupplier={null}
+      onSelectSupplier={() => {}}
+      hideResolved={false}
+      onToggleHideResolved={() => {}}
+    />,
+  );
+
+  const čipy = Array.from(screen.getByTestId("orders-toolbar").querySelectorAll(".chip"));
+  // Každá skupina má presne 1 riadok, Všetci = 4 — poradie čipov je tak
+  // deterministické aj s počtami.
+  expect(čipy.map((c) => c.textContent)).toEqual([
+    "Všetci (4)",
+    "betalov (1)",
+    "Forest (1)",
+    "WETLAND (1)",
+    "(bez dodávateľa) (1)",
+  ]);
+});
