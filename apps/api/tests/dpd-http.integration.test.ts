@@ -226,3 +226,22 @@ it("nemanažér/citanie nemôže odoslať zásielku (403)", async () => {
   });
   expect(res.status).toBe(403);
 });
+
+// issue 445: stavový filter — kvalifikujú len OTVORENÉ objednávky (znovupoužitý
+// `order_open_status` mechanizmus, default "Vybavuje sa"). Terminálne stavy
+// ("Stornovaná"/"Vybavená"/"Vratený tovar"/...) sa NIKDY neponúkajú, aj keď
+// nemajú `package_number` ani odoslanú `dpd_shipment` — presne šéfova výhrada
+// (priveľa objednávok s DPD možnosťou). Regression: PRED fixom (žiadny stavový
+// filter) by tento test padol, lebo aj terminálne objednávky sa ponúkli.
+it("GET /api/dpd/orders vylúči terminálne stavy (Stornovaná/Vybavená/Vratený tovar), aj bez package_number a dpd_shipment", async () => {
+  const { app, cookie, db } = await boot("manazer");
+  await db.insert(orders).values({ ...NEW_ORDER, externalOrderId: "20700010", statusName: "Vybavuje sa" });
+  await db.insert(orders).values({ ...NEW_ORDER, externalOrderId: "20700011", statusName: "Stornovaná" });
+  await db.insert(orders).values({ ...NEW_ORDER, externalOrderId: "20700012", statusName: "Vybavená" });
+  await db.insert(orders).values({ ...NEW_ORDER, externalOrderId: "20700013", statusName: "Vratený tovar" });
+
+  const res = await app.request("/api/dpd/orders", { headers: { cookie } });
+  const body = (await res.json()) as { orders: { preview: { externalOrderId: string } }[] };
+  const externalIds = body.orders.map((o) => o.preview.externalOrderId).sort();
+  expect(externalIds).toEqual(["20700010"]);
+});
