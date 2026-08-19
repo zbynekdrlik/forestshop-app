@@ -47,12 +47,19 @@ test("napísať zápis, pripnúť produkt (priama aj náhradná adresa), prepnú
   await page.getByTestId("floor-note-product-search-input").fill("E2E Predajňa Bunda Rogaland");
   await page.getByTestId("floor-note-product-search-submit").click();
   await expect(page.getByTestId("floor-note-product-pin-E2E-PREDAJNA-1")).toBeVisible();
+  // issue 453: zadať počet kusov 2 PRED pripnutím.
+  await page.getByTestId("floor-note-product-search-qty-E2E-PREDAJNA-1").fill("2");
   await page.getByTestId("floor-note-product-pin-E2E-PREDAJNA-1").click();
 
   const priamyOdkaz = page.getByTestId(`floor-note-product-link-${noteId}-E2E-PREDAJNA-1`);
   await expect(priamyOdkaz).toBeVisible();
   await expect(priamyOdkaz).toHaveAttribute("href", "https://www.forestshop.sk/e2e-predajna-bunda-rogaland/");
   await expect(priamyOdkaz).not.toHaveClass(/fallback/);
+
+  // issue 453: chip zobrazí zadaný počet "2 ks".
+  const pocet1 = page.getByTestId(`floor-note-product-qty-input-${noteId}-E2E-PREDAJNA-1`);
+  await expect(pocet1).toHaveValue("2");
+  await expect(page.getByTestId(`floor-note-product-${noteId}-E2E-PREDAJNA-1`)).toContainText("ks");
 
   // Pripnúť DRUHÝ produkt — BEZ priamej adresy (vizuálne odlíšený náhradný
   // odkaz, design komentár na ticket-e: nikdy plain-vyzerajúci odkaz).
@@ -62,8 +69,20 @@ test("napísať zápis, pripnúť produkt (priama aj náhradná adresa), prepnú
   const nahradnyOdkaz = page.getByTestId(`floor-note-product-link-${noteId}-E2E-PREDAJNA-2`);
   await expect(nahradnyOdkaz).toHaveClass(/floor-note-product-link-fallback/);
   await expect(page.locator(`[data-testid="floor-note-row-${noteId}"]`)).toContainText("hľadať na eshope");
+  // issue 453: druhý produkt bez zásahu do počtu → default 1.
+  await expect(page.getByTestId(`floor-note-product-qty-input-${noteId}-E2E-PREDAJNA-2`)).toHaveValue("1");
 
   await page.getByTestId(`floor-note-attach-toggle-${noteId}`).click(); // zavrieť hľadanie
+
+  // issue 453: upraviť počet produktu 1 z 2 na 3 (Enter commit), potom RELOAD
+  // dokáže, že sa hodnota naozaj uložila do DB (nie len lokálny draft).
+  await pocet1.fill("3");
+  await pocet1.press("Enter");
+  await expect(pocet1).toHaveValue("3");
+  await page.reload();
+  await expect(page.getByTestId("floor-notes-list")).toBeVisible();
+  await expect(page.getByTestId(`floor-note-product-qty-input-${noteId}-E2E-PREDAJNA-1`)).toHaveValue("3");
+  await expect(page.getByTestId(`floor-note-product-qty-input-${noteId}-E2E-PREDAJNA-2`)).toHaveValue("1");
 
   // Tri nezávislé značky.
   await page.getByTestId(`floor-note-marker-resolved-${noteId}`).click();

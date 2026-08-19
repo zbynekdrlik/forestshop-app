@@ -1,0 +1,2 @@
+ALTER TABLE "floor_note_product" ADD COLUMN "quantity" integer DEFAULT 1 NOT NULL;--> statement-breakpoint
+ALTER TABLE "floor_note_product" ADD CONSTRAINT "floor_note_product_quantity_ck" CHECK ("floor_note_product"."quantity" >= 1);

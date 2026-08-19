@@ -2,14 +2,15 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, expect, it, vi } from "vitest";
 import { FloorNotesSection } from "./FloorNotesSection.js";
 
-const { fetchFloorNotes, attachFloorNoteProduct, detachFloorNoteProduct } = vi.hoisted(() => ({
+const { fetchFloorNotes, attachFloorNoteProduct, detachFloorNoteProduct, updateFloorNoteProductQuantity } = vi.hoisted(() => ({
   fetchFloorNotes: vi.fn(),
   attachFloorNoteProduct: vi.fn(),
   detachFloorNoteProduct: vi.fn(),
+  updateFloorNoteProductQuantity: vi.fn(),
 }));
 vi.mock("../floorNotesApi.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../floorNotesApi.js")>();
-  return { ...actual, fetchFloorNotes, attachFloorNoteProduct, detachFloorNoteProduct };
+  return { ...actual, fetchFloorNotes, attachFloorNoteProduct, detachFloorNoteProduct, updateFloorNoteProductQuantity };
 });
 
 // issue 410: pripínanie produktu ZNOVUPOUŽÍVA `globalSearch` z
@@ -32,8 +33,8 @@ const ROW_BEZ_PRODUKTOV = {
   products: [],
 };
 
-const PRODUKT_S_ODKAZOM = { variantCode: "40237/L", productName: "Bunda Rogaland", sizeLabel: "L", shopUrl: "https://www.forestshop.sk/bunda/" };
-const PRODUKT_BEZ_ODKAZU = { variantCode: "60035/M", productName: "Čiapka Polar", sizeLabel: null, shopUrl: null };
+const PRODUKT_S_ODKAZOM = { variantCode: "40237/L", productName: "Bunda Rogaland", sizeLabel: "L", quantity: 2, shopUrl: "https://www.forestshop.sk/bunda/" };
+const PRODUKT_BEZ_ODKAZU = { variantCode: "60035/M", productName: "Čiapka Polar", sizeLabel: null, quantity: 1, shopUrl: null };
 
 const SEARCH_HIT = {
   productKey: "P1",
@@ -69,7 +70,7 @@ it("vyhľadá produkt (rovnaká cesta ako Vyhľadať) a pripne ho na zápis", as
   fireEvent.click(screen.getByTestId("floor-note-product-pin-40237/L"));
 
   await waitFor(() => {
-    expect(attachFloorNoteProduct).toHaveBeenCalledWith("note-a", "40237/L");
+    expect(attachFloorNoteProduct).toHaveBeenCalledWith("note-a", "40237/L", 1);
   });
   await screen.findByTestId("floor-note-product-link-note-a-40237/L");
 });
@@ -127,4 +128,52 @@ it("produkt, ktorý je UŽ pripnutý na zápis, má tlačidlo 'Pripnuté' (disab
   const pinButton = await screen.findByTestId<HTMLButtonElement>("floor-note-product-pin-40237/L");
   expect(pinButton.disabled).toBe(true);
   expect(pinButton.textContent).toBe("Pripnuté");
+});
+
+it("issue 453: pripne produkt so zadaným počtom kusov 2", async () => {
+  fetchFloorNotes
+    .mockResolvedValueOnce([ROW_BEZ_PRODUKTOV])
+    .mockResolvedValueOnce([{ ...ROW_BEZ_PRODUKTOV, products: [PRODUKT_S_ODKAZOM] }]);
+  globalSearch.mockResolvedValueOnce({ products: [SEARCH_HIT], orders: [] });
+  attachFloorNoteProduct.mockResolvedValueOnce(undefined);
+
+  render(<FloorNotesSection role="manazer" onSessionExpired={vi.fn()} />);
+  await screen.findByTestId("floor-note-row-note-a");
+
+  fireEvent.click(screen.getByTestId("floor-note-attach-toggle-note-a"));
+  fireEvent.change(screen.getByTestId<HTMLInputElement>("floor-note-product-search-input"), { target: { value: "bunda" } });
+  fireEvent.click(screen.getByTestId("floor-note-product-search-submit"));
+
+  await screen.findByTestId("floor-note-product-pin-40237/L");
+  fireEvent.change(screen.getByTestId<HTMLInputElement>("floor-note-product-search-qty-40237/L"), { target: { value: "2" } });
+  fireEvent.click(screen.getByTestId("floor-note-product-pin-40237/L"));
+
+  await waitFor(() => {
+    expect(attachFloorNoteProduct).toHaveBeenCalledWith("note-a", "40237/L", 2);
+  });
+});
+
+// issue 453: úprava počtu kusov už pripnutého produktu — commit na blur
+// (nikdy change+keyDown-Enter, `.claude/rules/frontend-design.md` issue 89).
+it("upraví počet kusov pripnutého produktu a zobrazí serverovú hodnotu", async () => {
+  fetchFloorNotes
+    .mockResolvedValueOnce([{ ...ROW_BEZ_PRODUKTOV, products: [PRODUKT_S_ODKAZOM] }])
+    .mockResolvedValueOnce([{ ...ROW_BEZ_PRODUKTOV, products: [{ ...PRODUKT_S_ODKAZOM, quantity: 3 }] }]);
+  updateFloorNoteProductQuantity.mockResolvedValueOnce(true);
+
+  render(<FloorNotesSection role="manazer" onSessionExpired={vi.fn()} />);
+  const input = await screen.findByTestId<HTMLInputElement>("floor-note-product-qty-input-note-a-40237/L");
+  expect(input.value).toBe("2");
+
+  fireEvent.change(input, { target: { value: "3" } });
+  fireEvent.blur(input);
+
+  await waitFor(() => {
+    expect(updateFloorNoteProductQuantity).toHaveBeenCalledWith("note-a", "40237/L", 3);
+  });
+  // Hodnota po refetch-i musí prísť zo SERVERA (re-query fresh, nikdy starý
+  // handle — `.claude/rules/frontend-design.md` issue 151).
+  await waitFor(() => {
+    expect(screen.getByTestId<HTMLInputElement>("floor-note-product-qty-input-note-a-40237/L").value).toBe("3");
+  });
 });

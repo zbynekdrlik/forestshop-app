@@ -7,6 +7,7 @@ paths:
   - "apps/web/src/autoResizeTextarea.ts"
   - "apps/web/src/components/FloorNotesSection.tsx"
   - "apps/web/src/components/FloorNoteRow.tsx"
+  - "apps/web/src/components/FloorNoteProductChip.tsx"
   - "apps/web/src/components/FloorNoteProductSearch.tsx"
 ---
 

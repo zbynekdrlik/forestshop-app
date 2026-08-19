@@ -3,7 +3,7 @@ import { autoResizeTextarea } from "../autoResizeTextarea.js";
 import { formatSkDateTime } from "../formatDate.js";
 import type { ProductSearchHit } from "../searchApi.js";
 import type { FloorNoteRow as FloorNoteRowData } from "../floorNotesApi.js";
-import { ourProductLink } from "../shopLinks.js";
+import { FloorNoteProductChip } from "./FloorNoteProductChip.js";
 import { FloorNoteProductSearch } from "./FloorNoteProductSearch.js";
 
 // issue 410: jeden zápis "Eshop → Objednávky predajňa" — voľný text (rastúca
@@ -22,6 +22,7 @@ export function FloorNoteRow({
   onDelete,
   onAttachProduct,
   onDetachProduct,
+  onUpdateQuantity,
   onSessionExpired,
 }: {
   readonly row: FloorNoteRowData;
@@ -35,8 +36,10 @@ export function FloorNoteRow({
   readonly onSaveText: (text: string) => void;
   readonly onToggleMarker: (marker: "resolved" | "ordered" | "called", value: boolean) => void;
   readonly onDelete: () => void;
-  readonly onAttachProduct: (hit: ProductSearchHit) => void;
+  readonly onAttachProduct: (hit: ProductSearchHit, quantity: number) => void;
   readonly onDetachProduct: (variantCode: string) => void;
+  // issue 453: úprava počtu kusov už pripnutého produktu.
+  readonly onUpdateQuantity: (variantCode: string, quantity: number) => void;
   readonly onSessionExpired: () => void;
 }): JSX.Element {
   const [editingText, setEditingText] = useState(false);
@@ -172,41 +175,21 @@ export function FloorNoteRow({
 
       {row.products.length > 0 && (
         <div className="floor-note-products" data-testid={`floor-note-products-${row.id}`}>
-          {row.products.map((p) => {
-            const isFallback = p.shopUrl === null;
-            const href = ourProductLink(p.variantCode, p.shopUrl);
-            const label = p.sizeLabel !== null ? `${p.productName} (${p.sizeLabel})` : p.productName;
-            return (
-              <span className="floor-note-product-chip" key={p.variantCode} data-testid={`floor-note-product-${row.id}-${p.variantCode}`}>
-                <a
-                  href={href}
-                  target="_blank"
-                  rel="noreferrer noopener"
-                  className={isFallback ? "floor-note-product-link floor-note-product-link-fallback" : "floor-note-product-link"}
-                  title={isFallback ? "Priama adresa produktu nie je známa — otvorí vyhľadávanie na eshope" : undefined}
-                  data-testid={`floor-note-product-link-${row.id}-${p.variantCode}`}
-                >
-                  {label}
-                </a>
-                {isFallback && <span className="floor-note-product-fallback-note">🔎 hľadať na eshope</span>}
-                {canEdit && (
-                  <button
-                    type="button"
-                    className="floor-note-icon-btn"
-                    disabled={busy}
-                    onClick={() => {
-                      onDetachProduct(p.variantCode);
-                    }}
-                    title="Odopnúť"
-                    aria-label={`Odopnúť produkt ${p.productName} zo zápisu ${row.id}`}
-                    data-testid={`floor-note-product-detach-${row.id}-${p.variantCode}`}
-                  >
-                    ✖
-                  </button>
-                )}
-              </span>
-            );
-          })}
+          {row.products.map((p) => (
+            <FloorNoteProductChip
+              key={p.variantCode}
+              product={p}
+              noteId={row.id}
+              busy={busy}
+              canEdit={canEdit}
+              onDetach={() => {
+                onDetachProduct(p.variantCode);
+              }}
+              onUpdateQuantity={(quantity) => {
+                onUpdateQuantity(p.variantCode, quantity);
+              }}
+            />
+          ))}
         </div>
       )}
 
@@ -228,8 +211,8 @@ export function FloorNoteRow({
             <FloorNoteProductSearch
               alreadyAttached={attached}
               attaching={busy}
-              onAttach={(hit) => {
-                onAttachProduct(hit);
+              onAttach={(hit, quantity) => {
+                onAttachProduct(hit, quantity);
               }}
               onSessionExpired={onSessionExpired}
             />

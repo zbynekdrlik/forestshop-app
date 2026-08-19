@@ -11,6 +11,7 @@ import {
   setFloorNoteCalled,
   setFloorNoteOrdered,
   setFloorNoteResolved,
+  updateFloorNoteProductQuantity,
   updateFloorNoteText,
   type FloorNoteRow as FloorNoteRowData,
 } from "../floorNotesApi.js";
@@ -141,15 +142,34 @@ export function FloorNotesSection({ role, onSessionExpired }: { readonly role: M
   );
 
   const attachProduct = useCallback(
-    (id: string, hit: ProductSearchHit) => {
+    (id: string, hit: ProductSearchHit, quantity: number) => {
       setBusyId(id);
       setError("");
-      attachFloorNoteProduct(id, hit.variantCode)
+      attachFloorNoteProduct(id, hit.variantCode, quantity)
         .then(() => {
           load();
         })
         .catch((err: unknown) => {
           handleActionError(err, "Produkt sa nepodarilo pripnúť — skúste to znova.");
+        })
+        .finally(() => {
+          setBusyId("");
+        });
+    },
+    [load, handleActionError],
+  );
+
+  // issue 453: dodatočná úprava počtu kusov už pripnutého produktu.
+  const updateProductQuantity = useCallback(
+    (id: string, variantCode: string, quantity: number) => {
+      setBusyId(id);
+      setError("");
+      updateFloorNoteProductQuantity(id, variantCode, quantity)
+        .then(() => {
+          load();
+        })
+        .catch((err: unknown) => {
+          handleActionError(err, "Počet kusov sa nepodarilo upraviť — skúste to znova.");
         })
         .finally(() => {
           setBusyId("");
@@ -242,11 +262,14 @@ export function FloorNotesSection({ role, onSessionExpired }: { readonly role: M
                 onDelete={() => {
                   removeNote(row.id);
                 }}
-                onAttachProduct={(hit) => {
-                  attachProduct(row.id, hit);
+                onAttachProduct={(hit, quantity) => {
+                  attachProduct(row.id, hit, quantity);
                 }}
                 onDetachProduct={(variantCode) => {
                   detachProduct(row.id, variantCode);
+                }}
+                onUpdateQuantity={(variantCode, quantity) => {
+                  updateProductQuantity(row.id, variantCode, quantity);
                 }}
                 onSessionExpired={onSessionExpired}
               />
