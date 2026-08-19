@@ -18,6 +18,7 @@ import { PairingSection } from "./components/PairingSection.js";
 import { PostaUncollectedSection } from "./components/PostaUncollectedSection.js";
 import { RestockSection } from "./components/RestockSection.js";
 import { ReturnedOrdersSection } from "./components/ReturnedOrdersSection.js";
+import { RiesitSection } from "./components/RiesitSection.js";
 import { SchedulerSection } from "./components/SchedulerSection.js";
 import { SearchSection } from "./components/SearchSection.js";
 import { SupplierStockSection } from "./components/SupplierStockSection.js";
@@ -133,6 +134,11 @@ export const NAV: readonly NavFolder[] = [
       // obrazovky, najprirodzenejšie susedné.
       { id: "floor-orders", label: "Objednávky predajňa", icon: "🏬", Component: FloorNotesSection, wide: true },
       { id: "nedostupne", label: "Nedostupné tovary", icon: "🚫", Component: NedostupneSection, wide: true },
+      // issue 450: šéfov kolega Štěpán (Discord, 19.8.2026) — nová položka
+      // „Riešiť" HNEĎ POD „Nedostupné tovary". Funkcia sa upresní neskôr,
+      // zatiaľ placeholder obrazovka (`RiesitSection.tsx`). Bez `wide` — nie
+      // je to hustá pracovná tabuľka, čítacia šírka stačí.
+      { id: "riesit", label: "Riešiť", icon: "🤔", Component: RiesitSection },
       // issue 290: šéfovo zadanie (Discord, 6.8.2026) — tri nové položky
       // "hneď pod Nedostupné tovary". READ-ONLY pohľady nad `order.status_
       // name` (Výmena/Vrátený tovar) + appkina vlastná reklamácia-značka
