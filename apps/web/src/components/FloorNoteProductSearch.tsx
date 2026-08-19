@@ -1,10 +1,18 @@
 import { useCallback, useRef, useState, type JSX } from "react";
 import { globalSearch, SearchUnauthorizedError, type ProductSearchHit } from "../searchApi.js";
 
-// issue 410: pripínanie produktu na zápis "Objednávky predajňa" — vyhľadáva
+// issue 410: pripínanie produktu na zápis "Objednávky predajne" — vyhľadáva
 // PRESNE tou istou logikou/cestou ako "Eshop → Vyhľadať" (`SearchSection.tsx`
 // volá TÚ ISTÚ `globalSearch()`, len tu sa použije jej `.products` polovica —
 // `.claude/rules/search.md`). Žiadna nová backendová vyhľadávacia trasa.
+// issue 453: pri každom výsledku je malý vstup na POČET KUSOV (default 1),
+// odošle sa spolu s pripnutím (`onAttach(hit, quantity)`).
+const MAX_QUANTITY = 1_000_000;
+function clampQuantity(raw: string): number {
+  const n = Math.floor(Number(raw));
+  return Number.isFinite(n) ? Math.min(MAX_QUANTITY, Math.max(1, n)) : 1;
+}
+
 export function FloorNoteProductSearch({
   alreadyAttached,
   attaching,
@@ -13,13 +21,16 @@ export function FloorNoteProductSearch({
 }: {
   readonly alreadyAttached: ReadonlySet<string>;
   readonly attaching: boolean;
-  readonly onAttach: (hit: ProductSearchHit) => void;
+  readonly onAttach: (hit: ProductSearchHit, quantity: number) => void;
   readonly onSessionExpired: () => void;
 }): JSX.Element {
   const [query, setQuery] = useState("");
   const [result, setResult] = useState<readonly ProductSearchHit[]>([]);
   const [searched, setSearched] = useState(false);
   const [error, setError] = useState("");
+  // Počet kusov na pripnutie, per variantCode — držaný ako reťazec (vstup ho
+  // môže mať dočasne prázdny), pri pripnutí sa `clampQuantity`-uje na ≥ 1.
+  const [quantities, setQuantities] = useState<Record<string, string>>({});
 
   // Len najnovšia požiadavka smie zapísať výsledok — rovnaký vzor ako
   // `SearchSection.tsx`'s `searchSeq`.
@@ -80,23 +91,41 @@ export function FloorNoteProductSearch({
         <ul className="floor-note-product-search-results" data-testid="floor-note-product-search-results">
           {result.map((hit) => {
             const pinned = alreadyAttached.has(hit.variantCode);
+            const qty = quantities[hit.variantCode] ?? "1";
             return (
               <li key={hit.variantCode} className="floor-note-product-search-hit">
                 <span>
                   {hit.variantCode} — {hit.productName}
                   {hit.sizeLabel !== null && ` (${hit.sizeLabel})`}
                 </span>
-                <button
-                  type="button"
-                  className="btn sm ghost"
-                  disabled={pinned || attaching}
-                  onClick={() => {
-                    onAttach(hit);
-                  }}
-                  data-testid={`floor-note-product-pin-${hit.variantCode}`}
-                >
-                  {pinned ? "Pripnuté" : "📌 Pripnúť"}
-                </button>
+                <span className="floor-note-product-search-actions">
+                  <input
+                    type="number"
+                    min={1}
+                    max={MAX_QUANTITY}
+                    className="floor-note-product-qty-input"
+                    aria-label={`Počet kusov — ${hit.productName}`}
+                    value={qty}
+                    disabled={pinned || attaching}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setQuantities((prev) => ({ ...prev, [hit.variantCode]: v }));
+                    }}
+                    data-testid={`floor-note-product-search-qty-${hit.variantCode}`}
+                  />
+                  <span className="floor-note-product-qty-unit">ks</span>
+                  <button
+                    type="button"
+                    className="btn sm ghost"
+                    disabled={pinned || attaching}
+                    onClick={() => {
+                      onAttach(hit, clampQuantity(qty));
+                    }}
+                    data-testid={`floor-note-product-pin-${hit.variantCode}`}
+                  >
+                    {pinned ? "Pripnuté" : "📌 Pripnúť"}
+                  </button>
+                </span>
               </li>
             );
           })}

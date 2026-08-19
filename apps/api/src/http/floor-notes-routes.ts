@@ -10,6 +10,7 @@ import {
   setFloorNoteCalled,
   setFloorNoteOrdered,
   setFloorNoteResolved,
+  updateFloorNoteProductQuantity,
   updateFloorNoteText,
 } from "../modules/floor-notes/service.js";
 import { listFloorNotes } from "../modules/floor-notes/queries.js";
@@ -26,7 +27,11 @@ import { requireSameOrigin } from "./origin-check.js";
 const createBody = z.object({ text: z.string().trim().min(1).max(4000) });
 const updateTextBody = createBody;
 const markerBody = z.object({ value: z.boolean() });
-const attachBody = z.object({ variantCode: z.string().trim().min(1).max(100) });
+// issue 453: počet kusov — celé číslo ≥ 1, default 1 (spätná kompatibilita:
+// starší frontend pole neposiela). `.max` bráni pretečeniu PG `integer`.
+const quantitySchema = z.number().int().min(1).max(1_000_000);
+const attachBody = z.object({ variantCode: z.string().trim().min(1).max(100), quantity: quantitySchema.default(1) });
+const quantityBody = z.object({ quantity: quantitySchema });
 const idParam = z.object({ id: z.string().uuid() });
 const productParam = z.object({ id: z.string().uuid(), variantCode: z.string() });
 
@@ -112,13 +117,28 @@ export function registerFloorNotesRoutes(app: Hono<AppBindings>, db: Database): 
     zValidator("json", attachBody),
     async (c) => {
       const { id } = c.req.valid("param");
-      const { variantCode } = c.req.valid("json");
-      const result = await attachFloorNoteProduct(db, { floorNoteId: id, variantCode, now: new Date() });
+      const { variantCode, quantity } = c.req.valid("json");
+      const result = await attachFloorNoteProduct(db, { floorNoteId: id, variantCode, quantity, now: new Date() });
       if (!result.ok) {
         const message = result.error === "note_not_found" ? "Zápis sa nenašiel" : "Produkt sa nenašiel";
         return c.json({ error: message }, 404);
       }
       return c.json({ ok: true as const });
+    },
+  );
+
+  app.patch(
+    "/api/floor-notes/:id/products/:variantCode/quantity",
+    requireSameOrigin(),
+    requireUser(db),
+    requireRole("admin", "manazer"),
+    zValidator("param", productParam),
+    zValidator("json", quantityBody),
+    async (c) => {
+      const { id, variantCode } = c.req.valid("param");
+      const { quantity } = c.req.valid("json");
+      const updated = await updateFloorNoteProductQuantity(db, { floorNoteId: id, variantCode, quantity });
+      return c.json({ ok: true as const, updated });
     },
   );
 

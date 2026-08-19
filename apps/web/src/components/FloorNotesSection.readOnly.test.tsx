@@ -16,7 +16,7 @@ const ROW = {
   called: false,
   createdAt: "2026-08-11T08:00:00.000Z",
   updatedAt: "2026-08-11T08:00:00.000Z",
-  products: [{ variantCode: "40237/L", productName: "Bunda Rogaland", sizeLabel: "L", shopUrl: "https://www.forestshop.sk/bunda/" }],
+  products: [{ variantCode: "40237/L", productName: "Bunda Rogaland", sizeLabel: "L", quantity: 3, shopUrl: "https://www.forestshop.sk/bunda/" }],
 };
 
 afterEach(() => {
@@ -48,4 +48,9 @@ it("rola 'citanie' vidí zoznam a pripnuté produkty, ale žiadny zapisovací ov
   expect(screen.queryByTestId("floor-note-delete-note-a")).toBeNull();
   expect(screen.queryByTestId("floor-note-product-detach-note-a-40237/L")).toBeNull();
   expect(screen.queryByTestId("floor-note-attach-toggle-note-a")).toBeNull();
+
+  // issue 453: počet kusov nesie informáciu → "citanie" ho VIDÍ ako statický
+  // "3 ks", ale NEMÁ vstup na úpravu (rovnaký vzor ako značky vyššie).
+  expect(screen.getByTestId("floor-note-product-qty-note-a-40237/L").textContent).toContain("3 ks");
+  expect(screen.queryByTestId("floor-note-product-qty-input-note-a-40237/L")).toBeNull();
 });

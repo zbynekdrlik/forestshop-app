@@ -90,6 +90,9 @@ export async function deleteFloorNote(db: Database, input: DeleteFloorNoteInput)
 export interface AttachFloorNoteProductInput {
   readonly floorNoteId: string;
   readonly variantCode: string;
+  // issue 453: počet kusov (celé číslo ≥ 1). Validáciu robí trasa (zod
+  // `int().min(1)`, default 1), tu sa len zapíše.
+  readonly quantity: number;
   readonly now: Date;
 }
 
@@ -111,9 +114,31 @@ export async function attachFloorNoteProduct(db: Database, input: AttachFloorNot
 
   await db
     .insert(floorNoteProducts)
-    .values({ floorNoteId: input.floorNoteId, variantCode: input.variantCode, createdAt: input.now })
+    .values({ floorNoteId: input.floorNoteId, variantCode: input.variantCode, quantity: input.quantity, createdAt: input.now })
+    // Opätovné pripnutie TOHO ISTÉHO produktu ostáva idempotentné
+    // (`.claude/rules/floor-notes.md`) — počet sa mení VÝHRADNE cez
+    // `updateFloorNoteProductQuantity` (samostatná PATCH trasa), nie
+    // opätovným pinom.
     .onConflictDoNothing();
   return { ok: true };
+}
+
+export interface UpdateFloorNoteProductQuantityInput {
+  readonly floorNoteId: string;
+  readonly variantCode: string;
+  readonly quantity: number;
+}
+
+// issue 453: dodatočná úprava počtu kusov už pripnutého produktu. Nemení
+// `floor_note.updated_at` — konzistentné s attach/detach, ktoré ho tiež
+// nebumpujú (množstvo je atribút junction riadku, nie textu zápisu).
+export async function updateFloorNoteProductQuantity(db: Database, input: UpdateFloorNoteProductQuantityInput): Promise<boolean> {
+  const result = await db
+    .update(floorNoteProducts)
+    .set({ quantity: input.quantity })
+    .where(and(eq(floorNoteProducts.floorNoteId, input.floorNoteId), eq(floorNoteProducts.variantCode, input.variantCode)))
+    .returning({ id: floorNoteProducts.id });
+  return result.length > 0;
 }
 
 export interface DetachFloorNoteProductInput {
