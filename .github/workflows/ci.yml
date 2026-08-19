@@ -68,7 +68,29 @@ jobs:
       # issue 122: shoptet-writeback's integration tests drive a REAL
       # Chromium (via `playwright`) against a local fixture server (never the
       # real Shoptet) — same install step apps/web's e2e job already uses.
-      - run: pnpm --filter @forestshop/api exec playwright install --with-deps chromium
+      # issue 460: cacheujeme stiahnutý Chromium (~/.cache/ms-playwright), aby
+      # ho `playwright install` nesťahoval pri KAŽDOM behu — hlavná príčina
+      # ~19-min zamrznutia bol výpadok playwright CDN pri sťahovaní prehliadača
+      # (beh 32279109468). Kľúč = OS + presná verzia Playwrightu (chromium build
+      # je viazaný na verziu), takže cache sa invaliduje AŽ pri bumpe Playwrightu.
+      # Na cache-HIT beží len `install-deps` (apt systémové závislosti), na MISS
+      # plná `--with-deps` inštalácia. Job ostáva bezpodmienečný (issue 351) —
+      # `if:` je len na kroku (výber install príkazu), nie na jobe/checku.
+      - name: Zistiť verziu Playwright
+        id: pw
+        run: echo "version=$(pnpm --filter @forestshop/api exec node -p "require('playwright/package.json').version")" >> "$GITHUB_OUTPUT"
+      - name: Cache Playwright prehliadačov
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ steps.pw.outputs.version }}
+      - name: Nainštalovať Playwright (prehliadač + systémové závislosti)
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: pnpm --filter @forestshop/api exec playwright install --with-deps chromium
+      - name: Nainštalovať len systémové závislosti Playwrightu (cache hit)
+        if: steps.pw-cache.outputs.cache-hit == 'true'
+        run: pnpm --filter @forestshop/api exec playwright install-deps chromium
       - run: pnpm --filter @forestshop/api test:integration
 
   e2e:
@@ -93,7 +115,24 @@ jobs:
         with: { node-version: 24, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @forestshop/api db:migrate
-      - run: pnpm --filter @forestshop/web exec playwright install --with-deps chromium
+      # issue 460: rovnaký Playwright browser cache ako v `integration` jobe.
+      # `@forestshop/web` používa `@playwright/test` (rovnaká verzia 1.62.0 ako
+      # `playwright` v api → rovnaký cache kľúč a zdieľaný ~/.cache/ms-playwright).
+      - name: Zistiť verziu Playwright
+        id: pw
+        run: echo "version=$(pnpm --filter @forestshop/web exec node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+      - name: Cache Playwright prehliadačov
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ steps.pw.outputs.version }}
+      - name: Nainštalovať Playwright (prehliadač + systémové závislosti)
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: pnpm --filter @forestshop/web exec playwright install --with-deps chromium
+      - name: Nainštalovať len systémové závislosti Playwrightu (cache hit)
+        if: steps.pw-cache.outputs.cache-hit == 'true'
+        run: pnpm --filter @forestshop/web exec playwright install-deps chromium
       - run: pnpm --filter @forestshop/web e2e
 
   docker-build:

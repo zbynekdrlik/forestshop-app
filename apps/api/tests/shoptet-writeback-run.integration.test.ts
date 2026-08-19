@@ -7,7 +7,7 @@ import { withCleanDb } from "./helpers/db.js";
 import { insertTestVariantForProduct } from "./helpers/orders.js";
 import { startShoptetFixture, type ShoptetFixture } from "./helpers/shoptet-fixture.js";
 
-const TEST_TIMEOUT_MS = 60_000;
+const TEST_TIMEOUT_MS = 120_000; // issue 460: realny Chromium (~16 s baseline) proti fixture + premenlivy CI runner — rezerva ~8x, nie band-aid (merane zo surodencov, nie odhad)
 
 describe("runShoptetWriteback (end-to-end proti fixture)", () => {
   let db: Database;
