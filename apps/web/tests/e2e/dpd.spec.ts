@@ -37,9 +37,14 @@ test("zoznam objednávok, neúplná adresa je zablokovaná, appka je fail-closed
   await expect(page.getByTestId("nav-tab-poznamky")).toBeVisible();
   await page.getByTestId("nav-tab-dpd").click();
   await expect(page.getByRole("heading", { name: "Objednať DPD" })).toBeVisible();
-  // issue 445: odznak počtu objednávok na objednanie (9012 + 9013, obe
-  // „Vybavuje sa" → obe kvalifikujú, aj tá bez adresy).
-  await expect(page.getByTestId("nav-badge-dpd")).toHaveText("2");
+  // issue 445: odznak počtu objednávok na objednanie. Zdieľaná e2e DB seeduje
+  // veľa OTVORENÝCH objednávok bez `package_number` (nielen DPD fixtúry
+  // 9012/9013), takže presné číslo je krehké a mení sa s `e2e-setup.ts` —
+  // over len, že odznak SVIETI a nesie kladné celé číslo (živý count z
+  // `/api/dpd/orders/count`). Presnú stavovú sémantiku (len otvorené) pokrýva
+  // `dpd-http.integration.test.ts` s riadenými dátami.
+  await expect(page.getByTestId("nav-badge-dpd")).toBeVisible();
+  await expect(page.getByTestId("nav-badge-dpd")).toHaveText(/^[1-9]\d*$/);
 
   await expect(page.getByTestId("dpd-not-configured")).toBeVisible();
 
