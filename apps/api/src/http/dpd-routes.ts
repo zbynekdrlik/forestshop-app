@@ -7,7 +7,7 @@ import { record } from "../modules/audit/service.js";
 import type { DpdPortalConfig } from "../modules/dpd/config.js";
 import type { OrderDpdPickupOutcome, RunOrderDpdPickupOptions } from "../modules/dpd/pickup-playwright.js";
 import { runOrderDpdPickupIsolated } from "../modules/dpd/pickup-playwright.js";
-import { getDpdShipmentPreviews, listDpdShippableOrders } from "../modules/dpd/queries.js";
+import { countDpdShippableOrders, getDpdShipmentPreviews, listDpdShippableOrders } from "../modules/dpd/queries.js";
 import { recordDpdPickupRequest, recordDpdShipmentFailure, recordDpdShipmentSuccess } from "../modules/dpd/record.js";
 import type { CreateDpdShipmentOutcome, RunCreateDpdShipmentOptions } from "../modules/dpd/shipment-playwright.js";
 import { runCreateDpdShipmentIsolated } from "../modules/dpd/shipment-playwright.js";
@@ -49,6 +49,15 @@ export function registerDpdRoutes(app: Hono<AppBindings>, db: Database, deps: Dp
   app.get("/api/dpd/orders", requireUser(db), async (c) => {
     const orders = await listDpdShippableOrders(db);
     return c.json({ configured: deps.config !== undefined, orders });
+  });
+
+  // issue 445: lacný počet pre nav badge — literal-path súrodenec MUSÍ byť
+  // pred akoukoľvek budúcou `/api/dpd/orders/:id` trasou rovnakej metódy
+  // (`.claude/rules/http-routes.md`), dnes žiadna taká nie je, poradie sa
+  // drží ako zvyk.
+  app.get("/api/dpd/orders/count", requireUser(db), async (c) => {
+    const count = await countDpdShippableOrders(db);
+    return c.json({ count });
   });
 
   app.post("/api/dpd/preview", requireSameOrigin(), requireUser(db), zValidator("json", orderIdsBody), async (c) => {

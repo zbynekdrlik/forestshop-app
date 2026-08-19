@@ -103,7 +103,10 @@ test("ľavé menu má štyri priečinky (Dôležité/Eshop/Systém/Automatizáci
   await expect(page.getByRole("button", { name: "Vyhľadať" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Zlúčenie objednávok" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Upozornenia" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Preprava DPD" })).toBeVisible();
+  // issue 445: „Preprava DPD" presunutá do „Dôležité" pod „Poznámky",
+  // premenovaná na „Objednať DPD"; nesie odznak počtu, takže accessible name
+  // by mal jeho suffix — `data-testid` (vzor `nav-tab-pairing-review`).
+  await expect(page.getByTestId("nav-tab-dpd")).toBeVisible();
   await expect(page.getByRole("button", { name: "Úlohy na dnes" })).toBeVisible();
   // issue 437: nová záložka "Poznámky" v priečinku "Dôležité".
   await expect(page.getByRole("button", { name: "Poznámky" })).toBeVisible();

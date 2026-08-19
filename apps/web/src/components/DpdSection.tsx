@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState, type JSX } from "react";
+import { useCallback, useContext, useEffect, useMemo, useState, type JSX } from "react";
 import type { Me } from "../api.js";
+import { DpdBadgeRefreshContext } from "../dpdBadgeContext.js";
 import {
   DpdUnauthorizedError,
   fetchDpdPreview,
@@ -11,6 +12,27 @@ import {
   type DpdShippableOrder,
 } from "../dpdApi.js";
 import { formatSkDateTime } from "../formatDate.js";
+
+// issue 445: slovenské množné číslo pre feedback text pri hornom tlačidle
+// ("Objednané: N zásielok"/"N úspešných, M chýb") — šéf ho číta na telefóne,
+// takže "1 zásielok" by znelo zle.
+function pluralZasielka(n: number): string {
+  if (n === 1) return `${String(n)} zásielka`;
+  if (n >= 2 && n <= 4) return `${String(n)} zásielky`;
+  return `${String(n)} zásielok`;
+}
+
+function pluralChyba(n: number): string {
+  if (n === 1) return `${String(n)} chyba`;
+  if (n >= 2 && n <= 4) return `${String(n)} chyby`;
+  return `${String(n)} chýb`;
+}
+
+function pluralUspesna(n: number): string {
+  if (n === 1) return `${String(n)} úspešná`;
+  if (n >= 2 && n <= 4) return `${String(n)} úspešné`;
+  return `${String(n)} úspešných`;
+}
 
 // issue 292: "Eshop → Preprava DPD" — 1) zoznam objednávok bez appka-vlastnej
 // odoslanej zásielky, 2) klik na "Objednať prepravu DPD" ukáže PRESNÝ náhľad
@@ -53,6 +75,21 @@ export function DpdSection({ role, onSessionExpired }: { readonly role: Me["role
   const [pickupDate, setPickupDate] = useState(todayIso());
   const [pickupBusy, setPickupBusy] = useState(false);
   const [pickupMessage, setPickupMessage] = useState("");
+
+  // issue 445: po úspešnom odoslaní bumpne nav odznak "Objednať DPD" v
+  // App.tsx, aby počet HNEĎ klesol (zoznam sa zmenšil) — rovnaký vzor ako
+  // `UpozorneniaSection`'s `UpozorneniaBadgeRefreshContext`.
+  const { refresh: refreshDpdBadge } = useContext(DpdBadgeRefreshContext);
+
+  // issue 445: viditeľný súhrn pri HORNOM tlačidle (bez skrolovania) — "N
+  // zásielok" pri úplnom úspechu, "N úspešných, M chýb" pri čiastočnom.
+  const sendNotice = useMemo(() => {
+    if (sendResults === null) return "";
+    const ok = sendResults.filter((r) => r.ok).length;
+    const fail = sendResults.length - ok;
+    if (fail === 0) return `Objednané: ${pluralZasielka(ok)}`;
+    return `${pluralUspesna(ok)}, ${pluralChyba(fail)}`;
+  }, [sendResults]);
 
   const load = useCallback(() => {
     fetchDpdShippableOrders()
@@ -141,6 +178,9 @@ export function DpdSection({ role, onSessionExpired }: { readonly role: Me["role
         setPreviewItems(null);
         setSelected(new Set());
         load();
+        // issue 445: zoznam sa práve zmenšil o odoslané objednávky — daj
+        // App.tsx vedieť, aby nav odznak "Objednať DPD" hneď klesol.
+        refreshDpdBadge();
       })
       .catch((err: unknown) => {
         if (err instanceof DpdUnauthorizedError) {
@@ -203,6 +243,31 @@ export function DpdSection({ role, onSessionExpired }: { readonly role: Me["role
         </button>
         {pickupMessage !== "" && <span data-testid="dpd-pickup-message"> {pickupMessage}</span>}
       </div>
+
+      {/* issue 445: tlačidlo „Objednať prepravu DPD" + viditeľný feedback sú
+          HORE (nad tabuľkou, k tlačidlu zvozu) — šéf ich predtým na konci
+          dlhej tabuľky nenašiel. Feedback ostane viditeľný, aj keď sa zoznam
+          po odoslaní vyprázdni (guard `sendNotice`, nie `orders.length`). */}
+      {canSend && (orders.length > 0 || sendNotice !== "") && (
+        <div data-testid="dpd-send-actions">
+          {sendNotice !== "" && (
+            <p role="status" data-testid="dpd-send-notice">
+              {sendNotice}
+            </p>
+          )}
+          {orders.length > 0 && (
+            <button
+              type="button"
+              className="btn good"
+              disabled={!configured || selected.size === 0 || previewBusy}
+              onClick={openPreview}
+              data-testid="dpd-open-preview"
+            >
+              📦 Objednať prepravu DPD ({selected.size})
+            </button>
+          )}
+        </div>
+      )}
 
       {loaded && orders.length === 0 && <p data-testid="dpd-empty">Žiadna objednávka nečaká na odoslanie.</p>}
 
@@ -272,17 +337,14 @@ export function DpdSection({ role, onSessionExpired }: { readonly role: Me["role
               </tbody>
             </table>
           </div>
-
-          {canSend && (
-            <button type="button" className="btn good" disabled={!configured || selected.size === 0 || previewBusy} onClick={openPreview} data-testid="dpd-open-preview">
-              📦 Objednať prepravu DPD ({selected.size})
-            </button>
-          )}
         </>
       )}
 
+      {/* issue 445: detailný per-objednávkový výsledok ostáva (súhrn hore je
+          `role=status`); tu je len prístupné meno zoznamu, aby čítačka
+          obrazovky vedela, čo zoznam predstavuje. */}
       {sendResults !== null && (
-        <ul data-testid="dpd-send-results">
+        <ul aria-label="Výsledky odoslania — jednotlivé objednávky" data-testid="dpd-send-results">
           {sendResults.map((r) => (
             <li key={r.orderId} data-testid={`dpd-result-${r.orderId}`}>
               {r.ok ? `Odoslané, číslo zásielky ${r.parcelNumber ?? ""}` : `Zlyhalo: ${r.error ?? ""}`}

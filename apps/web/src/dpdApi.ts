@@ -57,6 +57,18 @@ export async function fetchDpdShippableOrders(): Promise<z.infer<typeof ordersSc
   return ordersSchema.parse(await readJson(response, "Zoznam objednávok na odoslanie sa nepodarilo načítať"));
 }
 
+// issue 445: počet objednávok na objednanie DPD — nav badge (rovnaký vzor
+// ako `upozorneniaApi.ts`'s `fetchUpozorneniaCount`: pri 401/chybe vráti 0,
+// odznak zostane na poslednej známej hodnote namiesto pádu).
+const countSchema = z.object({ count: z.number() });
+
+export async function fetchDpdShippableCount(): Promise<number> {
+  const response = await fetch("/api/dpd/orders/count");
+  if (response.status === 401) return 0;
+  if (!response.ok) return 0;
+  return countSchema.parse(await response.json()).count;
+}
+
 const previewsSchema = z.object({ previews: z.array(previewSchema) });
 
 export async function fetchDpdPreview(orderIds: readonly string[], weightOverrides: Readonly<Record<string, string>>): Promise<readonly DpdShipmentPreview[]> {

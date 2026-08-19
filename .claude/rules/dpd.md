@@ -170,17 +170,25 @@ paths:
   sama NIKDY nehádaje reálnu hmotnosť konkrétneho balíka, len ponúka
   rozumný štartovací bod.
 - **"Pripravené na odoslanie" (appka's vlastný zoznam,
-  `modules/dpd/queries.ts`'s `listDpdShippableOrders`) je ZÁMERNE nezávislé
-  od Shoptet `status_name`** — appka nemá spoľahlivý zoznam stavov "zabalené,
-  čaká na kuriéra" (na rozdiel od "Na objednanie"'s `order_open_status`,
-  ktorý rieši INÝ problém — dodávateľské objednávanie). Kritérium je
-  namiesto toho appka-vlastné: `order.package_number IS NULL` (Shoptet
-  nezaznamenal inú prepravu) A žiadny `dpd_shipment` riadok so `status =
-  'submitted'`. Obsluha si sama vyberie, ktoré reálne zabalené objednávky
-  odošle — ĎALŠIA funkcia, čo by potrebovala podobný "ešte neriešené"
-  filter, nech zváži rovnaký princíp (appka-vlastný stavový záznam) skôr
-  než sa spolieha na Shoptet `status_name`, ktorý na to nemá spoľahlivý
-  slovník.
+  `modules/dpd/queries.ts`'s `listDpdShippableOrders`) filtruje podľa
+  `order.package_number IS NULL` (Shoptet nezaznamenal inú prepravu) A
+  žiadny `dpd_shipment` riadok so `status = 'submitted'` A objednávka je v
+  OTVORENOM stave.** Pôvodne (issue 292) bol zoznam ZÁMERNE nezávislý od
+  `status_name` — ale šéf (issue 445, 19.8.2026) videl priveľa objednávok s
+  možnosťou objednať DPD, lebo bez stavového filtra kvalifikovali aj
+  stornované/vybavené objednávky bez čísla balíka. Stavový filter preto
+  ZNOVUPOUŽÍVA ten istý admin-konfigurovateľný `order_open_status`
+  mechanizmus ako "Na objednanie" (`listOpenStatusNames`, default
+  „Vybavuje sa") — `inArray(orders.statusName, [...openStatuses])`, rovnaký
+  idiom ako 5 ostatných modulov. Z konštrukcie tak nikdy neponúkne
+  terminálne stavy („Stornovaná"/„Vybavená"/„Vratený tovar"/„Vybavená
+  výmena"/„Vybavený Dobropis"), ktoré v open sete nie sú. **Nový hardcoded
+  zoznam terminálnych stavov PRIAMO v DPD module bol ZAMIETNUTÝ** (krehký —
+  nový terminálny stav v Shoptete by ticho prešiel; duplikuje znalosť, čo
+  už žije v `order_open_status`). Obsluha si spomedzi OTVORENÝCH sama vyberie
+  reálne zabalené objednávky. `countDpdShippableOrders` (nav badge „Objednať
+  DPD", issue 445) používa TÚ ISTÚ zdieľanú `shippableWhere` podmienku, aby
+  číslo v menu vždy sedelo s dĺžkou zoznamu.
 - **`dpd_shipment` je JEDEN riadok NA OBJEDNÁVKU (`orderId` unique,
   upsert)** — opakovaný pokus (retry po zlyhaní) PREPÍŠE ten istý riadok,
   appka teda vidí len POSLEDNÝ pokus, nikdy históriu pokusov (MVP, netreba

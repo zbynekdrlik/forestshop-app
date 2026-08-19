@@ -173,3 +173,55 @@ it("Objednať zvoz na deň zavolá requestDpdPickup s vybraným dátumom a zobra
   });
   expect(screen.getByTestId("dpd-pickup-message").textContent).toContain("Zvoz objednaný.");
 });
+
+// issue 445: viditeľný feedback (role=status) pri hornom tlačidle po odoslaní.
+it("po úspešnom odoslaní ukáže role=status súhrn 'Objednané: N zásielok' pri hornom tlačidle", async () => {
+  fetchDpdShippableOrders.mockResolvedValueOnce({ configured: true, orders: [ORDER_A] });
+  fetchDpdShippableOrders.mockResolvedValueOnce({ configured: true, orders: [] });
+  fetchDpdPreview.mockResolvedValue([ORDER_A.preview]);
+  sendDpdShipments.mockResolvedValue([{ orderId: "order-a", ok: true, parcelNumber: "06565000000042" }]);
+
+  render(<DpdSection role="manazer" onSessionExpired={() => {}} />);
+
+  fireEvent.click(await screen.findByLabelText("Vybrať objednávku 20700001"));
+  fireEvent.click(screen.getByTestId("dpd-open-preview"));
+  await screen.findByTestId("dpd-preview-dialog");
+  fireEvent.click(screen.getByTestId("dpd-preview-confirm"));
+
+  const notice = await screen.findByTestId("dpd-send-notice");
+  expect(notice.getAttribute("role")).toBe("status");
+  expect(notice.textContent).toBe("Objednané: 1 zásielka");
+});
+
+it("pri čiastočnom úspechu ukáže súhrn 'N úspešných, M chýb'", async () => {
+  const orderC = { ...ORDER_A, preview: { ...ORDER_A.preview, orderId: "order-c", externalOrderId: "20700003" } };
+  fetchDpdShippableOrders.mockResolvedValueOnce({ configured: true, orders: [ORDER_A, orderC] });
+  fetchDpdShippableOrders.mockResolvedValueOnce({ configured: true, orders: [orderC] });
+  fetchDpdPreview.mockResolvedValue([ORDER_A.preview, orderC.preview]);
+  sendDpdShipments.mockResolvedValue([
+    { orderId: "order-a", ok: true, parcelNumber: "06565000000042" },
+    { orderId: "order-c", ok: false, error: "portál nedostupný" },
+  ]);
+
+  render(<DpdSection role="manazer" onSessionExpired={() => {}} />);
+
+  fireEvent.click(await screen.findByLabelText("Vybrať objednávku 20700001"));
+  fireEvent.click(screen.getByLabelText("Vybrať objednávku 20700003"));
+  fireEvent.click(screen.getByTestId("dpd-open-preview"));
+  await screen.findByTestId("dpd-preview-dialog");
+  fireEvent.click(screen.getByTestId("dpd-preview-confirm"));
+
+  const notice = await screen.findByTestId("dpd-send-notice");
+  expect(notice.textContent).toBe("1 úspešná, 1 chyba");
+});
+
+it("tlačidlo 'Objednať prepravu DPD' je v DOM PRED tabuľkou (hore, nie na konci)", async () => {
+  fetchDpdShippableOrders.mockResolvedValue({ configured: true, orders: [ORDER_A] });
+
+  render(<DpdSection role="manazer" onSessionExpired={() => {}} />);
+
+  await screen.findByTestId("dpd-open-preview");
+  const section = screen.getByTestId("dpd-section");
+  const nodes = [...section.querySelectorAll("[data-testid='dpd-open-preview'], table")];
+  expect(nodes[0]?.getAttribute("data-testid")).toBe("dpd-open-preview");
+});

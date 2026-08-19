@@ -99,6 +99,15 @@ export const NAV: readonly NavFolder[] = [
       // `start_url` (`index.html`/`manifest.webmanifest`) mieri na
       // `/?tab=poznamky`, aby sa appka z plochy telefónu otvorila rovno sem.
       { id: "poznamky", label: "Poznámky", icon: "🗒️", Component: NotesSection },
+      // issue 445: šéfovo zadanie (Discord, 19.8.2026) — „Preprava DPD"
+      // (pôvodne issue 292, na konci priečinka „Eshop") presunutá SEM, do
+      // „Dôležité" POD „Poznámky", a premenovaná na „Objednať DPD" (denne
+      // používaný nástroj — objednanie DPD prepráv, patrí k Upozorneniam/
+      // Úlohám/Poznámkam). `id` `dpd` a URL `?tab=dpd` OSTÁVAJÚ nezmenené
+      // (žiadne rozbité odkazy — `isVisibleTabId`/`findTab` idú z REGISTRA,
+      // nie z priečinka). `wide: true` ostáva — je to hustá 8-stĺpcová
+      // pracovná tabuľka.
+      { id: "dpd", label: "Objednať DPD", icon: "🚚", Component: DpdSection, wide: true },
     ],
   },
   {
@@ -151,12 +160,9 @@ export const NAV: readonly NavFolder[] = [
       // z rovnakého dôvodu ako "Párovanie"/"Vyhľadať" vyššie
       // (obsluha na nej pracuje, žiadny plán/zapnuté-vypnuté koncept).
       { id: "order-merge", label: "Zlúčenie objednávok", icon: "🔀", Component: OrderMergeSection, wide: true },
-      // issue 292: majiteľ (Discord, 6.8.2026) — jedno tlačidlo na objednanie
-      // prepravy DPD. Patrí sem (nie do Automatizácie) z rovnakého dôvodu ako
-      // "Na objednanie"/"Zlúčenie objednávok" — obsluha na nej pracuje ručne
-      // (vyberá objednávky, potvrdzuje náhľad), žiadny plán/zapnuté-vypnuté
-      // koncept.
-      { id: "dpd", label: "Preprava DPD", icon: "🚚", Component: DpdSection, wide: true },
+      // issue 445: „Preprava DPD" (issue 292) presunutá z konca tohto
+      // priečinka do „Dôležité" pod „Poznámky" a premenovaná na „Objednať
+      // DPD" — pozri hore v priečinku „dolezite".
     ],
   },
   {

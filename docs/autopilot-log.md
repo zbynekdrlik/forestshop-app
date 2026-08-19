@@ -4229,3 +4229,20 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
 - Review: fresh-context general-purpose subagent → 0 🔴 0 🟡 1 🔵 (role=menu→group, opravené v `436c728`).
 - Lokálna dev DB trap (5433) zaostala o 5 migrácií → `db:migrate` (5 naraz v 1 tx, issue-399 trieda) tíško padol; fix = reset schémy public+drizzle + re-migrate na prázdnej DB (ako CI). Zapísané do `database.md`.
 - Playbook: `.claude/rules/calendar.md` (day-grouping vzor), `frontend-design.md` (EmojiPickerButton vzor + popover-prekryje-Uložiť), `database.md` (lokálna DB s viac čakajúcimi migráciami).
+
+## issues 442 + 443 — kalendár rok pri budúcoročnej udalosti + Nedostupné súčet Σ N (batch, 1 PR)
+- PR #444 → main merge `3ffee66` ; nasadené v0.3.0-dev.263 na forestshop.newlevel.media (verzia z DOM `v0.3.0-dev.263` overená, konzola 0 chýb/0 varovaní).
+- **442:** `formatDateLabel(instant, nowYear)` (`modules/calendar/next-event.ts`) pripojí ROK, keď sa kalendárny rok výskytu (Europe/Bratislava, `getZonedDateParts`) líši od dneška — „piatok 26. 2. 2027"; tohtoročné bez roka. `nowYear` sa počíta RAZ pred slučkou (review 🔵). Testy: prvé `FREQ=YEARLY` fixtúry (RED→GREEN — birthday next-year → rok v popisku + allDay; tohtoročný výskyt bez roka). Živo: pruh ukázal „📅 piatok 26. 2. 2027 — Narodeniny Adriana" (s rokom), „18. 8."/„19. 8." bez roka.
+- **443:** čistý `nedostupneSummary.ts` (`computeNedostupneGroupTotalPieces` + `formatNedostupneTotalChip`, gating `< 2` ako `formatVariantTotalChip`); odznak `Σ N` v hlavičke skupiny cez EXISTUJÚCU `.qty-total-chip` (`NedostupneSection.tsx`). Klientské, žiadna API zmena. Testy: unit (súčet+gating), komponent (2 obj.→Σ 2, 1 obj.→žiadny), e2e (`nedostupne.spec.ts` Σ 2). Živo: 12 skupín po 1 objednávke → 0 odznakov (gating správne); kladný prípad overený CI e2e (žiadna skupina s ≥2 na prod teraz).
+- **e2e fixtúra trap (stálo 2 CI cykly):** druhá nedostupná objednávka — `9009` aj `9012` boli obsadené (9012 v `e2e-fixtures-dpd.ts`); `externalOrderId` sa seeduje naprieč `e2e-setup.ts` + VŠETKÝMI `e2e-fixtures-*.ts`. Duplicita zhodí e2e webServer pri štarte (nie assert). Voľné `9099`. Zapísané do `testing.md`.
+- `orders.spec.ts` globálne počty +1 riadok: Všetci 8→9, bez dodávateľa 5→6, súhrn 12→13 / Nedostupné 1→2 (nedostupný riadok je resolved, „ostáva vybaviť" ostáva).
+- Review: fresh-context general-purpose subagent (Opus 4.8) → 0 🔴 0 🟡 2 🔵 (nowYear hoist + JSX reindent, oba opravené v `afbffd9`).
+- Playbook: `.claude/rules/testing.md` (externalOrderId voľný naprieč VŠETKÝMI e2e-seed súbormi, nielen e2e-setup.ts).
+
+## issue 445 — Objednať DPD: presun do Dôležité + tlačidlo hore + stavový filter + feedback + badge
+- version bump 0.3.0-dev.264 → dev.265 (50a11a5)
+- RED: apps/api/tests/dpd-http.integration.test.ts "vylúči terminálne stavy" (9be561b) — pred fixom terminálne stavy (Stornovaná/Vybavená/Vratený tovar) sa ponúkali
+- GREEN: apps/api/src/modules/dpd/queries.ts — shippableWhere pridal `inArray(orders.statusName, [...listOpenStatusNames])` + countDpdShippableOrders; GET /api/dpd/orders/count route (dc914c3)
+- web: nav.ts presun `dpd` z eshop do dolezite pod poznamky + rename "Objednať DPD"; DpdSection.tsx tlačidlo nad tabuľku + role=status feedback ("Objednané: N zásielok"/"N úspešných, M chýb") + aria-label na detailnom zozname; dpdBadgeContext.ts + App.tsx dpd badge count (vzor Upozornenia, bump po odoslaní); dpdApi.ts fetchDpdShippableCount
+- testy: dpd-http.integration (filter + count), DpdSection.test.tsx (role=status + button-above-table), nav.test.ts (4/9 counts + labels), e2e dpd.spec.ts + nav.spec.ts (rename, badge, button-above-table)
+- docs: .claude/rules/dpd.md "no status filter" medzera uzavretá
