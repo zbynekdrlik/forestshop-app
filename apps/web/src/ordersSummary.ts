@@ -1,4 +1,4 @@
-import type { OrderLine } from "./ordersApi.js";
+import { NEZNAMY_DODAVATEL, type OrderLine } from "./ordersApi.js";
 
 // issue 61 — priamy náprotivok starej appky's `isHandled` (`ORDERED[o.key] ||
 // WAITING[o.key] || INSTOCK[o.key] || UNAVAIL[o.key]`, `app.js:2332-2498`).
@@ -90,6 +90,32 @@ export function formatOrderSummaryText(summary: OrderLinesSummary, supplierLabel
     `${head} ${String(summary.remaining)} z ${String(summary.total)}` +
     (bits.length > 0 ? ` · ${bits.join(" · ")}` : "")
   );
+}
+
+// issue 452 (šéfov kolega Štěpán, Discord 19.8.2026: "aby tie jednotlivé firmy
+// ktoré sa zobrazujú hore farebne ... boli radené za sebou podľa abecedy") —
+// dodávateľské čipy v hlavičke "Na objednanie" (`OrdersToolbar.tsx`) sa
+// vykresľovali v poradí, aké príde z API (`queries.ts` triedi podľa NAJNOVŠEJ
+// objednávky skupiny, nie abecedne), v čom sa majiteľ ťažko orientoval. Táto
+// čisto prezentačná funkcia vráti NOVÉ pole skupín zoradené abecedne pre
+// vykreslenie čipov — vstupné `suppliers` sa NEMENÍ (iné miesta appky spoliehajú
+// na pôvodné poradie/identitu, a súčty čipov sú od poradia nezávislé).
+//
+// `sensitivity: "accent"` = case-insensitive (BETALOV == betalov PRI RADENÍ), ale
+// diakritika sa ROZLIŠUJE, takže slovenské poradie (c < č < d, s < š) ostáva
+// správne. Zástupný kôš `NEZNAMY_DODAVATEL` ("(bez dodávateľa)") ostáva VŽDY
+// NAPOSLEDY — rovnako ako už dnes robí `queries.ts` (aNull/bNull) aj zoznam
+// skupín pod čipmi; nie je to firma, takže sa medzi ne neradí. Čip "Všetci" nie
+// je skupina (vykresľuje sa samostatne, vždy prvý), teda sa tejto funkcie netýka.
+export function sortSuppliersForChips<T extends { readonly supplier: string }>(
+  suppliers: readonly T[],
+): readonly T[] {
+  return [...suppliers].sort((a, b) => {
+    const aNull = a.supplier === NEZNAMY_DODAVATEL;
+    const bNull = b.supplier === NEZNAMY_DODAVATEL;
+    if (aNull !== bNull) return aNull ? 1 : -1;
+    return a.supplier.localeCompare(b.supplier, "sk", { sensitivity: "accent" });
+  });
 }
 
 // issue 62 — priamy náprotivok starej appky's `groupQtyTotals`/`totalChipSpec`

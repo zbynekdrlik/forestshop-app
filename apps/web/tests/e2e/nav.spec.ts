@@ -41,7 +41,7 @@ const E2E_NAV_EMAIL = "e2e-nav@forestshop.sk";
 // nahradilo jej Shoptet-viazaný obsah vlastnými zápismi z predajne
 // (`id`/`label`/miesto v menu nezmenené, funkčný test teraz v samostatnom
 // `floor-notes.spec.ts`, rovnaký vzor).
-test("ľavé menu má štyri priečinky (Dôležité/Eshop/Systém/Automatizácie) s dvadsiatimi záložkami, klik prepne obrazovku, panel sa zbalí do lišty a stav si pamätá, konzola je čistá", async ({
+test("ľavé menu má štyri priečinky (Dôležité/Eshop/Systém/Automatizácie) s dvadsiatimi jednou záložkami, klik prepne obrazovku, panel sa zbalí do lišty a stav si pamätá, konzola je čistá", async ({
   page,
 }) => {
   const chyby: string[] = [];
@@ -80,8 +80,9 @@ test("ľavé menu má štyri priečinky (Dôležité/Eshop/Systém/Automatizáci
 
   // Presne dvadsať záložiek v CELOM menu (issue 387 E5 pridalo "Párovanie",
   // E8 odstránilo "Vypredané → Skladom: návrhy odkazov", issue 400/E9
-  // odstránilo "Párovanie produktov", issue 437 pridalo "Poznámky" — 19 → 20).
-  await expect(page.locator(".side-nav .tab")).toHaveCount(20);
+  // odstránilo "Párovanie produktov", issue 437 pridalo "Poznámky" — 19 → 20;
+  // issue 450 pridalo "Riešiť" pod "Nedostupné tovary" — 20 → 21).
+  await expect(page.locator(".side-nav .tab")).toHaveCount(21);
   await expect(page.getByRole("button", { name: "Sync zo Shoptetu" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Texty e-mailov" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Na objednanie" })).toBeVisible();
@@ -89,6 +90,8 @@ test("ľavé menu má štyri priečinky (Dôležité/Eshop/Systém/Automatizáci
   await expect(page.getByRole("button", { name: "Nevyzdvihnuté zásielky" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Pripomienky objednávok" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Nedostupné tovary" })).toBeVisible();
+  // issue 450: nová placeholder záložka "Riešiť" hneď POD "Nedostupné tovary".
+  await expect(page.getByRole("button", { name: "Riešiť" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Výmena tovaru" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Vrátený tovar" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Reklamácie" })).toBeVisible();
@@ -177,6 +180,14 @@ test("ľavé menu má štyri priečinky (Dôležité/Eshop/Systém/Automatizáci
   // požiadanie) — žiadny stavový odznak v menu, ani "Zastavené".
   await expect(page.getByTestId("nav-status-nedostupne")).toHaveCount(0);
 
+  // issue 450: nová placeholder záložka "Riešiť" HNEĎ POD "Nedostupné tovary"
+  // — klik otvorí placeholder obrazovku (titulok renderuje Topbar), žiadny
+  // stavový odznak v menu (rovnako ako "Nedostupné tovary" vyššie).
+  await page.getByRole("button", { name: "Riešiť" }).click();
+  await expect(page.getByRole("heading", { name: "Riešiť" })).toBeVisible();
+  await expect(page.getByTestId("riesit-placeholder")).toBeVisible();
+  await expect(page.getByTestId("nav-status-riesit")).toHaveCount(0);
+
   // issue 290: rovnaký dôvod ako "Nedostupné tovary" vyššie — žiadny
   // plán/zapnuté-vypnuté koncept, teda žiadny stavový odznak v menu (majú
   // však odznak POČTU nevybavených, funkčne overený v `order-flags.spec.ts`).
@@ -240,7 +251,7 @@ test("ľavé menu má štyri priečinky (Dôležité/Eshop/Systém/Automatizáci
 
   // Hlavičky priečinkov zmiznú, ikony všetkých modulov ostanú.
   await expect(page.getByRole("button", { name: "Systém" })).toHaveCount(0);
-  await expect(page.locator(".side-nav .tab")).toHaveCount(20);
+  await expect(page.locator(".side-nav .tab")).toHaveCount(21);
   // Názov sa v lište ukáže bublinou pri prejdení myšou.
   await expect(page.getByRole("button", { name: "Na objednanie" })).toHaveAttribute(
     "title",

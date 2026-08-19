@@ -50,6 +50,13 @@ test("manažér filtruje podľa dodávateľa, vidí súhrn ostáva vybaviť a sk
   await expect(page.getByTestId("supplier-chip-DODAVATEL-TEST-1")).toHaveText("DODAVATEL-TEST-1 (1)");
   await expect(page.getByTestId("supplier-chip-(bez dodávateľa)")).toHaveText("(bez dodávateľa) (6)");
 
+  // issue 452: čipy dodávateľov idú ABECEDNE (case-insensitive, slovenské
+  // locale), "Všetci" prvý, "(bez dodávateľa)" naposledy — over skutočné
+  // poradie v DOM (nielen prítomnosť/počty vyššie). Seedované skupiny:
+  // DODAVATEL-TEST-1, DODAVATEL-TEST-2, (bez dodávateľa).
+  const poradieČipov = (await page.locator(".chip-row .chip").allTextContents()).map((t) => t.replace(/\s*\(\d+\)\s*$/, ""));
+  expect(poradieČipov).toEqual(["Všetci", "DODAVATEL-TEST-1", "DODAVATEL-TEST-2", "(bez dodávateľa)"]);
+
   const summary = page.getByTestId("orders-summary");
   // issue 260: `orders-summary` (`formatOrderSummaryText`/`summarizeOrderLines`)
   // sčíta MNOŽSTVÁ (`quantity`), nie počet riadkov — chip-y vyššie ("Všetci
