@@ -4238,3 +4238,11 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
 - `orders.spec.ts` globálne počty +1 riadok: Všetci 8→9, bez dodávateľa 5→6, súhrn 12→13 / Nedostupné 1→2 (nedostupný riadok je resolved, „ostáva vybaviť" ostáva).
 - Review: fresh-context general-purpose subagent (Opus 4.8) → 0 🔴 0 🟡 2 🔵 (nowYear hoist + JSX reindent, oba opravené v `afbffd9`).
 - Playbook: `.claude/rules/testing.md` (externalOrderId voľný naprieč VŠETKÝMI e2e-seed súbormi, nielen e2e-setup.ts).
+
+## issue 445 — Objednať DPD: presun do Dôležité + tlačidlo hore + stavový filter + feedback + badge
+- version bump 0.3.0-dev.264 → dev.265 (50a11a5)
+- RED: apps/api/tests/dpd-http.integration.test.ts "vylúči terminálne stavy" (9be561b) — pred fixom terminálne stavy (Stornovaná/Vybavená/Vratený tovar) sa ponúkali
+- GREEN: apps/api/src/modules/dpd/queries.ts — shippableWhere pridal `inArray(orders.statusName, [...listOpenStatusNames])` + countDpdShippableOrders; GET /api/dpd/orders/count route (dc914c3)
+- web: nav.ts presun `dpd` z eshop do dolezite pod poznamky + rename "Objednať DPD"; DpdSection.tsx tlačidlo nad tabuľku + role=status feedback ("Objednané: N zásielok"/"N úspešných, M chýb") + aria-label na detailnom zozname; dpdBadgeContext.ts + App.tsx dpd badge count (vzor Upozornenia, bump po odoslaní); dpdApi.ts fetchDpdShippableCount
+- testy: dpd-http.integration (filter + count), DpdSection.test.tsx (role=status + button-above-table), nav.test.ts (4/9 counts + labels), e2e dpd.spec.ts + nav.spec.ts (rename, badge, button-above-table)
+- docs: .claude/rules/dpd.md "no status filter" medzera uzavretá

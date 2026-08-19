@@ -29,10 +29,26 @@ test("zoznam objednávok, neúplná adresa je zablokovaná, appka je fail-closed
   await page.getByLabel("Heslo").fill(E2E_HESLO);
   await page.getByRole("button", { name: "Prihlásiť sa" }).click();
 
-  await page.getByRole("button", { name: "Preprava DPD" }).click();
-  await expect(page.getByRole("heading", { name: "Preprava DPD" })).toBeVisible();
+  // issue 445: záložka je teraz v priečinku „Dôležité" POD „Poznámky" a volá
+  // sa „Objednať DPD" (id `dpd` + URL `?tab=dpd` nezmenené). Odznak nesie
+  // počet, takže accessible name tlačidla by obsahoval aj jeho suffix —
+  // `data-testid` obchádza celý accessible-name problém (rovnaký vzor ako
+  // `nav-tab-pairing-review`, issue 387 E5).
+  await expect(page.getByTestId("nav-tab-poznamky")).toBeVisible();
+  await page.getByTestId("nav-tab-dpd").click();
+  await expect(page.getByRole("heading", { name: "Objednať DPD" })).toBeVisible();
+  // issue 445: odznak počtu objednávok na objednanie (9012 + 9013, obe
+  // „Vybavuje sa" → obe kvalifikujú, aj tá bez adresy).
+  await expect(page.getByTestId("nav-badge-dpd")).toHaveText("2");
 
   await expect(page.getByTestId("dpd-not-configured")).toBeVisible();
+
+  // issue 445: tlačidlo „Objednať prepravu DPD" je HORE (nad tabuľkou) —
+  // jeho vrchný okraj je vyššie než vrchný okraj tabuľky.
+  await expect(page.getByTestId("dpd-send-actions")).toBeVisible();
+  const btnBox = await page.getByTestId("dpd-open-preview").boundingBox();
+  const tblBox = await page.locator("table").boundingBox();
+  expect(btnBox?.y ?? Infinity).toBeLessThan(tblBox?.y ?? -Infinity);
 
   // Pripravená objednávka (úplná adresa + dobierka) — checkbox je aktívny,
   // hmotnosť predvyplnená z uloženej hodnoty, dobierka zobrazená.

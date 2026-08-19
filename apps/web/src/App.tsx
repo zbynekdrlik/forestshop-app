@@ -6,6 +6,8 @@ import { Footer } from "./components/Footer.js";
 import { LoginForm } from "./components/LoginForm.js";
 import { Sidebar } from "./components/Sidebar.js";
 import { Topbar } from "./components/Topbar.js";
+import { fetchDpdShippableCount } from "./dpdApi.js";
+import { DpdBadgeRefreshContext } from "./dpdBadgeContext.js";
 import { DEFAULT_TAB_ID, NAV, findTab, isVisibleTabId } from "./nav.js";
 import { fetchOrderFlagCounts } from "./orderFlagsApi.js";
 import { OrderFlagsBadgeRefreshContext } from "./orderFlagsBadgeContext.js";
@@ -80,6 +82,35 @@ export function App(): JSX.Element {
     };
   }, [me, activeTabId, upozorneniaRefreshNonce]);
 
+  // issue 445: odznak "Objednať DPD" — presná kópia `upozorneniaCount`
+  // vzoru vyššie (App.tsx vlastní count, fetchuje ho pri prihlásení/zmene
+  // záložky/refresh-nonce, žiaden polling). Šéf chce hneď vidieť, koľko
+  // objednávok dnes treba objednať cez DPD. `DpdSection` po úspešnom
+  // odoslaní zásielok zavolá `refresh()` (cez `DpdBadgeRefreshContext`), čo
+  // bumpne tento nonce a číslo v menu HNEĎ klesne.
+  const [dpdCount, setDpdCount] = useState<number | null>(null);
+  const [dpdRefreshNonce, setDpdRefreshNonce] = useState(0);
+  const dpdBadgeRefresh = useCallback(() => {
+    setDpdRefreshNonce((n) => n + 1);
+  }, []);
+  const dpdBadgeContextValue = useMemo(() => ({ refresh: dpdBadgeRefresh }), [dpdBadgeRefresh]);
+  useEffect(() => {
+    if (me === null) return;
+    let cancelled = false;
+    fetchDpdShippableCount()
+      .then((count) => {
+        if (!cancelled) setDpdCount(count);
+      })
+      .catch(() => {
+        // `fetchDpdShippableCount` už interne zachytáva všetky chyby a vždy
+        // vráti 0 (`dpdApi.ts`) — tento catch je len poistka pre eslint
+        // `no-floating-promises`, nikdy by sa reálne nemal spustiť.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [me, activeTabId, dpdRefreshNonce]);
+
   // issue 387 E5/E6: odznak "Párovanie" — rovnaký PRIAMY vzor ako
   // `upozorneniaCount` vyššie (musí byť známy hneď po prihlásení, nikdy len
   // po prvom otvorení záložky — issue 331's pôvodné poučenie o
@@ -148,6 +179,10 @@ export function App(): JSX.Element {
     const counts: Record<string, number> = {};
     if (ordersRemainingCount !== null) counts["orders"] = ordersRemainingCount;
     if (upozorneniaCount !== null) counts["upozornenia"] = upozorneniaCount;
+    // issue 445: odznak sa ukazuje AJ pri nule (rovnako ako "upozornenia"/
+    // "pairing-review" — appka tým hovorí "toto číslo poznám, je 0"), aby
+    // šéf hneď videl "dnes netreba objednať žiadnu DPD prepravu".
+    if (dpdCount !== null) counts["dpd"] = dpdCount;
     // issue 387 E5 (pôvodne issue 331's princíp, teraz uplatnené tu): odznak
     // sa ukazuje AJ pri nule (appka tým hovorí "toto číslo poznám, je 0" —
     // presne to majiteľovi chýbalo, keď číslo poznal len z ručného SQL
@@ -169,7 +204,7 @@ export function App(): JSX.Element {
     // istý tvar bugu ako `UpozorneniaSection.tsx`'s `withBusy`), takže lint
     // to nezachytí a stará hodnota (chýbajúce odznaky hneď po prihlásení,
     // kým sa nespustí NEJAKÝ INÝ trigger) prežije bez varovania.
-  }, [ordersRemainingCount, upozorneniaCount, pairingReviewUnreviewedCount, orderFlagCounts]);
+  }, [ordersRemainingCount, upozorneniaCount, dpdCount, pairingReviewUnreviewedCount, orderFlagCounts]);
 
   // issue 185: stav zapnuté/vypnuté pre "Automatizácie" priečinok v menu.
   // Na rozdiel od `ordersRemainingCount` vyššie (publikované OBRAZOVKOU
@@ -290,6 +325,7 @@ export function App(): JSX.Element {
   return (
     <OrdersRemainingCountContext.Provider value={ordersRemainingCountContextValue}>
       <UpozorneniaBadgeRefreshContext.Provider value={upozorneniaBadgeContextValue}>
+        <DpdBadgeRefreshContext.Provider value={dpdBadgeContextValue}>
         <PairingReviewBadgeRefreshContext.Provider value={pairingReviewBadgeContextValue}>
           <OrderFlagsBadgeRefreshContext.Provider value={orderFlagsBadgeContextValue}>
             <div className="app-shell">
@@ -322,6 +358,7 @@ export function App(): JSX.Element {
             </div>
           </OrderFlagsBadgeRefreshContext.Provider>
         </PairingReviewBadgeRefreshContext.Provider>
+        </DpdBadgeRefreshContext.Provider>
       </UpozorneniaBadgeRefreshContext.Provider>
     </OrdersRemainingCountContext.Provider>
   );
