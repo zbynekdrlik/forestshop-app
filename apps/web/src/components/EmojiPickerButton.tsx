@@ -64,9 +64,18 @@ export function EmojiPickerButton({ targetRef, value, onChange, testId, disabled
 
   const insert = (emoji: string): void => {
     const el = targetRef.current;
-    const selStart = el?.selectionStart ?? value.length;
-    const selEnd = el?.selectionEnd ?? value.length;
-    const { value: next, cursor } = insertEmojiAtSelection(value, selStart, selEnd, emoji);
+    // Bázová hodnota = ŽIVÁ DOM hodnota poľa (`el.value`), nie React `value`
+    // prop. Prop je snímka z posledného renderu a vie zaostať za tým, čo
+    // používateľ reálne napísal, keď React ešte neskomitoval onChange poľa
+    // (issue 455: na inak časovanom CI runneri emoji klik bežal skôr, než sa
+    // update stavu z predošlého `.fill()` prejavil, takže zastaraný prázdny
+    // prop prepísal napísaný text — DOM hodnota je vždy aktuálna). Výber sa
+    // číta z TOHO ISTÉHO elementu, takže hodnota + caret sú jedna konzistentná
+    // snímka. Na prop spadneme len keď element neexistuje.
+    const base = el !== null ? el.value : value;
+    const selStart = el?.selectionStart ?? base.length;
+    const selEnd = el?.selectionEnd ?? base.length;
+    const { value: next, cursor } = insertEmojiAtSelection(base, selStart, selEnd, emoji);
     onChange(next);
     // Popover sa po vložení ZAVRIE — je `position: absolute` a otvára sa NAD
     // obsahom pod ním (napr. tlačidlo Uložiť leží pod poľom); keby ostal

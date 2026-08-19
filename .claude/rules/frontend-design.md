@@ -1427,6 +1427,25 @@ paths:
   4-bajtové UTF-8; zamknuté `emoji-persist.integration.test.ts`
   POST→GET round-tripom vrátane ZWJ rodiny/vlajky/variation selectora) —
   „emoji nefunguje" bol vždy len chýbajúci VSTUP, nikdy perzistencia.
+- **`EmojiPickerButton.insert()` MUSÍ čítať bázovú hodnotu zo ŽIVÉHO DOM-u
+  (`el.value`), NIE z React `value` prop-u (issue 455).** Prop je snímka z
+  posledného renderu; keď používateľ (alebo Playwright `.fill()`) napíše text
+  a HNEĎ klikne emoji skôr, než React skomituje onChange poľa, closure `insert`-u
+  nesie STARÝ prop (`""`), kým DOM `el.value` už má napísaný text. Výber
+  (`selectionStart/End`) sa už čítal zo živého `el`, takže s prop-om bola
+  hodnota+caret NEKONZISTENTNÁ dvojica: `insertEmojiAtSelection("", 19, 19, "✅")`
+  oreže caret na dĺžku 0 → vráti holé `"✅"` a napísaný text sa STRATÍ. Prejavilo
+  sa to len ako nedeterministický CI flake (`upozornenia.spec.ts:271`), lokálne
+  skoro vždy prešlo, lebo React zvyčajne stihne flush medzi dvoma Playwright
+  príkazmi. Fix = `const base = el !== null ? el.value : value;` (a
+  `selStart/End ?? base.length`), takže hodnota + caret sú jedna konzistentná
+  synchrónna snímka DOM-u; na prop sa spadne len keď element neexistuje. Nulová
+  zmena v happy-path (`el.value === value` prop). Deterministický regres:
+  `EmojiPickerButton.test.tsx` „issue 455" `StaleHarness` (uncontrolled `<textarea
+  defaultValue="">`, ručne `ta.value=` PRED prázdnym prop-om → assert `onChange`
+  dostane celý text + emoji). **Vzor pre ktorýkoľvek insert-at-cursor helper nad
+  controlled poľom:** čítaj hodnotu aj výber z toho ISTÉHO `el` v jednom
+  synchrónnom momente, nikdy nemiešaj DOM-výber s prop-hodnotou.
 - **Nav count BADGE (`nav-badge-<id>`, vzor Upozornenia/#147) naviazaný na
   DB dopyt sa v e2e NIKDY neasertuje presným číslom — zdieľaná e2e DB
   (`scripts/e2e-setup.ts`) seeduje VEĽA objednávok, ktoré kritériu
