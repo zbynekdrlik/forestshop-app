@@ -160,6 +160,17 @@ test("ľavé menu má štyri priečinky (Dôležité/Eshop/Systém/Automatizáci
   await expect(page.getByRole("heading", { name: "Pripomienky objednávok" })).toBeVisible();
   await expect(page.getByTestId("nav-status-order-reminder")).toHaveText(/^(Zastavené|Beží)$/);
 
+  // issue 447: pilulka „Beží"/„Zastavené" musí byť pri VŠETKÝCH
+  // automatizáciách. `restock` („Vypredané → Skladom") je togglovaná rovnako
+  // ako posta/order-reminder (Štart/Stop) — rovnaká shared-state disciplína
+  // (regex, nie presná hodnota, `restock.spec.ts` si ju môže dočasne prepnúť).
+  await expect(page.getByTestId("nav-status-restock")).toHaveText(/^(Zastavené|Beží)$/);
+  // Always-on plánované joby `sync` („Sync zo Shoptetu") a `supplier-stock`
+  // („Dodávateľský sklad") nemajú Štart/Stop prepínač — pilulka je preto VŽDY
+  // „Beží", nikdy „Zastavené" (žiadny súbežný spec ju nevie prepnúť).
+  await expect(page.getByTestId("nav-status-sync")).toHaveText("Beží");
+  await expect(page.getByTestId("nav-status-supplier-stock")).toHaveText("Beží");
+
   await page.getByRole("button", { name: "Nedostupné tovary" }).click();
   await expect(page.getByRole("heading", { name: "Nedostupné tovary" })).toBeVisible();
   // "Nedostupné tovary" nemá koncept zapnuté/vypnuté vôbec (je len na
