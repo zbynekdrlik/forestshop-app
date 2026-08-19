@@ -203,6 +203,23 @@ paths:
   tiché. Ďalší podobný nález (iný vlastný/interný odkaz omylom vytiahnutý
   z voľného textu): rovnaký vzor — vylúčiť PRI ZBERE podľa hosta, vyčistiť
   staré riadky, ukázať počet, nikdy len ticho prestať zapisovať nové.
+- **Zdroje populácie zberu (`collectSupplierLinks`, `run.ts`) — od issue 448
+  EFEKTÍVNE odkazy, nie surový `internalNote`:** populácia = `resolveEffectiveSupplierLink`
+  (`modules/orders/effective-supplier-link.ts` — override `product_supplier_link_override`
+  ∪ URL vytiahnutá z `products.internalNote`) ∪ split `pairing_variant_link`
+  (`pairing_decision.status='split'`, issue 423). Pred issue 448 čítal
+  `collectSupplierLinks` LEN surový `internalNote` (`.where(isNotNull(internalNote))`)
+  a bol JEDINÝ z čítacích ciest, čo `resolveEffectiveSupplierLink` NEVOLAL —
+  potvrdený odkaz z Párovania zapísaný do override tabuľky (`product_supplier_link_override`)
+  bol pre nočný zber neviditeľný až do Shoptet writebacku + ďalšieho catalog syncu
+  (betalov: 35 produktov s poznámkou „betalov", ale len 11 s URL v poznámke;
+  zvyšných 24 čaká na napárovanie, po ktorom sa override odkaz teraz zoberie
+  OKAMŽITE). `.where(isNotNull(internalNote))` filter je odstránený — produkt
+  s override ale bez poznámky by sa inak minul. `hostOf` normalizácia +
+  vylúčenie vlastného e-shopu (issue 227) platia rovnako na efektívny odkaz.
+  Efektívna linka je čistá JS funkcia (regex + coalesce), preto „načítaj do JS"
+  vzor (rovnako ako `computeCatalogCoverage`/`determineReviewPopulationKeys`),
+  nie SQL JOIN, ktorý by zaviedol druhú rozíditeľnú definíciu.
 - **Ten istý Shoptet FRONTEND ŠABLÓNOVÝ prvok (`<span class="availability-
   label" ... data-testid="labelAvailability">`) sa opakuje NAPRIEČ VIACERÝMI
   nezávislými doménami (issue 227: `virginiashop.sk`, `tenolix.cz`,
