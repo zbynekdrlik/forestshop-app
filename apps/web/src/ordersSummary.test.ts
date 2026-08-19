@@ -10,6 +10,7 @@ import {
   isStaleOrderLine,
   oldestWaitingPlacedAt,
   orderLineAgeDays,
+  sortSuppliersForChips,
   STALE_ORDER_LINE_DAYS,
   summarizeOrderLines,
 } from "./ordersSummary.js";
@@ -327,4 +328,49 @@ it("formatOrderCount — 0, 5+ (vrátane 22/23/24) sú rodový pád množného �
   expect(formatOrderCount(22)).toBe("22 objednávok");
   expect(formatOrderCount(23)).toBe("23 objednávok");
   expect(formatOrderCount(24)).toBe("24 objednávok");
+});
+
+// issue 452 — dodávateľské čipy zoradené abecedne (slovenské locale,
+// case-insensitive), "(bez dodávateľa)" naposledy.
+const group = (supplier: string) => ({ supplier });
+
+it("sortSuppliersForChips — zoradí abecedne bez ohľadu na veľkosť písmen", () => {
+  const zoradené = sortSuppliersForChips([group("WETLAND"), group("betalov"), group("Forest")]);
+  expect(zoradené.map((g) => g.supplier)).toEqual(["betalov", "Forest", "WETLAND"]);
+});
+
+it("sortSuppliersForChips — rešpektuje slovenskú diakritiku (c < č < d, s < š)", () => {
+  // Naivné `.sort()` podľa kódových bodov by dalo Cesnak, Dubák, Čučoriedka
+  // (Č=268 > D=68) — slovenské locale musí dať c < č < d.
+  const zoradené = sortSuppliersForChips([group("Dubák"), group("Cesnak"), group("Čučoriedka")]);
+  expect(zoradené.map((g) => g.supplier)).toEqual(["Cesnak", "Čučoriedka", "Dubák"]);
+
+  const sStavy = sortSuppliersForChips([group("Švošov"), group("Sokol"), group("Turie")]);
+  expect(sStavy.map((g) => g.supplier)).toEqual(["Sokol", "Švošov", "Turie"]);
+});
+
+it("sortSuppliersForChips — '(bez dodávateľa)' ostáva vždy naposledy", () => {
+  const zoradené = sortSuppliersForChips([
+    group("(bez dodávateľa)"),
+    group("WETLAND"),
+    group("BETALOV"),
+  ]);
+  expect(zoradené.map((g) => g.supplier)).toEqual(["BETALOV", "WETLAND", "(bez dodávateľa)"]);
+});
+
+it("sortSuppliersForChips — reprodukuje poradie zo zadania (Štěpánov screenshot)", () => {
+  const vstup = [
+    "BETALOV", "Hunting & Fishing", "LOVTEK", "ROY", "OUTHUNT", "Forest", "WETLAND",
+    "TRIGONA", "GRUBE", "ODIMON", "LESONA", "ZUBÍČEK", "FOMEI SLOVAKIA", "WERRA",
+    "ROSLER", "Drevo Novák", "TTHUNT", "SOXLAND",
+  ].map(group);
+  const prvé5 = sortSuppliersForChips(vstup).slice(0, 5).map((g) => g.supplier);
+  expect(prvé5).toEqual(["BETALOV", "Drevo Novák", "FOMEI SLOVAKIA", "Forest", "GRUBE"]);
+});
+
+it("sortSuppliersForChips — nemení vstupné pole (vráti novú kópiu)", () => {
+  const vstup = [group("WETLAND"), group("BETALOV")];
+  const zoradené = sortSuppliersForChips(vstup);
+  expect(vstup.map((g) => g.supplier)).toEqual(["WETLAND", "BETALOV"]);
+  expect(zoradené).not.toBe(vstup);
 });

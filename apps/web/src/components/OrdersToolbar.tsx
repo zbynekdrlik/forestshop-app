@@ -1,6 +1,6 @@
 import type { JSX } from "react";
 import type { OrderLine, SupplierOpenOrders } from "../ordersApi.js";
-import { formatOrderSummaryText, summarizeOrderLines } from "../ordersSummary.js";
+import { formatOrderSummaryText, sortSuppliersForChips, summarizeOrderLines } from "../ordersSummary.js";
 
 // issue 61 — filtrovacie štítky dodávateľov + súhrn "ostáva vybaviť" +
 // prepínač "skryť vybavené". Čisto prezentačný komponent: `OrdersSection.tsx`
@@ -42,7 +42,11 @@ export function OrdersToolbar({
         >
           {`Všetci (${String(allLines.length)})`}
         </button>
-        {suppliers.map((group) => {
+        {/* issue 452: čipy dodávateľov zoradené abecedne (slovenské locale,
+            case-insensitive), "(bez dodávateľa)" naposledy — čip "Všetci" vyššie
+            ostáva vždy prvý. Farby/počty/správanie sa nemenia, len poradie;
+            `allLines`/`scopedLines` (súčty) ostávajú nad pôvodným `suppliers`. */}
+        {sortSuppliersForChips(suppliers).map((group) => {
           const groupSummary = summarizeOrderLines(group.lines);
           const done = group.lines.length > 0 && groupSummary.remaining === 0;
           return (

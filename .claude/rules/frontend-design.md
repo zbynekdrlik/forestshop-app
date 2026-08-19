@@ -1139,6 +1139,25 @@ paths:
   vizuálny indikátor do existujúceho pomenovaného tlačidla" potrebuje rovnakú
   kontrolu: nezmenilo sa accessible name? (over `getByRole` dotazom
   s PÔVODNÝM textom, nie novým).
+- **Rovnaké aria-hidden pravidlo platí AJ pre STAVOVÚ PILULKU „Beží"/
+  „Zastavené" (`nav-status-<id>`, `Sidebar.tsx`) — a issue 447 dokázalo, že
+  jeho vynechanie sa ĽAHKO prehliadne, lebo EXISTUJÚCE pilulkové tab-y sú v
+  e2e klikané SUBSTRINGOM, nie `exact:true`.** Pilulka bola od issue 185 BEZ
+  `aria-hidden` (posta/order-reminder), ale ich tab-y `nav.spec.ts` klikal
+  `getByRole("button", {name: "Nevyzdvihnuté zásielky"})` (substring), ktorý
+  toleruje suffix „ Beží" v accessible name. Issue 447 pridalo pilulku na
+  restock/sync/supplier-stock — a `restock-waiting.spec.ts`/`restock-events
+  .spec.ts` klikajú restock tab `{name: "Vypredané → Skladom", exact: true}`.
+  Pilulkin text „Beží" sa zlial do accessible name („Vypredané → Skladom Beží"),
+  takže `exact:true` prestal sedieť → `locator.click` timeout 30 s, na VŠETKÝCH
+  3 restock e2e testoch. Prešlo dev-push AJ PR CI (nav.spec.ts's nové assercie
+  idú cez `getByTestId("nav-status-*")`, nie accname) a spadlo AŽ na main CI /
+  bolo chytené rerunom — lebo nav.spec.ts nemá exact-name restock click.
+  Fix: `aria-hidden="true"` na pilulke (rovnako ako `ticon`/`folder-badge`),
+  text/`nav-status-` testid ostávajú (aria-hidden neovplyvňuje ani jedno).
+  **Pri pridaní pilulky/odznaku na NOVÝ tab vždy `grep -rn '<label tabu>",
+  exact: true' apps/web/tests/e2e/` — substring-klikané existujúce pilulkové
+  tab-y regresiu SKRYJÚ, chytí ju len exact-name klik na PRÁVE opilulkovaný tab.**
 - **Súhrnný ukazovateľ (odznak/bodka) na hlavičke ZBALENÉHO kontajnera sa
   počíta z TÝCH ISTÝCH props, čo už vykresľujú originály vnútri — žiadny
   nový sieťový dotaz, žiadny nový stav navyše.** Issue 343: `folderBadgeSum`/

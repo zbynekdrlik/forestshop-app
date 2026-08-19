@@ -34,14 +34,16 @@ import { DEFAULT_TAB_ID, HIDDEN_TABS, NAV, findTab, isVisibleTabId } from "./nav
 // Issue 387 E5 pridalo "Párovanie" — pôvodne hneď za "Párovanie produktov"
 // (#239), ktorú issue 400 (E9) odstránilo (majiteľ ju výslovne schválil).
 // Tento test je najbližšie k tomu, čo strojovo overiť dá (registrácia, nie DOM).
-it("NAV má štyri priečinky (Dôležité/Eshop/Systém/Automatizácie), s 4/9/3/4 záložkami v poradí podľa dôležitosti", () => {
+it("NAV má štyri priečinky (Dôležité/Eshop/Systém/Automatizácie), s 4/10/3/4 záložkami v poradí podľa dôležitosti", () => {
   expect(NAV).toHaveLength(4);
   expect(NAV.map((f) => f.label)).toEqual(["Dôležité", "Eshop", "Systém", "Automatizácie"]);
   // issue 437: "Poznámky" pribudlo do priečinka „Dôležité" (2 → 3 záložky).
   // issue 445: "Objednať DPD" presunuté z „Eshop" do „Dôležité" pod
   // „Poznámky" (Dôležité 3 → 4, Eshop 10 → 9).
+  // issue 450: "Riešiť" pribudlo do „Eshop" hneď POD „Nedostupné tovary"
+  // (Eshop 9 → 10).
   expect(NAV[0]?.tabs).toHaveLength(4);
-  expect(NAV[1]?.tabs).toHaveLength(9);
+  expect(NAV[1]?.tabs).toHaveLength(10);
   expect(NAV[2]?.tabs).toHaveLength(3);
   expect(NAV[3]?.tabs).toHaveLength(4);
   expect(NAV[0]?.tabs.map((t) => t.label)).toEqual(["Upozornenia", "Úlohy na dnes", "Poznámky", "Objednať DPD"]);
@@ -49,6 +51,7 @@ it("NAV má štyri priečinky (Dôležité/Eshop/Systém/Automatizácie), s 4/9/
     "Na objednanie",
     "Objednávky predajňa",
     "Nedostupné tovary",
+    "Riešiť",
     "Výmena tovaru",
     "Vrátený tovar",
     "Reklamácie",
@@ -115,6 +118,8 @@ it("findTab nájde viditeľnú aj skrytú záložku podľa id, neznáme id vrát
   // issue 445: id `dpd` OSTÁVA (žiadne rozbité `?tab=dpd` odkazy), zmenil sa
   // len label na "Objednať DPD" a miesto v menu (Dôležité).
   expect(findTab("dpd")?.label).toBe("Objednať DPD");
+  // issue 450: nová placeholder záložka „Riešiť".
+  expect(findTab("riesit")?.label).toBe("Riešiť");
   expect(findTab("neexistuje")).toBeUndefined();
 });
 
