@@ -227,9 +227,21 @@ export function Sidebar({
                           // "Zastavené") ako `.pill` vnútri
                           // PostaUncollectedSection/OrderReminderSection —
                           // žiadny nový vzor navyše, len znovupoužitá trieda.
+                          // issue 447: `aria-hidden` (rovnaký vzor ako
+                          // `folder-badge`/`ticon` vyššie, `.claude/rules/
+                          // frontend-design.md` issue 343) — text pilulky by
+                          // sa inak zlial do PRÍSTUPNÉHO NÁZVU tlačidla
+                          // ("Vypredané → Skladom Beží"), čím by `getByRole
+                          // ("button", {name, exact:true})` prestal sedieť. Do
+                          // #447 to nevadilo (pilulku mali len posta/order-
+                          // reminder, klikané substringom); nové always-on tab-y
+                          // (restock/sync/supplier-stock) sú v e2e klikané
+                          // `exact:true`. Pilulka ostáva vizuálne + `nav-status-`
+                          // testid nedotknutý (aria-hidden neovplyvňuje text/testid).
                           <span
                             className={"pill tab-status" + (status === "off" ? " off" : "")}
                             data-testid={`nav-status-${tab.id}`}
+                            aria-hidden="true"
                           >
                             {status === "on" ? "Beží" : "Zastavené"}
                           </span>
