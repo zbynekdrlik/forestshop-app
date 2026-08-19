@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type JSX } from "react";
 import { fetchMe, postLogout, type Me } from "./api.js";
 import { applyThemeColors } from "./applyThemeColors.js";
+import { buildAutomationStatus, STATIC_AUTOMATION_STATUS } from "./automationStatus.js";
 import { ChangePasswordForm } from "./components/ChangePasswordForm.js";
 import { Footer } from "./components/Footer.js";
 import { LoginForm } from "./components/LoginForm.js";
@@ -16,6 +17,7 @@ import { OrdersRemainingCountContext } from "./ordersRemainingCountContext.js";
 import { fetchPairingReviewUnreviewedCount } from "./pairingReviewApi.js";
 import { PairingReviewBadgeRefreshContext } from "./pairingReviewBadgeContext.js";
 import { fetchPostaUncollectedStatus } from "./postaUncollectedApi.js";
+import { fetchRestockStatus } from "./restockApi.js";
 import { fetchThemeColors } from "./themeColorsApi.js";
 import { fetchUpozorneniaCount } from "./upozorneniaApi.js";
 import { UpozorneniaBadgeRefreshContext } from "./upozorneniaBadgeContext.js";
@@ -220,17 +222,21 @@ export function App(): JSX.Element {
   useEffect(() => {
     if (me === null) return;
     let cancelled = false;
-    Promise.all([fetchPostaUncollectedStatus(), fetchOrderReminderStatus()])
-      .then(([posta, reminder]) => {
+    // issue 447 — pilulka „Beží"/„Zastavené" pri VŠETKÝCH automatizáciách:
+    // togglované (posta/order-reminder/restock) podľa `enabled`, always-on
+    // joby (supplier-stock/sync) staticky „on" cez `buildAutomationStatus`.
+    Promise.all([fetchPostaUncollectedStatus(), fetchOrderReminderStatus(), fetchRestockStatus()])
+      .then(([posta, reminder, restock]) => {
         if (cancelled) return;
-        setAutomationStatus({
-          "posta-uncollected": posta.enabled ? "on" : "off",
-          "order-reminder": reminder.enabled ? "on" : "off",
-        });
+        setAutomationStatus(
+          buildAutomationStatus({ postaUncollected: posta.enabled, orderReminder: reminder.enabled, restock: restock.enabled }),
+        );
       })
       .catch(() => {
-        // Sieťový výpadok — odznak v menu nie je kritický, ticho ponechá
-        // predošlý (alebo žiadny) stav namiesto nespracovanej výnimky.
+        // Sieťový výpadok — togglované automatizácie necháme bez pilulky
+        // (nezavádzať falošné „Zastavené"), ale always-on statické (supplier-
+        // stock/sync) ukáž aj tak. Odznak v menu nie je kritický.
+        if (!cancelled) setAutomationStatus(STATIC_AUTOMATION_STATUS);
       });
     return () => {
       cancelled = true;

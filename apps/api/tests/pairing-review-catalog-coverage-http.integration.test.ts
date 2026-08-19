@@ -1,5 +1,5 @@
 import { afterEach, expect, it } from "vitest";
-import { productSupplierLinkOverrides, users } from "../src/db/schema.js";
+import { pairingDecisions, productSupplierLinkOverrides, users } from "../src/db/schema.js";
 import { createApp } from "../src/http/app.js";
 import { resetLoginRateLimit } from "../src/http/login-rate-limit.js";
 import { hashPassword } from "../src/modules/auth/passwords.js";
@@ -51,6 +51,9 @@ interface Telo {
   readonly linkedTotal: number;
   readonly catalogLinked: number;
   readonly catalogActive: number;
+  // issue 446 — badge záložky Párovanie = aktívne (≥1 sellable) produkty bez
+  // efektívneho odkazu a bez terminálneho rozhodnutia.
+  readonly activeUnpaired: number;
 }
 
 async function fetchCoverage(app: Awaited<ReturnType<typeof boot>>["app"], cookie: string): Promise<Telo> {
@@ -108,4 +111,49 @@ it("issue 432: aktívny olinkovaný produkt MIMO recenznej fronty sa ráta do po
   // Katalógové pokrytie ho VŠAK zaráta (aktívny + olinkovaný).
   expect(telo.catalogActive).toBe(1);
   expect(telo.catalogLinked).toBe(1);
+});
+
+// issue 446 — badge záložky Párovanie počíta AKTÍVNE nenapárované produkty
+// (≥1 sellable variant AND bez efektívneho odkazu AND bez terminálneho
+// rozhodnutia), nie celú no-link populáciu (~2302 vrátane ~2000 nepredajných).
+// `activeUnpaired` je tretie číslo z `computeCatalogCoverage`, vracia sa v tej
+// istej odpovedi ako `catalogActive`/`catalogLinked`.
+it("issue 446: activeUnpaired ráta LEN aktívne bez odkazu a bez terminálneho rozhodnutia", async () => {
+  const { app, cookie, db } = await boot("citanie");
+  const snapshotId = await insertTestSnapshot(db);
+  const [u] = await db.select({ id: users.id }).from(users).limit(1);
+  if (u === undefined) throw new Error("testovací používateľ chýba");
+
+  // (A) aktívny (sellable) bez odkazu, bez rozhodnutia → SA počíta do badge.
+  await seedProduct(db, snapshotId, "AU-ACTIVE", { name: "Aktívny bez odkazu" });
+
+  // (B) nepredajný (discontinued variant) bez odkazu → NEpočíta sa (nie je
+  // aktívny) — presne tých ~2000 položiek, čo nafukovali starý badge na 2302.
+  await seedProduct(db, snapshotId, "AU-DISCONTINUED", {
+    name: "Ukončený bez odkazu",
+    variants: [{ code: "AU-DISCONTINUED/1", state: "discontinued" }],
+  });
+
+  // (C) aktívny bez odkazu, ALE terminálne rozhodnutý (unavailable) → NEpočíta
+  // sa (už zrevidovaný, netreba naň ďalej upozorňovať).
+  await seedProduct(db, snapshotId, "AU-UNAVAIL", { name: "Aktívny, u dodávateľa nedostupný" });
+  await db.insert(pairingDecisions).values({
+    productKey: "AU-UNAVAIL",
+    status: "unavailable",
+    url: null,
+    decidedBy: u.id,
+    decidedAt: new Date(),
+    updatedAt: new Date(),
+  });
+
+  // (D) aktívny s efektívnou linkou → NEpočíta sa (má odkaz).
+  await seedProduct(db, snapshotId, "AU-LINKED", { name: "Aktívny s linkou", internalNote: "https://dodavatel.example.com/au" });
+
+  const telo = await fetchCoverage(app, cookie);
+
+  // Menovateľ = aktívne produkty (≥1 sellable): AU-ACTIVE, AU-UNAVAIL, AU-LINKED
+  // — nie AU-DISCONTINUED.
+  expect(telo.catalogActive).toBe(3);
+  // Badge = LEN AU-ACTIVE (bez odkazu, bez terminálneho rozhodnutia).
+  expect(telo.activeUnpaired).toBe(1);
 });

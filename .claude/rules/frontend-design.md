@@ -1408,3 +1408,23 @@ paths:
   4-bajtové UTF-8; zamknuté `emoji-persist.integration.test.ts`
   POST→GET round-tripom vrátane ZWJ rodiny/vlajky/variation selectora) —
   „emoji nefunguje" bol vždy len chýbajúci VSTUP, nikdy perzistencia.
+- **Nav count BADGE (`nav-badge-<id>`, vzor Upozornenia/#147) naviazaný na
+  DB dopyt sa v e2e NIKDY neasertuje presným číslom — zdieľaná e2e DB
+  (`scripts/e2e-setup.ts`) seeduje VEĽA objednávok, ktoré kritériu
+  vyhovujú, nielen fixtúry danej funkcie.** Issue 445 (DPD badge = počet
+  „na objednanie DPD"): `toHaveText("2")` (počítal som s dvomi DPD
+  fixtúrami 9012/9013) padlo na CI s `Received "14"` — e2e-setup má ~14
+  otvorených objednávok bez `package_number`, ktoré všetky kvalifikujú.
+  Lokálny beh len nového spec súboru to nechytil rovnako ako pri
+  `toHaveCount` (issue 437) — chytila to až CI. Fix: over len, že odznak
+  SVIETI a nesie kladné celé číslo (`toHaveText(/^[1-9]\d*$/)`) — presnú
+  sémantiku počtu pokrýva API integration test s RIADENÝMI dátami, nie
+  e2e proti zdieľanej seed DB. Platí pre KAŽDÝ budúci count badge.
+- **PROD DB sa dá čítať PRIAMO na `forestshop-dev` cez `docker exec` — užitočné
+  na živý „pred/po" dôkaz pri overovaní (nielen cez UI).** `docker exec
+  forestshop-postgres-1 psql -U forestshop -d forestshop -c "..."` (kontajner
+  s POMLČKOU `forestshop-postgres-1` = PROD, bez host portu; s PODTRŽNÍKOM
+  `forestshop_app-postgres-1` = lokálna dev DB na 5433, `.env`). Issue 445
+  tak doložilo, že stavový filter znížil ponuku DPD z 297 na 40 (257
+  terminálnych vylúčených) — presne šéfovu výhradu. Len ČÍTANIE, žiadny zápis
+  na PROD bez schválenia (`no-destructive-remote-actions.md`).

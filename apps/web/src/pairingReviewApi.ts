@@ -70,6 +70,9 @@ const searchSchema = z.object({
   // linkou), na rozdiel od `gatheredTotal`/`linkedTotal` (veľkosť recenznej fronty).
   catalogLinked: z.number(),
   catalogActive: z.number(),
+  // issue 446 — badge záložky Párovanie: AKTÍVNE nenapárované produkty (≥1
+  // sellable variant, bez efektívneho odkazu, bez terminálneho rozhodnutia).
+  activeUnpaired: z.number(),
   items: z.array(itemSchema),
 });
 export type PairingReviewSearchResult = z.infer<typeof searchSchema>;
@@ -107,21 +110,24 @@ export async function searchPairingReview(input: { readonly filter: PairingRevie
   return searchSchema.parse(await readJson(response, "Zoznam párovania sa nepodarilo načítať"));
 }
 
-const countSchema = z.object({ total: z.number() });
+// issue 446 — badge číta `activeUnpaired` (AKTÍVNE nenapárované produkty),
+// NIE `total` (veľkosť recenznej fronty ~2302 vrátane ~2000 dávno
+// nepredávaných katalógových položiek). `activeUnpaired` sa v odpovedi
+// vracia nezávisle od `filter`/`pageSize` (`computeCatalogCoverage`).
+const countSchema = z.object({ activeUnpaired: z.number() });
 
 // Badge v ľavom menu (`App.tsx`, rovnaký priamy vzor ako `restockLinksMissingCount`,
 // issue 331) — musí byť známy hneď po prihlásení. Znovupoužíva TEN ISTÝ
-// `GET /api/pairing-review` s `filter=unreviewed&pageSize=1` (lacný dopyt,
-// `total` sa v `listPairingReview` počíta nad CELOU odfiltrovanou množinou
-// nezávisle od `pageSize`). Chyba (401/sieť) sa nikdy nehádže — odznak
-// zostane na poslednej známej hodnote.
+// `GET /api/pairing-review` s `pageSize=1` (lacný dopyt, `activeUnpaired` sa
+// počíta nezávisle od `pageSize` aj `filter`). Chyba (401/sieť) sa nikdy
+// nehádže — odznak zostane na poslednej známej hodnote.
 export async function fetchPairingReviewUnreviewedCount(): Promise<number> {
   const query = new URLSearchParams({ filter: "unreviewed", page: "1", pageSize: "1" });
   const response = await fetch(`/api/pairing-review?${query.toString()}`);
   if (response.status === 401) return 0;
   if (!response.ok) return 0;
   const parsed = countSchema.safeParse(await response.json());
-  return parsed.success ? parsed.data.total : 0;
+  return parsed.success ? parsed.data.activeUnpaired : 0;
 }
 
 const candidateSchema = z.object({
