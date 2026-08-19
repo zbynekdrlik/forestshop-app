@@ -1427,6 +1427,47 @@ paths:
   4-bajtové UTF-8; zamknuté `emoji-persist.integration.test.ts`
   POST→GET round-tripom vrátane ZWJ rodiny/vlajky/variation selectora) —
   „emoji nefunguje" bol vždy len chýbajúci VSTUP, nikdy perzistencia.
+- **`EmojiPickerButton.insert()` MUSÍ čítať bázovú hodnotu zo ŽIVÉHO DOM-u
+  (`el.value`), NIE z React `value` prop-u (issue 455).** Prop je snímka z
+  posledného renderu; keď používateľ (alebo Playwright `.fill()`) napíše text
+  a HNEĎ klikne emoji skôr, než React skomituje onChange poľa, closure `insert`-u
+  nesie STARÝ prop (`""`), kým DOM `el.value` už má napísaný text. Výber
+  (`selectionStart/End`) sa už čítal zo živého `el`, takže s prop-om bola
+  hodnota+caret NEKONZISTENTNÁ dvojica: `insertEmojiAtSelection("", 19, 19, "✅")`
+  oreže caret na dĺžku 0 → vráti holé `"✅"` a napísaný text sa STRATÍ. Prejavilo
+  sa to len ako nedeterministický CI flake (`upozornenia.spec.ts:271`), lokálne
+  skoro vždy prešlo, lebo React zvyčajne stihne flush medzi dvoma Playwright
+  príkazmi. Fix = `const base = el !== null ? el.value : value;` (a
+  `selStart/End ?? base.length`), takže hodnota + caret sú jedna konzistentná
+  synchrónna snímka DOM-u; na prop sa spadne len keď element neexistuje. Nulová
+  zmena v happy-path (`el.value === value` prop). Deterministický regres:
+  `EmojiPickerButton.test.tsx` „issue 455" `StaleHarness` (uncontrolled `<textarea
+  defaultValue="">`, ručne `ta.value=` PRED prázdnym prop-om → assert `onChange`
+  dostane celý text + emoji). **Vzor pre ktorýkoľvek insert-at-cursor helper nad
+  controlled poľom:** čítaj hodnotu aj výber z toho ISTÉHO `el` v jednom
+  synchrónnom momente, nikdy nemiešaj DOM-výber s prop-hodnotou.
+- **`EmojiPickerButton` obnovuje fokus + caret v `requestAnimationFrame`, ale
+  smie fokus vrátiť LEN keď je stále „náš" — inak oneskorený rAF UKRADNE fokus
+  (issue 455, hlbšia príčina flaku `upozornenia.spec.ts:271`).** rAF vystrelí až
+  keď kompozítor vyrobí snímku; na zaťaženom (CI) stroji to zaostane o stovky ms,
+  kľudne až do chvíle, keď sa používateľ — alebo Playwright `.fill()` DRUHÉHO
+  poľa (dvojkroková `focus`→`insertText` operácia) — už presunul inam.
+  Bezpodmienečný `target.focus()` v rAF vtedy skočí SPÄŤ na pôvodné pole a text
+  sa napíše do zlého poľa (v teste: „Skontrolovať sklad" skončí v NADPISE, pole
+  podrobností ostane prázdne → emoji vyjde ako holé „✅", stabilne, presne flake
+  z CI). **Guard:** rAF callback obnoví fokus len keď `document.activeElement` je
+  pole samo, náš `rootRef` popover/root, `<body>` alebo `null`; inak `return`
+  (žiadna krádež). rAF id sa drží v `useRef` a pri ďalšom inserte aj pri unmounte
+  sa `cancelAnimationFrame`-uje (nech oneskorená snímka neukradne fokus po zmiznutí
+  poľa). Po `setOpen(false)` sa kliknuté emoji tlačidlo odmountuje a fokus padne na
+  `<body>` → bežná cesta (hneď po vložení) sa aj tak refokusne. **e2e vzor:** medzi
+  emoji-insert do jedného poľa a `.fill()`/prácu s ĎALŠÍM poľom vlož
+  `await expect(<pole>).toBeFocused()` — vypustí čakajúci rAF a zároveň overí
+  fokus-kontrakt. `pressSequentially` NIE je oprava (fokusne raz, per-znak píše do
+  práve fokusnutého poľa — oneskorený rAF ich presmeruje rovnako); ani post-type
+  `toHaveValue` (hazard je čakajúci rAF, nie necommitnutá hodnota). Deterministický
+  regresný unit test: stub `requestAnimationFrame`, klik emoji poľa A, `.focus()`
+  poľa B, ručne vystrel zachytený rAF, assert fokus ostal na B (RED bez guardu).
 - **Nav count BADGE (`nav-badge-<id>`, vzor Upozornenia/#147) naviazaný na
   DB dopyt sa v e2e NIKDY neasertuje presným číslom — zdieľaná e2e DB
   (`scripts/e2e-setup.ts`) seeduje VEĽA objednávok, ktoré kritériu

@@ -293,6 +293,11 @@ test("emoji picker: vloží emoji do nadpisu aj podrobností upozornenia, ulož�
   await page.getByRole("button", { name: "Vložiť 🔥" }).click();
   await expect(nadpis).toHaveValue("Urgentné 🔥");
   // (popover sa po vložení emoji zavrie sám — netreba ho ručne zatvárať)
+  // issue 455: obnova fokusu po vložení beží v rAF; počkaj, kým dobehne, PREDTÝM
+  // než začneš písať do ďalšieho poľa — inak by oneskorený rAF (dvojkrokový
+  // `.fill()` focus→insertText) ukradol fokus späť na nadpis a text podrobností
+  // by skončil v nadpise. Zároveň overuje kontrakt „fokus sa vráti do poľa".
+  await expect(nadpis).toBeFocused();
 
   // Podrobnosti: text + emoji cez picker.
   const detaily = page.getByTestId("upozornenie-form-details");
@@ -300,6 +305,8 @@ test("emoji picker: vloží emoji do nadpisu aj podrobností upozornenia, ulož�
   await page.getByTestId("upozornenie-details-emoji").click();
   await page.getByRole("button", { name: "Vložiť ✅" }).click();
   await expect(detaily).toHaveValue("Skontrolovať sklad ✅");
+  // Symetrická bariéra pred klikom na Uložiť + pokrytie fokus-kontraktu.
+  await expect(detaily).toBeFocused();
 
   await page.getByTestId("upozornenie-form-save").click();
   await expect(page.getByTestId("upozornenie-form")).toBeHidden();

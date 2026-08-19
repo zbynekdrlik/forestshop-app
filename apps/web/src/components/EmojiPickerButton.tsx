@@ -43,6 +43,16 @@ interface Props {
 export function EmojiPickerButton({ targetRef, value, onChange, testId, disabled = false }: Props): JSX.Element {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLSpanElement>(null);
+  // rAF na obnovu fokusu po vložení — držaný v refe, nech ho vieme zrušiť pri
+  // ďalšom inserte aj pri odmountovaní (issue 455: oneskorený rAF nesmie
+  // ukradnúť fokus tam, kam sa používateľ medzičasom presunul).
+  const rafRef = useRef<number | null>(null);
+
+  // Zruš čakajúci rAF na obnovu fokusu pri odmountovaní (napr. zatvorení
+  // formulára), nech oneskorená snímka neukradne fokus po zmiznutí poľa.
+  useEffect(() => () => {
+    if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+  }, []);
 
   // Popover neblokuje zvyšok formulára — zavrie sa na klik mimo a na Escape.
   useEffect(() => {
@@ -64,9 +74,18 @@ export function EmojiPickerButton({ targetRef, value, onChange, testId, disabled
 
   const insert = (emoji: string): void => {
     const el = targetRef.current;
-    const selStart = el?.selectionStart ?? value.length;
-    const selEnd = el?.selectionEnd ?? value.length;
-    const { value: next, cursor } = insertEmojiAtSelection(value, selStart, selEnd, emoji);
+    // Bázová hodnota = ŽIVÁ DOM hodnota poľa (`el.value`), nie React `value`
+    // prop. Prop je snímka z posledného renderu a vie zaostať za tým, čo
+    // používateľ reálne napísal, keď React ešte neskomitoval onChange poľa
+    // (issue 455: na inak časovanom CI runneri emoji klik bežal skôr, než sa
+    // update stavu z predošlého `.fill()` prejavil, takže zastaraný prázdny
+    // prop prepísal napísaný text — DOM hodnota je vždy aktuálna). Výber sa
+    // číta z TOHO ISTÉHO elementu, takže hodnota + caret sú jedna konzistentná
+    // snímka. Na prop spadneme len keď element neexistuje.
+    const base = el !== null ? el.value : value;
+    const selStart = el?.selectionStart ?? base.length;
+    const selEnd = el?.selectionEnd ?? base.length;
+    const { value: next, cursor } = insertEmojiAtSelection(base, selStart, selEnd, emoji);
     onChange(next);
     // Popover sa po vložení ZAVRIE — je `position: absolute` a otvára sa NAD
     // obsahom pod ním (napr. tlačidlo Uložiť leží pod poľom); keby ostal
@@ -77,9 +96,28 @@ export function EmojiPickerButton({ targetRef, value, onChange, testId, disabled
     // hodnotu a `setSelectionRange` sadne správne; fokus sa vráti do poľa, aby
     // sa dalo písať ďalej.
     setOpen(false);
-    requestAnimationFrame(() => {
+    // Oneskorený rAF nesmie UKRADNÚŤ fokus: na zaťaženom (CI) stroji vystrelí až
+    // keď sa používateľ — alebo Playwright `.fill()` iného poľa, čo je dvojkroková
+    // focus→insertText operácia — medzičasom presunul inam. Bezpodmienečný
+    // `target.focus()` by vtedy skočil späť na naše pole a text by sa napísal do
+    // zlého poľa (issue 455: hlbšia príčina flaku upozornenia.spec.ts:271 — rAF
+    // z insertu nadpisu vystrelil počas `.fill()` podrobností a ukradol fokus).
+    // Fokus vráť LEN keď je stále „náš" — aktívny prvok je pole samo, náš
+    // popover/root, `<body>` alebo `null`. Po `setOpen(false)` sa kliknuté emoji
+    // tlačidlo odmountuje a fokus padne na `<body>`, takže bežná cesta (hneď po
+    // vložení) sa aj tak refokusne. Predošlý čakajúci rAF zrušíme.
+    if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = null;
       const target = targetRef.current;
       if (target === null) return;
+      const active = document.activeElement;
+      const ours =
+        active === null ||
+        active === document.body ||
+        active === target ||
+        (rootRef.current !== null && rootRef.current.contains(active));
+      if (!ours) return;
       target.focus();
       target.setSelectionRange(cursor, cursor);
     });

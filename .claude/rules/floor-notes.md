@@ -66,3 +66,10 @@ nezmenené — mení sa len obsah obrazovky (`Component` v `nav.ts`), nie jej mi
   aj `apps/api/tests/helpers/db.ts`) — `apps/api/src/db/truncate-list-completeness.test.ts` (issue
   384) by inak spadol automaticky, over ho ako prvý signál pri KAŽDEJ ďalšej novej "koreňovej"
   tabuľke namiesto ručného hľadania.
+- **Počet kusov pripnutého produktu je stĺpec `floor_note_product.quantity` (int NOT NULL DEFAULT 1,
+  CHECK `>= 1`, migrácia `0057`; issue 453)** — DVE miesta ho nastavujú: vstup pri pripínaní vo
+  výsledku hľadania (`FloorNoteProductSearch.tsx`) a inline editovateľný spinbutton v zozname
+  (`FloorNoteProductChip.tsx`), ktorý PATCHuje pri zmene — obe cez tú istú zapisovaciu cestu.
+  API validuje `quantity >= 1` zhodne s DB CHECK (0/záporné odmietne), takže prípadné budúce
+  „zníž na 0 = odober" MUSÍ produkt ODOPNÚŤ (delete riadku), nie nastaviť `quantity = 0`.
+  Existujúce riadky pred 0057 dostali backfill DEFAULT 1; v zozname sa renderuje ako „N ks".

@@ -63,3 +63,37 @@ paths:
   bežný malý commit na `dev` (napr. plánovaný playbook/log zápis) — jeho push
   na `main` spustí normálny beh nad CELÝM aktuálnym stromom, teda aj nad
   obsahom, ktorý "zaskočil" bez CI.
+- **`ci.yml` beží LEN na `push` (do `dev` aj `main`) — `pull_request` trigger je
+  ZÁMERNE VYNECHANÝ (issue 458, opravené). NEPRIDÁVAJ ho späť.** Kým tam bol,
+  každý `dev→main` PR spustil DVA behy nad tým istým head commitom (`event=push`
+  + `event=pull_request`), ktoré súťažili o runner sloty a jeden
+  `e2e`/`integration` zamrzol na neurčito (~20 min vs normál ~2 min). **Prečo NIE
+  concurrency-cancel toho dvojbehu** (prvý pokus, zavrhnutý): zjednotiť push+PR
+  beh do jednej `concurrency` skupiny a jeden zrušiť sa zdá lákavé, ale zrušený
+  beh nechá **CANCELLED check na tom istom head SHA** ako zelený beh (checky push
+  aj PR behu sedia na jednom SHA) → PR ostane natrvalo **UNSTABLE** (overené
+  naživo na PR #459: `mergeable=MERGEABLE`, `mergeStateStatus=UNSTABLE`; branch
+  protection síce berie najnovší check per meno, ale RAW rollup/mergeStateStatus
+  ráta aj CANCELLED). To je presne to, pred čím issue 458 varovalo. **Riešenie —
+  duplikát NEVYTVORIŤ:** push beh nad head commitom `dev`-u reportuje checky
+  priamo na PR (GitHub páruje checky podľa **SHA, nie eventu**), takže PR je
+  CLEAN pri JEDNOM behu. **Prečo to nevytvorí dieru v pokrytí:** každá zmena na
+  `dev` ide cez `dev→main` PR, ktorého head je pushnutý dev commit → push beh nad
+  ním odbehne VŠETKY brány; `if:`/`continue-on-error` sa nepridáva → „brány
+  bezpodmienečne na každom push do dev aj main" (issue 351 vyššie) ostáva
+  splnené. **`concurrency` skupina** (`${{ github.workflow }}-${{ github.head_ref
+  || github.ref_name }}`, `cancel-in-progress: true`) ostáva len na zrušenie
+  PREDBEHNUTÝCH (starších) behov tej istej vetvy pri rýchlych pushoch — ruší
+  STARŠIE commity, nie head PR-ka, takže PR ostáva CLEAN. Deploy workflow má
+  vlastnú skupinu `deploy` (`cancel-in-progress: false` = radí, neruší) — tejto
+  zmeny sa netýka.
+- **`playwright install --with-deps chromium` v `integration`/`e2e` joboch vie
+  na GitHub-hosted runneri OJEDINELE ZAMRZNÚŤ** (sťahovanie Chromium z playwright
+  CDN + `apt-get` deps) — pozorované ~19 min na tom istom kroku (7/13) v OBOCH
+  joboch naraz (spoločný CDN výpadok), zatiaľ čo predošlý beh toho istého SHA ten
+  krok prešiel za pár sekúnd. Je to transient infra (nie contention — po oprave
+  458 beží len JEDEN beh; nie kódová chyba — install krok sa diffom nedotýka).
+  **Postup:** zruš zamrznutý beh (`gh run cancel <id>`, počkaj na `completed
+  cancelled`), potom `gh run rerun <id>` — čerstvý runner install prejde. JEDEN
+  rerun na vylúčenie transientu je v poriadku; NEPREDLŽUJ timeout (nie je pomalý,
+  zdroj visí externe).
