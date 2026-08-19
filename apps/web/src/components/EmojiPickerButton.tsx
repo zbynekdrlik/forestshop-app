@@ -43,6 +43,16 @@ interface Props {
 export function EmojiPickerButton({ targetRef, value, onChange, testId, disabled = false }: Props): JSX.Element {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLSpanElement>(null);
+  // rAF na obnovu fokusu po vložení — držaný v refe, nech ho vieme zrušiť pri
+  // ďalšom inserte aj pri odmountovaní (issue 455: oneskorený rAF nesmie
+  // ukradnúť fokus tam, kam sa používateľ medzičasom presunul).
+  const rafRef = useRef<number | null>(null);
+
+  // Zruš čakajúci rAF na obnovu fokusu pri odmountovaní (napr. zatvorení
+  // formulára), nech oneskorená snímka neukradne fokus po zmiznutí poľa.
+  useEffect(() => () => {
+    if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+  }, []);
 
   // Popover neblokuje zvyšok formulára — zavrie sa na klik mimo a na Escape.
   useEffect(() => {
@@ -86,9 +96,28 @@ export function EmojiPickerButton({ targetRef, value, onChange, testId, disabled
     // hodnotu a `setSelectionRange` sadne správne; fokus sa vráti do poľa, aby
     // sa dalo písať ďalej.
     setOpen(false);
-    requestAnimationFrame(() => {
+    // Oneskorený rAF nesmie UKRADNÚŤ fokus: na zaťaženom (CI) stroji vystrelí až
+    // keď sa používateľ — alebo Playwright `.fill()` iného poľa, čo je dvojkroková
+    // focus→insertText operácia — medzičasom presunul inam. Bezpodmienečný
+    // `target.focus()` by vtedy skočil späť na naše pole a text by sa napísal do
+    // zlého poľa (issue 455: hlbšia príčina flaku upozornenia.spec.ts:271 — rAF
+    // z insertu nadpisu vystrelil počas `.fill()` podrobností a ukradol fokus).
+    // Fokus vráť LEN keď je stále „náš" — aktívny prvok je pole samo, náš
+    // popover/root, `<body>` alebo `null`. Po `setOpen(false)` sa kliknuté emoji
+    // tlačidlo odmountuje a fokus padne na `<body>`, takže bežná cesta (hneď po
+    // vložení) sa aj tak refokusne. Predošlý čakajúci rAF zrušíme.
+    if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = null;
       const target = targetRef.current;
       if (target === null) return;
+      const active = document.activeElement;
+      const ours =
+        active === null ||
+        active === document.body ||
+        active === target ||
+        (rootRef.current !== null && rootRef.current.contains(active));
+      if (!ours) return;
       target.focus();
       target.setSelectionRange(cursor, cursor);
     });
