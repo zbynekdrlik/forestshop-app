@@ -7,7 +7,16 @@ on:
     branches: [main, dev]
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  # issue 458: kľúč MUSÍ byť rovnaký pre `push` aj `pull_request` tej istej
+  # ZDROJOVEJ vetvy, aby sa dva behy toho istého commitu (event=push z pushu do
+  # `dev` + event=pull_request z otvorenia `dev→main` PR) zlúčili do jednej
+  # skupiny a `cancel-in-progress` nechal bežať len NOVŠÍ z nich → jeden beh na
+  # commit, žiadna contention na `e2e`/`integration`. `github.ref` sa medzi
+  # udalosťami LÍŠI (`refs/heads/dev` vs `refs/pull/N/merge`) → dve rôzne
+  # skupiny → dvojbeh. `github.head_ref` je nastavené len pri `pull_request` a
+  # rovná sa zdrojovej vetve; `github.ref_name` je krátky názov vetvy pri
+  # `push` — obe dajú pre `dev→main` flow ten istý kľúč (`CI-dev`).
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:

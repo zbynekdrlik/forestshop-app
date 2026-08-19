@@ -63,16 +63,30 @@ paths:
   bežný malý commit na `dev` (napr. plánovaný playbook/log zápis) — jeho push
   na `main` spustí normálny beh nad CELÝM aktuálnym stromom, teda aj nad
   obsahom, ktorý "zaskočil" bez CI.
-- **Každý `dev→main` PR spustí DVA CI behy nad tým istým head SHA —
-  `event=push` (push do `dev`) + `event=pull_request` (otvorenie PR) — a
-  `ci.yml` nemá `concurrency:` skupinu, takže bežia SÚČASNE.** Keď sa ich
-  `e2e`/`integration` joby na runneri prekryjú, sútažia o zdieľané zdroje
-  (Postgres/porty) a jeden beh `e2e` zamrzne na neurčito (pozorované ~20 min vs
-  normál ~2 min), kým DRUHÝ beh toho istého commitu `e2e` dobehne za ~1 min.
-  **Diagnostika:** ak identický SHA prešiel `e2e`/daný job v druhom behu, kód
-  je preukázateľne v poriadku — je to contention, nie zlyhanie testu; NEPREDLŽUJ
-  timeout (`no-timeout-band-aids` — nie je pomalý, je zaseknutý na zdrojoch).
-  **Postup pri integrácii:** zruš zamrznutý beh (`gh run cancel <id>`, počkaj na
-  `completed cancelled`), potom spusti znova IBA zaseknutý job
-  (`gh run rerun <id> --job <jobid>`) — s voľným runnerom prejde normálne.
-  Trvalá oprava (concurrency skupina / izolácia zdrojov per-beh) je v issue 458.
+- **Concurrency kľúč `ci.yml` MUSÍ zjednotiť `push` aj `pull_request` beh tej
+  istej ZDROJOVEJ vetvy — kľúčuj na `${{ github.head_ref || github.ref_name }}`,
+  NIKDY na `github.ref` ani `github.sha` (issue 458, opravené).** Každý
+  `dev→main` PR spúšťa DVA CI behy nad tým istým head commitom: `event=push`
+  (push do `dev`) + `event=pull_request` (otvorenie/synchronize PR). Aby ich
+  `cancel-in-progress` zlúčil na JEDEN beh, potrebujú ROVNAKÝ concurrency kľúč —
+  a jediný výraz s rovnakou hodnotou pre obe udalosti tej istej vetvy je
+  zdrojová vetva: `github.head_ref` (nastavené len pri `pull_request`, = zdrojová
+  vetva) `|| github.ref_name` (krátky názov vetvy pri `push`) → `CI-dev` pre
+  obe. **Prečo NIE `github.ref`** (predošlý, neúčinný kľúč): pri `push` je
+  `refs/heads/dev`, pri `pull_request` `refs/pull/N/merge` — dva RÔZNE reťazce →
+  dve skupiny → dvojbeh + contention. **Prečo NIE `github.sha`:** pri
+  `pull_request` je to SHA efemérneho merge commitu, pri `push` head SHA — opäť
+  sa nezhodnú. Symptóm neúčinného kľúča: `e2e`/`integration` dvoch súbežných
+  behov toho istého commitu sútažia o runner sloty a jeden `e2e` zamrzne na
+  neurčito (~20 min vs normál ~2 min). **Diagnostika starého stavu:** ak
+  identický SHA prešiel v druhom behu → contention, nie zlyhanie testu;
+  NEPREDLŽUJ timeout (`no-timeout-band-aids`). **Prečo dedup nevytvorí dieru v
+  pokrytí:** cancel zruší len REDUNDANTNÝ druhý beh toho istého commitu — všetky
+  brány (`e2e`/`integration`/`docker-build`) aj tak odbehnú raz na tom commite
+  cez beh, ktorý prežije (najnovší); `if:`/`continue-on-error` sa nepridáva, tak
+  že požiadavka „brány bezpodmienečné na každom push/PR" (issue 351 vyššie)
+  ostáva splnená. **Prečo PR neostane UNSTABLE:** oba behy pripájajú check-runy
+  na ten istý head SHA PR-ka a branch protection berie NAJNOVŠÍ check-run daného
+  mena — prežije novší (zelený) beh, takže PR skončí CLEAN nech prežil push či
+  PR beh. Deploy workflow má vlastnú skupinu `deploy` (`cancel-in-progress:
+  false` = radí, neruší) — tejto zmeny sa netýka.
