@@ -11,6 +11,9 @@ export interface FloorNoteProductRow {
   readonly variantCode: string;
   readonly productName: string;
   readonly sizeLabel: string | null;
+  // issue 453: počet kusov k pripnutému produktu (celé číslo ≥ 1). Existujúce
+  // riadky majú 1 (stĺpcový `DEFAULT 1` + migrácia).
+  readonly quantity: number;
   // Priama adresa z `shop_product_url` (feed/sitemap/probe, `.claude/rules/
   // shop-feed.md` + `shop-sitemap.md`) — `null` keď nie je známa. Frontend
   // (nie tento dopyt) rozhoduje o vizuálne odlíšenom náhradnom odkaze
@@ -55,6 +58,7 @@ export async function listFloorNotes(db: Database): Promise<readonly FloorNoteRo
       variantCode: floorNoteProducts.variantCode,
       productName: variants.name,
       sizeLabel: variants.sizeLabel,
+      quantity: floorNoteProducts.quantity,
       shopUrl: shopProductUrl.url,
     })
     .from(floorNoteProducts)
@@ -65,7 +69,7 @@ export async function listFloorNotes(db: Database): Promise<readonly FloorNoteRo
   const byNote = new Map<string, FloorNoteProductRow[]>();
   for (const row of productRows) {
     const list = byNote.get(row.floorNoteId) ?? [];
-    list.push({ variantCode: row.variantCode, productName: row.productName, sizeLabel: row.sizeLabel, shopUrl: row.shopUrl });
+    list.push({ variantCode: row.variantCode, productName: row.productName, sizeLabel: row.sizeLabel, quantity: row.quantity, shopUrl: row.shopUrl });
     byNote.set(row.floorNoteId, list);
   }
 

@@ -9,6 +9,8 @@ const productSchema = z.object({
   variantCode: z.string(),
   productName: z.string(),
   sizeLabel: z.string().nullable(),
+  // issue 453: počet kusov (celé číslo ≥ 1).
+  quantity: z.number().int(),
   shopUrl: z.string().nullable(),
 });
 export type FloorNoteProduct = z.infer<typeof productSchema>;
@@ -97,13 +99,24 @@ export async function setFloorNoteCalled(id: string, value: boolean): Promise<bo
   return setMarker(id, "called", value);
 }
 
-export async function attachFloorNoteProduct(id: string, variantCode: string): Promise<void> {
+export async function attachFloorNoteProduct(id: string, variantCode: string, quantity: number): Promise<void> {
   const response = await fetch(`/api/floor-notes/${encodeURIComponent(id)}/products`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ variantCode }),
+    body: JSON.stringify({ variantCode, quantity }),
   });
   await readJson(response, "Produkt sa nepodarilo pripnúť");
+}
+
+// issue 453: dodatočná úprava počtu kusov už pripnutého produktu.
+export async function updateFloorNoteProductQuantity(id: string, variantCode: string, quantity: number): Promise<boolean> {
+  const response = await fetch(`/api/floor-notes/${encodeURIComponent(id)}/products/${encodeURIComponent(variantCode)}/quantity`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ quantity }),
+  });
+  const body = (await readJson(response, "Počet kusov sa nepodarilo upraviť")) as { readonly updated: boolean };
+  return body.updated;
 }
 
 export async function detachFloorNoteProduct(id: string, variantCode: string): Promise<boolean> {

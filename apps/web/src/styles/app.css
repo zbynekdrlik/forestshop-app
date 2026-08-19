@@ -3711,3 +3711,33 @@ a.upozornenie-title:hover {
   gap: var(--fs-space-2);
   font-size: var(--fs-text-sm);
 }
+/* issue 453: počet kusov pri pripnutom/pripínanom produkte. Vstup MUSÍ mať
+   2-zložkový selektor (`.trieda[type]`), inak ho globálny reset
+   `input:not([type="hidden"]) { width: 100% }` prepíše na plnú šírku
+   (`.claude/rules/frontend-design.md`, issue 403). */
+.floor-note-product-search-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--fs-space-2);
+  flex: 0 0 auto;
+}
+.floor-note-product-qty-edit {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--fs-space-1);
+}
+.floor-note-product-qty-input[type="number"] {
+  width: 3.5rem;
+  min-width: 3.5rem;
+  flex: 0 0 auto;
+  text-align: right;
+}
+.floor-note-product-qty-unit {
+  font-size: var(--fs-text-xs);
+  color: var(--fs-ink-muted);
+}
+.floor-note-product-qty {
+  font-size: var(--fs-text-sm);
+  color: var(--fs-ink-muted);
+  white-space: nowrap;
+}

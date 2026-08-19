@@ -1,4 +1,5 @@
-import { boolean, index, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { boolean, check, index, integer, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { variants } from "./schema-catalog.js";
 import { users } from "./schema-users.js";
 
@@ -65,6 +66,13 @@ export const floorNoteProducts = pgTable(
     variantCode: text("variant_code")
       .notNull()
       .references(() => variants.code),
+    // issue 453: počet kusov TOHTO variantu na TOMTO zázname (šéf: "neviem
+    // dať počet kusov"). Atribút VZŤAHU, preto stĺpec junction riadku, nie
+    // samostatná tabuľka. `.default(1)` backfilne existujúce riadky
+    // (šéfov prvý zápis) na 1 pri `ADD COLUMN` — žiadny enum, žiadne
+    // riziko 55P04 (`.claude/rules/database.md`). CHECK `>= 1` nižšie je
+    // druhá obrana popri zod `int().min(1)` na trase.
+    quantity: integer("quantity").notNull().default(1),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -72,5 +80,8 @@ export const floorNoteProducts = pgTable(
     // Ten istý produkt sa na TEN ISTÝ záznam nedá pripnúť dvakrát — appka
     // to rieši `onConflictDoNothing` (idempotentné "Pripnúť"), nie chybou.
     uniqueIndex("floor_note_product_note_variant_uq").on(t.floorNoteId, t.variantCode),
+    // Rovnaký vzor ako `order_line_quantity_positive_ck` — počet kusov je
+    // vždy aspoň 1.
+    check("floor_note_product_quantity_ck", sql`${t.quantity} >= 1`),
   ],
 );
