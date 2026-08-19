@@ -141,6 +141,13 @@ export interface PairingReviewSearchResult {
    * fronty — `computeCatalogCoverage`. */
   readonly catalogLinked: number;
   readonly catalogActive: number;
+  /** issue 446 — badge záložky Párovanie: AKTÍVNE nenapárované produkty
+   * (≥1 sellable variant AND bez efektívneho odkazu AND bez terminálneho
+   * rozhodnutia unavailable/discontinued/split). Podmnožina `catalogActive −
+   * catalogLinked`, počítaná v tom istom prechode ako `catalogLinked`
+   * (`computeCatalogCoverage`), aby si badge a hlavný ukazovateľ obrazovky
+   * nemohli rozísť. NEZÁVISLÉ od `filter` (rovnako ako catalog* polia). */
+  readonly activeUnpaired: number;
   readonly items: readonly PairingReviewItem[];
 }
 
@@ -233,10 +240,12 @@ async function determineReviewPopulationKeys(db: Database): Promise<string[]> {
 // fronty — aktívny olinkovaný produkt MIMO populácie (má linku, nebol
 // gatherovaný ani rozhodnutý) sa v pokrytí správne objaví, hoci `linkedTotal`
 // (odvodený z fronty) ho minie.
-async function computeCatalogCoverage(db: Database): Promise<{ readonly catalogActive: number; readonly catalogLinked: number }> {
+async function computeCatalogCoverage(
+  db: Database,
+): Promise<{ readonly catalogActive: number; readonly catalogLinked: number; readonly activeUnpaired: number }> {
   const sellableRows = await db.selectDistinct({ productKey: variants.productKey }).from(variants).where(eq(variants.state, "sellable"));
   const activeKeys = sellableRows.map((r) => r.productKey);
-  if (activeKeys.length === 0) return { catalogActive: 0, catalogLinked: 0 };
+  if (activeKeys.length === 0) return { catalogActive: 0, catalogLinked: 0, activeUnpaired: 0 };
 
   const productRows = await db.select({ key: products.key, internalNote: products.internalNote }).from(products).where(inArray(products.key, activeKeys));
   const internalNoteByKey = new Map(productRows.map((r) => [r.key, r.internalNote]));
@@ -247,12 +256,35 @@ async function computeCatalogCoverage(db: Database): Promise<{ readonly catalogA
     .where(inArray(productSupplierLinkOverrides.productKey, activeKeys));
   const overrideByProduct = new Map(overrideRows.map((r) => [r.productKey, r.url]));
 
+  // issue 446 — badge záložky Párovanie = AKTÍVNE nenapárované produkty
+  // (≥1 sellable variant AND bez efektívneho odkazu AND bez TERMINÁLNEHO
+  // rozhodnutia). Terminálne rozhodnutie (unavailable/discontinued/split — tá
+  // istá množina ako `isUnreviewed` nižšie) znamená "už zrevidované, netreba
+  // naň upozorňovať". `good`/`manual` VŽDY produkujú efektívnu linku, takže sú
+  // vylúčené už podmienkou `effective.url !== null`. Počíta sa v tom istom
+  // prechode ako `catalogLinked`, aby si badge a hlavný ukazovateľ obrazovky
+  // (catalogActive − catalogLinked) nemohli rozísť.
+  const terminalDecisionRows = await db
+    .select({ productKey: pairingDecisions.productKey, status: pairingDecisions.status })
+    .from(pairingDecisions)
+    .where(inArray(pairingDecisions.productKey, activeKeys));
+  const terminalDecided = new Set(
+    terminalDecisionRows
+      .filter((r) => r.status === "unavailable" || r.status === "discontinued" || r.status === "split")
+      .map((r) => r.productKey),
+  );
+
   let catalogLinked = 0;
+  let activeUnpaired = 0;
   for (const key of activeKeys) {
     const effective = resolveEffectiveSupplierLink(internalNoteByKey.get(key) ?? null, overrideByProduct.get(key) ?? null);
-    if (effective.url !== null) catalogLinked += 1;
+    if (effective.url !== null) {
+      catalogLinked += 1;
+      continue;
+    }
+    if (!terminalDecided.has(key)) activeUnpaired += 1;
   }
-  return { catalogActive: activeKeys.length, catalogLinked };
+  return { catalogActive: activeKeys.length, catalogLinked, activeUnpaired };
 }
 
 // issue 399 — zdieľané budovanie karty(-diet) pre KONKRÉTNU množinu
@@ -489,9 +521,9 @@ export async function getPairingReviewItem(db: Database, productKey: string): Pr
 export async function listPairingReview(db: Database, input: PairingReviewSearchInput): Promise<PairingReviewSearchResult> {
   // issue 432 — katalógové pokrytie sa počíta NEZÁVISLE od populácie fronty
   // (aj keď je fronta prázdna — napr. všetko olinkované — pokrytie ostáva správne).
-  const { catalogActive, catalogLinked } = await computeCatalogCoverage(db);
+  const { catalogActive, catalogLinked, activeUnpaired } = await computeCatalogCoverage(db);
   const productKeys = await determineReviewPopulationKeys(db);
-  if (productKeys.length === 0) return { total: 0, gatheredTotal: 0, linkedTotal: 0, catalogLinked, catalogActive, items: [] };
+  if (productKeys.length === 0) return { total: 0, gatheredTotal: 0, linkedTotal: 0, catalogLinked, catalogActive, activeUnpaired, items: [] };
 
   const allItems = await buildPairingReviewItems(db, productKeys);
 
@@ -559,7 +591,7 @@ export async function listPairingReview(db: Database, input: PairingReviewSearch
   const start = (input.page - 1) * input.pageSize;
   const items = filtered.slice(start, start + input.pageSize);
 
-  return { total, gatheredTotal, linkedTotal, catalogLinked, catalogActive, items };
+  return { total, gatheredTotal, linkedTotal, catalogLinked, catalogActive, activeUnpaired, items };
 }
 
 export interface PairingReviewCandidate {
