@@ -78,3 +78,43 @@ describe("EmojiPickerButton (komponent)", () => {
     expect(screen.queryByTestId("emoji-popover")).toBeNull();
   });
 });
+
+// issue 455: emoji picker nesmie stratiť text napísaný PRED emoji, ani keď React
+// controlled `value` prop ZAOSTÁVA za živým DOM-om. Na CI runneri emoji klik
+// bežal skôr, než React skomitoval `onChange` z predošlého `.fill()`, takže
+// stará prázdna prop hodnota prepísala napísaný text na holé "✅"
+// (`insertEmojiAtSelection("", …)` s caret-om orezaným na dĺžku 0). Insert musí
+// bázovú hodnotu čítať zo ŽIVÉHO DOM-u poľa (`el.value`), z toho istého
+// elementu ako výber — nie zo snímky propu.
+describe("EmojiPickerButton — vloženie použije živú DOM hodnotu, nie zaostávajúci prop (issue 455)", () => {
+  it("nestratí napísaný text, keď `value` prop zaostáva za DOM-om", () => {
+    const received: string[] = [];
+    function StaleHarness(): JSX.Element {
+      const ref = useRef<HTMLTextAreaElement>(null);
+      // `value` prop zámerne ZAOSTÁVA (prázdny) za tým, čo je v DOM-e — presne
+      // race stav z CI, keď React ešte neskomitoval onChange z `.fill()`.
+      return (
+        <>
+          <textarea ref={ref} defaultValue="" data-testid="ta" />
+          <EmojiPickerButton
+            targetRef={ref}
+            value=""
+            onChange={(next) => {
+              received.push(next);
+            }}
+            testId="emoji"
+          />
+        </>
+      );
+    }
+    render(<StaleHarness />);
+    const ta = screen.getByTestId<HTMLTextAreaElement>("ta");
+    // DOM je PRED propom: používateľ napísal text (fill), React ešte neskomitol.
+    ta.value = "Skontrolovať sklad ";
+    ta.focus();
+    ta.setSelectionRange(19, 19); // caret za textom, ako po `.fill()`
+    fireEvent.click(screen.getByTestId("emoji"));
+    fireEvent.click(screen.getByRole("button", { name: "Vložiť ✅" }));
+    expect(received).toEqual(["Skontrolovať sklad ✅"]);
+  });
+});
