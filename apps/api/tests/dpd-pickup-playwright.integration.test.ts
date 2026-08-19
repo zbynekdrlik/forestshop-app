@@ -5,7 +5,7 @@ import { startDpdFixture, type DpdFixture } from "./helpers/dpd-portal-fixture.j
 
 // Reálny Chromium proti LOKÁLNEJ fixture appke (nikdy proti skutočnému
 // dpdshipper.sk — issue 292's bezpečnostné pravidlo, `.claude/rules/dpd.md`).
-const TEST_TIMEOUT_MS = 60_000;
+const TEST_TIMEOUT_MS = 120_000; // issue 460: realny Chromium (~16 s baseline) proti fixture + premenlivy CI runner — rezerva ~8x, nie band-aid (merane zo surodencov, nie odhad)
 const USER = "manager";
 const PASSWORD = "tajneheslo";
 
@@ -43,6 +43,24 @@ describe("runOrderDpdPickup (proti fixture, nikdy proti reálnemu DPD)", () => {
       });
 
       expect(fixture.lastPickupDate()).toBe("5. 1. 2026");
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "zavrie prekrývajúci info banner (Štěpánov krok 2) pred vyplnením — inak by klik na formulár zlyhal",
+    async () => {
+      fixture = await startDpdFixture({ user: USER, password: PASSWORD, showInfoBanner: true });
+      const outcome = await runOrderDpdPickup({
+        config: dpdPortalConfigFromBaseUrl(fixture.baseUrl, USER, PASSWORD),
+        pickupDate: "2026-08-10",
+      });
+
+      // Úspech je dôkaz, že banner bol zatvorený: kým prekrýva formulár,
+      // `Pokračovať`/`Uložiť` klik zachytí banner a robot zlyhá (ok:false).
+      expect(outcome.ok).toBe(true);
+      expect(outcome.errorDetail).toBeNull();
+      expect(fixture.lastPickupDate()).toBe("10. 8. 2026");
     },
     TEST_TIMEOUT_MS,
   );

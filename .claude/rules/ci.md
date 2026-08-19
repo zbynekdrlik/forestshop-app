@@ -97,3 +97,21 @@ paths:
   cancelled`), potom `gh run rerun <id>` — čerstvý runner install prejde. JEDEN
   rerun na vylúčenie transientu je v poriadku; NEPREDLŽUJ timeout (nie je pomalý,
   zdroj visí externe).
+  **issue 460 (trvalá odolnosť, nasadené):** oba joby teraz cacheujú stiahnutý
+  Chromium cez `actions/cache@v4` (`~/.cache/ms-playwright`, kľúč
+  `${{ runner.os }}-playwright-<verzia>`) — na cache-HIT beží len
+  `playwright install-deps chromium` (apt), sťahovanie z CDN sa preskočí, čím
+  symptóm #1 (CDN zamrznutie) prakticky zmizne. Ak sa cache MINIE (bump
+  Playwrightu / prvý beh), plná `--with-deps` inštalácia môže stále OJEDINELE
+  zamrznúť na CDN — vtedy platí cancel+rerun postup vyššie, ale je to už len
+  pri invalidácii cache, nie pri každom behu.
+- **Reálny-Chromium integračné testy majú per-`it` strop `TEST_TIMEOUT_MS =
+  120_000` (issue 460), NIE 60 s.** Súbory `shoptet-writeback-run/-playwright/
+  -sequence`, `dpd-pickup-playwright`, `dpd-shipment-playwright`,
+  `order-note-playwright` ženú reálny Chromium proti fixture (~16 s baseline —
+  merané zo súrodencov 16,1–16,3 s). Pri pôvodnom 60 s strope (~4× rezerva)
+  test `shoptet-writeback-run:54` ojedinele timeoutoval na pomalom hostenom
+  runneri (beh `32285918063` attempt 1) — nie regresia, runner-timing flake.
+  120 s = ~8× rezerva, cielene LEN na prehliadačové testy; DB-only testy
+  ostávajú na globálnom `testTimeout: 30_000` (`vitest.config.ts`). Nový
+  reálny-Chromium test drž na `TEST_TIMEOUT_MS = 120_000`, nie 60 s.

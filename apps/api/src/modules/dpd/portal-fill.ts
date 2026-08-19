@@ -105,6 +105,51 @@ export function assertSlovakDeliveryCountry(countryName: string): void {
   }
 }
 
+// issue 451 (Štěpánov krok 2): po prihlásení portál môže ukázať info banner
+// („Aktuálne obmedzenia…") so zatváracím ✕, ktorý — ak prekryje formulár —
+// zachytí klik na „Pokračovať"/„Uložiť". Zámerne ŠIROKÝ, tolerantný výber
+// zatváracích prvkov v banner/alert/notification kontajneroch. Presný
+// selektor reálneho bannera je UNVERIFIED (mapovanie 9.8.2026 bolo
+// read-only, a z lane sa robot NESMIE spustiť naživo) — preto tolerantný
+// zoznam; over/zúž ho pri prvom reálnom zvoze.
+const INFO_BANNER_CLOSE_SELECTORS: readonly string[] = [
+  '[aria-label="Zavrieť" i]',
+  '[aria-label="Zavriet" i]',
+  '[aria-label="Close" i]',
+  '[class*="banner"] [class*="close"]',
+  '[class*="notification"] [class*="close"]',
+  '[class*="alert"] [class*="close"]',
+  "button.close",
+  'button:has-text("✕")',
+  'button:has-text("×")',
+];
+
+/**
+ * Štěpánov krok 2 (issue 451): zatvorí prekrývajúce info bannery/hlášky PRED
+ * vyplnením formulára. Zámerne BEST-EFFORT a fail-SOFT, NIE fail-loud —
+ * chýbajúci banner je NORMÁLNY stav (na rozdiel od povinného poľa, ktoré
+ * appka MUSÍ vyplniť), takže absencia = no-op, nikdy throw. Ak by prekrytie
+ * predsa zostalo, `checkForPortalError` po Uložení aj tak zlyhá nahlas —
+ * táto pomôcka teda nič nezhoršuje, len odstráni bežnú prekážku. Volá sa
+ * LEN z pickup vetvy (`pickup-playwright.ts`), shipment vetva ostáva
+ * nedotknutá.
+ */
+export async function dismissInfoBanners(page: Page): Promise<void> {
+  for (const selector of INFO_BANNER_CLOSE_SELECTORS) {
+    const closers = await page
+      .locator(selector)
+      .all()
+      .catch(() => [] as Locator[]);
+    for (const closer of closers) {
+      const visible = await closer.isVisible().catch(() => false);
+      if (!visible) continue;
+      await closer.click({ timeout: 1500 }).catch(() => {
+        // best-effort: tento prvok nemusí byť skutočný zatvárací ovládač
+      });
+    }
+  }
+}
+
 export interface RunOnDpdPortalPageOptions {
   readonly headless?: boolean;
   readonly executablePath?: string;

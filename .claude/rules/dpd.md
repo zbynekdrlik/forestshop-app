@@ -227,3 +227,33 @@ paths:
   `PASSWORD` nastavené, presne rovnaká disciplína ako `MAIL_HOST`/
   `SHOPTET_ADMIN_USER` v e2e prostredí (appka sa nikdy nedotkne skutočnej
   tretej strany z testu).
+- **Objednanie zvozu má Štěpánov krok 2 „zavrieť všetky hlášky" (info banner
+  „Aktuálne obmedzenia…" s ✕) — rieši `portal-fill.ts`'s `dismissInfoBanners`,
+  volaný v `pickup-playwright.ts`'s `runOrderDpdPickup` PRED `fillPickupForm`
+  (issue 451).** Zámerne fail-SOFT, NIE fail-loud (na rozdiel od povinných
+  polí formulára): chýbajúci banner je NORMÁLNY stav, takže helper chyby
+  prehltne a na absenciu je no-op; ak by prekrytie predsa zostalo,
+  `checkForPortalError` po Uložení aj tak zlyhá nahlas. **Presný selektor
+  reálneho bannera je UNVERIFIED** (mapovanie 9.8.2026 bolo read-only a robot
+  sa NESMIE spustiť naživo — vytvoril by reálny zvoz), preto ŠIROKÝ tolerantný
+  zoznam; scope-nuté selektory (`[class*="banner"] [class*="close"]` …) bežia
+  PRVÉ, holé `button:has-text("✕"/"×")` až posledné ako záloha — pri prvom
+  reálnom zvoze ich ZÚŽ podľa skutočného DOM (nikdy naslepo, zúženie teraz by
+  mohlo scope-núť VON aj skutočný zatvárací prvok). Volá sa LEN v pickup
+  vetve — shipment vetva (#292) ostáva nedotknutá. Test: fixtúra
+  `dpd-portal-fixture.ts`'s `showInfoBanner` prekryje formulár celoobrazovkovým
+  `z-index` overlayom, ktorý zachytí pointer eventy (Playwright „intercepts
+  pointer events") — RED bez dismissalu, GREEN s ním; over cez `[aria-label
+  "Zavrieť"]`/`[class*=alert] [class*=close]`, nie cez holý ✕ (aby test
+  nezávisel od záložného selektora).
+- **UI záložky „Objednať DPD": denná preprava (zvoz) je PRIMÁRNA akcia (issue
+  451) — tlačidlo „Objednať zvoz na deň" je `btn good lg` a PRVÉ v DOM poradí**
+  (nad per-zásielkovým `btn good` „Objednať prepravu DPD" aj nad tabuľkou);
+  feedback po zvoze je `<p role="status" data-testid="dpd-pickup-message">`
+  (live region ako `dpd-send-notice`). Poradie overuje `DpdSection.test.tsx`
+  (`["dpd-pickup-submit","dpd-open-preview","table"]`) aj `dpd.spec.ts`
+  (`zvozBox.y < btnBox.y`, boundingBox funguje aj na disabled tlačidle).
+  Per-zásielkový úvodný odsek sa presunul dole k svojej sekcii (`orders.length
+  > 0`). Badge/per-zásielková logika #445 nedotknuté. Kontakt (Štěpánov krok
+  5) sa NEVYBERÁ — účet má jediný predvyplnený kontakt + fail-loud poistka;
+  ak by prvý reálny zvoz ukázal, že kontakt treba aktívne vybrať, TU je delta.

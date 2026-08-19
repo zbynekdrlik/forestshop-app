@@ -2,7 +2,7 @@ import type { Page } from "playwright";
 import { log } from "../../logger.js";
 import { runInChildProcess } from "../shoptet-writeback/child-runner.js";
 import type { DpdPortalConfig } from "./config.js";
-import { runOnDpdPortalPage, typeInto } from "./portal-fill.js";
+import { dismissInfoBanners, runOnDpdPortalPage, typeInto } from "./portal-fill.js";
 
 // issue 292: "Objednávky zvozu" (`/pickup-orders`) — naživo overené
 // (7.8.2026 menu, 9.8.2026 formulár): klik "+" pri "Jednorazové zvozy"
@@ -84,6 +84,10 @@ export async function runOrderDpdPickup(options: RunOrderDpdPickupOptions): Prom
     await runOnDpdPortalPage(options.config, options, async (page) => {
       await page.goto(options.config.newPickupOrderUrl, { waitUntil: "domcontentloaded" });
       await page.waitForLoadState("networkidle");
+      // Štěpánov krok 2: zatvor prekrývajúce info hlášky, inak by zachytili
+      // klik na „Pokračovať"/„Uložiť" (issue 451). Best-effort — no-op, keď
+      // žiadny banner nie je.
+      await dismissInfoBanners(page);
       await fillPickupForm(page, options.pickupDate);
     });
     return { ok: true, errorDetail: null };

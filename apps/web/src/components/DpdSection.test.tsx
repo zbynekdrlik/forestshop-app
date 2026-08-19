@@ -171,7 +171,27 @@ it("Objednať zvoz na deň zavolá requestDpdPickup s vybraným dátumom a zobra
   await waitFor(() => {
     expect(requestDpdPickup).toHaveBeenCalledWith("2026-08-10");
   });
-  expect(screen.getByTestId("dpd-pickup-message").textContent).toContain("Zvoz objednaný.");
+  const message = screen.getByTestId("dpd-pickup-message");
+  expect(message.textContent).toContain("Zvoz objednaný.");
+  // issue 451: feedback po objednaní zvozu je live region (role=status),
+  // rovnako ako per-zásielkový `dpd-send-notice`.
+  expect(message.getAttribute("role")).toBe("status");
+});
+
+// issue 451: denná preprava (zvoz) je PRIMÁRNA akcia — tlačidlo zvozu je
+// v DOM PRED per-zásielkovým tlačidlom „Objednať prepravu DPD" aj pred
+// tabuľkou.
+it("tlačidlo 'Objednať zvoz na deň' je PRVÉ — pred per-zásielkovým tlačidlom aj tabuľkou", async () => {
+  fetchDpdShippableOrders.mockResolvedValue({ configured: true, orders: [ORDER_A] });
+
+  render(<DpdSection role="manazer" onSessionExpired={() => {}} />);
+
+  await screen.findByTestId("dpd-open-preview");
+  const section = screen.getByTestId("dpd-section");
+  const order = [...section.querySelectorAll("[data-testid='dpd-pickup-submit'], [data-testid='dpd-open-preview'], table")].map((n) =>
+    n.tagName === "TABLE" ? "table" : n.getAttribute("data-testid"),
+  );
+  expect(order).toEqual(["dpd-pickup-submit", "dpd-open-preview", "table"]);
 });
 
 // issue 445: viditeľný feedback (role=status) pri hornom tlačidle po odoslaní.

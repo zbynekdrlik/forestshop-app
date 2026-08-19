@@ -6,7 +6,7 @@ import { FAKE_LIST_PARCEL_NUMBER, startDpdFixture, type DpdFixture } from "./hel
 
 // Reálny Chromium proti LOKÁLNEJ fixture appke (nikdy proti skutočnému
 // dpdshipper.sk — issue 292's bezpečnostné pravidlo, `.claude/rules/dpd.md`).
-const TEST_TIMEOUT_MS = 60_000;
+const TEST_TIMEOUT_MS = 120_000; // issue 460: realny Chromium (~16 s baseline) proti fixture + premenlivy CI runner — rezerva ~8x, nie band-aid (merane zo surodencov, nie odhad)
 const USER = "manager";
 const PASSWORD = "tajneheslo";
 
