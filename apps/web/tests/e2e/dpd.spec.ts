@@ -55,6 +55,11 @@ test("zoznam objednávok, neúplná adresa je zablokovaná, appka je fail-closed
   const tblBox = await page.locator("table").boundingBox();
   expect(btnBox?.y ?? Infinity).toBeLessThan(tblBox?.y ?? -Infinity);
 
+  // issue 451: denná preprava (zvoz) je PRIMÁRNA akcia — tlačidlo „Objednať
+  // zvoz na deň" je NAD per-zásielkovým „Objednať prepravu DPD".
+  const zvozBox = await page.getByTestId("dpd-pickup-submit").boundingBox();
+  expect(zvozBox?.y ?? Infinity).toBeLessThan(btnBox?.y ?? -Infinity);
+
   // Pripravená objednávka (úplná adresa + dobierka) — checkbox je aktívny,
   // hmotnosť predvyplnená z uloženej hodnoty, dobierka zobrazená.
   const pripravena = page.getByTestId("dpd-order-row-9012");

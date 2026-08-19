@@ -215,12 +215,6 @@ export function DpdSection({ role, onSessionExpired }: { readonly role: Me["role
 
   return (
     <section data-testid="dpd-section">
-      <p>
-        Objednávky, ktoré appka ešte cez DPD neodoslala (a Shoptet pre ne nemá vlastné číslo zásielky).
-        Označ pripravené objednávky a klikni „Objednať prepravu DPD“ — appka najprv ukáže presný náhľad,
-        nič sa neodošle bez potvrdenia.
-      </p>
-
       {!configured && loaded && (
         <p role="alert" data-testid="dpd-not-configured">
           DPD preprava nie je nakonfigurovaná (chýba prihlásenie do dpdshipper.sk).
@@ -228,7 +222,12 @@ export function DpdSection({ role, onSessionExpired }: { readonly role: Me["role
       )}
       {loadError !== "" && <p role="alert">{loadError}</p>}
 
+      {/* issue 451: denná preprava (zvoz) je PRIMÁRNA akcia záložky —
+          najprominentnejšie tlačidlo (btn good lg), prvá v poradí, nad
+          per-zásielkovým objednaním aj tabuľkou. Text rešpektuje Štěpánov
+          krok 7 (objednávka sa hneď odošle DPD a už sa nedá upraviť). */}
       <div data-testid="dpd-pickup">
+        <p>Objednanie dennej prepravy (zvozu DPD). Vyber deň a klikni — objednávka sa hneď odošle DPD a už sa nedá upraviť.</p>
         <label htmlFor="dpd-pickup-date">Objednať zvoz na deň</label>
         <input
           id="dpd-pickup-date"
@@ -238,11 +237,25 @@ export function DpdSection({ role, onSessionExpired }: { readonly role: Me["role
             setPickupDate(e.target.value);
           }}
         />
-        <button type="button" className="btn sm" disabled={!configured || !canSend || pickupBusy} onClick={submitPickup} data-testid="dpd-pickup-submit">
+        <button type="button" className="btn good lg" disabled={!configured || !canSend || pickupBusy} onClick={submitPickup} data-testid="dpd-pickup-submit">
           🚚 Objednať zvoz na deň
         </button>
-        {pickupMessage !== "" && <span data-testid="dpd-pickup-message"> {pickupMessage}</span>}
+        {pickupMessage !== "" && (
+          <p role="status" data-testid="dpd-pickup-message">
+            {pickupMessage}
+          </p>
+        )}
       </div>
+
+      {/* issue 451: per-zásielkové objednanie je SEKUNDÁRNE (pod primárnym
+          zvozom) — jeho úvodný text sa presunul sem k nemu. */}
+      {orders.length > 0 && (
+        <p>
+          Nižšie sú objednávky, ktoré appka ešte cez DPD neodoslala (a Shoptet pre ne nemá vlastné číslo zásielky).
+          Označ pripravené objednávky a klikni „Objednať prepravu DPD“ — appka najprv ukáže presný náhľad,
+          nič sa neodošle bez potvrdenia.
+        </p>
+      )}
 
       {/* issue 445: tlačidlo „Objednať prepravu DPD" + viditeľný feedback sú
           HORE (nad tabuľkou, k tlačidlu zvozu) — šéf ich predtým na konci
