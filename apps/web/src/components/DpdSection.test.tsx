@@ -212,7 +212,7 @@ it("pri čiastočnom úspechu ukáže súhrn 'N úspešných, M chýb'", async (
   fireEvent.click(screen.getByTestId("dpd-preview-confirm"));
 
   const notice = await screen.findByTestId("dpd-send-notice");
-  expect(notice.textContent).toBe("1 úspešných, 1 chyba");
+  expect(notice.textContent).toBe("1 úspešná, 1 chyba");
 });
 
 it("tlačidlo 'Objednať prepravu DPD' je v DOM PRED tabuľkou (hore, nie na konci)", async () => {

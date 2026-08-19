@@ -28,6 +28,12 @@ function pluralChyba(n: number): string {
   return `${String(n)} chýb`;
 }
 
+function pluralUspesna(n: number): string {
+  if (n === 1) return `${String(n)} úspešná`;
+  if (n >= 2 && n <= 4) return `${String(n)} úspešné`;
+  return `${String(n)} úspešných`;
+}
+
 // issue 292: "Eshop → Preprava DPD" — 1) zoznam objednávok bez appka-vlastnej
 // odoslanej zásielky, 2) klik na "Objednať prepravu DPD" ukáže PRESNÝ náhľad
 // (nič sa ešte neposlalo), 3) až potvrdenie v náhľade skutočne spustí robota
@@ -82,7 +88,7 @@ export function DpdSection({ role, onSessionExpired }: { readonly role: Me["role
     const ok = sendResults.filter((r) => r.ok).length;
     const fail = sendResults.length - ok;
     if (fail === 0) return `Objednané: ${pluralZasielka(ok)}`;
-    return `${String(ok)} úspešných, ${pluralChyba(fail)}`;
+    return `${pluralUspesna(ok)}, ${pluralChyba(fail)}`;
   }, [sendResults]);
 
   const load = useCallback(() => {
