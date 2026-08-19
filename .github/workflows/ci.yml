@@ -1,21 +1,28 @@
 name: CI
 
 on:
+  # issue 458: CI beží na PUSH do `dev` aj `main`. `pull_request` trigger je
+  # ZÁMERNE VYNECHANÝ. Predtým bežal aj `pull_request`, takže jeden `dev→main`
+  # PR spustil DVA behy nad tým istým head commitom (event=push + event=pull_
+  # request) — súťažili o zdroje/runner sloty a jeden `e2e`/`integration`
+  # zamrzol. Zlúčiť ich cez `concurrency` (zrušiť jeden) NEfunguje: zrušený beh
+  # nechá CANCELLED check na tom istom head SHA, takže PR ostane natrvalo
+  # UNSTABLE (checky push aj PR behu sedia na jednom SHA — overené naživo na
+  # PR #459). Riešenie je duplikát NEVYTVORIŤ: push beh nad head commitom `dev`-u
+  # reportuje checky priamo na PR (GitHub páruje checky podľa SHA, nie podľa
+  # eventu), takže PR je CLEAN, všetky brány bežia, a keďže každá zmena na `dev`
+  # ide cez `dev→main` PR (ktorého head je pushnutý dev commit), „brány
+  # bezpodmienečne na každom push do dev aj main" (issue 351) ostáva splnené.
   push:
-    branches: [main, dev]
-  pull_request:
     branches: [main, dev]
 
 concurrency:
-  # issue 458: kľúč MUSÍ byť rovnaký pre `push` aj `pull_request` tej istej
-  # ZDROJOVEJ vetvy, aby sa dva behy toho istého commitu (event=push z pushu do
-  # `dev` + event=pull_request z otvorenia `dev→main` PR) zlúčili do jednej
-  # skupiny a `cancel-in-progress` nechal bežať len NOVŠÍ z nich → jeden beh na
-  # commit, žiadna contention na `e2e`/`integration`. `github.ref` sa medzi
-  # udalosťami LÍŠI (`refs/heads/dev` vs `refs/pull/N/merge`) → dve rôzne
-  # skupiny → dvojbeh. `github.head_ref` je nastavené len pri `pull_request` a
-  # rovná sa zdrojovej vetve; `github.ref_name` je krátky názov vetvy pri
-  # `push` — obe dajú pre `dev→main` flow ten istý kľúč (`CI-dev`).
+  # Zruší PREDBEHNUTÝ (starší) beh tej istej vetvy pri rýchlych po sebe idúcich
+  # pushoch — šetrí CI na už neaktuálnom commite. Cancel sa týka STARŠÍCH
+  # commitov (nie head-u PR), takže PR head má vždy len svoj vlastný beh a
+  # ostáva CLEAN. (`head_ref || ref_name`: head_ref je prázdny pri push evente
+  # → padne na ref_name = názov vetvy; ponechané pre robustnosť, keby sa niekedy
+  # znova pridal pull_request trigger.)
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
