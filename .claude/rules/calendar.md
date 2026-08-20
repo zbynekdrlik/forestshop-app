@@ -83,6 +83,45 @@ paths:
   tickete v tomto module: rovnaký vzor (funkcia dostane `limit` parameter,
   vráti pole, `.slice(0, limit)` na konci), nie duplicitná druhá funkcia
   vedľa pôvodnej.
+- **Issue 469 (majiteľ chce udalosti zo VŠETKÝCH kalendárov účtu, nie len z
+  jedného): `GOOGLE_CALENDAR_ICS_URL` prijme VIAC adries oddelených čiarkou
+  alebo novým riadkom → `readonly string[] | undefined` (spätne kompatibilné s
+  jednou adresou = 1-prvkové pole).** Zmena je `env.ts` transform (nie
+  `z.string().url()`, ktoré by zoznam odmietlo): `.optional().transform((raw,
+  ctx) => …)` — split na `[,\n]`, trim, vynechať prázdne, validovať KAŽDÚ
+  položku cez `z.string().url().safeParse`, pri neplatnej `ctx.addIssue({code:
+  z.ZodIssueCode.custom, …}) + return z.NEVER`. **Chybová hláška transformu
+  NIKDY neinterpoluje adresu** (tajný token je v ceste — vzor „secret in path"
+  vyššie platí aj tu; test to overuje: `not.toMatch(/basic\.ics/)`). `index.ts`
+  mapuje každú adresu na vlastný `createHttpIcsFetcher(url)` a odovzdá
+  `readonly IcsFetcher[]` do `createNextEventService`. **Kým sa do
+  `docker-compose.prod.yml` premietne, over ako pri každej env premennej
+  (`.claude/rules/deploy.md`) — tu ale `GOOGLE_CALENDAR_ICS_URL` už MÁ riadok v
+  compose (od #309), takže zmena hodnoty na viac-adresovú ide len cez
+  `/srv/forestshop/.env`, žiadny nový compose riadok netreba.**
+  - **Merge-then-group invariant (jadro #469):** `next-event.ts` sa rozdelilo
+    na `collectUpcomingCandidates(icsText, now): Candidate[]` (per kalendár:
+    BEGIN:VCALENDAR check + parse + expand + filter „ešte neskončila", BEZ
+    sortu/grupovania) a `groupByDay(candidates, now, dayLimit)` (sort podľa
+    začiatku + doterajšie zoskupenie po dňoch). `resolveNextEventsFromCalendars
+    (icsTexts[], now, dayLimit)` = `flatMap(collectUpcomingCandidates)` →
+    `groupByDay`. Kandidáti sa teda ZLÚČIA zo všetkých kalendárov, zoradia a AŽ
+    POTOM zoskupia po dňoch — nikdy per-kalendár-then-concat. Keby sa
+    zoskupilo per-kalendár a zreťazilo, deň s udalosťami z dvoch kalendárov by
+    sa do `NEXT_EVENT_DAYS_LIMIT` započítal DVAKRÁT a poradie by nesedelo. Test,
+    ktorý to ROZLIŠUJE: dayLimit 1, kalendár A má 10.+11.8., kalendár B má 11.8.
+    → merge-then-group vráti len 10.8. (`["A 10.8."]`), per-kalendár-concat by
+    dalo `["A 10.8.","B 11.8."]`. `resolveNextEvents(icsText,…)` ostáva ako
+    tenký obal `resolveNextEventsFromCalendars([icsText],…)`, takže všetkých 35
+    pôvodných testov platí bezo zmeny logiky.
+  - **One-fails-all honesty doktrína žije v service, nie vo wiring vrstve:**
+    `createNextEventService` stiahne fetchery cez `Promise.all` — jeden z N
+    zlyhá → celý `refresh` odmietne → `ok:false` (nikdy čiastočný pohľad, ktorý
+    by ticho skryl kalendár — presne problém z #469). Preto pole fetcherov
+    (`readonly IcsFetcher[]`), nie „kombinovaný fetcher `() => Promise<string[]>`"
+    postavený v `index.ts` — druhá voľba by presunula honesty-kritické správanie
+    mimo unit-testovaného service. Cache/TTL/in-flight dedup bez zmeny (drží
+    ZLÚČENÝ výsledok). Web karta (`NextCalendarEventCard.tsx`) sa NEMENÍ.
 - **Issue 439 (majiteľ chce 3 najbližšie DNI s udalosťami, nie 3 udalosti):
   `NEXT_EVENTS_LIMIT` → `NEXT_EVENT_DAYS_LIMIT`, parameter `limit` →
   `dayLimit`. Záverečné `.slice(0, limit)` (prvých N udalostí) sa nahradilo
