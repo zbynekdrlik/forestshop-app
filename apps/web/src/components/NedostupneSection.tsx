@@ -292,8 +292,11 @@ export function NedostupneSection({ role, onSessionExpired }: { readonly role: M
                   // issue 344: šéf chce riadok, kde už bol odoslaný AKÝKOĽVEK
                   // z dvoch e-mailov, odlíšiť na prvý pohľad — `handled`
                   // riadi celý riadok (background + ľavý pruh, `app.css`),
-                  // nikdy len tlačidlo. Existujúci text "✓ Odoslané" na
-                  // tlačidle nižšie ostáva nezmenený ako non-color signál.
+                  // nikdy len tlačidlo (zelená `--fs-success`). issue 466: šéf
+                  // navyše chce SAMOTNÉ odoslané tlačidlo červené — každé z
+                  // dvoch tlačidiel nižšie prepne `ghost` → `bad` (appkin
+                  // červený button variant, `--fs-danger`) NEZÁVISLE podľa
+                  // svojho vlastného sent flagu; riadok tým ostáva nedotknutý.
                   const handled = order.nedostupneSent || order.alternativaSent;
                   return (
                     <div
@@ -312,7 +315,7 @@ export function NedostupneSection({ role, onSessionExpired }: { readonly role: M
                         <div className="nedostupne-order-actions">
                           <button
                             type="button"
-                            className="btn lg ghost"
+                            className={`btn lg ${order.nedostupneSent ? "bad" : "ghost"}`}
                             disabled={rowBusy || order.nedostupneSent}
                             onClick={() => {
                               openPreview(order.orderCode, group.variantCode, "nedostupne");
@@ -323,7 +326,7 @@ export function NedostupneSection({ role, onSessionExpired }: { readonly role: M
                           </button>
                           <button
                             type="button"
-                            className="btn lg ghost"
+                            className={`btn lg ${order.alternativaSent ? "bad" : "ghost"}`}
                             disabled={rowBusy || order.alternativaSent}
                             onClick={() => {
                               openPreview(order.orderCode, group.variantCode, "alternativa");
