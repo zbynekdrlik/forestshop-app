@@ -449,9 +449,9 @@ describe("resolveNextEventsFromCalendars — zlúčenie viacerých kalendárov (
     expect(result.every((e) => e.dateLabel === "pondelok 10. 8.")).toBe(true);
   });
 
-  it("jeden kalendár v poli sa správa presne ako resolveNextEvents (spätná kompatibilita)", () => {
+  it("jeden kalendár v poli vráti presne udalosti toho kalendára (spätná kompatibilita)", () => {
     const cal = ics([...evt("c1", "Jediná", "20260810T090000", "20260810T100000")]);
-    expect(resolveNextEventsFromCalendars([cal], NOW, 3)).toEqual(resolveNextEvents(cal, NOW, 3));
+    expect(resolveNextEventsFromCalendars([cal], NOW, 3)).toEqual([{ title: "Jediná", dateLabel: "pondelok 10. 8.", allDay: false }]);
   });
 
   it("pokazený feed v KTOROMKOĽVEK kalendári nahlas zlyhá (fail-loud, čiastočný pohľad sa neskrýva)", () => {

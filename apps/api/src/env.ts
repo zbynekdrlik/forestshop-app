@@ -117,22 +117,28 @@ const envSchema = z.object({
   //
   // issue 469: prijme VIAC adries oddelených čiarkou alebo novým riadkom
   // (spätne kompatibilné s jednou adresou → 1-prvkové pole). Každá položka sa
-  // validuje ako URL; whitespace okolo sa oreže, prázdne položky sa vynechajú.
-  // Chybová hláška pri neplatnej adrese NIKDY neinterpoluje samotnú adresu
-  // (tajný token je v ceste — `.claude/rules/calendar.md`). Výsledný typ je
-  // `readonly string[] | undefined`.
+  // validuje ako URL; whitespace okolo sa oreže, prázdne aj duplicitné položky
+  // sa vynechajú (duplikát by inak stiahol ten istý kalendár dvakrát a
+  // zdvojil udalosti na karte). Chybová hláška pri neplatnej adrese NIKDY
+  // neinterpoluje samotnú adresu (tajný token je v ceste —
+  // `.claude/rules/calendar.md`). Výsledný typ je `string[] | undefined`.
   GOOGLE_CALENDAR_ICS_URL: z
     .string()
     .optional()
     .transform((raw, ctx) => {
       if (raw === undefined) return undefined;
-      const urls = raw
-        .split(/[,\n]/)
-        .map((s) => s.trim())
-        .filter((s) => s.length > 0);
+      const urlSchema = z.string().url();
+      const urls = [
+        ...new Set(
+          raw
+            .split(/[,\n]/)
+            .map((s) => s.trim())
+            .filter((s) => s.length > 0),
+        ),
+      ];
       if (urls.length === 0) return undefined;
       for (const url of urls) {
-        if (!z.string().url().safeParse(url).success) {
+        if (!urlSchema.safeParse(url).success) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
             message: "GOOGLE_CALENDAR_ICS_URL obsahuje neplatnú URL adresu (tajná adresa sa do hlášky zámerne nevypisuje)",
