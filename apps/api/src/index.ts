@@ -246,12 +246,14 @@ const dpdDeps = {
   config: dpdUser === undefined || dpdPassword === undefined ? undefined : dpdPortalConfigFromBaseUrl(env.DPD_PORTAL_BASE_URL, dpdUser, dpdPassword),
 };
 
-// issue 309: "Eshop → Upozornenia" — najbližšia udalosť z majiteľovho Google
-// kalendára. `GOOGLE_CALENDAR_ICS_URL` je nepovinná (env.ts) — bez nej appka
-// beží ďalej, karta na nástenke sa jednoducho nezobrazí (`http/app.ts`'s
-// `nextEvent === undefined` vetva).
-const googleCalendarIcsUrl = env.GOOGLE_CALENDAR_ICS_URL;
-const nextEventService = googleCalendarIcsUrl === undefined ? undefined : createNextEventService(createHttpIcsFetcher(googleCalendarIcsUrl));
+// issue 309/469: "Eshop → Upozornenia" — najbližšie udalosti z majiteľových
+// Google kalendárov. `GOOGLE_CALENDAR_ICS_URL` je nepovinná (env.ts) — bez nej
+// appka beží ďalej, karta na nástenke sa jednoducho nezobrazí (`http/app.ts`'s
+// `nextEvent === undefined` vetva). issue 469: premenná môže obsahovať VIAC
+// adries (env.ts ich už rozdelí na pole) — jeden bounded fetcher per adresa.
+const googleCalendarIcsUrls = env.GOOGLE_CALENDAR_ICS_URL;
+const nextEventService =
+  googleCalendarIcsUrls === undefined ? undefined : createNextEventService(googleCalendarIcsUrls.map((url) => createHttpIcsFetcher(url)));
 
 // issue 319: chýbajúci kľúč tu (na rozdiel od `postaUncollected`/
 // `orderReminder`/`nedostupne`/`orderMerge`/`dpd` nižšie) nechával

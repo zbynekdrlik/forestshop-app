@@ -60,19 +60,23 @@ function hasNotEnded(candidate: Candidate, now: Date): boolean {
 }
 
 /**
+ * Vyzbiera „ešte neskončené" kandidátske udalosti z JEDNÉHO ICS textu (parse +
+ * expanzia opakujúcich sa + filter). Zoradenie ani zoskupenie po dňoch tu NIE
+ * je — to sa robí AŽ nad ZLÚČENÝM zoznamom z viacerých kalendárov
+ * (`resolveNextEventsFromCalendars`), aby deň s udalosťami z dvoch kalendárov
+ * nebol započítaný do limitu dní dvakrát (issue 469).
+ *
  * `ical.sync.parseICS` NIKDY nehodí výnimku, ani na úplne nezmyselný vstup —
  * overené priamo (node-ical 0.27.1, prázdny aj náhodný text obidva vrátia
  * `{}`). Appka preto potrebuje VLASTNÚ minimálnu kontrolu "vyzerá to vôbec
  * ako kalendár" — inak by pokazený/nekalendárový feed (napr. HTML chybová
  * stránka vrátená s HTTP 200) ticho vyzeral ako "žiadna nadchádzajúca
  * udalosť" namiesto toho, aby nahlas zlyhal (dispatch: "Fetch failure /
- * malformed feed → fail loud, never crash, never show raw error").
- *
- * issue 382 → 439: `dayLimit` rozhoduje koľko najbližších DNÍ, v ktorých je
- * aspoň jedna udalosť, sa vráti — a pre KAŽDÝ taký deň VŠETKY jeho udalosti
- * (zoradené podľa najskoršieho začiatku). Nie počet udalostí.
+ * malformed feed → fail loud, never crash, never show raw error"). Pri viac
+ * kalendároch platí per adresu: pokazený feed KTORÉHOKOĽVEK kalendára zhodí
+ * celý výsledok na chybu, nikdy neskryje čiastočný pohľad (issue 469).
  */
-export function resolveNextEvents(icsText: string, now: Date, dayLimit: number): NextCalendarEvent[] {
+function collectUpcomingCandidates(icsText: string, now: Date): Candidate[] {
   if (!icsText.includes("BEGIN:VCALENDAR")) {
     throw new Error("Stiahnutý obsah nevyzerá ako platný ICS kalendár (chýba BEGIN:VCALENDAR)");
   }
@@ -97,27 +101,43 @@ export function resolveNextEvents(icsText: string, now: Date, dayLimit: number):
     }
   }
 
-  const upcoming = candidates.filter((c) => hasNotEnded(c, now)).sort((a, b) => a.start.getTime() - b.start.getTime());
+  return candidates.filter((c) => hasNotEnded(c, now));
+}
 
-  // issue 439: `dayLimit` počíta DNI, v ktorých je aspoň jedna udalosť, nie
-  // udalosti. Zoskupenie kľúčom kalendárneho dňa v Europe/Bratislava
-  // (`zonedDateKey`) — rovnaké pásmo ako `formatDateLabel`/`hasNotEnded`, takže
-  // sedí s vypísaným `dateLabel` a je stabilné voči proces-TZ pri celodenných
-  // (`VALUE=DATE`) udalostiach (`.claude/rules/calendar.md`). Iterujeme len cez
-  // udalosti, takže dni bez udalosti do skupiny nikdy nevstúpia — preskočia sa
-  // a NEMINÚ `dayLimit`. `continue` (nie `break`) pri dni nad limitom je
-  // robustné aj voči teoretickému preplietaniu udalostí rôznych dní: ďalšie
-  // udalosti UŽ započítaných dní sa stále pridajú. Prebiehajúca viacdňová
-  // udalosť (začala pred dneškom, ešte neskončila) sa zoskupí pod svoj
-  // ZAČIATOČNÝ deň — konzistentné s doterajším zobrazovaním takej udalosti jej
-  // začiatočným dátumom.
+/**
+ * Zoradí ZLÚČENÝ zoznam kandidátov (naprieč všetkými kalendármi) podľa začiatku
+ * a zoskupí po kalendárnych dňoch.
+ *
+ * issue 439: `dayLimit` počíta DNI, v ktorých je aspoň jedna udalosť, nie
+ * udalosti. Zoskupenie kľúčom kalendárneho dňa v Europe/Bratislava
+ * (`zonedDateKey`) — rovnaké pásmo ako `formatDateLabel`/`hasNotEnded`, takže
+ * sedí s vypísaným `dateLabel` a je stabilné voči proces-TZ pri celodenných
+ * (`VALUE=DATE`) udalostiach (`.claude/rules/calendar.md`). Iterujeme len cez
+ * udalosti, takže dni bez udalosti do skupiny nikdy nevstúpia — preskočia sa
+ * a NEMINÚ `dayLimit`. `continue` (nie `break`) pri dni nad limitom je
+ * robustné aj voči teoretickému preplietaniu udalostí rôznych dní: ďalšie
+ * udalosti UŽ započítaných dní sa stále pridajú. Prebiehajúca viacdňová
+ * udalosť (začala pred dneškom, ešte neskončila) sa zoskupí pod svoj
+ * ZAČIATOČNÝ deň — konzistentné s doterajším zobrazovaním takej udalosti jej
+ * začiatočným dátumom.
+ *
+ * issue 469: zoradenie aj zoskupenie sa robí AŽ TU, nad zlúčenými kandidátmi zo
+ * VŠETKÝCH kalendárov — nie per-kalendár-then-concat. Keby sa deň zoskupil
+ * osobitne pre každý kalendár a výsledky sa len zreťazili, deň, v ktorom majú
+ * udalosť dva kalendáre, by sa do limitu dní započítal dvakrát a poradie by
+ * nesedelo. `Array.prototype.sort` je stabilný (ES2019+), takže udalosti s
+ * rovnakým začiatkom si držia poradie vloženia (poradie kalendárov).
+ */
+function groupByDay(upcoming: readonly Candidate[], now: Date, dayLimit: number): NextCalendarEvent[] {
+  const sorted = [...upcoming].sort((a, b) => a.start.getTime() - b.start.getTime());
+
   const includedDayKeys = new Set<string>();
   const result: NextCalendarEvent[] = [];
   // issue 442: rok dneška (Europe/Bratislava) sa počíta RAZ pred slučkou —
   // `now` je naprieč všetkými udalosťami nemenné, `formatDateLabel` len
   // porovná rok výskytu proti nemu.
   const nowYear = getZonedDateParts(now).year;
-  for (const candidate of upcoming) {
+  for (const candidate of sorted) {
     const dayKey = zonedDateKey(candidate.start);
     if (!includedDayKeys.has(dayKey)) {
       if (includedDayKeys.size >= dayLimit) continue;
@@ -126,4 +146,29 @@ export function resolveNextEvents(icsText: string, now: Date, dayLimit: number):
     result.push({ title: candidate.title, dateLabel: formatDateLabel(candidate.start, nowYear), allDay: candidate.allDay });
   }
   return result;
+}
+
+/**
+ * Najbližšie udalosti z JEDNÉHO ICS textu — tenký obal nad
+ * `resolveNextEventsFromCalendars([icsText], …)`. Zachovaný ako pôvodné API pre
+ * jedno-kalendárové testy/volania.
+ *
+ * `dayLimit` rozhoduje koľko najbližších DNÍ, v ktorých je aspoň jedna udalosť,
+ * sa vráti — a pre KAŽDÝ taký deň VŠETKY jeho udalosti (zoradené podľa
+ * najskoršieho začiatku). Nie počet udalostí (issue 382 → 439).
+ */
+export function resolveNextEvents(icsText: string, now: Date, dayLimit: number): NextCalendarEvent[] {
+  return resolveNextEventsFromCalendars([icsText], now, dayLimit);
+}
+
+/**
+ * issue 469: najbližšie udalosti zo VIAC kalendárov naraz. Kandidáti sa
+ * vyzbierajú z KAŽDÉHO ICS textu, ZLÚČIA do jedného zoznamu, zoradia podľa
+ * začiatku a AŽ POTOM zoskupia po dňoch (`dayLimit`). Pokazený feed
+ * ktoréhokoľvek kalendára nahlas zlyhá (fail-loud) — čiastočný pohľad, ktorý by
+ * ticho skryl jeden kalendár, je presne problém z tohto ticketu.
+ */
+export function resolveNextEventsFromCalendars(icsTexts: readonly string[], now: Date, dayLimit: number): NextCalendarEvent[] {
+  const candidates = icsTexts.flatMap((icsText) => collectUpcomingCandidates(icsText, now));
+  return groupByDay(candidates, now, dayLimit);
 }
