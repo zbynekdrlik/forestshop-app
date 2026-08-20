@@ -60,6 +60,13 @@ export async function selectChangedSupplierLinks(db: Database): Promise<Selected
     .where(
       and(
         changedCondition,
+        // issue 465: variant zmiznutý zo Shoptetu (`missing_since` nastavené
+        // katalógovým importom — variant sa nikdy nemaže, len značí) sa do CSV
+        // NIKDY neposiela. Shoptet import odmietne CELÚ dávku pri kóde, ktorý
+        // už nemá (`failed:1`), a `run-writeback.ts` pri zlyhaní neoznačí NIČ →
+        // tá istá otrávená dávka sa vyberá donekonečna (173 zlyhaní za sebou),
+        // pričom jeden mŕtvy kód blokuje aj zdravé súrodenecké overridy.
+        isNull(variants.missingSince),
         // Vylúč variant IBA keď má per-veľkosť link A produkt je split.
         or(
           isNull(pairingVariantLinks.code),
@@ -86,16 +93,48 @@ export async function selectChangedSupplierLinks(db: Database): Promise<Selected
     .where(changedCondition)
     .groupBy(productSupplierLinkOverrides.productKey);
 
+  // issue 465: ktoré zmenené overridy majú aspoň jeden ŽIVÝ (nie
+  // `missing_since`) variant — na odlíšenie „všetky veľkosti zmizli zo
+  // Shoptetu" (0 živých, ale varianty existujú) od bežného produktu aj od
+  // „0 variantov vôbec" anomálie nižšie. Ten istý idiom (innerJoin +
+  // isNull(missingSince)) ako riadková otázka vyššie.
+  const liveVariantOverrides = await db
+    .selectDistinct({ productKey: productSupplierLinkOverrides.productKey })
+    .from(productSupplierLinkOverrides)
+    .innerJoin(variants, eq(variants.productKey, productSupplierLinkOverrides.productKey))
+    .where(and(changedCondition, isNull(variants.missingSince)));
+  const withLiveVariant = new Set(liveVariantOverrides.map((r) => r.productKey));
+
   const productKeys: string[] = [];
   const noVariantAnomaly: string[] = [];
+  const allVariantsMissing: string[] = [];
   for (const row of overrideVariantCounts) {
-    if (row.variantCount > 0) productKeys.push(row.productKey);
-    else noVariantAnomaly.push(row.productKey);
+    if (row.variantCount === 0) {
+      noVariantAnomaly.push(row.productKey);
+      continue;
+    }
+    // Má aspoň jeden variant → smie sa označiť synced (vrátane fully-split
+    // dormantného override z #423 aj all-missing produktu nižšie — oba majú 0
+    // emitovaných riadkov, ale VARIANTY existujú), inak by re-selectoval
+    // otrávenú dávku donekonečna.
+    productKeys.push(row.productKey);
+    // issue 465: ...ale ak nemá ANI JEDEN živý variant (všetky `missing_since`),
+    // do Shoptetu sa preň nikdy nič nezapíše — označíme synced (nech necyklí),
+    // ale ZALOGUJEME (nie tichý drop), aby bolo vidno, že odkaz sa reálne
+    // nezapísal. Fully-split dormantný override (#423) má živé varianty (len
+    // split-riadené) → tu sa NEoznačí ako all-missing, ostáva tichý.
+    if (!withLiveVariant.has(row.productKey)) allVariantsMissing.push(row.productKey);
   }
   if (noVariantAnomaly.length > 0) {
     log.warn(
       { skippedProductKeys: noVariantAnomaly },
       "shoptet write-back: preskočené zmenené odkazy na dodávateľa bez žiadneho variantu (dátová anomália)",
+    );
+  }
+  if (allVariantsMissing.length > 0) {
+    log.warn(
+      { markedProductKeys: allVariantsMissing },
+      "shoptet write-back: zmenený odkaz na dodávateľa, ktorého VŠETKY varianty zmizli zo Shoptetu (missing_since) — označené ako synced (niet čo zapísať), odkaz sa fyzicky nezapísal",
     );
   }
 

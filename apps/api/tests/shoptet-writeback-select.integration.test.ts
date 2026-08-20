@@ -195,4 +195,55 @@ describe("selectChangedSupplierLinks", () => {
     // never re-selects forever; NOT reported as the "no variant" anomaly
     expect(result.productKeys).toEqual(["P10"]);
   });
+
+  // ── issue 465: variants that went missing from Shoptet are never emitted ──
+
+  it("issue 465: EXCLUDES a variant that went missing from Shoptet (missing_since set), still emits its LIVE siblings", async () => {
+    // 2 live + 1 missing — mirrors the prod incident (2wolfs FOREST: 5 live +
+    // 5 missing). The missing variant's dead code must NOT reach the CSV.
+    await insertTestVariantForProduct(db, "P465", "P465/LIVE1", { pairCode: "1670" });
+    await insertTestVariantForProduct(db, "P465", "P465/LIVE2", { pairCode: "1670" });
+    await insertTestVariantForProduct(db, "P465", "P465/DEAD", {
+      pairCode: "1670",
+      missingSince: new Date("2026-08-13T09:22:02Z"),
+    });
+    await db
+      .insert(productSupplierLinkOverrides)
+      .values({ productKey: "P465", url: "https://dodavatel.example/p465", updatedAt: new Date("2026-01-02T00:00:00Z") });
+
+    const result = await selectChangedSupplierLinks(db);
+    // only the two LIVE variants — the missing one is gone
+    expect(result.rows).toEqual(
+      expect.arrayContaining([
+        { code: "P465/LIVE1", pairCode: "1670", internalNote: "https://dodavatel.example/p465" },
+        { code: "P465/LIVE2", pairCode: "1670", internalNote: "https://dodavatel.example/p465" },
+      ]),
+    );
+    expect(result.rows).toHaveLength(2);
+    expect(result.rows.map((r) => r.code)).not.toContain("P465/DEAD");
+    // the override still owns live variants → marked after a successful import
+    expect(result.productKeys).toEqual(["P465"]);
+  });
+
+  it("issue 465: a product whose ALL variants went missing emits ZERO rows but is STILL MARKED synced (never re-selects forever)", async () => {
+    // every variant removed from Shoptet — nothing can ever be written for it,
+    // but it MUST be marked synced (has variants) so it does not re-select the
+    // poisoned batch each hour; distinct from the 0-variant data anomaly.
+    await insertTestVariantForProduct(db, "P465ALL", "P465ALL/A", {
+      pairCode: "1",
+      missingSince: new Date("2026-08-13T09:22:02Z"),
+    });
+    await insertTestVariantForProduct(db, "P465ALL", "P465ALL/B", {
+      pairCode: "2",
+      missingSince: new Date("2026-08-13T09:22:02Z"),
+    });
+    await db
+      .insert(productSupplierLinkOverrides)
+      .values({ productKey: "P465ALL", url: "https://dodavatel.example/all-gone", updatedAt: new Date("2026-01-02T00:00:00Z") });
+
+    const result = await selectChangedSupplierLinks(db);
+    expect(result.rows).toEqual([]);
+    // has variants (just all missing) → marked, NOT the empty no-variant anomaly
+    expect(result.productKeys).toEqual(["P465ALL"]);
+  });
 });

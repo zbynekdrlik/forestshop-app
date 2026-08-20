@@ -123,4 +123,25 @@ describe("selectChangedVariantLinks", () => {
     expect(result.codes).toEqual(["P5/S"]);
     expect(result.rows).toEqual([{ code: "P5/S", pairCode: "1", internalNote: "https://dodavatel.example/S-new" }]);
   });
+
+  it("issue 465: NEVER emits a split per-size link whose variant went missing from Shoptet (missing_since set), still emits its LIVE sibling", async () => {
+    // same hole as the product path — a per-size link for a variant Shoptet no
+    // longer has would poison the merged import; it must be excluded here too.
+    await insertTestVariantForProduct(db, "P6", "P6/S", { pairCode: "1", sizeLabel: "S" });
+    await insertTestVariantForProduct(db, "P6", "P6/M", {
+      pairCode: "2",
+      sizeLabel: "M",
+      missingSince: new Date("2026-08-13T09:22:02Z"),
+    });
+    await splitProduct("P6");
+    await db.insert(pairingVariantLinks).values([
+      { code: "P6/S", url: "https://dodavatel.example/S", updatedAt: new Date("2026-01-02T00:00:00Z") },
+      { code: "P6/M", url: "https://dodavatel.example/M", updatedAt: new Date("2026-01-02T00:00:00Z") },
+    ]);
+
+    const result = await selectChangedVariantLinks(db);
+    // only the LIVE size — the missing one is excluded (never sent, never marked)
+    expect(result.codes).toEqual(["P6/S"]);
+    expect(result.rows).toEqual([{ code: "P6/S", pairCode: "1", internalNote: "https://dodavatel.example/S" }]);
+  });
 });

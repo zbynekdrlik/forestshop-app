@@ -199,4 +199,42 @@ describe("runShoptetWriteback (end-to-end proti fixture)", () => {
     },
     TEST_TIMEOUT_MS,
   );
+
+  it(
+    "issue 465: a product with a variant missing from Shoptet no longer poisons the batch — a healthy sibling override still syncs",
+    async () => {
+      // Reproduces the prod incident exactly (job_run link.failed:1 for 173
+      // runs): product POISON has a dead code (variant removed from Shoptet),
+      // healthy sibling HEALTHY is stuck in the same all-or-nothing batch.
+      await insertTestVariantForProduct(db, "POISON", "POISON/LIVE", { pairCode: "1670" });
+      await insertTestVariantForProduct(db, "POISON", "POISON/DEAD", {
+        pairCode: "1670",
+        missingSince: new Date("2026-08-13T09:22:02Z"),
+      });
+      await db
+        .insert(productSupplierLinkOverrides)
+        .values({ productKey: "POISON", url: "https://x.example/poison", updatedAt: new Date("2026-01-01T00:00:00Z") });
+
+      await insertTestVariantForProduct(db, "HEALTHY", "HEALTHY/1", { pairCode: "9" });
+      await db
+        .insert(productSupplierLinkOverrides)
+        .values({ productKey: "HEALTHY", url: "https://x.example/healthy", updatedAt: new Date("2026-01-01T00:00:00Z") });
+
+      // real Shoptet fails the WHOLE batch if the dead code is uploaded
+      fixture.failImportWhenCsvContainsCode("POISON/DEAD");
+
+      const result = await runShoptetWriteback(db, fixtureConfig(), new Date("2026-02-01T00:00:00Z"));
+      // dead code excluded → 2 live rows (POISON/LIVE + HEALTHY/1), import succeeds
+      expect(result).toEqual({ status: "ok", productCount: 2, variantLinkCount: 0, rowCount: 2 });
+
+      // BOTH overrides are marked synced — the healthy sibling is no longer blocked
+      const rows = await db
+        .select({ productKey: productSupplierLinkOverrides.productKey, syncedAt: productSupplierLinkOverrides.syncedAt })
+        .from(productSupplierLinkOverrides);
+      const syncedByKey = new Map(rows.map((r) => [r.productKey, r.syncedAt]));
+      expect(syncedByKey.get("POISON")?.toISOString()).toBe("2026-02-01T00:00:00.000Z");
+      expect(syncedByKey.get("HEALTHY")?.toISOString()).toBe("2026-02-01T00:00:00.000Z");
+    },
+    TEST_TIMEOUT_MS,
+  );
 });

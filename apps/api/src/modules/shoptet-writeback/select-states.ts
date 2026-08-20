@@ -38,7 +38,14 @@ export async function selectChangedStateDecisions(db: Database): Promise<Selecte
     })
     .from(pairingDecisions)
     .innerJoin(variants, eq(variants.productKey, pairingDecisions.productKey))
-    .where(changedCondition)
+    // issue 465: rovnaká missing_since diera ako v linkovej ceste
+    // (`select-changes.ts`) — variant zmiznutý zo Shoptetu (`missing_since`)
+    // sa do stavovej CSV NIKDY neposiela, inak by mŕtvy kód otrávil celú
+    // all-or-nothing dávku (`run-state-writeback.ts` pri zlyhaní neoznačí NIČ →
+    // donekonečna). Produkt so VŠETKÝMI variantmi missing emituje 0 riadkov →
+    // padne do existujúcej „anomália bez variantu" vetvy nižšie (preskočí sa +
+    // zaloguje, neotrávi nič) — konzistentné so súčasnou štruktúrou tejto cesty.
+    .where(and(changedCondition, isNull(variants.missingSince)))
     .orderBy(variants.code);
 
   const productKeys = [...new Set(rows.map((r) => r.productKey))];

@@ -124,3 +124,18 @@ paths:
   120 s = ~8× rezerva, cielene LEN na prehliadačové testy; DB-only testy
   ostávajú na globálnom `testTimeout: 30_000` (`vitest.config.ts`). Nový
   reálny-Chromium test drž na `TEST_TIMEOUT_MS = 120_000`, nie 60 s.
+- **#464 (Playwright kontajnerový image ako alternatíva) — ZVÁŽENÉ A ZAMIETNUTÉ,
+  NEIMPLEMENTOVAŤ.** Namiesto cache + MISS-only install použiť
+  `mcr.microsoft.com/playwright:v<ver>-jammy` ako `container:`. Zamerané čísla
+  (behy `32319785850`, `32318247998`): obnova browser cache = **4–6 s/job**, čo je
+  CELÝ náklad, ktorý by kontajner odstránil; wall-clock (~9m30s) je daný
+  `test:integration` = **~8m55s**, ktorého sa kontajner NEDOTKNE (~1% zisk).
+  Runner je GitHub-hosted `ubuntu-latest` (efemérny, žiadny perzistentný docker
+  layer cache) — kontajner (~1.5–2 GB) by sa sťahoval nanovo na oboch joboch každý
+  beh (nahradí 4–6s obnovu väčším pull-om = net POMALŠIE). Navyše nová ručná väzba
+  image-tag ↔ rozlíšená Playwright verzia (dnes sa kľúč odvodí za behu) a
+  cross-cutting prestavba `services.postgres` siete (`DATABASE_URL` → `postgres:5432`
+  namiesto `127.0.0.1`). Freeze trieda je už vyriešená #460/#462. **Znovu otvoriť LEN
+  ak** CI prejde na self-hosted runner s perzistentným docker layer cache (obráti
+  pull-cost), alebo browser-cache začne opakovane zlyhávať (časté MISS → 10-min
+  install timeouty). Plné čísla + rozhodnutie: issue 464.
