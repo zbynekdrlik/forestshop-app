@@ -97,14 +97,23 @@ paths:
   cancelled`), potom `gh run rerun <id>` — čerstvý runner install prejde. JEDEN
   rerun na vylúčenie transientu je v poriadku; NEPREDLŽUJ timeout (nie je pomalý,
   zdroj visí externe).
-  **issue 460 (trvalá odolnosť, nasadené):** oba joby teraz cacheujú stiahnutý
-  Chromium cez `actions/cache@v4` (`~/.cache/ms-playwright`, kľúč
-  `${{ runner.os }}-playwright-<verzia>`) — na cache-HIT beží len
-  `playwright install-deps chromium` (apt), sťahovanie z CDN sa preskočí, čím
-  symptóm #1 (CDN zamrznutie) prakticky zmizne. Ak sa cache MINIE (bump
-  Playwrightu / prvý beh), plná `--with-deps` inštalácia môže stále OJEDINELE
-  zamrznúť na CDN — vtedy platí cancel+rerun postup vyššie, ale je to už len
-  pri invalidácii cache, nie pri každom behu.
+  **issue 460 (browser cache, nasadené):** oba joby cacheujú stiahnutý Chromium
+  cez `actions/cache@v4` (`~/.cache/ms-playwright`, kľúč
+  `${{ runner.os }}-playwright-<verzia>`) — cache-HIT preskočí sťahovanie z CDN,
+  čím symptóm #1 (CDN zamrznutie) na hot path prakticky zmizne. Cache-HIT funguje
+  cross-branch (`dev` číta cache z default vetvy `main`).
+  **issue 462 (install-deps na hot path, nasadené — FINÁLNY mechanizmus):** na
+  cache-HIT sa `playwright install-deps` (apt) UŽ NESPÚŠŤA — krok bol odstránený.
+  Runner je čerstvá `ubuntu-latest` VM a cache obnoví LEN binárku prehliadača (nie
+  apt liby), takže systémové liby dáva image (má chromium deps) — overené naživo
+  behom `32317258896`: v OBOCH joboch (`integration`, `e2e`) bola cache HIT, install
+  krok `skipped`, a reálny Chromium (`test:integration` aj `e2e`) prešiel bez
+  install-deps. Tým apt zmizne z hot path a jeho ~17-min freeze (apt zámok/network
+  na zdieľanom runneri) sa eliminuje. `install --with-deps` (prehliadač + apt) beží
+  UŽ LEN na cache MISS (bump Playwrightu / evikcia) a má `timeout-minutes: 10`
+  poistku: transient CDN/apt hang teraz zlyhá AUTOMATICKY červeno pri 10 min
+  namiesto ~19 min visenia (žiadny continue-on-error), takže cancel+rerun postup
+  vyššie je stále platný, ale spúšťa sa sám a len pri MISS.
 - **Reálny-Chromium integračné testy majú per-`it` strop `TEST_TIMEOUT_MS =
   120_000` (issue 460), NIE 60 s.** Súbory `shoptet-writeback-run/-playwright/
   -sequence`, `dpd-pickup-playwright`, `dpd-shipment-playwright`,
