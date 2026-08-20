@@ -4290,3 +4290,28 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
 - **#464 (Playwright kontajnerový image namiesto install+cache):** zvážené a **zamietnuté** (architecture-first + investigate-existing-first, na reálnych číslach). Zmeraný cache-HIT hot path (behy `32319785850`, `32318247998`): obnova browser cache = **4–6 s/job** (celý náklad, čo by kontajner odstránil); wall-clock ~9m30s je daný `test:integration` = **~8m55s** (reálny Chromium shoptet-writeback), ktorého sa kontajner nedotkne (~1% zisk).
 - **Prečo NIE:** CI beží 100% na GitHub-hosted `ubuntu-latest` (efemérny, žiadny perzistentný docker layer cache) — kontajner (~1.5–2 GB) by sa sťahoval nanovo na oboch joboch každý beh → nahradí 4–6s obnovu cache väčším pull-om (net pomalšie). + nová ručná väzba image-tag ↔ rozlíšená Playwright verzia (`^1.49.0`→1.62.0, dnes sa kľúč odvodí za behu) + cross-cutting prestavba `services.postgres` siete (`DATABASE_URL`→`postgres:5432`). Freeze trieda už vyriešená #460/#462, posledné 3 behy stabilné 8m55s–9m40s.
 - **Znovu otvoriť LEN ak** CI prejde na self-hosted runner s perzistentným docker layer cache (obráti pull-cost), alebo browser-cache začne opakovane zlyhávať (časté MISS → 10-min install timeouty). Žiadna zmena kódu; `ci.md` doplnené o rozhodovaciu poznámku. Validácia + rozhodnutie durabilne na #464 (2 komentáre). Bez PR/merge/deploy — dev ostáva 0.3.0-dev.272.
+
+## 2026-08-20 — #465 (Spätný zápis odkazov: zmiznuté varianty otravujú dávku)
+
+- Solo bug ticket. STEP 0 overené read-only na prod: `job_run` link.failed:1
+  173 behov za sebou, 2wolfs FOREST 5 živých `62696/*` + 5 missing `15813/*`,
+  LunaVision zaseknutý od 17.8.
+- Version bump `1269463` (0.3.0-dev.272→.273), prvý commit.
+- Design komentár PRED kódom (root cause → missing_since sa nefiltruje →
+  Prístup 1 filter zvolený, Prístup 2 karanténa / Prístup 3 per-riadok parse
+  zamietnuté): issue #465 comment 5357125846.
+- RED→GREEN: link cesta `11b9473`[red]→`5f35bec`[green]
+  (`shoptet-writeback-select` P465/P465ALL, `-select-variant-links` P6,
+  `-run` POISON/HEALTHY); stavová cesta `192d353`[red]→`9668cc1`[green]
+  (`-select-states` P465S — review nález, tá istá missing_since diera v
+  `select-states.ts`, opravená v tom istom PR podľa #311).
+- Kľúčová oprava: `isNull(variants.missingSince)` v `select-changes.ts`,
+  `select-variant-links.ts` aj `select-states.ts`; all-missing produkt sa
+  označí synced + warn (`liveVariantOverrides` selectDistinct). Fixture
+  `failImportWhenCsvContainsCode` imituje reálne Shoptet `failed:1` na kóde.
+- PR #467 dev→main, merge `431207a`, main CI + Deploy zelené, nasadené
+  `0.3.0-dev.273`.
+- Post-deploy akceptácia (prvý beh na novom kóde 15:50:20 UTC): link.status
+  ok, rowCount 6 (z 11), oba overridy synced_at 15:50:20, 0 zaseknutých.
+  Ticket ostáva OTVORENÝ na ručné zatvorenie po review dôkazu (post-deploy
+  akceptačná podmienka).
