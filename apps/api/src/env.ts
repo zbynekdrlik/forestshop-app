@@ -107,14 +107,47 @@ const envSchema = z.object({
   // ostáva konfigurovateľná (rovnaký princíp ako `SHOPTET_ADMIN_BASE_URL`),
   // pre prípad zmeny adresy alebo testovacieho prostredia DPD.
   DPD_PORTAL_BASE_URL: z.string().url().default("https://www.dpdshipper.sk"),
-  // issue 309: "Eshop → Upozornenia" — najbližšia udalosť z majiteľovho
-  // Google kalendára. Tajná iCal adresa (nie API kľúč/OAuth token — pozri
-  // návrhový komentár na tickete): NESIE tajný token PRIAMO V CESTE (na
+  // issue 309/469: "Eshop → Upozornenia" — najbližšie udalosti z majiteľových
+  // Google kalendárov. Tajné iCal adresy (nie API kľúč/OAuth token — pozri
+  // návrhový komentár na tickete): NESÚ tajný token PRIAMO V CESTE (na
   // rozdiel od SHOPTET_EXPORT_URL, kde je tajomstvom len `hash` query
   // parameter), nikdy do repa/commit správy/logu. Nepovinná: bez nej appka
   // beží ďalej, karta sa na nástenke jednoducho nezobrazí (rovnaký fail-
   // graceful princíp ako SHOPTET_EXPORT_URL).
-  GOOGLE_CALENDAR_ICS_URL: z.string().url().optional(),
+  //
+  // issue 469: prijme VIAC adries oddelených čiarkou alebo novým riadkom
+  // (spätne kompatibilné s jednou adresou → 1-prvkové pole). Každá položka sa
+  // validuje ako URL; whitespace okolo sa oreže, prázdne aj duplicitné položky
+  // sa vynechajú (duplikát by inak stiahol ten istý kalendár dvakrát a
+  // zdvojil udalosti na karte). Chybová hláška pri neplatnej adrese NIKDY
+  // neinterpoluje samotnú adresu (tajný token je v ceste —
+  // `.claude/rules/calendar.md`). Výsledný typ je `string[] | undefined`.
+  GOOGLE_CALENDAR_ICS_URL: z
+    .string()
+    .optional()
+    .transform((raw, ctx) => {
+      if (raw === undefined) return undefined;
+      const urlSchema = z.string().url();
+      const urls = [
+        ...new Set(
+          raw
+            .split(/[,\n]/)
+            .map((s) => s.trim())
+            .filter((s) => s.length > 0),
+        ),
+      ];
+      if (urls.length === 0) return undefined;
+      for (const url of urls) {
+        if (!urlSchema.safeParse(url).success) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "GOOGLE_CALENDAR_ICS_URL obsahuje neplatnú URL adresu (tajná adresa sa do hlášky zámerne nevypisuje)",
+          });
+          return z.NEVER;
+        }
+      }
+      return urls;
+    }),
 });
 
 export type Env = z.infer<typeof envSchema>;
