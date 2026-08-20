@@ -365,3 +365,33 @@ paths:
   `pairing_variant_link` PRIAMO, nie cez `products.internalNote`. Prieskum
   starej appky (`parovanie_produktov` @ f76cafa): mala `internalNote` per
   variant v exporte, takže round-trip tam fungoval — v tejto appke NIE.
+- **KAŽDÁ CSV-emitujúca write-back SELECT cesta MUSÍ filtrovať
+  `isNull(variants.missingSince)` (issue 465).** Katalógový import variant, ktorý
+  zmizol zo Shoptetu, NEMAŽE — len nastaví `variant.missing_since`. Bez tohto
+  filtra sa mŕtvy `code` aj tak pošle do CSV, reálny Shoptet import odmietne CELÚ
+  all-or-nothing dávku (`Zlyhanie variantov: 1` → `failed:1`), `run-writeback.ts`
+  pri `!outcome.ok` neoznačí NIČ ako synced → identická otrávená dávka sa vyberá
+  KAŽDÚ HODINU donekonečna (naživo: 173 zlyhaní za sebou od 13. 8.), pričom jeden
+  mŕtvy kód blokuje aj zdravé súrodenecké overridy v tej istej dávke. Diera bola
+  vo VŠETKÝCH troch cestách: produktová (`select-changes.ts`), split
+  (`select-variant-links.ts`) aj STAVOVÁ (`select-states.ts`, feature 387 E7).
+  Pri KAŽDEJ ďalšej novej write-back SELECT ceste (nový CSV zdroj) pridaj ten
+  filter hneď — je to systémová vlastnosť „Shoptet neprijme zápis pre kód, ktorý
+  už nemá", nie jednorazová oprava.
+- **Marking-set pri missing_since (issue 465, rozšírenie #423 GROUP BY logiky):**
+  produkt so VŠETKÝMI variantmi `missing_since` emituje 0 riadkov, ALE má
+  varianty → v produktovej ceste sa OZNAČÍ synced (nech necyklí donekonečna,
+  presne vzor fully-split dormant override z #423) PLUS `log.warn`
+  (`markedProductKeys`) — nikdy tichý drop, lebo do Shoptetu sa preň reálne nič
+  nezapísalo. Rozlíšenie „všetky missing" (warn+mark) od fully-split-dormant
+  (tichý mark) od „0 variantov vôbec" (skip+warn) robí druhá otázka
+  `liveVariantOverrides` (innerJoin + isNull(missingSince), selectDistinct).
+  Split a stavová cesta majú jednoduchšiu štruktúru — tam all-missing produkt
+  padne do ich existujúcej „bez variantu" vetvy (re-select 0 riadkov / skip +
+  warn, neotrávi nič), self-heal pri návrate variantu.
+- **Test poison dávky proti fixture:** globálny `setOutcome("partial")` NEvie
+  vyjadriť „dávka padne KVÔLI konkrétnemu mŕtvemu kódu". `shoptet-fixture.ts` má
+  `failImportWhenCsvContainsCode(code)` (issue 465) — import vráti `failed:1` LEN
+  keď nahrané CSV obsahuje daný `code`; keď ho oprava odfiltruje, prejde. Tak sa
+  end-to-end testom preukáže, že otrávený produkt neblokuje sync zdravého
+  súrodenca. Helper `insertTestVariantForProduct` má `missingSince?: Date|null`.

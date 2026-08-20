@@ -195,6 +195,36 @@ it.each([
   }
 });
 
+// issue 466: tlačidlo v stave „✓ Odoslané" sa vyfarbí existujúcou červenou
+// (`.btn.bad`, appkin jediný červený button variant na tokenoch --fs-danger),
+// NEZÁVISLE pre každé z dvoch tlačidiel podľa jeho VLASTNÉHO sent flagu. Over
+// cez triedu-variant (rovnaká disciplína ako issue 344's row test vyššie —
+// `className` token, nie konkrétny hex/farba). Všetky 4 kombinácie dokazujú
+// nezávislosť oboch tlačidiel; neodoslané tlačidlo si drží pôvodný `ghost`.
+it.each([
+  { nedostupneSent: false, alternativaSent: false },
+  { nedostupneSent: true, alternativaSent: false },
+  { nedostupneSent: false, alternativaSent: true },
+  { nedostupneSent: true, alternativaSent: true },
+])("odoslané tlačidlo je červené (.btn.bad) nezávisle: nedostupneSent=$nedostupneSent, alternativaSent=$alternativaSent", async ({ nedostupneSent, alternativaSent }) => {
+  fetchNedostupneList.mockResolvedValue({
+    groups: [{ ...GROUP, orders: [{ ...GROUP.orders[0], nedostupneSent, alternativaSent }] }],
+    bccMissing: false,
+    mailNotConfigured: false,
+  });
+  render(<NedostupneSection role="manazer" onSessionExpired={vi.fn()} />);
+  await screen.findByTestId("nedostupne-group-40237/L");
+
+  const hasVariant = (testId: string, variant: string): boolean => screen.getByTestId(testId).className.split(/\s+/).includes(variant);
+
+  // Každé tlačidlo nesie červený variant PRÁVE keď je jeho vlastný e-mail odoslaný.
+  expect(hasVariant("nedostupne-send-17600001-40237/L", "bad")).toBe(nedostupneSent);
+  expect(hasVariant("nedostupne-alt-send-17600001-40237/L", "bad")).toBe(alternativaSent);
+  // Neodoslané tlačidlo si drží pôvodný ghost štýl — žiadna iná vizuálna zmena.
+  expect(hasVariant("nedostupne-send-17600001-40237/L", "ghost")).toBe(!nedostupneSent);
+  expect(hasVariant("nedostupne-alt-send-17600001-40237/L", "ghost")).toBe(!alternativaSent);
+});
+
 it("klik na 'náhľad' otvorí povinný náhľad PRED odoslaním — Odoslať sa ešte nevolá", async () => {
   fetchNedostupneList.mockResolvedValue(LIST_WITH_GROUP);
   fetchNedostupnePreview.mockResolvedValue({ ok: true, subject: "Informácia o dostupnosti vašej objednávky — Forestshop.sk", html: "<p>Ahoj</p>", text: "Ahoj", recipient: "jan@example.sk", customerName: "Ján Novák", previewToken: "tok-1" });

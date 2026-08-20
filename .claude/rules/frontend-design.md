@@ -1488,3 +1488,20 @@ paths:
   tak doložilo, že stavový filter znížil ponuku DPD z 297 na 40 (257
   terminálnych vylúčených) — presne šéfovu výhradu. Len ČÍTANIE, žiadny zápis
   na PROD bez schválenia (`no-destructive-remote-actions.md`).
+- **Appkin JEDINÝ červený BUTTON variant je `.btn.bad` (`app.css:733`,
+  `--fs-danger-bg` pozadie + `--fs-danger` text, pridaný issue 387 E6) — a je
+  DNES v žiadnom `.tsx` NEINŠTANCOVANÝ, lebo jeho pôvodné „✗ Zlé" tlačidlo bolo
+  medzitým odstránené (`PairingReviewCard.tsx` komentár, commit `f45af65`).**
+  Keď šéf inde v appke povie „daj tlačidlo červené" (issue 466 — odoslané
+  tlačidlo v Nedostupných): prepni jeho variant `ghost` → `bad`, NIKDY nezavádzaj
+  novú surovú/priesvitnú farbu (zakázané `--fs-*` token pravidlom vyššie).
+  DVE pasce: (1) `grep .btn.bad apps/web/src` dnes nič nenájde — to NEznamená, že
+  červený button token neexistuje, len že ho nikto práve nepoužíva; je to
+  DEFINOVANÝ variant vedľa `.btn.good`/`.btn.ghost`/`.btn.warn`, plnohodnotne
+  použiteľný. (2) Delete/„✕ zmazať" tlačidlá v appke sú `btn sm ghost` (SIVÉ), NIE
+  červené — takže NIE sú referenciou „červenej, ktorú používame na tlačidlách";
+  tou je práve `.btn.bad`. Varianty sa používajú VÝHRADNE vzájomne (`btn lg bad`,
+  nie `btn lg ghost bad` — stack by nechal ghostov `border-color`). Pozn.: červená
+  inde na tej istej obrazovke znamená CHYBU (BCC/mail varovania, issue 344 preto
+  pre RIADOK zvolil zelenú `--fs-success`) — pri „daj to červené" over, či to šéf
+  myslí naozaj (issue 466: myslel, výslovne zopakoval), a zdôvodnenie napíš na tiket.
