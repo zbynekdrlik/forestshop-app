@@ -88,6 +88,11 @@ export async function insertTestVariantForProduct(
     // issue 224: dodávateľská linka na PRODUKTE — potrebné pre testy, kde má
     // JEDEN produkt VIAC variantov (veľkostí) zdieľajúcich tú istú linku.
     readonly internalNote?: string | null;
+    // issue 465: variant, ktorý zmizol zo Shoptetu (catalog import nastaví
+    // `missing_since`, variant sa nikdy nemaže) — write-back ho MUSÍ vylúčiť
+    // z CSV. Default null = živý variant, nemení žiadneho existujúceho
+    // volajúceho (null aj undefined znamenajú „živý" rovnako).
+    readonly missingSince?: Date | null;
   } = {},
 ): Promise<void> {
   const snapshotId = await insertTestSnapshot(db);
@@ -133,6 +138,6 @@ export async function insertTestVariantForProduct(
     firstSeenAt: new Date("2026-01-01T00:00:00Z"),
     lastSeenAt: new Date("2026-01-01T00:00:00Z"),
     lastSeenSnapshotId: snapshotId,
-    missingSince: null,
+    missingSince: options.missingSince ?? null,
   });
 }

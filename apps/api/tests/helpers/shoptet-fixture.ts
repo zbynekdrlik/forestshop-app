@@ -52,6 +52,15 @@ export interface ShoptetFixture {
    * `omitSafeRadio` (constructor option, above) would trip on EVERY attempt
    * against the same fixture, making the two calls indistinguishable. */
   failNextImportFormOnce(): void;
+  /** issue 465: reálny Shoptet import hlási `Zlyhanie variantov: 1` (soft
+   * partial → `run-writeback.ts` `!outcome.ok` → nič sa neoznačí), keď nahrané
+   * CSV obsahuje `code` produktu/variantu, ktorý už v Shoptete NEEXISTUJE
+   * (variant odstránený). Globálny `setOutcome("partial")` to nevie vyjadriť
+   * per-kódovo — a práve „dávka padne KVÔLI mŕtvemu kódu, zdravý súrodenec
+   * ostane nezapísaný" je jadro tohto ticketu. Nastaví, že KAŽDÝ import,
+   * ktorého CSV obsahuje `code`, dopadne `partial`; keď kód v CSV nie je
+   * (oprava ho odfiltrovala), import prejde normálne. */
+  failImportWhenCsvContainsCode(code: string): void;
   close(): Promise<void>;
 }
 
@@ -107,6 +116,7 @@ export async function startShoptetFixture(options: ShoptetFixtureOptions): Promi
   let nextId = 100;
   let outcome: FixtureOutcomeMode = "success";
   let failNextImportForm = false; // issue 387 E7 — one-shot, see failNextImportFormOnce() below
+  let rejectCodeInCsv: string | null = null; // issue 465 — see failImportWhenCsvContainsCode() below
 
   app.get("/admin/", (c) => {
     const cookie = getCookie(c, COOKIE_NAME);
@@ -147,10 +157,14 @@ export async function startShoptetFixture(options: ShoptetFixtureOptions): Promi
     const id = nextId;
     nextId += 1;
     const date = "01.08.2026 10:00";
+    // issue 465: mŕtvy kód (variant odstránený zo Shoptetu) prítomný v CSV →
+    // reálny Shoptet import hlási failed:1 nad celou dávkou (soft partial).
+    const effectiveOutcome: FixtureOutcomeMode =
+      rejectCodeInCsv !== null && text.includes(rejectCodeInCsv) ? "partial" : outcome;
     let resultText: string;
-    if (outcome === "success") {
+    if (effectiveOutcome === "success") {
       resultText = `Spracované: ${String(rowCount)}. Upravené: ${String(rowCount)}. Zlyhanie variantov: 0.`;
-    } else if (outcome === "partial") {
+    } else if (effectiveOutcome === "partial") {
       resultText = `Spracované: ${String(rowCount)}. Upravené: ${String(rowCount - 1)}. Zlyhanie variantov: 1.`;
     } else {
       resultText = "Chyba | Číslo riadku: 2 - Data in column code are not unique";
@@ -179,6 +193,9 @@ export async function startShoptetFixture(options: ShoptetFixtureOptions): Promi
     },
     failNextImportFormOnce: () => {
       failNextImportForm = true;
+    },
+    failImportWhenCsvContainsCode: (code) => {
+      rejectCodeInCsv = code;
     },
     close: () =>
       new Promise<void>((resolve, reject) => {
