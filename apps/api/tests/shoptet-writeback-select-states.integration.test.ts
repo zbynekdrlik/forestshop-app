@@ -178,4 +178,30 @@ describe("selectChangedStateDecisions", () => {
     const all = await db.select().from(pairingDecisions).where(eq(pairingDecisions.productKey, "P7"));
     expect(all).toHaveLength(1);
   });
+
+  it("issue 465: EXCLUDES a variant that went missing from Shoptet (missing_since set) from the state CSV, still emits its LIVE siblings", async () => {
+    // Same missing_since poison class as the link write-back (issue 465): a
+    // discontinued/unavailable product whose variant Shoptet no longer has must
+    // NOT push that dead code into the state CSV (Shoptet rejects the whole
+    // batch → run-state-writeback marks nothing → same infinite-retry poison).
+    await insertTestVariantForProduct(db, "P465S", "P465S/LIVE", { pairCode: "7" });
+    await insertTestVariantForProduct(db, "P465S", "P465S/DEAD", {
+      pairCode: "7",
+      missingSince: new Date("2026-08-13T09:22:02Z"),
+    });
+    await db.insert(pairingDecisions).values({
+      productKey: "P465S",
+      status: "discontinued",
+      url: null,
+      decidedBy: userId,
+      decidedAt: new Date("2026-01-02T00:00:00Z"),
+      updatedAt: new Date("2026-01-02T00:00:00Z"),
+    });
+
+    const result = await selectChangedStateDecisions(db);
+    expect(result.rows).toEqual([{ code: "P465S/LIVE", pairCode: "7", status: "discontinued" }]);
+    expect(result.rows.map((r) => r.code)).not.toContain("P465S/DEAD");
+    // still owns a live variant → marked after a successful import
+    expect(result.productKeys).toEqual(["P465S"]);
+  });
 });
