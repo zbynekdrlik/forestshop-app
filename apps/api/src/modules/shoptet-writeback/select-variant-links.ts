@@ -47,6 +47,14 @@ export async function selectChangedVariantLinks(db: Database): Promise<SelectedV
       and(
         or(isNull(pairingVariantLinks.syncedAt), lt(pairingVariantLinks.syncedAt, pairingVariantLinks.updatedAt)),
         eq(pairingDecisions.status, "split"),
+        // issue 465: rovnaká diera ako v `select-changes.ts` — per-veľkosť link
+        // pre variant, ktorý zmizol zo Shoptetu (`missing_since`), sa nikdy
+        // neposiela (Shoptet by odmietol celú dávku pre neexistujúci kód). Kód
+        // sa neoznačí ako synced (nie je v `rows`), ale ani nič neotrávi (0
+        // riadkov); ak sa variant vráti (catalog import vymaže `missing_since`),
+        // sám sa znova vyberie a zapíše — self-heal, netreba marking-set ako pri
+        // produktovej ceste.
+        isNull(variants.missingSince),
       ),
     )
     .orderBy(pairingVariantLinks.code);
