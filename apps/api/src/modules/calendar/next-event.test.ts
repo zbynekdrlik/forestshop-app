@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveNextEvents } from "./next-event.js";
+import { resolveNextEvents, resolveNextEventsFromCalendars } from "./next-event.js";
 
 // issue 309: čisté testy nad ICS textom — ŽIADNY test v tomto module (ani v
 // tomto súbore) sa NIKDY nepripája na skutočný Google, presne rovnaká
@@ -392,5 +392,70 @@ describe("resolveNextEvents — limit (issue 382)", () => {
   it("`limit: 1` sa správa rovnako ako pôvodná singulárna funkcia (prvý prvok poľa)", () => {
     const result = resolveNextEvents(threeFutureEvents(), NOW, 1);
     expect(result).toEqual([{ title: "Prvá", dateLabel: "nedeľa 9. 8.", allDay: false }]);
+  });
+});
+
+// issue 469: majiteľ chce vidieť udalosti zo VŠETKÝCH kalendárov účtu, nie len z
+// jedného. `resolveNextEventsFromCalendars` zlúči kandidátov z viacerých ICS
+// textov do JEDNÉHO zoznamu, zoradí podľa začiatku a AŽ POTOM zoskupí po dňoch —
+// nikdy per-kalendár-then-concat (to by deň s udalosťami z dvoch kalendárov
+// započítalo do limitu dní dvakrát a poradie by nesedelo).
+describe("resolveNextEventsFromCalendars — zlúčenie viacerých kalendárov (issue 469)", () => {
+  function evt(uid: string, summary: string, startLocal: string, endLocal: string): readonly string[] {
+    return [
+      "BEGIN:VEVENT",
+      `UID:${uid}@test`,
+      "DTSTAMP:20260101T000000Z",
+      `SUMMARY:${summary}`,
+      `DTSTART;TZID=Europe/Bratislava:${startLocal}`,
+      `DTEND;TZID=Europe/Bratislava:${endLocal}`,
+      "END:VEVENT",
+    ];
+  }
+
+  it("udalosti z DVOCH kalendárov sa zlúčia a zoradia podľa začiatku (interleave), nie zreťazené per-kalendár", () => {
+    // Kalendár A má 9. a 12. 8., kalendár B má 10. a 11. 8.
+    const calA = ics([
+      ...evt("a1", "A 9.8.", "20260809T090000", "20260809T100000"),
+      ...evt("a2", "A 12.8.", "20260812T090000", "20260812T100000"),
+    ]);
+    const calB = ics([
+      ...evt("b1", "B 10.8.", "20260810T090000", "20260810T100000"),
+      ...evt("b2", "B 11.8.", "20260811T090000", "20260811T100000"),
+    ]);
+    const result = resolveNextEventsFromCalendars([calA, calB], NOW, 4);
+    // Zlúčené+zoradené: 9, 10, 11, 12. (Per-kalendár-then-concat by dalo 9,12,10,11.)
+    expect(result.map((e) => e.title)).toEqual(["A 9.8.", "B 10.8.", "B 11.8.", "A 12.8."]);
+  });
+
+  it("dayLimit počíta DNI naprieč ZLÚČENÝM zoznamom — deň prvého kalendára minie limit aj pre druhý", () => {
+    // Kalendár A: 10. a 11. 8.  Kalendár B: 11. 8.  dayLimit 1 → len 10. 8. (jeden deň).
+    const calA = ics([
+      ...evt("a1", "A 10.8.", "20260810T090000", "20260810T100000"),
+      ...evt("a2", "A 11.8.", "20260811T090000", "20260811T100000"),
+    ]);
+    const calB = ics([...evt("b1", "B 11.8.", "20260811T110000", "20260811T120000")]);
+    const result = resolveNextEventsFromCalendars([calA, calB], NOW, 1);
+    // merge-then-group (dayLimit 1) → len prvý deň 10. 8. → ["A 10.8."].
+    // per-kalendár-then-concat by dalo ["A 10.8.", "B 11.8."] (každý kalendár svoj prvý deň).
+    expect(result.map((e) => e.title)).toEqual(["A 10.8."]);
+  });
+
+  it("deň s udalosťami z DVOCH kalendárov je JEDEN spoločný slot dňa, zoradený v rámci dňa", () => {
+    const calA = ics([...evt("a1", "A 10.8. ráno", "20260810T080000", "20260810T090000")]);
+    const calB = ics([...evt("b1", "B 10.8. večer", "20260810T180000", "20260810T190000")]);
+    const result = resolveNextEventsFromCalendars([calA, calB], NOW, 3);
+    expect(result.map((e) => e.title)).toEqual(["A 10.8. ráno", "B 10.8. večer"]);
+    expect(result.every((e) => e.dateLabel === "pondelok 10. 8.")).toBe(true);
+  });
+
+  it("jeden kalendár v poli sa správa presne ako resolveNextEvents (spätná kompatibilita)", () => {
+    const cal = ics([...evt("c1", "Jediná", "20260810T090000", "20260810T100000")]);
+    expect(resolveNextEventsFromCalendars([cal], NOW, 3)).toEqual(resolveNextEvents(cal, NOW, 3));
+  });
+
+  it("pokazený feed v KTOROMKOĽVEK kalendári nahlas zlyhá (fail-loud, čiastočný pohľad sa neskrýva)", () => {
+    const good = ics([...evt("g1", "Dobrá", "20260810T090000", "20260810T100000")]);
+    expect(() => resolveNextEventsFromCalendars([good, "toto nie je ICS vôbec"], NOW, 3)).toThrow(/BEGIN:VCALENDAR/);
   });
 });

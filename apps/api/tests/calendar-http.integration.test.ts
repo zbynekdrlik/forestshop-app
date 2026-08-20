@@ -70,7 +70,7 @@ it("bez dodanej nextEvent service vráti configured:false, žiadny fetch sa nevo
 // issue 382: majiteľ chce TRI najbližšie udalosti — trasa vracia pole
 // `events`, nie singulárnu `event` hodnotu.
 it("s nakonfigurovanou service vráti najbližšie udalosti z (falošne) stiahnutého ICS", async () => {
-  const service = createNextEventService(() => Promise.resolve(icsWithEventTomorrow()));
+  const service = createNextEventService([() => Promise.resolve(icsWithEventTomorrow())]);
   const { app, cookie } = await boot(service);
   const res = await app.request("/api/upozornenia/next-event", { headers: { cookie } });
   expect(res.status).toBe(200);
@@ -83,7 +83,7 @@ it("s nakonfigurovanou service vráti najbližšie udalosti z (falošne) stiahnu
 });
 
 it("keď fetch zlyhá, appka vráti error:true, nikdy surovú chybu ani pád", async () => {
-  const service = createNextEventService(() => Promise.reject(new Error("simulovaný sieťový výpadok")));
+  const service = createNextEventService([() => Promise.reject(new Error("simulovaný sieťový výpadok"))]);
   const { app, cookie } = await boot(service);
   const res = await app.request("/api/upozornenia/next-event", { headers: { cookie } });
   expect(res.status).toBe(200);
