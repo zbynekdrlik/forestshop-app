@@ -2504,10 +2504,20 @@ a.upozornenie-title:hover {
   width: auto;
   padding: var(--fs-space-1) var(--fs-space-2);
 }
-.uloha-emoji-input-field {
-  flex: 0 0 auto;
-  width: 4rem;
-  padding: var(--fs-space-1) var(--fs-space-2);
+/* issue 471: riadkové 😊 je teraz `EmojiPickerButton` v PICK režime. Aby sa
+   hustota/vzhľad riadku NEZMENIL (zákaz svojvoľných zmien vzhľadu), jeho
+   prepínač sa scopne na vzhľad `.uloha-icon-btn` (bez rámika/pozadia, rovnaký
+   padding a `--fs-text-sm`). Špecificita `.uloha-actions .emoji-picker-toggle`
+   = (0,0,2,0) porazí základný `.emoji-picker-toggle` (0,0,1,0) bezpodmienečne. */
+.uloha-actions .emoji-picker-toggle {
+  background: none;
+  border: none;
+  padding: var(--fs-space-1);
+  font-size: var(--fs-text-sm);
+  border-radius: var(--fs-radius-sm);
+}
+.uloha-actions .emoji-picker-toggle:hover {
+  background: var(--fs-surface-alt);
 }
 .uloha-actions {
   display: flex;
@@ -2626,6 +2636,14 @@ a.upozornenie-title:hover {
   border-radius: var(--fs-radius-md);
   box-shadow: var(--fs-shadow-md);
 }
+/* issue 471: pri pickeri na PRAVOM okraji riadku (`.uloha-actions`) sa popover
+   ukotví k pravému okraju prepínača (`align="right"` → `.align-right`), inak by
+   sa `left:0` popover roztiahol mimo panela. Špecificita (0,0,2,0) porazí
+   základný `.emoji-picker-popover` (0,0,1,0). */
+.emoji-picker-popover.align-right {
+  left: auto;
+  right: 0;
+}
 .emoji-picker-option {
   background: none;
   border: none;
@@ -2636,6 +2654,25 @@ a.upozornenie-title:hover {
   font-size: var(--fs-text-md);
 }
 .emoji-picker-option:hover {
+  background: var(--fs-surface-alt);
+}
+/* issue 471: voľba „bez emoji" (PICK režim, `showClear`) — celá šírka mriežky,
+   oddelená spodnou čiarou od dlaždíc emoji. */
+.emoji-picker-clear {
+  grid-column: 1 / -1;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--fs-border-soft);
+  cursor: pointer;
+  text-align: left;
+  line-height: 1.2;
+  padding: var(--fs-space-1) var(--fs-space-2);
+  margin-bottom: var(--fs-space-1);
+  border-radius: var(--fs-radius-sm);
+  font-size: var(--fs-text-sm);
+  color: var(--fs-ink-muted);
+}
+.emoji-picker-clear:hover {
   background: var(--fs-surface-alt);
 }
 .poznamky-list {
