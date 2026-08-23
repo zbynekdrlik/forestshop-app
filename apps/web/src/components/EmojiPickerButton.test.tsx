@@ -144,7 +144,7 @@ describe("EmojiPickerButton — pick režim (issue 471)", () => {
     expect(screen.queryByTestId("pick-popover")).toBeNull();
   });
 
-  it("voľba „bez emoji" zavolá onPick(null) a zavrie popover", () => {
+  it("voľba bez emoji zavolá onPick(null) a zavrie popover", () => {
     const picked: (string | null)[] = [];
     render(
       <EmojiPickerButton
@@ -166,7 +166,7 @@ describe("EmojiPickerButton — pick režim (issue 471)", () => {
     expect(screen.getByRole("button", { name: "Pridať/zmeniť emoji" })).toBeDefined();
   });
 
-  it("bez showClear sa voľba „bez emoji" nezobrazí", () => {
+  it("bez showClear sa voľba bez emoji nezobrazí", () => {
     render(<EmojiPickerButton testId="pick" onPick={() => {}} />);
     fireEvent.click(screen.getByTestId("pick"));
     expect(screen.queryByTestId("pick-clear")).toBeNull();
