@@ -46,6 +46,20 @@ async function secondLogin(app: ReturnType<typeof createApp>, db: Awaited<Return
   return { cookie };
 }
 
+async function createTask(app: ReturnType<typeof createApp>, cookie: string, text: string): Promise<string> {
+  const res = await app.request("/api/daily-tasks", { method: "POST", headers: { cookie, "content-type": "application/json" }, body: JSON.stringify({ text }) });
+  return ((await res.json()) as { id: string }).id;
+}
+
+async function readCount(app: ReturnType<typeof createApp>, cookie: string): Promise<number> {
+  const res = await app.request("/api/daily-tasks/count", { headers: { cookie } });
+  return ((await res.json()) as { count: number }).count;
+}
+
+async function setDone(app: ReturnType<typeof createApp>, cookie: string, id: string, done: boolean): Promise<void> {
+  await app.request(`/api/daily-tasks/${id}/done`, { method: "POST", headers: { cookie, "content-type": "application/json" }, body: JSON.stringify({ done }) });
+}
+
 describe("GET /api/daily-tasks", () => {
   it("bez prihlásenia vráti 401", async () => {
     const { app } = await bootUser("sef@forestshop.sk", "admin");
@@ -238,5 +252,55 @@ describe("DELETE /api/daily-tasks/:id", () => {
 
     const list = await app.request("/api/daily-tasks", { headers: { cookie } });
     expect(((await list.json()) as { rows: readonly { id: string }[] }).rows.map((r) => r.id)).toEqual([id]);
+  });
+});
+
+// issue 473: odznak počtu v ľavom menu — počet MOJICH otvorených (bez fajky) úloh.
+describe("GET /api/daily-tasks/count", () => {
+  it("bez prihlásenia vráti 401", async () => {
+    const { app } = await bootUser("sef@forestshop.sk", "admin");
+    const res = await app.request("/api/daily-tasks/count");
+    expect(res.status).toBe(401);
+  });
+
+  it("čerstvý používateľ má count 0", async () => {
+    const { app, cookie } = await bootUser("sef@forestshop.sk", "admin");
+    const res = await app.request("/api/daily-tasks/count", { headers: { cookie } });
+    expect(res.status).toBe(200);
+    expect((await res.json()) as { count: number }).toEqual({ count: 0 });
+  });
+
+  it("počíta LEN otvorené úlohy — vybavená (s fajkou) sa neráta", async () => {
+    const { app, cookie } = await bootUser("sef@forestshop.sk", "admin");
+    const a = await createTask(app, cookie, "A");
+    await createTask(app, cookie, "B");
+    await createTask(app, cookie, "C");
+    await setDone(app, cookie, a, true);
+
+    expect(await readCount(app, cookie)).toBe(2);
+  });
+
+  it("odfajknutie a späť mení count OBOMA smermi (POST /:id/done nastaví done explicitne v oboch smeroch)", async () => {
+    const { app, cookie } = await bootUser("sef@forestshop.sk", "admin");
+    const id = await createTask(app, cookie, "úloha");
+    expect(await readCount(app, cookie)).toBe(1);
+
+    await setDone(app, cookie, id, true);
+    expect(await readCount(app, cookie)).toBe(0);
+
+    await setDone(app, cookie, id, false);
+    expect(await readCount(app, cookie)).toBe(1);
+  });
+
+  it("count je PER-POUŽÍVATEĽ — cudzie otvorené úlohy sa nerátajú", async () => {
+    const { app, cookie, db } = await bootUser("sef@forestshop.sk", "admin");
+    await createTask(app, cookie, "šéfova 1");
+    await createTask(app, cookie, "šéfova 2");
+
+    const other = await secondLogin(app, db, "zamestnanec@forestshop.sk", "manazer");
+    // druhý používateľ vidí LEN svoje (0), nie šéfove dve
+    expect(await readCount(app, other.cookie)).toBe(0);
+    // vlastník vidí svoje dve
+    expect(await readCount(app, cookie)).toBe(2);
   });
 });

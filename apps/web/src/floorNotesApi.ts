@@ -28,6 +28,7 @@ const rowSchema = z.object({
 export type FloorNoteRow = z.infer<typeof rowSchema>;
 
 const listSchema = z.object({ rows: z.array(rowSchema) });
+const countSchema = z.object({ count: z.number() });
 
 export class FloorNotesUnauthorizedError extends Error {
   constructor() {
@@ -56,6 +57,16 @@ async function readJson(response: Response, fallback: string): Promise<unknown> 
 export async function fetchFloorNotes(): Promise<readonly FloorNoteRow[]> {
   const response = await fetch("/api/floor-notes");
   return listSchema.parse(await readJson(response, "Zoznam zápisov sa nepodarilo načítať")).rows;
+}
+
+// issue 473: odznak počtu v ľavom menu — počet nevybavených zápisov. Rovnaký
+// vzor ako `fetchUpozorneniaCount` (`upozorneniaApi.ts`): odznak nie je
+// kritický, pri 401/chybe vráti 0 namiesto vyhodenia.
+export async function fetchUnresolvedFloorNotesCount(): Promise<number> {
+  const response = await fetch("/api/floor-notes/count");
+  if (response.status === 401) return 0;
+  if (!response.ok) return 0;
+  return countSchema.parse(await response.json()).count;
 }
 
 export async function createFloorNote(text: string): Promise<void> {

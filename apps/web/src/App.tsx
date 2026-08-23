@@ -7,8 +7,12 @@ import { Footer } from "./components/Footer.js";
 import { LoginForm } from "./components/LoginForm.js";
 import { Sidebar } from "./components/Sidebar.js";
 import { Topbar } from "./components/Topbar.js";
+import { fetchOpenDailyTasksCount } from "./dailyTasksApi.js";
+import { DailyTasksBadgeRefreshContext } from "./dailyTasksBadgeContext.js";
 import { fetchDpdShippableCount } from "./dpdApi.js";
 import { DpdBadgeRefreshContext } from "./dpdBadgeContext.js";
+import { fetchUnresolvedFloorNotesCount } from "./floorNotesApi.js";
+import { FloorNotesBadgeRefreshContext } from "./floorNotesBadgeContext.js";
 import { DEFAULT_TAB_ID, NAV, findTab, isVisibleTabId } from "./nav.js";
 import { fetchOrderFlagCounts } from "./orderFlagsApi.js";
 import { OrderFlagsBadgeRefreshContext } from "./orderFlagsBadgeContext.js";
@@ -177,10 +181,74 @@ export function App(): JSX.Element {
     };
   }, [me, activeTabId, orderFlagsRefreshNonce]);
 
+  // issue 473: odznak "Úlohy na dnes" — presná kópia `upozorneniaCount` vzoru
+  // vyššie (App.tsx vlastní count, fetchuje ho pri prihlásení/zmene záložky/
+  // refresh-nonce, žiaden polling). Číslo je PER-POUŽÍVATEĽ (úlohy sú súkromné),
+  // musí byť známe HNEĎ po prihlásení, nie až po prvom otvorení záložky.
+  // `DailyTasksSection` po každej úspešnej count-meniacej mutácii (pridať/
+  // zmazať/odfajknúť) zavolá `refresh()` cez `DailyTasksBadgeRefreshContext`.
+  const [dailyTasksCount, setDailyTasksCount] = useState<number | null>(null);
+  const [dailyTasksRefreshNonce, setDailyTasksRefreshNonce] = useState(0);
+  const dailyTasksBadgeRefresh = useCallback(() => {
+    setDailyTasksRefreshNonce((n) => n + 1);
+  }, []);
+  const dailyTasksBadgeContextValue = useMemo(() => ({ refresh: dailyTasksBadgeRefresh }), [dailyTasksBadgeRefresh]);
+  useEffect(() => {
+    if (me === null) return;
+    let cancelled = false;
+    fetchOpenDailyTasksCount()
+      .then((count) => {
+        if (!cancelled) setDailyTasksCount(count);
+      })
+      .catch(() => {
+        // `fetchOpenDailyTasksCount` už interne zachytáva všetky chyby a vždy
+        // vráti 0 (`dailyTasksApi.ts`) — tento catch je len poistka pre eslint
+        // `no-floating-promises`, nikdy by sa reálne nemal spustiť.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [me, activeTabId, dailyTasksRefreshNonce]);
+
+  // issue 473: odznak "Objednávky predajňa" — rovnaký PRIAMY vzor ako
+  // `dailyTasksCount` vyššie, ibaže tento počet je GLOBÁLNY (zdieľaný zoznam,
+  // žiadny user filter). `FloorNotesSection` po každej count-meniacej mutácii
+  // (pridať/zmazať/prepnúť ✅ vybavené) zavolá `refresh()` cez
+  // `FloorNotesBadgeRefreshContext` — značky 🛒/📞 count nemenia, tie refresh
+  // nevolajú.
+  const [floorNotesCount, setFloorNotesCount] = useState<number | null>(null);
+  const [floorNotesRefreshNonce, setFloorNotesRefreshNonce] = useState(0);
+  const floorNotesBadgeRefresh = useCallback(() => {
+    setFloorNotesRefreshNonce((n) => n + 1);
+  }, []);
+  const floorNotesBadgeContextValue = useMemo(() => ({ refresh: floorNotesBadgeRefresh }), [floorNotesBadgeRefresh]);
+  useEffect(() => {
+    if (me === null) return;
+    let cancelled = false;
+    fetchUnresolvedFloorNotesCount()
+      .then((count) => {
+        if (!cancelled) setFloorNotesCount(count);
+      })
+      .catch(() => {
+        // `fetchUnresolvedFloorNotesCount` už interne zachytáva všetky chyby a
+        // vždy vráti 0 (`floorNotesApi.ts`) — poistka pre eslint
+        // `no-floating-promises`, nikdy by sa reálne nemal spustiť.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [me, activeTabId, floorNotesRefreshNonce]);
+
   const badgeCounts = useMemo<Readonly<Record<string, number>>>(() => {
     const counts: Record<string, number> = {};
     if (ordersRemainingCount !== null) counts["orders"] = ordersRemainingCount;
     if (upozorneniaCount !== null) counts["upozornenia"] = upozorneniaCount;
+    // issue 473: odznaky sa ukazujú AJ pri nule (rovnako ako "upozornenia"/
+    // "dpd" — appka tým hovorí "toto číslo poznám, je 0"), presne ako žiada
+    // zadanie ("presne ako pri Upozornenia"). Kľúče `ulohy`/`floor-orders`
+    // zodpovedajú `nav.ts`'s `tab.id` — `Sidebar` ich vykreslí genericky.
+    if (dailyTasksCount !== null) counts["ulohy"] = dailyTasksCount;
+    if (floorNotesCount !== null) counts["floor-orders"] = floorNotesCount;
     // issue 445: odznak sa ukazuje AJ pri nule (rovnako ako "upozornenia"/
     // "pairing-review" — appka tým hovorí "toto číslo poznám, je 0"), aby
     // šéf hneď videl "dnes netreba objednať žiadnu DPD prepravu".
@@ -206,7 +274,7 @@ export function App(): JSX.Element {
     // istý tvar bugu ako `UpozorneniaSection.tsx`'s `withBusy`), takže lint
     // to nezachytí a stará hodnota (chýbajúce odznaky hneď po prihlásení,
     // kým sa nespustí NEJAKÝ INÝ trigger) prežije bez varovania.
-  }, [ordersRemainingCount, upozorneniaCount, dpdCount, pairingReviewUnreviewedCount, orderFlagCounts]);
+  }, [ordersRemainingCount, upozorneniaCount, dpdCount, pairingReviewUnreviewedCount, orderFlagCounts, dailyTasksCount, floorNotesCount]);
 
   // issue 185: stav zapnuté/vypnuté pre "Automatizácie" priečinok v menu.
   // Na rozdiel od `ordersRemainingCount` vyššie (publikované OBRAZOVKOU
@@ -334,34 +402,38 @@ export function App(): JSX.Element {
         <DpdBadgeRefreshContext.Provider value={dpdBadgeContextValue}>
           <PairingReviewBadgeRefreshContext.Provider value={pairingReviewBadgeContextValue}>
             <OrderFlagsBadgeRefreshContext.Provider value={orderFlagsBadgeContextValue}>
-              <div className="app-shell">
-                <Sidebar
-                  folders={NAV}
-                  activeTabId={activeTabId}
-                  onSelectTab={selectTab}
-                  badgeCounts={badgeCounts}
-                  badgeStatus={automationStatus}
-                />
-                <div className="main">
-                  <Topbar
-                    title={isVisibleTabId(activeTabId) ? (tab?.label ?? null) : null}
-                    greeting={`Prihlásený: ${me.displayName} (${me.role})`}
-                    role={me.role}
-                    onSessionExpired={reload}
-                    onLogout={logout}
-                    passwordPanelOpen={passwordPanelOpen}
-                    onTogglePasswordPanel={() => {
-                      setPasswordPanelOpen((open) => !open);
-                    }}
-                  >
-                    <ChangePasswordForm email={me.email} onSessionExpired={reload} />
-                  </Topbar>
-                  <main className={tab?.wide === true ? "main-wide" : undefined}>
-                    {logoutError !== "" && <p role="alert">{logoutError}</p>}
-                    {ActiveComponent !== null && <ActiveComponent role={me.role} onSessionExpired={reload} />}
-                  </main>
-                </div>
-              </div>
+              <DailyTasksBadgeRefreshContext.Provider value={dailyTasksBadgeContextValue}>
+                <FloorNotesBadgeRefreshContext.Provider value={floorNotesBadgeContextValue}>
+                  <div className="app-shell">
+                    <Sidebar
+                      folders={NAV}
+                      activeTabId={activeTabId}
+                      onSelectTab={selectTab}
+                      badgeCounts={badgeCounts}
+                      badgeStatus={automationStatus}
+                    />
+                    <div className="main">
+                      <Topbar
+                        title={isVisibleTabId(activeTabId) ? (tab?.label ?? null) : null}
+                        greeting={`Prihlásený: ${me.displayName} (${me.role})`}
+                        role={me.role}
+                        onSessionExpired={reload}
+                        onLogout={logout}
+                        passwordPanelOpen={passwordPanelOpen}
+                        onTogglePasswordPanel={() => {
+                          setPasswordPanelOpen((open) => !open);
+                        }}
+                      >
+                        <ChangePasswordForm email={me.email} onSessionExpired={reload} />
+                      </Topbar>
+                      <main className={tab?.wide === true ? "main-wide" : undefined}>
+                        {logoutError !== "" && <p role="alert">{logoutError}</p>}
+                        {ActiveComponent !== null && <ActiveComponent role={me.role} onSessionExpired={reload} />}
+                      </main>
+                    </div>
+                  </div>
+                </FloorNotesBadgeRefreshContext.Provider>
+              </DailyTasksBadgeRefreshContext.Provider>
             </OrderFlagsBadgeRefreshContext.Provider>
           </PairingReviewBadgeRefreshContext.Provider>
         </DpdBadgeRefreshContext.Provider>
