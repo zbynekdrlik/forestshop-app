@@ -119,6 +119,68 @@ describe("EmojiPickerButton — vloženie použije živú DOM hodnotu, nie zaost
   });
 });
 
+// issue 471: „pick" režim — klik na emoji rovno zavolá `onPick(emoji)` (bez
+// vkladania do poľa), voľba „bez emoji" zavolá `onPick(null)`. Ten istý zdieľaný
+// popover + zoznam ako insert režim (Úlohy na dnes ho použijú na jednoklikové
+// označenie celého riadku).
+describe("EmojiPickerButton — pick režim (issue 471)", () => {
+  it("klik na emoji zavolá onPick(emoji) a zavrie popover", () => {
+    const picked: (string | null)[] = [];
+    render(
+      <EmojiPickerButton
+        testId="pick"
+        onPick={(e) => {
+          picked.push(e);
+        }}
+        showClear
+        label="Pridať/zmeniť emoji"
+      />,
+    );
+    fireEvent.click(screen.getByTestId("pick"));
+    expect(screen.getByTestId("pick-popover")).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "Vložiť 🚀" }));
+    expect(picked).toEqual(["🚀"]);
+    // Po výbere sa popover ZAVRIE — jeden klik = hotovo.
+    expect(screen.queryByTestId("pick-popover")).toBeNull();
+  });
+
+  it("voľba bez emoji zavolá onPick(null) a zavrie popover", () => {
+    const picked: (string | null)[] = [];
+    render(
+      <EmojiPickerButton
+        testId="pick"
+        onPick={(e) => {
+          picked.push(e);
+        }}
+        showClear
+      />,
+    );
+    fireEvent.click(screen.getByTestId("pick"));
+    fireEvent.click(screen.getByTestId("pick-clear"));
+    expect(picked).toEqual([null]);
+    expect(screen.queryByTestId("pick-popover")).toBeNull();
+  });
+
+  it("prepínač nesie zadaný label (aria-label + title)", () => {
+    render(<EmojiPickerButton testId="pick" onPick={() => {}} label="Pridať/zmeniť emoji" />);
+    expect(screen.getByRole("button", { name: "Pridať/zmeniť emoji" })).toBeDefined();
+  });
+
+  it("bez showClear sa voľba bez emoji nezobrazí", () => {
+    render(<EmojiPickerButton testId="pick" onPick={() => {}} />);
+    fireEvent.click(screen.getByTestId("pick"));
+    expect(screen.queryByTestId("pick-clear")).toBeNull();
+  });
+
+  it("zdieľaný zoznam obsahuje rozšírené emoji Štěpánovej sady (issue 471)", () => {
+    render(<EmojiPickerButton testId="pick" onPick={() => {}} />);
+    fireEvent.click(screen.getByTestId("pick"));
+    for (const e of ["👏", "🚀", "🥳", "📣", "🤯", "😭", "😆", "🤷", "😳", "😜", "🤨"]) {
+      expect(screen.getByRole("button", { name: `Vložiť ${e}` })).toBeDefined();
+    }
+  });
+});
+
 // issue 455 (hlbšia príčina flaku upozornenia.spec.ts:271): obnova fokusu +
 // caretu po vložení emoji beží v `requestAnimationFrame`. rAF vystrelí AŽ keď
 // kompozítor vyrobí snímku — na zaťaženom (CI) stroji to môže zaostať o stovky

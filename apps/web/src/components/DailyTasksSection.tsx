@@ -9,6 +9,7 @@ import {
   updateDailyTaskText,
   type DailyTaskRow,
 } from "../dailyTasksApi.js";
+import { EmojiPickerButton } from "./EmojiPickerButton.js";
 
 // issue 342: "Dôležité → Úlohy na dnes" — nahrádza šéfove poznámky písané do
 // Discord kanála #úlohy-na-dnes. Na rozdiel od zvyšku appky (viď
@@ -32,24 +33,17 @@ import {
 //    ustálený vzor ako `.ord-supplier-link-edit`, issue 162) zníži ju na
 //    ~338px bez zmeny riadkovej výšky.
 // 2) Prepínač "vybavené" je teraz skutočný `<input type="checkbox">`
-//    namiesto `<button>`u s Unicode ☐/☑ — jediné miesto v appke, kde hlavný
-//    ovládací prvok obrazovky bol len text namiesto skutočného UI prvku
-//    (OrderLineRow.tsx/UpozorneniaSection.tsx/DpdSection.tsx majú všade
-//    skutočný checkbox — CSS špecificitu proti globálnemu resetu, pozri
-//    app.css, si však rieši výslovne len OrderLineRow.tsx's
-//    `.order-group input[type="checkbox"]`, viď fix nižšie).
-// 3) `.uloha-row`'s `align-items` je `flex-start` namiesto `center` — pri
-//    zalomení textu na užšom okne (viac riadkov) drží checkbox/ikony pri
-//    PRVOM riadku textu namiesto stredu celého zalomeného bloku.
+//    namiesto `<button>`u s Unicode ☐/☑.
+// 3) `.uloha-row`'s `align-items` je `flex-start` namiesto `center`.
 
-// Issue 381: odstráni draft PRE JEDEN riadok z `emojiDraft` bez `delete`
-// operátora (`@typescript-eslint/no-dynamic-delete` zakazuje `delete
-// next[dynamickýKľúč]`) — filtrovanie cez `Object.entries` je funkčne
-// rovnaké, len lint-safe.
-function forgetEmojiDraft(draft: Record<string, string>, id: string): Record<string, string> {
-  if (!(id in draft)) return draft;
-  return Object.fromEntries(Object.entries(draft).filter(([key]) => key !== id));
-}
+// issue 471: emoji picker (zdieľaný `EmojiPickerButton`, issue 440) je zapojený
+// na DVE miesta:
+//  - INSERT do TEXTU úlohy (nový vstup aj inline edit) — vloženie na kurzor,
+//    presne ako Poznámky/Upozornenia.
+//  - PICK na označenie CELÉHO riadku — klik na 😊 otvorí picker a JEDNÝM klikom
+//    sa emoji rovno uloží (`PATCH …/emoji`); voľba „bez emoji" ho odstráni.
+//    Nahradilo pôvodný medzikrok s textovým poľom + Uložiť (issue 342/381),
+//    ktorý Štěpán opísal ako nepoužiteľný.
 
 export function DailyTasksSection({ onSessionExpired }: { readonly onSessionExpired: () => void }): JSX.Element {
   const [rows, setRows] = useState<readonly DailyTaskRow[] | null>(null);
@@ -59,20 +53,22 @@ export function DailyTasksSection({ onSessionExpired }: { readonly onSessionExpi
   const [creating, setCreating] = useState(false);
   const [editingTextId, setEditingTextId] = useState<string | null>(null);
   const [textDraft, setTextDraft] = useState<Record<string, string>>({});
-  const [editingEmojiId, setEditingEmojiId] = useState<string | null>(null);
-  const [emojiDraft, setEmojiDraft] = useState<Record<string, string>>({});
+
+  // issue 471: emoji picker vkladá na pozíciu kurzora týchto polí. Nový vstup má
+  // vlastný ref; inline edit má JEDEN zdieľaný ref — appka dovolí najviac jeden
+  // riadok v editácii textu naraz, takže je namountované vždy najviac jedno pole.
+  const newTextRef = useRef<HTMLInputElement>(null);
+  const editTextRef = useRef<HTMLInputElement>(null);
 
   // Code review (rovnaký nález ako issue 251's `SupplierLinksSection.tsx`/
-  // `PairingSection.tsx`): `saveText`/`saveEmoji`'s `.then()` musí vedieť,
-  // KTORÝ riadok je PRÁVE editovaný V OKAMIHU, keď odpoveď doletí — nie ten,
-  // čo bol editovaný v momente kliknutia na Uložiť. Bez tohto by uloženie
-  // riadku A (ešte čakajúce na odpoveď) mohlo zavrieť editor riadku B,
-  // otvorený medzitým. "Latest ref" vzor — synchrónne priamo v tele
-  // komponentu, nie cez `useEffect`.
+  // `PairingSection.tsx`): `saveText`'s `.then()` musí vedieť, KTORÝ riadok je
+  // PRÁVE editovaný V OKAMIHU, keď odpoveď doletí — nie ten, čo bol editovaný
+  // v momente kliknutia na Uložiť. Bez tohto by uloženie riadku A (ešte
+  // čakajúce na odpoveď) mohlo zavrieť editor riadku B, otvorený medzitým.
+  // "Latest ref" vzor — synchrónne priamo v tele komponentu, nie cez
+  // `useEffect`.
   const editingTextIdRef = useRef(editingTextId);
   editingTextIdRef.current = editingTextId;
-  const editingEmojiIdRef = useRef(editingEmojiId);
-  editingEmojiIdRef.current = editingEmojiId;
 
   const load = useCallback(() => {
     fetchDailyTasks()
@@ -169,20 +165,15 @@ export function DailyTasksSection({ onSessionExpired }: { readonly onSessionExpi
     [textDraft, load, handleActionError],
   );
 
-  const saveEmoji = useCallback(
-    (id: string) => {
-      const emoji = (emojiDraft[id] ?? "").trim();
+  // issue 471: jednoklikové označenie riadku — picker zavolá toto priamo s
+  // vybraným emoji (alebo `null` pri voľbe „bez emoji"). Žiadny draft ani
+  // medzikrokové textové pole; picker si popover zatvorí sám.
+  const saveRowEmoji = useCallback(
+    (id: string, emoji: string | null) => {
       setBusyId(id);
       setError("");
-      updateDailyTaskEmoji(id, emoji === "" ? null : emoji)
+      updateDailyTaskEmoji(id, emoji)
         .then(() => {
-          // Rovnaký dôvod ako `saveText` vyššie — nezavrieť CUDZÍ, medzitým
-          // otvorený emoji editor.
-          if (editingEmojiIdRef.current === id) setEditingEmojiId(null);
-          // Issue 381: draft je teraz uložený, zahoď ho — ĎALŠIE otvorenie
-          // musí znova nasadiť čerstvú serverovú hodnotu, nie tento (už
-          // uložený, prípadne časom zastaraný) záznam.
-          setEmojiDraft((d) => forgetEmojiDraft(d, id));
           load();
         })
         .catch((err: unknown) => {
@@ -192,41 +183,12 @@ export function DailyTasksSection({ onSessionExpired }: { readonly onSessionExpi
           setBusyId("");
         });
     },
-    [emojiDraft, load, handleActionError],
+    [load, handleActionError],
   );
-
-  // Issue 381: majiteľ nahlásil, že priraďovanie emoji "sa správa hrozne" —
-  // naživo overené (komentár na ticket-e): (1) rozpísaný draft sa ticho
-  // stratí pri prepnutí na iný riadok, (2) chýba Zrušiť, (3) textový aj
-  // emoji editor sa dajú mať otvorené súčasne na tom istom riadku. Tri
-  // opravy nižšie, minimálne, správanie funkcie samotnej nemenia.
-
-  // Draft sa nasadí len keď PRE TENTO riadok ešte neexistuje (prvé
-  // otvorenie od posledného uloženia/zrušenia) — nie bezpodmienečne pri
-  // KAŽDOM kliknutí. Vďaka tomu draft prežije prepnutie na iný riadok a
-  // späť namiesto toho, aby ho každé ďalšie otvorenie ticho prepísalo
-  // serverovou hodnotou.
-  const openEmojiEditor = useCallback((row: DailyTaskRow) => {
-    setEmojiDraft((d) => (row.id in d ? d : { ...d, [row.id]: row.emoji ?? "" }));
-    // Textový a emoji editor sa nesmú dať mať otvorené súčasne na tom
-    // istom riadku (viedlo to k dvom identickým 💾 tlačidlám vedľa seba).
-    setEditingTextId((current) => (current === row.id ? null : current));
-    setEditingEmojiId(row.id);
-  }, []);
 
   const openTextEditor = useCallback((row: DailyTaskRow) => {
     setTextDraft((d) => ({ ...d, [row.id]: row.text }));
-    setEditingEmojiId((current) => (current === row.id ? null : current));
     setEditingTextId(row.id);
-  }, []);
-
-  // Explicitné Zrušiť pre emoji editor (textový editor už jedno má) —
-  // predtým bol jediný spôsob odchodu Uložiť, aj s prázdnou/nechcenou
-  // hodnotou. Draft sa zahodí, aby ďalšie otvorenie ukázalo znova
-  // serverovú hodnotu, nie tento zrušený pokus.
-  const cancelEmojiEdit = useCallback((id: string) => {
-    setEditingEmojiId((current) => (current === id ? null : current));
-    setEmojiDraft((d) => forgetEmojiDraft(d, id));
   }, []);
 
   const removeTask = useCallback(
@@ -252,6 +214,7 @@ export function DailyTasksSection({ onSessionExpired }: { readonly onSessionExpi
   const addRow = (
     <div className="ulohy-add-row">
       <input
+        ref={newTextRef}
         value={newText}
         onChange={(e) => {
           setNewText(e.target.value);
@@ -267,6 +230,7 @@ export function DailyTasksSection({ onSessionExpired }: { readonly onSessionExpi
         data-testid="uloha-new-input"
         disabled={creating}
       />
+      <EmojiPickerButton targetRef={newTextRef} value={newText} onChange={setNewText} testId="uloha-new-emoji" disabled={creating} />
       <button type="button" className="btn good sm" onClick={addTask} disabled={newText.trim() === "" || creating} data-testid="uloha-new-add">
         + Pridať
       </button>
@@ -325,8 +289,8 @@ export function DailyTasksSection({ onSessionExpired }: { readonly onSessionExpi
                     data-testid={`uloha-done-${row.id}`}
                   />
 
-                  {row.emoji !== null && editingEmojiId !== row.id && (
-                    <span className="uloha-emoji" aria-hidden="true">
+                  {row.emoji !== null && (
+                    <span className="uloha-emoji" data-testid={`uloha-emoji-cell-${row.id}`} aria-hidden="true">
                       {row.emoji}
                     </span>
                   )}
@@ -334,6 +298,7 @@ export function DailyTasksSection({ onSessionExpired }: { readonly onSessionExpi
                   {editingTextId === row.id ? (
                     <>
                       <input
+                        ref={editTextRef}
                         className="uloha-edit-input"
                         value={textDraft[row.id] ?? row.text}
                         onChange={(e) => {
@@ -343,6 +308,16 @@ export function DailyTasksSection({ onSessionExpired }: { readonly onSessionExpi
                         aria-label="Upraviť text úlohy"
                         data-testid={`uloha-edit-input-${row.id}`}
                         autoFocus
+                      />
+                      {/* issue 471: emoji DO textu aj v edit režime (insert na kurzor). */}
+                      <EmojiPickerButton
+                        targetRef={editTextRef}
+                        value={textDraft[row.id] ?? row.text}
+                        onChange={(v) => {
+                          setTextDraft((d) => ({ ...d, [row.id]: v }));
+                        }}
+                        testId={`uloha-edit-emoji-${row.id}`}
+                        disabled={busy}
                       />
                       <button
                         type="button"
@@ -375,55 +350,6 @@ export function DailyTasksSection({ onSessionExpired }: { readonly onSessionExpi
                     </span>
                   )}
 
-                  {editingEmojiId === row.id && (
-                    <>
-                      <input
-                        className="uloha-emoji-input-field"
-                        value={emojiDraft[row.id] ?? row.emoji ?? ""}
-                        onChange={(e) => {
-                          const value = e.target.value;
-                          setEmojiDraft((d) => ({ ...d, [row.id]: value }));
-                        }}
-                        aria-label="Emoji úlohy"
-                        placeholder="😊"
-                        data-testid={`uloha-emoji-input-${row.id}`}
-                        autoFocus
-                      />
-                      <button
-                        type="button"
-                        className="uloha-icon-btn"
-                        disabled={busy}
-                        onClick={() => {
-                          saveEmoji(row.id);
-                        }}
-                        title="Uložiť emoji"
-                        aria-label="Uložiť emoji"
-                        data-testid={`uloha-emoji-save-${row.id}`}
-                      >
-                        💾
-                      </button>
-                      {/* Review dispatch (issue 381): bez `disabled={busy}` by Zrušiť
-                          počas ROZBEHNUTÉHO uloženia TOHO ISTÉHO riadku otvorilo
-                          okno na race — zrušenie + nový rozpis medzitým a
-                          následné doručenie PÔVODNEJ (už "zrušenej") odpovede
-                          by ten nový rozpis ticho zahodilo cez `saveEmoji`'s
-                          `forgetEmojiDraft`. Rovnaký `busy` guard ako má Save. */}
-                      <button
-                        type="button"
-                        className="uloha-icon-btn"
-                        disabled={busy}
-                        onClick={() => {
-                          cancelEmojiEdit(row.id);
-                        }}
-                        title="Zrušiť"
-                        aria-label="Zrušiť úpravu emoji"
-                        data-testid={`uloha-emoji-cancel-${row.id}`}
-                      >
-                        ✕
-                      </button>
-                    </>
-                  )}
-
                   {editingTextId !== row.id && (
                     <div className="uloha-actions">
                       <button
@@ -438,20 +364,22 @@ export function DailyTasksSection({ onSessionExpired }: { readonly onSessionExpi
                       >
                         ✏️
                       </button>
-                      {editingEmojiId !== row.id && (
-                        <button
-                          type="button"
-                          className="uloha-icon-btn"
-                          onClick={() => {
-                            openEmojiEditor(row);
-                          }}
-                          title="Pridať/zmeniť emoji"
-                          aria-label={`Pridať/zmeniť emoji úlohy ${row.text}`}
-                          data-testid={`uloha-emoji-${row.id}`}
-                        >
-                          😊
-                        </button>
-                      )}
+                      {/* issue 471: 😊 otvorí picker, JEDNÝM klikom uloží emoji k úlohe
+                          (`saveRowEmoji`); voľba „bez emoji" ho odstráni. `align="right"`
+                          ukotví popover k pravému okraju (picker je pri pravom okraji
+                          panela). Vzhľad prepínača je CSS-scopnutý na `.uloha-icon-btn`
+                          (`app.css`), takže hustota riadku ostáva rovnaká (issue 471). */}
+                      <EmojiPickerButton
+                        onPick={(emoji) => {
+                          saveRowEmoji(row.id, emoji);
+                        }}
+                        showClear
+                        align="right"
+                        label={`Pridať/zmeniť emoji úlohy ${row.text}`}
+                        title="Pridať/zmeniť emoji"
+                        testId={`uloha-emoji-${row.id}`}
+                        disabled={busy}
+                      />
                       <button
                         type="button"
                         className="uloha-icon-btn"

@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { DailyTasksSection } from "./DailyTasksSection.js";
 
@@ -90,19 +90,71 @@ it("upraví text úlohy cez inline ✏️ toggle", async () => {
   });
 });
 
-it("pridá emoji cez inline 😊 toggle", async () => {
-  fetchDailyTasks.mockResolvedValueOnce([ROW_A]).mockResolvedValueOnce([{ ...ROW_A, emoji: "🚚" }]);
+// issue 471: emoji do TEXTU novej úlohy cez zdieľaný EmojiPickerButton (insert
+// na pozíciu kurzora — presne ako Poznámky/440).
+it("nový vstup: emoji z pickera sa vloží do textu novej úlohy", async () => {
+  fetchDailyTasks.mockResolvedValueOnce([]);
+  render(<DailyTasksSection onSessionExpired={vi.fn()} />);
+  await screen.findByTestId("ulohy-empty");
+
+  const input = screen.getByTestId<HTMLInputElement>("uloha-new-input");
+  fireEvent.change(input, { target: { value: "poslať" } });
+  fireEvent.click(screen.getByTestId("uloha-new-emoji"));
+  fireEvent.click(within(screen.getByTestId("uloha-new-emoji-popover")).getByRole("button", { name: "Vložiť 🚀" }));
+
+  await waitFor(() => {
+    expect(input.value).toContain("🚀");
+  });
+});
+
+// issue 471: emoji do TEXTU aj v inline edit režime.
+it("edit editor: emoji z pickera sa vloží do upravovaného textu", async () => {
+  fetchDailyTasks.mockResolvedValueOnce([ROW_A]);
+  render(<DailyTasksSection onSessionExpired={vi.fn()} />);
+  await screen.findByTestId("uloha-row-task-a");
+
+  fireEvent.click(screen.getByTestId("uloha-edit-task-a"));
+  const editInput = screen.getByTestId<HTMLInputElement>("uloha-edit-input-task-a");
+  fireEvent.change(editInput, { target: { value: "poslať DPD" } });
+  fireEvent.click(screen.getByTestId("uloha-edit-emoji-task-a"));
+  fireEvent.click(within(screen.getByTestId("uloha-edit-emoji-task-a-popover")).getByRole("button", { name: "Vložiť 🚚" }));
+
+  await waitFor(() => {
+    expect(editInput.value).toContain("🚚");
+  });
+});
+
+// issue 471: označenie CELÉHO riadku emojkou — klik na 😊 otvorí picker,
+// JEDNÝM klikom na emoji sa emoji rovno uloží (žiadne textové pole + Uložiť).
+it("riadok: jedným klikom na emoji v pickeri sa emoji uloží (updateDailyTaskEmoji)", async () => {
+  fetchDailyTasks.mockResolvedValueOnce([ROW_A]).mockResolvedValueOnce([{ ...ROW_A, emoji: "🚀" }]);
   updateDailyTaskEmoji.mockResolvedValueOnce(true);
   render(<DailyTasksSection onSessionExpired={vi.fn()} />);
   await screen.findByTestId("uloha-row-task-a");
 
   fireEvent.click(screen.getByTestId("uloha-emoji-task-a"));
-  const emojiInput = screen.getByTestId<HTMLInputElement>("uloha-emoji-input-task-a");
-  fireEvent.change(emojiInput, { target: { value: "🚚" } });
-  fireEvent.click(screen.getByTestId("uloha-emoji-save-task-a"));
+  fireEvent.click(within(screen.getByTestId("uloha-emoji-task-a-popover")).getByRole("button", { name: "Vložiť 🚀" }));
 
   await waitFor(() => {
-    expect(updateDailyTaskEmoji).toHaveBeenCalledWith("task-a", "🚚");
+    expect(updateDailyTaskEmoji).toHaveBeenCalledWith("task-a", "🚀");
+  });
+  await waitFor(() => {
+    expect(screen.getByTestId("uloha-emoji-cell-task-a").textContent).toBe("🚀");
+  });
+});
+
+// issue 471: voľba „bez emoji" v pickeri odstráni emoji riadku (null).
+it("riadok: voľba bez emoji odstráni emoji úlohy (updateDailyTaskEmoji null)", async () => {
+  fetchDailyTasks.mockResolvedValueOnce([ROW_B]).mockResolvedValueOnce([{ ...ROW_B, emoji: null }]);
+  updateDailyTaskEmoji.mockResolvedValueOnce(true);
+  render(<DailyTasksSection onSessionExpired={vi.fn()} />);
+  await screen.findByTestId("uloha-row-task-b");
+
+  fireEvent.click(screen.getByTestId("uloha-emoji-task-b"));
+  fireEvent.click(screen.getByTestId("uloha-emoji-task-b-clear"));
+
+  await waitFor(() => {
+    expect(updateDailyTaskEmoji).toHaveBeenCalledWith("task-b", null);
   });
 });
 
@@ -216,90 +268,22 @@ it("pri 401 POČAS mutácie (nielen počiatočného načítania) tiež zavolá o
   });
 });
 
-// Issue 381 (majiteľ: "to emoji čo si môžeš priradiť na úlohy na dnes tam
-// chcem mať ale sa správa hrozne") — naživo reprodukované na produkcii
-// (komentár na ticket-e): rozpísaný emoji draft sa ticho stratí pri
-// prepnutí na iný riadok, chýba Zrušiť, textový aj emoji editor sa dajú
-// mať otvorené súčasne na tom istom riadku.
-
-it("draft rozpísaného emoji PREŽIJE prepnutie na iný riadok a späť (bez uloženia)", async () => {
-  fetchDailyTasks.mockResolvedValue([ROW_B, ROW_A]);
-  render(<DailyTasksSection onSessionExpired={vi.fn()} />);
-  await screen.findByTestId("uloha-row-task-a");
-
-  // Otvor emoji editor riadku A, rozpíš draft, NEULOŽ.
-  fireEvent.click(screen.getByTestId("uloha-emoji-task-a"));
-  fireEvent.change(screen.getByTestId<HTMLInputElement>("uloha-emoji-input-task-a"), { target: { value: "🎯" } });
-
-  // Appka dovolí len JEDEN otvorený naraz — otvorenie iného riadku ticho
-  // "zavrie" prvý.
-  fireEvent.click(screen.getByTestId("uloha-emoji-task-b"));
-  expect(screen.queryByTestId("uloha-emoji-input-task-a")).toBeNull();
-
-  // Zavri riadok B (Zrušiť, bez uloženia) a znova otvor riadok A — draft
-  // 🎯 musí byť STÁLE tam, appka ho nesmie zahodiť len preto, že si sa
-  // pozrel na iný riadok.
-  fireEvent.click(screen.getByTestId("uloha-emoji-cancel-task-b"));
-  fireEvent.click(screen.getByTestId("uloha-emoji-task-a"));
-  expect(screen.getByTestId<HTMLInputElement>("uloha-emoji-input-task-a").value).toBe("🎯");
-});
-
-it("Zrušiť v emoji editore ho zavrie BEZ uloženia a zahodí draft (ďalšie otvorenie ukáže znova serverovú hodnotu)", async () => {
+// issue 471: v edit režime sa riadkové akcie (vrátane riadkového PICK pickera)
+// schovajú a namiesto nich je pri textovom poli INSERT picker na vloženie emoji
+// DO textu — nie sú to teda dva pickery naraz, ale prepnutie z označenia riadku
+// na vkladanie do textu.
+it("edit režim ukáže text-insert picker a schová riadkový pick picker", async () => {
   fetchDailyTasks.mockResolvedValueOnce([ROW_A]);
   render(<DailyTasksSection onSessionExpired={vi.fn()} />);
   await screen.findByTestId("uloha-row-task-a");
 
-  fireEvent.click(screen.getByTestId("uloha-emoji-task-a"));
-  fireEvent.change(screen.getByTestId<HTMLInputElement>("uloha-emoji-input-task-a"), { target: { value: "🚚" } });
-  fireEvent.click(screen.getByTestId("uloha-emoji-cancel-task-a"));
-
-  expect(updateDailyTaskEmoji).not.toHaveBeenCalled();
-  expect(screen.queryByTestId("uloha-emoji-input-task-a")).toBeNull();
-
-  fireEvent.click(screen.getByTestId("uloha-emoji-task-a"));
-  expect(screen.getByTestId<HTMLInputElement>("uloha-emoji-input-task-a").value).toBe("");
-});
-
-it("otvorenie textového editora zavrie emoji editor TOHO ISTÉHO riadku (nikdy oba naraz)", async () => {
-  fetchDailyTasks.mockResolvedValueOnce([ROW_A]);
-  render(<DailyTasksSection onSessionExpired={vi.fn()} />);
-  await screen.findByTestId("uloha-row-task-a");
-
-  fireEvent.click(screen.getByTestId("uloha-emoji-task-a"));
-  expect(screen.getByTestId("uloha-emoji-input-task-a")).toBeTruthy();
+  // Pred úpravou: riadkový pick picker je prítomný, text-insert picker nie.
+  expect(screen.getByTestId("uloha-emoji-task-a")).toBeTruthy();
+  expect(screen.queryByTestId("uloha-edit-emoji-task-a")).toBeNull();
 
   fireEvent.click(screen.getByTestId("uloha-edit-task-a"));
-  expect(screen.queryByTestId("uloha-emoji-input-task-a")).toBeNull();
-  expect(screen.getByTestId("uloha-edit-input-task-a")).toBeTruthy();
-});
 
-// Nezávislý review dispatch (issue 381 PR) našiel doplnkový race: Zrušiť
-// nebolo chránené proti bežiacemu uloženiu TOHO ISTÉHO riadku — kliknutie
-// Zrušiť počas čakajúcej odpovede, znovu-otvorenie a nový rozpis by stále
-// mohli byť zahodené, keď PÔVODNÁ (už zrušená) odpoveď dorazí neskôr.
-it("Zrušiť je disabled, kým čaká uloženie TOHO ISTÉHO riadku (nedá sa obísť rozbehnuté uloženie)", async () => {
-  fetchDailyTasks.mockResolvedValue([ROW_A]);
-  let resolveSave: (v: boolean) => void = () => {};
-  updateDailyTaskEmoji.mockImplementationOnce(
-    () =>
-      new Promise<boolean>((resolve) => {
-        resolveSave = resolve;
-      }),
-  );
-  render(<DailyTasksSection onSessionExpired={vi.fn()} />);
-  await screen.findByTestId("uloha-row-task-a");
-
-  fireEvent.click(screen.getByTestId("uloha-emoji-task-a"));
-  fireEvent.change(screen.getByTestId<HTMLInputElement>("uloha-emoji-input-task-a"), { target: { value: "🚚" } });
-  fireEvent.click(screen.getByTestId("uloha-emoji-save-task-a"));
-
-  // Odpoveď ešte NEDORAZILA — Zrušiť musí byť disabled, presne ako Uložiť.
-  expect(screen.getByTestId<HTMLButtonElement>("uloha-emoji-cancel-task-a").disabled).toBe(true);
-  fireEvent.click(screen.getByTestId("uloha-emoji-cancel-task-a"));
-  expect(screen.getByTestId("uloha-emoji-input-task-a")).toBeTruthy();
-
-  resolveSave(true);
-  await waitFor(() => {
-    expect(updateDailyTaskEmoji).toHaveBeenCalledWith("task-a", "🚚");
-  });
+  // V edit režime: text-insert picker je, riadkový pick picker sa schoval.
+  expect(screen.getByTestId("uloha-edit-emoji-task-a")).toBeTruthy();
+  expect(screen.queryByTestId("uloha-emoji-task-a")).toBeNull();
 });
