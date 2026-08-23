@@ -90,7 +90,9 @@ test("ľavé menu má štyri priečinky (Dôležité/Eshop/Systém/Automatizáci
   await expect(page.getByRole("button", { name: "Nevyzdvihnuté zásielky" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Pripomienky objednávok" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Nedostupné tovary" })).toBeVisible();
-  // issue 450: nová placeholder záložka "Riešiť" hneď POD "Nedostupné tovary".
+  // issue 450 → 476: záložka "Riešiť" hneď POD "Nedostupné tovary" (od issue
+  // 476 skutočná sekcia, nie placeholder). Počet záložiek (21) sa NEMENÍ —
+  // záložka existovala už od issue 450.
   await expect(page.getByRole("button", { name: "Riešiť" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Výmena tovaru" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Vrátený tovar" })).toBeVisible();
@@ -194,12 +196,15 @@ test("ľavé menu má štyri priečinky (Dôležité/Eshop/Systém/Automatizáci
   // požiadanie) — žiadny stavový odznak v menu, ani "Zastavené".
   await expect(page.getByTestId("nav-status-nedostupne")).toHaveCount(0);
 
-  // issue 450: nová placeholder záložka "Riešiť" HNEĎ POD "Nedostupné tovary"
-  // — klik otvorí placeholder obrazovku (titulok renderuje Topbar), žiadny
-  // stavový odznak v menu (rovnako ako "Nedostupné tovary" vyššie).
+  // issue 450 → 476: záložka "Riešiť" HNEĎ POD "Nedostupné tovary" — klik
+  // otvorí obrazovku Riešiť (titulok renderuje Topbar), žiadny STAVOVÝ odznak
+  // v menu (rovnako ako "Nedostupné tovary" vyššie; má však odznak POČTU
+  // `nav-badge-riesit`, funkčne overený v riesit.spec.ts). issue 476 nahradilo
+  // placeholder skutočnou sekciou — over rýchle pole namiesto zaniknutého
+  // `riesit-placeholder`.
   await page.getByRole("button", { name: "Riešiť" }).click();
   await expect(page.getByRole("heading", { name: "Riešiť" })).toBeVisible();
-  await expect(page.getByTestId("riesit-placeholder")).toBeVisible();
+  await expect(page.getByTestId("riesit-quick-add-input")).toBeVisible();
   await expect(page.getByTestId("nav-status-riesit")).toHaveCount(0);
 
   // issue 290: rovnaký dôvod ako "Nedostupné tovary" vyššie — žiadny

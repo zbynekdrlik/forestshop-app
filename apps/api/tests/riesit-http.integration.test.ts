@@ -177,6 +177,34 @@ it("POST /api/orders/riesit/by-code označí VŠETKY riadky otvorenej objednávk
   expect(body.suppliers.flatMap((s) => s.lines).length).toBe(3);
 });
 
+it("POST /api/orders/riesit/by-code: keď je objednávka UŽ celá v riesit, vráti lineCount 0 (žiadny zbytočný zápis/audit)", async () => {
+  const { app, cookie, db, userId } = await boot("manazer");
+  const obj = await vlozObjednavku(db, 2);
+  // prvým volaním všetko označíme
+  const prve = await app.request("/api/orders/riesit/by-code", {
+    method: "POST",
+    headers: { cookie, "content-type": "application/json" },
+    body: JSON.stringify({ code: obj.code }),
+  });
+  expect((await prve.json()) as { lineCount: number }).toEqual({ ok: true, lineCount: 2 });
+
+  // druhé volanie už nič nemení → lineCount 0
+  const druhe = await app.request("/api/orders/riesit/by-code", {
+    method: "POST",
+    headers: { cookie, "content-type": "application/json" },
+    body: JSON.stringify({ code: obj.code }),
+  });
+  expect(druhe.status).toBe(200);
+  expect((await druhe.json()) as { lineCount: number }).toEqual({ ok: true, lineCount: 0 });
+
+  // audit z prvého behu ostáva 2 (druhý beh nepridal žiadny)
+  const audit = await db
+    .select({ entityId: auditEvents.entityId })
+    .from(auditEvents)
+    .where(and(eq(auditEvents.action, "order_line.state.changed"), eq(auditEvents.actorUserId, userId)));
+  expect(audit.length).toBe(2);
+});
+
 it("POST /api/orders/riesit/by-code: neznáme číslo vráti 400 so zrozumiteľnou hláškou", async () => {
   const { app, cookie } = await boot("manazer");
   const res = await app.request("/api/orders/riesit/by-code", {

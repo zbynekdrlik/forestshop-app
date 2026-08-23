@@ -437,7 +437,7 @@ export function App(): JSX.Element {
             <OrderFlagsBadgeRefreshContext.Provider value={orderFlagsBadgeContextValue}>
               <DailyTasksBadgeRefreshContext.Provider value={dailyTasksBadgeContextValue}>
                 <FloorNotesBadgeRefreshContext.Provider value={floorNotesBadgeContextValue}>
-                 <RiesitBadgeRefreshContext.Provider value={riesitBadgeContextValue}>
+                  <RiesitBadgeRefreshContext.Provider value={riesitBadgeContextValue}>
                   <div className="app-shell">
                     <Sidebar
                       folders={NAV}
@@ -466,7 +466,7 @@ export function App(): JSX.Element {
                       </main>
                     </div>
                   </div>
-                 </RiesitBadgeRefreshContext.Provider>
+                  </RiesitBadgeRefreshContext.Provider>
                 </FloorNotesBadgeRefreshContext.Provider>
               </DailyTasksBadgeRefreshContext.Provider>
             </OrderFlagsBadgeRefreshContext.Provider>

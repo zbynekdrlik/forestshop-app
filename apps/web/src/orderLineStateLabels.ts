@@ -33,3 +33,13 @@ export const STATE_DISPLAY_ORDER: readonly OrderLine["state"][] = [
   "skladom",
   "nedostupne",
 ];
+
+// Kompilačná poistka úplnosti: keby pribudol 6. stav do enumu/`STATE_LABELS`,
+// ale zabudol sa doplniť sem, `tsc` padne (nová hodnota by nebola pokrytá
+// `STATE_DISPLAY_ORDER`, takže `Exclude<...>` už nie je `never`). Bráni tichému
+// „stav existuje, ale jeho tlačidlo sa nikde nevykreslí" (recenzia issue 476).
+type _AllStatesInDisplayOrder = Exclude<OrderLine["state"], (typeof STATE_DISPLAY_ORDER)[number]> extends never
+  ? true
+  : ["CHÝBA stav v STATE_DISPLAY_ORDER", Exclude<OrderLine["state"], (typeof STATE_DISPLAY_ORDER)[number]>];
+const _stateDisplayOrderExhaustive: _AllStatesInDisplayOrder = true;
+void _stateDisplayOrderExhaustive;

@@ -85,15 +85,24 @@ test("STAV je celý čitateľný a POZNÁMKY pole je dosť široké na všetkýc
     // pri 1280px (predtým ~108.5px, keď boli všetky tri v jednej bunke) —
     // znovu zmerané throwaway skriptom (`page.evaluate` logujúci reálne
     // `getBoundingClientRect().height` proti lokálnym dev serverom, rovnaká
-    // metodika ako issue 105/107/111/127/164), NIE len odhadnuté. 105px
-    // necháva malú rezervu nad nameraným 98.19px bez toho, aby maskoval
-    // skutočné zalomenie (to by strop prehodilo o desiatky px, nie
-    // jednotky).
+    // metodika ako issue 105/107/111/127/164), NIE len odhadnuté.
+    // AKTUALIZÁCIA (issue 476): strop 105→112px. Mockup Štěpána presunul
+    // ceruzku „Upraviť odkaz" POD 🔗 v stĺpci Dodávateľ (bunka je zámerne
+    // DVOJRIADKOVÁ — „riadok je dvojriadkový" priamo v zadaní), takže bunka
+    // Dodávateľ narástla z ~36px na ~76px. Párové meranie proti PRODUKCII
+    // (metodika issue 276 — heights PRED a PO tej istej CSS zmene na tých
+    // istých riadkoch) ukázalo delta ≤2px na riadok (bunka Dodávateľ takmer
+    // nikdy nie je najvyššia — riadi ju PRODUKT/POZNÁMKY), takže NEJDE o
+    // systematický nárast, len pár poznámkovo-ťažkých hraničných riadkov sa
+    // prehuplo z ~106 na nameraných ~108px pri 1280px. 112px necháva malú
+    // rezervu nad nameraným 108px bez maskovania skutočného zalomenia (to by
+    // strop prehodilo o desiatky px). Toto je ZÁMERNÝ, klientom schválený
+    // dizajn, nie regresia.
     const vysokeKompaktneRiadky = await page.evaluate(() => {
       return [...document.querySelectorAll(".order-row")]
         .filter((r) => r.querySelector('[data-testid^="supplier-assign-cell-"]') === null)
         .map((r) => r.getBoundingClientRect().height)
-        .filter((h) => h > 105);
+        .filter((h) => h > 112);
     });
     expect(vysokeKompaktneRiadky, `príliš vysoké riadky pri ${String(width)}px`).toEqual([]);
 
