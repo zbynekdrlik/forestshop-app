@@ -114,6 +114,31 @@ paths:
   poistku: transient CDN/apt hang teraz zlyhá AUTOMATICKY červeno pri 10 min
   namiesto ~19 min visenia (žiadny continue-on-error), takže cancel+rerun postup
   vyššie je stále platný, ale spúšťa sa sám a len pri MISS.
+- **Syntaktická chyba v `src/**/*.test.tsx` (unit test) padne AJ `check` AJ
+  `docker-build`, ale `e2e` NIE — a `pnpm gates:local` ju lokálne prehliadne, ak
+  je oprava len v pracovnom strome a nie zakomitovaná.** Issue 471 (stálo to
+  jeden CI cyklus): slovenská úvodzovka v názve testu (`„…"` s rovnou zatváracou
+  úvodzovkou) predčasne ukončila reťazec → `TS1002`. `check` job beží `pnpm
+  typecheck` (`tsc -b`) a `docker-build` beží `pnpm --filter web build`
+  (`tsc -b && vite build`) — OBA `tsc -b` zbierajú aj `src/**/*.test.tsx` (sú v
+  `apps/web/tsconfig`'s include), takže syntaktická chyba v unit teste zhodí AJ
+  produkčný build, nielen typecheck. `e2e` job (`playwright test`) beží LEN
+  `tests/e2e/**` cez vite/esbuild dev server, ktorý `src` test súbory NIKDY
+  neparsuje → `e2e` prejde ZELENÝ pri rozbitom `src` teste (presne tak to vyzeralo:
+  `e2e`/`version-check` ✓, `check`/`docker-build` ✗). **Druhá polovica pasce:**
+  `pnpm gates:local` (aj `pnpm typecheck`) beží proti PRACOVNÉMU STROMU — ak opravu
+  syntaxe spravíš Editom, ale zabudneš `git add` ten súbor (napr. commituješ skupinu
+  súborov, ktorá ho vynechá), lokálny gate prejde ZELENÝ, kým committed/pushnutá
+  verzia ostane rozbitá a CI padne. **Pred pushom vždy `git status --short`** — a keď
+  commituješ explicitný zoznam súborov (`git add a b c`), over, že medzi nimi je aj
+  súbor, ktorý si práve opravil. Slovenské úvodzovky vo VNÚTRI JS reťazcového
+  literálu (názvy testov) rovno nepoužívaj — buď plain text bez úvodzoviek, alebo
+  správna zatváracia `"` (U+201C), nikdy rovná `"`.
+- **CI logy padnutého jobu sa dajú prečítať EŠTE PRED dokončením celého behu cez
+  REST API** (`gh run view --log`/`--log-failed` odmietne „run still in progress",
+  kým beží iný job): `gh api repos/<owner>/<repo>/actions/jobs/<job_id>/logs
+  --allow-escape-sequences | sed 's/\x1b\[[0-9;]*m//g' | grep -inE "error|fail|TS[0-9]"`.
+  Job ID: `gh run view <run> --json jobs --jq '.jobs[]|select(.conclusion=="failure")|.databaseId'`.
 - **Reálny-Chromium integračné testy majú per-`it` strop `TEST_TIMEOUT_MS =
   120_000` (issue 460), NIE 60 s.** Súbory `shoptet-writeback-run/-playwright/
   -sequence`, `dpd-pickup-playwright`, `dpd-shipment-playwright`,
