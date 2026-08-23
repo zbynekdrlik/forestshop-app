@@ -108,20 +108,27 @@ export type AttachFloorNoteProductResult =
 // (`onConflictDoNothing`, unique index `floor_note_product_note_variant_uq`)
 // — appka to nerieši chybou, "Pripnúť" jednoducho nič nezmení.
 export async function attachFloorNoteProduct(db: Database, input: AttachFloorNoteProductInput): Promise<AttachFloorNoteProductResult> {
-  const [note] = await db.select({ id: floorNotes.id }).from(floorNotes).where(eq(floorNotes.id, input.floorNoteId));
-  if (note === undefined) return { ok: false, error: "note_not_found" };
-  const [variant] = await db.select({ code: variants.code }).from(variants).where(eq(variants.code, input.variantCode));
-  if (variant === undefined) return { ok: false, error: "product_not_found" };
+  return db.transaction(async (tx) => {
+    const [note] = await tx.select({ id: floorNotes.id }).from(floorNotes).where(eq(floorNotes.id, input.floorNoteId));
+    if (note === undefined) return { ok: false, error: "note_not_found" };
+    const [variant] = await tx.select({ code: variants.code }).from(variants).where(eq(variants.code, input.variantCode));
+    if (variant === undefined) return { ok: false, error: "product_not_found" };
 
-  await db
-    .insert(floorNoteProducts)
-    .values({ floorNoteId: input.floorNoteId, variantCode: input.variantCode, quantity: input.quantity, createdAt: input.now })
-    // Opätovné pripnutie TOHO ISTÉHO produktu ostáva idempotentné
-    // (`.claude/rules/floor-notes.md`) — počet sa mení VÝHRADNE cez
-    // `updateFloorNoteProductQuantity` (samostatná PATCH trasa), nie
-    // opätovným pinom.
-    .onConflictDoNothing();
-  return { ok: true };
+    await tx
+      .insert(floorNoteProducts)
+      .values({ floorNoteId: input.floorNoteId, variantCode: input.variantCode, quantity: input.quantity, createdAt: input.now })
+      // Opätovné pripnutie TOHO ISTÉHO produktu ostáva idempotentné
+      // (`.claude/rules/floor-notes.md`) — počet sa mení VÝHRADNE cez
+      // `updateFloorNoteProductQuantity` (samostatná PATCH trasa), nie
+      // opätovným pinom.
+      .onConflictDoNothing();
+    // issue 480: `floor_note.ordered` (🛒) je odvodené z objednaného stavu
+    // VŠETKÝCH položiek zápisu — nová položka je neobjednaná, takže po pripnutí
+    // treba prepočítať (inak by 🛒 z predchádzajúceho „všetko objednané" ostalo
+    // zavádzajúco true).
+    await recomputeFloorNoteOrdered(tx, input.floorNoteId);
+    return { ok: true };
+  });
 }
 
 export interface UpdateFloorNoteProductQuantityInput {
@@ -226,9 +233,15 @@ export interface DetachFloorNoteProductInput {
 }
 
 export async function detachFloorNoteProduct(db: Database, input: DetachFloorNoteProductInput): Promise<boolean> {
-  const result = await db
-    .delete(floorNoteProducts)
-    .where(and(eq(floorNoteProducts.floorNoteId, input.floorNoteId), eq(floorNoteProducts.variantCode, input.variantCode)))
-    .returning({ id: floorNoteProducts.id });
-  return result.length > 0;
+  return db.transaction(async (tx) => {
+    const result = await tx
+      .delete(floorNoteProducts)
+      .where(and(eq(floorNoteProducts.floorNoteId, input.floorNoteId), eq(floorNoteProducts.variantCode, input.variantCode)))
+      .returning({ id: floorNoteProducts.id });
+    // issue 480: po odobratí položky sa mohlo stať, že VŠETKY zvyšné položky sú
+    // objednané (🛒 → true), alebo že zápis ostal bez položiek (🛒 → false) —
+    // prepočítaj. No-op, keď sa nič neodobralo (neexistujúca dvojica).
+    await recomputeFloorNoteOrdered(tx, input.floorNoteId);
+    return result.length > 0;
+  });
 }

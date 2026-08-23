@@ -205,6 +205,36 @@ it("keď sú objednané VŠETKY produkty zápisu, floor_note.ordered (🛒) sa n
   expect(note?.ordered).toBe(false); // symetricky späť
 });
 
+it("pripnutie novej položky do plne objednaného zápisu zhodí 🛒; odopnutie neobjednanej ho zdvihne", async () => {
+  const { app, cookie, db } = await boot("manazer");
+  await insertTestVariant(db, "FLOOR-ATT-A", "Dod");
+  await insertTestVariant(db, "FLOOR-ATT-B", "Dod");
+  const noteId = await createNote(app, cookie, "Attach/detach prepočet");
+  await attach(app, cookie, noteId, "FLOOR-ATT-A");
+
+  const noteOrdered = async () => (await db.select().from(floorNotes).where(eq(floorNotes.id, noteId)))[0]?.ordered;
+
+  // Objednaj jediný produkt → 🛒 true.
+  await app.request(`/api/floor-notes/${noteId}/products/FLOOR-ATT-A/ordered`, {
+    method: "POST",
+    headers: { cookie, "content-type": "application/json" },
+    body: JSON.stringify({ value: true }),
+  });
+  expect(await noteOrdered()).toBe(true);
+
+  // Pripni druhý (neobjednaný) produkt → už NIE sú všetky objednané → 🛒 false.
+  await attach(app, cookie, noteId, "FLOOR-ATT-B");
+  expect(await noteOrdered()).toBe(false);
+
+  // Odopni neobjednaný produkt → zostáva len objednaný → 🛒 späť true.
+  const del = await app.request(`/api/floor-notes/${noteId}/products/FLOOR-ATT-B`, {
+    method: "DELETE",
+    headers: { cookie, "content-type": "application/json" },
+  });
+  expect(del.status).toBe(200);
+  expect(await noteOrdered()).toBe(true);
+});
+
 it("vybavený (resolved) zápis → jeho predajňové riadky z Na objednanie zmiznú", async () => {
   const { app, cookie, db } = await boot("manazer");
   await insertTestVariant(db, "FLOOR-RES", "Dod");

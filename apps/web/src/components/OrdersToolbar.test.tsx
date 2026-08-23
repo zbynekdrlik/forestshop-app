@@ -225,3 +225,47 @@ it("čipy dodávateľov sú zoradené abecedne, 'Všetci' prvý a '(bez dodávat
     "(bez dodávateľa) (1)",
   ]);
 });
+
+it("issue 480 — chip zahŕňa predajňové riadky v počte aj v done farbe, floor-only skupina", () => {
+  const floorRow = (ordered: boolean) => ({
+    noteId: "n1",
+    variantCode: "F-1",
+    productName: "Produkt",
+    sizeLabel: null,
+    customerName: "Zákazník",
+    quantity: 1,
+    createdAt: "2026-08-20T00:00:00.000Z",
+    ordered,
+  });
+  const suppliers: readonly SupplierOpenOrders[] = [
+    // Floor-only skupina, predajňový riadok objednaný → chip je „done".
+    { supplier: "Len Predajňa", email: null, lines: [], floorRows: [floorRow(true)] },
+    // Order riadok vybavený, ALE predajňový riadok neobjednaný → NIE „done".
+    {
+      supplier: "Zmiešaná",
+      email: null,
+      lines: [makeLine({ lineId: "m1", ordered: true, state: "skladom" })],
+      floorRows: [floorRow(false)],
+    },
+  ];
+  render(
+    <OrdersToolbar
+      suppliers={suppliers}
+      selectedSupplier={null}
+      onSelectSupplier={() => {}}
+      hideResolved={false}
+      onToggleHideResolved={() => {}}
+    />,
+  );
+
+  const lenPredajna = screen.getByTestId("supplier-chip-Len Predajňa");
+  expect(lenPredajna.textContent).toBe("Len Predajňa (1)");
+  expect(lenPredajna.className).toContain("done");
+
+  const zmiesana = screen.getByTestId("supplier-chip-Zmiešaná");
+  expect(zmiesana.textContent).toBe("Zmiešaná (2)"); // 1 order + 1 predajňový
+  expect(zmiesana.className).not.toContain("done"); // predajňový riadok ešte neobjednaný
+
+  // „Všetci" = 0+1 (Len Predajňa) + 1+1 (Zmiešaná) = 3.
+  expect(screen.getByTestId("supplier-chip-all").textContent).toBe("Všetci (3)");
+});
