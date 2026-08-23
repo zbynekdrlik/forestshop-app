@@ -4332,3 +4332,16 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
   spresnený názov testu POST /:id/done). PR #475 dev→main, merge `1abefb3`,
   main CI + Deploy zelené, nasadené `v0.3.0-dev.277` (telo PR = plain
   „issue 473", žiadny Closes).
+
+## 2026-08-23 — issue 476 (Riešiť — stav order_line + sekcia)
+- **#476 (piaty stav riadku `riesit` + sekcia „Riešiť" + rýchle pole číslo→Enter):**
+  nový enum `order_line_state` člen `riesit` (migrácia `0058`, samostatná od
+  CHECK/index kvôli 55P04), zdieľaný `listOpenOrderLinesBySupplier` so
+  `stateFilter` (sekcia Riešiť = tie isté zoskupené riadky, len `state=riesit`),
+  `useOrderLinesBoard` vyňaté jadro spoločné pre „Na objednanie" aj „Riešiť",
+  odznak `GET /api/orders/riesit/count`, hromadné `POST /api/orders/riesit/by-code`
+  (číslo objednávky → Enter, 200 aj pri neznámom/zatvorenom čísle kvôli konzole).
+- Commity `8fc4fc9` (bump .278) / `98fc2fe` (feat) / `00d00f6` (review fixes).
+  PR #477 (merge `43a8f04`) + #478 (merge `d85091e`, by-code 400→200 konzolová
+  chyba) + #479 (merge `5ca7955`, playbook). Nasadené `v0.3.0-dev.280` (telá PR
+  = plain „issue 476", žiadny Closes).
