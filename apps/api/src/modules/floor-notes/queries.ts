@@ -1,4 +1,4 @@
-import { asc, desc, eq } from "drizzle-orm";
+import { asc, count, desc, eq } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
 import { floorNoteProducts, floorNotes, shopProductUrl, variants } from "../../db/schema.js";
 
@@ -83,4 +83,18 @@ export async function listFloorNotes(db: Database): Promise<readonly FloorNoteRo
     updatedAt: n.updatedAt.toISOString(),
     products: byNote.get(n.id) ?? [],
   }));
+}
+
+// issue 473: odznak počtu v ľavom menu — počet NEVYBAVENÝCH (`resolved = false`)
+// zápisov. GLOBÁLNY (zdieľaný zoznam, žiadny `user_id` filter na čítaní, presne
+// ako `listFloorNotes` vyššie). `COUNT(*) WHERE ...` priamo v SQL (rovnaký vzor
+// ako `countActionableUpozornenia`). Značky `ordered`/`called` sú NEZÁVISLÉ a do
+// počtu NEVSTUPUJÚ — jediné, čo znamená "vybavené", je `resolved` (design
+// komentár na issue 410/473).
+export async function countUnresolvedFloorNotes(db: Database): Promise<number> {
+  const [row] = await db
+    .select({ total: count() })
+    .from(floorNotes)
+    .where(eq(floorNotes.resolved, false));
+  return row?.total ?? 0;
 }

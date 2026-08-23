@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type JSX } from "react";
+import { useCallback, useContext, useEffect, useState, type JSX } from "react";
 import type { Me } from "../api.js";
 import { autoResizeTextarea } from "../autoResizeTextarea.js";
 import {
@@ -15,6 +15,7 @@ import {
   updateFloorNoteText,
   type FloorNoteRow as FloorNoteRowData,
 } from "../floorNotesApi.js";
+import { FloorNotesBadgeRefreshContext } from "../floorNotesBadgeContext.js";
 import type { ProductSearchHit } from "../searchApi.js";
 import { FloorNoteRow } from "./FloorNoteRow.js";
 
@@ -38,6 +39,13 @@ export function FloorNotesSection({ role, onSessionExpired }: { readonly role: M
   const [creating, setCreating] = useState(false);
   const [busyId, setBusyId] = useState("");
   const canEdit = CAN_EDIT_ROLES.has(role);
+
+  // issue 473: odznak počtu nevybavených zápisov v ľavom menu (`App.tsx` ho
+  // vlastní/fetchuje) — po count-meniacej mutácii zavolá `refresh()`, aby číslo
+  // kleslo/stúplo hneď bez reloadu. Count MENÍ len: pridanie, zmazanie a
+  // prepnutie ✅ vybavené (`resolved`). Značky 🛒 objednané / 📞 zavolané count
+  // NEMENIA, tie refresh nevolajú (design komentár na issue 473).
+  const { refresh: badgeRefresh } = useContext(FloorNotesBadgeRefreshContext);
 
   const load = useCallback(() => {
     fetchFloorNotes()
@@ -77,6 +85,7 @@ export function FloorNotesSection({ role, onSessionExpired }: { readonly role: M
       .then(() => {
         setNewText("");
         load();
+        badgeRefresh();
       })
       .catch((err: unknown) => {
         handleActionError(err, "Zápis sa nepodarilo pridať — skúste to znova.");
@@ -84,7 +93,7 @@ export function FloorNotesSection({ role, onSessionExpired }: { readonly role: M
       .finally(() => {
         setCreating(false);
       });
-  }, [newText, creating, load, handleActionError]);
+  }, [newText, creating, load, handleActionError, badgeRefresh]);
 
   const saveText = useCallback(
     (id: string, text: string) => {
@@ -112,6 +121,9 @@ export function FloorNotesSection({ role, onSessionExpired }: { readonly role: M
       setter(id, value)
         .then(() => {
           load();
+          // LEN ✅ vybavené (`resolved`) mení počet nevybavených zápisov —
+          // 🛒 objednané / 📞 zavolané sú nezávislé značky bez vplyvu na odznak.
+          if (marker === "resolved") badgeRefresh();
         })
         .catch((err: unknown) => {
           handleActionError(err, `${MARKER_LABELS[marker]} — akcia zlyhala, skúste to znova.`);
@@ -120,7 +132,7 @@ export function FloorNotesSection({ role, onSessionExpired }: { readonly role: M
           setBusyId("");
         });
     },
-    [load, handleActionError],
+    [load, handleActionError, badgeRefresh],
   );
 
   const removeNote = useCallback(
@@ -130,6 +142,7 @@ export function FloorNotesSection({ role, onSessionExpired }: { readonly role: M
       deleteFloorNote(id)
         .then(() => {
           load();
+          badgeRefresh();
         })
         .catch((err: unknown) => {
           handleActionError(err, "Zápis sa nepodarilo odstrániť — skúste to znova.");
@@ -138,7 +151,7 @@ export function FloorNotesSection({ role, onSessionExpired }: { readonly role: M
           setBusyId("");
         });
     },
-    [load, handleActionError],
+    [load, handleActionError, badgeRefresh],
   );
 
   const attachProduct = useCallback(

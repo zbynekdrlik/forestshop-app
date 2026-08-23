@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type JSX } from "react";
+import { useCallback, useContext, useEffect, useRef, useState, type JSX } from "react";
 import {
   createDailyTask,
   DailyTasksUnauthorizedError,
@@ -9,6 +9,7 @@ import {
   updateDailyTaskText,
   type DailyTaskRow,
 } from "../dailyTasksApi.js";
+import { DailyTasksBadgeRefreshContext } from "../dailyTasksBadgeContext.js";
 import { EmojiPickerButton } from "./EmojiPickerButton.js";
 
 // issue 342: "Dôležité → Úlohy na dnes" — nahrádza šéfove poznámky písané do
@@ -53,6 +54,13 @@ export function DailyTasksSection({ onSessionExpired }: { readonly onSessionExpi
   const [creating, setCreating] = useState(false);
   const [editingTextId, setEditingTextId] = useState<string | null>(null);
   const [textDraft, setTextDraft] = useState<Record<string, string>>({});
+
+  // issue 473: po každej count-meniacej mutácii (pridať/odfajknúť/zmazať) sa
+  // zavolá `refresh()` z `DailyTasksBadgeRefreshContext`, aby odznak v ľavom
+  // menu (`App.tsx` ho vlastní a fetchuje) klesol/stúpol HNEĎ bez reloadu —
+  // rovnaký vzor ako `UpozorneniaSection`. Úprava textu/emoji count NEMENÍ,
+  // tie refresh nevolajú.
+  const { refresh: badgeRefresh } = useContext(DailyTasksBadgeRefreshContext);
 
   // issue 471: emoji picker vkladá na pozíciu kurzora týchto polí. Nový vstup má
   // vlastný ref; inline edit má JEDEN zdieľaný ref — appka dovolí najviac jeden
@@ -113,6 +121,7 @@ export function DailyTasksSection({ onSessionExpired }: { readonly onSessionExpi
       .then(() => {
         setNewText("");
         load();
+        badgeRefresh();
       })
       .catch((err: unknown) => {
         handleActionError(err, "Úlohu sa nepodarilo pridať — skúste to znova.");
@@ -120,7 +129,7 @@ export function DailyTasksSection({ onSessionExpired }: { readonly onSessionExpi
       .finally(() => {
         setCreating(false);
       });
-  }, [newText, creating, load, handleActionError]);
+  }, [newText, creating, load, handleActionError, badgeRefresh]);
 
   const toggleDone = useCallback(
     (row: DailyTaskRow) => {
@@ -129,6 +138,7 @@ export function DailyTasksSection({ onSessionExpired }: { readonly onSessionExpi
       setDailyTaskDone(row.id, row.doneAt === null)
         .then(() => {
           load();
+          badgeRefresh();
         })
         .catch((err: unknown) => {
           handleActionError(err, "Akcia zlyhala — skúste to znova.");
@@ -137,7 +147,7 @@ export function DailyTasksSection({ onSessionExpired }: { readonly onSessionExpi
           setBusyId("");
         });
     },
-    [load, handleActionError],
+    [load, handleActionError, badgeRefresh],
   );
 
   const saveText = useCallback(
@@ -198,6 +208,7 @@ export function DailyTasksSection({ onSessionExpired }: { readonly onSessionExpi
       deleteDailyTask(id)
         .then(() => {
           load();
+          badgeRefresh();
         })
         .catch((err: unknown) => {
           handleActionError(err, "Úlohu sa nepodarilo odstrániť — skúste to znova.");
@@ -206,7 +217,7 @@ export function DailyTasksSection({ onSessionExpired }: { readonly onSessionExpi
           setBusyId("");
         });
     },
-    [load, handleActionError],
+    [load, handleActionError, badgeRefresh],
   );
 
   const intro = <p>Osobný zoznam úloh — nahrádza poznámky písané do Discordu. Vidíš len svoje vlastné úlohy.</p>;

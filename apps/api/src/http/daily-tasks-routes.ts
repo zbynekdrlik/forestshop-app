@@ -3,7 +3,7 @@ import type { Hono } from "hono";
 import { z } from "zod";
 import type { Database } from "../db/client.js";
 import { createDailyTask, deleteDailyTask, setDailyTaskDone, updateDailyTaskEmoji, updateDailyTaskText } from "../modules/daily-tasks/service.js";
-import { listDailyTasks } from "../modules/daily-tasks/queries.js";
+import { countOpenDailyTasks, listDailyTasks } from "../modules/daily-tasks/queries.js";
 import { requireSameOrigin } from "./origin-check.js";
 import { requireUser, type AppBindings } from "./middleware.js";
 
@@ -28,6 +28,17 @@ export function registerDailyTasksRoutes(app: Hono<AppBindings>, db: Database): 
     const user = c.get("user");
     const rows = await listDailyTasks(db, user.userId);
     return c.json({ rows });
+  });
+
+  // issue 473: odznak počtu v ľavom menu — počet MOJICH otvorených (bez fajky)
+  // úloh. Literal-path súrodenec MUSÍ byť pred `/:id` trasami rovnakej metódy
+  // (`.claude/rules/http-routes.md` — poradie literal-vs-`:param`); dnes žiadna
+  // GET `/:id` trasa neexistuje, ale poradie sa drží ako zvyk (rovnako ako
+  // `upozornenia-routes.ts`'s `/count`).
+  app.get("/api/daily-tasks/count", requireUser(db), async (c) => {
+    const user = c.get("user");
+    const count = await countOpenDailyTasks(db, user.userId);
+    return c.json({ count });
   });
 
   app.post("/api/daily-tasks", requireSameOrigin(), requireUser(db), zValidator("json", createBody), async (c) => {

@@ -14,6 +14,7 @@ const rowSchema = z.object({
 export type DailyTaskRow = z.infer<typeof rowSchema>;
 
 const listSchema = z.object({ rows: z.array(rowSchema) });
+const countSchema = z.object({ count: z.number() });
 
 export class DailyTasksUnauthorizedError extends Error {
   constructor() {
@@ -42,6 +43,17 @@ async function readJson(response: Response, fallback: string): Promise<unknown> 
 export async function fetchDailyTasks(): Promise<readonly DailyTaskRow[]> {
   const response = await fetch("/api/daily-tasks");
   return listSchema.parse(await readJson(response, "Úlohy sa nepodarilo načítať")).rows;
+}
+
+// issue 473: odznak počtu v ľavom menu — počet mojich otvorených úloh. Rovnaký
+// vzor ako `fetchUpozorneniaCount` (`upozorneniaApi.ts`): odznak nie je
+// kritický, takže pri 401/chybe vráti 0 namiesto vyhodenia (App.tsx nechá
+// odznak na poslednej známej hodnote).
+export async function fetchOpenDailyTasksCount(): Promise<number> {
+  const response = await fetch("/api/daily-tasks/count");
+  if (response.status === 401) return 0;
+  if (!response.ok) return 0;
+  return countSchema.parse(await response.json()).count;
 }
 
 export async function createDailyTask(text: string): Promise<void> {

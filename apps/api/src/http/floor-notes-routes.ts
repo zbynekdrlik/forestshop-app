@@ -13,7 +13,7 @@ import {
   updateFloorNoteProductQuantity,
   updateFloorNoteText,
 } from "../modules/floor-notes/service.js";
-import { listFloorNotes } from "../modules/floor-notes/queries.js";
+import { countUnresolvedFloorNotes, listFloorNotes } from "../modules/floor-notes/queries.js";
 import { requireRole, requireUser, type AppBindings } from "./middleware.js";
 import { requireSameOrigin } from "./origin-check.js";
 
@@ -39,6 +39,16 @@ export function registerFloorNotesRoutes(app: Hono<AppBindings>, db: Database): 
   app.get("/api/floor-notes", requireUser(db), async (c) => {
     const rows = await listFloorNotes(db);
     return c.json({ rows });
+  });
+
+  // issue 473: odznak počtu v ľavom menu — počet nevybavených (`resolved=false`)
+  // zápisov, globálne. Literal-path súrodenec MUSÍ byť pred `/:id` trasami
+  // (`.claude/rules/http-routes.md` — poradie literal-vs-`:param`); dnes žiadna
+  // GET `/:id` trasa neexistuje, ale poradie sa drží ako zvyk (rovnako ako
+  // `upozornenia-routes.ts`'s `/count`).
+  app.get("/api/floor-notes/count", requireUser(db), async (c) => {
+    const count = await countUnresolvedFloorNotes(db);
+    return c.json({ count });
   });
 
   app.post("/api/floor-notes", requireSameOrigin(), requireUser(db), requireRole("admin", "manazer"), zValidator("json", createBody), async (c) => {

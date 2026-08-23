@@ -60,6 +60,15 @@ async function createNote(app: ReturnType<typeof createApp>, cookie: string, tex
   return body.id;
 }
 
+async function setMarker(app: ReturnType<typeof createApp>, cookie: string, id: string, marker: "resolved" | "ordered" | "called", value: boolean): Promise<void> {
+  await app.request(`/api/floor-notes/${id}/${marker}`, { method: "POST", headers: { cookie, "content-type": "application/json" }, body: JSON.stringify({ value }) });
+}
+
+async function readCount(app: ReturnType<typeof createApp>, cookie: string): Promise<number> {
+  const res = await app.request("/api/floor-notes/count", { headers: { cookie } });
+  return ((await res.json()) as { count: number }).count;
+}
+
 describe("GET /api/floor-notes", () => {
   it("bez prihlásenia vráti 401", async () => {
     const { app } = await bootUser("manazer@forestshop.sk", "manazer");
@@ -225,4 +234,60 @@ describe("DELETE /api/floor-notes/:id", () => {
   // `onDelete: "cascade"` (`schema-floor-notes.ts`) — dôkaz je v
   // `floor-notes-products-http.integration.test.ts`, tematicky patrí tam
   // (ten súbor produkty aj vkladá).
+});
+
+// issue 473: odznak počtu v ľavom menu — počet nevybavených (`resolved=false`)
+// zápisov, globálne. Značky 🛒 objednané / 📞 zavolané do počtu NEVSTUPUJÚ.
+describe("GET /api/floor-notes/count", () => {
+  it("bez prihlásenia vráti 401", async () => {
+    const { app } = await bootUser("manazer@forestshop.sk", "manazer");
+    const res = await app.request("/api/floor-notes/count");
+    expect(res.status).toBe(401);
+  });
+
+  it("čerstvá appka má count 0", async () => {
+    const { app, cookie } = await bootUser("manazer@forestshop.sk", "manazer");
+    const res = await app.request("/api/floor-notes/count", { headers: { cookie } });
+    expect(res.status).toBe(200);
+    expect((await res.json()) as { count: number }).toEqual({ count: 0 });
+  });
+
+  it("počíta LEN nevybavené (resolved=false) zápisy — vybavený sa neráta", async () => {
+    const { app, cookie } = await bootUser("manazer@forestshop.sk", "manazer");
+    const a = await createNote(app, cookie, "A");
+    await createNote(app, cookie, "B");
+    await createNote(app, cookie, "C");
+    await setMarker(app, cookie, a, "resolved", true);
+
+    expect(await readCount(app, cookie)).toBe(2);
+  });
+
+  it("prepnutie ✅ vybavené a späť mení count OBOMA smermi", async () => {
+    const { app, cookie } = await bootUser("manazer@forestshop.sk", "manazer");
+    const id = await createNote(app, cookie, "zápis");
+    expect(await readCount(app, cookie)).toBe(1);
+
+    await setMarker(app, cookie, id, "resolved", true);
+    expect(await readCount(app, cookie)).toBe(0);
+
+    await setMarker(app, cookie, id, "resolved", false);
+    expect(await readCount(app, cookie)).toBe(1);
+  });
+
+  it("značky 🛒 objednané / 📞 zavolané NEMENIA count (do počtu vstupuje len ✅ vybavené)", async () => {
+    const { app, cookie } = await bootUser("manazer@forestshop.sk", "manazer");
+    const id = await createNote(app, cookie, "zápis");
+    await setMarker(app, cookie, id, "ordered", true);
+    await setMarker(app, cookie, id, "called", true);
+
+    expect(await readCount(app, cookie)).toBe(1);
+  });
+
+  it("count je GLOBÁLNY (zdieľaný) — zápis jedného vidí v počte aj druhý používateľ", async () => {
+    const { app, cookie, db } = await bootUser("manazer@forestshop.sk", "manazer");
+    await createNote(app, cookie, "spoločný zápis");
+
+    const other = await secondLogin(app, db, "kolega@forestshop.sk", "manazer");
+    expect(await readCount(app, other.cookie)).toBe(1);
+  });
 });

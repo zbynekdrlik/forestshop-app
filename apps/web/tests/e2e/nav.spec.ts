@@ -143,6 +143,20 @@ test("ľavé menu má štyri priečinky (Dôležité/Eshop/Systém/Automatizáci
   await expect(upozornOdznak).toBeVisible();
   await expect(upozornOdznak).toHaveText(/^\d+$/);
 
+  // issue 473: rovnaký odznak vzor pre "Úlohy na dnes" (počet mojich otvorených
+  // úloh, per-používateľ) a "Objednávky predajňa" (počet nevybavených zápisov,
+  // globálne) — obe známe HNEĎ po prihlásení (`App.tsx` si ich fetchuje priamo).
+  // Presné číslo sa zámerne NEOVERUJE (zdieľaná e2e DB, `.claude/rules/
+  // frontend-design.md` issue 445 vzor) — len že odznak existuje a nesie platné
+  // celé číslo (odznak sa ukazuje aj pri 0, ako "upozornenia"/"dpd").
+  const ulohyOdznak = page.getByTestId("nav-badge-ulohy");
+  await expect(ulohyOdznak).toBeVisible();
+  await expect(ulohyOdznak).toHaveText(/^\d+$/);
+
+  const predajnaOdznak = page.getByTestId("nav-badge-floor-orders");
+  await expect(predajnaOdznak).toBeVisible();
+  await expect(predajnaOdznak).toHaveText(/^\d+$/);
+
   // issue 185: tri obrazovky, ktoré dovtedy sedeli len v `HIDDEN_TABS` — klik
   // na každú otvorí svoju obrazovku (samostatný `<h1>` titulok v Topbar-e,
   // žiadny duplicitný `<h2>` — obrazovky si ho pri presune odstránili). Dve z
