@@ -376,6 +376,7 @@ export function DailyTasksSection({ onSessionExpired }: { readonly onSessionExpi
                         showClear
                         align="right"
                         label={`Pridať/zmeniť emoji úlohy ${row.text}`}
+                        title="Pridať/zmeniť emoji"
                         testId={`uloha-emoji-${row.id}`}
                         disabled={busy}
                       />

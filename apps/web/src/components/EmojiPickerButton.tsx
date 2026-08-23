@@ -47,9 +47,13 @@ interface CommonProps {
    * kolidoval). */
   readonly testId: string;
   readonly disabled?: boolean;
-  /** Popis prepínača (aria-label + title). Predvolene „Vložiť emoji"; riadkové
-   * označenie úlohy použije napr. „Pridať/zmeniť emoji". */
+  /** Prístupný názov prepínača (aria-label). Predvolene „Vložiť emoji"; riadkové
+   * označenie úlohy použije napr. „Pridať/zmeniť emoji úlohy <text>" (rozlíši
+   * riadky pre čítačku obrazovky). */
   readonly label?: string;
+  /** Hover tooltip prepínača (`title`). Predvolene = `label`; použi krátky
+   * tooltip, keď je `label` dlhý a s tooltipom by rušil. */
+  readonly title?: string;
 }
 
 /** Predvolený INSERT režim — vloženie na pozíciu kurzora cieľového poľa. */
@@ -79,6 +83,7 @@ type Props = InsertProps | PickProps;
 
 export function EmojiPickerButton(props: Props): JSX.Element {
   const { testId, disabled = false, label = "Vložiť emoji" } = props;
+  const tooltip = props.title ?? label;
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLSpanElement>(null);
   // rAF na obnovu fokusu po vložení — držaný v refe, nech ho vieme zrušiť pri
@@ -182,7 +187,7 @@ export function EmojiPickerButton(props: Props): JSX.Element {
         className="emoji-picker-toggle"
         aria-label={label}
         aria-expanded={open}
-        title={label}
+        title={tooltip}
         disabled={disabled}
         onClick={() => {
           setOpen((o) => !o);

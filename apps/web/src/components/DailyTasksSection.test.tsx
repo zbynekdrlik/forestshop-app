@@ -144,7 +144,7 @@ it("riadok: jedným klikom na emoji v pickeri sa emoji uloží (updateDailyTaskE
 });
 
 // issue 471: voľba „bez emoji" v pickeri odstráni emoji riadku (null).
-it("riadok: voľba „bez emoji" odstráni emoji úlohy (updateDailyTaskEmoji null)", async () => {
+it("riadok: voľba bez emoji odstráni emoji úlohy (updateDailyTaskEmoji null)", async () => {
   fetchDailyTasks.mockResolvedValueOnce([ROW_B]).mockResolvedValueOnce([{ ...ROW_B, emoji: null }]);
   updateDailyTaskEmoji.mockResolvedValueOnce(true);
   render(<DailyTasksSection onSessionExpired={vi.fn()} />);
@@ -268,14 +268,22 @@ it("pri 401 POČAS mutácie (nielen počiatočného načítania) tiež zavolá o
   });
 });
 
-// issue 471: otvorenie textového editora (✏️) nesmie ovplyvniť emoji picker
-// riadku — sú to dve nezávislé ovládania (picker je popover, nie inline editor).
-it("otvorenie textového editora nechá riadkový emoji picker prítomný a funkčný", async () => {
+// issue 471: v edit režime sa riadkové akcie (vrátane riadkového PICK pickera)
+// schovajú a namiesto nich je pri textovom poli INSERT picker na vloženie emoji
+// DO textu — nie sú to teda dva pickery naraz, ale prepnutie z označenia riadku
+// na vkladanie do textu.
+it("edit režim ukáže text-insert picker a schová riadkový pick picker", async () => {
   fetchDailyTasks.mockResolvedValueOnce([ROW_A]);
   render(<DailyTasksSection onSessionExpired={vi.fn()} />);
   await screen.findByTestId("uloha-row-task-a");
 
-  // V edit režime je pri textovom poli picker na vloženie emoji DO textu.
+  // Pred úpravou: riadkový pick picker je prítomný, text-insert picker nie.
+  expect(screen.getByTestId("uloha-emoji-task-a")).toBeTruthy();
+  expect(screen.queryByTestId("uloha-edit-emoji-task-a")).toBeNull();
+
   fireEvent.click(screen.getByTestId("uloha-edit-task-a"));
+
+  // V edit režime: text-insert picker je, riadkový pick picker sa schoval.
   expect(screen.getByTestId("uloha-edit-emoji-task-a")).toBeTruthy();
+  expect(screen.queryByTestId("uloha-emoji-task-a")).toBeNull();
 });
