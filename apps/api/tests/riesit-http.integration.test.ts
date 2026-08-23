@@ -205,18 +205,22 @@ it("POST /api/orders/riesit/by-code: keď je objednávka UŽ celá v riesit, vr�
   expect(audit.length).toBe(2);
 });
 
-it("POST /api/orders/riesit/by-code: neznáme číslo vráti 400 so zrozumiteľnou hláškou", async () => {
+it("POST /api/orders/riesit/by-code: neznáme číslo vráti 200 {ok:false} so zrozumiteľnou hláškou (NIE 4xx — konzola)", async () => {
   const { app, cookie } = await boot("manazer");
   const res = await app.request("/api/orders/riesit/by-code", {
     method: "POST",
     headers: { cookie, "content-type": "application/json" },
     body: JSON.stringify({ code: "999999" }),
   });
-  expect(res.status).toBe(400);
-  expect(((await res.json()) as { error: string }).error).toContain("nenašla");
+  // 200, nie 4xx — bežný používateľský omyl nesmie logovať konzolovú chybu
+  // (Chromium loguje 4xx; `.claude/rules/testing.md`), naživo overené na prode.
+  expect(res.status).toBe(200);
+  const telo = (await res.json()) as { ok: boolean; error?: string };
+  expect(telo.ok).toBe(false);
+  expect(telo.error).toContain("nenašla");
 });
 
-it("POST /api/orders/riesit/by-code: zatvorená objednávka vráti 400 (nie je otvorená)", async () => {
+it("POST /api/orders/riesit/by-code: zatvorená objednávka vráti 200 {ok:false} (nie je otvorená, NIE 4xx)", async () => {
   const { app, cookie, db } = await boot("manazer");
   const zatvorena = await vlozObjednavku(db, 1, "Vybavená");
 
@@ -225,8 +229,10 @@ it("POST /api/orders/riesit/by-code: zatvorená objednávka vráti 400 (nie je o
     headers: { cookie, "content-type": "application/json" },
     body: JSON.stringify({ code: zatvorena.code }),
   });
-  expect(res.status).toBe(400);
-  expect(((await res.json()) as { error: string }).error).toContain("nie je otvorená");
+  expect(res.status).toBe(200);
+  const telo = (await res.json()) as { ok: boolean; error?: string };
+  expect(telo.ok).toBe(false);
+  expect(telo.error).toContain("nie je otvorená");
 
   // stav riadku sa nezmenil
   const [r] = await db.select({ state: orderLines.state }).from(orderLines).where(eq(orderLines.id, zatvorena.lineIds[0] ?? ""));
