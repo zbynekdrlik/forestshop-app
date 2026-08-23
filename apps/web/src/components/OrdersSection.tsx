@@ -1,4 +1,4 @@
-import { useCallback, useContext, useEffect, useState, type JSX } from "react";
+import { useCallback, useContext, useEffect, useMemo, useState, type JSX } from "react";
 import type { Me } from "../api.js";
 import {
   persistHideResolvedPreference,
@@ -7,31 +7,16 @@ import {
   readSelectedSupplierPreference,
 } from "../ordersDisplayPreferences.js";
 import { OrdersRemainingCountContext } from "../ordersRemainingCountContext.js";
+import { RiesitBadgeRefreshContext } from "../riesitBadgeContext.js";
 import { isLineHiddenByFilter, isLineResolved } from "../ordersSummary.js";
-import { clearWriteFailure, lineWhere, orderWhere, upsertWriteFailure, type OrderWriteFailure } from "../ordersWriteFailures.js";
-import { useDirtyEditorLineIds } from "../useDirtyEditorLineIds.js";
+import { useOrderLinesBoard } from "../useOrderLinesBoard.js";
 import { useSelectedSupplierFallback } from "../useSelectedSupplierFallback.js";
-import { useSupplierDrafts } from "../useSupplierDrafts.js";
-import { useSupplierEmailEditing } from "../useSupplierEmailEditing.js";
-import { useSupplierLinkSave } from "../useSupplierLinkSave.js";
-import { useSupplierMailActions } from "../useSupplierMailActions.js";
 import { OrderOpenStatusesPanel } from "./OrderOpenStatusesPanel.js";
 import { OrdersOverviewTiles } from "./OrdersOverviewTiles.js";
 import { OrdersToolbar } from "./OrdersToolbar.js";
 import { OrderWriteFailuresBanner } from "./OrderWriteFailuresBanner.js";
 import { SupplierOrderGroup } from "./SupplierOrderGroup.js";
-import {
-  assignOrderLineSupplier as assignOrderLineSupplierApi,
-  fetchOpenOrders,
-  NEZNAMY_DODAVATEL,
-  OrdersUnauthorizedError,
-  setSupplierLinesOrdered,
-  updateOrderComment,
-  updateOrderLineOrdered,
-  updateOrderLineState,
-  type OrderLine,
-  type SupplierOpenOrders,
-} from "../ordersApi.js";
+import { fetchOpenOrders, NEZNAMY_DODAVATEL } from "../ordersApi.js";
 
 // Rovnaké dve role, ktoré server vyžaduje pre
 // `POST /api/orders/lines/:lineId/state` (`requireRole("admin", "manazer")`,
@@ -47,15 +32,49 @@ export function OrdersSection({
   readonly role: Me["role"];
   readonly onSessionExpired: () => void;
 }): JSX.Element {
-  const [suppliers, setSuppliers] = useState<readonly SupplierOpenOrders[]>([]);
-  const [loaded, setLoaded] = useState(false);
-  const [error, setError] = useState("");
-  // issue 66: kumulatívny zoznam zlyhaní zápisu (nahrádza pôvodný jediný
-  // `stateError` string, ktorý každé ĎALŠIE zlyhanie prepísalo — pozri
-  // `ordersWriteFailures.ts`'s modulový komentár + komentár na tickete).
-  const [writeFailures, setWriteFailures] = useState<readonly OrderWriteFailure[]>([]);
-  const [busyLineId, setBusyLineId] = useState<string | null>(null);
   const canChangeState = CAN_CHANGE_STATE_ROLES.has(role);
+
+  // issue 476: zmena stavu tu (klik na „Riešiť" v Na objednanie) môže pridať/
+  // odobrať riadok v stave `riesit`, takže po nej refetchni menu odznak
+  // „Riešiť" (rovnaký vzor ako issue 473). Provider žije v `App.tsx`; mimo
+  // neho (samostatný render v teste) je to bezpečné no-op.
+  const { refresh: refreshRiesitBadge } = useContext(RiesitBadgeRefreshContext);
+
+  // issue 476: jadro obrazovky (dáta + mutácie + pomocné hooky) je zdieľané so
+  // sekciou „Riešiť" cez `useOrderLinesBoard`. „Na objednanie" ťahá z
+  // `/api/orders/open`, NEfiltruje na jeden stav (`keepOnlyState` vynechané) a
+  // po zmene stavu refetchne riesit odznak.
+  const board = useOrderLinesBoard({
+    fetchLines: fetchOpenOrders,
+    onSessionExpired,
+    canChangeState,
+    onStateChanged: refreshRiesitBadge,
+  });
+  const {
+    suppliers,
+    loaded,
+    error,
+    writeFailures,
+    setWriteFailures,
+    busyLineId,
+    busyOrderedLineId,
+    busyOrderedSupplier,
+    busySupplierLineId,
+    busySupplierLinkLineId,
+    busyCommentOrderId,
+    supplierDrafts,
+    dirtyEditorLineIds,
+    onEditorActivityChange,
+    email,
+    mail,
+    setSupplierLink,
+    load,
+    changeState,
+    changeOrdered,
+    assignSupplier,
+    changeComment,
+    toggleGroupOrdered,
+  } = board;
 
   // issue 61/148: vybraný dodávateľ (chip) aj prepínač "skryť vybavené" sa
   // OBA čítajú raz pri mount-e priamo z localStorage (lazy init), aby appka
@@ -79,66 +98,13 @@ export function OrdersSection({
     });
   }, []);
 
-  // #31: e-mailový kontakt dodávateľa (editovateľný priamo v zozname) —
-  // vyňaté do vlastného hooku (issue 66), pozri `useSupplierEmailEditing.ts`.
-  const {
-    editingEmailSupplier,
-    emailDraft,
-    emailBusy,
-    emailError,
-    onEmailDraftChange: setEmailDraft,
-    onStartEditEmail: startEditEmail,
-    onSaveEmail: saveEmail,
-    onCancelEditEmail: cancelEditEmail,
-  } = useSupplierEmailEditing(setSuppliers, onSessionExpired);
-
-  // #31: náhľad + potvrdenie pred odoslaním objednávky mailom — vyňaté do
-  // vlastného hooku (issue 64), aby sa v tomto súbore uvoľnilo miesto pod
-  // eslint `max-lines: 400` pre novú funkciu nižšie (poznámka k objednávke),
-  // BEZ zmeny správania (`useSupplierMailActions.ts`).
-  const {
-    previewSupplier,
-    preview,
-    previewError,
-    sendBusy,
-    sendResult,
-    openPreview,
-    closePreview,
-    confirmSend,
-    copyOrderToClipboard,
-  } = useSupplierMailActions(onSessionExpired);
-
-  // issue 151: rozpísaný koncept priradenia dodávateľa — musí žiť TU, nie
-  // lokálne v `OrderLineRow` (`useSupplierDrafts.ts` vysvetľuje prečo).
-  // Zosúlaďuje sa SAMO, vnútri hooku, po každej zmene `suppliers`.
-  const supplierDrafts = useSupplierDrafts(suppliers);
-
-  const load = useCallback(() => {
-    fetchOpenOrders()
-      .then((items) => {
-        setSuppliers(items);
-        setLoaded(true);
-      })
-      .catch((err: unknown) => {
-        setLoaded(true);
-        if (err instanceof OrdersUnauthorizedError) {
-          onSessionExpired();
-          return;
-        }
-        setError("Otvorené objednávky sa nepodarilo načítať.");
-      });
-  }, [onSessionExpired]);
-
-  useEffect(load, [load]);
-
   // issue 147: publikuje počet NEVYBAVENÝCH RIADKOV (naprieč VŠETKÝMI
   // dodávateľmi) do ľavého menu cez `OrdersRemainingCountContext` — po KAŽDEJ
   // zmene `suppliers`, takže odznak je vždy aktuálny. Pred prvým úspešným
   // načítaním sa nevolá vôbec — Sidebar dovtedy odznak nevykreslí.
   // issue 260: zámerne NEJDE cez `summarizeOrderLines(...).remaining` — tá
-  // odteraz sčítava KUSY (`quantity`), zatiaľ čo tento odznak má vlastný,
-  // samostatne zdokumentovaný zámer "počet riadkov" (viď test "publikuje
-  // počet nevybavených riadkov (nie celkový počet)"). Počíta sa preto priamo
+  // odteraz sčítava KUSY (`quantity`); tento odznak má vlastný, samostatne
+  // zdokumentovaný zámer "počet riadkov" (viď test). Počíta sa preto priamo
   // cez kanonický predikát `isLineResolved`.
   const { setCount: setOrdersRemainingCount } = useContext(OrdersRemainingCountContext);
   useEffect(() => {
@@ -147,225 +113,8 @@ export function OrdersSection({
     setOrdersRemainingCount(allLines.filter((l) => !isLineResolved(l)).length);
   }, [loaded, suppliers, setOrdersRemainingCount]);
 
-  // issue 148 (vyňaté do `useSelectedSupplierFallback.ts`, issue 151 —
-  // uvoľnenie miesta pod eslint `max-lines`, BEZ zmeny správania).
+  // issue 148 (vyňaté do `useSelectedSupplierFallback.ts`).
   useSelectedSupplierFallback(loaded, suppliers, selectedSupplier, selectSupplier);
-
-  const changeState = useCallback(
-    (lineId: string, newState: OrderLine["state"]) => {
-      const failureId = `state:${lineId}`;
-      setBusyLineId(lineId);
-      updateOrderLineState(lineId, newState)
-        .then(() => {
-          // Lokálna aktualizácia namiesto plného refetchu — server už
-          // potvrdil zápis (aj audit), netreba znova ťahať celý zoznam.
-          setSuppliers((current) =>
-            current.map((group) => ({
-              ...group,
-              lines: group.lines.map((line) => (line.lineId === lineId ? { ...line, state: newState } : line)),
-            })),
-          );
-          setWriteFailures((current) => clearWriteFailure(current, failureId));
-        })
-        .catch((err: unknown) => {
-          if (err instanceof OrdersUnauthorizedError) {
-            onSessionExpired();
-            return;
-          }
-          setWriteFailures((current) =>
-            upsertWriteFailure(current, {
-              id: failureId,
-              what: "Zmena stavu",
-              where: lineWhere(suppliers, lineId),
-              detail: err instanceof Error ? err.message : "Zmena stavu sa nepodarila.",
-            }),
-          );
-        })
-        .finally(() => {
-          setBusyLineId(null);
-        });
-    },
-    [onSessionExpired, suppliers],
-  );
-
-  // issue 60: odškrtávacie políčko "objednané u dodávateľa" — per riadok aj
-  // hromadne pre celú skupinu dodávateľa. NEZÁVISLÉ od `changeState` vyššie.
-  const [busyOrderedLineId, setBusyOrderedLineId] = useState<string | null>(null);
-  const [busyOrderedSupplier, setBusyOrderedSupplier] = useState<string | null>(null);
-
-  const changeOrdered = useCallback(
-    (lineId: string, ordered: boolean) => {
-      const failureId = `ordered:${lineId}`;
-      setBusyOrderedLineId(lineId);
-      updateOrderLineOrdered(lineId, ordered)
-        .then(() => {
-          setSuppliers((current) =>
-            current.map((group) => ({
-              ...group,
-              lines: group.lines.map((line) => (line.lineId === lineId ? { ...line, ordered } : line)),
-            })),
-          );
-          setWriteFailures((current) => clearWriteFailure(current, failureId));
-        })
-        .catch((err: unknown) => {
-          if (err instanceof OrdersUnauthorizedError) {
-            onSessionExpired();
-            return;
-          }
-          setWriteFailures((current) =>
-            upsertWriteFailure(current, {
-              id: failureId,
-              what: "Príznak objednané",
-              where: lineWhere(suppliers, lineId),
-              detail: err instanceof Error ? err.message : "Zmena príznaku objednané sa nepodarila.",
-            }),
-          );
-        })
-        .finally(() => {
-          setBusyOrderedLineId(null);
-        });
-    },
-    [onSessionExpired, suppliers],
-  );
-
-  // issue 63: ručné priradenie dodávateľa riadku bez dodávateľa. PLNÝ refetch
-  // po úspechu (nie lokálna oprava) — priradenie mení SKUPINU riadku
-  // (`ordersApi.ts`'s `assignOrderLineSupplier` komentár vysvetľuje prečo).
-  const [busySupplierLineId, setBusySupplierLineId] = useState<string | null>(null);
-
-  const assignSupplier = useCallback(
-    (lineId: string, supplier: string) => {
-      const failureId = `supplier:${lineId}`;
-      const where = lineWhere(suppliers, lineId);
-      setBusySupplierLineId(lineId);
-      assignOrderLineSupplierApi(lineId, supplier)
-        .then(() => {
-          setWriteFailures((current) => clearWriteFailure(current, failureId));
-          load();
-        })
-        .catch((err: unknown) => {
-          if (err instanceof OrdersUnauthorizedError) {
-            onSessionExpired();
-            return;
-          }
-          setWriteFailures((current) =>
-            upsertWriteFailure(current, {
-              id: failureId,
-              what: "Priradenie dodávateľa",
-              where,
-              detail: err instanceof Error ? err.message : "Priradenie dodávateľa sa nepodarilo.",
-            }),
-          );
-          // issue 89 (review PR 87): predtým sa `load()` volalo LEN v úspešnej
-          // vetve vyššie — pri zamietnutí (napr. server vráti 409, lebo
-          // produkt medzitým dostal dodávateľa v katalógu inou cestou, súbeh s
-          // importom alebo dlho otvorená stránka iného manažéra) zoznam
-          // zostal STARÝ a vstupné pole na priradenie by tak ostalo viditeľné
-          // navždy — manažér by mohol skúšať donekonečna. `load()` mení len
-          // `suppliers`/`loaded`/`error`, nikdy `writeFailures` (nezávislý stav
-          // vyššie), takže táto hláška ostáva viditeľná aj po refetchi.
-          load();
-        })
-        .finally(() => {
-          setBusySupplierLineId(null);
-        });
-    },
-    [load, onSessionExpired, suppliers],
-  );
-
-  // issue 121: manuálny odkaz na dodávateľa — PLNÝ refetch po úspechu (rovnaký
-  // dôvod ako `assignSupplier` vyššie: zmena platí pre celý PRODUKT, teda aj
-  // pre súrodenecké veľkosti toho istého riadku). issue 153: vyňaté do
-  // `useSupplierLinkSave.ts` (pridalo okamžitú klientsku validáciu, čo
-  // poslalo tento súbor cez eslint `max-lines: 400` — rovnaký dôvod/vzor ako
-  // `useSupplierEmailEditing.ts`).
-  const { busySupplierLinkLineId, setSupplierLink } = useSupplierLinkSave(suppliers, setWriteFailures, load, onSessionExpired);
-
-  // Hromadné označenie/zrušenie CELEJ skupiny dodávateľa naraz (stará appka's
-  // `markGroupOrdered` — jedno tlačidlo, ktoré prepína smer podľa toho, či je
-  // skupina UŽ celá objednaná, `webreview/static/app.js`'s `allOrdered`).
-  const toggleGroupOrdered = useCallback(
-    (supplier: string, ordered: boolean) => {
-      const failureId = `groupOrdered:${supplier}`;
-      setBusyOrderedSupplier(supplier);
-      setSupplierLinesOrdered(supplier, ordered)
-        .then(() => {
-          setSuppliers((current) =>
-            current.map((group) =>
-              group.supplier === supplier
-                ? { ...group, lines: group.lines.map((line) => ({ ...line, ordered })) }
-                : group,
-            ),
-          );
-          setWriteFailures((current) => clearWriteFailure(current, failureId));
-        })
-        .catch((err: unknown) => {
-          if (err instanceof OrdersUnauthorizedError) {
-            onSessionExpired();
-            return;
-          }
-          setWriteFailures((current) =>
-            upsertWriteFailure(current, {
-              id: failureId,
-              what: "Hromadné označenie skupiny",
-              where: `dodávateľ ${supplier}`,
-              detail: err instanceof Error ? err.message : "Hromadné označenie skupiny sa nepodarilo.",
-            }),
-          );
-        })
-        .finally(() => {
-          setBusyOrderedSupplier(null);
-        });
-    },
-    [onSessionExpired],
-  );
-
-  // issue 64: manažérova voľná poznámka k CELEJ objednávke — NEZÁVISLÉ od
-  // riadku (na rozdiel od `changeState`/`changeOrdered` vyššie, kľúčované
-  // `orderId`, nie `lineId`). Po úspechu sa lokálne aktualizujú VŠETKY
-  // riadky s rovnakým `orderId` naprieč VŠETKÝMI skupinami dodávateľov (na
-  // rozdiel od `toggleGroupOrdered`, ktoré mutuje len JEDNU skupinu — jedna
-  // objednávka môže mať riadky u viacerých dodávateľov naraz).
-  const [busyCommentOrderId, setBusyCommentOrderId] = useState<string | null>(null);
-
-  const changeComment = useCallback(
-    (orderId: string, comment: string | null) => {
-      const failureId = `comment:${orderId}`;
-      setBusyCommentOrderId(orderId);
-      updateOrderComment(orderId, comment)
-        .then(() => {
-          setSuppliers((current) =>
-            current.map((group) => ({
-              ...group,
-              lines: group.lines.map((line) => (line.orderId === orderId ? { ...line, comment } : line)),
-            })),
-          );
-          setWriteFailures((current) => clearWriteFailure(current, failureId));
-        })
-        .catch((err: unknown) => {
-          if (err instanceof OrdersUnauthorizedError) {
-            onSessionExpired();
-            return;
-          }
-          setWriteFailures((current) =>
-            upsertWriteFailure(current, {
-              id: failureId,
-              what: "Poznámka k objednávke",
-              where: orderWhere(suppliers, orderId),
-              detail: err instanceof Error ? err.message : "Uloženie poznámky sa nepodarilo.",
-            }),
-          );
-        })
-        .finally(() => {
-          setBusyCommentOrderId(null);
-        });
-    },
-    [onSessionExpired, suppliers],
-  );
-
-  // issue 149: `useDirtyEditorLineIds.ts` — riadky s PRÁVE TERAZ otvorenou
-  // úpravou, výnimka z "skryť vybavené" filtra nižšie.
-  const { dirtyEditorLineIds, setActive: onEditorActivityChange } = useDirtyEditorLineIds();
 
   // `/api/orders/open` už zoraďuje riadky presne tak, ako majú byť zobrazené
   // (dodávateľ vzostupne, potom najnovšia objednávka prvá) — žiadne ďalšie
@@ -386,10 +135,11 @@ export function OrdersSection({
 
   // issue 63: UŽ známe pravopisy dodávateľov (bez zástupného
   // "(bez dodávateľa)") pre `<datalist>` našepkávanie — z toho, čo appka UŽ
-  // má načítané (`suppliers`), žiadna nová GET trasa netreba. `Set` odstráni
-  // prípadné duplicity (viac skupín s tým istým zobrazovaným pravopisom by
-  // dnes nemalo nastať, ale je to lacná poistka).
-  const knownSuppliers = [...new Set(suppliers.map((g) => g.supplier).filter((s) => s !== NEZNAMY_DODAVATEL))].sort();
+  // má načítané (`suppliers`), žiadna nová GET trasa netreba.
+  const knownSuppliers = useMemo(
+    () => [...new Set(suppliers.map((g) => g.supplier).filter((s) => s !== NEZNAMY_DODAVATEL))].sort(),
+    [suppliers],
+  );
 
   return (
     <section className="orders-section">
@@ -427,8 +177,7 @@ export function OrdersSection({
         </p>
       )}
       {/* issue 63: JEDEN zdieľaný datalist pre všetky priraďovacie polia
-          (`OrderLineRow.tsx`'s `list="known-suppliers"`) — voľba dodávateľa
-          sa nemení podľa skupiny/riadku, takže stačí jeden globálny zoznam. */}
+          (`OrderLineRow.tsx`'s `list="known-suppliers"`). */}
       <datalist id="known-suppliers">
         {knownSuppliers.map((supplier) => (
           <option key={supplier} value={supplier} />
@@ -455,24 +204,24 @@ export function OrdersSection({
           onAssignSupplier={assignSupplier}
           onSetSupplierLink={setSupplierLink}
           onChangeComment={changeComment}
-          editingEmailSupplier={editingEmailSupplier}
-          emailDraft={emailDraft}
-          emailBusy={emailBusy}
-          emailError={emailError}
-          onEmailDraftChange={setEmailDraft}
-          onStartEditEmail={startEditEmail}
-          onSaveEmail={saveEmail}
-          onCancelEditEmail={cancelEditEmail}
+          editingEmailSupplier={email.editingEmailSupplier}
+          emailDraft={email.emailDraft}
+          emailBusy={email.emailBusy}
+          emailError={email.emailError}
+          onEmailDraftChange={email.onEmailDraftChange}
+          onStartEditEmail={email.onStartEditEmail}
+          onSaveEmail={email.onSaveEmail}
+          onCancelEditEmail={email.onCancelEditEmail}
           onToggleGroupOrdered={toggleGroupOrdered}
-          onCopyOrderToClipboard={copyOrderToClipboard}
-          previewSupplier={previewSupplier}
-          preview={preview}
-          previewError={previewError}
-          sendBusy={sendBusy}
-          sendResult={sendResult}
-          onOpenPreview={openPreview}
-          onClosePreview={closePreview}
-          onConfirmSend={confirmSend}
+          onCopyOrderToClipboard={mail.copyOrderToClipboard}
+          previewSupplier={mail.previewSupplier}
+          preview={mail.preview}
+          previewError={mail.previewError}
+          sendBusy={mail.sendBusy}
+          sendResult={mail.sendResult}
+          onOpenPreview={mail.openPreview}
+          onClosePreview={mail.closePreview}
+          onConfirmSend={mail.confirmSend}
         />
       ))}
     </section>

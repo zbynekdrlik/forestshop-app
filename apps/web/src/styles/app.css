@@ -40,6 +40,11 @@
   --fs-warning-bg: #fdf3dd;
   --fs-danger: #b3261e;
   --fs-danger-bg: #fbeceb;
+  /* issue 476: „Riešiť" stav — modrá „na vyriešenie" farba, zámerne odlišná
+     od zelenej (Skladom/brand)/oranžovej (Čaká sa)/červenej (Nedostupné),
+     aby bol piaty stav na prvý pohľad rozoznateľný. */
+  --fs-info: #2456a6;
+  --fs-info-bg: #e8eefb;
 
   /* issue 263: tri stavové farby "Na objednanie" filtračných čipov +
      hlavičky skupiny (`.chip`/`.toorder-supplier`) — presné hex hodnoty zo
@@ -1295,7 +1300,14 @@ tr:last-child td {
    `orders-layout.spec.ts`'s `vysokeKompaktneRiadky`). */
 .ord-state-btn-group {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  /* issue 476: 3-stĺpcová mriežka (predtým 2×2) — 5 tlačidiel (pribudlo
+     „Riešiť") spadne ako 3+2: horný rad Nevybavené·Riešiť·Čaká sa, dolný
+     Skladom·Nedostupné (presne mockup Štěpán). `col-state` sa rozšíril na
+     18 % (uvoľnené z užšieho `col-supplier`, kde ceruzka šla POD 🔗), takže
+     tri tlačidlá v rade majú rovnakú šírku ako predtým dve — živo odmerané
+     na prode: 0 orezaných tlačidiel, výška klastra 81px nezmenená
+     (`.claude/rules/frontend-design.md` metodika). */
+  grid-template-columns: 1fr 1fr 1fr;
   gap: var(--fs-space-1);
   width: 100%;
 }
@@ -1363,6 +1375,30 @@ tr:last-child td {
   background: var(--fs-danger-bg);
   border-color: var(--fs-danger);
   color: var(--fs-danger);
+}
+/* issue 476: „Riešiť" aktívny stav — modrá „info" farba (viď `--fs-info`),
+   tri nezávislé signály ako ostatné (plná výplň + hrubší rám + tučné písmo). */
+.ord-state-btn-riesit.active {
+  background: var(--fs-info-bg);
+  border-color: var(--fs-info);
+  color: var(--fs-info);
+}
+/* issue 476: rýchle pole „číslo objednávky → Riešiť" v sekcii Riešiť.
+   Vodorovný riadok (label + vstup + tlačidlo), zalomí sa na úzkej obrazovke. */
+.riesit-quick-add {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--fs-space-2);
+  margin-bottom: var(--fs-space-3);
+}
+/* Dvojtriedny selektor (0,0,2,0) — prebije globálny `input:not([type=hidden])
+   { width: 100% }` reset (0,0,1,1), inak by pole zabralo celý riadok
+   (`.claude/rules/frontend-design.md`, issue 403). */
+.riesit-quick-add .riesit-quick-add-input {
+  flex: 0 1 16rem;
+  min-width: 8rem;
+  max-width: 100%;
 }
 /* issue 95: DODÁVATEĽ + PRIRADENIE DODÁVATEĽA zlúčené do jednej bunky
    (majiteľ, komentár #1: "neviem čo tam je Priradenie dodávateľa stĺpec" —
@@ -1502,13 +1538,24 @@ tr:last-child td {
    napriek rôznej výške obsahu. */
 .ord-supplier-row {
   display: flex;
-  align-items: center;
+  /* issue 476 (mockup Štěpán): ceruzka „Upraviť odkaz" (✏️ toggle) sa
+     presunula POD tlačidlo prepojenia (🔗) namiesto vedľa neho — stĺpec
+     Dodávateľ je preto dvojriadkový a užší (`col-supplier` 13→8.5 %),
+     uvoľnené miesto ide do stĺpca Stav (3 tlačidlá v rade). Živo odmerané
+     na prode: výška riadku sa NEZVÝŠI (bunka Dodávateľ ~76px < výška klastra
+     stavov 81px, ktorá už teraz určuje spodnú hranicu riadku). */
+  flex-direction: column;
+  align-items: flex-start;
   gap: var(--fs-space-1);
   min-width: 0;
 }
 .ord-supplier-row > .ord-supplier-cell {
   min-width: 0;
-  flex: 1 1 auto;
+  /* issue 476: v stĺpcovom rozložení NErásť vertikálne (predtým `1 1 auto`
+     v riadku roztiahlo bunku vodorovne) — 🔗/„—"/hint sedí na vlastnej
+     výške, ceruzka je pod ním. */
+  flex: 0 0 auto;
+  max-width: 100%;
 }
 /* "veľké tlačidlá" — rovnaký 2.25rem (36px) klikací rozmer ako
    `.ord-supplier-link`, aby zamestnanec mohol rýchlo kliknúť aj na úzkej
@@ -1948,10 +1995,17 @@ tr:last-child td {
   width: 4%;
 }
 .col-supplier {
-  width: 13%;
+  /* issue 476: 13→8.5 % — ceruzka „Upraviť odkaz" sa presunula POD 🔗
+     (`.ord-supplier-row` stĺpcové), takže bunka Dodávateľ potrebuje menej
+     šírky; uvoľnené percentá idú do `col-state` nižšie (net-zero swap). */
+  width: 8.5%;
 }
 .col-state {
-  width: 13.5%;
+  /* issue 476: 13.5→18 % — priestor pre 3 tlačidlá stavov v rade
+     (Nevybavené·Riešiť·Čaká sa) rovnako širokých ako predtým dve. Živo
+     odmerané na prode (tabuľka na min-width 1022px = najtesnejšie): 0
+     orezaných tlačidiel, žiadny horizontálny pretok. */
+  width: 18%;
 }
 .col-date {
   width: 9%;

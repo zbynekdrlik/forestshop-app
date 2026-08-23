@@ -16,8 +16,10 @@ import { FloorNotesBadgeRefreshContext } from "./floorNotesBadgeContext.js";
 import { DEFAULT_TAB_ID, NAV, findTab, isVisibleTabId } from "./nav.js";
 import { fetchOrderFlagCounts } from "./orderFlagsApi.js";
 import { OrderFlagsBadgeRefreshContext } from "./orderFlagsBadgeContext.js";
+import { fetchRiesitCount } from "./ordersApi.js";
 import { fetchOrderReminderStatus } from "./orderReminderApi.js";
 import { OrdersRemainingCountContext } from "./ordersRemainingCountContext.js";
+import { RiesitBadgeRefreshContext } from "./riesitBadgeContext.js";
 import { fetchPairingReviewUnreviewedCount } from "./pairingReviewApi.js";
 import { PairingReviewBadgeRefreshContext } from "./pairingReviewBadgeContext.js";
 import { fetchPostaUncollectedStatus } from "./postaUncollectedApi.js";
@@ -239,6 +241,34 @@ export function App(): JSX.Element {
     };
   }, [me, activeTabId, floorNotesRefreshNonce]);
 
+  // issue 476: odznak "Riešiť" — rovnaký PRIAMY vzor ako `dailyTasksCount`/
+  // `floorNotesCount` vyššie (App.tsx vlastní count, fetchuje pri prihlásení/
+  // zmene záložky/refresh-nonce, žiaden polling). Počet je GLOBÁLNY (stav
+  // `riesit` na otvorených objednávkach). `OrdersSection` AJ `RiesitSection`
+  // po každej zmene stavu zavolajú `refresh()` cez `RiesitBadgeRefreshContext`
+  // (obe môžu riesit riadok pridať aj odobrať).
+  const [riesitCount, setRiesitCount] = useState<number | null>(null);
+  const [riesitRefreshNonce, setRiesitRefreshNonce] = useState(0);
+  const riesitBadgeRefresh = useCallback(() => {
+    setRiesitRefreshNonce((n) => n + 1);
+  }, []);
+  const riesitBadgeContextValue = useMemo(() => ({ refresh: riesitBadgeRefresh }), [riesitBadgeRefresh]);
+  useEffect(() => {
+    if (me === null) return;
+    let cancelled = false;
+    fetchRiesitCount()
+      .then((count) => {
+        if (!cancelled) setRiesitCount(count);
+      })
+      .catch(() => {
+        // `fetchRiesitCount` už interne zachytáva všetky chyby a vždy vráti 0
+        // (`ordersApi.ts`) — poistka pre eslint `no-floating-promises`.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [me, activeTabId, riesitRefreshNonce]);
+
   const badgeCounts = useMemo<Readonly<Record<string, number>>>(() => {
     const counts: Record<string, number> = {};
     if (ordersRemainingCount !== null) counts["orders"] = ordersRemainingCount;
@@ -249,6 +279,9 @@ export function App(): JSX.Element {
     // zodpovedajú `nav.ts`'s `tab.id` — `Sidebar` ich vykreslí genericky.
     if (dailyTasksCount !== null) counts["ulohy"] = dailyTasksCount;
     if (floorNotesCount !== null) counts["floor-orders"] = floorNotesCount;
+    // issue 476: odznak „Riešiť" — ukazuje sa AJ pri nule (rovnako ako
+    // „ulohy"/„floor-orders" vyššie); kľúč `riesit` = `nav.ts`'s `tab.id`.
+    if (riesitCount !== null) counts["riesit"] = riesitCount;
     // issue 445: odznak sa ukazuje AJ pri nule (rovnako ako "upozornenia"/
     // "pairing-review" — appka tým hovorí "toto číslo poznám, je 0"), aby
     // šéf hneď videl "dnes netreba objednať žiadnu DPD prepravu".
@@ -274,7 +307,7 @@ export function App(): JSX.Element {
     // istý tvar bugu ako `UpozorneniaSection.tsx`'s `withBusy`), takže lint
     // to nezachytí a stará hodnota (chýbajúce odznaky hneď po prihlásení,
     // kým sa nespustí NEJAKÝ INÝ trigger) prežije bez varovania.
-  }, [ordersRemainingCount, upozorneniaCount, dpdCount, pairingReviewUnreviewedCount, orderFlagCounts, dailyTasksCount, floorNotesCount]);
+  }, [ordersRemainingCount, upozorneniaCount, dpdCount, pairingReviewUnreviewedCount, orderFlagCounts, dailyTasksCount, floorNotesCount, riesitCount]);
 
   // issue 185: stav zapnuté/vypnuté pre "Automatizácie" priečinok v menu.
   // Na rozdiel od `ordersRemainingCount` vyššie (publikované OBRAZOVKOU
@@ -404,6 +437,7 @@ export function App(): JSX.Element {
             <OrderFlagsBadgeRefreshContext.Provider value={orderFlagsBadgeContextValue}>
               <DailyTasksBadgeRefreshContext.Provider value={dailyTasksBadgeContextValue}>
                 <FloorNotesBadgeRefreshContext.Provider value={floorNotesBadgeContextValue}>
+                  <RiesitBadgeRefreshContext.Provider value={riesitBadgeContextValue}>
                   <div className="app-shell">
                     <Sidebar
                       folders={NAV}
@@ -432,6 +466,7 @@ export function App(): JSX.Element {
                       </main>
                     </div>
                   </div>
+                  </RiesitBadgeRefreshContext.Provider>
                 </FloorNotesBadgeRefreshContext.Provider>
               </DailyTasksBadgeRefreshContext.Provider>
             </OrderFlagsBadgeRefreshContext.Provider>

@@ -8,10 +8,10 @@ import { record } from "../modules/audit/service.js";
 import { ORDERS_EXPORT_URL_NOT_CONFIGURED, type OrdersIngestResult, type RunOrdersIngest } from "../modules/orders/ingest.js";
 import { listKnownStatusNames, listOpenStatusNames, replaceOpenStatusNames } from "../modules/orders/open-statuses.js";
 import { getOrdersDashboardOverview } from "../modules/orders/overview.js";
-import { getOrderDetail, listOpenOrderLinesBySupplier } from "../modules/orders/queries.js";
+import { countOpenOrderLinesByState, getOrderDetail, listOpenOrderLinesBySupplier } from "../modules/orders/queries.js";
 import { assignOrderLineSupplier } from "../modules/orders/supplier-assignment.js";
 import { setProductSupplierLink, supplierLinkUrlBody } from "../modules/orders/supplier-link-assignment.js";
-import { setOrderComment, setOrderLineOrdered, setOrderLineState } from "../modules/orders/state.js";
+import { setOrderComment, setOrderLineOrdered, setOrderLinesStateByCode, setOrderLineState } from "../modules/orders/state.js";
 import { requireRole, requireUser, type AppBindings } from "./middleware.js";
 import { requireSameOrigin } from "./origin-check.js";
 
@@ -46,6 +46,11 @@ const orderCommentBody = z.object({ comment: z.string().trim().max(2000) });
 // orezanie prázdnych/duplicít po trime) beží až v module, lebo "['   ']"
 // prejde touto schémou, ale po očistení je to prázdny zoznam.
 const openStatusesBody = z.object({ statuses: z.array(z.string()).min(1).max(50) });
+// issue 476: rýchle pole v sekcii Riešiť — číslo objednávky (`externalOrderId`,
+// orezané + neprázdne). Cap 50 (rovnaká horná hranica ako `open_status`
+// položka vyššie) — Shoptet čísla objednávok sú krátke, toto len zachytí
+// zjavne pokazený vstup skôr, než sa dostane k DB dopytu.
+const riesitByCodeBody = z.object({ code: z.string().trim().min(1).max(50) });
 
 // Re-exportované, aby `http/app.ts` nemusel meniť svoj import — kanonická
 // definícia žije v `modules/orders/ingest.ts` (rovnaký vzor ako katalógov
@@ -66,6 +71,55 @@ export function registerOrdersRoutes(
   // vidieť otvorené objednávky, len SPÚŠŤANIE importu (nižšie) je vyhradené.
   app.get("/api/orders/open", requireUser(db), async (c) =>
     c.json({ suppliers: await listOpenOrderLinesBySupplier(db, adminBaseUrl) }),
+  );
+
+  // issue 476: sekcia „Riešiť" — PRESNE tie isté zoskupené riadky ako
+  // „Na objednanie", len zúžené na stav `riesit` (zdieľaný
+  // `listOpenOrderLinesBySupplier` so `stateFilter`, žiadna duplicita).
+  // Literálne trasy `/api/orders/riesit(...)` MUSIA byť PRED `GET /api/orders/
+  // :id` nižšie — Hono zhoduje v poradí registrácie, inak by parametrizovaná
+  // `:id` „riesit" zožrala ako svoj parameter (`.claude/rules/http-routes.md`,
+  // rovnaký dôvod ako „open-statuses"/„overview" vyššie).
+  app.get("/api/orders/riesit", requireUser(db), async (c) =>
+    c.json({ suppliers: await listOpenOrderLinesBySupplier(db, adminBaseUrl, { stateFilter: "riesit" }) }),
+  );
+
+  // issue 476: odznak počtu v ľavom menu — počet otvorených riadkov v stave
+  // `riesit` (vzor issue 473 count endpointov). `requireUser`, žiadne
+  // obmedzenie roly (čítanie počtu nie je citlivejšie než čítanie zoznamu).
+  app.get("/api/orders/riesit/count", requireUser(db), async (c) => {
+    const count = await countOpenOrderLinesByState(db, "riesit");
+    return c.json({ count });
+  });
+
+  // issue 476: rýchle pole „číslo objednávky → Enter" — nastaví stav `riesit`
+  // na VŠETKÝCH riadkoch danej (otvorenej) objednávky. Rovnaké oprávnenie +
+  // CSRF disciplína ako per-riadková zmena stavu (`requireRole("admin",
+  // "manazer")`). Neznáme/zatvorené číslo = zrozumiteľná SK chyba (400).
+  app.post(
+    "/api/orders/riesit/by-code",
+    requireSameOrigin(),
+    requireUser(db),
+    requireRole("admin", "manazer"),
+    zValidator("json", riesitByCodeBody),
+    async (c) => {
+      const { code } = c.req.valid("json");
+      const user = c.get("user");
+      const result = await setOrderLinesStateByCode(db, {
+        code,
+        newState: "riesit",
+        actorUserId: user.userId,
+        now: new Date(),
+      });
+      if (result.status === "order_not_found") {
+        return c.json({ error: `Objednávka s číslom „${code}" sa nenašla.` }, 400);
+      }
+      if (result.status === "order_not_open") {
+        return c.json({ error: `Objednávka „${code}" už nie je otvorená — nedá sa presunúť do Riešiť.` }, 400);
+      }
+      log.info({ actorUserId: user.userId, code, lineCount: result.lineCount }, "hromadné označenie objednávky stavom Riešiť");
+      return c.json({ ok: true as const, lineCount: result.lineCount });
+    },
   );
 
   // issue 237: "Prehľad e-shopu" (dnes/tento týždeň/tento mesiac) — literálna

@@ -2,6 +2,7 @@ import { eq, inArray } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
 import { orderLines, orders, type OrderLineState } from "../../db/schema.js";
 import { record } from "../audit/service.js";
+import { listOpenStatusNames } from "./open-statuses.js";
 import { listOpenOrderLineIdsForSupplier } from "./queries.js";
 
 export type SetOrderLineStateResult = "ok" | "not_found";
@@ -55,6 +56,77 @@ export async function setOrderLineState(
     });
 
     return "ok";
+  });
+}
+
+// issue 476: rýchle pole „číslo objednávky → Enter" v sekcii Riešiť —
+// hromadne nastaví stav VŠETKÝCH riadkov jednej objednávky (identifikovanej
+// jej Shoptet číslom `externalOrderId`). Vlastný discriminated výsledok, aby
+// trasa vedela vrátiť zrozumiteľnú SK chybu pre neznáme aj zatvorené číslo.
+export type SetOrderLinesStateByCodeResult =
+  | { readonly status: "ok"; readonly lineCount: number }
+  | { readonly status: "order_not_found" }
+  | { readonly status: "order_not_open" };
+
+export interface SetOrderLinesStateByCodeInput {
+  readonly code: string;
+  readonly newState: OrderLineState;
+  readonly actorUserId: string;
+  readonly now: Date;
+}
+
+// Jedna transakcia (rovnaký vzor ako `setOrderLineState` vyššie) — objednávka
+// aj jej riadky sa zamknú (`.for("update")`), stav sa zapíše a KAŽDÁ reálna
+// zmena dostane vlastný auditový záznam `order_line.state.changed` (rovnaký
+// tvar ako per-riadková zmena, aby história sedela). Riadok, čo UŽ je v
+// cieľovom stave, sa preskočí (žiadny zbytočný UPDATE ani audit). „Otvorená"
+// objednávka = jej Shoptet `status_name` je v `order_open_status` (rovnaká
+// definícia ako „Na objednanie" zoznam, `.claude/rules/orders.md`) — inak by
+// označenie nemalo zmysel (riadok by sa v sekcii Riešiť aj tak nezobrazil,
+// tá filtruje na otvorené stavy).
+export async function setOrderLinesStateByCode(
+  db: Database,
+  input: SetOrderLinesStateByCodeInput,
+): Promise<SetOrderLinesStateByCodeResult> {
+  return db.transaction(async (tx) => {
+    const [order] = await tx
+      .select({ id: orders.id, statusName: orders.statusName })
+      .from(orders)
+      .where(eq(orders.externalOrderId, input.code))
+      .for("update")
+      .limit(1);
+    if (order === undefined) return { status: "order_not_found" as const };
+
+    const openStatuses = await listOpenStatusNames(tx);
+    if (!openStatuses.includes(order.statusName)) return { status: "order_not_open" as const };
+
+    const lines = await tx
+      .select({ id: orderLines.id, variantCode: orderLines.variantCode, state: orderLines.state })
+      .from(orderLines)
+      .where(eq(orderLines.orderId, order.id))
+      .for("update");
+
+    let changed = 0;
+    for (const line of lines) {
+      if (line.state === input.newState) continue;
+      await tx.update(orderLines).set({ state: input.newState }).where(eq(orderLines.id, line.id));
+      await record(tx, {
+        at: input.now,
+        actorUserId: input.actorUserId,
+        action: "order_line.state.changed",
+        entity: "order_line",
+        entityId: line.id,
+        data: {
+          orderId: order.id,
+          variantCode: line.variantCode,
+          from: line.state,
+          to: input.newState,
+        },
+      });
+      changed++;
+    }
+
+    return { status: "ok" as const, lineCount: changed };
   });
 }
 
