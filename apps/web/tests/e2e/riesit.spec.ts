@@ -71,7 +71,9 @@ test("Riešiť: riadok sa zobrazí, zmena stavu ho odstráni, odznak svieti, rý
       if (url.includes("/api/orders/riesit/by-code")) {
         const telo = typeof init?.body === "string" ? init.body : "{}";
         const code = (JSON.parse(telo) as { code?: string }).code ?? "";
-        if (code === "9999") return Promise.resolve(json({ error: `Objednávka s číslom „${code}“ sa nenašla.` }, 400));
+        // Neznáme číslo = 200 `{ok:false,error}` (NIE 4xx) — verné reálnemu
+        // serveru, aby konzola ostala čistá (viď server komentár / testing.md).
+        if (code === "9999") return Promise.resolve(json({ ok: false, error: `Objednávka s číslom „${code}“ sa nenašla.` }));
         return Promise.resolve(json({ ok: true, lineCount: 1 }));
       }
       if (url.includes("/api/orders/riesit")) return Promise.resolve(json({ suppliers: [skupina] }));

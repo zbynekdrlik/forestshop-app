@@ -111,11 +111,19 @@ export function registerOrdersRoutes(
         actorUserId: user.userId,
         now: new Date(),
       });
+      // Neznáme/zatvorené číslo je BEŽNÝ, OČAKÁVANÝ používateľský omyl (preklep
+      // v čísle), nie HTTP chyba — vraciame 200 s `{ok:false,error}`, nie 4xx.
+      // Chromium loguje „Failed to load resource" pre KAŽDÝ fetch s 4xx, čo by
+      // pri rýchlom poli (overovanom cez Playwright s kontrolou nulovej konzoly)
+      // porušilo zákaz konzolových chýb (`.claude/rules/testing.md`, rovnaký
+      // vzor ako `/api/catalog/ingest`'s `{status:"busy"}` a `/api/me/password`).
+      // Naživo overené (post-deploy 0.3.0-dev.278): 400 SKUTOČNE zalogovalo
+      // konzolovú chybu na prode — preto táto oprava.
       if (result.status === "order_not_found") {
-        return c.json({ error: `Objednávka s číslom „${code}" sa nenašla.` }, 400);
+        return c.json({ ok: false as const, error: `Objednávka s číslom „${code}" sa nenašla.` });
       }
       if (result.status === "order_not_open") {
-        return c.json({ error: `Objednávka „${code}" už nie je otvorená — nedá sa presunúť do Riešiť.` }, 400);
+        return c.json({ ok: false as const, error: `Objednávka „${code}" už nie je otvorená — nedá sa presunúť do Riešiť.` });
       }
       log.info({ actorUserId: user.userId, code, lineCount: result.lineCount }, "hromadné označenie objednávky stavom Riešiť");
       return c.json({ ok: true as const, lineCount: result.lineCount });

@@ -205,12 +205,20 @@ export async function fetchRiesitCount(): Promise<number> {
   }
 }
 
-const riesitByCodeResultSchema = z.object({ ok: z.literal(true), lineCount: z.number() });
+// issue 476: server vracia 200 v OBOCH prípadoch — úspech `{ok:true,lineCount}`
+// aj OČAKÁVANÝ používateľský omyl (neznáme/zatvorené číslo) `{ok:false,error}`
+// — NIKDY 4xx za taký omyl (Chromium by zalogoval konzolovú chybu, viď server
+// komentár + `.claude/rules/testing.md`; rovnaký vzor ako `sendSupplierOrderMail`).
+const riesitByCodeResultSchema = z.discriminatedUnion("ok", [
+  z.object({ ok: z.literal(true), lineCount: z.number() }),
+  z.object({ ok: z.literal(false), error: z.string() }),
+]);
 
-// issue 476: rýchle pole „číslo objednávky → Enter" — nastaví stav `riesit`
-// na všetkých riadkoch danej objednávky. Neznáme/zatvorené číslo vráti server
-// ako 400 `{error}`, ktoré `readJson` premení na `Error` so slovenskou
-// hláškou (zobrazí ju volajúci `RiesitSection`).
+// issue 476: rýchle pole „číslo objednávky → Enter" — nastaví stav `riesit` na
+// všetkých riadkoch danej objednávky. Doménový neúspech (neznáme/zatvorené
+// číslo) príde ako 200 `{ok:false,error}` — vyhodíme `Error(error)`, aby ju
+// `RiesitSection` zobrazila cez existujúci `catch`; 4xx/5xx (401, CSRF, ...) sú
+// SKUTOČNÉ HTTP chyby a rieši ich `readJson`.
 export async function setOrderLinesRiesitByCode(code: string): Promise<{ readonly lineCount: number }> {
   const response = await fetch("/api/orders/riesit/by-code", {
     method: "POST",
@@ -218,6 +226,7 @@ export async function setOrderLinesRiesitByCode(code: string): Promise<{ readonl
     body: JSON.stringify({ code }),
   });
   const telo = riesitByCodeResultSchema.parse(await readJson(response, "Označenie objednávky sa nepodarilo"));
+  if (!telo.ok) throw new Error(telo.error);
   return { lineCount: telo.lineCount };
 }
 
