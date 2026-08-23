@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } 
 import {
   assignOrderLineSupplier as assignOrderLineSupplierApi,
   OrdersUnauthorizedError,
+  setFloorRowOrdered,
   setSupplierLinesOrdered,
   updateOrderComment,
   updateOrderLineOrdered,
@@ -57,6 +58,9 @@ export function useOrderLinesBoard(options: OrderLinesBoardOptions): {
   readonly busySupplierLineId: string | null;
   readonly busySupplierLinkLineId: string | null;
   readonly busyCommentOrderId: string | null;
+  // issue 480: kľúč (`noteId::variantCode`) predajňového riadku, ktorého zápis
+  // „objednané" PRÁVE TERAZ prebieha.
+  readonly busyFloorRowKey: string | null;
   readonly supplierDrafts: ReturnType<typeof useSupplierDrafts>;
   readonly dirtyEditorLineIds: ReadonlySet<string>;
   readonly onEditorActivityChange: (lineId: string, active: boolean) => void;
@@ -66,6 +70,8 @@ export function useOrderLinesBoard(options: OrderLinesBoardOptions): {
   readonly load: () => void;
   readonly changeState: (lineId: string, newState: OrderLine["state"]) => void;
   readonly changeOrdered: (lineId: string, ordered: boolean) => void;
+  // issue 480: prepnutie „objednané" na predajňovom riadku.
+  readonly changeFloorOrdered: (noteId: string, variantCode: string, ordered: boolean) => void;
   readonly assignSupplier: (lineId: string, supplier: string) => void;
   readonly changeComment: (orderId: string, comment: string | null) => void;
   readonly toggleGroupOrdered: (supplier: string, ordered: boolean) => void;
@@ -81,6 +87,9 @@ export function useOrderLinesBoard(options: OrderLinesBoardOptions): {
   const [busyOrderedSupplier, setBusyOrderedSupplier] = useState<string | null>(null);
   const [busySupplierLineId, setBusySupplierLineId] = useState<string | null>(null);
   const [busyCommentOrderId, setBusyCommentOrderId] = useState<string | null>(null);
+  // issue 480: predajňový riadok (`noteId::variantCode`), ktorého zápis
+  // „objednané" PRÁVE TERAZ prebieha.
+  const [busyFloorRowKey, setBusyFloorRowKey] = useState<string | null>(null);
 
   // #31: e-mailový kontakt dodávateľa (editovateľný v zozname).
   const email = useSupplierEmailEditing(setSuppliers, onSessionExpired);
@@ -185,6 +194,48 @@ export function useOrderLinesBoard(options: OrderLinesBoardOptions): {
     [onSessionExpired, suppliers],
   );
 
+  // issue 480: „objednané" na predajňovom riadku — volá floor-notes trasu,
+  // lokálne prepne `ordered` daného floor riadku (`noteId`+`variantCode`).
+  // Neinclude `suppliers` v deps — `where` sa počíta z argumentov, aktualizácia
+  // ide cez funkčný `setSuppliers`.
+  const changeFloorOrdered = useCallback(
+    (noteId: string, variantCode: string, ordered: boolean) => {
+      const rowKey = `${noteId}::${variantCode}`;
+      const failureId = `floorOrdered:${rowKey}`;
+      setBusyFloorRowKey(rowKey);
+      setFloorRowOrdered(noteId, variantCode, ordered)
+        .then(() => {
+          setSuppliers((current) =>
+            current.map((group) => ({
+              ...group,
+              floorRows: (group.floorRows ?? []).map((row) =>
+                row.noteId === noteId && row.variantCode === variantCode ? { ...row, ordered } : row,
+              ),
+            })),
+          );
+          setWriteFailures((current) => clearWriteFailure(current, failureId));
+        })
+        .catch((err: unknown) => {
+          if (err instanceof OrdersUnauthorizedError) {
+            onSessionExpired();
+            return;
+          }
+          setWriteFailures((current) =>
+            upsertWriteFailure(current, {
+              id: failureId,
+              what: "Príznak objednané (predajňa)",
+              where: `predajňový riadok ${variantCode}`,
+              detail: err instanceof Error ? err.message : "Zmena príznaku objednané sa nepodarila.",
+            }),
+          );
+        })
+        .finally(() => {
+          setBusyFloorRowKey(null);
+        });
+    },
+    [onSessionExpired],
+  );
+
   const assignSupplier = useCallback(
     (lineId: string, supplier: string) => {
       const failureId = `supplier:${lineId}`;
@@ -227,10 +278,16 @@ export function useOrderLinesBoard(options: OrderLinesBoardOptions): {
       setBusyOrderedSupplier(supplier);
       setSupplierLinesOrdered(supplier, ordered)
         .then(() => {
+          // issue 480: hromadná akcia prepne objednávkové AJ predajňové riadky
+          // skupiny (server `setSupplierLinesOrdered` mutuje oboje).
           setSuppliers((current) =>
             current.map((group) =>
               group.supplier === supplier
-                ? { ...group, lines: group.lines.map((line) => ({ ...line, ordered })) }
+                ? {
+                    ...group,
+                    lines: group.lines.map((line) => ({ ...line, ordered })),
+                    floorRows: (group.floorRows ?? []).map((row) => ({ ...row, ordered })),
+                  }
                 : group,
             ),
           );
@@ -308,6 +365,7 @@ export function useOrderLinesBoard(options: OrderLinesBoardOptions): {
     busySupplierLineId,
     busySupplierLinkLineId,
     busyCommentOrderId,
+    busyFloorRowKey,
     supplierDrafts,
     dirtyEditorLineIds,
     onEditorActivityChange,
@@ -317,6 +375,7 @@ export function useOrderLinesBoard(options: OrderLinesBoardOptions): {
     load,
     changeState,
     changeOrdered,
+    changeFloorOrdered,
     assignSupplier,
     changeComment,
     toggleGroupOrdered,

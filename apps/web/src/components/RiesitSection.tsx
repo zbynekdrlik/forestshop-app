@@ -164,8 +164,13 @@ export function RiesitSection({
           busySupplierLineId={board.busySupplierLineId}
           busySupplierLinkLineId={board.busySupplierLinkLineId}
           busyCommentOrderId={board.busyCommentOrderId}
+          // issue 480: predajňové riadky sú LEN v „Na objednanie" (server vracia
+          // pre „Riešiť" prázdne `floorRows`), tieto props sú tu de facto no-op,
+          // ale `SupplierOrderGroup` ich vyžaduje.
+          busyFloorRowKey={board.busyFloorRowKey}
           onChangeState={board.changeState}
           onChangeOrdered={board.changeOrdered}
+          onChangeFloorOrdered={board.changeFloorOrdered}
           onAssignSupplier={board.assignSupplier}
           onSetSupplierLink={board.setSupplierLink}
           onChangeComment={board.changeComment}

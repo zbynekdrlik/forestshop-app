@@ -8,7 +8,7 @@ import {
 } from "../ordersDisplayPreferences.js";
 import { OrdersRemainingCountContext } from "../ordersRemainingCountContext.js";
 import { RiesitBadgeRefreshContext } from "../riesitBadgeContext.js";
-import { isLineHiddenByFilter, isLineResolved } from "../ordersSummary.js";
+import { isFloorRowHidden, isLineHiddenByFilter, isLineResolved } from "../ordersSummary.js";
 import { useOrderLinesBoard } from "../useOrderLinesBoard.js";
 import { useSelectedSupplierFallback } from "../useSelectedSupplierFallback.js";
 import { OrderOpenStatusesPanel } from "./OrderOpenStatusesPanel.js";
@@ -62,6 +62,7 @@ export function OrdersSection({
     busySupplierLineId,
     busySupplierLinkLineId,
     busyCommentOrderId,
+    busyFloorRowKey,
     supplierDrafts,
     dirtyEditorLineIds,
     onEditorActivityChange,
@@ -71,6 +72,7 @@ export function OrdersSection({
     load,
     changeState,
     changeOrdered,
+    changeFloorOrdered,
     assignSupplier,
     changeComment,
     toggleGroupOrdered,
@@ -110,7 +112,12 @@ export function OrdersSection({
   useEffect(() => {
     if (!loaded) return;
     const allLines = suppliers.flatMap((group) => group.lines);
-    setOrdersRemainingCount(allLines.filter((l) => !isLineResolved(l)).length);
+    // issue 480: odznak počíta aj NEOBJEDNANÉ predajňové riadky (konzistentne s
+    // tým, ako sa počítajú e-shopové — neobjednaný sa počíta, objednaný nie).
+    const allFloorRows = suppliers.flatMap((group) => group.floorRows ?? []);
+    setOrdersRemainingCount(
+      allLines.filter((l) => !isLineResolved(l)).length + allFloorRows.filter((r) => !r.ordered).length,
+    );
   }, [loaded, suppliers, setOrdersRemainingCount]);
 
   // issue 148 (vyňaté do `useSelectedSupplierFallback.ts`).
@@ -120,6 +127,11 @@ export function OrdersSection({
   // (dodávateľ vzostupne, potom najnovšia objednávka prvá) — žiadne ďalšie
   // preskupovanie na klientovi.
   const totalLines = suppliers.reduce((sum, group) => sum + group.lines.length, 0);
+  // issue 480: prázdny stav / toolbar / hláška „skryť vybavené" berú do úvahy aj
+  // predajňové riadky — skupina môže mať LEN predajňové riadky (žiadne
+  // objednávky), a vtedy zoznam NIE JE prázdny.
+  const totalFloorRows = suppliers.reduce((sum, group) => sum + (group.floorRows?.length ?? 0), 0);
+  const totalRows = totalLines + totalFloorRows;
 
   // issue 61: dodávatelia zúžení podľa vybraného chipu — hromadné akcie
   // (`SupplierActionsPanel`) dostávajú vždy PLNÉ `group.lines` (nefiltrované
@@ -129,7 +141,10 @@ export function OrdersSection({
     (group) => selectedSupplier === null || group.supplier === selectedSupplier,
   );
   const visibleLinesCount = filteredGroups.reduce(
-    (sum, group) => sum + group.lines.filter((line) => !isLineHiddenByFilter(line, hideResolved, dirtyEditorLineIds)).length,
+    (sum, group) =>
+      sum +
+      group.lines.filter((line) => !isLineHiddenByFilter(line, hideResolved, dirtyEditorLineIds)).length +
+      (group.floorRows ?? []).filter((row) => !isFloorRowHidden(row, hideResolved)).length,
     0,
   );
 
@@ -157,10 +172,10 @@ export function OrdersSection({
         }}
       />
       {canChangeState && <OrderOpenStatusesPanel onSessionExpired={onSessionExpired} onSaved={load} />}
-      {loaded && totalLines === 0 && (
+      {loaded && totalRows === 0 && (
         <p className="empty" data-testid="orders-empty">Zatiaľ nie sú žiadne otvorené objednávky.</p>
       )}
-      {loaded && totalLines > 0 && (
+      {loaded && totalRows > 0 && (
         <OrdersToolbar
           suppliers={suppliers}
           selectedSupplier={selectedSupplier}
@@ -169,7 +184,7 @@ export function OrdersSection({
           onToggleHideResolved={toggleHideResolved}
         />
       )}
-      {loaded && totalLines > 0 && hideResolved && visibleLinesCount === 0 && (
+      {loaded && totalRows > 0 && hideResolved && visibleLinesCount === 0 && (
         <p className="empty" data-testid="orders-hidden-empty">
           {selectedSupplier === null
             ? "Všetko vybavené — vybavené riadky sú skryté."
@@ -199,8 +214,10 @@ export function OrdersSection({
           busySupplierLineId={busySupplierLineId}
           busySupplierLinkLineId={busySupplierLinkLineId}
           busyCommentOrderId={busyCommentOrderId}
+          busyFloorRowKey={busyFloorRowKey}
           onChangeState={changeState}
           onChangeOrdered={changeOrdered}
+          onChangeFloorOrdered={changeFloorOrdered}
           onAssignSupplier={assignSupplier}
           onSetSupplierLink={setSupplierLink}
           onChangeComment={changeComment}

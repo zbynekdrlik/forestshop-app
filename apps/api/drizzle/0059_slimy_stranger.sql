@@ -1,0 +1,1 @@
+ALTER TABLE "floor_note_product" ADD COLUMN "ordered_at" timestamp with time zone;

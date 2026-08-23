@@ -34,6 +34,7 @@ export function SupplierActionsPanel({
   onClosePreview,
   onConfirmSend,
   selectedSupplier,
+  busyFloorRowKey,
 }: {
   readonly group: SupplierOpenOrders;
   readonly canChangeState: boolean;
@@ -61,6 +62,11 @@ export function SupplierActionsPanel({
   // nosič tých istých troch stavov ako filtračný čip (`OrdersToolbar.tsx`) —
   // `active` presne vtedy, keď je TÁTO skupina PRÁVE TERAZ vybraný filter.
   readonly selectedSupplier: string | null;
+  // issue 480: kľúč (`noteId::variantCode`) predajňového riadku, ktorého zápis
+  // „objednané" PRÁVE TERAZ prebieha — hromadné tlačidlo skupiny sa musí
+  // znefunkčniť aj kým beží per-floor-row zápis TEJTO skupiny (obojsmerný
+  // busy-guard, issue 60).
+  readonly busyFloorRowKey: string | null;
 }): JSX.Element {
   // Riadky, ktoré ešte treba objednať u dodávateľa (rovnaký zámer ako stará
   // appka's `outstandingOf`/`!isHandled`, #31) — východiskový stav pred tým,
@@ -70,16 +76,36 @@ export function SupplierActionsPanel({
   // odoslať/skopírovať bez ohľadu na to, či je riadok už odškrtnutý. Jediné
   // miesto, ktoré túto konštantu po extrakcii (issue 61) potrebuje.
   const outstandingState = "objednane";
-  // issue 263: rovnaký výpočet "done" ako čip (`OrdersToolbar.tsx`), aby
-  // OBIDVA nosiče vždy zhodne zobrazovali TÚ ISTÚ farbu pre TÚ ISTÚ skupinu.
-  const done = group.lines.length > 0 && summarizeOrderLines(group.lines).remaining === 0;
+  // issue 480: predajňové riadky skupiny (server ich vždy posiela, `?? []`
+  // poistka pre staré testové literály bez tohto poľa).
+  const floorRows = group.floorRows ?? [];
+  // issue 480: skupina je „všetko objednané" (pre smer aj popis hromadného
+  // tlačidla) keď sú objednané VŠETKY riadky objednávok AJ všetky predajňové
+  // riadky. `[].every() === true`, takže skupina bez floor riadkov sa správa
+  // presne ako doteraz.
+  const allOrdered = group.lines.every((l) => l.ordered) && floorRows.every((r) => r.ordered);
+  // issue 263/480: rovnaký výpočet "done" ako čip (`OrdersToolbar.tsx`), aby
+  // OBIDVA nosiče zhodne zobrazili TÚ ISTÚ farbu — rozšírené o predajňové riadky
+  // (skupina je „done" len keď je vybavené VŠETKO: objednávky aj predajňa).
+  const done =
+    group.lines.length + floorRows.length > 0 &&
+    summarizeOrderLines(group.lines).remaining === 0 &&
+    floorRows.every((r) => r.ordered);
+  // issue 480: hromadné tlačidlo je znefunkčnené aj kým beží per-floor-row zápis
+  // niektorého riadku TEJTO skupiny (mirror `busyOrderedLineId`, obojsmerný
+  // busy-guard z issue 60).
+  const floorBusyInGroup =
+    busyFloorRowKey !== null && floorRows.some((r) => `${r.noteId}::${r.variantCode}` === busyFloorRowKey);
   const isSelected = selectedSupplier === group.supplier;
 
   return (
     <>
       <div className={"toorder-supplier" + (done ? " done" : "") + (isSelected ? " active" : "")}>
+        {/* issue 480: počet zahŕňa aj predajňové riadky, aby skupina LEN s
+            predajňovými riadkami neukazovala „0 riadky". */}
         <span className="tosup-label">
-          {group.supplier} — {group.lines.length} {group.lines.length === 1 ? "riadok" : "riadky"}
+          {group.supplier} — {group.lines.length + floorRows.length}{" "}
+          {group.lines.length + floorRows.length === 1 ? "riadok" : "riadky"}
         </span>
         <div className="tosup-contact" data-testid={`supplier-contact-${group.supplier}`}>
           {editingEmailSupplier === group.supplier ? (
@@ -141,13 +167,17 @@ export function SupplierActionsPanel({
               className="btn sm ghost"
               disabled={
                 busyOrderedSupplier === group.supplier ||
-                (busyOrderedLineId !== null && group.lines.some((l) => l.lineId === busyOrderedLineId))
+                (busyOrderedLineId !== null && group.lines.some((l) => l.lineId === busyOrderedLineId)) ||
+                floorBusyInGroup
               }
               onClick={() => {
-                onToggleGroupOrdered(group.supplier, !group.lines.every((l) => l.ordered));
+                // issue 480: hromadné označenie zahŕňa objednávkové AJ predajňové
+                // riadky (server `setSupplierLinesOrdered` nastaví oboje) — smer
+                // podľa `allOrdered` (všetko objednané → zruší, inak označí).
+                onToggleGroupOrdered(group.supplier, !allOrdered);
               }}
             >
-              {group.lines.every((l) => l.ordered) ? "↺ Zrušiť označenie skupiny" : "✔ Označiť skupinu ako objednané"}
+              {allOrdered ? "↺ Zrušiť označenie skupiny" : "✔ Označiť skupinu ako objednané"}
             </button>
             {/* issue 118: majiteľ, doslovne "zatial skry este to nebudeme
                 pouzivat" — SKRYTÉ (nie zmazané), `orderScreenFlags.ts`'s

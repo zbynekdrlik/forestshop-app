@@ -1,9 +1,10 @@
 import { eq, inArray } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
-import { orderLines, orders, type OrderLineState } from "../../db/schema.js";
+import { floorNoteProducts, orderLines, orders, type OrderLineState } from "../../db/schema.js";
 import { record } from "../audit/service.js";
+import { recomputeFloorNoteOrdered } from "../floor-notes/service.js";
 import { listOpenStatusNames } from "./open-statuses.js";
-import { listOpenOrderLineIdsForSupplier } from "./queries.js";
+import { listOpenOrderLineIdsForSupplier, listUnresolvedFloorProductIdsForSupplier } from "./queries.js";
 
 export type SetOrderLineStateResult = "ok" | "not_found";
 
@@ -236,6 +237,10 @@ export interface SetSupplierLinesOrderedInput {
 
 export interface SetSupplierLinesOrderedResult {
   readonly lineCount: number;
+  // issue 480: koľko predajňových (floor) riadkov skupiny akcia zasiahla —
+  // interné (log/audit/test), do HTTP odpovede sa NEpridáva (existujúce testy
+  // `toEqual({ ok, ordered, lineCount })`).
+  readonly floorRowCount: number;
 }
 
 // issue 60: hromadné "označiť celú skupinu dodávateľa ako objednané"/zrušenie
@@ -259,9 +264,28 @@ export async function setSupplierLinesOrdered(
 ): Promise<SetSupplierLinesOrderedResult> {
   return db.transaction(async (tx) => {
     const lineIds = await listOpenOrderLineIdsForSupplier(tx, input.supplier);
-    if (lineIds.length === 0) return { lineCount: 0 };
+    // issue 480: hromadná akcia zahŕňa aj PREDAJŇOVÉ riadky skupiny — skupina
+    // môže mať dokonca LEN floor riadky (žiadne objednávky), takže sa nesmie
+    // predčasne vrátiť pri prázdnom `lineIds`. Prázdne OBOJE = neškodný no-op.
+    const floorProducts = await listUnresolvedFloorProductIdsForSupplier(tx, input.supplier);
+    if (lineIds.length === 0 && floorProducts.length === 0) return { lineCount: 0, floorRowCount: 0 };
 
-    await tx.update(orderLines).set({ ordered: input.ordered }).where(inArray(orderLines.id, [...lineIds]));
+    if (lineIds.length > 0) {
+      await tx.update(orderLines).set({ ordered: input.ordered }).where(inArray(orderLines.id, [...lineIds]));
+    }
+
+    // issue 480: nastav `ordered_at` všetkých floor produktov skupiny a
+    // prepočítaj note-level 🛒 každého DOTKNUTÉHO zápisu (jeden zápis môže mať
+    // viac produktov v skupine — deduplikuj noteId, aby sa prepočet nezopakoval).
+    if (floorProducts.length > 0) {
+      await tx
+        .update(floorNoteProducts)
+        .set({ orderedAt: input.ordered ? input.now : null })
+        .where(inArray(floorNoteProducts.id, floorProducts.map((f) => f.productId)));
+      for (const noteId of [...new Set(floorProducts.map((f) => f.floorNoteId))]) {
+        await recomputeFloorNoteOrdered(tx, noteId);
+      }
+    }
 
     // Review of PR 75, finding 1: pôvodne `entity: "supplier_contact"` —
     // tento zápis mutuje `order_line` riadky, nie e-mailový kontakt
@@ -272,15 +296,22 @@ export async function setSupplierLinesOrdered(
     // `entityId` ostáva `null` (žiadny JEDEN riadok, na ktorý by mal
     // ukazovať — rovnaký vzor ako `orders-routes.ts`'s bulk
     // `orders.ingest.trigger` udalosť), dodávateľ + zasiahnuté ID zostávajú v
-    // `data`.
+    // `data`. issue 480: `floorRowCount` doplnené (počet zasiahnutých floor
+    // riadkov) — JEDEN agregovaný audit záznam pokrýva order aj floor riadky.
     await record(tx, {
       at: input.now,
       actorUserId: input.actorUserId,
       action: "order_line.ordered.bulk_changed",
       entity: "order_line",
-      data: { supplier: input.supplier, ordered: input.ordered, lineIds, lineCount: lineIds.length },
+      data: {
+        supplier: input.supplier,
+        ordered: input.ordered,
+        lineIds,
+        lineCount: lineIds.length,
+        floorRowCount: floorProducts.length,
+      },
     });
 
-    return { lineCount: lineIds.length };
+    return { lineCount: lineIds.length, floorRowCount: floorProducts.length };
   });
 }

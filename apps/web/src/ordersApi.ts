@@ -93,9 +93,31 @@ const ordersIngestOutcomeSchema = z.discriminatedUnion("status", [
 
 export type OrdersIngestOutcome = z.infer<typeof ordersIngestOutcomeSchema>;
 
+// issue 480: predajňový (floor) riadok — produkt pripnutý na nevybavenom zápise
+// „Objednávky predajňa", zaradený pod svojho dodávateľa. Zrkadlí `FloorOrderRow`
+// z `apps/api/src/modules/orders/queries.ts`. NEMÁ stav ani order/admin odkaz —
+// klik vedie na `?tab=floor-orders`; jediná „vybavené" sémantika je `ordered`.
+const floorRowSchema = z.object({
+  noteId: z.string(),
+  variantCode: z.string(),
+  productName: z.string(),
+  sizeLabel: z.string().nullable(),
+  customerName: z.string(),
+  quantity: z.number(),
+  createdAt: z.string(),
+  ordered: z.boolean(),
+});
+export type FloorOrderRow = z.infer<typeof floorRowSchema>;
+
 const supplierGroupSchema = z.object({
   supplier: z.string(),
   lines: z.array(orderLineSchema),
+  // issue 480: predajňové riadky pod tým istým dodávateľom. `.optional()`
+  // (nie `.default`) ZÁMERNE — server ich VŽDY posiela (board „Na objednanie"
+  // naplnené, sekcia „Riešiť" prázdne `[]`), ale desiatky existujúcich unit
+  // testov konštruujú skupinu ako `{ supplier, lines, email }` bez tohto poľa;
+  // optional typ ich necháva kompilovať a konzumenti čítajú `floorRows ?? []`.
+  floorRows: z.array(floorRowSchema).optional(),
   // E-mailový kontakt dodávateľa (#31), `null` keď zatiaľ nenastavený.
   email: z.string().nullable(),
 });
@@ -358,6 +380,22 @@ export async function setSupplierLinesOrdered(
     await readJson(response, "Hromadné označenie skupiny sa nepodarilo"),
   );
   return { lineCount: telo.lineCount };
+}
+
+// issue 480: „objednané" na predajňovom riadku v board-e „Na objednanie" —
+// volá `POST /api/floor-notes/:id/products/:variantCode/ordered`. Server
+// prepočíta note-level 🛒. 401 hádže `OrdersUnauthorizedError` (cez `readJson`),
+// aby to `useOrderLinesBoard` spracoval rovnako ako ostatné board mutácie.
+export async function setFloorRowOrdered(noteId: string, variantCode: string, ordered: boolean): Promise<void> {
+  const response = await fetch(
+    `/api/floor-notes/${encodeURIComponent(noteId)}/products/${encodeURIComponent(variantCode)}/ordered`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ value: ordered }),
+    },
+  );
+  await readJson(response, "Zmena príznaku objednané sa nepodarila");
 }
 
 // #31: e-mailový kontakt dodávateľa + odoslanie objednávky mailom.

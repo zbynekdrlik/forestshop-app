@@ -1,6 +1,7 @@
 import type { JSX } from "react";
-import { computeVariantTotals, isLineHiddenByFilter } from "../ordersSummary.js";
+import { computeVariantTotals, isFloorRowHidden, isLineHiddenByFilter } from "../ordersSummary.js";
 import type { SupplierDraftsApi } from "../useSupplierDrafts.js";
+import { FloorOrderRow } from "./FloorOrderRow.js";
 import { OrderLineRow } from "./OrderLineRow.js";
 import { SupplierActionsPanel } from "./SupplierActionsPanel.js";
 import type { OrderLine, OrderMailPreview, SupplierOpenOrders } from "../ordersApi.js";
@@ -26,8 +27,10 @@ export function SupplierOrderGroup({
   busySupplierLineId,
   busySupplierLinkLineId,
   busyCommentOrderId,
+  busyFloorRowKey,
   onChangeState,
   onChangeOrdered,
+  onChangeFloorOrdered,
   onAssignSupplier,
   onSetSupplierLink,
   onChangeComment,
@@ -79,8 +82,13 @@ export function SupplierOrderGroup({
   readonly busySupplierLinkLineId: string | null;
   // issue 64: objednávka, ktorej poznámka PRÁVE TERAZ ukladá.
   readonly busyCommentOrderId: string | null;
+  // issue 480: kľúč (`noteId::variantCode`) predajňového riadku, ktorého zápis
+  // „objednané" PRÁVE TERAZ prebieha.
+  readonly busyFloorRowKey: string | null;
   readonly onChangeState: (lineId: string, newState: OrderLine["state"]) => void;
   readonly onChangeOrdered: (lineId: string, ordered: boolean) => void;
+  // issue 480: prepnutie „objednané" na predajňovom riadku.
+  readonly onChangeFloorOrdered: (noteId: string, variantCode: string, ordered: boolean) => void;
   readonly onAssignSupplier: (lineId: string, supplier: string) => void;
   // issue 166: `boolean` návratová hodnota — pozri `OrderLineRow.tsx`'s komentár.
   readonly onSetSupplierLink: (lineId: string, url: string) => boolean;
@@ -105,7 +113,11 @@ export function SupplierOrderGroup({
   readonly onConfirmSend: (supplier: string) => void;
 }): JSX.Element | null {
   const visibleLines = group.lines.filter((line) => !isLineHiddenByFilter(line, hideResolved, dirtyEditorLineIds));
-  if (visibleLines.length === 0) return null;
+  // issue 480: predajňové riadky skupiny (skryté pri „skryť vybavené", keď sú
+  // objednané). Skupina zmizne LEN keď nemá ani viditeľnú objednávku ANI
+  // viditeľný predajňový riadok — inak by floor-only skupina vôbec nevykreslila.
+  const visibleFloorRows = (group.floorRows ?? []).filter((row) => !isFloorRowHidden(row, hideResolved));
+  if (visibleLines.length === 0 && visibleFloorRows.length === 0) return null;
   // issue 62: súčty sa počítajú nad CELOU (nefiltrovanou) skupinou
   // dodávateľa, nikdy nad `visibleLines` — chip nesmie zmiznúť/zmeniť
   // hodnotu len preto, že prepínač "skryť vybavené" skryl sesterský riadok
@@ -138,6 +150,7 @@ export function SupplierOrderGroup({
         onClosePreview={onClosePreview}
         onConfirmSend={onConfirmSend}
         selectedSupplier={selectedSupplier}
+        busyFloorRowKey={busyFloorRowKey}
       />
       {/* issue 95: vlastný vodorovný posuvný obal — stránka (`.main-wide`)
           sa sama nikdy neposúva, posúva sa (keď treba) len táto tabuľka.
@@ -214,6 +227,21 @@ export function SupplierOrderGroup({
                 onChangeComment={onChangeComment}
                 onEditorActivityChange={onEditorActivityChange}
                 onSupplierDraftChange={supplierDrafts.setDraft}
+              />
+            ))}
+            {/* issue 480: predajňové riadky POD riadkami objednávok tej istej
+                skupiny dodávateľa — v tej istej tabuľke (rovnaké stĺpce), bez
+                stavových tlačidiel, s 🛍️ namiesto čísla objednávky. */}
+            {visibleFloorRows.map((row) => (
+              <FloorOrderRow
+                key={`${row.noteId}::${row.variantCode}`}
+                row={row}
+                canChangeState={canChangeState}
+                busyFloorRowKey={busyFloorRowKey}
+                // Review of PR 75/76 (issue 60) obojsmerný busy-guard: kým beží
+                // hromadná akcia skupiny, jednotlivý floor riadok sa nedá meniť.
+                supplierBusy={busyOrderedSupplier === group.supplier}
+                onChangeOrdered={onChangeFloorOrdered}
               />
             ))}
           </tbody>

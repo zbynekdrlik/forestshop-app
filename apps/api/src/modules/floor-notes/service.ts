@@ -1,6 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
 import { floorNoteProducts, floorNotes, variants } from "../../db/schema.js";
+import { record } from "../audit/service.js";
 
 export interface CreateFloorNoteInput {
   readonly text: string;
@@ -139,6 +140,84 @@ export async function updateFloorNoteProductQuantity(db: Database, input: Update
     .where(and(eq(floorNoteProducts.floorNoteId, input.floorNoteId), eq(floorNoteProducts.variantCode, input.variantCode)))
     .returning({ id: floorNoteProducts.id });
   return result.length > 0;
+}
+
+// issue 480: prepočíta note-level 🛒 (`floor_note.ordered`) z objednaného stavu
+// POLOŽIEK zápisu — `true` práve keď má zápis ≥1 položku a VŠETKY majú
+// `ordered_at` nastavené, inak `false` (symetricky: odškrtnutie ktorejkoľvek
+// položky 🛒 zhodí). Spúšťa sa po KAŽDEJ zmene objednaného stavu položky
+// (per-item `setFloorNoteProductOrdered` nižšie AJ hromadné cez skupinu
+// dodávateľa v `orders/state.ts`'s `setSupplierLinesOrdered`), VŽDY v tej istej
+// transakcii. Ručný 🛒 prepínač (`setFloorNoteOrdered`) ostáva NEZÁVISLÝ —
+// tento prepočet sa spúšťa len pri zmene objednaného stavu položky, nikdy pri
+// pin/odpin (počty aj tak čítajú `ordered_at` per položku, ostávajú správne).
+// `updated_at` sa NEbumpuje — je to odvodený dôsledok zmeny junction riadku,
+// rovnaký zámer ako `updateFloorNoteProductQuantity` (množstvo je atribút
+// junction riadku, nie textu zápisu). `Pick<Database, "select" | "update">` —
+// prijíma aj `tx` (`PgTransaction` nemá `Database.$client`, rovnaký vzor ako
+// `queries.ts`'s `Pick<Database, "select">`).
+export async function recomputeFloorNoteOrdered(
+  db: Pick<Database, "select" | "update">,
+  floorNoteId: string,
+): Promise<void> {
+  const productRows = await db
+    .select({ orderedAt: floorNoteProducts.orderedAt })
+    .from(floorNoteProducts)
+    .where(eq(floorNoteProducts.floorNoteId, floorNoteId));
+  const allOrdered = productRows.length > 0 && productRows.every((r) => r.orderedAt !== null);
+  await db.update(floorNotes).set({ ordered: allOrdered }).where(eq(floorNotes.id, floorNoteId));
+}
+
+export interface SetFloorNoteProductOrderedInput {
+  readonly floorNoteId: string;
+  readonly variantCode: string;
+  readonly ordered: boolean;
+  readonly actorUserId: string;
+  readonly now: Date;
+}
+
+export type SetFloorNoteProductOrderedResult = "ok" | "not_found";
+
+// issue 480: „objednané" na predajňovom riadku v board-e „Na objednanie" —
+// nastaví `floor_note_product.ordered_at` (NULL = zrušené), prepočíta note-level
+// 🛒 a zapíše audit, VŠETKO v jednej transakcii (rovnaký vzor ako
+// `orders/state.ts`'s `setOrderLineOrdered`). `.for("update")` proti súbežnej
+// zmene TEJ ISTEJ položky (audit `from` by inak mohol prečítať zastaraný stav).
+export async function setFloorNoteProductOrdered(
+  db: Database,
+  input: SetFloorNoteProductOrderedInput,
+): Promise<SetFloorNoteProductOrderedResult> {
+  return db.transaction(async (tx) => {
+    const [row] = await tx
+      .select({ id: floorNoteProducts.id, orderedAt: floorNoteProducts.orderedAt })
+      .from(floorNoteProducts)
+      .where(and(eq(floorNoteProducts.floorNoteId, input.floorNoteId), eq(floorNoteProducts.variantCode, input.variantCode)))
+      .for("update")
+      .limit(1);
+    if (row === undefined) return "not_found";
+
+    await tx
+      .update(floorNoteProducts)
+      .set({ orderedAt: input.ordered ? input.now : null })
+      .where(eq(floorNoteProducts.id, row.id));
+    await recomputeFloorNoteOrdered(tx, input.floorNoteId);
+
+    await record(tx, {
+      at: input.now,
+      actorUserId: input.actorUserId,
+      action: "floor_note_product.ordered.changed",
+      entity: "floor_note_product",
+      entityId: row.id,
+      data: {
+        floorNoteId: input.floorNoteId,
+        variantCode: input.variantCode,
+        from: row.orderedAt !== null,
+        to: input.ordered,
+      },
+    });
+
+    return "ok";
+  });
 }
 
 export interface DetachFloorNoteProductInput {

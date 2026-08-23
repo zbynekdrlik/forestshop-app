@@ -73,6 +73,15 @@ export const floorNoteProducts = pgTable(
     // riziko 55P04 (`.claude/rules/database.md`). CHECK `>= 1` nižšie je
     // druhá obrana popri zod `int().min(1)` na trase.
     quantity: integer("quantity").notNull().default(1),
+    // issue 480: kedy sa TÁTO položka zápisu objednala u dodávateľa v board-e
+    // „Na objednanie" (nullable, `NULL` = ešte neobjednané). Priamy náprotivok
+    // `order_line.ordered` (issue 60), len ako časová pečiatka namiesto boolean
+    // — timestamp nesie aj „kedy" a je konzistentný s audit-ovanými zápismi.
+    // `floor_note.ordered` (🛒) sa z neho PREPOČÍTA (`floor-notes/service.ts`'s
+    // `recomputeFloorNoteOrdered`): true práve keď má zápis ≥1 položku a VŠETKY
+    // majú `ordered_at`. Predajňové riadky do „Na objednanie" pridáva
+    // `orders/queries.ts` (rovnaká efektívna dodávateľská cesta ako order_line).
+    orderedAt: timestamp("ordered_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [

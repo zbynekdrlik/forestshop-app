@@ -63,6 +63,7 @@ function renderPanel(group: SupplierOpenOrders, selectedSupplier: string | null)
       onClosePreview={() => {}}
       onConfirmSend={() => {}}
       selectedSupplier={selectedSupplier}
+      busyFloorRowKey={null}
     />,
   );
 }
