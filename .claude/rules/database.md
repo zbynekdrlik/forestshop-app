@@ -428,3 +428,14 @@ paths:
   drizzle.__drizzle_migrations` ukazuje „nejaké" aplikované — porovnaj počet
   `.sql` súborov (`ls apps/api/drizzle/*.sql | wc -l`) vs. riadkov v
   `__drizzle_migrations`.
+- **POZITÍVNY precedens k issue 399 (issue 476): SAMOSTATNÝ `ALTER TYPE ... ADD
+  VALUE 'x'`, ktorého hodnotu používa LEN runtime kód (WHERE/porovnania), a
+  NIKDY žiadna DDL (CHECK/index/generated-column), je BEZPEČNÝ aj v drizzle-ho
+  single-transakcii, aj keď je viac migrácií čakajúcich naraz.** `order_line_
+  state ADD VALUE 'riesit'` (migrácia `0058`) — 55P04 „unsafe use of new value"
+  vyžaduje, aby sa hodnota v TEJ ISTEJ `migrate()` transakcii aj POUŽILA v DDL
+  proti NEPRÁZDNEJ tabuľke; samotné pridanie hodnoty túto stráž nespustí.
+  `db:generate` z rozšíreného `pgEnum` poľa vygeneruje presne jeden riadok bez
+  breakpointu — over, že migrácia NEOBSAHUJE žiadny CHECK/index/generated-column
+  s novou hodnotou (ak áno, platí plná obrana issue 399: `::text` porovnanie
+  alebo samostatný deploy len s ADD VALUE pred použitím).
