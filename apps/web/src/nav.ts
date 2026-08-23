@@ -135,10 +135,11 @@ export const NAV: readonly NavFolder[] = [
       { id: "floor-orders", label: "Objednávky predajňa", icon: "🏬", Component: FloorNotesSection, wide: true },
       { id: "nedostupne", label: "Nedostupné tovary", icon: "🚫", Component: NedostupneSection, wide: true },
       // issue 450: šéfov kolega Štěpán (Discord, 19.8.2026) — nová položka
-      // „Riešiť" HNEĎ POD „Nedostupné tovary". Funkcia sa upresní neskôr,
-      // zatiaľ placeholder obrazovka (`RiesitSection.tsx`). Bez `wide` — nie
-      // je to hustá pracovná tabuľka, čítacia šírka stačí.
-      { id: "riesit", label: "Riešiť", icon: "🤔", Component: RiesitSection },
+      // „Riešiť" HNEĎ POD „Nedostupné tovary".
+      // issue 476: funkcia doplnená — sekcia nesie tú istú hustú pracovnú
+      // tabuľku ako „Na objednanie"/„Nedostupné tovary" (riadky v stave
+      // `riesit`), preto `wide: true` z rovnakého dôvodu ako ony.
+      { id: "riesit", label: "Riešiť", icon: "🤔", Component: RiesitSection, wide: true },
       // issue 290: šéfovo zadanie (Discord, 6.8.2026) — tri nové položky
       // "hneď pod Nedostupné tovary". READ-ONLY pohľady nad `order.status_
       // name` (Výmena/Vrátený tovar) + appkina vlastná reklamácia-značka

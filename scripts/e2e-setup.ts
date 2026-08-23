@@ -143,6 +143,10 @@ const E2E_SKRYTY_EDITOR_EMAIL = "e2e-skryty-editor@forestshop.sk"; // musí sa z
 // dostáva VLASTNÝ izolovaný účet namiesto ďalšieho prihlásenia pod zdieľaným.
 const E2E_POSTA_EMAIL = "e2e-posta@forestshop.sk"; // musí sa zhodovať s hodnotou v posta-uncollected.spec.ts
 
+// issue 476: VLASTNÝ izolovaný účet pre `riesit.spec.ts` — rovnaký dôvod ako
+// vyššie (zdieľaný `e2e@forestshop.sk` je na hranici `MAX_ATTEMPTS`).
+const E2E_RIESIT_EMAIL = "e2e-riesit@forestshop.sk"; // musí sa zhodovať s hodnotou v riesit.spec.ts
+
 // issue 173: rovnaký mechanizmus a dôvod ako `E2E_POSTA_EMAIL` vyššie —
 // nový spec súbor (`order-reminder.spec.ts`) dostáva VLASTNÝ izolovaný účet
 // namiesto ďalšieho prihlásenia pod zdieľaným `e2e@forestshop.sk`.
@@ -302,12 +306,8 @@ await db.insert(users).values({ email: E2E_HESLO_ZMENA_EMAIL, passwordHash: awai
 await db.insert(users).values({ email: E2E_SKUPINY_EMAIL, passwordHash: await hashPassword(E2E_HESLO), displayName: "E2E Manažér", role: "manazer" });
 await db.insert(users).values({ email: E2E_NAV_EMAIL, passwordHash: await hashPassword(E2E_HESLO), displayName: "E2E Manažér", role: "manazer" });
 await db.insert(users).values({ email: E2E_OTVORENE_STAVY_EMAIL, passwordHash: await hashPassword(E2E_HESLO), displayName: "E2E Manažér", role: "manazer" });
-await db.insert(users).values({
-  email: E2E_OBJEDNANE_EMAIL,
-  passwordHash: await hashPassword(E2E_HESLO),
-  displayName: "E2E Manažér",
-  role: "manazer",
-});
+await db.insert(users).values({ email: E2E_RIESIT_EMAIL, passwordHash: await hashPassword(E2E_HESLO), displayName: "E2E Manažér", role: "manazer" });
+await db.insert(users).values({ email: E2E_OBJEDNANE_EMAIL, passwordHash: await hashPassword(E2E_HESLO), displayName: "E2E Manažér", role: "manazer" });
 await db.insert(users).values({
   email: E2E_FILTRE_EMAIL,
   passwordHash: await hashPassword(E2E_HESLO),

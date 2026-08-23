@@ -25,6 +25,13 @@ export const orderLineState = pgEnum("order_line_state", [
   "caka_sa",
   "skladom",
   "nedostupne",
+  // issue 476: piaty EXKLUZÍVNY stav „Riešiť" (Štěpán, Discord 23.8.2026) —
+  // presne princíp `nedostupne` (jeden radio klaster, svieti len jeden),
+  // označený riadok sa zobrazí v sekcii Riešiť. Pridaný na KONIEC enumu
+  // inkrementálnou migráciou `ALTER TYPE ... ADD VALUE 'riesit'` — hodnota sa
+  // v žiadnej DDL nepoužíva (len runtime kód), takže sa NA ňu nevzťahuje past
+  // issue 399 (55P04), viď `.claude/rules/database.md`.
+  "riesit",
 ]);
 
 // Odvodené priamo z `enumValues`, nie ručne prepísaná duplicitná únia — nová

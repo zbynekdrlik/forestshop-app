@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, isNull } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
 import {
   orderLines,
@@ -170,9 +170,16 @@ export async function countOpenOrdersByCustomer(
 export async function listOpenOrderLinesBySupplier(
   db: Database,
   adminBaseUrl: string,
+  // issue 476: voliteľný filter na jeden stav riadku — sekcia „Riešiť" volá
+  // s `stateFilter: "riesit"`, aby dostala PRESNE tie isté zoskupené riadky
+  // ako Na objednanie, len zúžené na stav `riesit` (NEduplikuje sa query
+  // logika, len sa pridá jedna WHERE podmienka). Bez neho (Na objednanie)
+  // ostáva správanie 1:1 nezmenené.
+  opts?: { readonly stateFilter?: OrderLineState },
 ): Promise<readonly SupplierOpenOrders[]> {
   const openStatuses = await listOpenStatusNames(db);
   if (openStatuses.length === 0) return [];
+  const stateFilter = opts?.stateFilter;
 
   // issue 431: počet otvorených objednávok na zákazníka, spočítaný RAZ pre
   // celý zoznam (nie per riadok) — priloží sa ku každému riadku nižšie podľa
@@ -215,7 +222,13 @@ export async function listOpenOrderLinesBySupplier(
     // zoznamu vypadnúť (rovnaký dôvod ako `restock/queries.ts`/
     // `nedostupne/queries.ts`), len jeho kód sa vykreslí ako neaktívny text.
     .leftJoin(shopProductUrl, eq(shopProductUrl.code, orderLines.variantCode))
-    .where(inArray(orders.statusName, [...openStatuses]))
+    .where(
+      // issue 476: `stateFilter` (sekcia Riešiť) pridá `state = 'riesit'`; bez
+      // neho (Na objednanie) len otvorené Shoptet stavy, ako doteraz.
+      stateFilter === undefined
+        ? inArray(orders.statusName, [...openStatuses])
+        : and(inArray(orders.statusName, [...openStatuses]), eq(orderLines.state, stateFilter)),
+    )
     // Sekundárne triedenie podľa najnovšej objednávky ako prvej v rámci
     // dodávateľa — rovnaký zámer ako katalógov `desc(fetchedAt), desc(id)`
     // tie-break, len tu na `placedAt`/`lineId`, aby poradie riadkov v rámci
@@ -377,6 +390,25 @@ export async function listOpenOrderLineIdsForSupplier(
     .for("update", { of: [orderLines, orders] });
 
   return rows.map((row) => row.lineId);
+}
+
+// issue 476: odznak počtu v ľavom menu pre „Riešiť" — počet OTVORENÝCH
+// (Shoptet stav ∈ `order_open_status`) riadkov objednávok v danom stave.
+// `COUNT(*) WHERE ...` priamo v SQL (rovnaký vzor ako `countActionable
+// Upozornenia` / issue 473's `countOpenDailyTasks`), nie natiahnutie celého
+// zoznamu cez `listOpenOrderLinesBySupplier` a `.length` v JS. Počíta RIADKY
+// (nie kusy) — rovnaký zámer ako „Na objednanie" nav odznak (issue 147/260,
+// `.claude/rules/orders.md`). `state` je parameter kvôli budúcej
+// znovupoužiteľnosti, dnes ho volá len `riesit` count trasa.
+export async function countOpenOrderLinesByState(db: Database, state: OrderLineState): Promise<number> {
+  const openStatuses = await listOpenStatusNames(db);
+  if (openStatuses.length === 0) return 0;
+  const [row] = await db
+    .select({ total: count() })
+    .from(orderLines)
+    .innerJoin(orders, eq(orders.id, orderLines.orderId))
+    .where(and(inArray(orders.statusName, [...openStatuses]), eq(orderLines.state, state)));
+  return row?.total ?? 0;
 }
 
 export interface OrderDetailLine {

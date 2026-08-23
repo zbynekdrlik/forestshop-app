@@ -15,4 +15,21 @@ export const STATE_LABELS: Record<OrderLine["state"], string> = {
   caka_sa: "Čaká sa",
   skladom: "Skladom",
   nedostupne: "Nedostupné",
+  // issue 476: piaty EXKLUZÍVNY stav „Riešiť" (Štěpán) — princíp `nedostupne`,
+  // označený riadok sa zobrazí v sekcii Riešiť.
+  riesit: "Riešiť",
 };
+
+// issue 476: PORADIE tlačidiel v klastri stavov (mockup Štěpán, ROZHODNUTÉ) —
+// horný rad Nevybavené · Riešiť · Čaká sa, dolný rad Skladom · Nedostupné
+// (`OrderLineStateButtons.tsx` renderuje 3-stĺpcovú mriežku, 5 tlačidiel
+// spadne ako 3+2). Zámerne SAMOSTATNÉ pole, nie `Object.keys(STATE_LABELS)` —
+// poradie kľúčov v `STATE_LABELS` nesie iný zámer (východiskový enum poradie)
+// a nesmie diktovať vizuálne poradie tlačidiel.
+export const STATE_DISPLAY_ORDER: readonly OrderLine["state"][] = [
+  "objednane",
+  "riesit",
+  "caka_sa",
+  "skladom",
+  "nedostupne",
+];

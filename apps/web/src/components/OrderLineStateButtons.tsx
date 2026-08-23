@@ -1,6 +1,6 @@
 import type { JSX } from "react";
 import type { OrderLine } from "../ordersApi.js";
-import { STATE_LABELS } from "../orderLineStateLabels.js";
+import { STATE_DISPLAY_ORDER, STATE_LABELS } from "../orderLineStateLabels.js";
 
 // issue 161: majiteľ, doslovne "na stav nechcem mat selektor ale 4
 // tlacitka" — nahrádza pôvodný `<select>` (`OrderLineRow.tsx`) segmentovaným
@@ -29,7 +29,7 @@ export function OrderLineStateButtons({
       aria-label={`Zmeniť stav riadku objednávky ${line.externalOrderId} / ${line.variantCode}`}
       data-testid={`state-select-${line.lineId}`}
     >
-      {(Object.keys(STATE_LABELS) as OrderLine["state"][]).map((s) => {
+      {STATE_DISPLAY_ORDER.map((s) => {
         const active = line.state === s;
         return (
           <button

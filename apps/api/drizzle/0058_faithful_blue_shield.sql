@@ -1,0 +1,1 @@
+ALTER TYPE "public"."order_line_state" ADD VALUE 'riesit';

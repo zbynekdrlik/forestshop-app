@@ -35,7 +35,10 @@ const orderLineSchema = z.object({
   // vrstva overenia, rovnaký vzor ako `adminUrl`/`supplierUrl` vyššie.
   ourUrl: z.string().regex(/^https?:\/\//).nullable(),
   quantity: z.number(),
-  state: z.enum(["objednane", "caka_sa", "skladom", "nedostupne"]),
+  // issue 476: piaty stav `riesit` (exkluzívny, princíp `nedostupne`) — zrkadlí
+  // `orderLineState.enumValues` z `apps/api/src/db/schema-orders.ts`. Bez neho
+  // by frontend odmietol (zod parse) každý riadok so stavom `riesit`.
+  state: z.enum(["objednane", "caka_sa", "skladom", "nedostupne", "riesit"]),
   // issue 60: nezávislý príznak "objednané u dodávateľa" (viď `state.ts`'s
   // komentár) — oddelené od `state` vyššie.
   ordered: z.boolean(),
@@ -174,6 +177,48 @@ export async function fetchOpenOrders(): Promise<readonly SupplierOpenOrders[]> 
     await readJson(response, "Otvorené objednávky sa nepodarilo načítať"),
   );
   return parsed.suppliers;
+}
+
+// issue 476: sekcia „Riešiť" — tie isté zoskupené riadky ako `fetchOpenOrders`,
+// len zúžené na stav `riesit` (server-strana `stateFilter`). Rovnaká schéma
+// odpovede.
+export async function fetchRiesitOrders(): Promise<readonly SupplierOpenOrders[]> {
+  const response = await fetch("/api/orders/riesit");
+  const parsed = openOrdersSchema.parse(
+    await readJson(response, "Objednávky na riešenie sa nepodarilo načítať"),
+  );
+  return parsed.suppliers;
+}
+
+const riesitCountSchema = z.object({ count: z.number() });
+
+// issue 476: počet pre menu odznak „Riešiť" — vzor issue 473 (App.tsx fetch +
+// badge context). Chybu zachytáva volajúci `App.tsx` (vždy vráti 0 pri
+// zlyhaní), rovnako ako `fetchUnresolvedFloorNotesCount`.
+export async function fetchRiesitCount(): Promise<number> {
+  try {
+    const response = await fetch("/api/orders/riesit/count");
+    if (!response.ok) return 0;
+    return riesitCountSchema.parse(await response.json()).count;
+  } catch {
+    return 0;
+  }
+}
+
+const riesitByCodeResultSchema = z.object({ ok: z.literal(true), lineCount: z.number() });
+
+// issue 476: rýchle pole „číslo objednávky → Enter" — nastaví stav `riesit`
+// na všetkých riadkoch danej objednávky. Neznáme/zatvorené číslo vráti server
+// ako 400 `{error}`, ktoré `readJson` premení na `Error` so slovenskou
+// hláškou (zobrazí ju volajúci `RiesitSection`).
+export async function setOrderLinesRiesitByCode(code: string): Promise<{ readonly lineCount: number }> {
+  const response = await fetch("/api/orders/riesit/by-code", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ code }),
+  });
+  const telo = riesitByCodeResultSchema.parse(await readJson(response, "Označenie objednávky sa nepodarilo"));
+  return { lineCount: telo.lineCount };
 }
 
 // issue 237: "Prehľad e-shopu" (dnes/tento týždeň/tento mesiac) — zrkadlí
