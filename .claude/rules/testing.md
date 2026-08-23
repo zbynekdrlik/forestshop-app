@@ -796,3 +796,35 @@ paths:
   "[0-9]+"' scripts/e2e-setup.ts scripts/e2e-fixtures-*.ts | sort -u` a vyber
   číslo, ktoré tam NIE JE (napr. `9099`). (Grep len `e2e-setup.ts` je presne tá
   pasca, čo spôsobila oba zbytočné cykly.)
+- **Endpoint, ktorého BEŽNÝ používateľský OMYL sa overuje cez Playwright s
+  kontrolou nulovej konzoly, NESMIE vracať 4xx — a e2e s prepichnutým
+  `window.fetch` túto pascu SKRYJE, chytí ju až naživo overenie na prode
+  (issue 476).** Rýchle pole „Riešiť" (`POST /api/orders/riesit/by-code`) vracalo
+  pri neznámom/zatvorenom čísle objednávky (typický preklep) 400. Chromium
+  loguje „Failed to load resource" pre KAŽDÝ 4xx `fetch()` (existujúci bod
+  vyššie), takže reálny používateľský omyl zaложил konzolovú chybu. **`riesit
+  .spec.ts` to NECHYTILO**, lebo mockuje `window.fetch` na JS-úrovni (vracia
+  `new Response(..., {status:400})` z overridu, NIE cez sieť) — a JS-level
+  Response 4xx do konzoly NELOGUJE, na rozdiel od skutočnej sieťovej odpovede.
+  `pnpm gates:local` (unit only) ani e2e teda nič nehlásili; chybu odhalil až
+  post-deploy Playwright klik na prode (`console_messages` = 1 error). Fix
+  (vzor `/api/catalog/ingest` `{status:"busy"}` / `POST /api/me/password`):
+  server vracia **200 `{ok:false,error}`** pri očakávanom omyle, 4xx si necháva
+  pre skutočné HTTP chyby (401/CSRF/malformed). **Dve poučenia:** (1) nový
+  endpoint, ktorého doménový neúspech je bežný používateľský omyl, vracaj 200
+  `{ok:false,error}`, nie 4xx; (2) keď e2e MOCKUJE `window.fetch`, over jeho
+  status-kódy proti REÁLNEMU serveru — mock 4xx neodhalí konzolovú chybu, ktorú
+  reálna 4xx odpoveď spôsobí (post-deploy naživo klik cez Playwright +
+  `browser_console_messages` je jediná spoľahlivá kontrola tejto triedy).
+- **Nová e2e obrazovka nad ZDIEĽANÝMI objednávkami sa NEDÁ testovať reálne
+  seedovanými dátami — `orders.spec.ts`'s prvý test asertuje PRESNÉ GLOBÁLNE
+  počty otvorených riadkov („Všetci (N)", „Ostáva vybaviť X z N") naprieč
+  VŠETKÝMI dodávateľmi, takže KAŽDÁ nová objednávka ich rozbije, a mutovanie
+  zdieľaných objednávok medzi paralelnými workermi je race (issue 476).**
+  Riešenie: prepichnutý `window.fetch` (`addInitScript`, vzor
+  `orders-write-failures.spec.ts`) — mockni len endpointy tej sekcie
+  (`/api/orders/riesit(/count|/by-code)`, `.../lines/:id/state`), zvyšok (login,
+  `/api/me`, ostatné badge counts) nechaj ísť reálne. Retry-safe, žiadna
+  kolízia, reálne kliky + kontrola konzoly. Reálny endpoint end-to-end pokrýva
+  API integračný test, komponent+hook unit test. (Pozor na status-kódy mocku —
+  viď bod vyššie.)

@@ -746,3 +746,20 @@ paths:
   apps/web/src`), inak netypovaná fixtúra nesie `undefined` a napr.
   `undefined < 2` je `false`, takže odznak sa VYKRESLÍ s textom "undefined"
   (pravidlo "každé pole explicitne, nikdy undefined" vyššie v tomto súbore).
+- **Sekcia „Riešiť" (issue 476, piaty EXKLUZÍVNY stav `riesit`, princíp
+  `nedostupne`) znovupoužíva jadro „Na objednanie" cez zdieľaný hook
+  `apps/web/src/useOrderLinesBoard.ts` — NIE cez kópiu OrdersSection.** Hook
+  nesie `suppliers` + všetky mutácie (stav/objednané/priradenie/odkaz/poznámka/
+  hromadné) + sub-hooky (drafts, dirtyEditors, email, mail, supplier-link).
+  OrdersSection aj RiesitSection ho konzumujú; OrdersSection správanie ostalo
+  1:1 (`keepOnlyState` undefined → pôvodný optimistický map; `onStateChanged`
+  no-op default). RiesitSection posiela `keepOnlyState:"riesit"` (riadok pri
+  zmene stavu na iný sa lokálne odstráni) + vlastné rýchle pole. **Backend:**
+  `listOpenOrderLinesBySupplier(db, adminBaseUrl, { stateFilter })` (NEduplikuje
+  query), `countOpenOrderLinesByState`, `setOrderLinesStateByCode` (bulk podľa
+  `externalOrderId`); trasy `GET /api/orders/riesit(/count)`, `POST /riesit/
+  by-code` — VŠETKY PRED `GET /api/orders/:id` (literal-pred-`:param`).
+  `by-code` vracia 200 `{ok:false,error}` pri neznámom/zatvorenom čísle (NIE 4xx
+  — konzola, `.claude/rules/testing.md`). Menu odznak `riesit` vzor issue 473.
+  KAŽDÁ ďalšia „obrazovka nad podmnožinou otvorených objednávok" nech použije
+  `useOrderLinesBoard` + `stateFilter`, nie novú kópiu.
