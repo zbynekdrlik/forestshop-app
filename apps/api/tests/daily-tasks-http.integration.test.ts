@@ -280,7 +280,7 @@ describe("GET /api/daily-tasks/count", () => {
     expect(await readCount(app, cookie)).toBe(2);
   });
 
-  it("odfajknutie a späť mení count OBOMA smermi (POST /:id/done je toggle)", async () => {
+  it("odfajknutie a späť mení count OBOMA smermi (POST /:id/done nastaví done explicitne v oboch smeroch)", async () => {
     const { app, cookie } = await bootUser("sef@forestshop.sk", "admin");
     const id = await createTask(app, cookie, "úloha");
     expect(await readCount(app, cookie)).toBe(1);
