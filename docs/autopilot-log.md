@@ -4315,3 +4315,20 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
   ok, rowCount 6 (z 11), oba overridy synced_at 15:50:20, 0 zaseknutých.
   Ticket ostáva OTVORENÝ na ručné zatvorenie po review dôkazu (post-deploy
   akceptačná podmienka).
+
+## 2026-08-23 — issue 473 (PR #475, merge 1abefb3, v0.3.0-dev.277 na main)
+- **#473 (súčtové odznaky menu pre Úlohy na dnes a Objednávky predajňa):** dva
+  nové COUNT endpointy podľa vzoru Upozornenia — `GET /api/daily-tasks/count`
+  (`requireUser`, per-používateľ, `done_at IS NULL`) a `GET /api/floor-notes/
+  count` (`requireUser`, globálne, `resolved=false`). App.tsx publikuje kľúče
+  `ulohy`/`floor-orders` do `badgeCounts` (odznak sa ukazuje aj pri 0, presne
+  ako Upozornenia); sekcie volajú `refresh()` cez vlastný badge context po
+  count-meniacej mutácii (pridať/zmazať/odfajknúť resp. prepnúť ✅ vybavené —
+  značky 🛒 objednané / 📞 zavolané count NEmenia).
+- Testy: API integračné (per-user izolácia, done/resolved vylúčenie, toggle
+  oboma smermi, ordered/called nemenia count), web badgeRefresh unit testy pre
+  obe sekcie, e2e viditeľnosť oboch odznakov.
+- Commity `c099183` (bump .277) / `a164313` (feat) / `edf91f7` (review 🔵 —
+  spresnený názov testu POST /:id/done). PR #475 dev→main, merge `1abefb3`,
+  main CI + Deploy zelené, nasadené `v0.3.0-dev.277` (telo PR = plain
+  „issue 473", žiadny Closes).
