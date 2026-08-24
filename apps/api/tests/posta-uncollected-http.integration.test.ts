@@ -14,6 +14,17 @@ import { waitForJobRunSettled } from "./helpers/job-run.js";
 // (ticket's bezpečnostná podmienka pre testy).
 const HESLO = "test-heslo-abc";
 
+// issue 480 (test robustnosť): `run-now` používa REÁLNy `new Date()` a filtruje
+// objednávky 30-dňovým oknom (`SOURCE_WINDOW_DAYS`, `isEligibleOrder`). Fixtúry
+// mali natvrdo `placedAt: 2026-07-25`, čo 30. dňa po tomto dátume (kalendár
+// prekročil 2026-08-24) VYPADLO z okna → `run-now` nenašiel žiadnu objednávku a
+// 4 testy padli („expected 1 e-mail, got 0"). Dátum je preto RELATÍVNY k teraz
+// (10 dní dozadu — bezpečne v okne bez ohľadu na reálny kalendár), rovnaký
+// princíp ako `logic.test.ts`, ktorý si referenčný dátum tiež riadi sám.
+function placedRecently(): Date {
+  return new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
+}
+
 let close: (() => Promise<void>) | undefined;
 afterEach(async () => {
   await close?.();
@@ -107,7 +118,7 @@ it("'Spustiť teraz' funguje BEZ ohľadu na enabled=false, ale bez BCC neposlé 
     externalOrderId: "20600001",
     customerName: "Test",
     statusName: "Vybavená",
-    placedAt: new Date("2026-07-25T00:00:00Z"),
+    placedAt: placedRecently(),
     email: "zakaznik@example.sk",
     packageNumber: "EF1SK",
     shippingCarrierName: "Kuriér",
@@ -140,7 +151,7 @@ it("'Spustiť teraz' druhý raz PRESNE počas prebiehajúceho behu vráti 200 'b
     externalOrderId: "20600004",
     customerName: "Test",
     statusName: "Vybavená",
-    placedAt: new Date("2026-07-25T00:00:00Z"),
+    placedAt: placedRecently(),
     email: "zakaznik@example.sk",
     packageNumber: "EF4SK",
     shippingCarrierName: "Kuriér",
@@ -171,7 +182,7 @@ it("s BCC adresou 'Spustiť teraz' pošle e-mail zákazníkovi", async () => {
     externalOrderId: "20600002",
     customerName: "Test",
     statusName: "Vybavená",
-    placedAt: new Date("2026-07-25T00:00:00Z"),
+    placedAt: placedRecently(),
     email: "zakaznik@example.sk",
     packageNumber: "EF2SK",
     shippingCarrierName: "Kuriér",
@@ -190,7 +201,7 @@ it("náhľad e-mailu (preview) vráti presne to, čo by odišlo — bez odoslani
     externalOrderId: "20600003",
     customerName: "Zákazník Testovací",
     statusName: "Vybavená",
-    placedAt: new Date("2026-07-25T00:00:00Z"),
+    placedAt: placedRecently(),
     email: "zakaznik@example.sk",
     packageNumber: "EF3SK",
     shippingCarrierName: "Kuriér",
