@@ -3,8 +3,8 @@ import { createNote, deleteNote, fetchNotes, NotesUnauthorizedError, setNoteReso
 import { EmojiPickerButton } from "./EmojiPickerButton.js";
 
 // issue 437: "Poznámky" — ZDIEĽANÁ nástenka rýchlych poznámok (mobilný zápis +
-// PWA). Na rozdiel od `DailyTasksSection.tsx` (súkromný per-používateľský
-// zoznam) sú poznámky zdieľané: každý prihlásený ich vidí, autor je
+// PWA). Rovnako ako `DailyTasksSection.tsx` (od #487 tiež zdieľaný) sú
+// poznámky zdieľané: každý prihlásený ich vidí, autor je
 // zobrazený, a ktokoľvek prihlásený môže vybaviť/zmazať (server to tak
 // vynucuje — `note-routes.ts`). Preto tu NIE JE žiadne role-podmienené
 // ovládanie (Štěpán = rola `sef` musí vedieť pridávať aj spracúvať).

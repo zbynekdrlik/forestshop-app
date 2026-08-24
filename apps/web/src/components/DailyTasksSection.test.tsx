@@ -19,9 +19,9 @@ vi.mock("../dailyTasksApi.js", async (importOriginal) => {
   return { ...actual, fetchDailyTasks, createDailyTask, updateDailyTaskText, updateDailyTaskEmoji, setDailyTaskDone, deleteDailyTask };
 });
 
-const ROW_A = { id: "task-a", text: "poslať DPD", emoji: null, doneAt: null, createdAt: "2026-08-11T08:00:00.000Z", updatedAt: "2026-08-11T08:00:00.000Z" };
-const ROW_B = { id: "task-b", text: "Nemáme sáčky", emoji: "🛍️", doneAt: null, createdAt: "2026-08-11T09:00:00.000Z", updatedAt: "2026-08-11T09:00:00.000Z" };
-const ROW_DONE = { id: "task-done", text: "Vybavená úloha", emoji: null, doneAt: "2026-08-11T10:00:00.000Z", createdAt: "2026-08-11T07:00:00.000Z", updatedAt: "2026-08-11T10:00:00.000Z" };
+const ROW_A = { id: "task-a", text: "poslať DPD", emoji: null, authorUserId: "user-1", authorName: "Šéf", doneAt: null, createdAt: "2026-08-11T08:00:00.000Z", updatedAt: "2026-08-11T08:00:00.000Z" };
+const ROW_B = { id: "task-b", text: "Nemáme sáčky", emoji: "🛍️", authorUserId: "user-2", authorName: "Kolega", doneAt: null, createdAt: "2026-08-11T09:00:00.000Z", updatedAt: "2026-08-11T09:00:00.000Z" };
+const ROW_DONE = { id: "task-done", text: "Vybavená úloha", emoji: null, authorUserId: "user-1", authorName: "Šéf", doneAt: "2026-08-11T10:00:00.000Z", createdAt: "2026-08-11T07:00:00.000Z", updatedAt: "2026-08-11T10:00:00.000Z" };
 
 afterEach(() => {
   cleanup();
@@ -35,6 +35,16 @@ it("zobrazí zoznam úloh z fetchDailyTasks", async () => {
   await screen.findByTestId("uloha-row-task-a");
   expect(screen.getByTestId("uloha-text-task-a").textContent).toBe("poslať DPD");
   expect(screen.getByTestId("uloha-text-task-b").textContent).toBe("Nemáme sáčky");
+});
+
+// issue 487: zdieľaný zoznam — autor sa zobrazuje pri každom riadku (ako pri Poznámkach).
+it("zobrazí autora pri každom riadku (zdieľaný zoznam)", async () => {
+  fetchDailyTasks.mockResolvedValueOnce([ROW_B, ROW_A]);
+  render(<DailyTasksSection onSessionExpired={vi.fn()} />);
+
+  await screen.findByTestId("uloha-row-task-a");
+  expect(screen.getByTestId("uloha-author-task-a").textContent).toBe("Šéf");
+  expect(screen.getByTestId("uloha-author-task-b").textContent).toBe("Kolega");
 });
 
 it("prázdny zoznam ukáže výzvu, nie chybu", async () => {

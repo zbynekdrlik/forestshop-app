@@ -7,12 +7,13 @@ import { countOpenDailyTasks, listDailyTasks } from "../modules/daily-tasks/quer
 import { requireSameOrigin } from "./origin-check.js";
 import { requireUser, type AppBindings } from "./middleware.js";
 
-// issue 342: "Úlohy na dnes" — súkromný zoznam, viazaný na prihláseného
-// používateľa. Na rozdiel od zvyšku appky (zápis vyžaduje `requireRole
-// ("admin", "manazer")`) tu STAČÍ `requireUser` na KAŽDÚ akciu vrátane
-// zápisu — server aj tak vynucuje `userId` na každom dopyte, takže žiadna
-// rola nedostane prístup k CUDZÍM úlohám; obmedzenie roly by tu len bránilo
-// zamestnancovi s rolou "citanie" mať VLASTNÝ súkromný zoznam bez dôvodu.
+// issue 342 + 487: "Úlohy na dnes". Pôvodne súkromný per-používateľský zoznam
+// (#342); od #487 ZDIEĽANÝ — každý prihlásený účet vidí a smie odfajknúť/upraviť/
+// zmazať VŠETKY úlohy (presne ako Poznámky `note`, #437). Na KAŽDÚ akciu vrátane
+// zápisu STAČÍ `requireUser` (žiadny `requireRole`) — je to zdieľaný tímový
+// nástroj a aj rola "citanie" musí vedieť pridávať/spracúvať. Autor sa PRI
+// VYTVORENÍ ukladá zo session (`user.userId`) a zobrazuje sa pri riadku; ostatné
+// akcie vlastníctvo ZÁMERNE nevynucujú (server ho nekľúčuje, `service.ts`).
 const createBody = z.object({ text: z.string().trim().min(1).max(300) });
 const updateTextBody = z.object({ text: z.string().trim().min(1).max(300) });
 // Code review: 16 znakov by odmietlo legitímnu VIACPRVKOVÚ emoji sekvenciu
@@ -25,19 +26,17 @@ const idParam = z.object({ id: z.string().uuid() });
 
 export function registerDailyTasksRoutes(app: Hono<AppBindings>, db: Database): void {
   app.get("/api/daily-tasks", requireUser(db), async (c) => {
-    const user = c.get("user");
-    const rows = await listDailyTasks(db, user.userId);
+    const rows = await listDailyTasks(db);
     return c.json({ rows });
   });
 
-  // issue 473: odznak počtu v ľavom menu — počet MOJICH otvorených (bez fajky)
-  // úloh. Literal-path súrodenec MUSÍ byť pred `/:id` trasami rovnakej metódy
-  // (`.claude/rules/http-routes.md` — poradie literal-vs-`:param`); dnes žiadna
-  // GET `/:id` trasa neexistuje, ale poradie sa drží ako zvyk (rovnako ako
-  // `upozornenia-routes.ts`'s `/count`).
+  // issue 473 + 487: odznak počtu v ľavom menu — počet OTVORENÝCH (bez fajky)
+  // úloh VŠETKÝCH účtov (zdieľaný zoznam). Literal-path súrodenec MUSÍ byť pred
+  // `/:id` trasami rovnakej metódy (`.claude/rules/http-routes.md` — poradie
+  // literal-vs-`:param`); dnes žiadna GET `/:id` trasa neexistuje, ale poradie sa
+  // drží ako zvyk (rovnako ako `upozornenia-routes.ts`'s `/count`).
   app.get("/api/daily-tasks/count", requireUser(db), async (c) => {
-    const user = c.get("user");
-    const count = await countOpenDailyTasks(db, user.userId);
+    const count = await countOpenDailyTasks(db);
     return c.json({ count });
   });
 
@@ -51,31 +50,27 @@ export function registerDailyTasksRoutes(app: Hono<AppBindings>, db: Database): 
   app.patch("/api/daily-tasks/:id/text", requireSameOrigin(), requireUser(db), zValidator("param", idParam), zValidator("json", updateTextBody), async (c) => {
     const { id } = c.req.valid("param");
     const { text } = c.req.valid("json");
-    const user = c.get("user");
-    const updated = await updateDailyTaskText(db, { id, userId: user.userId, text, now: new Date() });
+    const updated = await updateDailyTaskText(db, { id, text, now: new Date() });
     return c.json({ ok: true as const, updated });
   });
 
   app.patch("/api/daily-tasks/:id/emoji", requireSameOrigin(), requireUser(db), zValidator("param", idParam), zValidator("json", updateEmojiBody), async (c) => {
     const { id } = c.req.valid("param");
     const { emoji } = c.req.valid("json");
-    const user = c.get("user");
-    const updated = await updateDailyTaskEmoji(db, { id, userId: user.userId, emoji: emoji === "" ? null : emoji, now: new Date() });
+    const updated = await updateDailyTaskEmoji(db, { id, emoji: emoji === "" ? null : emoji, now: new Date() });
     return c.json({ ok: true as const, updated });
   });
 
   app.post("/api/daily-tasks/:id/done", requireSameOrigin(), requireUser(db), zValidator("param", idParam), zValidator("json", doneBody), async (c) => {
     const { id } = c.req.valid("param");
     const { done } = c.req.valid("json");
-    const user = c.get("user");
-    const updated = await setDailyTaskDone(db, { id, userId: user.userId, done, now: new Date() });
+    const updated = await setDailyTaskDone(db, { id, done, now: new Date() });
     return c.json({ ok: true as const, updated });
   });
 
   app.delete("/api/daily-tasks/:id", requireSameOrigin(), requireUser(db), zValidator("param", idParam), async (c) => {
     const { id } = c.req.valid("param");
-    const user = c.get("user");
-    const removed = await deleteDailyTask(db, { id, userId: user.userId });
+    const removed = await deleteDailyTask(db, { id });
     return c.json({ ok: true as const, removed });
   });
 }

@@ -1,15 +1,16 @@
 import { index, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { users } from "./schema-users.js";
 
-// issue 342: "Úlohy na dnes" — nahrádza šéfove poznámky písané do Discord
-// kanála #úlohy-na-dnes. ÚPLNE osobný zoznam, viazaný na `user_id` — každý
-// prihlásený používateľ vidí a upravuje LEN svoje vlastné riadky, server to
-// vynucuje na každom endpointe (`modules/daily-tasks/service.ts`), nikdy len
-// frontend. Zámerne SAMOSTATNÁ tabuľka, nie nová `upozornenie.type` hodnota —
-// plné odôvodnenie na tickete (design komentár pred prvým commitom kódu):
-// Upozornenia sú zdieľaná firemná queue s postpone/resolve/dedupKey
-// sémantikou a odznakom pre VŠETKÝCH zamestnancov, tento zoznam je súkromný
-// poznámkový blok bez toho všetkého.
+// issue 342 + 487: "Úlohy na dnes" — nahrádza šéfove poznámky písané do Discord
+// kanála #úlohy-na-dnes. PÔVODNE súkromný per-`user_id` zoznam (#342); od #487
+// ZDIEĽANÝ — každý prihlásený účet vidí a smie odfajknúť/upraviť/zmazať VŠETKY
+// úlohy (presne ako `note`/Poznámky, #437). `user_id` stĺpec OSTÁVA, ale už NIE
+// ako filter viditeľnosti — je to AUTOR (zapisuje sa zo session pri create,
+// `service.ts`, a zobrazuje sa pri riadku). Server vlastníctvo pri čítaní/zápise
+// ZÁMERNE nevynucuje (`modules/daily-tasks/queries.ts`/`service.ts`). Zámerne
+// SAMOSTATNÁ tabuľka, nie nová `upozornenie.type` hodnota — plné odôvodnenie na
+// tickete: Upozornenia sú firemná queue s postpone/resolve/dedupKey sémantikou a
+// odznakom, tento zoznam je minimalistická zdieľaná nástenka bez toho všetkého.
 export const dailyTask = pgTable(
   "daily_task",
   {
@@ -32,9 +33,12 @@ export const dailyTask = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    // Zoznam sa vždy číta zoradený "najnovšie hore" A vždy filtrovaný na
-    // JEDNÉHO používateľa naraz (`.claude/rules/database.md` — index podľa
-    // toho, ako sa dáta SKUTOČNE čítajú).
+    // Index z pôvodnej per-user sémantiky (#342). Od #487 sa zoznam číta
+    // ZDIEĽANE (zoradený "najnovšie hore", bez `user_id` filtra), takže tento
+    // zložený `(user_id, created_at)` index už nie je pre čítanie optimálny —
+    // PONECHÁVA SA ZÁMERNE bez zmeny (#487 nerobí ŽIADNU migráciu; pri 22
+    // riadkoch je rozdiel nepodstatný). Prípadné pretypovanie indexu na samotný
+    // `created_at` je vec budúcej migrácie, nie tejto zmeny správania.
     index("daily_task_user_id_created_at_idx").on(t.userId, t.createdAt),
   ],
 );

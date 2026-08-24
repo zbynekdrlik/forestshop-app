@@ -28,6 +28,8 @@ const ULOHA = {
   id: "task-1",
   text: "poslať DPD",
   emoji: null,
+  authorUserId: "user-1",
+  authorName: "Šéf",
   doneAt: null,
   createdAt: "2026-08-23T08:00:00.000Z",
   updatedAt: "2026-08-23T08:00:00.000Z",

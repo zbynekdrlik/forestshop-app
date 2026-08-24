@@ -9,7 +9,8 @@ const E2E_ULOHY_EMAIL = "e2e-ulohy@forestshop.sk"; // musí sa zhodovať s hodno
 // textového poľa + Uložiť), zmeniť/odstrániť emoji, upraviť text, vybaviť
 // (ostáva v zozname, len stlmené), odstrániť. Konzola musí zostať čistá
 // (`.claude/rules/testing.md`). Účet má rolu "citanie" — server (a teda aj
-// appka) nemá pre tento súkromný zoznam žiadne role-podmienené obmedzenie.
+// appka) nemá pre tento ZDIEĽANÝ zoznam (#487) žiadne role-podmienené
+// obmedzenie; autor sa zobrazuje pri riadku.
 test("emoji picker do textu úlohy + jednoklikové označenie riadku, upraviť, vybaviť, odstrániť — konzola je čistá", async ({ page }) => {
   const chyby: string[] = [];
   page.on("console", (m) => {
@@ -45,6 +46,11 @@ test("emoji picker do textu úlohy + jednoklikové označenie riadku, upraviť, 
   await expect(riadky).toHaveCount(2);
   await expect(riadky.nth(0)).toContainText("Záhorecký volať");
   await expect(riadky.nth(1)).toContainText("Nemáme sáčky 👍");
+
+  // issue 487: zdieľaný zoznam — pri každom riadku je jeho autor (seedovaný
+  // účet `e2e-ulohy@forestshop.sk` má displayName "E2E Čitateľ").
+  await expect(riadky.nth(0).locator(".uloha-author")).toHaveText("E2E Čitateľ");
+  await expect(riadky.nth(1).locator(".uloha-author")).toHaveText("E2E Čitateľ");
 
   // Nájsť konkrétny riadok podľa aktuálneho textu (rovnaký vzor ako
   // `upozornenia.spec.ts`'s `kartaSNadpisom`, len cez `.uloha-row`).

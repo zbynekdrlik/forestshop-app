@@ -185,8 +185,9 @@ export function App(): JSX.Element {
 
   // issue 473: odznak "Úlohy na dnes" — presná kópia `upozorneniaCount` vzoru
   // vyššie (App.tsx vlastní count, fetchuje ho pri prihlásení/zmene záložky/
-  // refresh-nonce, žiaden polling). Číslo je PER-POUŽÍVATEĽ (úlohy sú súkromné),
-  // musí byť známe HNEĎ po prihlásení, nie až po prvom otvorení záložky.
+  // refresh-nonce, žiaden polling). Číslo je ZDIEĽANÉ (od #487 počíta otvorené
+  // úlohy VŠETKÝCH účtov), musí byť známe HNEĎ po prihlásení, nie až po prvom
+  // otvorení záložky.
   // `DailyTasksSection` po každej úspešnej count-meniacej mutácii (pridať/
   // zmazať/odfajknúť) zavolá `refresh()` cez `DailyTasksBadgeRefreshContext`.
   const [dailyTasksCount, setDailyTasksCount] = useState<number | null>(null);

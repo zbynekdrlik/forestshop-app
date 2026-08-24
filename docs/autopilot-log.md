@@ -4414,3 +4414,28 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
 - Playbook: `.claude/rules/orders.md` — sekcia „Riešiť" ZJEDNODUŠENÁ (plochý
   zoznam objednávok, `groupRiesitLinesByOrder`, `countOpenOrdersByState` distinct,
   `OrderLinesTableHead` zdieľaný). Doplnené v tomto docs follow-upe.
+
+## 2026-08-24 — issues 487 + 488 (Úlohy na dnes zdieľané pre všetky účty; monitor bez forestshop-novy)
+
+- Batch (worktree isolation, #317), version bump 0.3.0-dev.285 → .286.
+- Design komentáre PRED prvým commitom kódu (root cause / prístup / zamietnutá
+  alternatíva) + STEP 0 overenie (naživo + prod DB) na oboch tiketoch:
+  https://github.com/zbynekdrlik/forestshop-app/issues/487#issuecomment-5395672519
+  (a #488).
+- **#487 (majiteľ: „prečo ja nevidím úlohy na dnes … nechaj to viditeľné pre
+  všetky účty, opatrne aby si niečo nevymazal"):** modul „Úlohy na dnes"
+  (`daily_task`, #342) prešiel zo SÚKROMNÉHO per-user zoznamu na ZDIEĽANÝ —
+  presne ako Poznámky (`note`, #437). Odstránený per-user filter z čítania aj
+  zápisu (`modules/daily-tasks/queries.ts` + `service.ts` + `daily-tasks-routes.ts`);
+  `listDailyTasks` má JOIN na `users` pre `authorUserId`/`authorName` (autor sa
+  zobrazí pri riadku), `countOpenDailyTasks` počíta otvorené úlohy VŠETKÝCH účtov.
+  `user_id` stĺpec OSTÁVA (autor zo session pri create); ŽIADNA migrácia, ŽIADNE
+  mazanie — 22 existujúcich prod úloh (všetky účtu `info`) nedotknutých, len
+  viditeľné pre všetkých. Web: `dailyTasksApi.ts` (+autor), `DailyTasksSection.tsx`
+  (autor pri riadku, zdieľaný úvodný text), `app.css` (`.uloha-author`). Existujúce
+  per-user testy prepísané na zdieľanú sémantiku + nový „účet B vidí a odfajkne
+  úlohu účtu A".
+- **#488 (majiteľ: „vypni tú doménu forestshop-novy nech to beží iba na
+  normálnej"), LEN repo časť:** `scripts/uptime-check.sh` default (riadok 60) už
+  nekontroluje `forestshop-novy.newlevel.media`, ostáva len hlavná doména; HELP
+  hlavička zosúladená. Cloudflare/DNS/dev1 rieši supervisor — #488 ostáva OTVORENÝ.

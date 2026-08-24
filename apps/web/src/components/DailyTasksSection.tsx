@@ -12,16 +12,17 @@ import {
 import { DailyTasksBadgeRefreshContext } from "../dailyTasksBadgeContext.js";
 import { EmojiPickerButton } from "./EmojiPickerButton.js";
 
-// issue 342: "Dôležité → Úlohy na dnes" — nahrádza šéfove poznámky písané do
-// Discord kanála #úlohy-na-dnes. Na rozdiel od zvyšku appky (viď
-// `UpozorneniaSection.tsx`'s `CONTROL_ROLES`) tu NIE JE žiadne
-// role-podmienené ovládanie — úlohy sú súkromné pre KAŽDÉHO prihláseného
-// používateľa nezávisle od role (server to vynucuje cez `user_id`,
-// `daily-tasks-routes.ts`), takže neexistuje dôvod niekomu brániť mať
-// vlastný súkromný zoznam. Preto komponent prijíma len `onSessionExpired`,
-// nie celý `SectionProps` — TypeScript-ovo je to stále kompatibilné s
-// `ComponentType<SectionProps>` (`nav.ts`), lebo objekt s VIAC poľami (role
-// navyše) sa dá vždy odovzdať tam, kde sa čaká len podmnožina.
+// issue 342 + 487: "Dôležité → Úlohy na dnes" — nahrádza šéfove poznámky písané
+// do Discord kanála #úlohy-na-dnes. PÔVODNE súkromný per-používateľský zoznam
+// (#342); od #487 ZDIEĽANÝ — každý prihlásený účet vidí a smie odfajknúť/upraviť/
+// zmazať VŠETKY úlohy, autor sa zobrazuje pri riadku (presne ako `NotesSection`/
+// Poznámky, #437). Na rozdiel od zvyšku appky (viď `UpozorneniaSection.tsx`'s
+// `CONTROL_ROLES`) tu NIE JE žiadne role-podmienené ovládanie — server na každú
+// akciu vyžaduje len `requireUser` (`daily-tasks-routes.ts`), takže aj rola
+// "citanie" smie pridávať/spracúvať. Preto komponent prijíma len
+// `onSessionExpired`, nie celý `SectionProps` — TypeScript-ovo je to stále
+// kompatibilné s `ComponentType<SectionProps>` (`nav.ts`), lebo objekt s VIAC
+// poľami (role navyše) sa dá vždy odovzdať tam, kde sa čaká len podmnožina.
 
 // Issue 403 (majiteľ: "stale to je otras" — naživo pomenované na tickete):
 // tri štrukturálne opravy, žiadna zmena funkčnosti/testid.
@@ -220,7 +221,7 @@ export function DailyTasksSection({ onSessionExpired }: { readonly onSessionExpi
     [load, handleActionError, badgeRefresh],
   );
 
-  const intro = <p>Osobný zoznam úloh — nahrádza poznámky písané do Discordu. Vidíš len svoje vlastné úlohy.</p>;
+  const intro = <p>Zdieľaný zoznam úloh — nahrádza poznámky písané do Discordu. Vidia ho všetky prihlásené účty; pri každej úlohe je jej autor.</p>;
 
   const addRow = (
     <div className="ulohy-add-row">
@@ -356,9 +357,16 @@ export function DailyTasksSection({ onSessionExpired }: { readonly onSessionExpi
                       </button>
                     </>
                   ) : (
-                    <span className="uloha-text" data-testid={`uloha-text-${row.id}`}>
-                      {row.text}
-                    </span>
+                    <>
+                      <span className="uloha-text" data-testid={`uloha-text-${row.id}`}>
+                        {row.text}
+                      </span>
+                      {/* issue 487: zdieľaný zoznam — autor úlohy pri riadku (ako
+                          pri Poznámkach), aby bolo jasné, čí je záznam. */}
+                      <span className="uloha-author" data-testid={`uloha-author-${row.id}`}>
+                        {row.authorName}
+                      </span>
+                    </>
                   )}
 
                   {editingTextId !== row.id && (
