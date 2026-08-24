@@ -4439,3 +4439,26 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
   normálnej"), LEN repo časť:** `scripts/uptime-check.sh` default (riadok 60) už
   nekontroluje `forestshop-novy.newlevel.media`, ostáva len hlavná doména; HELP
   hlavička zosúladená. Cloudflare/DNS/dev1 rieši supervisor — #488 ostáva OTVORENÝ.
+- Testy: web unit 742 + api unit 1010 (`pnpm gates:local` zelené); CI (dev aj
+  main) check/integration/e2e/docker-build/version-check zelené. Review cez
+  fresh-context reviewera: 0 🔴 0 🟡 4 🔵 (len zastarané komentáre, opravené).
+- Commity: `51eb19c` (bump .286 + log hlavička), `4d60bc7` (feat #487),
+  `a11b6bc` (uptime #488), `44bbc63` (oprava komentárov po review). PR #489
+  (merge `eab1f87`). Nasadené `v0.3.0-dev.286` na main. **Obidva tikety 487 aj
+  488 ostávajú OTVORENÉ** (telo PR aj commit správy plain „issue N" bez
+  zatváracieho slova) — zatvorí ich supervisor po naživo overení / doriešení
+  infra časti #488.
+- Post-deploy naživo overené na forestshop.newlevel.media (verzia z DOM
+  `v0.3.0-dev.286`, aj `/api/version`): prihlásený INÝ účet než autor
+  (`vychod@varos.sk` / Zbyněk, admin) vidí VŠETKÝCH 22 existujúcich úloh účtu
+  `info`, pri každej je autor „info"; nav odznak „Úlohy na dnes: 22"
+  (zdieľaný počet). Cross-account odfajknutie: Zbyněk odfajkol úlohu `info`
+  → odznak 22→21, riadok `done`; VRÁTENÉ presne späť → odznak 22, riadok
+  otvorený (dáta majiteľa nedotknuté). Konzola 0 chýb na obrazovke úloh.
+- Playbook: `frontend-design.md` (DailyTasksSection úzke props — zdôvodnenie
+  aktualizované na zdieľané #487), `testing.md` (nová poznámka: `daily_task`
+  je od #487 GLOBÁLna tabuľka, `daily-tasks.spec.ts` globálne asercie sú
+  bezpečné len ako jediný zapisovateľ — issue 480 trieda).
+- Táto log+playbook finalizácia jazdí na samostatnom docs bump-e
+  `0.3.0-dev.287` (rovnaký vzor ako .285 pri issue 484) — ŽIADNA funkčná
+  zmena, len dokumentácia; #487/#488 sú funkčne nasadené už na `.286`.
