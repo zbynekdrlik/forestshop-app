@@ -756,10 +756,27 @@ paths:
   no-op default). RiesitSection posiela `keepOnlyState:"riesit"` (riadok pri
   zmene stavu na iný sa lokálne odstráni) + vlastné rýchle pole. **Backend:**
   `listOpenOrderLinesBySupplier(db, adminBaseUrl, { stateFilter })` (NEduplikuje
-  query), `countOpenOrderLinesByState`, `setOrderLinesStateByCode` (bulk podľa
+  query), `countOpenOrdersByState` (issue 484: pôvodne `countOpenOrderLinesByState`),
+  `setOrderLinesStateByCode` (bulk podľa
   `externalOrderId`); trasy `GET /api/orders/riesit(/count)`, `POST /riesit/
   by-code` — VŠETKY PRED `GET /api/orders/:id` (literal-pred-`:param`).
   `by-code` vracia 200 `{ok:false,error}` pri neznámom/zatvorenom čísle (NIE 4xx
   — konzola, `.claude/rules/testing.md`). Menu odznak `riesit` vzor issue 473.
   KAŽDÁ ďalšia „obrazovka nad podmnožinou otvorených objednávok" nech použije
   `useOrderLinesBoard` + `stateFilter`, nie novú kópiu.
+- **Sekcia „Riešiť" ZJEDNODUŠENÁ (issue 484, Štěpán): NEskupuje po dodávateľoch —
+  je to PLOCHÝ zoznam OBJEDNÁVOK.** `RiesitSection` už NErenderuje
+  `board.suppliers.map(SupplierOrderGroup)`; namiesto toho `groupRiesitLinesByOrder`
+  (`apps/web/src/riesitOrders.ts`) preskupí `board.suppliers[].lines[]` (NAPRIEČ
+  dodávateľmi — jedna objednávka môže mať riadky u viacerých) podľa `orderId` do
+  plochého zoznamu, najnovšia prvá. 1 objednávka = 1 kompaktný `RiesitOrderRow`
+  (šípka ▾ · číslo objednávky preklik na `adminUrl` · zákazník · `formatItemCount`
+  „N položiek" · dátum · poznámka); rozrolovanie ukáže PLNÉ položkové riadky
+  (znovupoužitý `OrderLineRow`, `supplierBusy={false}`, `variantTotal` per-objednávka).
+  Vypnutie stavu Riešiť POSLEDNEJ položky objednávku z odvodeného zoznamu zloží
+  (`keepOnlyState:"riesit"` odstráni riadok z boardu → `groupRiesitLinesByOrder`
+  ju už nevytvorí). **Nav odznak `riesit` počíta DISTINCT OBJEDNÁVKY** (nie riadky):
+  `countOpenOrdersByState` = `countDistinct(order_line.order_id)` (drizzle `countDistinct`).
+  `colgroup`+`thead` 9-stĺpcovej tabuľky sú vyčlenené do `OrderLinesTableHead`
+  (jeden zdroj pravdy, zdieľaný `SupplierOrderGroup` AJ rozrolovaním Riešiť — DOM
+  bajt-identický, „Na objednanie" testy nezmenené). Rýchle pole `by-code` bezo zmeny.

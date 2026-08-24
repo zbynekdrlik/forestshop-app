@@ -4397,4 +4397,20 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
   `riesitOrders.ts` (nový agregátor), `ordersSummary.ts` (+`formatItemCount` paucal),
   `OrderLinesTableHead.tsx` (nový, colgroup+thead, zdieľaný so `SupplierOrderGroup`),
   `RiesitOrderRow.tsx` (nový), `RiesitSection.tsx` (plochý zoznam), `app.css`.
-- Commity/PR/nasadenie: dopĺňa sa po merge.
+- Testy: API integ `riesit-http` (count = DISTINCT objednávky), unit
+  `riesitOrders`/`formatItemCount`/`RiesitSection` (kompaktný riadok → expand →
+  vypnutie Riešiť zloží), e2e `riesit.spec` (nulová konzola). `pnpm gates:local`
+  zelené (741 web unit).
+- Commity: `7815054` (bump .284 + log), `a051d61` (feat). PR #485 (merge
+  `72638cc`). Nasadené `v0.3.0-dev.284` na main (telo PR + commity = plain
+  „issue 484", žiadny Closes — ticket ostáva OTVORENÝ na ručné zatvorenie po
+  potvrdení klientom Štěpánom). Post-deploy naživo overené na
+  forestshop.newlevel.media: `/api/version`=0.3.0-dev.284, DOM `v0.3.0-dev.284`,
+  odznak „Riešiť: 2" (DISTINCT objednávky — 2 objednávky, nie 4 riadky),
+  kompaktné riadky (20261249 Jan Mészáros „1 položka"; 20261172 Zuzana Kereštan
+  „3 položky" = Štěpánov príklad, teraz 1 riadok namiesto 3 skupín), rozrolovanie
+  → 9-stĺpcová tabuľka s 3 plnými riadkami, preklik čísla → Shoptet admin, rýchle
+  pole neznáme číslo → 200 + „nenašla", konzola 0 chýb.
+- Playbook: `.claude/rules/orders.md` — sekcia „Riešiť" ZJEDNODUŠENÁ (plochý
+  zoznam objednávok, `groupRiesitLinesByOrder`, `countOpenOrdersByState` distinct,
+  `OrderLinesTableHead` zdieľaný). Doplnené v tomto docs follow-upe.
