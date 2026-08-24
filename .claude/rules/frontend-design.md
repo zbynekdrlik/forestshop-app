@@ -1197,8 +1197,10 @@ paths:
   onSessionExpired={reload} />`), and excess-property checking only
   fires on object LITERALS, never on a wider-typed value flowing into a
   narrower parameter.** Issue 342's `DailyTasksSection` takes only
-  `{onSessionExpired}` (its data is scoped by `user_id` server-side, so no
-  `CONTROL_ROLES`-style role check exists anywhere in the component) — no
+  `{onSessionExpired}` (since #487 it is a SHARED list — `requireUser` on
+  every endpoint, so no `CONTROL_ROLES`-style role check exists in the
+  component; it was a private per-`user_id` list at #342, the justification
+  changed but the narrow-props shape stayed the same) — no
   cast, no `as SectionProps`, `pnpm typecheck` passes clean. Reach for this
   ONLY when the screen genuinely has no role distinction (server enforces
   ownership/permission some OTHER way); if any role check exists, take the

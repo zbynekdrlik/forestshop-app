@@ -858,3 +858,15 @@ paths:
   PRÁVE svojho `noteId` (`floor-note-row-${noteId}` `toHaveCount(0)`), nikdy
   globálny stav. Lokálne (`workers: 1`) sa táto kolízia NEPREJAVÍ — chytí ju až
   paralelné CI.
+- **`daily_task` je od #487 tiež GLOBÁLNa (zdieľaná) tabuľka — modul „Úlohy na
+  dnes" prešiel z per-`user_id` na zdieľaný (ako `note`/#437: bez per-user
+  filtra, JOIN na `users` pre autora, zápisy kľúčujú len `eq(id)`).**
+  `daily-tasks.spec.ts` NAPRIEK TOMU stále používa globálnu prázdnotu
+  (`ulohy-empty`) aj presné počty (`toHaveCount(2)`/`toHaveCount(1)`) — je to
+  bezpečné LEN preto, že tento spec je JEDINÝ e2e zapisovateľ do `daily_task`
+  (over `grep -rln "api/daily-tasks\|uloha-new" apps/web/tests/e2e/`). Prvý
+  ĎALŠÍ spec, ktorý zapíše `daily_task`, spustí presne kolíznu triedu issue 480
+  vyššie — vtedy treba OBA prerobiť na „filtruj podľa VLASTNÉHO fixture" (a nav
+  badge `nav-badge-ulohy` už dnes správne overuje len `/^\d+$/`, nie presné
+  číslo — zdieľaný počet naprieč účtami). Pri prevode akéhokoľvek ďalšieho
+  per-user zoznamu na zdieľaný over toto ako prvé.
