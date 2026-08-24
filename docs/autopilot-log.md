@@ -4375,3 +4375,26 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
   overení). Post-deploy naživo overené: floor riadok reálneho zápisu „Galik
   Matúš" (ODIMON, 60285) sa renderuje v „Na objednanie"; write-path (create→pin→
   ordered→🛒→delete) cez throwaway zápis OK, konzola čistá.
+- Finalizácia: PR #483 (merge `8d8d814`) = playbook bump `.283` + tento
+  autopilot-log + testing/floor-notes learnings; nasadené `v0.3.0-dev.283` na
+  main (tela PR = plain „issue 480"). Issue 480 ostáva OTVORENÝ na ručné
+  zatvorenie.
+
+## 2026-08-24 — issue 484 (Riešiť — zjednodušiť: 1 riadok na objednávku s rozrolovaním, Štěpán)
+- **#484 (klientom schválené, komentár 5394210094):** sekcia „Riešiť" prešla zo
+  skupín po dodávateľoch na PLOCHÝ zoznam objednávok. 1 objednávka = 1 kompaktný
+  riadok (šípka ▾ na rozrolovanie · číslo objednávky preklik na Shoptet admin ·
+  meno zákazníka · počet položiek v stave riesit · dátum · poznámka). Rozrolovanie
+  ukáže PLNÉ položkové riadky ako v „Na objednanie" (znovupoužitý `OrderLineRow`
+  vrátane vypnutia stavu Riešiť; vypnutie poslednej položky objednávku zo zoznamu
+  zloží). Rýchle pole „pridať podľa čísla objednávky" bezo zmeny.
+- **Agregácia NAD existujúcim zdrojom (žiadny nový dopyt):** `groupRiesitLinesByOrder`
+  (`riesitOrders.ts`) preskupí `board.suppliers[].lines[]` (naprieč dodávateľmi)
+  podľa `orderId`; `useOrderLinesBoard` (dáta+mutácie) sa nemení. Nav odznak `riesit`
+  po novom počíta DISTINCT objednávky — `countOpenOrdersByState` (`countDistinct`)
+  nahradila `countOpenOrderLinesByState` na trase `GET /api/orders/riesit/count`.
+- **Nové/zmenené:** `queries.ts` (rename+distinct), `orders-routes.ts`; web
+  `riesitOrders.ts` (nový agregátor), `ordersSummary.ts` (+`formatItemCount` paucal),
+  `OrderLinesTableHead.tsx` (nový, colgroup+thead, zdieľaný so `SupplierOrderGroup`),
+  `RiesitOrderRow.tsx` (nový), `RiesitSection.tsx` (plochý zoznam), `app.css`.
+- Commity/PR/nasadenie: dopĺňa sa po merge.

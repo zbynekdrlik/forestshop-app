@@ -1400,6 +1400,59 @@ tr:last-child td {
   min-width: 8rem;
   max-width: 100%;
 }
+/* issue 484: plochý zoznam objednávok v sekcii „Riešiť" — 1 objednávka =
+   1 kompaktný riadok (šípka · číslo · zákazník · počet · dátum · poznámka),
+   šípka rozroluje plnú `.orders-table`. */
+.riesit-orders {
+  display: flex;
+  flex-direction: column;
+  gap: var(--fs-space-2);
+}
+.riesit-order {
+  border: 1px solid var(--fs-border);
+  border-radius: var(--fs-radius);
+  background: var(--fs-surface);
+}
+.riesit-order-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--fs-space-2) var(--fs-space-3);
+  padding: var(--fs-space-2) var(--fs-space-3);
+}
+/* Šípka ▾/▸ — malé tlačidlo, nikdy sa nezmenší. */
+.riesit-order-toggle {
+  flex: 0 0 auto;
+}
+/* Číslo objednávky (preklik) — nikdy nezalomiť. */
+.riesit-order-code {
+  flex: 0 0 auto;
+  font-weight: 600;
+}
+/* Meno zákazníka zaberie zvyšné miesto, orezané na jednom riadku. */
+.riesit-order-customer {
+  flex: 1 1 8rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.riesit-order-count,
+.riesit-order-date {
+  flex: 0 0 auto;
+  color: var(--fs-ink-muted);
+  font-size: var(--fs-text-sm);
+}
+/* Poznámka k objednávke — na vlastnom riadku pod hlavičkou, orezaná. */
+.riesit-order-note {
+  flex: 1 1 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fs-ink-muted);
+  font-size: var(--fs-text-sm);
+}
 /* issue 95: DODÁVATEĽ + PRIRADENIE DODÁVATEĽA zlúčené do jednej bunky
    (majiteľ, komentár #1: "neviem čo tam je Priradenie dodávateľa stĺpec" —
    je vidieť len pri riadkoch bez katalógového dodávateľa, `supplierAssignable`

@@ -121,22 +121,29 @@ it("GET /api/orders/riesit bez prihlásenia vráti 401", async () => {
 
 // --- GET /api/orders/riesit/count ---
 
-it("GET /api/orders/riesit/count počíta LEN otvorené riadky v stave riesit", async () => {
+it("GET /api/orders/riesit/count počíta DISTINCT otvorené objednávky (nie riadky) v stave riesit", async () => {
   const { app, cookie, db } = await boot("manazer");
-  const a = await vlozObjednavku(db, 2);
+  const a = await vlozObjednavku(db, 2); // JEDNA objednávka s DVOMA riadkami
+  const b = await vlozObjednavku(db, 1);
   await vlozObjednavku(db, 1); // ostane objednane, do počtu nevstúpi
 
   const c0 = await app.request("/api/orders/riesit/count", { headers: { cookie } });
   expect((await c0.json()) as { count: number }).toEqual({ count: 0 });
 
+  // issue 484: OBA riadky objednávky `a` → riesit. To je stále JEDNA problémová
+  // objednávka, takže count = 1 (nie 2 ako pri starom počítaní riadkov).
   await setState(app, cookie, a.lineIds[0] ?? "", "riesit");
   await setState(app, cookie, a.lineIds[1] ?? "", "riesit");
+  const c1 = await app.request("/api/orders/riesit/count", { headers: { cookie } });
+  expect((await c1.json()) as { count: number }).toEqual({ count: 1 });
 
+  // Druhá objednávka v stave riesit → count 2 (DVE distinct objednávky).
+  await setState(app, cookie, b.lineIds[0] ?? "", "riesit");
   const c2 = await app.request("/api/orders/riesit/count", { headers: { cookie } });
   expect((await c2.json()) as { count: number }).toEqual({ count: 2 });
 });
 
-it("GET /api/orders/riesit/count NEpočíta riadky zatvorenej objednávky", async () => {
+it("GET /api/orders/riesit/count NEpočíta zatvorenú objednávku", async () => {
   const { app, cookie, db } = await boot("manazer");
   // objednávka v NEotvorenom Shoptet stave — jej riadky sa nikde neukážu
   const zatvorena = await vlozObjednavku(db, 1, "Vybavená");

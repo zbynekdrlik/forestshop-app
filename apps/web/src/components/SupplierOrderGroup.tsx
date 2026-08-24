@@ -3,6 +3,7 @@ import { computeVariantTotals, isFloorRowHidden, isLineHiddenByFilter } from "..
 import type { SupplierDraftsApi } from "../useSupplierDrafts.js";
 import { FloorOrderRow } from "./FloorOrderRow.js";
 import { OrderLineRow } from "./OrderLineRow.js";
+import { OrderLinesTableHead } from "./OrderLinesTableHead.js";
 import { SupplierActionsPanel } from "./SupplierActionsPanel.js";
 import type { OrderLine, OrderMailPreview, SupplierOpenOrders } from "../ordersApi.js";
 
@@ -164,45 +165,9 @@ export function SupplierOrderGroup({
           komentár), presne kam majiteľ žiadal. */}
       <div className="orders-table-wrap">
         <table className="orders-table">
-          <colgroup>
-            <col className="col-ordered" />
-            <col className="col-order" />
-            <col className="col-customer" />
-            <col className="col-product" />
-            <col className="col-qty" />
-            <col className="col-supplier" />
-            <col className="col-state" />
-            <col className="col-date" />
-            <col className="col-notes" />
-          </colgroup>
-          <thead>
-            <tr>
-              {/* issue 105 bod 1: pri 1280px (tabuľkin skutočný floor —
-                  `min-width: 64rem`) sa jednoslovné VEĽKÉ hlavičky
-                  ("OBJEDNANÉ"/"OBJEDNÁVKA"/"MNOŽSTVO"/"OBJEDNÁVKY") nezmestili
-                  do svojich úzkych stĺpcov a pretekali do suseda (zmerané
-                  `th.scrollWidth`). Namiesto širších percent (väčší diff,
-                  riziko pre PRODUKT/DODÁVATEĽ) sú 4 popisky skrátené — plný
-                  význam nesie `title`. Checkbox stĺpec: JEDINÉ miesto na
-                  obrazovke, ktoré sa smie týkať "objednané u dodávateľa" (viď
-                  `STATE_LABELS`/dátumový stĺpec nižšie, aby sa nekolidovalo). */}
-              <th title="Objednané u dodávateľa (zaškrtávacie políčko)" aria-label="Objednané u dodávateľa">
-                ✓
-              </th>
-              <th title="Číslo objednávky (klik na kód v riadku otvorí objednávku v administrácii Shoptet)">
-                Č. obj.
-              </th>
-              <th>Zákazník</th>
-              <th>Produkt</th>
-              <th title="Množstvo (počet kusov)">Ks</th>
-              <th title="Dodávateľ z katalógu, alebo ručné priradenie pri produkte bez katalógového dodávateľa">
-                Dodávateľ
-              </th>
-              <th>Stav</th>
-              <th title="Dátum objednávky">Dátum obj.</th>
-              <th title="Poznámka zákazníka z e-shopu (na čítanie) + vlastná poznámka tímu">Poznámky</th>
-            </tr>
-          </thead>
+          {/* issue 484: colgroup(9)+thead vyčlenené do `OrderLinesTableHead`
+              (zdieľané s rozrolovaním sekcie „Riešiť") — DOM bajt-identický. */}
+          <OrderLinesTableHead />
           <tbody>
             {visibleLines.map((line) => (
               <OrderLineRow

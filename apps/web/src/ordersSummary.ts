@@ -263,3 +263,13 @@ export function formatOrderCount(n: number): string {
   if (n === 2 || n === 3 || n === 4) return `${String(n)} objednávky`;
   return `${String(n)} objednávok`;
 }
+
+// issue 484: počet POLOŽIEK objednávky v stave riesit na kompaktnom riadku
+// sekcie „Riešiť" (napr. „3 položky"). Rovnaký slovenský 3-tvarový paucal ako
+// `formatOrderCount` vyššie (1 → jednotné, 2-4 → málopočetné, 0/5+ → rodový
+// pád množného čísla; tvar sa NEODVODZUJE z poslednej číslice).
+export function formatItemCount(n: number): string {
+  if (n === 1) return "1 položka";
+  if (n === 2 || n === 3 || n === 4) return `${String(n)} položky`;
+  return `${String(n)} položiek`;
+}

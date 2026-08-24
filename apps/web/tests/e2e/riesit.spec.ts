@@ -3,8 +3,10 @@ import { expect, test } from "@playwright/test";
 const E2E_HESLO = "e2e-test-heslo"; // účet existuje len v testovacej databáze
 const E2E_RIESIT_EMAIL = "e2e-riesit@forestshop.sk"; // musí sa zhodovať s hodnotou v scripts/e2e-setup.ts
 
-// issue 476: sekcia „Riešiť" — klik-flow (riadok v stave riesit sa zobrazí,
-// zmena stavu ho odstráni), menu odznak, rýchle pole a nulová konzola.
+// issue 476/484: sekcia „Riešiť" — klik-flow. Issue 484: PLOCHÝ zoznam
+// objednávok (1 objednávka = 1 kompaktný riadok s rozrolovaním), preklik čísla,
+// vypnutie stavu Riešiť poslednej položky objednávku zloží; menu odznak, rýchle
+// pole a nulová konzola.
 //
 // Prečo prepichnutý `window.fetch` (`addInitScript`), nie reálne seedované
 // dáta: `orders.spec.ts`'s prvý test asertuje PRESNÉ GLOBÁLNE počty otvorených
@@ -19,7 +21,7 @@ const E2E_RIESIT_EMAIL = "e2e-riesit@forestshop.sk"; // musí sa zhodovať s hod
 // komponent+hook `apps/web/src/components/RiesitSection.test.tsx`.
 const FAKE_LINE_ID = "e2e00000-0000-0000-0000-000000000476";
 
-test("Riešiť: riadok sa zobrazí, zmena stavu ho odstráni, odznak svieti, rýchle pole hlási neznáme číslo, konzola je čistá", async ({
+test("Riešiť: kompaktný riadok objednávky → rozrolovanie → vypnutie Riešiť objednávku zloží, odznak svieti, rýchle pole hlási neznáme číslo, konzola je čistá", async ({
   page,
 }) => {
   const chyby: string[] = [];
@@ -92,8 +94,23 @@ test("Riešiť: riadok sa zobrazí, zmena stavu ho odstráni, odznak svieti, rý
   // Titulok „Riešiť" renderuje Topbar (viditeľná záložka, `.claude/rules/frontend-design.md`).
   await expect(page.getByRole("heading", { name: "Riešiť" })).toBeVisible();
 
-  // Riadok v stave riesit sa zobrazí, jeho tlačidlo „Riešiť" je aktívne.
+  // issue 484: 1 objednávka = 1 kompaktný riadok (meno zákazníka + počet
+  // položiek); položkové riadky sú ZBALENÉ, kým sa nerozrolujú.
+  const objednavka = page.getByTestId("riesit-order-7001");
+  await expect(objednavka).toBeVisible();
+  await expect(objednavka).toContainText("Zákazník Riešiť");
+  await expect(page.getByTestId("riesit-order-count-7001")).toHaveText("1 položka");
   const riadok = page.getByTestId(`order-line-${FAKE_LINE_ID}`);
+  await expect(riadok).toHaveCount(0);
+
+  // Číslo objednávky je preklik do Shoptet admin (rovnaký cieľ ako v „Na objednanie").
+  await expect(objednavka.getByRole("link", { name: /Otvoriť objednávku 7001/ })).toHaveAttribute(
+    "href",
+    "https://www.forestshop.sk/admin/vyhladavanie/?string=7001&src=orders",
+  );
+
+  // Rozrolovanie → plný položkový riadok + aktívne tlačidlo „Riešiť".
+  await page.getByTestId("riesit-order-toggle-7001").click();
   await expect(riadok).toBeVisible();
   await expect(page.getByTestId(`state-btn-riesit-${FAKE_LINE_ID}`)).toHaveAttribute("aria-checked", "true");
 
@@ -104,9 +121,9 @@ test("Riešiť: riadok sa zobrazí, zmena stavu ho odstráni, odznak svieti, rý
   // Rýchle pole je viditeľné.
   await expect(page.getByTestId("riesit-quick-add-input")).toBeVisible();
 
-  // Zmena stavu na iný → riadok zo sekcie zmizne (optimistické odstránenie).
+  // Vypnutie stavu Riešiť POSLEDNEJ položky → objednávka z plochého zoznamu vypadne.
   await page.getByTestId(`state-btn-skladom-${FAKE_LINE_ID}`).click();
-  await expect(riadok).toHaveCount(0);
+  await expect(objednavka).toHaveCount(0);
 
   // Rýchle pole: neznáme číslo → zrozumiteľná chyba.
   await page.getByTestId("riesit-quick-add-input").fill("9999");

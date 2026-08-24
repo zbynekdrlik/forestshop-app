@@ -2,6 +2,7 @@ import { expect, it } from "vitest";
 import {
   computeVariantTotals,
   countAffectedOrders,
+  formatItemCount,
   formatOrderCount,
   formatOrderSummaryText,
   formatVariantTotalChip,
@@ -328,6 +329,17 @@ it("formatOrderCount — 0, 5+ (vrátane 22/23/24) sú rodový pád množného �
   expect(formatOrderCount(22)).toBe("22 objednávok");
   expect(formatOrderCount(23)).toBe("23 objednávok");
   expect(formatOrderCount(24)).toBe("24 objednávok");
+});
+
+// issue 484 — počet položiek na kompaktnom riadku sekcie „Riešiť", rovnaký
+// slovenský 3-tvarový paucal ako `formatOrderCount`.
+it("formatItemCount — 1 / 2-4 / 0,5+ (paucal položka)", () => {
+  expect(formatItemCount(1)).toBe("1 položka");
+  expect(formatItemCount(2)).toBe("2 položky");
+  expect(formatItemCount(4)).toBe("4 položky");
+  expect(formatItemCount(0)).toBe("0 položiek");
+  expect(formatItemCount(5)).toBe("5 položiek");
+  expect(formatItemCount(23)).toBe("23 položiek");
 });
 
 // issue 452 — dodávateľské čipy zoradené abecedne (slovenské locale,

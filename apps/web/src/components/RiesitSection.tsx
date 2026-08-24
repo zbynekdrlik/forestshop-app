@@ -2,18 +2,25 @@ import { useContext, useState, type JSX } from "react";
 import type { Me } from "../api.js";
 import { fetchRiesitOrders, OrdersUnauthorizedError, setOrderLinesRiesitByCode } from "../ordersApi.js";
 import { RiesitBadgeRefreshContext } from "../riesitBadgeContext.js";
+import { groupRiesitLinesByOrder } from "../riesitOrders.js";
 import { useOrderLinesBoard } from "../useOrderLinesBoard.js";
 import { OrderWriteFailuresBanner } from "./OrderWriteFailuresBanner.js";
-import { SupplierOrderGroup } from "./SupplierOrderGroup.js";
+import { RiesitOrderRow } from "./RiesitOrderRow.js";
 
 // issue 450: šéfov kolega Štěpán (Discord 19.8.2026) — pôvodne placeholder.
 // issue 476 (Štěpán, Discord 23.8.2026): funkcia doplnená — sekcia „Riešiť"
-// zobrazuje riadky objednávok v stave `riesit` (piaty exkluzívny stav,
-// princíp `nedostupne`), KOMPLETNE rovnaké ako „Na objednanie" (všetky funkcie
-// riadku + zoskupenie po dodávateľoch). Jadro (dáta + mutácie + pomocné hooky)
-// je ZDIEĽANÉ s OrdersSection cez `useOrderLinesBoard` — tu sa líši len zdroj
-// riadkov (`/api/orders/riesit`), odstránenie riadku po zmene stavu na iný
+// zobrazuje objednávky s riadkami v stave `riesit` (piaty exkluzívny stav,
+// princíp `nedostupne`). Jadro (dáta + mutácie + pomocné hooky) je ZDIEĽANÉ s
+// OrdersSection cez `useOrderLinesBoard` — líši sa len zdroj riadkov
+// (`/api/orders/riesit`), odstránenie riadku po zmene stavu na iný
 // (`keepOnlyState: "riesit"`) a rýchle pole na číslo objednávky.
+//
+// issue 484 (Štěpán, schválené komentárom 5394210094): sekcia sa ZJEDNODUŠILA —
+// už NEskupuje po dodávateľoch (jedna objednávka s 3 produktmi u 3 dodávateľov
+// zaberala celú stranu). Namiesto toho PLOCHÝ zoznam objednávok: 1 objednávka =
+// 1 kompaktný riadok (`RiesitOrderRow`) s rozrolovaním na plné položkové riadky.
+// `board.suppliers` (rovnaký zdroj) sa preskupí podľa `orderId`
+// (`groupRiesitLinesByOrder`) — žiadny nový API dopyt.
 //
 // VIDITEĽNÁ záložka (`nav.ts`, priečinok „eshop"), takže NEMÁ vlastný
 // `<h1>`/`<h2>` — titulok „Riešiť" renderuje `App.tsx` cez `Topbar`
@@ -84,7 +91,9 @@ export function RiesitSection({
       });
   };
 
-  const totalLines = board.suppliers.reduce((sum, group) => sum + group.lines.length, 0);
+  // issue 484: plochý zoznam objednávok odvodený z rovnakého `board.suppliers`
+  // (žiadny nový dopyt) — preskupené podľa `orderId`, najnovšia prvá.
+  const orders = groupRiesitLinesByOrder(board.suppliers);
 
   return (
     <section className="orders-section" data-testid="riesit-section">
@@ -139,61 +148,19 @@ export function RiesitSection({
           board.setWriteFailures([]);
         }}
       />
-      {board.loaded && totalLines === 0 && (
+      {board.loaded && orders.length === 0 && (
         <p className="empty" data-testid="riesit-empty">
-          Zatiaľ tu nie sú žiadne položky na riešenie. Označ riadok tlačidlom „Riešiť" v „Na objednanie",
+          Zatiaľ tu nie sú žiadne objednávky na riešenie. Označ riadok tlačidlom „Riešiť" v „Na objednanie",
           alebo zadaj číslo objednávky vyššie.
         </p>
       )}
-      {board.suppliers.map((group) => (
-        <SupplierOrderGroup
-          key={group.supplier}
-          group={group}
-          selectedSupplier={null}
-          // V sekcii Riešiť sa NEskrývajú „vybavené" riadky — `isLineResolved`
-          // by pri stave `riesit` (!== objednane) skryl VŠETKY riadky. Vždy
-          // `false`, aby bol každý riesit riadok vidno.
-          hideResolved={false}
-          dirtyEditorLineIds={board.dirtyEditorLineIds}
-          onEditorActivityChange={board.onEditorActivityChange}
-          supplierDrafts={board.supplierDrafts}
-          canChangeState={canChangeState}
-          busyLineId={board.busyLineId}
-          busyOrderedLineId={board.busyOrderedLineId}
-          busyOrderedSupplier={board.busyOrderedSupplier}
-          busySupplierLineId={board.busySupplierLineId}
-          busySupplierLinkLineId={board.busySupplierLinkLineId}
-          busyCommentOrderId={board.busyCommentOrderId}
-          // issue 480: predajňové riadky sú LEN v „Na objednanie" (server vracia
-          // pre „Riešiť" prázdne `floorRows`), tieto props sú tu de facto no-op,
-          // ale `SupplierOrderGroup` ich vyžaduje.
-          busyFloorRowKey={board.busyFloorRowKey}
-          onChangeState={board.changeState}
-          onChangeOrdered={board.changeOrdered}
-          onChangeFloorOrdered={board.changeFloorOrdered}
-          onAssignSupplier={board.assignSupplier}
-          onSetSupplierLink={board.setSupplierLink}
-          onChangeComment={board.changeComment}
-          editingEmailSupplier={board.email.editingEmailSupplier}
-          emailDraft={board.email.emailDraft}
-          emailBusy={board.email.emailBusy}
-          emailError={board.email.emailError}
-          onEmailDraftChange={board.email.onEmailDraftChange}
-          onStartEditEmail={board.email.onStartEditEmail}
-          onSaveEmail={board.email.onSaveEmail}
-          onCancelEditEmail={board.email.onCancelEditEmail}
-          onToggleGroupOrdered={board.toggleGroupOrdered}
-          onCopyOrderToClipboard={board.mail.copyOrderToClipboard}
-          previewSupplier={board.mail.previewSupplier}
-          preview={board.mail.preview}
-          previewError={board.mail.previewError}
-          sendBusy={board.mail.sendBusy}
-          sendResult={board.mail.sendResult}
-          onOpenPreview={board.mail.openPreview}
-          onClosePreview={board.mail.closePreview}
-          onConfirmSend={board.mail.confirmSend}
-        />
-      ))}
+      {orders.length > 0 && (
+        <div className="riesit-orders" data-testid="riesit-orders">
+          {orders.map((order) => (
+            <RiesitOrderRow key={order.orderId} order={order} canChangeState={canChangeState} board={board} />
+          ))}
+        </div>
+      )}
     </section>
   );
 }

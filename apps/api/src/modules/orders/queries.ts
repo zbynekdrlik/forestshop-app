@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, countDistinct, desc, eq, inArray, isNull } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
 import {
   floorNoteProducts,
@@ -556,19 +556,20 @@ export async function listUnresolvedFloorProductIdsForSupplier(
   return rows.map((row) => ({ productId: row.productId, floorNoteId: row.floorNoteId }));
 }
 
-// issue 476: odznak počtu v ľavom menu pre „Riešiť" — počet OTVORENÝCH
-// (Shoptet stav ∈ `order_open_status`) riadkov objednávok v danom stave.
-// `COUNT(*) WHERE ...` priamo v SQL (rovnaký vzor ako `countActionable
-// Upozornenia` / issue 473's `countOpenDailyTasks`), nie natiahnutie celého
-// zoznamu cez `listOpenOrderLinesBySupplier` a `.length` v JS. Počíta RIADKY
-// (nie kusy) — rovnaký zámer ako „Na objednanie" nav odznak (issue 147/260,
-// `.claude/rules/orders.md`). `state` je parameter kvôli budúcej
-// znovupoužiteľnosti, dnes ho volá len `riesit` count trasa.
-export async function countOpenOrderLinesByState(db: Database, state: OrderLineState): Promise<number> {
+// issue 476/484: odznak počtu v ľavom menu pre „Riešiť" — počet OTVORENÝCH
+// (Shoptet stav ∈ `order_open_status`) DISTINCT OBJEDNÁVOK, ktoré majú aspoň
+// jeden riadok v danom stave. Issue 484 (Štěpán): pôvodne (issue 476) počítal
+// RIADKY, ale mentálny model je „koľko problémových OBJEDNÁVOK" — jedna
+// objednávka s viacerými riesit riadkami (rôzne varianty/dodávatelia) sa teraz
+// počíta RAZ. `countDistinct(order_line.order_id)` priamo v SQL (rovnaký vzor
+// ako predtým `count()`), nie natiahnutie celého zoznamu a `.length` v JS —
+// DB náprotivok `ordersSummary.ts`'s `countAffectedOrders`. `state` je parameter
+// kvôli budúcej znovupoužiteľnosti, dnes ho volá len `riesit` count trasa.
+export async function countOpenOrdersByState(db: Database, state: OrderLineState): Promise<number> {
   const openStatuses = await listOpenStatusNames(db);
   if (openStatuses.length === 0) return 0;
   const [row] = await db
-    .select({ total: count() })
+    .select({ total: countDistinct(orderLines.orderId) })
     .from(orderLines)
     .innerJoin(orders, eq(orders.id, orderLines.orderId))
     .where(and(inArray(orders.statusName, [...openStatuses]), eq(orderLines.state, state)));
