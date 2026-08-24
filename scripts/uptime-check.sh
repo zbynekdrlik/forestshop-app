@@ -6,8 +6,8 @@
 # scripts/uptime-check.sh — issue 357, external public-URL availability monitor.
 #
 # HELP-BEGIN
-# WHY: nič doteraz z VONKU nekontrolovalo, či `forestshop.newlevel.media` /
-# `forestshop-novy.newlevel.media` žijú — 12. 8. 2026 objavil výpadok (Cloudflare
+# WHY: nič doteraz z VONKU nekontrolovalo, či `forestshop.newlevel.media` žije
+# — 12. 8. 2026 objavil výpadok (Cloudflare
 # Error 1033, pozri .claude/rules/deploy.md) majiteľ, nie automatika. Beží NA
 # DEV1, zámerne NIE na dev2 (kde bežia appka aj tunel) — monitor na tom istom
 # stroji, čo sleduje, by zomrel presne v momente výpadku, ktorý má hlásiť.
@@ -57,7 +57,10 @@ esac
 # Pole, nie reťazec + `for url in $URLS` — review finding, issue 357: neúvodzovkovaná
 # expanzia reťazca sa spolieha na delenie slov (funguje, ale je krehké); pole je
 # odolnejšie a jasnejšie vyjadruje zámer (viacero nezávislých URL).
-read -ra URLS <<< "${UPTIME_CHECK_URLS:-https://forestshop.newlevel.media https://forestshop-novy.newlevel.media}"
+# issue 488: `forestshop-novy.newlevel.media` sa vypína (majiteľ, appka beží len
+# na hlavnej doméne), takže default kontroluje UŽ LEN hlavnú adresu; env override
+# `UPTIME_CHECK_URLS` ostáva, keby bolo treba sledovať aj ďalšie adresy.
+read -ra URLS <<< "${UPTIME_CHECK_URLS:-https://forestshop.newlevel.media}"
 CONFIRM_THRESHOLD="${UPTIME_CHECK_CONFIRM_THRESHOLD:-2}"
 ALERT_THROTTLE_PASSES="${UPTIME_CHECK_ALERT_THROTTLE_PASSES:-12}"   # ~1h at the 5-min cadence
 CURL_TIMEOUT="${UPTIME_CHECK_CURL_TIMEOUT:-10}"
