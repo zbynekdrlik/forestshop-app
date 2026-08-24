@@ -1,5 +1,5 @@
 import type { JSX } from "react";
-import type { OrderLine, SupplierOpenOrders } from "../ordersApi.js";
+import type { FloorOrderRow, OrderLine, SupplierOpenOrders } from "../ordersApi.js";
 import { formatOrderSummaryText, sortSuppliersForChips, summarizeOrderLines } from "../ordersSummary.js";
 
 // issue 61 — filtrovacie štítky dodávateľov + súhrn "ostáva vybaviť" +
@@ -21,8 +21,22 @@ export function OrdersToolbar({
   readonly onToggleHideResolved: () => void;
 }): JSX.Element {
   const allLines: readonly OrderLine[] = suppliers.flatMap((group) => group.lines);
-  const scopedLines =
-    selectedSupplier === null ? allLines : (suppliers.find((g) => g.supplier === selectedSupplier)?.lines ?? []);
+  // issue 480: predajňové riadky vstupujú do počtov čipov aj do súhrnu rovnako
+  // ako riadky objednávok (inak by čip/„Všetci"/súhrn driftovali od nástenkového
+  // odznaku a od hlavičky skupiny — issue 263 invariant „čip == panel").
+  const allFloorRows: readonly FloorOrderRow[] = suppliers.flatMap((group) => group.floorRows ?? []);
+  const scopedGroup = selectedSupplier === null ? null : suppliers.find((g) => g.supplier === selectedSupplier);
+  const scopedLines = selectedSupplier === null ? allLines : (scopedGroup?.lines ?? []);
+  const scopedFloorRows = selectedSupplier === null ? allFloorRows : (scopedGroup?.floorRows ?? []);
+
+  // Súhrn „ostáva vybaviť N z M" — predajňové riadky pridávajú svoje KUSY do
+  // total/remaining (neobjednaný = remaining, ako order riadok). Rozpis
+  // (Objednané/Čaká sa/…) ostáva iba pre order riadky (predajňový riadok nemá
+  // stav), takže sa doň nemieša.
+  const baseSummary = summarizeOrderLines(scopedLines);
+  const floorTotalQty = scopedFloorRows.reduce((sum, row) => sum + row.quantity, 0);
+  const floorRemainingQty = scopedFloorRows.filter((row) => !row.ordered).reduce((sum, row) => sum + row.quantity, 0);
+  const summary = { ...baseSummary, total: baseSummary.total + floorTotalQty, remaining: baseSummary.remaining + floorRemainingQty };
 
   return (
     <div className="orders-toolbar" data-testid="orders-toolbar">
@@ -40,15 +54,22 @@ export function OrdersToolbar({
             onSelectSupplier(null);
           }}
         >
-          {`Všetci (${String(allLines.length)})`}
+          {`Všetci (${String(allLines.length + allFloorRows.length)})`}
         </button>
         {/* issue 452: čipy dodávateľov zoradené abecedne (slovenské locale,
             case-insensitive), "(bez dodávateľa)" naposledy — čip "Všetci" vyššie
             ostáva vždy prvý. Farby/počty/správanie sa nemenia, len poradie;
             `allLines`/`scopedLines` (súčty) ostávajú nad pôvodným `suppliers`. */}
         {sortSuppliersForChips(suppliers).map((group) => {
-          const groupSummary = summarizeOrderLines(group.lines);
-          const done = group.lines.length > 0 && groupSummary.remaining === 0;
+          const groupFloorRows = group.floorRows ?? [];
+          // issue 480: `done` (a počet) zhodné s hlavičkou skupiny
+          // (`SupplierActionsPanel`) — vybavené je VŠETKO: objednávky aj
+          // predajňové riadky. `[].every() === true`, takže skupina bez
+          // predajňových riadkov sa správa presne ako doteraz.
+          const done =
+            group.lines.length + groupFloorRows.length > 0 &&
+            summarizeOrderLines(group.lines).remaining === 0 &&
+            groupFloorRows.every((row) => row.ordered);
           return (
             <button
               key={group.supplier}
@@ -59,14 +80,14 @@ export function OrdersToolbar({
                 onSelectSupplier(group.supplier);
               }}
             >
-              {`${group.supplier} (${String(group.lines.length)})`}
+              {`${group.supplier} (${String(group.lines.length + groupFloorRows.length)})`}
             </button>
           );
         })}
       </div>
       <div className="orders-toolbar-summary-row">
         <p className="orders-summary" data-testid="orders-summary">
-          {formatOrderSummaryText(summarizeOrderLines(scopedLines), selectedSupplier)}
+          {formatOrderSummaryText(summary, selectedSupplier)}
         </p>
         <button
           type="button"

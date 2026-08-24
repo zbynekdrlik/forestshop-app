@@ -1,4 +1,4 @@
-import { NEZNAMY_DODAVATEL, type OrderLine } from "./ordersApi.js";
+import { NEZNAMY_DODAVATEL, type FloorOrderRow, type OrderLine } from "./ordersApi.js";
 
 // issue 61 — priamy náprotivok starej appky's `isHandled` (`ORDERED[o.key] ||
 // WAITING[o.key] || INSTOCK[o.key] || UNAVAIL[o.key]`, `app.js:2332-2498`).
@@ -23,6 +23,15 @@ export function isLineHiddenByFilter(
   dirtyEditorLineIds: ReadonlySet<string>,
 ): boolean {
   return hideResolved && isLineResolved(line) && !dirtyEditorLineIds.has(line.lineId);
+}
+
+// issue 480: predajňový (floor) riadok je „vybavený" — a teda skrytý pri
+// prepínači „skryť vybavené" — práve keď je objednaný. `ordered` je jediná
+// terminálna sémantika floor riadku (nemá stav ani `dirtyEditorLineIds`
+// výnimku, tie sú len pre order_line inline editory). Samostatná funkcia (nie
+// `isLineHiddenByFilter`), keďže floor riadok nemá `state`/`lineId`.
+export function isFloorRowHidden(row: Pick<FloorOrderRow, "ordered">, hideResolved: boolean): boolean {
+  return hideResolved && row.ordered;
 }
 
 // issue 260: každé pole je súčet `quantity` (počet KUSOV naprieč riadkami),

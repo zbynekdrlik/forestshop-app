@@ -153,7 +153,10 @@ it("hromadné označenie čaká na riadkový zámok objednávky — lookup bež�
     // Skutočný dôkaz dokončenia je samotný úspešný `await bulk` +
     // očakávaný výsledok nižšie — žiadna ďalšia kontrola `settled` netreba.
     const result = await bulk;
-    expect(result).toEqual({ lineCount: 1 });
+    // issue 480: `setSupplierLinesOrdered` teraz vracia aj `floorRowCount`
+    // (počet zasiahnutých predajňových riadkov) — tu 0 (skupina má len order
+    // riadok, žiadny predajňový).
+    expect(result).toEqual({ lineCount: 1, floorRowCount: 0 });
   } finally {
     await rawClient.end();
   }
@@ -222,7 +225,10 @@ it("hromadné označenie NEČAKÁ na zámok katalógovej tabuľky (product) — 
       now: new Date("2026-07-30T10:00:00Z"),
     });
 
-    expect(result).toEqual({ lineCount: 1 });
+    // issue 480: `setSupplierLinesOrdered` teraz vracia aj `floorRowCount`
+    // (počet zasiahnutých predajňových riadkov) — tu 0 (skupina má len order
+    // riadok, žiadny predajňový).
+    expect(result).toEqual({ lineCount: 1, floorRowCount: 0 });
   } finally {
     await rawClient.query("COMMIT");
     await rawClient.end();

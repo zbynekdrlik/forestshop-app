@@ -1670,6 +1670,27 @@ tr:last-child td {
 .ord-code-link {
   text-decoration: underline;
 }
+/* issue 480: predajňový (floor) riadok v tabuľke „Na objednanie" — vykresľuje
+   sa v tej istej tabuľke ako riadky objednávok (rovnaké stĺpce). `.floor-order-
+   code` = kód produktu pod jeho názvom, tlmený a menší, presný vzor ako
+   `.ord-code-text` (issue 276). `.floor-order-link` = znak 🛍️ na mieste čísla
+   objednávky, odkaz na zápis v „Objednávky predajňa" (`?tab=floor-orders`);
+   bez podčiarknutia (je to ikona, nie text). Dimming objednaného riadku
+   preberá existujúca `.order-row.ordered` (issue 60) — žiadne nové pravidlo. */
+.floor-order-code {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-text-xs);
+  color: var(--fs-ink-muted);
+  margin-top: var(--fs-space-1);
+}
+.floor-order-link {
+  text-decoration: none;
+  line-height: 1;
+}
 /* issue 65: upozornenie na starú nevybavenú objednávku (>14 dní) — výrazná
    farba (`--fs-warning`), rovnaká sémantika ako `.orders-table tr.state-
    caka_sa` vyššie, ale nezávislá od stavu riadku (môže sa zobraziť pri

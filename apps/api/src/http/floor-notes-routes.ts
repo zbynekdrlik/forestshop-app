@@ -9,6 +9,7 @@ import {
   detachFloorNoteProduct,
   setFloorNoteCalled,
   setFloorNoteOrdered,
+  setFloorNoteProductOrdered,
   setFloorNoteResolved,
   updateFloorNoteProductQuantity,
   updateFloorNoteText,
@@ -149,6 +150,38 @@ export function registerFloorNotesRoutes(app: Hono<AppBindings>, db: Database): 
       const { quantity } = c.req.valid("json");
       const updated = await updateFloorNoteProductQuantity(db, { floorNoteId: id, variantCode, quantity });
       return c.json({ ok: true as const, updated });
+    },
+  );
+
+  // issue 480: „objednané" na predajňovom riadku v board-e „Na objednanie" —
+  // nastaví `floor_note_product.ordered_at` a prepočíta note-level 🛒
+  // (`setFloorNoteProductOrdered`). Rovnaké oprávnenie + CSRF disciplína ako
+  // ostatné zápisy. 6-segmentová trasa (`.../products/:variantCode/ordered`) sa
+  // NEKOLÍDUJE so 4-segmentovým `POST .../products` (attach) ani s
+  // 5-segmentovým `DELETE .../:variantCode` (iný počet segmentov / iná metóda,
+  // `.claude/rules/http-routes.md`).
+  app.post(
+    "/api/floor-notes/:id/products/:variantCode/ordered",
+    requireSameOrigin(),
+    requireUser(db),
+    requireRole("admin", "manazer"),
+    zValidator("param", productParam),
+    zValidator("json", markerBody),
+    async (c) => {
+      const { id, variantCode } = c.req.valid("param");
+      const { value } = c.req.valid("json");
+      const user = c.get("user");
+      const result = await setFloorNoteProductOrdered(db, {
+        floorNoteId: id,
+        variantCode,
+        ordered: value,
+        actorUserId: user.userId,
+        now: new Date(),
+      });
+      if (result === "not_found") {
+        return c.json({ error: "Položka zápisu sa nenašla" }, 404);
+      }
+      return c.json({ ok: true as const, ordered: value });
     },
   );
 
