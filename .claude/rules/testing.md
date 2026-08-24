@@ -828,3 +828,33 @@ paths:
   kolízia, reálne kliky + kontrola konzoly. Reálny endpoint end-to-end pokrýva
   API integračný test, komponent+hook unit test. (Pozor na status-kódy mocku —
   viď bod vyššie.)
+- **Integračný test, ktorý cez HTTP vrstvu spúšťa logiku používajúcu REÁLNy
+  `new Date()` s POSUVNÝM oknom, NESMIE mať NATVRDO zadaný dátum fixtúry —
+  padne presne pri prekročení okna reálnym kalendárom (issue 480).**
+  `posta-uncollected` `run-now` filtruje objednávky 30-dňovým oknom
+  (`SOURCE_WINDOW_DAYS`, `isEligibleOrder` proti reálnemu `new Date()` — HTTP
+  vrstva nemá injektovateľné hodiny). Fixtúry mali `placedAt: new
+  Date("2026-07-25T00:00:00Z")`, čo 30. deň po tomto dátume (polnoc UTC
+  2026-08-24) VYPADLO z okna → `run-now` nenašiel objednávku a 4 testy padli
+  („expected 1 e-mail, got 0"). Fix: dátum RELATÍVNy k `Date.now()` (napr. 10
+  dní dozadu, `placedRecently()`) — bezpečne v okne bez ohľadu na kalendár,
+  rovnaký princíp ako `logic.test.ts`, ktorý si referenčný dátum (`TODAY`)
+  riadi sám a volá `isEligibleOrder(order, TODAY)`. **Diagnostická stopa:** keď
+  test padne LEN na neskoršom behu pri IDENTICKOM kóde (prešiel na dev, padol na
+  main), over `gh run view --json createdAt` OBOCH behov — hranica polnoci UTC =
+  date-fragility fixtúry, nie regresia diffu. Pri KAŽDEJ novej fixtúre pre
+  real-clock filter (posta/stale-order/akékoľvek „posledných N dní") daj dátum
+  relatívny, nikdy natvrdo.
+- **e2e spec, ktorý mutuje GLOBÁLNu tabuľku (zoznam bez per-účet filtra, napr.
+  `floor_note`), NESMIE tvrdiť GLOBÁLNu prázdnotu ani globálny počet — v CI
+  bežia spec SÚBORY PARALELNE (`playwright.config.ts` `workers: undefined`),
+  takže iný spec môže mať v tom istom čase vlastný záznam (issue 480).**
+  `floor-notes.spec` padal na `expect(floor-notes-empty).toBeVisible()` a
+  `locator('[data-testid^="floor-note-row-"]').toHaveCount(1)`, keď nový
+  `floor-orders-board.spec` (ten istý globálny `floor_note` zoznam, oba účet
+  `e2e-predajna@...` — no zoznam je aj tak globálny) vytvoril vlastný zápis.
+  Fix: každý spec kontroluje LEN VLASTNÝ fixture — riadok filtruj podľa
+  unikátneho textu (`.filter({ hasText: "..." })`) a po zmazaní over zmiznutie
+  PRÁVE svojho `noteId` (`floor-note-row-${noteId}` `toHaveCount(0)`), nikdy
+  globálny stav. Lokálne (`workers: 1`) sa táto kolízia NEPREJAVÍ — chytí ju až
+  paralelné CI.
