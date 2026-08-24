@@ -8,7 +8,7 @@ import { record } from "../modules/audit/service.js";
 import { ORDERS_EXPORT_URL_NOT_CONFIGURED, type OrdersIngestResult, type RunOrdersIngest } from "../modules/orders/ingest.js";
 import { listKnownStatusNames, listOpenStatusNames, replaceOpenStatusNames } from "../modules/orders/open-statuses.js";
 import { getOrdersDashboardOverview } from "../modules/orders/overview.js";
-import { countOpenOrderLinesByState, getOrderDetail, listOpenOrderLinesBySupplier } from "../modules/orders/queries.js";
+import { countOpenOrdersByState, getOrderDetail, listOpenOrderLinesBySupplier } from "../modules/orders/queries.js";
 import { assignOrderLineSupplier } from "../modules/orders/supplier-assignment.js";
 import { setProductSupplierLink, supplierLinkUrlBody } from "../modules/orders/supplier-link-assignment.js";
 import { setOrderComment, setOrderLineOrdered, setOrderLinesStateByCode, setOrderLineState } from "../modules/orders/state.js";
@@ -84,11 +84,12 @@ export function registerOrdersRoutes(
     c.json({ suppliers: await listOpenOrderLinesBySupplier(db, adminBaseUrl, { stateFilter: "riesit" }) }),
   );
 
-  // issue 476: odznak počtu v ľavom menu — počet otvorených riadkov v stave
-  // `riesit` (vzor issue 473 count endpointov). `requireUser`, žiadne
-  // obmedzenie roly (čítanie počtu nie je citlivejšie než čítanie zoznamu).
+  // issue 476/484: odznak počtu v ľavom menu — počet otvorených DISTINCT
+  // OBJEDNÁVOK v stave `riesit` (issue 484, Štěpán: „koľko problémových
+  // objednávok", nie riadkov). `requireUser`, žiadne obmedzenie roly (čítanie
+  // počtu nie je citlivejšie než čítanie zoznamu).
   app.get("/api/orders/riesit/count", requireUser(db), async (c) => {
-    const count = await countOpenOrderLinesByState(db, "riesit");
+    const count = await countOpenOrdersByState(db, "riesit");
     return c.json({ count });
   });
 
