@@ -4345,3 +4345,33 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
   PR #477 (merge `43a8f04`) + #478 (merge `d85091e`, by-code 400→200 konzolová
   chyba) + #479 (merge `5ca7955`, playbook). Nasadené `v0.3.0-dev.280` (telá PR
   = plain „issue 476", žiadny Closes).
+
+## 2026-08-24 — issue 480 (Na objednanie: predajňové položky 🛍️ zo zápisov Objednávky predajňa)
+- **#480:** pripnuté produkty NEVYBAVENÝCH zápisov „Objednávky predajňa" sa
+  zobrazia v „Na objednanie" pod svojím dodávateľom (rovnaká `effectiveSupplierSql`
+  cesta ako order_line), aby sa objednali spolu s e-shopovými. Migrácia `0059`
+  (nullable `floor_note_product.ordered_at`); board `GET /api/orders/open`
+  rozšírený o `floorRows` per skupina (LEN „Na objednanie", nie „Riešiť";
+  zobrazia sa aj bez otvorených stavov); `POST /api/floor-notes/:id/products/
+  :variantCode/ordered` (per-item, audited); hromadné `setSupplierLinesOrdered`
+  zahŕňa floor riadky; `floor_note.ordered` (🛒) ODVODENÉ cez
+  `recomputeFloorNoteOrdered` (per-item/bulk/attach/detach); e-mail floor
+  NEZAHŔŇA; `FloorOrderRow.tsx` (9 stĺpcov, 🛍️ + `?tab=floor-orders`).
+- Testy: API integračné `floor-orders-http.integration.test.ts` (13), web unit
+  `OrdersSection.floorRows.test.tsx` (7) + `OrdersToolbar` floor chip, e2e
+  `floor-orders-board.spec.ts` (klik-flow, nulová konzola).
+- Review (fresh-context dispatch, 0 🔴 0 🟡 0 🔵 po opravách): OrdersToolbar čipy
+  zahŕňajú floor riadky (issue 263 invariant), 🛒 prepočet aj pri attach/detach.
+- **Sprievodné (nesúvisiace s feature, ale blokovali zelené CI):** (1)
+  `floor-notes.spec` zúžený na vlastný zápis (globálny zdieľaný zoznam +
+  paralelné CI); (2) `posta-uncollected` fixtúry relatívny `placedAt` (pre-
+  existujúci date-fragility — natvrdo 2026-07-25 vypadlo z 30-dňového okna po
+  polnoci UTC 2026-08-24).
+- Commity: `49a5cc6` (bump .281 + log #476) / `c023345` (feat) / `04d4743`
+  (review) / `1d6a3d2` (e2e robustnosť) / `a92b1b2` (bump .282) / `eaa908c`
+  (posta fix). PR #481 (merge `ce07ccd1`, feature) + #482 (merge `56a3f041`,
+  CI unblock + bump .282). Nasadené `v0.3.0-dev.282` (telá PR = plain „issue
+  480", žiadny Closes — ticket ostáva OTVORENÝ na ručné zatvorenie po nezávislom
+  overení). Post-deploy naživo overené: floor riadok reálneho zápisu „Galik
+  Matúš" (ODIMON, 60285) sa renderuje v „Na objednanie"; write-path (create→pin→
+  ordered→🛒→delete) cez throwaway zápis OK, konzola čistá.
