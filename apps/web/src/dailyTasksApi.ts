@@ -49,7 +49,8 @@ export async function fetchDailyTasks(): Promise<readonly DailyTaskRow[]> {
   return listSchema.parse(await readJson(response, "Úlohy sa nepodarilo načítať")).rows;
 }
 
-// issue 473: odznak počtu v ľavom menu — počet mojich otvorených úloh. Rovnaký
+// issue 473 + 487: odznak počtu v ľavom menu — počet otvorených úloh VŠETKÝCH
+// účtov (zdieľané, #487). Rovnaký
 // vzor ako `fetchUpozorneniaCount` (`upozorneniaApi.ts`): odznak nie je
 // kritický, takže pri 401/chybe vráti 0 namiesto vyhodenia (App.tsx nechá
 // odznak na poslednej známej hodnote).
