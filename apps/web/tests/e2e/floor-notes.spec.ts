@@ -23,7 +23,11 @@ test("napísať zápis, pripnúť produkt (priama aj náhradná adresa), prepnú
   await page.getByLabel("Heslo").fill(E2E_HESLO);
   await page.getByRole("button", { name: "Prihlásiť sa" }).click();
   await expect(page.getByRole("heading", { name: "Objednávky predajňa" })).toBeVisible();
-  await expect(page.getByTestId("floor-notes-empty")).toBeVisible();
+  // issue 480: zoznam zápisov je GLOBÁLNY (žiadny per-účet filter) a e2e beží v
+  // CI PARALELNE (`playwright.config.ts` `workers: undefined`), takže iný spec
+  // (`floor-orders-board.spec.ts`) môže mať v tom istom čase vlastný zápis —
+  // tento test preto NEsmie tvrdiť GLOBÁLNU prázdnotu ani globálny počet; všetky
+  // kontrolky sú zúžené na VLASTNÝ zápis (podľa unikátneho textu / noteId).
 
   // Rastúca textarea — Enter len pridá nový riadok, formulár sa NEODOŠLE.
   const novaTextarea = page.getByTestId("floor-note-new-input");
@@ -34,7 +38,9 @@ test("napísať zápis, pripnúť produkt (priama aj náhradná adresa), prepnú
 
   await page.getByTestId("floor-note-new-add").click();
   await expect(page.getByTestId("floor-notes-list")).toBeVisible();
-  const riadok = page.locator('[data-testid^="floor-note-row-"]');
+  // Zúžené na VLASTNÝ zápis podľa unikátneho textu — nie globálny počet
+  // (paralelný spec môže mať vlastný zápis, viď komentár vyššie).
+  const riadok = page.locator('[data-testid^="floor-note-row-"]').filter({ hasText: "Matúš Dubec" });
   await expect(riadok).toHaveCount(1);
   await expect(riadok).toContainText("Matúš Dubec");
   await expect(novaTextarea).toHaveValue("");
@@ -105,9 +111,11 @@ test("napísať zápis, pripnúť produkt (priama aj náhradná adresa), prepnú
   await expect(page.getByTestId(`floor-note-product-link-${noteId}-E2E-PREDAJNA-1`)).toHaveCount(0);
   await expect(page.getByTestId(`floor-note-product-link-${noteId}-E2E-PREDAJNA-2`)).toBeVisible();
 
-  // Zmazať zápis — okamžite, bez potvrdzovacieho dialógu.
+  // Zmazať zápis — okamžite, bez potvrdzovacieho dialógu. Overuje sa, že
+  // zmizol PRÁVE TENTO zápis (nie globálna prázdnota — paralelný spec môže mať
+  // vlastný zápis, viď komentár vyššie).
   await page.getByTestId(`floor-note-delete-${noteId}`).click();
-  await expect(page.getByTestId("floor-notes-empty")).toBeVisible();
+  await expect(page.getByTestId(`floor-note-row-${noteId}`)).toHaveCount(0);
 
   expect(chyby).toEqual([]);
 });
