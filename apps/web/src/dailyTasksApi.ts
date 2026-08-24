@@ -1,12 +1,16 @@
 import { z } from "zod";
 
-// issue 342: "Dôležité → Úlohy na dnes" — zrkadlí `DailyTaskRow`
-// (`apps/api/src/modules/daily-tasks/queries.ts`).
+// issue 342 + 487: "Dôležité → Úlohy na dnes" — zrkadlí `DailyTaskRow`
+// (`apps/api/src/modules/daily-tasks/queries.ts`). Od #487 je zoznam ZDIEĽANÝ,
+// takže riadok nesie aj `authorUserId`/`authorName` (JOIN na `users`) — autor sa
+// zobrazuje pri každej úlohe (ako pri Poznámkach).
 
 const rowSchema = z.object({
   id: z.string(),
   text: z.string(),
   emoji: z.string().nullable(),
+  authorUserId: z.string(),
+  authorName: z.string(),
   doneAt: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),

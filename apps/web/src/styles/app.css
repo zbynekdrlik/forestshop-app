@@ -2626,6 +2626,17 @@ a.upozornenie-title:hover {
   overflow-wrap: break-word;
   min-width: 0;
 }
+/* issue 487: zdieľaný zoznam — meno autora pri riadku (rovnaký stlmený štýl ako
+   `.poznamka-meta`). Nekonkuruje textu o priestor (`flex:0 0 auto`), gap riadku
+   (`.uloha-row`'s `--fs-space-2`) ho oddelí; `align-self:center` ho opticky
+   zarovná na výšku jednoriadkového textu. */
+.uloha-author {
+  flex: 0 0 auto;
+  align-self: center;
+  font-size: var(--fs-text-xs);
+  color: var(--fs-ink-faint);
+  white-space: nowrap;
+}
 .uloha-edit-input {
   flex: 1 1 0%;
   min-width: 6rem;

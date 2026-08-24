@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
 import { dailyTask } from "../../db/schema.js";
 
@@ -13,7 +13,10 @@ export interface DailyTaskWriteResult {
 }
 
 // Jediná zapisovacia cesta pre NOVÚ úlohu — rovnaký princíp ako
-// `.claude/rules/mail-log.md`/`upozornenia`'s "jediná zapisovacia cesta".
+// `.claude/rules/mail-log.md`/`upozornenia`'s "jediná zapisovacia cesta". Autor
+// (`userId`) prichádza zo session (nikdy z tela requestu) a ukladá sa aj v
+// ZDIEĽANOM režime (#487) — pri riadku sa zobrazuje ako autor, presne ako pri
+// Poznámkach (`note`, #437).
 export async function createDailyTask(db: Database, input: CreateDailyTaskInput): Promise<DailyTaskWriteResult> {
   const [row] = await db
     .insert(dailyTask)
@@ -25,17 +28,18 @@ export async function createDailyTask(db: Database, input: CreateDailyTaskInput)
 
 export interface UpdateDailyTaskTextInput {
   readonly id: string;
-  readonly userId: string;
   readonly text: string;
   readonly now: Date;
 }
 
-// Vlastníctvo (`user_id`) sa vynucuje TU, nie len vo frontende — rovnaká
-// disciplína ako `upozornenia/service.ts`'s `updateOwnNote` (`source ===
-// "vlastne"`). Cudziu/neznámu/už zmazanú úlohu vráti ako `false`, nikdy 4xx
-// (rovnaký "neškodné no-op" princíp ako zvyšok appky).
+// issue 487: ZDIEĽANÝ zoznam — upraviť/odfajknúť/zmazať smie KTOKOĽVEK
+// prihlásený, NIE len autor (rovnako ako `note`/Poznámky, #437). Preto sa tu —
+// na rozdiel od pôvodnej súkromnej sémantiky (#342, `and(eq(id), eq(user_id))`) —
+// vlastníctvo ZÁMERNE nevynucuje; zápisy kľúčujú len `eq(id)`. Neznámu/už
+// zmazanú úlohu vrátia ako `false`, nikdy 4xx (rovnaký "neškodné no-op" princíp
+// ako zvyšok appky).
 //
-// Text a emoji sú ZÁMERNE dve samostatné funkcie/endpointy, nie jeden
+// Text a emoji ostávajú ZÁMERNE dve samostatné funkcie/endpointy, nie jeden
 // partial-update — zrkadlí to dve samostatné akcie v UI ("upraviť text" /
 // "pridať emoji", design komentár na tickete) a vyhýba sa dvojznačnosti
 // "kľúč nezadaný vs. zadaný ako null" (`.claude/rules/testing.md`'s vlastná
@@ -45,14 +49,13 @@ export async function updateDailyTaskText(db: Database, input: UpdateDailyTaskTe
   const result = await db
     .update(dailyTask)
     .set({ text: input.text, updatedAt: input.now })
-    .where(and(eq(dailyTask.id, input.id), eq(dailyTask.userId, input.userId)))
+    .where(eq(dailyTask.id, input.id))
     .returning({ id: dailyTask.id });
   return result.length > 0;
 }
 
 export interface UpdateDailyTaskEmojiInput {
   readonly id: string;
-  readonly userId: string;
   // `null` = zmazať emoji (späť na "žiadne").
   readonly emoji: string | null;
   readonly now: Date;
@@ -62,14 +65,13 @@ export async function updateDailyTaskEmoji(db: Database, input: UpdateDailyTaskE
   const result = await db
     .update(dailyTask)
     .set({ emoji: input.emoji, updatedAt: input.now })
-    .where(and(eq(dailyTask.id, input.id), eq(dailyTask.userId, input.userId)))
+    .where(eq(dailyTask.id, input.id))
     .returning({ id: dailyTask.id });
   return result.length > 0;
 }
 
 export interface SetDailyTaskDoneInput {
   readonly id: string;
-  readonly userId: string;
   readonly done: boolean;
   readonly now: Date;
 }
@@ -78,20 +80,19 @@ export async function setDailyTaskDone(db: Database, input: SetDailyTaskDoneInpu
   const result = await db
     .update(dailyTask)
     .set({ doneAt: input.done ? input.now : null, updatedAt: input.now })
-    .where(and(eq(dailyTask.id, input.id), eq(dailyTask.userId, input.userId)))
+    .where(eq(dailyTask.id, input.id))
     .returning({ id: dailyTask.id });
   return result.length > 0;
 }
 
 export interface DeleteDailyTaskInput {
   readonly id: string;
-  readonly userId: string;
 }
 
 export async function deleteDailyTask(db: Database, input: DeleteDailyTaskInput): Promise<boolean> {
   const result = await db
     .delete(dailyTask)
-    .where(and(eq(dailyTask.id, input.id), eq(dailyTask.userId, input.userId)))
+    .where(eq(dailyTask.id, input.id))
     .returning({ id: dailyTask.id });
   return result.length > 0;
 }

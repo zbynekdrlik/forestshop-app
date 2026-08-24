@@ -46,6 +46,11 @@ test("emoji picker do textu úlohy + jednoklikové označenie riadku, upraviť, 
   await expect(riadky.nth(0)).toContainText("Záhorecký volať");
   await expect(riadky.nth(1)).toContainText("Nemáme sáčky 👍");
 
+  // issue 487: zdieľaný zoznam — pri každom riadku je jeho autor (seedovaný
+  // účet `e2e-ulohy@forestshop.sk` má displayName "E2E Čitateľ").
+  await expect(riadky.nth(0).locator(".uloha-author")).toHaveText("E2E Čitateľ");
+  await expect(riadky.nth(1).locator(".uloha-author")).toHaveText("E2E Čitateľ");
+
   // Nájsť konkrétny riadok podľa aktuálneho textu (rovnaký vzor ako
   // `upozornenia.spec.ts`'s `kartaSNadpisom`, len cez `.uloha-row`).
   const sackyRiadok = page.locator(".uloha-row").filter({ hasText: "Nemáme sáčky" });
