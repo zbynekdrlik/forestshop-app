@@ -4480,6 +4480,39 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
   `0.3.0-dev.287` (rovnaký vzor ako .285 pri issue 484) — ŽIADNA funkčná
   zmena, len dokumentácia; #487/#488 sú funkčne nasadené už na `.286`.
 
+## 2026-08-26 — #492 (zamrznutý stav objednávky po vypadnutí z exportného okna)
+
+- Solo ticket, paralelný fleet round; version bump `0.3.0-dev.291` (pôvodne .289,
+  re-bump po re-syncu s dev, ktoré medzičasom postúpilo cez #462/#493).
+- Koreň (empiricky overené na forestshop-dev): import objednávok beží s pevným
+  90-dňovým kĺzavým oknom (`computeImportWindow(now,90)`); CSV import je jediná
+  cesta osviežujúca `order.status_name` (#59). Objednávka vybavená v Shoptete AŽ
+  PO vypadnutí z okna sa už nikdy neosvieži → zamrzne na "Vybavuje sa" a visí v
+  Na objednanie. Overené: 20260739 (30.4) v DB "Vybavuje sa", v poslednom exporte
+  chýba; priame stiahnutie so širokým `dateFrom` vracia "Vybavená".
+- Fix (prístup A, vzor #132): sebaozdravujúce okno CSV importu — `findOldestOpenOrder`
+  + `computeOrdersExportWindowStart` v `backfill.ts`; CLI + `index.ts` predĺžia
+  `dateFrom` (aj `windowStart` akceptačnej brány) dozadu na najstaršiu otvorenú
+  objednávku. Repair sweep inherentný: prvý beh po nasadení zosúladí 20260739
+  (→Vybavená, zmizne) aj 20260819 (→zostane). Žiadne mazanie, žiadna heuristika.
+- Zamietnuté: (B) per-order Playwright dočítanie stavu (nový krehký scraping),
+  (C) natvrdo dlhšie pevné okno (nerieši triedu). Design komentár:
+  https://github.com/zbynekdrlik/forestshop-app/issues/492#issuecomment-5423282699
+- Commity: `db6949b` (bump .289 + log), `07acb4f` (RED test), `9fee46e` (GREEN
+  fix), + docs (orders.md playbook + tento log). RED→GREEN:
+  `orders-status-backfill.integration.test.ts` — "computeOrdersExportWindowStart
+  PREDĹŽI okno dozadu na staršiu otvorenú objednávku (aj s id)" + "FIX:
+  sebaozdravujúce okno CSV importu dočíta starú objednávku a osvieži ju na
+  'Vybavená'" (obidva RED na neutralizovanej `computeOrdersExportWindowStart`,
+  overené na izolovanom Postgrese; 7/7 GREEN, #132 backfill + ingest bez regresie).
+- Repair sweep (inherentný): prvý beh po nasadení s predĺženým oknom zosúladí
+  presne 2 zamrznuté staré otvorené objednávky — 20260739 (→ Vybavená, zmizne z
+  Na objednanie) a 20260819 (→ Vybavuje sa, správne ZOSTANE, v Shoptete stále
+  otvorená). Klientove 20260990/20261172 sú vnútri okna, nedotknuté.
+- Review (Fable, fresh-context): 0 🔴 1 🟡 4 🔵 → opravené v `93c8fdd` — zdieľaný
+  `computeOrdersIngestWindows` (testovateľné drôtovanie CLI+scheduler, 3 unit testy),
+  log pri rozšírení okna (warn >365 dní), oprava zastaraného komentára v `ingest.ts`.
+
 ## issue 493 — Stavový klaster: 6. exkluzívny stav „Objednané" (`0.3.0-dev.290`)
 
 - Zadanie/binding: telo ticketu (tlačidlo = toggle `ordered` booleanu) PREHLASOVANÉ

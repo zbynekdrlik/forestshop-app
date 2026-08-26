@@ -12,9 +12,9 @@ import { createNextEventService } from "./modules/calendar/service.js";
 import { createHttpExportFetcher } from "./modules/catalog/fetcher.js";
 import { ingestCatalog } from "./modules/catalog/ingest.js";
 import { createSmtpMailTransport } from "./modules/mail/transport.js";
-import { computeOrderIdsWindowStart } from "./modules/orders/backfill.js";
-import { computeImportWindow, createHttpOrderIdsFetcher, createHttpOrdersExportFetcher } from "./modules/orders/fetcher.js";
-import { DEFAULT_ORDERS_IMPORT_WINDOW_DAYS, ingestOrders, type RunOrdersIngest } from "./modules/orders/ingest.js";
+import { computeOrdersIngestWindows } from "./modules/orders/backfill.js";
+import { createHttpOrderIdsFetcher, createHttpOrdersExportFetcher } from "./modules/orders/fetcher.js";
+import { ingestOrders, type RunOrdersIngest } from "./modules/orders/ingest.js";
 import { createHttpTrackingClient } from "./modules/posta-uncollected/tracking-client.js";
 import { runPostaUncollected } from "./modules/posta-uncollected/run.js";
 import { createOpenAiClassifyClient } from "./modules/order-reminder/classify-client.js";
@@ -96,24 +96,27 @@ const ordersUrl = env.SHOPTET_ORDERS_URL;
 // `runIngest`/`runOrdersIngest` vyššie) — `ingestOrders` to sama osebe berie
 // ako "id zatiaľ neznáme", nikdy ako chybu.
 const ordersXmlUrl = env.SHOPTET_ORDERS_XML_URL;
-// issue 132: XML id-fetch okno (LEN preň, nikdy pre hlavný CSV import vyššie
-// — ten má vlastnú, nezávislú akceptančnú logiku, `.claude/rules/orders.md`)
-// sa sebaozdravujúco predĺži dozadu, keď v DB existuje otvorená objednávka
-// bez `shoptet_order_id` staršia než predvolené 90-dňové okno
-// (`backfill.ts`'s `computeOrderIdsWindowStart`) — inak taká objednávka
-// (napr. 20260739/20260740) nikdy nedostane svoje id, hoci Shoptet ho má a
-// objednávka ostáva otvorená.
+// issue 132/492: obe importné okná sa sebaozdravujúco predĺžia dozadu, keď v
+// DB existuje otvorená objednávka staršia než predvolené 90-dňové okno. CSV
+// import (`exportDateFrom`, #492) na najstaršiu OTVORENÚ objednávku BEZ ohľadu
+// na id — inak jej `status_name` navždy zamrzne (objednávka vybavená v Shoptete
+// AŽ PO vypadnutí z okna zostane v appke "Vybavuje sa" a visí v "Na objednanie",
+// napr. 20260739; CSV je jediná cesta osviežujúca status). XML id-fetch
+// (`idsDateFrom`, #132) na najstaršiu otvorenú BEZ `shoptet_order_id`, z
+// predvoleného okna (nezmenené #132). Oba počíta JEDEN zdroj pravdy
+// `computeOrdersIngestWindows` (`backfill.ts`) — zdieľaný s `cli/orders-ingest.ts`.
 const runOrdersIngest: RunOrdersIngest | undefined =
   ordersUrl === undefined
     ? undefined
     : async (now: Date) => {
-        const { dateFrom, dateUntil } = computeImportWindow(now, DEFAULT_ORDERS_IMPORT_WINDOW_DAYS);
-        const idsDateFrom = ordersXmlUrl === undefined ? dateFrom : await computeOrderIdsWindowStart(db, dateFrom);
+        const { exportDateFrom, idsDateFrom, dateUntil } = await computeOrdersIngestWindows(db, now, {
+          hasXmlUrl: ordersXmlUrl !== undefined,
+        });
         return ingestOrders(db, {
-          fetchExport: createHttpOrdersExportFetcher({ url: ordersUrl, dateFrom, dateUntil }),
+          fetchExport: createHttpOrdersExportFetcher({ url: ordersUrl, dateFrom: exportDateFrom, dateUntil }),
           now,
           rawDir: env.ORDERS_RAW_DIR,
-          windowStart: dateFrom,
+          windowStart: exportDateFrom,
           windowEnd: dateUntil,
           // issue 269: odkaz priamo na objednávku vo vrátkovej karte na
           // Upozorneniach — rovnaká premenná ako `postaUncollectedDeps`/

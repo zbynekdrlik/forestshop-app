@@ -440,12 +440,16 @@ export async function ingestOrders(db: Database, options: OrdersIngestOptions): 
         for (const row of inserted) orderIdByExternalId.set(row.externalOrderId, row.id);
       }
 
-      // issue 132: `orderIdsByCode` (best-effort XML fetch, prípadne
-      // ROZŠÍRENÉ za CSV okno cez `backfill.ts`'s `computeOrderIdsWindowStart`
+      // issue 132: `orderIdsByCode` (best-effort XML fetch, `dateFrom`
+      // ROZŠÍRENÝ za predvolené okno cez `backfill.ts`'s `computeOrderIdsWindowStart`
       // — pozri `index.ts`/`cli/orders-ingest.ts`) môže poznať objednávku,
-      // ktorá v TOMTO behu CSV vôbec NIE JE (staršia než jeho vlastné,
-      // NEROZŠÍRENÉ okno — CSV okno sa zámerne nemení, aby sa nedotkla
-      // `previousLineRatio` akceptančná logika vyššie). Bez tohto kroku by
+      // ktorá v TOMTO behu CSV vôbec NIE JE. Od #492 sa AJ CSV okno
+      // sebaozdravujúco rozširuje (`computeOrdersExportWindowStart`, na
+      // NADMNOŽINU XML okna — najstaršia OTVORENÁ objednávka bez ohľadu na id),
+      // takže táto vetva je v praxi takmer mŕtva (objednávku, ktorú pozná XML,
+      // zvyčajne teraz nesie aj CSV) — ponechaná ZÁMERNE ako obrana pre prípad,
+      // že by XML poznal objednávku mimo CSV obsahu (napr. zmazaná/vymenená
+      // v CSV, ale ešte v XML histórii). Bez tohto kroku by
       // upsert cyklus vyššie (ktorý ide LEN cez `orderInfo`, postavené z CSV)
       // taký záznam nikdy nenavštívil, takže jeho `shoptetOrderId` by sa
       // nikdy nezapísal, hoci XML mapa ho pozná. Priamy `UPDATE` namiesto
