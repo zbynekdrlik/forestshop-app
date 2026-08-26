@@ -41,7 +41,11 @@ const E2E_NAV_EMAIL = "e2e-nav@forestshop.sk";
 // nahradilo jej Shoptet-viazaný obsah vlastnými zápismi z predajne
 // (`id`/`label`/miesto v menu nezmenené, funkčný test teraz v samostatnom
 // `floor-notes.spec.ts`, rovnaký vzor).
-test("ľavé menu má štyri priečinky (Dôležité/Eshop/Systém/Automatizácie) s dvadsiatimi jednou záložkami, klik prepne obrazovku, panel sa zbalí do lišty a stav si pamätá, konzola je čistá", async ({
+// issue 501 (2026-08-26): dva nové PRÁZDNE priečinky "Vyšívanie"/"Slavosport"
+// HNEĎ POD "Eshop" (šéfov kolega Štěpán, Discord + nákres) — celkovo šesť
+// priečinkov, poradie Dôležité/Eshop/Vyšívanie/Slavosport/Systém/Automatizácie.
+// Počet ZÁLOŽIEK sa NEMENÍ (nové sekcie sú zatiaľ bez záložiek) — stále 21.
+test("ľavé menu má šesť priečinkov (Dôležité/Eshop/Vyšívanie/Slavosport/Systém/Automatizácie) s dvadsiatimi jednou záložkami, klik prepne obrazovku, panel sa zbalí do lišty a stav si pamätá, konzola je čistá", async ({
   page,
 }) => {
   const chyby: string[] = [];
@@ -57,11 +61,33 @@ test("ľavé menu má štyri priečinky (Dôležité/Eshop/Systém/Automatizáci
   await page.getByLabel("Heslo").fill(E2E_HESLO);
   await page.getByRole("button", { name: "Prihlásiť sa" }).click();
 
-  // Presne štyri priečinky.
+  // Presne šesť priečinkov (issue 501 pridalo Vyšívanie/Slavosport).
   await expect(page.getByRole("button", { name: "Dôležité" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Systém" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Eshop" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Automatizácie" })).toBeVisible();
+  // issue 501: dva nové PRÁZDNE priečinky HNEĎ POD "Eshop".
+  await expect(page.getByRole("button", { name: "Vyšívanie" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Slavosport" })).toBeVisible();
+
+  // issue 501: over presné PORADIE priečinkov podľa nákresu Štěpána (šípka
+  // mieri presne pod Eshop). `.ftitle` nesie SUROVÝ text priečinka —
+  // `text-transform: uppercase` je len CSS, takže `allTextContents()` vráti
+  // prirodzený tvar z registra (`nav.ts`), nie veľké písmená.
+  const poradiePriecinkov = await page.locator(".side-nav .folder-head .ftitle").allTextContents();
+  expect(poradiePriecinkov).toEqual([
+    "Dôležité",
+    "Eshop",
+    "Vyšívanie",
+    "Slavosport",
+    "Systém",
+    "Automatizácie",
+  ]);
+  // Nové prázdne sekcie štartujú ROZBALENÉ (žiadny defaultCollapsed, ako
+  // Dôležité/Eshop) — správanie prázdnej sekcie je konzistentné s ostatnými
+  // zbaliteľnými priečinkami (klik ich zbalí; overené unit testom Sidebaru).
+  await expect(page.getByRole("button", { name: "Vyšívanie" })).toHaveAttribute("aria-expanded", "true");
+  await expect(page.getByRole("button", { name: "Slavosport" })).toHaveAttribute("aria-expanded", "true");
 
   // issue 343: "Systém" a "Automatizácie" štartujú ZBALENÉ (menu by inak
   // presahovalo výšku obrazovky), "Eshop" ostáva rozbalený — over predvolený

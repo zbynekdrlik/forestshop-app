@@ -34,9 +34,20 @@ import { DEFAULT_TAB_ID, HIDDEN_TABS, NAV, findTab, isVisibleTabId } from "./nav
 // Issue 387 E5 pridalo "Párovanie" — pôvodne hneď za "Párovanie produktov"
 // (#239), ktorú issue 400 (E9) odstránilo (majiteľ ju výslovne schválil).
 // Tento test je najbližšie k tomu, čo strojovo overiť dá (registrácia, nie DOM).
-it("NAV má štyri priečinky (Dôležité/Eshop/Systém/Automatizácie), s 4/10/3/4 záložkami v poradí podľa dôležitosti", () => {
-  expect(NAV).toHaveLength(4);
-  expect(NAV.map((f) => f.label)).toEqual(["Dôležité", "Eshop", "Systém", "Automatizácie"]);
+// issue 501: dva nové PRÁZDNE priečinky "Vyšívanie"/"Slavosport" HNEĎ POD
+// "Eshop" (šéfov kolega Štěpán, Discord + nákres) — poradie priečinkov je teraz
+// Dôležité, Eshop, Vyšívanie, Slavosport, Systém, Automatizácie. Sú zatiaľ bez
+// záložiek (0/0), "Systém"/"Automatizácie" sa posunuli na indexy 4/5.
+it("NAV má šesť priečinkov (Dôležité/Eshop/Vyšívanie/Slavosport/Systém/Automatizácie), s 4/10/0/0/3/4 záložkami v poradí podľa dôležitosti", () => {
+  expect(NAV).toHaveLength(6);
+  expect(NAV.map((f) => f.label)).toEqual([
+    "Dôležité",
+    "Eshop",
+    "Vyšívanie",
+    "Slavosport",
+    "Systém",
+    "Automatizácie",
+  ]);
   // issue 437: "Poznámky" pribudlo do priečinka „Dôležité" (2 → 3 záložky).
   // issue 445: "Objednať DPD" presunuté z „Eshop" do „Dôležité" pod
   // „Poznámky" (Dôležité 3 → 4, Eshop 10 → 9).
@@ -44,8 +55,12 @@ it("NAV má štyri priečinky (Dôležité/Eshop/Systém/Automatizácie), s 4/10
   // (Eshop 9 → 10).
   expect(NAV[0]?.tabs).toHaveLength(4);
   expect(NAV[1]?.tabs).toHaveLength(10);
-  expect(NAV[2]?.tabs).toHaveLength(3);
-  expect(NAV[3]?.tabs).toHaveLength(4);
+  // issue 501: dve nové PRÁZDNE sekcie (Vyšívanie/Slavosport) — zatiaľ 0/0
+  // záložiek; "Systém"/"Automatizácie" sa posunuli na indexy 4/5.
+  expect(NAV[2]?.tabs).toHaveLength(0);
+  expect(NAV[3]?.tabs).toHaveLength(0);
+  expect(NAV[4]?.tabs).toHaveLength(3);
+  expect(NAV[5]?.tabs).toHaveLength(4);
   expect(NAV[0]?.tabs.map((t) => t.label)).toEqual(["Upozornenia", "Úlohy na dnes", "Poznámky", "Objednať DPD"]);
   expect(NAV[1]?.tabs.map((t) => t.label)).toEqual([
     "Na objednanie",
@@ -61,9 +76,9 @@ it("NAV má štyri priečinky (Dôležité/Eshop/Systém/Automatizácie), s 4/10
   ]);
   // issue 212: "Dodávateľský sklad" — scraper dostupnosti u dodávateľa;
   // patrí do Systému (zadanie majiteľa), nie medzi Automatizácie.
-  expect(NAV[2]?.tabs.map((t) => t.label)).toEqual(["Sync zo Shoptetu", "Texty e-mailov", "Dodávateľský sklad"]);
+  expect(NAV[4]?.tabs.map((t) => t.label)).toEqual(["Sync zo Shoptetu", "Texty e-mailov", "Dodávateľský sklad"]);
   // issue 193: "Odoslané e-maily" — prehľad toho, čo automatizácie poslali.
-  expect(NAV[3]?.tabs.map((t) => t.label)).toEqual([
+  expect(NAV[5]?.tabs.map((t) => t.label)).toEqual([
     // issue 213: prepínanie vypredaných produktov späť na skladom.
     "Vypredané → Skladom",
     "Nevyzdvihnuté zásielky",
@@ -80,15 +95,21 @@ it("NAV má štyri priečinky (Dôležité/Eshop/Systém/Automatizácie), s 4/10
 // jeho vlastný test). Issue 342: "Dôležité" (nový, PRVÝ priečinok) ostáva
 // tiež rozbalený — rovnaký dôvod ako "Eshop" (dennodenne používaná
 // obrazovka).
-it("Dôležité a Eshop nemajú defaultCollapsed nastavené, Systém a Automatizácie majú true", () => {
+it("Dôležité/Eshop/Vyšívanie/Slavosport nemajú defaultCollapsed nastavené, Systém a Automatizácie majú true", () => {
   expect(NAV[0]?.label).toBe("Dôležité");
   expect(NAV[0]?.defaultCollapsed).toBeUndefined();
   expect(NAV[1]?.label).toBe("Eshop");
   expect(NAV[1]?.defaultCollapsed).toBeUndefined();
-  expect(NAV[2]?.label).toBe("Systém");
-  expect(NAV[2]?.defaultCollapsed).toBe(true);
-  expect(NAV[3]?.label).toBe("Automatizácie");
-  expect(NAV[3]?.defaultCollapsed).toBe(true);
+  // issue 501: nové prázdne sekcie štartujú ROZBALENÉ (žiadny defaultCollapsed),
+  // rovnako ako Dôležité/Eshop — dizajnové rozhodnutie na tickete #501.
+  expect(NAV[2]?.label).toBe("Vyšívanie");
+  expect(NAV[2]?.defaultCollapsed).toBeUndefined();
+  expect(NAV[3]?.label).toBe("Slavosport");
+  expect(NAV[3]?.defaultCollapsed).toBeUndefined();
+  expect(NAV[4]?.label).toBe("Systém");
+  expect(NAV[4]?.defaultCollapsed).toBe(true);
+  expect(NAV[5]?.label).toBe("Automatizácie");
+  expect(NAV[5]?.defaultCollapsed).toBe(true);
 });
 
 // issue 287: DEFAULT_TAB_ID sa NEODVODZUJE od NAV[0] (to je "eshop", priečinok,
