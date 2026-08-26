@@ -1524,3 +1524,9 @@ paths:
   inde na tej istej obrazovke znamená CHYBU (BCC/mail varovania, issue 344 preto
   pre RIADOK zvolil zelenú `--fs-success`) — pri „daj to červené" over, či to šéf
   myslí naozaj (issue 466: myslel, výslovne zopakoval), a zdôvodnenie napíš na tiket.
+
+- **Badge v nav tabe mení accessible name tlačidla** (#512): číselný badge je
+  `<span>` s `aria-label` VNÚTRI tab buttonu, takže jeho text sa PRIDÁVA do
+  accessible name — `getByRole` kliky s NEexact menom v e2e ostávajú bezpečné,
+  exact-name kliky by sa rozbili. Pri pridávaní badge na existujúci tab netreba
+  meniť nav counts logiku, len over e2e selektory tabu.
