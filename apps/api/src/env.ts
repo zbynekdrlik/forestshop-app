@@ -95,6 +95,12 @@ const envSchema = z.object({
   // zdieľané všeobecné `MAIL_BCC`). Chýbajúca = automatizácia NEPOŠLE ani
   // jeden e-mail zákazníkovi (fail-closed).
   ORDER_MERGE_BCC_EMAIL: z.string().email().optional(),
+  // issue 500: "Na objednanie" — ručný e-mail zákazníkovi (@ tlačidlo na
+  // riadku). Rovnaká úvaha ako `NEDOSTUPNE_BCC_EMAIL`/`ORDER_MERGE_BCC_EMAIL`
+  // vyššie (NEZÁVISLÁ, vyhradená premenná, nikdy zdieľané všeobecné
+  // `MAIL_BCC`). Chýbajúca = odoslanie NEODÍDE (fail-closed) a okno náhľadu
+  // ukáže jasnú hlášku.
+  ORDER_CUSTOMER_CONTACT_BCC_EMAIL: z.string().email().optional(),
   // issue 292: prihlasovacie údaje do portálu `dpdshipper.sk` (Playwright
   // robot na objednávanie prepravy/zvozu) — rovnaké pravidlo ako
   // `SHOPTET_ADMIN_USER`/`PASSWORD` vyššie, nikdy do repa/commit

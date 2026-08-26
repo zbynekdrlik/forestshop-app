@@ -6,6 +6,8 @@ import { groupRiesitLinesByOrder } from "../riesitOrders.js";
 import { useOrderLinesBoard } from "../useOrderLinesBoard.js";
 import { OrderWriteFailuresBanner } from "./OrderWriteFailuresBanner.js";
 import { RiesitOrderRow } from "./RiesitOrderRow.js";
+import { CustomerContactDialog } from "./CustomerContactDialog.js";
+import { useCustomerContactMail } from "../useCustomerContactMail.js";
 
 // issue 450: šéfov kolega Štěpán (Discord 19.8.2026) — pôvodne placeholder.
 // issue 476 (Štěpán, Discord 23.8.2026): funkcia doplnená — sekcia „Riešiť"
@@ -91,6 +93,11 @@ export function RiesitSection({
       });
   };
 
+  // issue 502: @ tlačidlo za menom zákazníka otvorí okno na ručný e-mail
+  // zákazníkovi — ZDIEĽANÉ jadro (`useCustomerContactMail`) s „Na objednanie"
+  // (#500), aby bola funkcia úplne identická.
+  const contact = useCustomerContactMail(onSessionExpired);
+
   // issue 484: plochý zoznam objednávok odvodený z rovnakého `board.suppliers`
   // (žiadny nový dopyt) — preskupené podľa `orderId`, najnovšia prvá.
   const orders = groupRiesitLinesByOrder(board.suppliers);
@@ -157,10 +164,19 @@ export function RiesitSection({
       {orders.length > 0 && (
         <div className="riesit-orders" data-testid="riesit-orders">
           {orders.map((order) => (
-            <RiesitOrderRow key={order.orderId} order={order} canChangeState={canChangeState} board={board} />
+            <RiesitOrderRow
+              key={order.orderId}
+              order={order}
+              canChangeState={canChangeState}
+              board={board}
+              onOpenCustomerContact={contact.open}
+            />
           ))}
         </div>
       )}
+      {/* issue 502: okno na ručný e-mail zákazníkovi — zdieľané s „Na
+          objednanie" (#500), otvorí ho @ tlačidlo ktoréhokoľvek riadku. */}
+      <CustomerContactDialog contact={contact} />
     </section>
   );
 }

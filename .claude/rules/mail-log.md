@@ -91,3 +91,20 @@ paths:
   `/srv/forestshop/.env` a bude ho chcieť „napojiť": je to zámerné
   rozhodnutie (viď aj `.claude/rules/orders.md`), nie chýbajúce drôtovanie —
   BCC už funguje cez vyhradené premenné.
+- **issue 500: nová hodnota `mail_log_source` enumu sa musí pridať na TROCH
+  miestach, inak PRVÝ zapísaný riadok toho zdroja zhodí CELÚ obrazovku „Kniha
+  odoslaných e-mailov" (aj fail-closed `skipped` riadok stačí).** Fable review
+  na PR pre #500 chytil dva zabudnuté: (1) `apps/web/src/mailLogApi.ts`'s
+  `MAIL_LOG_SOURCES` pole + `MAIL_LOG_SOURCE_LABELS` (frontend zod
+  `rowSchema.source: z.enum(MAIL_LOG_SOURCES)` inak `listSchema.parse` vyhodí
+  pri PRVOM riadku a `MailLogSection` prestane vykresľovať pre VŠETKY zdroje),
+  a (2) `apps/api/src/http/mail-log-routes.ts`'s `listQuery.source` filter
+  enum. Plus samozrejme (3) `apps/api/src/db/schema-mail-log.ts`'s `pgEnum`
+  (+ samostatná `ALTER TYPE … ADD VALUE` migrácia, `.claude/rules/database.md`
+  issue 476 bezpečný vzor) a `mail-log/service.ts`'s `MailLogSource` únia.
+  Checklist pri KAŽDOM ďalšom (šiestom+) odosielateľovi: schema pgEnum +
+  MailLogSource únia + migrácia + `mailLogApi.ts` (SOURCES + LABELS) +
+  `mail-log-routes.ts` filter. `order_merge` (#257) to všetko urobilo správne
+  — porovnaj s ním. A nová `env.ts` `*_BCC_EMAIL` premenná potrebuje riadok v
+  `docker-compose.prod.yml` (`.claude/rules/deploy.md` issue 198/292), inak je
+  funkcia fail-closed mŕtva na prode.

@@ -1446,7 +1446,10 @@ tr:last-child td {
 }
 /* Meno zákazníka zaberie zvyšné miesto, orezané na jednom riadku. */
 .riesit-order-customer {
-  flex: 1 1 8rem;
+  /* issue 502: NErásť (predtým `1 1 8rem`) — meno má prirodzenú šírku (dlhé sa
+     oreže ellipsom), aby @ tlačidlo sedelo HNEĎ ZA ním VĽAVO; počet+dátum drží
+     vpravo `.riesit-order-count`'s `margin-left: auto` nižšie. */
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1457,6 +1460,12 @@ tr:last-child td {
   flex: 0 0 auto;
   color: var(--fs-ink-muted);
   font-size: var(--fs-text-sm);
+}
+/* issue 502: počet položiek (prvý z pravej skupiny) odtlačí seba + dátum
+   vpravo — medzi menom+@ (vľavo) a počtom+dátumom (vpravo) tak ostane medzera,
+   presne ako v nákrese. */
+.riesit-order-count {
+  margin-left: auto;
 }
 /* Poznámka k objednávke — na vlastnom riadku pod hlavičkou, orezaná. */
 .riesit-order-note {
@@ -1486,6 +1495,12 @@ tr:last-child td {
    nesie teraz `.ord-supplier-assign`'s vlastný `margin-top` nižšie. */
 .ord-supplier-merged {
   max-width: 100%;
+  /* issue 500: zúžené ĽAVÉ/PRAVÉ odsadenie LEN tejto bunky (vzor `.ord-qty`/
+     issue 214) — uvoľní ~8px, aby sa 🔗 + @ (2×36px) zmestili vedľa seba do
+     úzkeho `col-supplier` (8.5 %) bez presúvania colgroup percent iným
+     stĺpcom. */
+  padding-left: var(--fs-space-1);
+  padding-right: var(--fs-space-1);
 }
 /* issue 67: odkaz/kód dodávateľa pri riadku objednávky. */
 .ord-supplier-cell {
@@ -1617,13 +1632,48 @@ tr:last-child td {
   gap: var(--fs-space-1);
   min-width: 0;
 }
-.ord-supplier-row > .ord-supplier-cell {
+/* issue 500: horný riadok bunky DODÁVATEĽ — 🔗 (odkaz) + @ (e-mail
+   zákazníkovi) VEDĽA seba; ✏️ (úprava odkazu) ostáva POD nimi (`.ord-supplier
+   -row` stĺpcová). `nowrap`: nikdy sa nezalomí (zalomenie by zvýšilo výšku
+   riadku) — miesto na dve 36px tlačidlá uvoľňuje zúžené odsadenie bunky
+   (`.ord-supplier-merged` nižšie, vzor `.ord-qty`/issue 214). */
+.ord-supplier-top {
+  display: flex;
+  align-items: center;
+  gap: var(--fs-space-1);
+  flex-wrap: nowrap;
   min-width: 0;
-  /* issue 476: v stĺpcovom rozložení NErásť vertikálne (predtým `1 1 auto`
-     v riadku roztiahlo bunku vodorovne) — 🔗/„—"/hint sedí na vlastnej
-     výške, ceruzka je pod ním. */
-  flex: 0 0 auto;
   max-width: 100%;
+}
+.ord-supplier-top > .ord-supplier-cell {
+  /* Bunka sa smie zmenšiť (poznámka/hint sa oreže cez `.ord-supplier-note`'s
+     ellipsis), aby @ tlačidlo vedľa nej vždy udržalo svoj klikací cieľ. */
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+}
+/* issue 500: @ tlačidlo (e-mail zákazníkovi) vedľa 🔗 — rovnaký 36px ikonový
+   rozmer/vzhľad ako `.ord-supplier-link`, aby dvojica pôsobila konzistentne;
+   `flex-shrink: 0`, nikdy pod klikací cieľ. */
+.customer-contact-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  min-width: 2.25rem;
+  min-height: 2.25rem;
+  padding: var(--fs-space-1);
+  font-size: var(--fs-text-lg);
+  line-height: 1;
+  color: var(--fs-brand);
+  background: var(--fs-surface-alt);
+  border: 1px solid var(--fs-border);
+  border-radius: var(--fs-radius-sm);
+  cursor: pointer;
+}
+.customer-contact-btn:hover {
+  background: var(--fs-brand);
+  color: var(--fs-surface);
 }
 /* "veľké tlačidlá" — rovnaký 2.25rem (36px) klikací rozmer ako
    `.ord-supplier-link`, aby zamestnanec mohol rýchlo kliknúť aj na úzkej

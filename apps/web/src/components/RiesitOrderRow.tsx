@@ -3,6 +3,7 @@ import { formatSkDate } from "../formatDate.js";
 import { computeVariantTotals, formatItemCount } from "../ordersSummary.js";
 import type { RiesitOrder } from "../riesitOrders.js";
 import type { useOrderLinesBoard } from "../useOrderLinesBoard.js";
+import { CustomerContactRowButton } from "./CustomerContactRowButton.js";
 import { OrderLineRow } from "./OrderLineRow.js";
 import { OrderLinesTableHead } from "./OrderLinesTableHead.js";
 
@@ -21,10 +22,15 @@ export function RiesitOrderRow({
   order,
   canChangeState,
   board,
+  onOpenCustomerContact,
 }: {
   readonly order: RiesitOrder;
   readonly canChangeState: boolean;
   readonly board: Board;
+  // issue 502: @ tlačidlo za menom zákazníka otvorí to isté okno na ručný
+  // e-mail zákazníkovi ako „Na objednanie" (#500) — `RiesitSection` vlastní
+  // zdieľaný modál (`useCustomerContactMail`).
+  readonly onOpenCustomerContact: (orderCode: string, trigger: HTMLElement | null) => void;
 }): JSX.Element {
   // Rozbalený/zbalený stav je lokálny per-objednávka. Kľúč zoznamu je `orderId`
   // (RiesitSection), takže inštancia (a teda aj tento stav) prežije re-render
@@ -65,6 +71,19 @@ export function RiesitOrderRow({
           {order.externalOrderId}
         </a>
         <span className="riesit-order-customer">{order.customerName}</span>
+        {/* issue 502: @ tlačidlo — hneď za menom zákazníka (VĽAVO, nikdy
+            napravo, Štěpán), otvorí to isté okno na e-mail zákazníkovi ako „Na
+            objednanie" (#500). Gated na `canChangeState` (server `/send`
+            vyžaduje admin/manazer). `.riesit-order-count`'s `margin-left: auto`
+            (app.css) drží počet+dátum vpravo, takže @ ostáva pri mene vľavo. */}
+        {canChangeState && (
+          <CustomerContactRowButton
+            testIdKey={order.externalOrderId}
+            orderCode={order.externalOrderId}
+            customerName={order.customerName}
+            onOpen={onOpenCustomerContact}
+          />
+        )}
         <span className="riesit-order-count" data-testid={`riesit-order-count-${order.externalOrderId}`}>
           {formatItemCount(order.lines.length)}
         </span>
