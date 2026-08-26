@@ -154,6 +154,36 @@ it("klik na hlavičku priečinka ho zbalí (folder-chev sa otočí cez triedu 'c
   expect(folderBtn.getAttribute("aria-expanded")).toBe("false");
 });
 
+// issue 501: nové sekcie "Vyšívanie"/"Slavosport" sú zatiaľ PRÁZDNE priečinky
+// (`tabs: []`, žiadna funkcia). Musia sa vykresliť ako obyčajná zbaliteľná
+// hlavička bez obsahu — konzistentne s naplnenými priečinkami — a nesmú
+// vykresliť žiadne `.tab` tlačidlo.
+const FOLDERS_WITH_EMPTY = [
+  {
+    id: "eshop",
+    label: "Eshop",
+    tabs: [{ id: "orders", label: "Na objednanie", icon: "📦", Component: () => null }],
+  },
+  { id: "vysivanie", label: "Vyšívanie", tabs: [] },
+];
+
+it("prázdny priečinok (tabs: []) vykreslí zbaliteľnú hlavičku bez záložiek", () => {
+  render(<Sidebar folders={FOLDERS_WITH_EMPTY} activeTabId="orders" onSelectTab={() => {}} />);
+
+  // Hlavička sa vykreslí a štartuje rozbalená (žiadny defaultCollapsed).
+  const hlavicka = screen.getByRole("button", { name: "Vyšívanie" });
+  expect(hlavicka.getAttribute("aria-expanded")).toBe("true");
+
+  // Priečinok nemá žiadnu záložku (žiadne `.tab` tlačidlo v jeho `.nav-folder`).
+  const priecinok = hlavicka.closest(".nav-folder");
+  expect(priecinok).not.toBeNull();
+  expect(priecinok?.querySelectorAll(".tab").length).toBe(0);
+
+  // Klik hlavičku zbalí — rovnaké zbaliteľné správanie ako naplnené priečinky.
+  fireEvent.click(hlavicka);
+  expect(hlavicka.getAttribute("aria-expanded")).toBe("false");
+});
+
 // issue 147: `badgeCounts` je generický (kľúčovaný `tab.id`), nielen pre
 // "Na objednanie" — test preto overuje aj že tab BEZ kľúča v `badgeCounts`
 // odznak nedostane vôbec (nie odznak s "0").

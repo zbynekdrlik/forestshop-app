@@ -172,6 +172,26 @@ export const NAV: readonly NavFolder[] = [
       // DPD" — pozri hore v priečinku „dolezite".
     ],
   },
+  // issue 501: šéfov kolega Štěpán (Discord, 26.8.2026 + nákres) — dva nové
+  // „adresáre" VYŠÍVANIE a SLAVOSPORT umiestnené HNEĎ POD „Eshop" (šípka v
+  // nákrese mieri presne pod Eshop), teda poradie priečinkov: Dôležité, Eshop,
+  // Vyšívanie, Slavosport, Systém, Automatizácie. Zatiaľ sú to PRÁZDNE sekcie
+  // (žiadne záložky, žiadna funkcia — tá príde neskôr samostatnými tiketmi):
+  // prázdny `tabs: []` sa v `Sidebar.tsx` vykreslí ako obyčajná zbaliteľná
+  // hlavička bez obsahu, konzistentne s ostatnými priečinkami. `defaultCollapsed`
+  // sa NENASTAVUJE (štartujú rozbalené ako Dôležité/Eshop) a `label` je v
+  // prirodzenom tvare — CSS ho zobrazí veľkými písmenami (`text-transform:
+  // uppercase` na `.folder-head`), rovnako ako pri ostatných priečinkoch.
+  {
+    id: "vysivanie",
+    label: "Vyšívanie",
+    tabs: [],
+  },
+  {
+    id: "slavosport",
+    label: "Slavosport",
+    tabs: [],
+  },
   {
     id: "system",
     label: "Systém",

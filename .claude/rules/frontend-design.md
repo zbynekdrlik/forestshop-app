@@ -28,6 +28,23 @@ paths:
   to visible = move its entry from `HIDDEN_TABS` to a `NAV` folder — the
   component itself needs no change (`findTab`/`isVisibleTabId` already
   handle both).
+- **A PRÁZDNY priečinok (`NavFolder` s `tabs: []`) je platný placeholder —
+  `Sidebar.tsx` ho vykreslí ako obyčajnú zbaliteľnú hlavičku bez obsahu,
+  žiadny viditeľný prázdny box** (`.folder-head` sa renderuje vždy, telo
+  `.folder-body`/`.tabs` ostane prázdne a nemá rám ani pozadie). Issue 501
+  (nové sekcie „Vyšívanie"/„Slavosport" HNEĎ POD „Eshop", zatiaľ bez funkcií)
+  ich pridalo presne takto — jeden `{ id, label, tabs: [] }` záznam v `NAV`,
+  žiadna zmena `Sidebar.tsx`/`App.tsx`/CSS. `defaultCollapsed` sa NENASTAVILO
+  (štartujú rozbalené ako Dôležité/Eshop), `label` je v prirodzenom tvare
+  (CSS `text-transform: uppercase` na `.folder-head` ho zobrazí veľkými
+  písmenami — do registra sa píše prirodzený tvar). Keď sa neskôr doplní
+  funkcia, stačí pridať záložky do `tabs` toho istého priečinka. **E2E
+  overenie PORADIA priečinkov** (nielen prítomnosti jednotlivých hlavičiek):
+  `page.locator(".side-nav .folder-head .ftitle").allTextContents()` vráti
+  SUROVÝ text priečinkov z registra (CSS `uppercase` neovplyvňuje
+  `textContent`), takže sa porovná `toEqual([...])` s očakávaným poradím —
+  pozri `nav.spec.ts`. Prázdny priečinok nemá žiadny `.tab`, takže počet
+  `.side-nav .tab` sa pridaním prázdnej sekcie NEMENÍ.
 - **A VISIBLE tab (in `NAV`, not `HIDDEN_TABS`) must NEVER render its own
   `<h1>`/`<h2>` matching the tab's `label` — `App.tsx` renders that title
   itself via `Topbar` for any `isVisibleTabId(activeTabId)` tab, so a
