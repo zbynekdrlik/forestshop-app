@@ -25,6 +25,7 @@ export const MAIL_TEMPLATE_KEYS = [
   "order_reminder",
   "supplier_order",
   "order_merge",
+  "order_customer_contact",
 ] as const;
 
 export type MailTemplateKey = (typeof MAIL_TEMPLATE_KEYS)[number];
@@ -298,6 +299,29 @@ const KINDS: readonly MailTemplateKind[] = [
         KONTAKTUJTE_NAS,
         "",
         PODPIS_TIM,
+      ].join("\n"),
+    },
+  },
+  {
+    // issue 500: ručný e-mail zákazníkovi z riadku „Na objednanie" (@ tlačidlo).
+    // Prednastavený text zo zadania (Štěpán si stred dopíše sám v okne pred
+    // odoslaním). Podpis je „Drlík, Forestshop.sk" (rovnako ako `nedostupne`,
+    // nie `PODPIS_TIM`) — presne ako v zadaní; kontaktné riadky (telefón/
+    // e-mail/web) NIE SÚ v tele, dopĺňa ich zdieľaná pätička (issue 347/379).
+    key: "order_customer_contact",
+    label: "Kontakt zákazníkovi k objednávke",
+    description:
+      "Ručný e-mail zákazníkovi z riadku Na objednanie / Riešiť (@ tlačidlo) — obsluha si stred textu dopíše sama pred odoslaním.",
+    ownPlaceholders: [MENO, CISLO_OBJEDNAVKY],
+    defaultText: {
+      subject: "Vaša objednávka č. {{cislo_objednavky}} — Forestshop.sk",
+      body: [
+        "Dobrý deň, **{{meno_zakaznika}}**,",
+        "",
+        "Radi by sme Vás kontaktovali ohľadom Vašej objednávky č. **{{cislo_objednavky}}**.",
+        "",
+        "S pozdravom,",
+        "**Drlík, Forestshop.sk**",
       ].join("\n"),
     },
   },

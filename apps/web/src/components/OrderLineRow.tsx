@@ -4,7 +4,9 @@ import type { OrderLine } from "../ordersApi.js";
 import { STATE_LABELS } from "../orderLineStateLabels.js";
 import { formatVariantTotalChip, isStaleOrderLine, orderLineAgeDays, type VariantTotal } from "../ordersSummary.js";
 import { CustomerOrderCountBadge } from "./CustomerOrderCountBadge.js";
+import { CustomerContactRowButton } from "./CustomerContactRowButton.js";
 import { OrderLineStateButtons } from "./OrderLineStateButtons.js";
+import { OrderSupplierLinkDisplay } from "./OrderSupplierLinkDisplay.js";
 
 // issue 162: počet stĺpcov "Na objednanie" tabuľky — MUSÍ sedieť s počtom
 // `<col>` v `SupplierOrderGroup.tsx`'s `<colgroup>` (9). Vlastný rozbaľovací
@@ -35,6 +37,7 @@ export function OrderLineRow({
   onChangeComment,
   onEditorActivityChange,
   onSupplierDraftChange,
+  onOpenCustomerContact,
 }: {
   readonly line: OrderLine;
   readonly canChangeState: boolean;
@@ -91,6 +94,13 @@ export function OrderLineRow({
   // `onEditorActivityChange` vyššie (len boolean) tu ide o SAMOTNÝ TEXT,
   // lebo ten musí prežiť aj presun riadku medzi skupinami (remount).
   readonly onSupplierDraftChange: (lineId: string, value: string) => void;
+  // issue 500: @ tlačidlo v stĺpci DODÁVATEĽ otvorí okno na ručný e-mail
+  // zákazníkovi (`OrdersSection.tsx` vlastní stav modálu). VOLITEĽNÉ — „Riešiť"
+  // (`RiesitOrderRow`) ho neposiela, takže tlačidlo je LEN v „Na objednanie".
+  // Nesie číslo objednávky + spúšťací prvok (návrat fokusu po zavretí dialógu,
+  // `MailPreviewDialog`'s `returnFocusRef`); meno zákazníka si okno vezme z
+  // náhľadu zo servera.
+  readonly onOpenCustomerContact?: (orderCode: string, trigger: HTMLElement | null) => void;
 }): JSX.Element {
   const qtyChip = variantTotal !== undefined ? formatVariantTotalChip(variantTotal) : null;
 
@@ -337,53 +347,27 @@ export function OrderLineRow({
             namiesto dvoch samostatných stĺpcov. */}
         <td className="ord-supplier-merged">
           <div className="ord-supplier-row">
-            <div className="ord-supplier-cell" data-testid={`supplier-link-${line.lineId}`}>
-              {line.supplierUrl !== null ? (
-                // issue 119: majiteľ, doslovne "zmen na nejake tlacitko z ikonou
-                // ktore otvori na novom okne ten link, lebo teraz to je tazke
-                // stlacit" — textový odkaz nahradený veľkým ikonovým tlačidlom
-                // (`.ord-supplier-link` v `app.css` teraz štylizuje `<a>` ako
-                // tlačidlo, min. 36×36px klikacej plochy). `aria-label`/`title`
-                // nesú ten istý popis ako predtým (issue 72: variantName sám
-                // nestačí — dva riadky toho istého produktu v rôznych veľkostiach
-                // majú zhodný variantName, líšia sa len variantCode), viditeľný
-                // text je teraz len ikonka (`aria-hidden`, prístupné meno nesie
-                // výlučne `aria-label`).
-                <a
-                  href={line.supplierUrl}
-                  target="_blank"
-                  rel="noreferrer noopener"
-                  className="ord-supplier-link"
-                  aria-label={`Odkaz na dodávateľa — ${line.variantName} (${line.variantCode})`}
-                  title={`Otvoriť odkaz na dodávateľa — ${line.variantName} (${line.variantCode})`}
-                >
-                  <span aria-hidden="true">🔗</span>
-                </a>
-              ) : line.supplierNote !== null ? (
-                <span className="ord-supplier-note" title={line.supplierNote}>
-                  {line.supplierNote}
-                </span>
-              ) : line.supplierAssignable ? (
-                // issue 107 bod 3: majiteľ, komentár #1: "neviem čo tam je
-                // Priradenie dodávateľa stĺpec" — namiesto holej pomlčky (predtým
-                // aj tu, aj v `.ord-supplier-assign` nižšie — DVE pomlčky nad
-                // sebou) je tu teraz VIDITEĽNÝ popis toho, čo vstup pod ním robí.
-                // Zámerne v TEJTO, už existujúcej bunke (nie nový riadok pod
-                // vstupom) — pridanie ĎALŠIEHO riadku by pri úzkom stĺpci
-                // (input+button už zapĺňajú takmer celú šírku) posunulo výšku
-                // riadku nad issue 105's ~95px invariant (živo zmerané: 85px →
-                // 103.5px s popisom na vlastnom riadku).
-                <span className="ord-supplier-assign-hint">Priradiť dodávateľa</span>
-              ) : (
-                // issue 117: `externalCode` (dodávateľský kód) sa už NIKDY
-                // nezobrazuje — majiteľ ho nepoužíva ("kody produktov vobec
-                // nepouzivame"), appka používa výlučne odkaz na dodávateľa.
-                // Predtým sa táto pomlčka potláčala, keď `externalCode` bol
-                // vyplnený (zobrazoval sa namiesto nej samostatný "kód …" riadok)
-                // — bez toho riadku je terajší terminálny stav VŽDY pomlčka,
-                // keď riadok nemá ani odkaz, ani poznámku, ani priradenie
-                // (legitímny, `OrderLineRow.supplierAssignCell.test.tsx`).
-                "—"
+            {/* issue 500: 🔗 (odkaz na dodávateľa) + @ (e-mail zákazníkovi)
+                vedľa seba na HORNOM riadku bunky; ✏️ (úprava odkazu) ostáva POD
+                nimi (`.ord-supplier-row` je stĺpcová od issue 476). */}
+            <div className="ord-supplier-top">
+              <div className="ord-supplier-cell" data-testid={`supplier-link-${line.lineId}`}>
+                {/* issue 500: obsah bunky (🔗 / poznámka / hint / „—") vyčlenený
+                    do `OrderSupplierLinkDisplay` (eslint `max-lines`). */}
+                <OrderSupplierLinkDisplay line={line} />
+              </div>
+              {/* issue 500/502: @ tlačidlo — otvorí okno na ručný e-mail
+                  zákazníkovi (`OrdersSection.tsx` vlastní modál). Gated na
+                  `canChangeState` (server `/send` vyžaduje admin/manazer) A
+                  prítomnosť callbacku („Riešiť" ho neposiela). Zdieľané tlačidlo
+                  s „Riešiť" (`CustomerContactRowButton`). */}
+              {canChangeState && onOpenCustomerContact !== undefined && (
+                <CustomerContactRowButton
+                  testIdKey={line.lineId}
+                  orderCode={line.externalOrderId}
+                  customerName={line.customerName}
+                  onOpen={onOpenCustomerContact}
+                />
               )}
             </div>
             {/* issue 121: majiteľ, doslovne "ma byt moznost ho doplnit... pri
