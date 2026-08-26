@@ -4455,6 +4455,23 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
   (zdieľaný počet). Cross-account odfajknutie: Zbyněk odfajkol úlohu `info`
   → odznak 22→21, riadok `done`; VRÁTENÉ presne späť → odznak 22, riadok
   otvorený (dáta majiteľa nedotknuté). Konzola 0 chýb na obrazovke úloh.
+
+## 2026-08-26 — issue 491 (DPD „Objednať zvoz na deň" zlyháva — #step2 timeout, klient-urgent)
+
+- Version bump 0.3.0-dev.287 → .288 (worktree agent-a226518e).
+- Root cause (naživo read-only remap `/pickup-orders/0` na dpdshipper.sk, žiadny
+  zápis): formulár NIE JE dvojkrokový wizard s `#step1`/`#step2` — je to JEDEN
+  Angular `<form class="data">` s `#button-confirmation` „Pokračovať". Klik
+  „Pokračovať" re-renderuje NA MIESTE (URL ostáva) na REVIEW krok: `.panel.warning`
+  + readonly polia + `#button-save` „Uložiť" (+ `#button-back`). `pickup-playwright.ts`
+  čakal `#step1` hidden (prejde triviálne, prvok chýba) + `#step2` visible (timeout
+  8000 ms — prvok nikdy neexistoval) → nahlásená chyba; finálne uloženie sa
+  nedosiahlo (žiadny zvoz sa nevytvoril). Info hlášky (Štěpánov krok „zavrieť")
+  sú `shp-newsfeed-toast` zatvárané `.newsfeed-toast__button` „Zatvoriť" — staré
+  `dismissInfoBanners` selektory (aria-label/✕/close) nezavreli nič.
+- Design komentár PRED prvým commitom kódu (root cause / prístup / zamietnutá
+  alternatíva) + STEP 0 overenie:
+  https://github.com/zbynekdrlik/forestshop-app/issues/491
 - Playbook: `frontend-design.md` (DailyTasksSection úzke props — zdôvodnenie
   aktualizované na zdieľané #487), `testing.md` (nová poznámka: `daily_task`
   je od #487 GLOBÁLna tabuľka, `daily-tasks.spec.ts` globálne asercie sú

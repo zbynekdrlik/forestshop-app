@@ -112,7 +112,10 @@ paths:
     mechanizmus (ten istý, aký appka videla vypisovať systémové správy na
     `/pickup-orders`), aj bežné hádané CSS triedy ako zálohu — kým sa
     skutočný tvar chyby/úspechu neoverí prvým reálnym zvozom, KAŽDÉ
-    `ok:true` tu je optimistické, nie potvrdené.
+    `ok:true` tu je optimistické, nie potvrdené. **VYRIEŠENÉ issue 491
+    (26.8.2026): pozitívny signál = review krok zmizne (`#button-save`
+    detached) po Uložení, inak chybový toast → fail-loud; pozri bullet
+    „PRVÝ REÁLNY ZVOZ" nižšie.**
   - **Testy** (`tests/helpers/dpd-portal-fixture.ts`) imitujú LEN tvar,
     ktorý appka skutočne ovláda (ID/vnorenie/atribúty naživo domapovaných
     prvkov) — NIKDY sa nedotknú `dpdshipper.sk`. **Fixture login formulár
@@ -239,7 +242,12 @@ paths:
   zoznam; scope-nuté selektory (`[class*="banner"] [class*="close"]` …) bežia
   PRVÉ, holé `button:has-text("✕"/"×")` až posledné ako záloha — pri prvom
   reálnom zvoze ich ZÚŽ podľa skutočného DOM (nikdy naslepo, zúženie teraz by
-  mohlo scope-núť VON aj skutočný zatvárací prvok). Volá sa LEN v pickup
+  mohlo scope-núť VON aj skutočný zatvárací prvok). **ZÚŽENÉ issue 491
+  (26.8.2026): reálne hlášky sú `shp-newsfeed-toast`, zatvárané
+  `.newsfeed-toast__button` „Zatvoriť" (staré hádané selektory nezavreli NIČ);
+  `dismissInfoBanners` teraz mieri LEN na `shp-newsfeed-toast
+  button:has-text("Zatvoriť")` — pozri bullet „PRVÝ REÁLNY ZVOZ" nižšie.**
+  Volá sa LEN v pickup
   vetve — shipment vetva (#292) ostáva nedotknutá. Test: fixtúra
   `dpd-portal-fixture.ts`'s `showInfoBanner` prekryje formulár celoobrazovkovým
   `z-index` overlayom, ktorý zachytí pointer eventy (Playwright „intercepts
@@ -257,3 +265,49 @@ paths:
   > 0`). Badge/per-zásielková logika #445 nedotknuté. Kontakt (Štěpánov krok
   5) sa NEVYBERÁ — účet má jediný predvyplnený kontakt + fail-loud poistka;
   ak by prvý reálny zvoz ukázal, že kontakt treba aktívne vybrať, TU je delta.
+- **PRVÝ REÁLNY ZVOZ (issue 491, 26.8.2026) — objednávka zvozu `/pickup-orders/0`
+  NAŽIVO domapovaná, a predošlé HÁDANÉ `#step1`/`#step2` boli NESPRÁVNE.**
+  Skutočný DOM (read-only remap app credentials z kontajnera, žiadny zápis):
+  - Formulár je JEDEN Angular `<form class="data">` (`shp-app ng-version=5.1.3`)
+    — zvozová adresa readonly (`#customer-name`/`-street`/`-zip`/`-city`),
+    kontakt (`#contact-person` ng2-completer, `#email`, `#phone`), `#note`,
+    a **`#pickup-date` = `wj-input-date`** s vnútorným `input[wj-part="input"]`
+    (type=tel) — selektor `#pickup-date input[wj-part="input"]` je SPRÁVNY.
+    Jediné editovateľné pole, ktoré appka mení, je dátum. Krok 1 má JEDNO
+    tlačidlo `#button-confirmation` „Pokračovať".
+  - **`#step1`/`#step2` v reálnom DOM NEEXISTUJÚ.** Klik „Pokračovať"
+    NEnaviguje (URL ostáva `/pickup-orders/0`) — Angular RE-RENDERuje NA
+    MIESTE na REVIEW krok: zmizne `#button-confirmation`, `<form>` sa zmení na
+    `<div class="data">`, objaví sa `<div class="panel wide warning">` („Po jej
+    uložení bude objednávka odoslaná do DPD…"), polia sú readonly, a pribudnú
+    **`#button-save` („Uložiť") + `#button-back` („Späť")** v `.commands.toolbar`.
+    Skutočné odoslanie = klik `#button-save`. Starý kód čakal `#step1` hidden
+    (prejde triviálne — prvok chýba = hidden) + `#step2` visible (timeout
+    8000 ms — nikdy neexistoval) → nahlásená chyba; finálne uloženie sa NIKDY
+    nedosiahlo, teda žiadny zvoz sa nevytvoril (sedí s tým, čo videl Štěpán).
+    **Fix (`fillPickupForm`):** čakať `#button-save` visible (review marker),
+    klik `#button-save`, potom FAIL-LOUD pozitívne overenie — race medzi
+    „`#button-save` detached" (navigácia na zoznam / re-render = ÚSPECH) a
+    chybovým toastom (ZLYHANIE), nikdy tiché optimistické „ok" (uzatvára
+    UNVERIFIED poznámku vyššie o „úspech = absencia chyby").
+  - **Info hlášky (Štěpánov krok „zavrieť všetky hlášky") sú
+    `shp-newsfeed-toast` toasty v `#toast-container` („Aktuálne obmedzenia a
+    možné oneskorenia…", „Nové pravidlá v doručovaní…"), zatvárané tlačidlom
+    `.newsfeed-toast__button` s textom „Zatvoriť"** (druhé tlačidlo toastu
+    „Obsah správy" je DECOY — otvorilo by správu). Staré hádané selektory
+    (`[aria-label=Zavrieť]`/`✕`/`[class*=close]`) nezavreli NIČ. Naživo
+    overené: klik `shp-newsfeed-toast button:has-text("Zatvoriť")` zavrel OBA
+    toasty (2 → 0). `dismissInfoBanners` ZÚŽENÉ presne na tento selektor
+    (loop-close-first, bounded, fail-soft) — pozri `portal-fill.ts`.
+  - **Zoznam `/pickup-orders`:** „Jednorazové zvozy" je
+    `shp-one-time-pickup-orders-list` (`.one-time-pickups`), tlačidlo „Nová
+    objednávka zvozu" = `#add-pickup-order` (naviguje na `/pickup-orders/0`,
+    appka's priama navigácia stále platí). Úspešný zvoz = riadok s dátumom
+    (`Dátum vyzdvihnutia`) + stav **„Objednávka odoslaná"** (`td.col-date`).
+    Zvozová adresa účtu: „Slavosport s.r.o., Brokoffova 1654/8, 05801 Poprad".
+  - **Fixtúra `dpd-portal-fixture.ts`'s `pickupFormPage` prerobená na tento
+    reálny tvar** (single `<form>` → „Pokračovať" → review s `#button-save`;
+    `shp-newsfeed-toast` overlay so „Zatvoriť" + „Obsah správy" DECOY) —
+    empiricky RED na starom kóde (5/5 testov padlo, `#step2` timeout / decoy),
+    GREEN na novom (5/5). Kontakt sa STÁLE nevyberá (jediný predvyplnený,
+    fungovalo naživo).
