@@ -32,13 +32,14 @@ const LINE: OrderLine = {
   customerOpenOrderCount: 1,
 };
 
-// issue 476: mockup Štěpán — 5 tlačidiel v poradí Nevybavené · Riešiť · Čaká sa
-// · Skladom · Nedostupné (klaster 3+2 rieši CSS grid, tu overujeme PORADIE
-// v DOM-e, ktoré do gridu vstupuje).
-it("renderuje 5 stavových tlačidiel v mockup poradí vrátane Riešiť", () => {
+// issue 476/493: mockup Štěpán — 6 tlačidiel v poradí Nevybavené · Riešiť ·
+// Čaká sa · Skladom · Nedostupné · Objednané (klaster 3+3 rieši CSS grid, tu
+// overujeme PORADIE v DOM-e, ktoré do gridu vstupuje — „Objednané" je 6. slot =
+// dolný rad 3. miesto vedľa Nedostupné).
+it("renderuje 6 stavových tlačidiel v mockup poradí vrátane Riešiť a Objednané", () => {
   render(<OrderLineStateButtons line={LINE} busyLineId={null} onChangeState={() => {}} />);
   const labels = [...document.querySelectorAll(".ord-state-btn")].map((b) => b.textContent);
-  expect(labels).toEqual(["Nevybavené", "Riešiť", "Čaká sa", "Skladom", "Nedostupné"]);
+  expect(labels).toEqual(["Nevybavené", "Riešiť", "Čaká sa", "Skladom", "Nedostupné", "Objednané"]);
 });
 
 it("klik na Riešiť pošle onChangeState so stavom riesit", () => {
@@ -46,6 +47,16 @@ it("klik na Riešiť pošle onChangeState so stavom riesit", () => {
   render(<OrderLineStateButtons line={LINE} busyLineId={null} onChangeState={onChangeState} />);
   fireEvent.click(screen.getByTestId(`state-btn-riesit-${LINE.lineId}`));
   expect(onChangeState).toHaveBeenCalledWith(LINE.lineId, "riesit");
+});
+
+// issue 493: klik na „Objednané" pošle interný stav `objednane_stav` (NIE
+// `objednane` — to je default „Nevybavené"). Zároveň potvrdzuje, že 6. tlačidlo
+// nesie správnu internú hodnotu, nie label.
+it("klik na Objednané pošle onChangeState so stavom objednane_stav", () => {
+  const onChangeState = vi.fn();
+  render(<OrderLineStateButtons line={LINE} busyLineId={null} onChangeState={onChangeState} />);
+  fireEvent.click(screen.getByTestId(`state-btn-objednane_stav-${LINE.lineId}`));
+  expect(onChangeState).toHaveBeenCalledWith(LINE.lineId, "objednane_stav");
 });
 
 it("klik na UŽ aktívny stav nepošle zbytočný zápis", () => {

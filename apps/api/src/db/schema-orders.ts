@@ -32,6 +32,18 @@ export const orderLineState = pgEnum("order_line_state", [
   // v žiadnej DDL nepoužíva (len runtime kód), takže sa NA ňu nevzťahuje past
   // issue 399 (55P04), viď `.claude/rules/database.md`.
   "riesit",
+  // issue 493: šiesty EXKLUZÍVNY stav s labelom „Objednané" (Štěpán, binding
+  // rozhodnutie 5423135473 — PREHLASUJE pôvodný dizajn z tela ticketu). Presne
+  // princíp `riesit`/`nedostupne` (jeden radio klaster, svieti len jeden).
+  // POZOR NA NÁZOV: interná hodnota je `objednane_stav`, NIE `objednane` —
+  // `objednane` je UŽ DEFAULT (label „Nevybavené", issue 60) a `order_line
+  // .ordered` boolean (✓ checkbox) nesie nadväzné toky; nový stav musí mať
+  // ODLIŠNÚ hodnotu, inak by koliboval s oboma (`.claude/rules/orders.md`
+  // „naming trap"). Pridaný na KONIEC enumu inkrementálnou migráciou `ALTER
+  // TYPE ... ADD VALUE 'objednane_stav'` — hodnota sa v žiadnej DDL nepoužíva
+  // (len runtime kód), takže sa NA ňu nevzťahuje past issue 399 (55P04),
+  // bezpečný vzor issue 476 (viď `.claude/rules/database.md`).
+  "objednane_stav",
 ]);
 
 // Odvodené priamo z `enumValues`, nie ručne prepísaná duplicitná únia — nová

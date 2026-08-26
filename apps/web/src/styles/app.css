@@ -45,6 +45,13 @@
      aby bol piaty stav na prvý pohľad rozoznateľný. */
   --fs-info: #2456a6;
   --fs-info-bg: #e8eefb;
+  /* issue 493: šiesty stav „Objednané" — vlastná fialová farba, zámerne odlišná
+     od zelenej (Skladom)/oranžovej (Čaká sa)/červenej (Nedostupné)/modrej
+     (Riešiť)/sivej (Nevybavené), aby bol na prvý pohľad rozoznateľný (rovnaký
+     zámer ako `--fs-info` pri Riešiť). Všetkých 5 doterajších sémantických
+     rodín bolo obsadených, preto NOVÝ odtieň, nie duplikát tokenu. */
+  --fs-accent: #6a3fa0;
+  --fs-accent-bg: #efe9f8;
 
   /* issue 263: tri stavové farby "Na objednanie" filtračných čipov +
      hlavičky skupiny (`.chip`/`.toorder-supplier`) — presné hex hodnoty zo
@@ -1382,6 +1389,14 @@ tr:last-child td {
   background: var(--fs-info-bg);
   border-color: var(--fs-info);
   color: var(--fs-info);
+}
+/* issue 493: „Objednané" aktívny stav — fialová „accent" farba (viď
+   `--fs-accent`), tri nezávislé signály ako ostatné (plná výplň + hrubší rám +
+   tučné písmo). Dolný rad 3. slot vedľa Nedostupné (`STATE_DISPLAY_ORDER`). */
+.ord-state-btn-objednane_stav.active {
+  background: var(--fs-accent-bg);
+  border-color: var(--fs-accent);
+  color: var(--fs-accent);
 }
 /* issue 476: rýchle pole „číslo objednávky → Riešiť" v sekcii Riešiť.
    Vodorovný riadok (label + vstup + tlačidlo), zalomí sa na úzkej obrazovke. */
