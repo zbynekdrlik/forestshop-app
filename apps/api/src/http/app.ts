@@ -86,7 +86,11 @@ export function createApp(
     // rovnakého dôvodu ako `nedostupne` vyššie: bezpečný default pre testy/
     // lokálny vývoj, `index.ts` v produkcii VŽDY nahradí reálnymi
     // dependencies.
-    readonly orderMerge?: OrderMergeRunDeps;
+    // issue 512: `adminBaseUrl` sa NEPOSIELA tu — injektuje ho `createApp`
+    // z top-level `options.adminBaseUrl` (rovnaký vzor ako orders/search/dpd
+    // trasy), takže volajúci (testy aj `index.ts`) ho v `orderMerge` objekte
+    // vôbec neuvádzajú.
+    readonly orderMerge?: Omit<OrderMergeRunDeps, "adminBaseUrl">;
     // issue 500: "Na objednanie" — ručný e-mail zákazníkovi (@ tlačidlo na
     // riadku). Voliteľné z rovnakého dôvodu ako `orderMerge` vyššie: bezpečný
     // default nižšie pre testy/lokálny vývoj, `index.ts` v produkcii VŽDY
@@ -295,14 +299,15 @@ export function createApp(
   );
   // issue 257: "Zlúčenie objednávok" — bezpečný default z rovnakého dôvodu
   // ako `nedostupne` vyššie.
-  registerOrderMergeRoutes(
-    app,
-    db,
-    options.orderMerge ?? {
+  registerOrderMergeRoutes(app, db, {
+    ...(options.orderMerge ?? {
       mailTransport: undefined,
       bccEmail: undefined,
-    },
-  );
+    }),
+    // issue 512: základ priameho odkazu na objednávku (klikateľné čísla vo
+    // výpise) — ten istý default ako ostatné trasy.
+    adminBaseUrl: options.adminBaseUrl ?? "https://www.forestshop.sk",
+  });
   // issue 500: "Na objednanie" — ručný e-mail zákazníkovi (@ tlačidlo na
   // riadku). Bezpečný default z rovnakého dôvodu ako `orderMerge` vyššie. Prefix
   // `/api/order-customer-contact/*` sa nekríži s `/api/orders/:id`

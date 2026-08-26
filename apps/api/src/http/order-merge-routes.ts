@@ -5,7 +5,12 @@ import type { Database } from "../db/client.js";
 import { record } from "../modules/audit/service.js";
 import type { MailTransport } from "../modules/mail/transport.js";
 import { consumeMergePreviewToken, issueMergePreviewToken } from "../modules/orders/merge-mail-preview-tokens.js";
-import { buildOrderMergeMailContent, listMergeCandidateGroups, sendOrderMergeMail } from "../modules/orders/merge-mail.js";
+import {
+  buildOrderMergeMailContent,
+  countMergeCandidateGroups,
+  listMergeCandidateGroups,
+  sendOrderMergeMail,
+} from "../modules/orders/merge-mail.js";
 import { requireRole, requireUser, type AppBindings } from "./middleware.js";
 import { requireSameOrigin } from "./origin-check.js";
 
@@ -15,6 +20,9 @@ import { requireSameOrigin } from "./origin-check.js";
 export interface OrderMergeRunDeps {
   readonly mailTransport: MailTransport | undefined;
   readonly bccEmail: string | undefined;
+  // issue 512: `env.ts`'s `SHOPTET_ADMIN_BASE_URL` — základ priameho odkazu
+  // na objednávku (klikateľné čísla vo výpise, `buildShoptetAdminOrderUrl`).
+  readonly adminBaseUrl: string;
 }
 
 const previewBody = z.object({ baseOrderId: z.string().uuid(), otherOrderIds: z.array(z.string().uuid()).min(1) });
@@ -53,8 +61,18 @@ export function registerOrderMergeRoutes(app: Hono<AppBindings>, db: Database, d
   // Čítanie — každý prihlásený zamestnanec (rovnaká úroveň ako "Nedostupné
   // tovary").
   app.get("/api/order-merge/candidates", requireUser(db), async (c) => {
-    const groups = await listMergeCandidateGroups(db);
+    const groups = await listMergeCandidateGroups(db, deps.adminBaseUrl);
     return c.json({ groups, bccMissing: bccMissing(deps), mailNotConfigured: mailNotConfigured(deps) });
+  });
+
+  // issue 512: počet PRÍPADOV pre menu odznak — zákazníci (osoby) s ≥2
+  // otvorenými objednávkami, NIE počet objednávok. `requireUser`, žiadne
+  // obmedzenie roly (čítanie počtu nie je citlivejšie než čítanie zoznamu) —
+  // rovnaký vzor ako `GET /api/orders/riesit/count`. Žiadny `:param`
+  // konflikt v tomto súbore (všetky trasy sú literal).
+  app.get("/api/order-merge/count", requireUser(db), async (c) => {
+    const count = await countMergeCandidateGroups(db);
+    return c.json({ count });
   });
 
   // Povinný náhľad — počítaný ROVNAKOU funkciou, akú použije skutočné

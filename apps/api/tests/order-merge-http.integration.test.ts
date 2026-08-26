@@ -57,7 +57,15 @@ async function boot(role: UserRole, options: { readonly sent?: MailMessage[]; re
 async function seedOrder(
   db: Awaited<ReturnType<typeof boot>>["db"],
   externalOrderId: string,
-  options: { readonly customerName?: string; readonly email?: string | null; readonly statusName?: string; readonly placedAt?: Date } = {},
+  options: {
+    readonly customerName?: string;
+    readonly email?: string | null;
+    readonly statusName?: string;
+    readonly placedAt?: Date;
+    // issue 512: interné Shoptet id — keď je nastavené, `adminUrl` je priamy
+    // odkaz `?id=`; keď null (default), vyhľadávací fallback `?string=`.
+    readonly shoptetOrderId?: number;
+  } = {},
 ): Promise<string> {
   const [order] = await db
     .insert(orders)
@@ -67,6 +75,7 @@ async function seedOrder(
       email: options.email === undefined ? "zakaznik@example.sk" : options.email,
       statusName: options.statusName ?? DEFAULT_ORDER_OPEN_STATUS,
       placedAt: options.placedAt ?? new Date("2026-07-20T10:00:00Z"),
+      ...(options.shoptetOrderId === undefined ? {} : { shoptetOrderId: options.shoptetOrderId }),
     })
     .returning({ id: orders.id });
   if (order === undefined) throw new Error("test objednávka sa nepodarila vložiť");
@@ -115,6 +124,54 @@ it("zákazník bez e-mailu sa zlučuje podľa MENA (fallback)", async () => {
   const body = (await res.json()) as { groups: { customerName: string }[] };
   expect(body.groups).toHaveLength(1);
   expect(body.groups[0]?.customerName).toBe("Delta Bez Emailu");
+});
+
+it("issue 512: každá objednávka vo výpise nesie adminUrl — priamy ?id= keď je Shoptet id, inak ?string= fallback", async () => {
+  const { app, cookie, db } = await boot("citanie");
+  // Ten istý zákazník, dve otvorené objednávky — jedna s interným Shoptet id,
+  // druhá bez neho.
+  await seedOrder(db, "9201", {
+    customerName: "Epsilon Zákazník",
+    email: "epsilon@example.sk",
+    placedAt: new Date("2026-07-21T10:00:00Z"),
+    shoptetOrderId: 58656,
+  });
+  await seedOrder(db, "9202", {
+    customerName: "Epsilon Zákazník",
+    email: "epsilon@example.sk",
+    placedAt: new Date("2026-07-20T10:00:00Z"),
+  });
+
+  const res = await app.request("/api/order-merge/candidates", { headers: { cookie } });
+  expect(res.status).toBe(200);
+  const body = (await res.json()) as { groups: { orders: { externalOrderId: string; adminUrl: string }[] }[] };
+  const byCode = new Map((body.groups[0]?.orders ?? []).map((o) => [o.externalOrderId, o.adminUrl]));
+  expect(byCode.get("9201")).toBe("https://www.forestshop.sk/admin/objednavky-detail/?id=58656");
+  expect(byCode.get("9202")).toBe("https://www.forestshop.sk/admin/vyhladavanie/?string=9202&src=orders");
+});
+
+it("issue 512: /count počíta PRÍPADY (osoby) s ≥2 otvorenými objednávkami, NIE objednávky", async () => {
+  const { app, cookie, db } = await boot("citanie");
+  // Alfa: 3 otvorené objednávky → 1 prípad.
+  await seedOrder(db, "9211", { customerName: "Alfa", email: "alfa@example.sk" });
+  await seedOrder(db, "9212", { customerName: "Alfa", email: "alfa@example.sk" });
+  await seedOrder(db, "9213", { customerName: "Alfa", email: "alfa@example.sk" });
+  // Gama: 2 otvorené objednávky → 1 prípad.
+  await seedOrder(db, "9214", { customerName: "Gama", email: "gama@example.sk" });
+  await seedOrder(db, "9215", { customerName: "Gama", email: "gama@example.sk" });
+  // Beta: 1 otvorená objednávka → 0 prípadov.
+  await seedOrder(db, "9216", { customerName: "Beta", email: "beta@example.sk" });
+
+  const res = await app.request("/api/order-merge/count", { headers: { cookie } });
+  expect(res.status).toBe(200);
+  // 6 objednávok, ale iba 2 PRÍPADY (osoby) — Alfa a Gama; Beta sa nepočíta.
+  expect((await res.json()) as { count: number }).toEqual({ count: 2 });
+});
+
+it("issue 512: GET /count bez prihlásenia vráti 401", async () => {
+  const { app } = await boot("manazer");
+  const res = await app.request("/api/order-merge/count");
+  expect(res.status).toBe(401);
 });
 
 it("bccMissing/mailNotConfigured — bez BCC ani mail transportu", async () => {

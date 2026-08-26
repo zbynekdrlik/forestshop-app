@@ -9,6 +9,7 @@ import { resolveTemplate } from "../mail-templates/store.js";
 import type { MailTransport } from "../mail/transport.js";
 import { customerIdentityKey } from "./customer-identity.js";
 import { listOpenStatusNames } from "./open-statuses.js";
+import { buildShoptetAdminOrderUrl } from "./queries.js";
 
 // issue 257: e-mail zákazníkovi, keď sa jeho viaceré objednávky posielajú
 // spolu ako jedna zásielka. "Ten istý zákazník" = zdieľaný `customerIdentityKey`
@@ -19,6 +20,16 @@ export interface MergeCandidateOrder {
   readonly orderId: string;
   readonly externalOrderId: string;
   readonly placedAt: string;
+}
+
+// issue 512: kandidát vo VÝPISE záložky navyše nesie priamy odkaz do Shoptet
+// administrácie na TÚTO objednávku (`buildShoptetAdminOrderUrl` — ten istý
+// serverom-počítaný `adminUrl` string ako „Na objednanie"/„Riešiť"/„Vyhľadať")
+// — LEN pre klikateľné čísla objednávok vo výpise; send/preview tok
+// (`listMergeableOrders`) ho nepotrebuje, preto zostáva na holom
+// `MergeCandidateOrder`.
+export interface MergeCandidateGroupOrder extends MergeCandidateOrder {
+  readonly adminUrl: string;
 }
 
 export interface MergeableOrders {
@@ -43,16 +54,21 @@ export interface MergeCandidateGroup {
   // `candidates`. Prvý prvok slúži ako `baseOrderId` pri odoslaní (server aj
   // tak celú skupinu prepočíta nanovo podľa identity zákazníka, takže na
   // tom, KTORÁ objednávka skupiny je "base", nezáleží).
-  readonly orders: readonly MergeCandidateOrder[];
+  readonly orders: readonly MergeCandidateGroupOrder[];
 }
 
 /**
- * Zákazníci s ≥2 OTVORENÝMI objednávkami — presne zoznam, ktorý nová
- * záložka "Zlúčenie objednávok" vypíše. Skupiny zoradené od NAJVÄČŠEJ
- * (najviac objednávok na zlúčenie), pri zhode abecedne podľa mena.
+ * Otvorené objednávky zoskupené podľa IDENTITY zákazníka
+ * (`customerIdentityKey`), len skupiny s ≥2 objednávkami. Vnútri skupiny
+ * najnovšia objednávka prvá; skupiny zoradené od NAJVÄČŠEJ (najviac
+ * objednávok na zlúčenie), pri zhode abecedne podľa mena.
+ *
+ * issue 512: JEDINÝ zdroj pravdy pre „ktorí zákazníci sa dajú zlúčiť" —
+ * zdieľajú ho VÝPIS (`listMergeCandidateGroups`) AJ POČET pre menu odznak
+ * (`countMergeCandidateGroups`), aby sa odznak (počet prípadov) a samotné
+ * zlúčenie NIKDY nerozišli (rovnaká úvaha ako odznak „Na objednanie", #431).
  */
-export async function listMergeCandidateGroups(db: Database): Promise<readonly MergeCandidateGroup[]> {
-  const openOrders = await loadOpenOrders(db);
+function groupOpenOrdersByCustomer(openOrders: readonly OpenOrderRow[]): OpenOrderRow[][] {
   const byIdentity = new Map<string, OpenOrderRow[]>();
   for (const order of openOrders) {
     const key = customerIdentityKey(order.email, order.customerName);
@@ -60,20 +76,56 @@ export async function listMergeCandidateGroups(db: Database): Promise<readonly M
     if (bucket === undefined) byIdentity.set(key, [order]);
     else bucket.push(order);
   }
-  const groups: MergeCandidateGroup[] = [];
+  const buckets: OpenOrderRow[][] = [];
   for (const bucket of byIdentity.values()) {
     if (bucket.length < 2) continue;
-    const sorted = [...bucket].sort((a, b) => b.placedAt.getTime() - a.placedAt.getTime());
-    const first = sorted[0];
+    buckets.push([...bucket].sort((a, b) => b.placedAt.getTime() - a.placedAt.getTime()));
+  }
+  buckets.sort(
+    (a, b) => b.length - a.length || (a[0]?.customerName ?? "").localeCompare(b[0]?.customerName ?? "", "sk"),
+  );
+  return buckets;
+}
+
+/**
+ * Zákazníci s ≥2 OTVORENÝMI objednávkami — presne zoznam, ktorý nová
+ * záložka "Zlúčenie objednávok" vypíše. `adminBaseUrl` (`env.ts`'s
+ * `SHOPTET_ADMIN_BASE_URL`) je základ priameho odkazu na objednávku
+ * (issue 512, klikateľné čísla — ten istý `buildShoptetAdminOrderUrl` ako
+ * „Na objednanie"/„Riešiť"/„Vyhľadať").
+ */
+export async function listMergeCandidateGroups(
+  db: Database,
+  adminBaseUrl: string,
+): Promise<readonly MergeCandidateGroup[]> {
+  const buckets = groupOpenOrdersByCustomer(await loadOpenOrders(db));
+  const groups: MergeCandidateGroup[] = [];
+  for (const bucket of buckets) {
+    const first = bucket[0];
     if (first === undefined) continue;
     groups.push({
       customerName: first.customerName,
       email: first.email,
-      orders: sorted.map((o) => ({ orderId: o.id, externalOrderId: o.externalOrderId, placedAt: o.placedAt.toISOString() })),
+      orders: bucket.map((o) => ({
+        orderId: o.id,
+        externalOrderId: o.externalOrderId,
+        placedAt: o.placedAt.toISOString(),
+        adminUrl: buildShoptetAdminOrderUrl(adminBaseUrl, o.externalOrderId, o.shoptetOrderId),
+      })),
     });
   }
-  groups.sort((a, b) => b.orders.length - a.orders.length || a.customerName.localeCompare(b.customerName, "sk"));
   return groups;
+}
+
+/**
+ * issue 512: počet PRÍPADOV pre menu odznak — zákazníci (osoby) s ≥2
+ * otvorenými objednávkami, NIE počet objednávok (Jozef Stroška s 3
+ * objednávkami = 1). Zdieľa `groupOpenOrdersByCustomer` s výpisom vyššie,
+ * takže odznak a zlúčenie sa nikdy nerozídu; nepotrebuje `adminBaseUrl`
+ * (len počíta skupiny).
+ */
+export async function countMergeCandidateGroups(db: Database): Promise<number> {
+  return groupOpenOrdersByCustomer(await loadOpenOrders(db)).length;
 }
 
 interface OpenOrderRow {
@@ -82,6 +134,9 @@ interface OpenOrderRow {
   readonly customerName: string;
   readonly email: string | null;
   readonly placedAt: Date;
+  // issue 512: interné Shoptet id (keď ho appka pozná, migrácia 0016) — pre
+  // priamy odkaz na detail objednávky vo výpise záložky.
+  readonly shoptetOrderId: number | null;
 }
 
 // Otvorené objednávky (`order.status_name` v nastavenom otvorenom zozname) —
@@ -98,6 +153,7 @@ async function loadOpenOrders(db: Database): Promise<readonly OpenOrderRow[]> {
       customerName: orders.customerName,
       email: orders.email,
       placedAt: orders.placedAt,
+      shoptetOrderId: orders.shoptetOrderId,
     })
     .from(orders)
     .where(inArray(orders.statusName, [...openStatuses]));
