@@ -4,6 +4,9 @@ paths:
   - "apps/api/src/http/nedostupne-routes.ts"
   - "apps/web/src/components/NedostupneSection*.tsx"
   - "apps/web/src/nedostupneApi.ts"
+  - "apps/api/src/modules/single-use-preview-tokens.ts"
+  - "apps/api/src/modules/orders/merge-mail-preview-tokens.ts"
+  - "apps/api/src/modules/orders/customer-contact-preview-tokens.ts"
 ---
 
 # Nedostupné tovary (issue 176)
@@ -21,6 +24,20 @@ paths:
   MVP rozsah — reštart appky tokeny zruší, v poriadku). Ďalšia automatizácia
   s ticketovou podmienkou "povinný náhľad pred odoslaním" potrebuje TEN ISTÝ
   mechanizmus, nie len frontend disciplínu.
+- **issue 505: jadro jednorazových preview-tokenov je ZDIEĽANÉ v
+  `apps/api/src/modules/single-use-preview-tokens.ts`** (factory
+  `createSingleUsePreviewTokenStore()` → `{ issue(key, now), consume(token,
+  key, now) }`, kľúčovaný ĽUBOVOĽNÝM reťazcom). Tri moduly, čo ho volajú, sú
+  už len TENKÉ WRAPPERY so zachovanými verejnými signatúrami:
+  `nedostupne/preview-tokens.ts`, `orders/merge-mail-preview-tokens.ts`,
+  `orders/customer-contact-preview-tokens.ts`. **TTL (15 min), `MAX_ENTRIES`
+  strop, sweep interval a eviction sa menia na JEDNOM mieste** (v zdieľanom
+  jadre), nie trikrát. Každý wrapper má VLASTNÝ store (nezdieľaný Map + strop),
+  takže eviction jednej feature nevyhadzuje tokeny inej. Viac-poľové kľúče vo
+  wrapperi serializuj cez `JSON.stringify([...])` (nie `join(oddeľovač)`,
+  ktorý pri hodnote s oddeľovačom kolidoval) — je injektívny, takže porovnanie
+  reťazcového kľúča je ekvivalentné pôvodnému porovnaniu po poliach. Nová
+  automatizácia s povinným náhľadom = nový tenký wrapper nad týmto jadrom.
 - **ŽIADNY scheduler/`enabled` prepínač, na rozdiel od #172/#173** — táto
   automatizácia nemá žiadny naplánovaný beh (ticket nič také nežiadal).
   `GET /api/nedostupne` je VŽDY živý DB dopyt, nikdy `job_run.detail` cache.
