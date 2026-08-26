@@ -39,6 +39,20 @@ test("záložka vypíše zákazníkov s ≥2 otvorenými objednávkami, povinný
   await expect(group).toContainText("č. 9010");
   await expect(group).toContainText("č. 9011");
 
+  // issue 512: číslo objednávky je klikateľný odkaz do Shoptet administrácie
+  // (rovnaký vzor ako „Na objednanie"/„Riešiť"). Seed objednávka nemá interné
+  // Shoptet id, takže odkaz je vyhľadávací fallback `?string=<kód>`.
+  const odkaz9010 = group.getByRole("link", { name: "Otvoriť objednávku 9010 v administrácii Shoptet" });
+  await expect(odkaz9010).toBeVisible();
+  const href9010 = await odkaz9010.getAttribute("href");
+  expect(href9010).toMatch(/\/admin\//);
+  expect(href9010).toContain("9010");
+
+  // issue 512: menu odznak „Zlúčenie objednávok" ukazuje počet PRÍPADOV (osôb) —
+  // kladné celé číslo, nikdy presné (zdieľaná seed DB seeduje viac objednávok,
+  // `.claude/rules/testing.md`/#445).
+  await expect(page.getByTestId("nav-badge-order-merge")).toHaveText(/^[1-9]\d*$/);
+
   // Klik otvorí POVINNÝ náhľad PRED akýmkoľvek odoslaním (rovnaký kontrakt
   // ako "Nedostupné tovary" — server-side vynútený token).
   await group.getByTestId("order-merge-send-9011").click();

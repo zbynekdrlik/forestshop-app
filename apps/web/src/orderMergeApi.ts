@@ -3,7 +3,15 @@ import { z } from "zod";
 // issue 257: "Zlúčenie objednávok" — zrkadlí `apps/api/src/http/order-merge-routes.ts`.
 // Rovnaký tvar ako `nedostupneApi.ts`.
 
-const candidateOrderSchema = z.object({ orderId: z.string(), externalOrderId: z.string(), placedAt: z.string() });
+// issue 512: `adminUrl` = priamy odkaz do Shoptet administrácie na objednávku
+// (server ho počíta `buildShoptetAdminOrderUrl`, ten istý tvar ako
+// `ordersApi.ts`'s `orderLineSchema`).
+const candidateOrderSchema = z.object({
+  orderId: z.string(),
+  externalOrderId: z.string(),
+  placedAt: z.string(),
+  adminUrl: z.string().regex(/^https?:\/\//),
+});
 export type MergeCandidateOrder = z.infer<typeof candidateOrderSchema>;
 
 const groupSchema = z.object({
@@ -63,6 +71,21 @@ async function readJson(response: Response, fallback: string): Promise<unknown> 
 export async function fetchOrderMergeCandidates(): Promise<OrderMergeList> {
   const response = await fetch("/api/order-merge/candidates");
   return listSchema.parse(await readJson(response, "Zoznam sa nepodarilo načítať"));
+}
+
+const countSchema = z.object({ count: z.number() });
+
+// issue 512: počet PRÍPADOV (osoby s ≥2 otvorenými objednávkami) pre menu
+// odznak — vzor `ordersApi.ts`'s `fetchRiesitCount`. Chybu zachytáva volajúci
+// `App.tsx` (vždy vráti 0 pri zlyhaní).
+export async function fetchOrderMergeCount(): Promise<number> {
+  try {
+    const response = await fetch("/api/order-merge/count");
+    if (!response.ok) return 0;
+    return countSchema.parse(await response.json()).count;
+  } catch {
+    return 0;
+  }
 }
 
 export async function fetchOrderMergePreview(baseOrderId: string, otherOrderIds: readonly string[]): Promise<OrderMergePreview> {
