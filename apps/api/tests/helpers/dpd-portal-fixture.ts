@@ -156,39 +156,84 @@ function shipmentsListPage(reference: string | null): string {
 }
 
 function pickupFormPage(showInfoBanner: boolean): string {
-  // issue 451: celoobrazovkový prekrývací info banner s ✕ — vysoký z-index
-  // (zachytáva pointer eventy nad formulárom), zatvárateľný `aria-label
-  // "Zavrieť"`/text ✕. Kým sa nezavrie, `Pokračovať`/`Uložiť` klik zachytí
-  // tento banner a zlyhá — presne ten stav, ktorý `dismissInfoBanners`
-  // (Štěpánov krok 2) rieši.
+  // issue 491 (reálny tvar, naživo domapované 26.8.2026): `/pickup-orders/0` je
+  // JEDEN `<form class="data">` s `#pickup-date` (wj-input-date, vnútorný
+  // `input[wj-part="input"]`) a `#button-confirmation` „Pokračovať". Klik
+  // „Pokračovať" re-renderuje NA MIESTE na REVIEW krok — zmizne
+  // `#button-confirmation`, objaví sa `#button-save` „Uložiť" (+ `.panel.warning`).
+  // Skutočné odoslanie = klik `#button-save`. (Predtým fixtúra modelovala
+  // hádané `#step1`/`#step2` step-container ID, ktoré v reálnom DOM NEEXISTUJÚ.)
+  //
+  // issue 451/491 info toasty (Štěpánov krok „zavrieť všetky hlášky"):
+  // `shp-newsfeed-toast` v celoobrazovkovom `#toast-container` overlaye
+  // (zachytáva pointer eventy nad formulárom), zatvárané tlačidlom „Zatvoriť"
+  // (`.newsfeed-toast__button`). Druhé tlačidlo „Obsah správy" je DECOY — klik
+  // naň overlay NEODstráni; implementácia, čo klikne na VŠETKY
+  // `.newsfeed-toast__button` (alebo hádaný ✕/aria-label/close), by decoy
+  // klikla / netrafila „Zatvoriť" → overlay zostane → klik na formulár zlyhá.
   const infoBanner = showInfoBanner
-    ? `<div id="dpd-info-banner" style="position:fixed;top:0;left:0;right:0;bottom:0;z-index:2147483647;background:rgba(0,0,0,0.4)">
-        <div class="alert-info" style="padding:1rem">Aktuálne obmedzenia v doručovaní.
-          <button type="button" id="info-banner-close" class="banner-close" aria-label="Zavrieť">✕</button>
-        </div>
+    ? `<div id="toast-container" class="toast-center-center toast-container" style="position:fixed;top:0;left:0;right:0;bottom:0;z-index:2147483647;background:rgba(0,0,0,0.4)">
+        <shp-newsfeed-toast class="toast-info toast newsfeed-toast">
+          <div class="toast-title">Nové pravidlá v doručovaní do Holandska</div>
+          <div class="newsfeed-toast__buttons">
+            <button type="button" class="newsfeed-toast__button" data-role="close"><span class="newsfeed-toast__label">Zatvoriť</span></button>
+            <button type="button" class="newsfeed-toast__button" data-role="content"><span class="newsfeed-toast__label">Obsah správy</span></button>
+          </div>
+        </shp-newsfeed-toast>
+        <shp-newsfeed-toast class="toast-info toast newsfeed-toast">
+          <div class="toast-title">Aktuálne obmedzenia a možné oneskorenia pri doručovaní zásielok</div>
+          <div class="newsfeed-toast__buttons">
+            <button type="button" class="newsfeed-toast__button" data-role="close"><span class="newsfeed-toast__label">Zatvoriť</span></button>
+            <button type="button" class="newsfeed-toast__button" data-role="content"><span class="newsfeed-toast__label">Obsah správy</span></button>
+          </div>
+        </shp-newsfeed-toast>
       </div>
       <script>
-        document.getElementById('info-banner-close').addEventListener('click', function () {
-          var b = document.getElementById('dpd-info-banner'); if (b) b.remove();
+        Array.prototype.forEach.call(document.querySelectorAll('shp-newsfeed-toast'), function (t) {
+          t.querySelector('[data-role=close]').addEventListener('click', function () {
+            t.remove();
+            var c = document.getElementById('toast-container');
+            if (c && c.querySelectorAll('shp-newsfeed-toast').length === 0) c.remove();
+          });
+          // "Obsah správy" (data-role=content) = DECOY: overlay zámerne NEODstráni
         });
       </script>`
     : "";
   return `<!doctype html><html><body>
+    <div class="content-panel pickup-order-editor">
+      <form id="pickup-step1" class="data ng-untouched ng-pristine ng-valid" novalidate="">
+        <div class="panel"><h2>Podrobnosti</h2>
+          <div class="ctl">
+            <label for="pickup-date_input">Dátum vyzdvihnutia</label>
+            <div id="pickup-date" class="wj-control wj-inputdate"><input wj-part="input" type="tel" class="wj-form-control" id="pickup-date_input" /></div>
+          </div>
+          <div class="ctl"><label for="note">Poznámka</label><textarea id="note"></textarea></div>
+        </div>
+        <div class="commands toolbar"><button type="button" id="button-confirmation">Pokračovať</button></div>
+      </form>
+      <div id="pickup-step2" class="data" style="display:none">
+        <div class="panel wide warning">Prosím, skontrolujte údaje objednávky. Po jej uložení bude objednávka odoslaná do DPD.</div>
+        <div class="commands toolbar">
+          <button id="button-save"><span class="ic-floppydisk"></span><span class="label">Uložiť</span></button>
+          <button id="button-back"><span class="ic-arrow-left-1"></span><span class="label">Späť</span></button>
+        </div>
+      </div>
+    </div>
     ${infoBanner}
-    <div id="pickup-date"><input wj-part="input" id="pickup-date-input" /></div>
-    <div id="step1"><button type="button" id="button-confirmation">Pokračovať</button></div>
-    <div id="step2" style="display:none"><button type="button" id="save-btn2">Uložiť</button></div>
     <script>
       document.getElementById('button-confirmation').addEventListener('click', function () {
-        document.getElementById('step1').style.display = 'none';
-        document.getElementById('step2').style.display = 'block';
+        window.__pickupDate = document.getElementById('pickup-date_input').value;
+        document.getElementById('pickup-step1').style.display = 'none';
+        document.getElementById('pickup-step2').style.display = 'block';
       });
-      document.getElementById('save-btn2').addEventListener('click', function () {
-        var date = document.getElementById('pickup-date-input').value;
-        fetch('/test/pickup-submit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: date }) })
+      document.getElementById('button-save').addEventListener('click', function () {
+        fetch('/test/pickup-submit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: window.__pickupDate }) })
           .then(function (r) { return r.json(); })
           .then(function (r) {
-            if (!r.ok) {
+            if (r.ok) {
+              // úspech: review krok sa odpojí — appka deteguje detach #button-save
+              var s = document.getElementById('pickup-step2'); if (s) s.remove();
+            } else {
               document.body.insertAdjacentHTML('beforeend', '<div class="alert-danger">Zvoz sa nepodarilo objednať (test)</div>');
             }
           });
