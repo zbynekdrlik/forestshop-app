@@ -11,12 +11,18 @@ import { users } from "./schema-users.js";
 // vedel, čo sa v jeho mene odoslalo.
 // issue 257: "order_merge" — e-mail zákazníkovi o zlúčení viacerých jeho
 // objednávok do jednej zásielky (`modules/orders/merge-mail.ts`).
+// issue 500: "order_customer_contact" — ručný e-mail zákazníkovi z riadku "Na
+// objednanie" (@ tlačidlo, `modules/orders/customer-contact.ts`). Nová hodnota
+// enumu, ktorú používa LEN runtime insert (žiadny CHECK/index/generated-column)
+// → bezpečná samostatná `ALTER TYPE ... ADD VALUE` migrácia (issue 476 vzor,
+// `.claude/rules/database.md`).
 export const mailLogSource = pgEnum("mail_log_source", [
   "nedostupne",
   "posta_uncollected",
   "order_reminder",
   "supplier_order",
   "order_merge",
+  "order_customer_contact",
 ]);
 
 // `skipped` = appka SKUTOČNE chcela poslať a nemohla (chýba adresa, chýba

@@ -3,7 +3,7 @@ import { z } from "zod";
 // issue 193: obrazovka "Odoslané e-maily" — zrkadlí `http/mail-log-routes.ts`.
 // Len čítanie, žiadny zápis (do knihy zapisujú samy odosielacie cesty).
 
-export const MAIL_LOG_SOURCES = ["nedostupne", "posta_uncollected", "order_reminder", "supplier_order", "order_merge"] as const;
+export const MAIL_LOG_SOURCES = ["nedostupne", "posta_uncollected", "order_reminder", "supplier_order", "order_merge", "order_customer_contact"] as const;
 export type MailLogSource = (typeof MAIL_LOG_SOURCES)[number];
 
 // Popisky sú TU (nie na serveri) z rovnakého dôvodu ako pri stavoch riadkov
@@ -14,6 +14,7 @@ export const MAIL_LOG_SOURCE_LABELS: Readonly<Record<MailLogSource, string>> = {
   order_reminder: "Pripomienky objednávok",
   supplier_order: "Objednávka dodávateľovi",
   order_merge: "Zlúčenie objednávky",
+  order_customer_contact: "Kontakt zákazníkovi",
 };
 
 const rowSchema = z.object({

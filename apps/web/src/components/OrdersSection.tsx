@@ -16,6 +16,8 @@ import { OrdersOverviewTiles } from "./OrdersOverviewTiles.js";
 import { OrdersToolbar } from "./OrdersToolbar.js";
 import { OrderWriteFailuresBanner } from "./OrderWriteFailuresBanner.js";
 import { SupplierOrderGroup } from "./SupplierOrderGroup.js";
+import { CustomerContactDialog } from "./CustomerContactDialog.js";
+import { useCustomerContactMail } from "../useCustomerContactMail.js";
 import { fetchOpenOrders, NEZNAMY_DODAVATEL } from "../ordersApi.js";
 
 // Rovnaké dve role, ktoré server vyžaduje pre
@@ -156,6 +158,11 @@ export function OrdersSection({
     [suppliers],
   );
 
+  // issue 500: @ tlačidlo na riadku otvorí okno na ručný e-mail zákazníkovi —
+  // zdieľané jadro (`useCustomerContactMail`) so sekciou „Riešiť" (#502), aby
+  // bola funkcia identická.
+  const contact = useCustomerContactMail(onSessionExpired);
+
   return (
     <section className="orders-section">
       {!loaded && <p>Načítavam otvorené objednávky…</p>}
@@ -239,8 +246,12 @@ export function OrdersSection({
           onOpenPreview={mail.openPreview}
           onClosePreview={mail.closePreview}
           onConfirmSend={mail.confirmSend}
+          onOpenCustomerContact={contact.open}
         />
       ))}
+      {/* issue 500: okno na ručný e-mail zákazníkovi — JEDNO na celú sekciu
+          (zdieľané s „Riešiť" #502), otvorí ho @ tlačidlo ktoréhokoľvek riadku. */}
+      <CustomerContactDialog contact={contact} />
     </section>
   );
 }
