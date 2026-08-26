@@ -16,7 +16,7 @@
 // na $?, nie len na text výstupu (rovnaká disciplína ako `scripts/catalog-ingest.ts`).
 import { createDb } from "../db/client.js";
 import { loadEnv } from "../env.js";
-import { computeOrderIdsWindowStart } from "../modules/orders/backfill.js";
+import { computeOrderIdsWindowStart, computeOrdersExportWindowStart } from "../modules/orders/backfill.js";
 import { computeImportWindow, createHttpOrderIdsFetcher, createHttpOrdersExportFetcher } from "../modules/orders/fetcher.js";
 import {
   DEFAULT_ORDERS_IMPORT_WINDOW_DAYS,
@@ -52,15 +52,18 @@ const ordersXmlUrl = env.SHOPTET_ORDERS_XML_URL;
 const { db, pool } = createDb(env.DATABASE_URL);
 let result: OrdersIngestResult;
 try {
-  // issue 132: pozri rovnaký komentár v `index.ts` — XML id-fetch okno sa
-  // sebaozdravujúco predĺži dozadu, keď existuje otvorená objednávka bez id
-  // staršia než predvolené okno.
+  // issue 132/492: pozri rovnaký komentár v `index.ts`. CSV import okno
+  // (`exportDateFrom`) sa sebaozdravujúco predĺži dozadu na najstaršiu OTVORENÚ
+  // objednávku (osvieženie zamrznutého status_name, #492); XML id-fetch okno
+  // samostatne na najstaršiu otvorenú BEZ id (#132) — počítané z predvoleného
+  // okna, aby #132 správanie ostalo nezmenené.
+  const exportDateFrom = await computeOrdersExportWindowStart(db, dateFrom);
   const idsDateFrom = ordersXmlUrl === undefined ? dateFrom : await computeOrderIdsWindowStart(db, dateFrom);
   result = await ingestOrders(db, {
-    fetchExport: createHttpOrdersExportFetcher({ url: env.SHOPTET_ORDERS_URL, dateFrom, dateUntil }),
+    fetchExport: createHttpOrdersExportFetcher({ url: env.SHOPTET_ORDERS_URL, dateFrom: exportDateFrom, dateUntil }),
     now,
     rawDir: env.ORDERS_RAW_DIR,
-    windowStart: dateFrom,
+    windowStart: exportDateFrom,
     windowEnd: dateUntil,
     // issue 269: odkaz priamo na objednávku vo vrátkovej karte na Upozorneniach.
     adminBaseUrl: env.SHOPTET_ADMIN_BASE_URL,

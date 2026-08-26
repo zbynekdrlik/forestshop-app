@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -137,13 +136,17 @@ function buildCsv(rows: readonly Record<string, string>[]): Buffer {
 
 // Simuluje Shoptet-ov `dateFrom` filter: STARÁ objednávka (30.4, teraz už
 // "Vybavená") je v exporte LEN keď stiahnuté okno siaha po ňu; ČERSTVÁ
-// objednávka je v exporte vždy (drží akceptačnú bránu zdravú).
-const STARA_DATE = new Date("2026-04-30T10:00:00Z");
+// objednávka je v exporte vždy (drží akceptačnú bránu zdravú). `WINDOW_THRESHOLD`
+// je bod MEDZI dátumom starej objednávky (30.4) a začiatkom predvoleného
+// 90-dňového okna (~28.5 pri NOW=26.8) — NIE presný placed_at (ten je po
+// TZ prevode 30.4 13:45 UTC, nie 10:00), takže prah drží obe strany jasne
+// oddelené bez ohľadu na presný čas.
+const WINDOW_THRESHOLD = new Date("2026-05-10T00:00:00Z");
 function windowAwareFetcher(dateFrom: Date): OrdersExportFetcher {
   const rows: Record<string, string>[] = [
     { code: "9210", date: "2026-08-20 09:00:00", statusName: "Vybavuje sa", billFullName: "Cerstva", itemName: "T", itemAmount: "1", itemCode: "40237/XL" },
   ];
-  if (dateFrom.getTime() <= STARA_DATE.getTime()) {
+  if (dateFrom.getTime() <= WINDOW_THRESHOLD.getTime()) {
     rows.push({ code: "20260739", date: "2026-04-30 15:45:25", statusName: "Vybavena", billFullName: "Andrej", itemName: "T", itemAmount: "1", itemCode: "40237/XL" });
   }
   return () => Promise.resolve({ body: buildCsv(rows), sourceLabel: "fixtúra" });
@@ -179,7 +182,7 @@ it("BUG: pevné 90-dňové okno necháva starú vybavenú objednávku zamrznutú
 
   // pevné okno (predfixové správanie): dateFrom ~28.5, stará objednávka (30.4) mimo neho
   const { dateFrom, dateUntil } = computeImportWindow(NOW, DEFAULT_ORDERS_IMPORT_WINDOW_DAYS);
-  expect(dateFrom.getTime()).toBeGreaterThan(STARA_DATE.getTime()); // 30.4 je PRED oknom
+  expect(dateFrom.getTime()).toBeGreaterThan(WINDOW_THRESHOLD.getTime()); // okno nesiaha po 30.4 → export ju vynechá
   await ingestOrders(db, { fetchExport: windowAwareFetcher(dateFrom), now: NOW, rawDir: dir, windowStart: dateFrom, windowEnd: dateUntil });
 
   const [old] = await db.select().from(orders).where(eq(orders.externalOrderId, "20260739"));
@@ -193,7 +196,7 @@ it("FIX: sebaozdravujúce okno CSV importu dočíta starú objednávku a osviež
 
   const { dateFrom: defaultFrom, dateUntil } = computeImportWindow(NOW, DEFAULT_ORDERS_IMPORT_WINDOW_DAYS);
   const exportFrom = await computeOrdersExportWindowStart(db, defaultFrom);
-  expect(exportFrom.getTime()).toBeLessThanOrEqual(STARA_DATE.getTime()); // predĺžené na 30.4
+  expect(exportFrom.getTime()).toBeLessThanOrEqual(WINDOW_THRESHOLD.getTime()); // predĺžené po 30.4 → export ju zachytí
   await ingestOrders(db, { fetchExport: windowAwareFetcher(exportFrom), now: NOW, rawDir: dir, windowStart: exportFrom, windowEnd: dateUntil });
 
   const [old] = await db.select().from(orders).where(eq(orders.externalOrderId, "20260739"));
