@@ -375,6 +375,29 @@ paths:
   alternatívy, nikdy vyskúšané, lebo CSV dovtedy stačilo) predtým, než sa
   záver zovšeobecní na "Shoptet to nemá vôbec" — mal len iný, dovtedy
   neotestovaný export.
+- **Import má PEVNÉ 90-dňové KĹZAVÉ okno (`fetcher.ts`'s `computeImportWindow(now,
+  90)`, `dateFrom`/`dateUntil` z `now`); objednávka staršia než 90 dní z exportu
+  VYPADNE. `backfill.ts` predlžuje okno dozadu SEBAOZDRAVUJÚCO, samostatne pre
+  dva rôzne dôvody:**
+  - **#132 — XML id-fetch (`computeOrderIdsWindowStart`, `findOldestOpenOrderMissingShoptetId`):**
+    najstaršia OTVORENÁ objednávka BEZ `shoptet_order_id`. Inak nikdy nedostane id.
+  - **#492 — CSV import (`computeOrdersExportWindowStart`, `findOldestOpenOrder`):**
+    najstaršia OTVORENÁ objednávka BEZ ohľadu na id. CSV je JEDINÁ cesta osviežujúca
+    `status_name` (issue 59) — objednávka vybavená v Shoptete AŽ PO vypadnutí z okna
+    by inak navždy zamrzla na "Vybavuje sa" a visela v "Na objednanie" (20260739).
+    REPAIR je inherentný: prvý beh s predĺženým oknom zosúladí každý zamrznutý stav
+    zo Shoptetu — žiadny samostatný skript, žiadna heuristika "staré = vybavené".
+  Obe počítané z PREDVOLENÉHO `dateFrom` (nie navzájom), aby #132 správanie ostalo
+  nezmenené; CSV rozšírenie predlžuje AJ `windowStart` akceptačnej brány (`ingest.ts`),
+  takže `previousLineRatio` ostáva apples-to-apples (počítadlo DB riadkov aj stiahnutý
+  export sa rozšíria SPOLU). Zdieľaný privátny helper `oldestOpenOrderPlacedAt(db, extra?)`.
+- **Overené naživo (issue 492, forestshop-dev, 26. 8. 2026): Shoptet REŠPEKTUJE
+  širší `dateFrom`** — priame stiahnutie s `dateFrom=2026-4-1` vrátilo objednávku
+  z 30.4 (mimo 90-dňového okna) s AKTUÁLNYM stavom ("Vybavená"), zatiaľ čo posledný
+  bežný surový export ju vôbec neniesol. Rozdiel veľkosti (90 dní ~1,27 MB vs. 148
+  dní ~1,9 MB) je zanedbateľný. Známa hranica: objednávka otvorená v appke, ktorá už
+  v Shoptete NEEXISTUJE (zmazaná), by okno držala predĺžené donekonečna — extrémne
+  zriedkavé, download aj tak malý (rovnaká trieda rizika, akú #132 vedome prijalo).
 - **`fixtures/orders-sample.csv` je RUČNE vyrobená (nie výrez reálneho
   exportu ako katalógova fixtúra), takže sa smie prepísať CELÁ pythonom —
   žiadny byte-for-byte jeden-riadok postup ako `.claude/rules/catalog.md`

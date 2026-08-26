@@ -4480,3 +4480,14 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
 - Zamietnuté: (B) per-order Playwright dočítanie stavu (nový krehký scraping),
   (C) natvrdo dlhšie pevné okno (nerieši triedu). Design komentár:
   https://github.com/zbynekdrlik/forestshop-app/issues/492#issuecomment-5423282699
+- Commity: `db6949b` (bump .289 + log), `07acb4f` (RED test), `9fee46e` (GREEN
+  fix), + docs (orders.md playbook + tento log). RED→GREEN:
+  `orders-status-backfill.integration.test.ts` — "computeOrdersExportWindowStart
+  PREDĹŽI okno dozadu na staršiu otvorenú objednávku (aj s id)" + "FIX:
+  sebaozdravujúce okno CSV importu dočíta starú objednávku a osvieži ju na
+  'Vybavená'" (obidva RED na neutralizovanej `computeOrdersExportWindowStart`,
+  overené na izolovanom Postgrese; 7/7 GREEN, #132 backfill + ingest bez regresie).
+- Repair sweep (inherentný): prvý beh po nasadení s predĺženým oknom zosúladí
+  presne 2 zamrznuté staré otvorené objednávky — 20260739 (→ Vybavená, zmizne z
+  Na objednanie) a 20260819 (→ Vybavuje sa, správne ZOSTANE, v Shoptete stále
+  otvorená). Klientove 20260990/20261172 sú vnútri okna, nedotknuté.
