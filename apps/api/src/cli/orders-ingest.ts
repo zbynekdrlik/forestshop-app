@@ -16,13 +16,9 @@
 // na $?, nie len na text výstupu (rovnaká disciplína ako `scripts/catalog-ingest.ts`).
 import { createDb } from "../db/client.js";
 import { loadEnv } from "../env.js";
-import { computeOrderIdsWindowStart, computeOrdersExportWindowStart } from "../modules/orders/backfill.js";
-import { computeImportWindow, createHttpOrderIdsFetcher, createHttpOrdersExportFetcher } from "../modules/orders/fetcher.js";
-import {
-  DEFAULT_ORDERS_IMPORT_WINDOW_DAYS,
-  ingestOrders,
-  type OrdersIngestResult,
-} from "../modules/orders/ingest.js";
+import { computeOrdersIngestWindows } from "../modules/orders/backfill.js";
+import { createHttpOrderIdsFetcher, createHttpOrdersExportFetcher } from "../modules/orders/fetcher.js";
+import { ingestOrders, type OrdersIngestResult } from "../modules/orders/ingest.js";
 
 function popis(result: OrdersIngestResult): string {
   switch (result.status) {
@@ -45,20 +41,19 @@ if (env.SHOPTET_ORDERS_URL === undefined) {
 }
 
 const now = new Date();
-const { dateFrom, dateUntil } = computeImportWindow(now, DEFAULT_ORDERS_IMPORT_WINDOW_DAYS);
-
 const ordersXmlUrl = env.SHOPTET_ORDERS_XML_URL;
 
 const { db, pool } = createDb(env.DATABASE_URL);
 let result: OrdersIngestResult;
 try {
-  // issue 132/492: pozri rovnaký komentár v `index.ts`. CSV import okno
-  // (`exportDateFrom`) sa sebaozdravujúco predĺži dozadu na najstaršiu OTVORENÚ
-  // objednávku (osvieženie zamrznutého status_name, #492); XML id-fetch okno
-  // samostatne na najstaršiu otvorenú BEZ id (#132) — počítané z predvoleného
-  // okna, aby #132 správanie ostalo nezmenené.
-  const exportDateFrom = await computeOrdersExportWindowStart(db, dateFrom);
-  const idsDateFrom = ordersXmlUrl === undefined ? dateFrom : await computeOrderIdsWindowStart(db, dateFrom);
+  // issue 132/492: obe okná importu (CSV export sebaozdravujúco rozšírené na
+  // najstaršiu OTVORENÚ objednávku — osvieženie zamrznutého status_name #492;
+  // XML id-fetch na otvorenú BEZ id #132) počíta JEDEN zdroj pravdy
+  // `computeOrdersIngestWindows` (`backfill.ts`), aby sa CLI a `index.ts`
+  // nikdy nerozišli a aby to šlo unit-testovať.
+  const { exportDateFrom, idsDateFrom, dateUntil } = await computeOrdersIngestWindows(db, now, {
+    hasXmlUrl: ordersXmlUrl !== undefined,
+  });
   result = await ingestOrders(db, {
     fetchExport: createHttpOrdersExportFetcher({ url: env.SHOPTET_ORDERS_URL, dateFrom: exportDateFrom, dateUntil }),
     now,

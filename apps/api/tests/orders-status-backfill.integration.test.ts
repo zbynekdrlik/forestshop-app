@@ -7,6 +7,7 @@ import { orders } from "../src/db/schema.js";
 import { DEFAULT_ORDER_OPEN_STATUS, listOpenStatusNames } from "../src/modules/orders/open-statuses.js";
 import {
   computeOrdersExportWindowStart,
+  computeOrdersIngestWindows,
   findOldestOpenOrder,
 } from "../src/modules/orders/backfill.js";
 import { computeImportWindow } from "../src/modules/orders/fetcher.js";
@@ -121,6 +122,56 @@ it("computeOrdersExportWindowStart NEROZŠÍRI, keď je uzavretá stará objedn�
   });
 
   expect(await computeOrdersExportWindowStart(ctx.db, DEFAULT_DATE_FROM)).toEqual(DEFAULT_DATE_FROM);
+});
+
+// --- unit: computeOrdersIngestWindows (zdieľaný zdroj pravdy drôtovania CLI+scheduler) ---
+
+const NOW_WINDOWS = new Date("2026-08-26T10:00:00Z");
+
+it("computeOrdersIngestWindows: bez otvorených objednávok → obe okná = predvolené 90-dňové", async () => {
+  const ctx = await withCleanDb();
+  close = ctx.close;
+  const { dateFrom, dateUntil } = computeImportWindow(NOW_WINDOWS);
+
+  const w = await computeOrdersIngestWindows(ctx.db, NOW_WINDOWS, { hasXmlUrl: true });
+  expect(w.exportDateFrom).toEqual(dateFrom);
+  expect(w.idsDateFrom).toEqual(dateFrom);
+  expect(w.dateUntil).toEqual(dateUntil);
+});
+
+it("computeOrdersIngestWindows: stará otvorená objednávka (s id) rozšíri exportDateFrom; idsDateFrom ostane predvolené (bez XML)", async () => {
+  const ctx = await withCleanDb();
+  close = ctx.close;
+  const stara = new Date("2026-04-30T10:00:00Z"); // > 90 dní pred NOW_WINDOWS
+  await ctx.db.insert(orders).values({
+    externalOrderId: "20260739",
+    customerName: "Andrej Praskač",
+    statusName: DEFAULT_ORDER_OPEN_STATUS,
+    placedAt: stara,
+    shoptetOrderId: 58184, // MÁ id → #132 XML okno by ho nechalo tak
+  });
+  const { dateFrom } = computeImportWindow(NOW_WINDOWS);
+
+  const w = await computeOrdersIngestWindows(ctx.db, NOW_WINDOWS, { hasXmlUrl: false });
+  expect(w.exportDateFrom.toISOString()).toBe(stara.toISOString()); // CSV okno rozšírené (#492)
+  expect(w.idsDateFrom).toEqual(dateFrom); // bez XML URL → predvolené
+});
+
+it("computeOrdersIngestWindows: stará otvorená BEZ id + XML → OBE okná rozšírené", async () => {
+  const ctx = await withCleanDb();
+  close = ctx.close;
+  const stara = new Date("2026-04-30T10:00:00Z");
+  await ctx.db.insert(orders).values({
+    externalOrderId: "20260740",
+    customerName: "Zákazník X",
+    statusName: DEFAULT_ORDER_OPEN_STATUS,
+    placedAt: stara,
+    shoptetOrderId: null, // chýba id → #132 okno ju TIEŽ zachytí
+  });
+
+  const w = await computeOrdersIngestWindows(ctx.db, NOW_WINDOWS, { hasXmlUrl: true });
+  expect(w.exportDateFrom.toISOString()).toBe(stara.toISOString());
+  expect(w.idsDateFrom.toISOString()).toBe(stara.toISOString());
 });
 
 // --- end-to-end: stale-status cesta cez ingestOrders + okno-vedomý fetcher ---
