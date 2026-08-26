@@ -35,10 +35,13 @@ const orderLineSchema = z.object({
   // vrstva overenia, rovnaký vzor ako `adminUrl`/`supplierUrl` vyššie.
   ourUrl: z.string().regex(/^https?:\/\//).nullable(),
   quantity: z.number(),
-  // issue 476: piaty stav `riesit` (exkluzívny, princíp `nedostupne`) — zrkadlí
-  // `orderLineState.enumValues` z `apps/api/src/db/schema-orders.ts`. Bez neho
-  // by frontend odmietol (zod parse) každý riadok so stavom `riesit`.
-  state: z.enum(["objednane", "caka_sa", "skladom", "nedostupne", "riesit"]),
+  // issue 476/493: piaty stav `riesit` a šiesty `objednane_stav` (label
+  // „Objednané", oba exkluzívne, princíp `nedostupne`) — RUČNE zrkadlí
+  // `orderLineState.enumValues` z `apps/api/src/db/schema-orders.ts` (nie je
+  // odvodené, treba sync na oboch stranách). Bez novej hodnoty by frontend
+  // odmietol (zod parse) KAŽDÝ riadok v tom stave a `OrderLine["state"]` typ
+  // by ju nepoznal (padne `STATE_LABELS`/`STATE_DISPLAY_ORDER` úplnosť).
+  state: z.enum(["objednane", "caka_sa", "skladom", "nedostupne", "riesit", "objednane_stav"]),
   // issue 60: nezávislý príznak "objednané u dodávateľa" (viď `state.ts`'s
   // komentár) — oddelené od `state` vyššie.
   ordered: z.boolean(),

@@ -803,3 +803,29 @@ paths:
   `colgroup`+`thead` 9-stĺpcovej tabuľky sú vyčlenené do `OrderLinesTableHead`
   (jeden zdroj pravdy, zdieľaný `SupplierOrderGroup` AJ rozrolovaním Riešiť — DOM
   bajt-identický, „Na objednanie" testy nezmenené). Rýchle pole `by-code` bezo zmeny.
+- **NAMING TRAP — v appke sú TRI/ŠTYRI rôzne „objednané"-podobné pojmy, NIKDY ich
+  nezamieňaj (issue 493, Štěpán binding rozhodnutie 5423135473).** Po pridaní 6.
+  stavu enumu existujú súčasne: **(a)** enum hodnota `objednane` = DEFAULT stav
+  riadku, vo frontende label **„Nevybavené"** (issue 60 — NIE „Objednané"!);
+  **(b)** enum hodnota `objednane_stav` = 6. EXKLUZÍVNY stav, label **„Objednané"**
+  (issue 493, stav PRODUKTU — princíp `riesit`/`nedostupne`); **(c)**
+  `order_line.ordered` boolean = ✓ checkbox „vybavil som akýmkoľvek spôsobom"
+  (NEZÁVISLÝ od stavu — issue 60); **(d)** súhrnný chip „Objednané" v „Súhrn o
+  objednávaní" (`ordersSummary.ts`'s `BREAKDOWN_PARTS`) počíta `ordered` BOOLEAN,
+  nie stav. Preto interná hodnota nového stavu MUSÍ byť `objednane_stav`, NIKDY
+  `objednane` (kolízia s defaultom + `ordered` toky). **Pridanie 6. stavu = presne
+  vzor issue 476 (`riesit`), 5 miest:** (1) `schema-orders.ts`'s `orderLineState`
+  pgEnum + samostatná migrácia `ALTER TYPE ... ADD VALUE 'objednane_stav'` (BEZ DDL
+  použitia hodnoty → bezpečný vzor issue 476, žiadna 55P04, `database.md`); (2)
+  `apps/web/src/ordersApi.ts`'s `orderLineSchema.state` z.enum — RUČNE zrkadlí
+  enum (NIE odvodené!), bez nej frontend zod-odmietne každý riadok v novom stave
+  A `OrderLine["state"]` typ ho nepozná; (3) `orderLineStateLabels.ts` —
+  `STATE_LABELS` (Record, tsc vynúti) + `STATE_DISPLAY_ORDER` (exhaustive typ
+  vynúti; nový stav na KONIEC = dolný rad, 3-stĺpcová grid mriežka spadne 3+3);
+  (4) `app.css` — `.ord-state-btn-<hodnota>.active` farba (nový distinct odtieň,
+  všetkých 5 sémantických rodín obsadených → `--fs-accent` fialová); (5) testy.
+  Route `POST /api/orders/lines/:id/state`, stavové labely v hlavičke skupiny,
+  rozbalené riadky v Riešiť aj `isLineResolved` (`state !== "objednane"`) berú nový
+  stav AUTOMATICKY. Klient výslovne NEŽIADAL vlastnú sekciu (na rozdiel od Riešiť)
+  — len tlačidlo + stav; `ordered`-boolean toky (hromadné označenie, Skryť
+  vybavené, súčty, supplier e-mail) sa NEMENIA.
