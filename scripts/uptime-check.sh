@@ -17,11 +17,20 @@
 #
 # Perióda (systemd timer) 5 min. Potvrdenie po 2 zlyhaniach OKAMIHU za sebou
 # (~10 min súvislého výpadku) — jeden jednorazový blik (krátky sieťový hik) sa
-# nealertuje. Alert pre TÚ ISTÚ prebiehajúcu udalosť sa neopakuje častejšie než
-# raz za ALERT_THROTTLE_PASSES prechodov (predvolene 12 = ~1h pri 5min cadence)
-# — žiadny spam pre jeden trvajúci výpadok. Pri zotavení (URL, čo bolo predtým
-# potvrdene dole, teraz vráti 200) sa pošle JEDNA správa o zotavení a stav sa
-# vyčistí.
+# nealertuje.
+#
+# Routing alertov (issue 499, doktrína analyze-not-ping — airuleset #704/#705):
+# telefón (Discord) dostane LEN genuine nový actionable prechod stavu, a to
+# vždy s per-incident `--dedup-key`, takže ten istý incident nikdy nepinguje
+# znova:
+#   * prvé potvrdenie výpadku -> JEDEN keyed ping (kľúč `<prefix>:down:<url>:<id>`),
+#   * zotavenie predtým potvrdeného výpadku -> JEDEN keyed ping (`…:up:…:<id>`),
+#     s ROVNAKÝM incident-id ako down alert, ktorý uzatvára.
+# Prebiehajúci (už oznámený) výpadok sa na KAŽDOM ďalšom prechode zapíše LEN do
+# journalu (machine channel), NIKDY znova na telefón — žiadny spam pre jeden
+# trvajúci výpadok. `<id>` = epoch prvého potvrdenia; nový skutočný výpadok
+# dostane nový id -> nový kľúč -> alert. Keyless `notify --body` (bez
+# `--dedup-key`) je flood primitív a je tu ZAKÁZANÝ.
 #
 # Usage:
 #   scripts/uptime-check.sh            # one pass: measure -> decide -> alert
@@ -62,12 +71,18 @@ esac
 # `UPTIME_CHECK_URLS` ostáva, keby bolo treba sledovať aj ďalšie adresy.
 read -ra URLS <<< "${UPTIME_CHECK_URLS:-https://forestshop.newlevel.media}"
 CONFIRM_THRESHOLD="${UPTIME_CHECK_CONFIRM_THRESHOLD:-2}"
-ALERT_THROTTLE_PASSES="${UPTIME_CHECK_ALERT_THROTTLE_PASSES:-12}"   # ~1h at the 5-min cadence
 CURL_TIMEOUT="${UPTIME_CHECK_CURL_TIMEOUT:-10}"
 
 NOTIFY="${AIRULESET_NOTIFY:-$HOME/devel/airuleset/airuleset.py}"
 OWNER_NAME="${UPTIME_CHECK_OWNER:-marek}"
 REPO_SLUG="${UPTIME_CHECK_REPO:-zbynekdrlik/forestshop-app}"
+
+# issue 499 (airuleset #704/#705, doktrína analyze-not-ping): každý telefónny
+# alert nesie stabilný per-incident `--dedup-key` `<prefix>:<down|up>:<url-key>:
+# <incident-id>`, aby ten istý prebiehajúci incident NEpingoval znova (airuleset
+# `notify` zdedupe podľa kľúča). Keyless send (bez `--dedup-key`) je flood
+# primitív a je tu ZAKÁZANÝ.
+DEDUP_PREFIX="${UPTIME_CHECK_DEDUP_PREFIX:-forestshop-uptime}"
 
 STATE_DIR="${UPTIME_CHECK_STATE_DIR:-${XDG_RUNTIME_DIR:-/tmp}}"
 STATE_FILE="${UPTIME_CHECK_STATE_FILE:-$STATE_DIR/forestshop-app-uptime-check.state}"
@@ -84,7 +99,8 @@ probe_one() {
 
 # ── read / write persisted per-URL state ────────────────────────────────────
 # Key namespaced by a sanitized URL so both endpoints get independent
-# confirm/throttle tracking (one down, one up must not mask each other).
+# confirm / alerted / incident tracking (one down, one up must not mask each
+# other).
 sanitize_key() { printf '%s' "$1" | tr -c 'A-Za-z0-9' '_'; }
 
 read_state_field() {
@@ -103,20 +119,39 @@ write_state_field() {
   mv -f "$tmp" "$STATE_FILE" 2>/dev/null || true
 }
 
-send_alert() {
-  local body="$1"
+# PHONE (Discord) — ONLY a genuine NEW actionable state TRANSITION (outage
+# start / recovery). ALWAYS carries a stable per-incident `--dedup-key` so the
+# SAME incident never re-pings (airuleset dedups on the key). A repeated status
+# for an UNCHANGED state must NEVER come here — route it through log_machine().
+send_phone_alert() {
+  local dedup_key="$1" body="$2"
   if [ "$DRY_RUN" -eq 1 ]; then
-    log "[dry-run] WOULD alert: $body"
+    log "[dry-run] WOULD phone-alert (dedup-key=$dedup_key): $body"
     return 0
   fi
-  log "ALERT: firing Discord notification"
+  log "ALERT: firing Discord notification (dedup-key=$dedup_key)"
   python3 "$NOTIFY" notify --body "$body" --owner-name "$OWNER_NAME" \
+    --dedup-key "$dedup_key" \
     >/dev/null 2>&1 || log "ALERT: airuleset.py notify failed (non-fatal)"
 }
 
-# ── one URL: measure -> confirm -> throttle -> alert/recover ───────────────
+# MACHINE CHANNEL — a periodic / repeated STATE report goes to the journal
+# (stderr -> systemd journal), NEVER the phone (doktrína analyze-not-ping,
+# airuleset #704/#705). No `notify` call is made here.
+log_machine() {
+  log "MACHINE-CHANNEL: $*"
+}
+
+# ── one URL: measure -> confirm -> route (phone transition / journal state) ──
+# Three routing lanes (issue 499, doktrína analyze-not-ping):
+#   1. NEW confirmed outage      -> ONE keyed PHONE alert  (down:<incident-id>)
+#   2. ongoing known outage      -> journal (machine channel) only, NEVER phone
+#   3. recovery of a known outage-> ONE keyed PHONE alert  (up:<same incident-id>)
+# The incident-id (epoch of the first confirmation) makes each real outage's
+# dedup key unique, so a genuinely new outage always alerts while the same
+# ongoing incident never re-pings.
 check_url() {
-  local url="$1" key code down prev_confirm confirm
+  local url="$1" key code down prev_confirm confirm was_alerted incident_id
   key="$(sanitize_key "$url")"
 
   code="$(probe_one "$url")"
@@ -133,16 +168,20 @@ check_url() {
   write_state_field "${key}_confirm" "$confirm"
   log "url=$url confirm=$prev_confirm -> $confirm (threshold=$CONFIRM_THRESHOLD)"
 
-  # Recovered (was previously CONFIRMED down, now healthy) -> one recovery
-  # message, then clear the alert dedup so a FUTURE fresh outage always alerts.
-  local was_alerted
   was_alerted="$(read_state_field "${key}_alerted" 0)"
+
+  # Lane 3 — recovered (was CONFIRMED down, now healthy): ONE keyed recovery
+  # phone ping for THIS incident, then clear incident state so a FUTURE fresh
+  # outage always alerts with a new incident-id.
   if [ "$down" -eq 0 ]; then
     if [ "$was_alerted" = "1" ]; then
-      send_alert "✅ uptime-check ($REPO_SLUG): $url je opäť dostupná (HTTP $code)."
+      incident_id="$(read_state_field "${key}_incident" 0)"
+      send_phone_alert "${DEDUP_PREFIX}:up:${key}:${incident_id}" \
+        "✅ uptime-check ($REPO_SLUG): $url je opäť dostupná (HTTP $code)."
     fi
     write_state_field "${key}_alerted" 0
-    write_state_field "${key}_throttle_passes" 0
+    write_state_field "${key}_incident" 0
+    write_state_field "${key}_incident_passes" 0
     return 0
   fi
 
@@ -151,26 +190,30 @@ check_url() {
     return 0
   fi
 
-  # Confirmed down. Throttle repeat alerts for the SAME ongoing outage.
-  local prior_passes
+  # Lane 2 — already alerted for this ongoing incident: a periodic STATE report,
+  # NOT a phone ping. Route to the machine channel (journal) only.
   if [ "$was_alerted" = "1" ]; then
-    prior_passes="$(read_state_field "${key}_throttle_passes" 0)"
-    prior_passes=$((prior_passes + 1))
-    if [ "$prior_passes" -lt "$ALERT_THROTTLE_PASSES" ]; then
-      write_state_field "${key}_throttle_passes" "$prior_passes"
-      log "url=$url already alerted, suppressed by throttle (pass ${prior_passes}/${ALERT_THROTTLE_PASSES})"
-      return 0
-    fi
-    log "url=$url still down after throttle window — re-alerting"
+    local passes
+    passes="$(read_state_field "${key}_incident_passes" 0)"
+    passes=$((passes + 1))
+    write_state_field "${key}_incident_passes" "$passes"
+    incident_id="$(read_state_field "${key}_incident" 0)"
+    log_machine "url=$url STÁLE NEDOSTUPNÁ (HTTP ${code:-<žiadna odpoveď>}) — incident=$incident_id, prechod ${passes} — telefón sa NEpinguje (periodický stavový report)"
+    return 0
   fi
 
+  # Lane 1 — first confirmation of a NEW outage: the ONE genuine new actionable
+  # event. Capture a fresh incident-id and send exactly ONE keyed phone alert.
+  incident_id="$(date +%s)"
   write_state_field "${key}_alerted" 1
-  write_state_field "${key}_throttle_passes" 0
-  send_alert "🚨 uptime-check ($REPO_SLUG): $url NEODPOVEDÁ (HTTP ${code:-<žiadna odpoveď>}) už ${CONFIRM_THRESHOLD}+ prechodov za sebou."
+  write_state_field "${key}_incident" "$incident_id"
+  write_state_field "${key}_incident_passes" 0
+  send_phone_alert "${DEDUP_PREFIX}:down:${key}:${incident_id}" \
+    "🚨 uptime-check ($REPO_SLUG): $url NEODPOVEDÁ (HTTP ${code:-<žiadna odpoveď>}) už ${CONFIRM_THRESHOLD}+ prechodov za sebou."
 }
 
 main() {
-  log "pass start (dry_run=$DRY_RUN, threshold=$CONFIRM_THRESHOLD, throttle=$ALERT_THROTTLE_PASSES)"
+  log "pass start (dry_run=$DRY_RUN, threshold=$CONFIRM_THRESHOLD, dedup_prefix=$DEDUP_PREFIX)"
   for url in "${URLS[@]}"; do
     check_url "$url"
   done

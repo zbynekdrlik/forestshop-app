@@ -64,7 +64,7 @@ CASE=""
 ok()   { echo "  ✓ [$CASE] $1"; }
 fail() { echo "  ✗ [$CASE] $1"; FAILS=$((FAILS + 1)); }
 
-OUT=""; RC=0; NOW=1000
+OUT=""; NOW=1000
 newscenario() { rm -f "$STATE" "$STATE".* 2>/dev/null || true; : > "$NOTIFYLOG"; }
 
 # pass HTTP_CODE [extra-script-args...]  — jeden beh skriptu (jeden „tick")
@@ -77,7 +77,6 @@ pass() {
     UPTIME_CHECK_STATE_FILE="$STATE" \
     AIRULESET_NOTIFY="/fake/airuleset.py" \
     bash "$SCRIPT" "$@" 2>&1)
-  RC=$?
   set -e
 }
 

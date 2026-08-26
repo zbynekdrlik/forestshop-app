@@ -42,6 +42,10 @@ jobs:
       # (mockuje docker/curl cez PATH stuby — CI skutočný produkčný deploy
       # odbehnúť nevie, túto logiku áno). Beží pri každom push/PR.
       - run: pnpm test:deploy-script
+      # issue 499: bash-unit test alertovacieho routingu z scripts/uptime-check.sh
+      # (mockuje curl/python3/date cez PATH stuby) — overí per-incident
+      # --dedup-key + machine-channel routing (doktrína analyze-not-ping).
+      - run: pnpm test:uptime-script
 
   integration:
     runs-on: ubuntu-latest
