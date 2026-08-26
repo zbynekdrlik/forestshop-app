@@ -4462,3 +4462,21 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
 - Táto log+playbook finalizácia jazdí na samostatnom docs bump-e
   `0.3.0-dev.287` (rovnaký vzor ako .285 pri issue 484) — ŽIADNA funkčná
   zmena, len dokumentácia; #487/#488 sú funkčne nasadené už na `.286`.
+
+## 2026-08-26 — #492 (zamrznutý stav objednávky po vypadnutí z exportného okna)
+
+- Solo ticket, paralelný fleet round; version bump `0.3.0-dev.289` (prvý commit).
+- Koreň (empiricky overené na forestshop-dev): import objednávok beží s pevným
+  90-dňovým kĺzavým oknom (`computeImportWindow(now,90)`); CSV import je jediná
+  cesta osviežujúca `order.status_name` (#59). Objednávka vybavená v Shoptete AŽ
+  PO vypadnutí z okna sa už nikdy neosvieži → zamrzne na "Vybavuje sa" a visí v
+  Na objednanie. Overené: 20260739 (30.4) v DB "Vybavuje sa", v poslednom exporte
+  chýba; priame stiahnutie so širokým `dateFrom` vracia "Vybavená".
+- Fix (prístup A, vzor #132): sebaozdravujúce okno CSV importu — `findOldestOpenOrder`
+  + `computeOrdersExportWindowStart` v `backfill.ts`; CLI + `index.ts` predĺžia
+  `dateFrom` (aj `windowStart` akceptačnej brány) dozadu na najstaršiu otvorenú
+  objednávku. Repair sweep inherentný: prvý beh po nasadení zosúladí 20260739
+  (→Vybavená, zmizne) aj 20260819 (→zostane). Žiadne mazanie, žiadna heuristika.
+- Zamietnuté: (B) per-order Playwright dočítanie stavu (nový krehký scraping),
+  (C) natvrdo dlhšie pevné okno (nerieši triedu). Design komentár:
+  https://github.com/zbynekdrlik/forestshop-app/issues/492#issuecomment-5423282699
