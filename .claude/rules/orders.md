@@ -391,6 +391,10 @@ paths:
   nezmenené; CSV rozšírenie predlžuje AJ `windowStart` akceptačnej brány (`ingest.ts`),
   takže `previousLineRatio` ostáva apples-to-apples (počítadlo DB riadkov aj stiahnutý
   export sa rozšíria SPOLU). Zdieľaný privátny helper `oldestOpenOrderPlacedAt(db, extra?)`.
+  Drôtovanie oboch okien (ktoré okno ktorý fetch dostane + `dateUntil`) je v JEDINOM
+  `computeOrdersIngestWindows(db, now, {hasXmlUrl})` — volajú ho AJ `cli/orders-ingest.ts`
+  AJ `index.ts` scheduler, aby sa nikdy nerozišli a aby to šlo unit-testovať (presne
+  trieda tichého regresu, ktorý #492 spôsobil — pevné okno bez testu na drôtovaní).
 - **Overené naživo (issue 492, forestshop-dev, 26. 8. 2026): Shoptet REŠPEKTUJE
   širší `dateFrom`** — priame stiahnutie s `dateFrom=2026-4-1` vrátilo objednávku
   z 30.4 (mimo 90-dňového okna) s AKTUÁLNYM stavom ("Vybavená"), zatiaľ čo posledný
