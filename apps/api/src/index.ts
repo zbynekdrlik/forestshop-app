@@ -239,6 +239,14 @@ const orderMergeDeps = {
   bccEmail: env.ORDER_MERGE_BCC_EMAIL,
 };
 
+// issue 500: "Na objednanie" — ručný e-mail zákazníkovi (@ tlačidlo na riadku).
+// Rovnaká úvaha ako `orderMergeDeps` vyššie: zdieľaný `sendSupplierMail`, vlastná
+// fail-closed BCC premenná, e-mail posiela človek ručne po povinnom náhľade.
+const orderCustomerContactDeps = {
+  mailTransport: sendSupplierMail,
+  bccEmail: env.ORDER_CUSTOMER_CONTACT_BCC_EMAIL,
+};
+
 // issue 292: "Eshop → Preprava DPD" — vlastné prihlasovacie údaje
 // (`DPD_PORTAL_USER`/`PASSWORD`), nezdieľané so Shoptet-om.
 // `config: undefined` = appka beží ďalej, akcie odosielajúce do DPD vrátia
@@ -276,6 +284,7 @@ const app = createApp(db, {
   orderReminder: orderReminderDeps,
   nedostupne: nedostupneDeps,
   orderMerge: orderMergeDeps,
+  orderCustomerContact: orderCustomerContactDeps,
   fetchSupplierPage,
   restock: { config: shoptetImportConfigFromBaseUrl(env.SHOPTET_ADMIN_BASE_URL, shoptetAdminUser ?? "", shoptetAdminPassword ?? "") },
   dpd: dpdDeps,

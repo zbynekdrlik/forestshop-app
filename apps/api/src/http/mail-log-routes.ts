@@ -11,7 +11,7 @@ import { requireUser, type AppBindings } from "./middleware.js";
 const PERIOD_DAYS: Readonly<Record<string, number | null>> = { "7": 7, "30": 30, "90": 90, all: null };
 
 const listQuery = z.object({
-  source: z.enum(["nedostupne", "posta_uncollected", "order_reminder", "supplier_order", "order_merge"]).optional(),
+  source: z.enum(["nedostupne", "posta_uncollected", "order_reminder", "supplier_order", "order_merge", "order_customer_contact"]).optional(),
   status: z.enum(["sent", "failed", "skipped"]).optional(),
   period: z.enum(["7", "30", "90", "all"]).default("30"),
 });

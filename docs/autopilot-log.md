@@ -4536,3 +4536,28 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
   pridania stavu). Migrácia číslo `0060` — kolíziu s paralelným workerom (issue 492)
   rieši supervisor pri integrácii. Ticket 493 ostáva OTVORENÝ (worktree worker,
   merge/deploy/overenie rieši supervisor).
+
+## 2026-08-26 — issues 500 + 502 (@ e-mail zákazníkovi na riadku, bundled)
+- Verzia `0.3.0-dev.294` (re-bump z .292 po merge origin/dev .293, issue 501 lane).
+- #500 (Na objednanie) + #502 (Riešiť) — tá istá funkcia, jedna vetva/PR do dev.
+  @ tlačidlo → okno na ručný e-mail zákazníkovi (vzor „Nedostupné"/„Zlúčenie objednávok"):
+  editovateľné telo, povinný náhľad + jednorazový token, odoslanie IBA cez F193
+  `sendLoggedMail`, znenie ako F192 šablóna `order_customer_contact`.
+- Server: `modules/orders/customer-contact.ts` + `customer-contact-preview-tokens.ts`
+  + `http/order-customer-contact-routes.ts` (preview=requireUser, send=admin/manazer),
+  nový `mail_log_source order_customer_contact` (migrácia `0061_far_rawhide_kid.sql`,
+  samostatný ADD VALUE — bezpečný vzor issue 476), `ORDER_CUSTOMER_CONTACT_BCC_EMAIL`.
+- Frontend (DRY): zdieľaný hook `useCustomerContactMail` + `CustomerContactDialog`
+  + `CustomerContactRowButton` (obe sekcie identické); `OrderSupplierLinkDisplay`
+  vyčlenené z OrderLineRow (max-lines).
+- Fable review chytil 2 blokery: chýbajúci riadok v `docker-compose.prod.yml`
+  (ORDER_CUSTOMER_CONTACT_BCC_EMAIL) a chýbajúci `order_customer_contact` v
+  mail-log enumoch (`mailLogApi.ts` + `mail-log-routes.ts`) — obidva opravené.
+  Follow-up 505: zjednotiť tri identické preview-token moduly.
+- Playbook: `mail-log.md` (nový mail_log_source = update na 3 miestach, inak
+  zhodí Knihu odoslaných e-mailov).
+- RED/GREEN nie je (nová funkcia, nie bug-fix) — testy v tom istom PR: unit
+  (preview-tokens, OrdersSection/RiesitSection @ modál), integračný, e2e.
+- Layout (2×36px v úzkom col-supplier) — UNVERIFIED, nasadzovateľ overí naživo.
+- Tickety 500/502 ostávajú OTVORENÉ (worktree worker, PR do dev; merge/deploy/
+  overenie rieši supervisor).

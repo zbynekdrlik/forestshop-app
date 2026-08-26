@@ -449,3 +449,51 @@ export async function sendSupplierOrderMail(supplier: string): Promise<{ ok: boo
   const telo = sendOrderMailResultSchema.parse(await response.json());
   return { ok: telo.ok, ...(telo.error === undefined ? {} : { error: telo.error }) };
 }
+
+// issue 500: „Na objednanie" — ručný e-mail zákazníkovi (@ tlačidlo na riadku).
+// Rovnaký dvojkrokový tok ako „Nedostupné tovary"/„Zlúčenie objednávok": povinný
+// náhľad (vydá jednorazový `previewToken`) → odoslanie s tým istým tokenom +
+// (prípadne) ručne upraveným telom.
+const customerContactPreviewSchema = z.union([
+  z.object({
+    ok: z.literal(true),
+    subject: z.string(),
+    html: z.string(),
+    // `text` je plain-textová verzia — frontend ju predvyplní do editovateľného okna.
+    text: z.string(),
+    recipient: z.string(),
+    customerName: z.string(),
+    previewToken: z.string(),
+  }),
+  z.object({ ok: z.literal(false), error: z.string() }),
+]);
+export type CustomerContactPreview = Extract<z.infer<typeof customerContactPreviewSchema>, { readonly ok: true }>;
+
+export async function fetchCustomerContactPreview(orderCode: string): Promise<CustomerContactPreview> {
+  const response = await fetch("/api/order-customer-contact/preview", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ orderCode }),
+  });
+  const parsed = customerContactPreviewSchema.parse(await readJson(response, "Náhľad e-mailu sa nepodarilo načítať"));
+  if (!parsed.ok) throw new Error(parsed.error);
+  return parsed;
+}
+
+// issue 176/257 vzor: server VYŽADUJE `previewToken` vydaný `/preview` PRE
+// PRESNE túto objednávku — volajúci musí poslať TEN ISTÝ token, aký dostal z
+// `fetchCustomerContactPreview`. NEhádže na doménové zlyhanie (200 `{ok:false}`,
+// rovnako ako `sendSupplierOrderMail`).
+export async function sendCustomerContactMail(orderCode: string, previewToken: string, editedBody: string): Promise<{ ok: boolean; error?: string }> {
+  const response = await fetch("/api/order-customer-contact/send", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ orderCode, previewToken, editedBody }),
+  });
+  if (response.status === 401) throw new OrdersUnauthorizedError();
+  if (!response.ok) {
+    return { ok: false, error: await serverErrorMessage(response, "Odoslanie e-mailu sa nepodarilo") };
+  }
+  const telo = sendOrderMailResultSchema.parse(await response.json());
+  return { ok: telo.ok, ...(telo.error === undefined ? {} : { error: telo.error }) };
+}

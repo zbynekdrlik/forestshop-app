@@ -53,6 +53,7 @@ export function SupplierOrderGroup({
   onOpenPreview,
   onClosePreview,
   onConfirmSend,
+  onOpenCustomerContact,
   selectedSupplier,
 }: {
   readonly group: SupplierOpenOrders;
@@ -112,6 +113,9 @@ export function SupplierOrderGroup({
   readonly onOpenPreview: (supplier: string) => void;
   readonly onClosePreview: () => void;
   readonly onConfirmSend: (supplier: string) => void;
+  // issue 500: @ tlačidlo na riadku otvorí okno na ručný e-mail zákazníkovi
+  // (`OrdersSection.tsx` vlastní modál). Prechádza ĎALEJ do `OrderLineRow`.
+  readonly onOpenCustomerContact: (orderCode: string, trigger: HTMLElement | null) => void;
 }): JSX.Element | null {
   const visibleLines = group.lines.filter((line) => !isLineHiddenByFilter(line, hideResolved, dirtyEditorLineIds));
   // issue 480: predajňové riadky skupiny (skryté pri „skryť vybavené", keď sú
@@ -192,6 +196,7 @@ export function SupplierOrderGroup({
                 onChangeComment={onChangeComment}
                 onEditorActivityChange={onEditorActivityChange}
                 onSupplierDraftChange={supplierDrafts.setDraft}
+                onOpenCustomerContact={onOpenCustomerContact}
               />
             ))}
             {/* issue 480: predajňové riadky POD riadkami objednávok tej istej

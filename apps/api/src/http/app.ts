@@ -25,6 +25,7 @@ import { registerNedostupneRoutes, type NedostupneRunDeps } from "./nedostupne-r
 import { registerNoteRoutes } from "./note-routes.js";
 import { registerOrderFlagsRoutes } from "./order-flags-routes.js";
 import { registerOrderMergeRoutes, type OrderMergeRunDeps } from "./order-merge-routes.js";
+import { registerOrderCustomerContactRoutes, type OrderCustomerContactRunDeps } from "./order-customer-contact-routes.js";
 import { requireSameOrigin } from "./origin-check.js";
 import { registerPairingRoutes } from "./pairing-routes.js";
 import { registerPairingReviewRoutes } from "./pairing-review-routes.js";
@@ -86,6 +87,11 @@ export function createApp(
     // lokálny vývoj, `index.ts` v produkcii VŽDY nahradí reálnymi
     // dependencies.
     readonly orderMerge?: OrderMergeRunDeps;
+    // issue 500: "Na objednanie" — ručný e-mail zákazníkovi (@ tlačidlo na
+    // riadku). Voliteľné z rovnakého dôvodu ako `orderMerge` vyššie: bezpečný
+    // default nižšie pre testy/lokálny vývoj, `index.ts` v produkcii VŽDY
+    // nahradí reálnymi dependencies.
+    readonly orderCustomerContact?: OrderCustomerContactRunDeps;
     // issue 212: "Dodávateľský sklad" — sťahovanie stránky dodávateľa.
     // Voliteľné z rovnakého dôvodu ako `nedostupne` vyššie; testy dodajú
     // vlastnú implementáciu a NIKDY nechodia na skutočnú stránku dodávateľa.
@@ -293,6 +299,19 @@ export function createApp(
     app,
     db,
     options.orderMerge ?? {
+      mailTransport: undefined,
+      bccEmail: undefined,
+    },
+  );
+  // issue 500: "Na objednanie" — ručný e-mail zákazníkovi (@ tlačidlo na
+  // riadku). Bezpečný default z rovnakého dôvodu ako `orderMerge` vyššie. Prefix
+  // `/api/order-customer-contact/*` sa nekríži s `/api/orders/:id`
+  // (`orders-routes.ts`) — iný segment, žiadne poradie registrácie netreba
+  // riešiť (`.claude/rules/http-routes.md`).
+  registerOrderCustomerContactRoutes(
+    app,
+    db,
+    options.orderCustomerContact ?? {
       mailTransport: undefined,
       bccEmail: undefined,
     },
