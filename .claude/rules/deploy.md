@@ -45,8 +45,9 @@ paths:
   beží appka — monitor na tom istom stroji, čo sleduje, by zomrel spolu s
   tým, čo má hlásiť; rovnaký vzor ako
   `api-watchdog.timer`/`imag-obs-alert-watchdog.timer`), kontroluje
-  obe verejné adresy (`forestshop.newlevel.media`,
-  `forestshop-novy.newlevel.media`) každých 5 minút, alertuje až po 2
+  verejnú adresu `forestshop.newlevel.media` (default od issue 488 už len
+  hlavná; `UPTIME_CHECK_URLS` override vie pridať ďalšie) každých 5 minút,
+  alertuje až po 2
   zlyhaniach za sebou (~10 min súvislého výpadku, nie jeden blik) cez
   `~/devel/airuleset/airuleset.py notify --body ... --owner-name marek
   --dedup-key ...`. **Routing alertov (issue 499, doktrína analyze-not-ping —

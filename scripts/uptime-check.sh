@@ -29,8 +29,11 @@
 # Prebiehajúci (už oznámený) výpadok sa na KAŽDOM ďalšom prechode zapíše LEN do
 # journalu (machine channel), NIKDY znova na telefón — žiadny spam pre jeden
 # trvajúci výpadok. `<id>` = epoch prvého potvrdenia; nový skutočný výpadok
-# dostane nový id -> nový kľúč -> alert. Keyless `notify --body` (bez
-# `--dedup-key`) je flood primitív a je tu ZAKÁZANÝ.
+# dostane nový id -> nový kľúč -> alert. Down alert sa označí ako oznámený AŽ po
+# skutočnom DORUČENÍ — ak `notify` zlyhá, ďalší prechod ho zopakuje s novým
+# incident-id (nový kľúč, airuleset nezdedupe), kým sa nedoručí (nikdy tichý
+# výpadok). Keyless `notify --body` (bez `--dedup-key`) je flood primitív a je
+# tu ZAKÁZANÝ.
 #
 # Usage:
 #   scripts/uptime-check.sh            # one pass: measure -> decide -> alert
@@ -113,7 +116,10 @@ read_state_field() {
 write_state_field() {
   local key="$1" val="$2" tmp
   mkdir -p "$(dirname "$STATE_FILE")" 2>/dev/null || true
-  tmp="$(mktemp "${STATE_FILE}.XXXXXX" 2>/dev/null || echo "$STATE_FILE")"
+  # Fallback must be a DISTINCT path, never $STATE_FILE itself — the `> "$tmp"`
+  # redirection below would otherwise truncate the state file before `grep -v`
+  # reads it, silently dropping every other key (review finding, issue 499).
+  tmp="$(mktemp "${STATE_FILE}.XXXXXX" 2>/dev/null || printf '%s' "${STATE_FILE}.tmp.$$")"
   { [ -f "$STATE_FILE" ] && grep -v "^${key}=" "$STATE_FILE"; printf '%s=%s\n' "$key" "$val"; } \
     > "$tmp" 2>/dev/null || true
   mv -f "$tmp" "$STATE_FILE" 2>/dev/null || true
@@ -123,6 +129,9 @@ write_state_field() {
 # start / recovery). ALWAYS carries a stable per-incident `--dedup-key` so the
 # SAME incident never re-pings (airuleset dedups on the key). A repeated status
 # for an UNCHANGED state must NEVER come here — route it through log_machine().
+# Returns 0 iff the notification was DELIVERED (or dry-run) — the caller advances
+# the incident state machine only on delivery, so a failed transition alert is
+# retried on the next pass instead of being lost (never a silent outage).
 send_phone_alert() {
   local dedup_key="$1" body="$2"
   if [ "$DRY_RUN" -eq 1 ]; then
@@ -130,9 +139,12 @@ send_phone_alert() {
     return 0
   fi
   log "ALERT: firing Discord notification (dedup-key=$dedup_key)"
-  python3 "$NOTIFY" notify --body "$body" --owner-name "$OWNER_NAME" \
-    --dedup-key "$dedup_key" \
-    >/dev/null 2>&1 || log "ALERT: airuleset.py notify failed (non-fatal)"
+  if python3 "$NOTIFY" notify --body "$body" --owner-name "$OWNER_NAME" \
+       --dedup-key "$dedup_key" >/dev/null 2>&1; then
+    return 0
+  fi
+  log "ALERT: airuleset.py notify failed (non-fatal) — retry next pass"
+  return 1
 }
 
 # MACHINE CHANNEL — a periodic / repeated STATE report goes to the journal
@@ -203,13 +215,25 @@ check_url() {
   fi
 
   # Lane 1 — first confirmation of a NEW outage: the ONE genuine new actionable
-  # event. Capture a fresh incident-id and send exactly ONE keyed phone alert.
+  # event. Send the keyed phone alert; mark the incident ALERTED only once the
+  # phone actually received it. If delivery fails, leave `_alerted=0` so the
+  # next pass retries here with a FRESH incident-id (a fresh dedup key). This is
+  # required because airuleset KEEPS the dedup marker on a transient POST failure
+  # (deliberate — a timeout can fire after Discord accepted), so a same-key retry
+  # would be suppressed; a fresh key is never suppressed and guarantees the alert
+  # eventually lands. Cost: a rare double-ping only if a POST timed out AFTER
+  # Discord accepted it — far better than a silently-missed outage for a monitor.
+  # `_incident` is written BEFORE `_alerted` so no crash can leave alerted=1 with
+  # a zero incident-id.
   incident_id="$(date +%s)"
-  write_state_field "${key}_alerted" 1
   write_state_field "${key}_incident" "$incident_id"
-  write_state_field "${key}_incident_passes" 0
-  send_phone_alert "${DEDUP_PREFIX}:down:${key}:${incident_id}" \
-    "🚨 uptime-check ($REPO_SLUG): $url NEODPOVEDÁ (HTTP ${code:-<žiadna odpoveď>}) už ${CONFIRM_THRESHOLD}+ prechodov za sebou."
+  if send_phone_alert "${DEDUP_PREFIX}:down:${key}:${incident_id}" \
+       "🚨 uptime-check ($REPO_SLUG): $url NEODPOVEDÁ (HTTP ${code:-<žiadna odpoveď>}) už ${CONFIRM_THRESHOLD}+ prechodov za sebou."; then
+    write_state_field "${key}_alerted" 1
+    write_state_field "${key}_incident_passes" 0
+  else
+    log "url=$url down alert NEDORUČENÝ — zopakujem s novým incident-id na ďalšom prechode"
+  fi
 }
 
 main() {
