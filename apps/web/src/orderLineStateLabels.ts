@@ -18,20 +18,30 @@ export const STATE_LABELS: Record<OrderLine["state"], string> = {
   // issue 476: piaty EXKLUZÍVNY stav „Riešiť" (Štěpán) — princíp `nedostupne`,
   // označený riadok sa zobrazí v sekcii Riešiť.
   riesit: "Riešiť",
+  // issue 493: šiesty EXKLUZÍVNY stav — interná hodnota `objednane_stav`, label
+  // „Objednané" (Štěpán, binding rozhodnutie 5423135473). POZOR: label „Objednané"
+  // je zámerne rovnaké slovo ako ✓ checkbox `OrderLine["ordered"]`, ale je to INÁ
+  // vec — checkbox = „vybavil som akýmkoľvek spôsobom", tento STAV = stav produktu
+  // (`.claude/rules/orders.md` „naming trap"). Interná hodnota preto NESMIE byť
+  // `objednane` (to je default „Nevybavené").
+  objednane_stav: "Objednané",
 };
 
-// issue 476: PORADIE tlačidiel v klastri stavov (mockup Štěpán, ROZHODNUTÉ) —
-// horný rad Nevybavené · Riešiť · Čaká sa, dolný rad Skladom · Nedostupné
-// (`OrderLineStateButtons.tsx` renderuje 3-stĺpcovú mriežku, 5 tlačidiel
-// spadne ako 3+2). Zámerne SAMOSTATNÉ pole, nie `Object.keys(STATE_LABELS)` —
-// poradie kľúčov v `STATE_LABELS` nesie iný zámer (východiskový enum poradie)
-// a nesmie diktovať vizuálne poradie tlačidiel.
+// issue 476/493: PORADIE tlačidiel v klastri stavov (mockup Štěpán, ROZHODNUTÉ)
+// — horný rad Nevybavené · Riešiť · Čaká sa, dolný rad Skladom · Nedostupné ·
+// Objednané (`OrderLineStateButtons.tsx` renderuje 3-stĺpcovú mriežku, 6 tlačidiel
+// spadne ako 3+3). issue 493: „Objednané" je 6. slot = dolný rad 3. miesto vedľa
+// Nedostupné, pod Čaká sa (presne screenshot/binding rozhodnutie Štěpán). Zámerne
+// SAMOSTATNÉ pole, nie `Object.keys(STATE_LABELS)` — poradie kľúčov v
+// `STATE_LABELS` nesie iný zámer (východiskový enum poradie) a nesmie diktovať
+// vizuálne poradie tlačidiel.
 export const STATE_DISPLAY_ORDER: readonly OrderLine["state"][] = [
   "objednane",
   "riesit",
   "caka_sa",
   "skladom",
   "nedostupne",
+  "objednane_stav",
 ];
 
 // Kompilačná poistka úplnosti: keby pribudol 6. stav do enumu/`STATE_LABELS`,

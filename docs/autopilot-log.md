@@ -4479,3 +4479,27 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
 - Táto log+playbook finalizácia jazdí na samostatnom docs bump-e
   `0.3.0-dev.287` (rovnaký vzor ako .285 pri issue 484) — ŽIADNA funkčná
   zmena, len dokumentácia; #487/#488 sú funkčne nasadené už na `.286`.
+
+## issue 493 — Stavový klaster: 6. exkluzívny stav „Objednané" (`0.3.0-dev.290`)
+
+- Zadanie/binding: telo ticketu (tlačidlo = toggle `ordered` booleanu) PREHLASOVANÉ
+  klientom (Štěpán, komentár 5423135473): „Objednané" = PLNOHODNOTNÝ 6. exkluzívny
+  stav enumu `order_line_state`, presne ako Nedostupné/Riešiť; radio v klastri (dolný
+  rad, vedľa Nedostupné), BEZ prepojenia s ✓ checkboxom; žiadna sekcia; `ordered`-toky
+  bez zmeny.
+- Zmena = presne vzor issue 476 (`riesit`), 5 miest: (1) enum hodnota `objednane_stav`
+  (label „Objednané", NIE `objednane`=default „Nevybavené") v `schema-orders.ts` +
+  samostatná migrácia `0060_nifty_quentin_quire.sql` (`ALTER TYPE ... ADD VALUE`, BEZ
+  DDL použitia → bezpečný vzor issue 476, žiadna 55P04); (2) frontend
+  `ordersApi.ts`'s `orderLineSchema.state` z.enum (RUČNE zrkadlí enum); (3)
+  `orderLineStateLabels.ts` `STATE_LABELS` + `STATE_DISPLAY_ORDER` (6. slot = dolný
+  rad, grid 3+3); (4) `app.css` `.ord-state-btn-objednane_stav.active` + nový token
+  `--fs-accent` (fialová, distinct od 5 existujúcich); (5) testy. Route/chipy/Riešiť/
+  `isLineResolved` berú stav automaticky (2 kompilačné poistky vynútia úplnosť).
+- Testy: `OrderLineStateButtons.test.tsx` (6 tlačidiel poradie + klik objednane_stav),
+  `orders-http-state.integration.test.ts` (set + round-trip + audit novej enum hodnoty),
+  `orders-objednane-state.spec.ts` (e2e klik-flow, prepichnutý fetch, nulová konzola).
+- Playbook: `orders.md` (naming trap: 4 rôzne „objednané" pojmy + 5-miestny postup
+  pridania stavu). Migrácia číslo `0060` — kolíziu s paralelným workerom (issue 492)
+  rieši supervisor pri integrácii. Ticket 493 ostáva OTVORENÝ (worktree worker,
+  merge/deploy/overenie rieši supervisor).

@@ -98,6 +98,46 @@ it("manažér zmení stav riadku objednávky, zápis sa uloží aj do auditu s t
   expect(udalost?.data).toMatchObject({ orderId, from: "objednane", to: "skladom" });
 });
 
+// issue 493: šiesty stav „Objednané" (interná hodnota `objednane_stav`, NIE
+// `objednane`) — over, že route ho prijme (Zod `z.enum(orderLineState
+// .enumValues)`), zapíše do DB a do auditu s korektným `from`/`to`, a že sa dá
+// z neho aj prepnúť späť (round-trip novej enum hodnoty end-to-end).
+it("manažér nastaví stav Objednané (objednane_stav) a potom prepne späť — round-trip novej enum hodnoty", async () => {
+  const { app, cookie, db } = await boot("manazer");
+  const { orderId, lineId } = await vlozRiadok(db);
+
+  const nastav = await app.request(`/api/orders/lines/${lineId}/state`, {
+    method: "POST",
+    headers: { cookie, "content-type": "application/json" },
+    body: JSON.stringify({ state: "objednane_stav" }),
+  });
+  expect(nastav.status).toBe(200);
+  expect(await nastav.json()).toEqual({ ok: true, state: "objednane_stav" });
+
+  const [poNastaveni] = await db.select().from(orderLines).where(eq(orderLines.id, lineId));
+  expect(poNastaveni?.state).toBe("objednane_stav");
+
+  const prepni = await app.request(`/api/orders/lines/${lineId}/state`, {
+    method: "POST",
+    headers: { cookie, "content-type": "application/json" },
+    body: JSON.stringify({ state: "skladom" }),
+  });
+  expect(prepni.status).toBe(200);
+
+  const [poPrepnuti] = await db.select().from(orderLines).where(eq(orderLines.id, lineId));
+  expect(poPrepnuti?.state).toBe("skladom");
+
+  const udalosti = await db.select().from(auditEvents);
+  const zmeny = udalosti.filter((e) => e.action === "order_line.state.changed");
+  expect(zmeny).toHaveLength(2);
+  // Order-independent (dve HTTP requesty môžu mať rovnaký `at` v tej istej ms):
+  // over KAŽDÚ zmenu podľa jej `to` hodnoty, nie podľa poradia v poli.
+  const naObjednane = zmeny.find((e) => (e.data as { to?: string }).to === "objednane_stav");
+  const naSkladom = zmeny.find((e) => (e.data as { to?: string }).to === "skladom");
+  expect(naObjednane?.data).toMatchObject({ orderId, from: "objednane", to: "objednane_stav" });
+  expect(naSkladom?.data).toMatchObject({ orderId, from: "objednane_stav", to: "skladom" });
+});
+
 it("rola citanie nesmie zmeniť stav riadku objednávky", async () => {
   const { app, cookie, db } = await boot("citanie");
   const { lineId } = await vlozRiadok(db);
