@@ -4,17 +4,27 @@ import { runInChildProcess } from "../shoptet-writeback/child-runner.js";
 import type { DpdPortalConfig } from "./config.js";
 import { dismissInfoBanners, runOnDpdPortalPage, typeInto } from "./portal-fill.js";
 
-// issue 292: "Objednávky zvozu" (`/pickup-orders`) — naživo overené
-// (7.8.2026 menu, 9.8.2026 formulár): klik "+" pri "Jednorazové zvozy"
-// navigoval na `/pickup-orders/0` (`config.ts`'s `newPickupOrderUrl`), teda
-// priama navigácia je spoľahlivejšia než hľadanie tlačidla. Formulár je
-// DVOJKROKOVÝ — krok 1 (zvozová adresa/kontakt/dátum, predvyplnené z účtu,
-// appka mení LEN dátum) → "Pokračovať" → krok 2 (rovnaká URL, appka's
-// vlastný SPA prechod) → skutočné "Uložiť".
+// issue 292/491: "Objednávky zvozu" (`/pickup-orders`) — naživo overené
+// (7.8.2026 menu, 9.8.2026 + 26.8.2026 formulár): klik "+" pri "Jednorazové
+// zvozy" navigoval na `/pickup-orders/0` (`config.ts`'s `newPickupOrderUrl`),
+// teda priama navigácia je spoľahlivejšia než hľadanie tlačidla. Formulár je
+// JEDEN Angular `<form class="data">` (zvozová adresa/kontakt/dátum, predvyplnené
+// z účtu, appka mení LEN `#pickup-date`) s tlačidlom `#button-confirmation`
+// "Pokračovať". Klik "Pokračovať" NEnaviguje (URL ostáva `/pickup-orders/0`) —
+// Angular RE-RENDERuje NA MIESTE na REVIEW krok: zmizne `#button-confirmation`,
+// objaví sa `.panel.warning` + readonly polia + `#button-save` "Uložiť". Skutočné
+// odoslanie = klik `#button-save`. (Predtým sa hádali `#step1`/`#step2` step-
+// container ID, ktoré v reálnom DOM NEEXISTUJÚ — `#step2` waitFor timeoutoval
+// 8000 ms; issue 491.)
 const PICKUP_DATE_SELECTOR = '#pickup-date input[wj-part="input"]';
 const CONTINUE_BUTTON_SELECTOR = "#button-confirmation";
-const STEP1_SELECTOR = "#step1";
-const STEP2_SELECTOR = "#step2";
+const SAVE_BUTTON_SELECTOR = "#button-save";
+// Chybové hlásenie portálu — scoped na toast/alert kontajnery s chybovým textom
+// (NIE bežné validačné `[class*=error]` triedy, aby po úspešnej navigácii na
+// zoznam nevznikol falošný pozitív). Reálne info toasty (`shp-newsfeed-toast`,
+// text "obmedzenia"/"pravidlá") tento vzor NEmatchujú.
+const PORTAL_ERROR_SELECTOR =
+  '.alert-danger, .toast-error, [id*="toast"] :text-matches("chyb|zlyha|nepodarilo|error", "i")';
 
 /** DPD portál čaká slovenský tvar dátumu bez vedúcich núl ("10. 8. 2026"),
  * naživo overené (9.8.2026) — appka dostáva ISO `YYYY-MM-DD`
@@ -28,20 +38,9 @@ function toDpdDateFormat(isoDate: string): string {
   return `${String(Number(day))}. ${String(Number(month))}. ${year}`;
 }
 
-/**
- * Code review (issue 292, PR 324): "úspech" tu ostáva NEPRIAMY dôkaz
- * (absencia chyby), lebo skutočný pozitívny signál sa nedal naživo overiť
- * (rovnaké bezpečnostné pravidlo ako pri zásielke — prvý reálny klik patrí
- * majiteľovi, `.claude/rules/dpd.md`). Kontrola je preto zámerne ŠIROKÁ:
- * najprv overený `#toast-container`/`[id*="toast"]` mechanizmus (rovnaký,
- * aký appka už naživo videla vypisovať systémové správy PO prihlásení na
- * `/pickup-orders`), potom aj bežné chybové CSS triedy ako záloha. Kým sa
- * toto neoverí prvým skutočným zvozom, každé "ok:true" tu je optimistické,
- * NIE potvrdené — pozri `.claude/rules/dpd.md`'s UNVERIFIED poznámku.
- */
 async function checkForPortalError(page: Page): Promise<string | null> {
   const errorText = await page
-    .locator('[id*="toast"] :text-matches("chyb|zlyha|nepodarilo|error", "i"), .toast-error, .alert-danger, [class*="error"]:visible')
+    .locator(PORTAL_ERROR_SELECTOR)
     .first()
     .textContent({ timeout: 3000 })
     .catch(() => null);
@@ -51,19 +50,47 @@ async function checkForPortalError(page: Page): Promise<string | null> {
 async function fillPickupForm(page: Page, pickupDate: string): Promise<void> {
   await typeInto(page, PICKUP_DATE_SELECTOR, toDpdDateFormat(pickupDate));
   await page.locator(CONTINUE_BUTTON_SELECTOR).click();
-  // Deterministické čakanie namiesto pevného spánku (code review, issue
-  // 292, PR 324) — krok 1 sa naozaj skryje AŽ keď Angular prekreslí, na
-  // reálnom (ťažšom) portáli to môže trvať dlhšie než pevná pauza.
-  await page.locator(STEP1_SELECTOR).waitFor({ state: "hidden", timeout: 8000 });
-  await page.locator(STEP2_SELECTOR).waitFor({ state: "visible", timeout: 8000 });
 
-  const saveButton = page.getByRole("button", { name: "Uložiť", exact: true });
+  // Klik "Pokračovať" re-renderuje formulár NA MIESTE na REVIEW krok — objaví sa
+  // `#button-save` ("Uložiť") a zmizne `#button-confirmation` (naživo overené
+  // issue 491). Čakáme na skutočný marker review kroku namiesto neexistujúceho
+  // `#step1`/`#step2` (to timeoutovalo). Angular prekreslenie môže na reálnom
+  // (ťažšom) portáli trvať dlhšie než pevná pauza — deterministické čakanie.
+  await page.locator(SAVE_BUTTON_SELECTOR).waitFor({ state: "visible", timeout: 10_000 });
+
+  // Poistka: ak sa medzitým znovu objavil prekrývajúci info toast, zavri ho,
+  // inak by zachytil klik na "Uložiť" (fail-soft, no-op keď žiadny nie je).
+  await dismissInfoBanners(page);
+
+  const saveButton = page.locator(SAVE_BUTTON_SELECTOR);
   await saveButton.click();
+
+  // Fail-loud POZITÍVNE overenie výsledku (issue 491, uzatvára dpd.md UNVERIFIED
+  // poznámku): po Uložení sa objednávka odošle do DPD a portál buď opustí review
+  // krok (`#button-save` sa odpojí — navigácia na zoznam / re-render = ÚSPECH),
+  // alebo zobrazí chybový toast (ZLYHANIE). Nikdy tiché optimistické "ok".
+  const outcome = await Promise.race([
+    saveButton
+      .waitFor({ state: "detached", timeout: 20_000 })
+      .then(() => "saved" as const)
+      .catch(() => "timeout" as const),
+    page
+      .locator(PORTAL_ERROR_SELECTOR)
+      .first()
+      .waitFor({ state: "visible", timeout: 20_000 })
+      .then(() => "error" as const)
+      .catch(() => "timeout" as const),
+  ]);
   await page.waitForLoadState("networkidle").catch(() => {});
 
   const errorText = await checkForPortalError(page);
   if (errorText !== null) {
     throw new Error(`DPD portál nahlásil chybu pri objednaní zvozu: ${errorText}`);
+  }
+  if (outcome !== "saved") {
+    throw new Error(
+      "DPD zvoz: po kliknutí Uložiť sa objednávka nepotvrdila (review krok nezmizol ani sa nezobrazila chyba) — over stav ručne v portáli",
+    );
   }
 }
 
