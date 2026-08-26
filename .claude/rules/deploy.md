@@ -59,7 +59,14 @@ paths:
   channel), nikdy znova na telefón. Keyless `notify --body` (bez `--dedup-key`)
   je flood primitív a je v skripte ZAKÁZANÝ. Logika je testovaná
   `scripts/uptime-check.test.sh` (root `pnpm test:uptime-script`, beží v CI
-  `check` jobe cez PATH-stub `curl`/`python3`/`date`). **Systemd
+  `check` jobe cez PATH-stub `curl`/`python3`/`date`).
+  **GOTCHA — airuleset drží dedup marker aj po TRANSIENT zlyhaní POSTu
+  (`notify/__init__.py`, „a timeout can fire AFTER Discord accepted"); marker
+  uvoľní LEN pri no-token/no-channel.** Preto retry alertu s ROVNAKÝM
+  `--dedup-key` po zlyhanom `notify` je airulesetom ZDEDUPOVANÝ (tichý výpadok).
+  Down alert sa preto označí ako oznámený AŽ po úspešnom doručení a retry použije
+  NOVÝ incident-id (nový kľúč) — platí pre KAŽDÝ budúci alert skript v tomto repe,
+  čo volá airuleset `notify` a chce „nikdy nezmeškaj". **Systemd
   `.timer`/`.service` súbory sa NEVERZUJÚ do repa** (`~/.config/systemd/user/
   uptime-check.{timer,service}` na dev1, rovnaký vzor ako
   `parovanie-backup.timer`) — repo drží len skript, inštalácia je ručný
