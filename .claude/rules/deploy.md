@@ -45,16 +45,33 @@ paths:
   beží appka — monitor na tom istom stroji, čo sleduje, by zomrel spolu s
   tým, čo má hlásiť; rovnaký vzor ako
   `api-watchdog.timer`/`imag-obs-alert-watchdog.timer`), kontroluje
-  obe verejné adresy (`forestshop.newlevel.media`,
-  `forestshop-novy.newlevel.media`) každých 5 minút, alertuje až po 2
+  verejnú adresu `forestshop.newlevel.media` (default od issue 488 už len
+  hlavná; `UPTIME_CHECK_URLS` override vie pridať ďalšie) každých 5 minút,
+  alertuje až po 2
   zlyhaniach za sebou (~10 min súvislého výpadku, nie jeden blik) cez
-  `~/devel/airuleset/airuleset.py notify --body ... --owner-name marek`,
-  opakovaný alert pre TÚ ISTÚ prebiehajúcu udalosť najviac raz za ~1h
-  (throttle) + jedna správa pri zotavení. **Systemd `.timer`/`.service`
-  súbory sa NEVERZUJÚ do repa** (`~/.config/systemd/user/uptime-check.
-  {timer,service}` na dev1, rovnaký vzor ako `parovanie-backup.timer`) —
-  repo drží len skript, inštalácia je ručný jednorazový krok. Stavový súbor
-  (potvrdzovací počítadlo + throttle) je v `${XDG_RUNTIME_DIR:-/tmp}` —
+  `~/devel/airuleset/airuleset.py notify --body ... --owner-name marek
+  --dedup-key ...`. **Routing alertov (issue 499, doktrína analyze-not-ping —
+  airuleset #704/#705):** telefón (Discord) dostane LEN genuine nový actionable
+  prechod stavu — prvé potvrdenie výpadku a zotavenie — vždy s per-incident
+  `--dedup-key` (`forestshop-uptime:<down|up>:<url>:<incident-id>`), takže ten
+  istý prebiehajúci incident NEpinguje znova; prebiehajúci (už oznámený)
+  výpadok sa na každom ďalšom prechode zapíše LEN do journalu (machine
+  channel), nikdy znova na telefón. Keyless `notify --body` (bez `--dedup-key`)
+  je flood primitív a je v skripte ZAKÁZANÝ. Logika je testovaná
+  `scripts/uptime-check.test.sh` (root `pnpm test:uptime-script`, beží v CI
+  `check` jobe cez PATH-stub `curl`/`python3`/`date`).
+  **GOTCHA — airuleset drží dedup marker aj po TRANSIENT zlyhaní POSTu
+  (`notify/__init__.py`, „a timeout can fire AFTER Discord accepted"); marker
+  uvoľní LEN pri no-token/no-channel.** Preto retry alertu s ROVNAKÝM
+  `--dedup-key` po zlyhanom `notify` je airulesetom ZDEDUPOVANÝ (tichý výpadok).
+  Down alert sa preto označí ako oznámený AŽ po úspešnom doručení a retry použije
+  NOVÝ incident-id (nový kľúč) — platí pre KAŽDÝ budúci alert skript v tomto repe,
+  čo volá airuleset `notify` a chce „nikdy nezmeškaj". **Systemd
+  `.timer`/`.service` súbory sa NEVERZUJÚ do repa** (`~/.config/systemd/user/
+  uptime-check.{timer,service}` na dev1, rovnaký vzor ako
+  `parovanie-backup.timer`) — repo drží len skript, inštalácia je ručný
+  jednorazový krok. Stavový súbor (potvrdzovací počítadlo + alerted flag +
+  incident-id) je v `${XDG_RUNTIME_DIR:-/tmp}` —
   netreba ho zálohovať, monitor sa po reštarte dev1 sám znovu rozbehne od
   nuly (najhorší prípad: jeden alert navyše, nikdy tichý výpadok).
 
