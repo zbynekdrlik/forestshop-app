@@ -16,6 +16,7 @@ import { FloorNotesBadgeRefreshContext } from "./floorNotesBadgeContext.js";
 import { DEFAULT_TAB_ID, NAV, findTab, isVisibleTabId } from "./nav.js";
 import { fetchOrderFlagCounts } from "./orderFlagsApi.js";
 import { OrderFlagsBadgeRefreshContext } from "./orderFlagsBadgeContext.js";
+import { fetchOrderMergeCount } from "./orderMergeApi.js";
 import { fetchRiesitCount } from "./ordersApi.js";
 import { fetchOrderReminderStatus } from "./orderReminderApi.js";
 import { OrdersRemainingCountContext } from "./ordersRemainingCountContext.js";
@@ -270,6 +271,28 @@ export function App(): JSX.Element {
     };
   }, [me, activeTabId, riesitRefreshNonce]);
 
+  // issue 512: odznak „Zlúčenie objednávok" — počet PRÍPADOV (osoby s ≥2
+  // otvorenými objednávkami). Rovnaký PRIAMY vzor ako `riesitCount` vyššie
+  // (App.tsx vlastní count, fetchuje pri prihlásení/zmene záložky). ŽIADNY
+  // refresh-context: odoslanie e-mailu o zlúčení NEMENÍ počet otvorených
+  // objednávok, takže stačí refetch pri prepnutí záložky.
+  const [orderMergeCount, setOrderMergeCount] = useState<number | null>(null);
+  useEffect(() => {
+    if (me === null) return;
+    let cancelled = false;
+    fetchOrderMergeCount()
+      .then((count) => {
+        if (!cancelled) setOrderMergeCount(count);
+      })
+      .catch(() => {
+        // `fetchOrderMergeCount` interne zachytáva všetky chyby a vždy vráti 0
+        // (`orderMergeApi.ts`) — poistka pre eslint `no-floating-promises`.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [me, activeTabId]);
+
   const badgeCounts = useMemo<Readonly<Record<string, number>>>(() => {
     const counts: Record<string, number> = {};
     if (ordersRemainingCount !== null) counts["orders"] = ordersRemainingCount;
@@ -283,6 +306,10 @@ export function App(): JSX.Element {
     // issue 476: odznak „Riešiť" — ukazuje sa AJ pri nule (rovnako ako
     // „ulohy"/„floor-orders" vyššie); kľúč `riesit` = `nav.ts`'s `tab.id`.
     if (riesitCount !== null) counts["riesit"] = riesitCount;
+    // issue 512: odznak „Zlúčenie objednávok" — počet prípadov (osôb) s ≥2
+    // otvorenými objednávkami; ukazuje sa AJ pri nule (zadanie: „ako ostatné
+    // položky — Na objednanie, Riešiť…"). Kľúč `order-merge` = `nav.ts`'s `tab.id`.
+    if (orderMergeCount !== null) counts["order-merge"] = orderMergeCount;
     // issue 445: odznak sa ukazuje AJ pri nule (rovnako ako "upozornenia"/
     // "pairing-review" — appka tým hovorí "toto číslo poznám, je 0"), aby
     // šéf hneď videl "dnes netreba objednať žiadnu DPD prepravu".
@@ -308,7 +335,7 @@ export function App(): JSX.Element {
     // istý tvar bugu ako `UpozorneniaSection.tsx`'s `withBusy`), takže lint
     // to nezachytí a stará hodnota (chýbajúce odznaky hneď po prihlásení,
     // kým sa nespustí NEJAKÝ INÝ trigger) prežije bez varovania.
-  }, [ordersRemainingCount, upozorneniaCount, dpdCount, pairingReviewUnreviewedCount, orderFlagCounts, dailyTasksCount, floorNotesCount, riesitCount]);
+  }, [ordersRemainingCount, upozorneniaCount, dpdCount, pairingReviewUnreviewedCount, orderFlagCounts, dailyTasksCount, floorNotesCount, riesitCount, orderMergeCount]);
 
   // issue 185: stav zapnuté/vypnuté pre "Automatizácie" priečinok v menu.
   // Na rozdiel od `ordersRemainingCount` vyššie (publikované OBRAZOVKOU

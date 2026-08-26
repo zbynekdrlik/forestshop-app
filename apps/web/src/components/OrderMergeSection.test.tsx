@@ -20,8 +20,8 @@ const GROUP = {
   customerName: "Eva Kováčová",
   email: "eva@example.sk",
   orders: [
-    { orderId: "order-a", externalOrderId: "27700101", placedAt: "2026-08-01T10:00:00.000Z" },
-    { orderId: "order-b", externalOrderId: "27700100", placedAt: "2026-07-31T10:00:00.000Z" },
+    { orderId: "order-a", externalOrderId: "27700101", placedAt: "2026-08-01T10:00:00.000Z", adminUrl: "https://www.forestshop.sk/admin/objednavky-detail/?id=12345" },
+    { orderId: "order-b", externalOrderId: "27700100", placedAt: "2026-07-31T10:00:00.000Z", adminUrl: "https://www.forestshop.sk/admin/vyhladavanie/?string=27700100&src=orders" },
   ],
 };
 
@@ -98,6 +98,16 @@ it("zrušenie náhľadu NEPOŠLE nič", async () => {
     expect(screen.queryByTestId("order-merge-preview")).toBeNull();
   });
   expect(sendOrderMergeMail).not.toHaveBeenCalled();
+});
+
+it("issue 512: číslo objednávky je klikateľný odkaz do Shoptet administrácie", async () => {
+  fetchOrderMergeCandidates.mockResolvedValue(LIST_WITH_GROUP);
+  render(<OrderMergeSection role="citanie" onSessionExpired={vi.fn()} />);
+  await screen.findByTestId("order-merge-group-27700101");
+
+  const odkaz = screen.getByRole("link", { name: "Otvoriť objednávku 27700101 v administrácii Shoptet" });
+  expect(odkaz.getAttribute("href")).toBe("https://www.forestshop.sk/admin/objednavky-detail/?id=12345");
+  expect(odkaz.textContent).toBe("27700101");
 });
 
 it("rola citanie NEVIDÍ tlačidlo odoslania", async () => {

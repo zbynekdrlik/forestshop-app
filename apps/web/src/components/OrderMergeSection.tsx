@@ -162,7 +162,22 @@ export function OrderMergeSection({ role, onSessionExpired }: { readonly role: M
                 </div>
                 <ul className="order-merge-orders">
                   {group.orders.map((o) => (
-                    <li key={o.orderId}>č. {o.externalOrderId}</li>
+                    // issue 512: číslo objednávky je klikateľné — priamy odkaz
+                    // do Shoptet administrácie (rovnaký `.ord-admin-link` vzor
+                    // ako „Na objednanie"/„Riešiť"/„Vyhľadať").
+                    <li key={o.orderId}>
+                      č.{" "}
+                      <a
+                        href={o.adminUrl}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                        className="ord-admin-link"
+                        aria-label={`Otvoriť objednávku ${o.externalOrderId} v administrácii Shoptet`}
+                        title="Otvoriť v administrácii Shoptet"
+                      >
+                        {o.externalOrderId}
+                      </a>
+                    </li>
                   ))}
                 </ul>
                 {canControl && (
