@@ -25,6 +25,11 @@ export interface DpdFixtureOptions {
   readonly stuckDisabled?: boolean;
   /** Krok 2 objednávky zvozu po Uložení ukáže chybu namiesto úspechu. */
   readonly pickupSaveFails?: boolean;
+  /** issue 491: klik „Uložiť" v review kroku NIČ nespraví — review krok
+   * NEZMIZNE ani sa NEZOBRAZÍ chyba (simuluje tichý/zaseknutý portál). Overuje
+   * fail-loud „nepotvrdila" vetvu (`outcome !== "saved"`), aby appka nikdy
+   * tiché ok:true pri nepotvrdenom odoslaní. */
+  readonly pickupSaveHangs?: boolean;
   /** issue 451 (Štěpánov krok 2): formulár zvozu prekryje celoobrazovkový
    * info banner („Aktuálne obmedzenia…") so zatváracím ✕ — kým sa nezavrie,
    * zachytáva kliky na polia/tlačidlá formulára (na overenie, že robot
@@ -155,7 +160,7 @@ function shipmentsListPage(reference: string | null): string {
   return `<!doctype html><html><body><table>${row}</table></body></html>`;
 }
 
-function pickupFormPage(showInfoBanner: boolean): string {
+function pickupFormPage(showInfoBanner: boolean, pickupSaveHangs: boolean): string {
   // issue 491 (reálny tvar, naživo domapované 26.8.2026): `/pickup-orders/0` je
   // JEDEN `<form class="data">` s `#pickup-date` (wj-input-date, vnútorný
   // `input[wj-part="input"]`) a `#button-confirmation` „Pokračovať". Klik
@@ -226,7 +231,9 @@ function pickupFormPage(showInfoBanner: boolean): string {
         document.getElementById('pickup-step1').style.display = 'none';
         document.getElementById('pickup-step2').style.display = 'block';
       });
-      document.getElementById('button-save').addEventListener('click', function () {
+      ${pickupSaveHangs
+        ? "/* issue 491 pickupSaveHangs: žiadny listener na #button-save — klik je no-op (tichý portál). Review krok NEZMIZNE ani sa NEZOBRAZÍ chyba → appka musí fail-loud 'nepotvrdila'. */"
+        : `document.getElementById('button-save').addEventListener('click', function () {
         fetch('/test/pickup-submit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: window.__pickupDate }) })
           .then(function (r) { return r.json(); })
           .then(function (r) {
@@ -237,7 +244,7 @@ function pickupFormPage(showInfoBanner: boolean): string {
               document.body.insertAdjacentHTML('beforeend', '<div class="alert-danger">Zvoz sa nepodarilo objednať (test)</div>');
             }
           });
-      });
+      });`}
     </script>
   </body></html>`;
 }
@@ -272,7 +279,9 @@ export async function startDpdFixture(options: DpdFixtureOptions): Promise<DpdFi
   });
 
   app.get("/pickup-orders/0", (c) =>
-    getCookie(c, COOKIE_NAME) === "ok" ? c.html(pickupFormPage(options.showInfoBanner ?? false)) : c.html(loginPage()),
+    getCookie(c, COOKIE_NAME) === "ok"
+      ? c.html(pickupFormPage(options.showInfoBanner ?? false, options.pickupSaveHangs ?? false))
+      : c.html(loginPage()),
   );
 
   app.post("/test/pickup-submit", async (c) => {

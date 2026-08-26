@@ -18,7 +18,7 @@ describe("runOrderDpdPickup (proti fixture, nikdy proti reálnemu DPD)", () => {
   });
 
   it(
-    "prejde oboma krokmi wizardu, nastaví dátum v slovenskom tvare bez vedúcich núl a uloží",
+    "vyplní dátum (slovenský tvar bez vedúcich núl), prejde cez Pokračovať do review kroku a uloží cez #button-save",
     async () => {
       fixture = await startDpdFixture({ user: USER, password: PASSWORD });
       const outcome = await runOrderDpdPickup({
@@ -76,6 +76,21 @@ describe("runOrderDpdPickup (proti fixture, nikdy proti reálnemu DPD)", () => {
 
       expect(outcome.ok).toBe(false);
       expect(outcome.errorDetail).toMatch(/nepodarilo/i);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "vráti ok:false s 'nepotvrdila', keď po Uložení review krok NEZMIZNE ani sa nezobrazí chyba (tichý/zaseknutý portál) — nikdy tiché ok:true",
+    async () => {
+      fixture = await startDpdFixture({ user: USER, password: PASSWORD, pickupSaveHangs: true });
+      const outcome = await runOrderDpdPickup({
+        config: dpdPortalConfigFromBaseUrl(fixture.baseUrl, USER, PASSWORD),
+        pickupDate: "2026-08-10",
+      });
+
+      expect(outcome.ok).toBe(false);
+      expect(outcome.errorDetail).toMatch(/nepotvrdila/i);
     },
     TEST_TIMEOUT_MS,
   );
