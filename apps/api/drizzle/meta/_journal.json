@@ -421,6 +421,13 @@
       "when": 1787524179494,
       "tag": "0059_slimy_stranger",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1787736233178,
+      "tag": "0060_nifty_quentin_quire",
+      "breakpoints": true
     }
   ]
 }
