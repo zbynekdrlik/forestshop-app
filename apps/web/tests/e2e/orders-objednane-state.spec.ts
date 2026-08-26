@@ -86,6 +86,10 @@ test("Na objednanie: klik na Objednané prepne riadok do 6. stavu (objednane_sta
       if (method !== "GET" && cesta.includes("/api/orders/lines/") && cesta.endsWith("/state")) {
         const telo = typeof init?.body === "string" ? init.body : "{}";
         const st = (JSON.parse(telo) as { state?: string }).state ?? "";
+        // Zapíš DRÔTOVÚ hodnotu, aby test overil, že tlačidlo poslalo internú
+        // `objednane_stav`, nie label ani default `objednane` (vzor `__zlyhajUrl`
+        // v orders-write-failures.spec.ts).
+        Object.assign(window, { __sentState: st });
         // Verné reálnemu serveru: 200 `{ok:true, state}` (route je generická,
         // `z.enum(orderLineState.enumValues)`).
         return Promise.resolve(json({ ok: true, state: st }));
@@ -120,6 +124,11 @@ test("Na objednanie: klik na Objednané prepne riadok do 6. stavu (objednane_sta
   await objednaneBtn.click();
   await expect(objednaneBtn).toHaveAttribute("aria-checked", "true");
   await expect(nevybaveneBtn).toHaveAttribute("aria-checked", "false");
+
+  // review 🔵: over aj skutočnú DRÔTOVÚ hodnotu poslanú na server — musí byť
+  // interná `objednane_stav`, NIE label „Objednané" ani default `objednane`.
+  const poslanyStav = await page.evaluate(() => (window as unknown as { __sentState?: string }).__sentState);
+  expect(poslanyStav).toBe("objednane_stav");
 
   expect(chyby).toEqual([]);
 });
