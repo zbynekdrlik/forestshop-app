@@ -171,6 +171,12 @@ services:
       # vyššie). Chýbajúca = automatizácia NEPOŠLE ani jeden e-mail
       # zákazníkovi (fail-closed).
       ORDER_MERGE_BCC_EMAIL:
+      # issue 500: "Na objednanie"/"Riešiť" — ručný e-mail zákazníkovi (@).
+      # NEZÁVISLÁ vyhradená premenná (rovnaký dôvod ako ostatné *_BCC_EMAIL
+      # vyššie). Chýbajúca = odoslanie NEODÍDE (fail-closed) a okno náhľadu
+      # ukáže jasnú hlášku (issue 198/292: nová env.ts premenná MUSÍ mať
+      # riadok tu, inak sa do kontajnera nikdy nedostane).
+      ORDER_CUSTOMER_CONTACT_BCC_EMAIL:
       # issue 309: "Eshop → Upozornenia" — najbližšia udalosť z majiteľovho
       # Google kalendára. Rovnaká úvaha ako SHOPTET_EXPORT_URL vyššie:
       # `.optional()` v `env.ts`, bare kľúč preberá `/srv/forestshop/.env`,

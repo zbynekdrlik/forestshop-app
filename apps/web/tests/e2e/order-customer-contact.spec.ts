@@ -66,7 +66,9 @@ test("@ e-mail zákazníkovi: klik na riadku Na objednanie aj Riešiť otvorí o
       new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
     window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
-      if (url.includes("/api/orders/open")) return Promise.resolve(json({ suppliers: [naObjednanieGroup] }));
+      // Presná cesta (nie `includes`) — inak by zachytila aj
+      // `/api/orders/open-statuses` a vrátila zlý tvar.
+      if (/\/api\/orders\/open(?:$|\?)/.test(url)) return Promise.resolve(json({ suppliers: [naObjednanieGroup] }));
       if (url.includes("/api/orders/riesit/count")) return Promise.resolve(json({ count: 1 }));
       if (url.includes("/api/orders/riesit")) return Promise.resolve(json({ suppliers: [riesitGroup] }));
       if (url.includes("/api/order-customer-contact/preview")) {
