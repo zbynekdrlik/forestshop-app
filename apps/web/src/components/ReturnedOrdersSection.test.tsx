@@ -34,6 +34,17 @@ it("prázdny zoznam zobrazí informačnú vetu", async () => {
   await screen.findByTestId("returned-empty");
 });
 
+it("hlavička popisuje aktívne vrátenia a že dobropisy sa už nezobrazujú (issue 516)", async () => {
+  fetchReturnedOrders.mockResolvedValue([]);
+  const { container } = render(<ReturnedOrdersSection role="manazer" onSessionExpired={vi.fn()} />);
+  await screen.findByTestId("returned-empty");
+  expect(container.textContent).toContain("Vratený tovar");
+  expect(container.textContent).toContain("aktívne vrátenia");
+  // Diskriminačná fráza LEN v novej hlavičke (stará verzia „…alebo Vybavený
+  // Dobropis" obsahovala „Vybavený Dobropis" tiež) — issue 516.
+  expect(container.textContent).toContain("sa tu už nezobrazujú");
+});
+
 it("zobrazí objednávku, chýbajúca suma/poznámka sa ukáže ako pomlčka", async () => {
   fetchReturnedOrders.mockResolvedValue([ROW]);
   render(<ReturnedOrdersSection role="manazer" onSessionExpired={vi.fn()} />);

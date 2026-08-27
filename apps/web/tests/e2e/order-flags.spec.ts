@@ -44,6 +44,15 @@ test("Výmena tovaru/Vrátený tovar zobrazia zoznam, Reklamácie umožnia ozna�
   await expect(vymenaOdznak).toBeVisible();
   await expect(vymenaOdznak).toHaveText(/^[1-9]\d*$/);
 
+  // issue 516: menu-odznak „Vrátený tovar" = počet AKTÍVnych vrátení (stav
+  // „Vratený tovar"), zdieľa TÚ istú dátovú cestu ako výpis (badge == výpis).
+  // Fixtúra 9202 garantuje ≥1, takže odznak je viditeľný hneď po prihlásení
+  // (skrytý pri 0). Presné číslo NEasertujeme — badge počíta VŠETKY „Vratený
+  // tovar" objednávky v zdieľanej seed DB (vzor issue 445, `nav-badge` disciplína).
+  const vrateniOdznak = page.getByTestId("nav-badge-returned");
+  await expect(vrateniOdznak).toBeVisible();
+  await expect(vrateniOdznak).toHaveText(/^[1-9]\d*$/);
+
   // Výmena tovaru.
   await page.getByRole("button", { name: "Výmena tovaru" }).click();
   await expect(page.getByRole("heading", { name: "Výmena tovaru" })).toBeVisible();

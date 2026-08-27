@@ -163,8 +163,14 @@ export interface OrderFlagCounts {
  *   count. NIE je unresolved-filtrovaný — stav "Výmena tovaru" nezakladá
  *   "vratenie" kartu (`return-status.ts`), takže `unresolved` je preň prakticky
  *   vždy false; filtrovať by badge navždy skrylo.
- * - `returned` = počet NEVYBAVENÝCH vrátení (`unresolved`) — nezmenené, "Vratený
- *   tovar" JE aktívny vrátkový stav s kartami.
+ * - `returned` = počet VŠETKÝCH aktívnych vrátení (stav "Vratený tovar") — issue
+ *   516, Štěpán: odznak sa musí rovnať výpisu (rozchod „3 vs 2"). Zdieľa PRESNE
+ *   tú istú dátovú cestu ako výpis (`selectFlaggedByStatus(db,
+ *   isReturnedOrderStatus)`), takže badge == dĺžka výpisu, žiadny duplicitný
+ *   predikát. UŽ NIE JE unresolved-filtrovaný: pôvodne (issue 290) počítal len
+ *   objednávky s otvorenou "vratenie" kartou, čo dávalo 2 pri 3 aktívnych
+ *   vráteniach (tretia bez karty) — presne ten rozchod, čo #516 odstránilo,
+ *   rovnakým vzorom ako #514 pri výmene.
  * - `claims` = počet AKTUÁLNE OZNAČENÝCH (žiadny ďalší "vybavené" koncept). */
 export async function countOrderFlags(db: Database): Promise<OrderFlagCounts> {
   const [exchangeRows, returnedRows, claimRows] = await Promise.all([
@@ -174,7 +180,7 @@ export async function countOrderFlags(db: Database): Promise<OrderFlagCounts> {
   ]);
   return {
     exchange: exchangeRows.length,
-    returned: returnedRows.filter((r) => r.unresolved).length,
+    returned: returnedRows.length,
     claims: claimRows.length,
   };
 }
