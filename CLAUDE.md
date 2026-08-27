@@ -107,6 +107,7 @@ Per-area rules live in `.claude/rules/<area>.md` with `paths:` frontmatter.
 - Zápisová cesta `product_supplier_link_override` (#239, obrazovka odstránená #400 — API + zdieľaný upsert s #121 ostávajú, volajú ich Vyhľadať #240 a Párovanie #387 E6) → `.claude/rules/product-links.md`
 - Eshop → Vyhľadať (#240 — dve oddelené polia produkty/objednávky, detail produktu, zdieľaná zapisovacia cesta s #239) → `.claude/rules/search.md`
 - Eshop → Upozornenia (#267 — nástenka, čiastočný unique dedup index, počítaný stav bez cron-u, zdieľaná zapisovacia cesta pre budúce #268/#269) → `.claude/rules/upozornenia.md`
+- Eshop → Výmena tovaru / Vrátený tovar / Reklamácie (#290/#514 — READ-ONLY sekcie nad order.status_name, výpis+badge zdieľajú jeden predikát, väzba „nevybavené" na vratenie karty) → `.claude/rules/order-flags.md`
 - Preprava DPD (#292 — per-zásielkový Playwright robot na dpdshipper.sk, appka-vlastný `dpd_shipment`/`dpd_pickup_request` záznam, náhľad pred odoslaním, fail-loud nedomapovaný formulár) → `.claude/rules/dpd.md`
 - Google kalendár — najbližšia udalosť (#309 — samostatný modul od `upozornenia` (žiadny dedupKey/resolve), krátkodobá in-memory cache namiesto scheduler jobu, node-ical proces-TZ past pri celodenných udalostiach) → `.claude/rules/calendar.md`
 - Profesionálne párovanie produktov (#387 E1+ — port starej appky @60b6164, rapidfuzz case-sensitive token_set_ratio, viac-kódová adaptácia, nahradilo `restock-links.md` v E8) → `.claude/rules/pairing-search.md`

@@ -11,14 +11,17 @@ import { normalizeStatusName } from "./parser.js";
 // prepojený rozsah, keby sa niekedy zmenil dôvod #297's rozdelenia
 // aktívne/hotové), len ROVNAKÚ funkciu (`normalizeStatusName`) na
 // porovnanie, presne ako `open-statuses.ts`.
-const EXCHANGE_STATUS = normalizeStatusName("Vybavená výmena");
+const EXCHANGE_STATUS = normalizeStatusName("Výmena tovaru");
 const RETURNED_GOODS_STATUS = normalizeStatusName("Vratený tovar");
 const RETURNED_CREDIT_STATUS = normalizeStatusName("Vybavený Dobropis");
 
-/** `true`, keď objednávka patrí na stránku "Výmena tovaru" — presne stav
- * "Vybavená výmena" (jediný, čo majiteľ na produkcii reálne má; "Výmena
- * tovaru" — rozpracovaný stav — dnes nemá priradenú žiadnu objednávku,
- * rozhodnuté na tickete). */
+/** `true`, keď objednávka patrí na stránku "Výmena tovaru" — presne AKTÍVny
+ * stav "Výmena tovaru" (issue 514, Štěpán: sekcia má ukazovať len aktívne
+ * výmeny na vybavenie). Vybavená výmena ("Vybavená výmena") sa tu už
+ * NEzobrazuje. Issue 290 pôvodne cielilo "Vybavená výmena", lebo vtedy
+ * (7.8.2026) produkcia nemala ani jednu objednávku v stave "Výmena tovaru";
+ * realita sa medzitým zmenila (živo overené na tikete #514: 1× "Výmena
+ * tovaru", 8× "Vybavená výmena"). */
 export function isExchangeOrderStatus(statusName: string): boolean {
   return normalizeStatusName(statusName) === EXCHANGE_STATUS;
 }

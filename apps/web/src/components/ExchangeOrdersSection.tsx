@@ -3,11 +3,14 @@ import type { Me } from "../api.js";
 import { fetchExchangeOrders, OrderFlagsUnauthorizedError, type OrderFlagRow } from "../orderFlagsApi.js";
 import { OrderFlagTable } from "./OrderFlagTable.js";
 
-// issue 290: "Eshop → Výmena tovaru" — READ-ONLY zoznam objednávok v stave
-// "Vybavená výmena" (jediný priradený stav, `modules/orders/order-flags
-// .ts`). Žiadna mutácia tu — vybavovanie ostáva výhradne na nástenke
-// Upozornenia (`return-status.ts`/#267/#269/#297), táto obrazovka len
-// ZOBRAZUJE tie isté objednávky + či majú ešte otvorenú kartu.
+// issue 290 → 514: "Eshop → Výmena tovaru" — READ-ONLY zoznam AKTÍVnych
+// výmen (stav "Výmena tovaru", `modules/orders/order-flags.ts`). Issue 514
+// (Štěpán) invertovalo pôvodné priradenie na "Vybavená výmena": sekcia teraz
+// ukazuje len výmeny, ktoré treba vybaviť, vybavené sa nezobrazujú. Žiadna
+// mutácia tu. "Výmena tovaru" nezakladá "vratenie" kartu na Upozorneniach
+// (`return-status.ts`), takže štítok "nevybavené" (zdieľaný `OrderFlagTable`)
+// sa tu bežne nezobrazí — ostáva len pre zriedkavý prípad "Vratený tovar →
+// Výmena tovaru" s lingering otvorenou kartou.
 export function ExchangeOrdersSection({ onSessionExpired }: { readonly role: Me["role"]; readonly onSessionExpired: () => void }): JSX.Element {
   const [rows, setRows] = useState<readonly OrderFlagRow[] | null>(null);
   const [error, setError] = useState("");
@@ -29,7 +32,7 @@ export function ExchangeOrdersSection({ onSessionExpired }: { readonly role: Me[
 
   return (
     <section>
-      <p>Objednávky, ktoré Shoptet eviduje v stave „Vybavená výmena“. Farebný štítok „nevybavené“ znamená, že na nástenke Upozornenia je k tejto objednávke ešte otvorená karta.</p>
+      <p>Objednávky, ktoré Shoptet eviduje v stave „Výmena tovaru“ — aktívne výmeny, ktoré treba vybaviť. Vybavené výmeny („Vybavená výmena“) sa tu už nezobrazujú.</p>
       {rows.length === 0 ? (
         <p data-testid="exchange-empty">Momentálne žiadna objednávka nie je vo výmene.</p>
       ) : (
