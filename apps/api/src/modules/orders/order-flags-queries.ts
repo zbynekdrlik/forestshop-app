@@ -155,9 +155,17 @@ export interface OrderFlagCounts {
   readonly claims: number;
 }
 
-/** Počty pre odznaky v ľavom menu (`nav.ts`) — `exchange`/`returned` =
- * počet NEVYBAVENÝCH (`unresolved`), `claims` = počet AKTUÁLNE OZNAČENÝCH
- * (žiadny ďalší "vybavené" koncept, viď `listClaimOrders` vyššie). */
+/** Počty pre odznaky v ľavom menu (`nav.ts`):
+ * - `exchange` = počet VŠETKÝCH aktívnych výmen (stav "Výmena tovaru") — issue
+ *   514, Štěpán: „koľko objendávok so stavom Výmena tovaru je aktualnych".
+ *   Zdieľa PRESNE tú istú dátovú cestu ako výpis (`selectFlaggedByStatus(db,
+ *   isExchangeOrderStatus)`), takže badge == dĺžka výpisu, žiadny duplicitný
+ *   count. NIE je unresolved-filtrovaný — stav "Výmena tovaru" nezakladá
+ *   "vratenie" kartu (`return-status.ts`), takže `unresolved` je preň prakticky
+ *   vždy false; filtrovať by badge navždy skrylo.
+ * - `returned` = počet NEVYBAVENÝCH vrátení (`unresolved`) — nezmenené, "Vratený
+ *   tovar" JE aktívny vrátkový stav s kartami.
+ * - `claims` = počet AKTUÁLNE OZNAČENÝCH (žiadny ďalší "vybavené" koncept). */
 export async function countOrderFlags(db: Database): Promise<OrderFlagCounts> {
   const [exchangeRows, returnedRows, claimRows] = await Promise.all([
     selectFlaggedByStatus(db, isExchangeOrderStatus),
@@ -165,7 +173,7 @@ export async function countOrderFlags(db: Database): Promise<OrderFlagCounts> {
     db.select({ id: orders.id }).from(orders).where(isNotNull(orders.claimMarkedAt)),
   ]);
   return {
-    exchange: exchangeRows.filter((r) => r.unresolved).length,
+    exchange: exchangeRows.length,
     returned: returnedRows.filter((r) => r.unresolved).length,
     claims: claimRows.length,
   };
