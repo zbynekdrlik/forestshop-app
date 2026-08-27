@@ -63,11 +63,14 @@ async function insertOrder(
 }
 
 describe("GET /api/order-flags/exchange", () => {
-  it("vráti len objednávky v stave 'Vybavená výmena', s nevybavenosťou podľa otvorenej vratenie karty", async () => {
+  it("vráti len AKTÍVne výmeny (stav 'Výmena tovaru'), 'Vybavená výmena' sa už NEzobrazuje (issue 514)", async () => {
     const { app, cookie, db } = await boot("citanie");
-    const vymena = await insertOrder(db, "Vybavená výmena", { comment: "poznámka k výmene" });
+    const vymena = await insertOrder(db, "Výmena tovaru", { comment: "poznámka k výmene" });
+    await insertOrder(db, "Vybavená výmena"); // vybavená výmena — issue 514 ju z výpisu odstránilo
     await insertOrder(db, "Vybavená"); // iný stav — nesmie sa objaviť
     await insertOrder(db, "Vratený tovar"); // iný stav — nesmie sa objaviť
+    // Lingering otvorená vratenie karta (zriedkavý prípad Vratený tovar → Výmena
+    // tovaru) → unresolved: true; zdieľaný `OrderFlagTable` štítok ostáva funkčný.
     await upsertUpozornenie(db, {
       type: "vratenie",
       source: "appka",
@@ -81,14 +84,14 @@ describe("GET /api/order-flags/exchange", () => {
     const body = (await res.json()) as { orders: readonly Record<string, unknown>[] };
     expect(body.orders).toHaveLength(1);
     expect(body.orders[0]?.["externalOrderId"]).toBe(vymena.externalOrderId);
-    expect(body.orders[0]?.["statusName"]).toBe("Vybavená výmena");
+    expect(body.orders[0]?.["statusName"]).toBe("Výmena tovaru");
     expect(body.orders[0]?.["comment"]).toBe("poznámka k výmene");
     expect(body.orders[0]?.["unresolved"]).toBe(true);
   });
 
-  it("objednávka bez otvorenej vratenie karty je unresolved: false", async () => {
+  it("aktívna výmena bez otvorenej vratenie karty je unresolved: false", async () => {
     const { app, cookie, db } = await boot("citanie");
-    await insertOrder(db, "Vybavená výmena");
+    await insertOrder(db, "Výmena tovaru");
 
     const res = await app.request("/api/order-flags/exchange", { headers: { cookie } });
     const body = (await res.json()) as { orders: readonly Record<string, unknown>[] };
@@ -98,7 +101,7 @@ describe("GET /api/order-flags/exchange", () => {
 
   it("VYRIEŠENÁ vratenie karta neznamená unresolved — len otvorená karta počíta", async () => {
     const { app, cookie, db, userId } = await boot("citanie");
-    const vymena = await insertOrder(db, "Vybavená výmena");
+    const vymena = await insertOrder(db, "Výmena tovaru");
     const card = await upsertUpozornenie(db, {
       type: "vratenie",
       source: "appka",
@@ -250,17 +253,21 @@ describe("POST /api/order-flags/claims/:id/clear", () => {
 });
 
 describe("GET /api/order-flags/counts", () => {
-  it("spočíta nevybavené výmeny/vrátenia + aktuálne označené reklamácie", async () => {
+  it("exchange = POČET VŠETKÝCH aktívnych výmen (nie unresolved-filtrovaný), returned = nevybavené vrátenia, claims = označené (issue 514)", async () => {
     const { app, cookie, db } = await boot("manazer");
-    const vymena = await insertOrder(db, "Vybavená výmena");
+    // Dve aktívne výmeny: jedna s otvorenou vratenie kartou, jedna bez. Badge
+    // (issue 514) počíta OBE — dôkaz, že to NIE JE unresolved-filtrovaný count.
+    const vymenaSKartou = await insertOrder(db, "Výmena tovaru");
+    await insertOrder(db, "Výmena tovaru");
     await upsertUpozornenie(db, {
       type: "vratenie",
       source: "appka",
       title: "t",
-      dedupKey: returnUpozornenieDedupKey(vymena.externalOrderId),
+      dedupKey: returnUpozornenieDedupKey(vymenaSKartou.externalOrderId),
       now: new Date("2026-07-21T00:00:00Z"),
     });
-    await insertOrder(db, "Vratený tovar"); // bez karty → 0 do returned count
+    await insertOrder(db, "Vybavená výmena"); // vybavená výmena sa NEpočíta (issue 514)
+    await insertOrder(db, "Vratený tovar"); // bez karty → 0 do returned count (nezmenené)
     const reklamacia = await insertOrder(db, "Vybavená");
     await app.request("/api/order-flags/claims", {
       method: "POST",
@@ -270,6 +277,6 @@ describe("GET /api/order-flags/counts", () => {
 
     const res = await app.request("/api/order-flags/counts", { headers: { cookie } });
     const body = (await res.json()) as { exchange: number; returned: number; claims: number };
-    expect(body).toEqual({ exchange: 1, returned: 0, claims: 1 });
+    expect(body).toEqual({ exchange: 2, returned: 0, claims: 1 });
   });
 });

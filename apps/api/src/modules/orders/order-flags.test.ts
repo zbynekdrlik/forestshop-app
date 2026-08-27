@@ -1,17 +1,22 @@
 import { describe, expect, it } from "vitest";
 import { isExchangeOrderStatus, isReturnedOrderStatus } from "./order-flags.js";
 
-// issue 290: priradenie OVERENÉ NAŽIVO na produkcii (tiket) — "Výmena
-// tovaru" = presne "Vybavená výmena", "Vrátený tovar" = "Vratený tovar" +
-// "Vybavený Dobropis". Rovnaká normalizačná disciplína ako `return-
-// status.test.ts` (NFC + orez, nikdy bajtovo presná zhoda).
+// issue 514 (invertuje issue 290): sekcia „Výmena tovaru" má ukazovať
+// AKTÍVNE výmeny — presne stav "Výmena tovaru", nie hotový "Vybavená výmena"
+// (ten sa z výpisu odstraňuje). Issue 290 pôvodne priradilo "Vybavená
+// výmena", lebo vtedy (7.8.2026) produkcia nemala ani jednu objednávku v
+// stave "Výmena tovaru" — realita sa medzitým zmenila (živo overené na
+// tikete: 1× "Výmena tovaru", 8× "Vybavená výmena"). "Vrátený tovar" =
+// "Vratený tovar" + "Vybavený Dobropis" (nezmenené). Rovnaká normalizačná
+// disciplína ako `return-status.test.ts` (NFC + orez, nikdy bajtovo presná
+// zhoda).
 describe("isExchangeOrderStatus", () => {
-  it("rozpozná jediný priradený stav 'Vybavená výmena'", () => {
-    expect(isExchangeOrderStatus("Vybavená výmena")).toBe(true);
+  it("rozpozná AKTÍVny stav 'Výmena tovaru' (issue 514)", () => {
+    expect(isExchangeOrderStatus("Výmena tovaru")).toBe(true);
   });
 
-  it("'Výmena tovaru' (rozpracovaný stav) NIE JE priradený — dnes nemá žiadnu objednávku", () => {
-    expect(isExchangeOrderStatus("Výmena tovaru")).toBe(false);
+  it("'Vybavená výmena' (vybavená výmena) UŽ NIE JE priradený — issue 514 ho z výpisu odstránilo", () => {
+    expect(isExchangeOrderStatus("Vybavená výmena")).toBe(false);
   });
 
   it("vrátkové/bežné stavy nie sú výmena", () => {
@@ -22,8 +27,8 @@ describe("isExchangeOrderStatus", () => {
   });
 
   it("normalizuje (NFC + orez) rovnako ako order.status_name", () => {
-    expect(isExchangeOrderStatus("  Vybavená výmena  ")).toBe(true);
-    expect(isExchangeOrderStatus("Vybavená výmena".normalize("NFD"))).toBe(true);
+    expect(isExchangeOrderStatus("  Výmena tovaru  ")).toBe(true);
+    expect(isExchangeOrderStatus("Výmena tovaru".normalize("NFD"))).toBe(true);
   });
 });
 
