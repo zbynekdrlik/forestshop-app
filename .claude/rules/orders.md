@@ -833,3 +833,18 @@ paths:
   stav AUTOMATICKY. Klient výslovne NEŽIADAL vlastnú sekciu (na rozdiel od Riešiť)
   — len tlačidlo + stav; `ordered`-boolean toky (hromadné označenie, Skryť
   vybavené, súčty, supplier e-mail) sa NEMENIA.
+
+## Zlúčenie objednávok — klikateľné objednávky + badge prípadov (#512)
+
+- **Nav badge „Zlúčenie objednávok" počíta OSOBY (prípady), nie objednávky** —
+  `/api/order-merge/count` aj výpis zdieľajú JEDEN grouping helper
+  (`groupOpenOrdersByCustomer` v `apps/api/src/modules/orders/merge-mail.ts`);
+  nikdy nereplikuj počítanie ako samostatný SQL `COUNT(DISTINCT)` — identita
+  zákazníka žije v JS (rozšírenie precedensu identity kľúča z #431) a duplikácia
+  by sa časom rozišla s výpisom.
+- **Odkazy na objednávky v kartách Zlúčenia** = serverom stavané `adminUrl`
+  (`buildShoptetAdminOrderUrl`, `.ord-admin-link`, target `_blank`) — FE nikdy
+  nestavia Shoptet admin URL sám. Vzor vlákna `adminBaseUrl` do `createApp`:
+  option typu `Omit<Deps,"adminBaseUrl">` + `options.adminBaseUrl ?? default`
+  za spreadom, existujúci volajúci/testy sa nemenia (rovnako ako
+  orders/search/dpd trasy).
