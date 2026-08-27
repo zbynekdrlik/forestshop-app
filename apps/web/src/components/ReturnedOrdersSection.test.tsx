@@ -34,6 +34,15 @@ it("prázdny zoznam zobrazí informačnú vetu", async () => {
   await screen.findByTestId("returned-empty");
 });
 
+it("hlavička popisuje aktívne vrátenia a že dobropisy sa už nezobrazujú (issue 516)", async () => {
+  fetchReturnedOrders.mockResolvedValue([]);
+  const { container } = render(<ReturnedOrdersSection role="manazer" onSessionExpired={vi.fn()} />);
+  await screen.findByTestId("returned-empty");
+  expect(container.textContent).toContain("Vratený tovar");
+  expect(container.textContent).toContain("aktívne vrátenia");
+  expect(container.textContent).toContain("Vybavený Dobropis");
+});
+
 it("zobrazí objednávku, chýbajúca suma/poznámka sa ukáže ako pomlčka", async () => {
   fetchReturnedOrders.mockResolvedValue([ROW]);
   render(<ReturnedOrdersSection role="manazer" onSessionExpired={vi.fn()} />);

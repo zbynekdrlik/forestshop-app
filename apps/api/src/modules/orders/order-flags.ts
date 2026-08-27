@@ -13,7 +13,6 @@ import { normalizeStatusName } from "./parser.js";
 // porovnanie, presne ako `open-statuses.ts`.
 const EXCHANGE_STATUS = normalizeStatusName("Výmena tovaru");
 const RETURNED_GOODS_STATUS = normalizeStatusName("Vratený tovar");
-const RETURNED_CREDIT_STATUS = normalizeStatusName("Vybavený Dobropis");
 
 /** `true`, keď objednávka patrí na stránku "Výmena tovaru" — presne AKTÍVny
  * stav "Výmena tovaru" (issue 514, Štěpán: sekcia má ukazovať len aktívne
@@ -26,10 +25,16 @@ export function isExchangeOrderStatus(statusName: string): boolean {
   return normalizeStatusName(statusName) === EXCHANGE_STATUS;
 }
 
-/** `true`, keď objednávka patrí na stránku "Vrátený tovar" — "Vratený
- * tovar" (rozpracované) ALEBO "Vybavený Dobropis" (jeho hotová podoba,
- * rozhodnuté na tickete). */
+/** `true`, keď objednávka patrí na stránku "Vrátený tovar" — presne AKTÍVny
+ * stav "Vratený tovar" (issue 516, Štěpán: sekcia má ukazovať len aktívne
+ * vrátenia na vybavenie, „nie vybavený Dobropis"). Hotový "Vybavený
+ * Dobropis" sa tu už NEzobrazuje. Issue 290 pôvodne priradilo OBA stavy;
+ * #516 to zúžilo na aktívny stav rovnakým vzorom, akým #514 zúžilo "Výmena
+ * tovaru" (z hotovej "Vybavená výmena" na aktívnu "Výmena tovaru"). Priradenie
+ * živo overené na prod DB (tiket #516: 3× "Vratený tovar", 5× "Vybavený
+ * Dobropis"). "Vybavený Dobropis" ostáva HOTOVÝM vrátkovým stavom výhradne v
+ * `return-status.ts` (auto-zatvára kartu pri importe) — samostatný menný
+ * priestor Upozornení, nesúvisí s tým, čo táto sekcia zobrazuje. */
 export function isReturnedOrderStatus(statusName: string): boolean {
-  const normalized = normalizeStatusName(statusName);
-  return normalized === RETURNED_GOODS_STATUS || normalized === RETURNED_CREDIT_STATUS;
+  return normalizeStatusName(statusName) === RETURNED_GOODS_STATUS;
 }

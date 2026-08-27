@@ -124,18 +124,17 @@ describe("GET /api/order-flags/exchange", () => {
 });
 
 describe("GET /api/order-flags/returned", () => {
-  it("vráti objednávky v OBOCH stavoch — 'Vratený tovar' aj 'Vybavený Dobropis'", async () => {
+  it("vráti LEN aktívne 'Vratený tovar', 'Vybavený Dobropis' sa už NEzobrazuje (issue 516)", async () => {
     const { app, cookie, db } = await boot("citanie");
     const vrateny = await insertOrder(db, "Vratený tovar");
-    const dobropis = await insertOrder(db, "Vybavený Dobropis");
+    await insertOrder(db, "Vybavený Dobropis"); // vybavený dobropis — issue 516 ho z výpisu odstránilo
     await insertOrder(db, "Vybavená výmena"); // iná stránka — nesmie sa objaviť
 
     const res = await app.request("/api/order-flags/returned", { headers: { cookie } });
     const body = (await res.json()) as { orders: readonly Record<string, unknown>[] };
-    const ids = body.orders.map((o) => o["externalOrderId"]);
-    expect(ids).toHaveLength(2);
-    expect(ids).toContain(vrateny.externalOrderId);
-    expect(ids).toContain(dobropis.externalOrderId);
+    expect(body.orders).toHaveLength(1);
+    expect(body.orders[0]?.["externalOrderId"]).toBe(vrateny.externalOrderId);
+    expect(body.orders[0]?.["statusName"]).toBe("Vratený tovar");
   });
 });
 
@@ -253,7 +252,7 @@ describe("POST /api/order-flags/claims/:id/clear", () => {
 });
 
 describe("GET /api/order-flags/counts", () => {
-  it("exchange = POČET VŠETKÝCH aktívnych výmen (nie unresolved-filtrovaný), returned = nevybavené vrátenia, claims = označené (issue 514)", async () => {
+  it("exchange = počet VŠETKÝCH aktívnych výmen, returned = počet VŠETKÝCH aktívnych vrátení (nie unresolved-filtrovaný), claims = označené (issue 514 + 516)", async () => {
     const { app, cookie, db } = await boot("manazer");
     // Dve aktívne výmeny: jedna s otvorenou vratenie kartou, jedna bez. Badge
     // (issue 514) počíta OBE — dôkaz, že to NIE JE unresolved-filtrovaný count.
@@ -267,7 +266,10 @@ describe("GET /api/order-flags/counts", () => {
       now: new Date("2026-07-21T00:00:00Z"),
     });
     await insertOrder(db, "Vybavená výmena"); // vybavená výmena sa NEpočíta (issue 514)
-    await insertOrder(db, "Vratený tovar"); // bez karty → 0 do returned count (nezmenené)
+    // issue 516: aktívne "Vratený tovar" BEZ karty sa TERAZ počíta (returned je
+    // počet všetkých aktívnych vrátení, nie unresolved-filtrovaný) → 1.
+    await insertOrder(db, "Vratený tovar");
+    await insertOrder(db, "Vybavený Dobropis"); // vybavený dobropis sa NEpočíta (issue 516)
     const reklamacia = await insertOrder(db, "Vybavená");
     await app.request("/api/order-flags/claims", {
       method: "POST",
@@ -277,7 +279,7 @@ describe("GET /api/order-flags/counts", () => {
 
     const res = await app.request("/api/order-flags/counts", { headers: { cookie } });
     const body = (await res.json()) as { exchange: number; returned: number; claims: number };
-    expect(body).toEqual({ exchange: 2, returned: 0, claims: 1 });
+    expect(body).toEqual({ exchange: 2, returned: 1, claims: 1 });
   });
 });
 
