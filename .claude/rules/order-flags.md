@@ -25,7 +25,9 @@ appkiným `order.claim_marked_at` (Reklamácie). Modul: `order-flags.ts`
   `order-flags.ts` (`EXCHANGE_STATUS`/`RETURNED_*_STATUS`) — výpis aj počet
   ju preberú automaticky, nikdy neduplikuj SQL/JS count. Issue 514 tak
   invertovalo „Výmena tovaru" jedinou zmenou `EXCHANGE_STATUS` (z „Vybavená
-  výmena" na „Výmena tovaru").
+  výmena" na „Výmena tovaru"); issue 516 rovnako zúžilo „Vrátený tovar" na
+  presne aktívny stav „Vratený tovar" (vypustený „Vybavený Dobropis") jedinou
+  zmenou v `isReturnedOrderStatus`.
 - **Menu-odznaky exchange/returned/claims sú UŽ NAPOJENÉ v `App.tsx` (#290)**
   — `fetchOrderFlagCounts` → `orderFlagCounts` → `badgeCounts["exchange"/…]`,
   zobrazené LEN pri `> 0` (skryté pri 0, na rozdiel od orders/upozornenia,
@@ -43,11 +45,17 @@ appkiným `order.claim_marked_at` (Reklamácie). Modul: `order-flags.ts`
   ANI JEDNEJ mape**, takže preň karta nikdy nevznikne → `unresolved` je preň
   prakticky vždy `false` a štítok sa v sekcii „Výmena tovaru" bežne
   nezobrazí (ostáva len pre zriedkavý prechod „Vratený tovar → Výmena
-  tovaru" s lingering otvorenou kartou). Preto (issue 514) je exchange badge
-  = počet VŠETKÝCH aktívnych výmen (`exchangeRows.length`), NIE
-  unresolved-filtrovaný — filtrovať by ho navždy skrylo; returned ostáva
-  unresolved-filtrovaný, lebo „Vratený tovar" JE aktívny vrátkový stav s
-  kartami. Táto asymetria počtov je zámerná, nie bug.
+  tovaru" s lingering otvorenou kartou). **OBA odznaky (exchange AJ returned)
+  = počet VŠETKÝCH aktívnych objednávok príslušného stavu (`exchangeRows
+  .length` / `returnedRows.length`), NIE unresolved-filtrovaný** — badge ==
+  dĺžka výpisu, lebo idú tou istou `selectFlaggedByStatus` cestou. Issue 514
+  to zaviedlo pre exchange; **issue 516 to rovnako spravilo pre returned** —
+  predtým bol returned unresolved-filtrovaný (počítal len vrátenia s otvorenou
+  kartou), čo dávalo rozchod „3 vs 2" (3 aktívne „Vratený tovar", z toho 2 s
+  kartou). Ten unresolved filter sa preto NIKDY nesmie vrátiť — odznak MUSÍ
+  zdieľať predikát s výpisom. Štítok „nevybavené" v riadku (`unresolved`)
+  ostáva funkčný a informatívny (odlíši aktívne vrátenia s otvorenou kartou),
+  ale odznak naň už neviaže.
 - **Priradenie stavu VŽDY over naživo na produkcii, nie zo starej appky ani
   z odhadu** — issue 290 aj 514 to overili priamo v prod DB
   (`docker exec forestshop-postgres-1 psql -U forestshop -d forestshop -c
