@@ -6,10 +6,11 @@ import { isExchangeOrderStatus, isReturnedOrderStatus } from "./order-flags.js";
 // (ten sa z výpisu odstraňuje). Issue 290 pôvodne priradilo "Vybavená
 // výmena", lebo vtedy (7.8.2026) produkcia nemala ani jednu objednávku v
 // stave "Výmena tovaru" — realita sa medzitým zmenila (živo overené na
-// tikete: 1× "Výmena tovaru", 8× "Vybavená výmena"). "Vrátený tovar" =
-// "Vratený tovar" + "Vybavený Dobropis" (nezmenené). Rovnaká normalizačná
-// disciplína ako `return-status.test.ts` (NFC + orez, nikdy bajtovo presná
-// zhoda).
+// tikete: 1× "Výmena tovaru", 8× "Vybavená výmena"). Issue 516 rovnako zúžilo
+// "Vrátený tovar" na PRESNE aktívny stav "Vratený tovar" — hotový "Vybavený
+// Dobropis" sa už nezobrazuje (živo overené: 3× "Vratený tovar", 5× "Vybavený
+// Dobropis"). Rovnaká normalizačná disciplína ako `return-status.test.ts`
+// (NFC + orez, nikdy bajtovo presná zhoda).
 describe("isExchangeOrderStatus", () => {
   it("rozpozná AKTÍVny stav 'Výmena tovaru' (issue 514)", () => {
     expect(isExchangeOrderStatus("Výmena tovaru")).toBe(true);
@@ -33,9 +34,16 @@ describe("isExchangeOrderStatus", () => {
 });
 
 describe("isReturnedOrderStatus", () => {
-  it("rozpozná OBA priradené stavy — 'Vratený tovar' aj jeho hotovú podobu 'Vybavený Dobropis'", () => {
+  it("rozpozná AKTÍVny stav 'Vratený tovar' (issue 516)", () => {
     expect(isReturnedOrderStatus("Vratený tovar")).toBe(true);
-    expect(isReturnedOrderStatus("Vybavený Dobropis")).toBe(true);
+  });
+
+  // issue 516: sekcia „Vrátený tovar" má ukazovať LEN aktívne „Vratený tovar",
+  // nie hotový „Vybavený Dobropis" (zrkadlo #514 pre výmenu). Issue 290 pôvodne
+  // priradilo OBA stavy; #516 to zúžilo. „Vybavený Dobropis" ostáva HOTOVÝM
+  // vrátkovým stavom výhradne v `return-status.ts` (auto-zatvára kartu).
+  it("'Vybavený Dobropis' UŽ NIE JE priradený — issue 516 ho z výpisu aj počtu odstránilo", () => {
+    expect(isReturnedOrderStatus("Vybavený Dobropis")).toBe(false);
   });
 
   it("výmenový/bežné stavy nie sú vrátený tovar", () => {
@@ -47,6 +55,6 @@ describe("isReturnedOrderStatus", () => {
 
   it("normalizuje (NFC + orez) rovnako ako order.status_name", () => {
     expect(isReturnedOrderStatus("  Vratený tovar  ")).toBe(true);
-    expect(isReturnedOrderStatus("Vybavený Dobropis".normalize("NFD"))).toBe(true);
+    expect(isReturnedOrderStatus("Vratený tovar".normalize("NFD"))).toBe(true);
   });
 });
