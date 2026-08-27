@@ -280,3 +280,41 @@ describe("GET /api/order-flags/counts", () => {
     expect(body).toEqual({ exchange: 2, returned: 0, claims: 1 });
   });
 });
+
+// issue 516 [red]: reprodukuje rozchod „3 vs 2" pri sekcii Vrátený tovar.
+// Pred fixom má sekcia DVE rôzne dátové cesty: výpis (`isReturnedOrderStatus`
+// = „Vratený tovar" ALEBO „Vybavený Dobropis", stavovo) a odznak
+// (unresolved-filtrovaný — len objednávky s otvorenou vratenie kartou). Tri
+// aktívne „Vratený tovar" (2 s kartou) + 1 „Vybavený Dobropis" tak pred fixom
+// dajú výpis = 4 a odznak = 2. Po fixe (zrkadlo #514) zdieľajú JEDEN predikát
+// → výpis = odznak = 3, dobropis sa nezobrazuje ani nepočíta.
+describe("Vrátený tovar — odznak == výpis, len aktívne 'Vratený tovar' (issue 516, rozchod 3 vs 2)", () => {
+  it("výpis obsahuje LEN 'Vratený tovar' (žiadny 'Vybavený Dobropis') a odznak sa rovná jeho dĺžke", async () => {
+    const { app, cookie, db } = await boot("manazer");
+    // Tri aktívne „Vratený tovar" — LEN dve majú otvorenú vratenie kartu (tretia bez).
+    const sKartou1 = await insertOrder(db, "Vratený tovar");
+    const sKartou2 = await insertOrder(db, "Vratený tovar");
+    await insertOrder(db, "Vratený tovar"); // bez otvorenej karty
+    for (const o of [sKartou1, sKartou2]) {
+      await upsertUpozornenie(db, {
+        type: "vratenie",
+        source: "appka",
+        title: "t",
+        dedupKey: returnUpozornenieDedupKey(o.externalOrderId),
+        now: new Date("2026-07-21T00:00:00Z"),
+      });
+    }
+    await insertOrder(db, "Vybavený Dobropis"); // vybavený dobropis — do výpisu ani počtu už nepatrí (issue 516)
+
+    const listRes = await app.request("/api/order-flags/returned", { headers: { cookie } });
+    const list = ((await listRes.json()) as { orders: readonly Record<string, unknown>[] }).orders;
+    const countsRes = await app.request("/api/order-flags/counts", { headers: { cookie } });
+    const counts = (await countsRes.json()) as { returned: number };
+
+    expect(list).toHaveLength(3);
+    expect(list.every((o) => o["statusName"] === "Vratený tovar")).toBe(true);
+    // Jeden zdieľaný predikát: odznak == dĺžka výpisu == počet aktívnych vrátení.
+    expect(counts.returned).toBe(list.length);
+    expect(counts.returned).toBe(3);
+  });
+});

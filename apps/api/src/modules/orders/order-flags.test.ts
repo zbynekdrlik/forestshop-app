@@ -38,6 +38,15 @@ describe("isReturnedOrderStatus", () => {
     expect(isReturnedOrderStatus("Vybavený Dobropis")).toBe(true);
   });
 
+  // issue 516 [red]: sekcia „Vrátený tovar" má ukazovať LEN aktívne „Vratený
+  // tovar", nie hotový „Vybavený Dobropis" (zrkadlo #514 pre výmenu). Tento
+  // test PADÁ proti súčasnému kódu (dnes vracia true) — GREEN commit zúži
+  // klasifikátor a horný „OBA priradené stavy" test sa v tom istom commite
+  // zosúladí (spec change).
+  it("issue 516: 'Vybavený Dobropis' UŽ NIE JE priradený — sekcia ukazuje len aktívne 'Vratený tovar'", () => {
+    expect(isReturnedOrderStatus("Vybavený Dobropis")).toBe(false);
+  });
+
   it("výmenový/bežné stavy nie sú vrátený tovar", () => {
     expect(isReturnedOrderStatus("Vybavená výmena")).toBe(false);
     expect(isReturnedOrderStatus("Vybavená")).toBe(false);
