@@ -36,10 +36,13 @@ export async function seedOrderFlagsFixtures(db: Database, heslo: string): Promi
     role: "manazer",
   });
 
+  // issue 514: AKTÍVna výmena (stav "Výmena tovaru") — sekcia „Výmena tovaru"
+  // teraz zobrazuje len tieto, nie hotové "Vybavená výmena". Táto jediná
+  // fixtúra garantuje viditeľný menu-odznak `nav-badge-exchange` (>0).
   await db.insert(orders).values({
     externalOrderId: "9201",
     customerName: "E2E Zákazník Výmena",
-    statusName: "Vybavená výmena",
+    statusName: "Výmena tovaru",
     placedAt: MINULY_DATUM,
     totalPriceWithVat: "30.00",
   });

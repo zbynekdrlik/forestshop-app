@@ -35,13 +35,22 @@ test("Výmena tovaru/Vrátený tovar zobrazia zoznam, Reklamácie umožnia ozna�
   await expect(claimsOdznak).toBeVisible();
   await expect(claimsOdznak).toHaveText(/^\d+$/);
 
+  // issue 514: menu-odznak „Výmena tovaru" = počet AKTÍVnych výmen (stav
+  // „Výmena tovaru"). Fixtúra 9201 garantuje ≥1, takže odznak je viditeľný
+  // hneď po prihlásení (skrytý pri 0). Presné číslo NEasertujeme — badge
+  // počíta VŠETKY „Výmena tovaru" objednávky v zdieľanej seed DB (vzor
+  // issue 445, `nav-badge` disciplína).
+  const vymenaOdznak = page.getByTestId("nav-badge-exchange");
+  await expect(vymenaOdznak).toBeVisible();
+  await expect(vymenaOdznak).toHaveText(/^[1-9]\d*$/);
+
   // Výmena tovaru.
   await page.getByRole("button", { name: "Výmena tovaru" }).click();
   await expect(page.getByRole("heading", { name: "Výmena tovaru" })).toBeVisible();
   const vymenaRiadok = page.getByTestId("exchange-row-9201");
   await expect(vymenaRiadok).toBeVisible();
   await expect(vymenaRiadok).toContainText("E2E Zákazník Výmena");
-  await expect(vymenaRiadok).toContainText("Vybavená výmena");
+  await expect(vymenaRiadok).toContainText("Výmena tovaru");
   await expect(vymenaRiadok).toContainText("30.00 €");
 
   // Vrátený tovar.

@@ -11,16 +11,20 @@ vi.mock("../orderFlagsApi.js", async (importOriginal) => {
 
 const { OrderFlagsUnauthorizedError } = await import("../orderFlagsApi.js");
 
+// issue 514: sekcia zobrazuje AKTÍVne výmeny (stav "Výmena tovaru"), nie
+// hotové "Vybavená výmena". Štítok "nevybavené" (zdieľaný `OrderFlagTable`)
+// ostáva funkčný pre zriedkavý prípad "Vratený tovar → Výmena tovaru" s
+// lingering otvorenou vratenie kartou.
 const ROW = {
   id: "order-1",
   externalOrderId: "20600001",
   customerName: "Zákazník testovaný",
-  statusName: "Vybavená výmena",
+  statusName: "Výmena tovaru",
   placedAt: "2026-08-01T10:00:00.000Z",
   totalPriceWithVat: "42.00",
   comment: "poznámka",
   adminUrl: "https://www.forestshop.sk/admin/objednavky-detail/?id=1",
-  unresolved: true,
+  unresolved: false,
 };
 
 afterEach(() => {
@@ -34,20 +38,28 @@ it("prázdny zoznam zobrazí informačnú vetu", async () => {
   await screen.findByTestId("exchange-empty");
 });
 
-it("zobrazí riadok objednávky s odkazom aj štítkom 'nevybavené', keď má otvorenú vratenie kartu", async () => {
+it("hlavička popisuje aktívne výmeny (issue 514)", async () => {
+  fetchExchangeOrders.mockResolvedValue([]);
+  const { container } = render(<ExchangeOrdersSection role="manazer" onSessionExpired={vi.fn()} />);
+  await screen.findByTestId("exchange-empty");
+  expect(container.textContent).toContain("Výmena tovaru");
+  expect(container.textContent).toContain("aktívne výmeny");
+});
+
+it("zobrazí riadok aktívnej výmeny (stav 'Výmena tovaru') s odkazom", async () => {
   fetchExchangeOrders.mockResolvedValue([ROW]);
   render(<ExchangeOrdersSection role="manazer" onSessionExpired={vi.fn()} />);
   const row = await screen.findByTestId("exchange-row-20600001");
   expect(row.textContent).toContain("20600001");
-  expect(row.textContent).toContain("Vybavená výmena");
-  await screen.findByTestId("exchange-row-unresolved-20600001");
+  expect(row.textContent).toContain("Výmena tovaru");
+  expect(screen.queryByTestId("exchange-row-unresolved-20600001")).toBeNull();
 });
 
-it("objednávka bez otvorenej karty NEMÁ štítok 'nevybavené'", async () => {
-  fetchExchangeOrders.mockResolvedValue([{ ...ROW, unresolved: false }]);
+it("štítok 'nevybavené' sa zobrazí pri lingering otvorenej vratenie karte (Vratený tovar → Výmena tovaru)", async () => {
+  fetchExchangeOrders.mockResolvedValue([{ ...ROW, unresolved: true }]);
   render(<ExchangeOrdersSection role="manazer" onSessionExpired={vi.fn()} />);
   await screen.findByTestId("exchange-row-20600001");
-  expect(screen.queryByTestId("exchange-row-unresolved-20600001")).toBeNull();
+  await screen.findByTestId("exchange-row-unresolved-20600001");
 });
 
 it("401 (Unauthorized) volá onSessionExpired namiesto zobrazenia chyby", async () => {
