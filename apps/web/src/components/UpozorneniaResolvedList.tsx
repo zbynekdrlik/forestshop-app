@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef, useState, type JSX } from "react";
+import { useCallback, useEffect, useState, type JSX } from "react";
 import { formatSkDateTime } from "../formatDate.js";
 import { fetchResolvedUpozornenia, returnUpozornenieToOpen, UpozorneniaUnauthorizedError, type ResolvedUpozornenieRow } from "../upozorneniaApi.js";
+import { useStaleResponseGuard } from "../useStaleResponseGuard.js";
 
 // issue 283 (majiteľ, komentár na tickete): záložka "Vybavené" na nástenke
 // Upozornenia — história vyriešených kariet + tlačidlo na vrátenie späť medzi
@@ -32,21 +33,21 @@ export function UpozorneniaResolvedList({
   const [rows, setRows] = useState<readonly ResolvedUpozornenieRow[] | null>(null);
   const [error, setError] = useState("");
   const [busyId, setBusyId] = useState("");
-  // Rovnaký "latest ref" princíp ako `UpozorneniaSection.tsx`'s `loadSeqRef`
-  // (issue 254/251/151, `.claude/rules/frontend-design.md`) — chráni pred
+  // Zdieľaný `useStaleResponseGuard` (issue 523; "latest ref" princíp,
+  // issue 254/251/151, `.claude/rules/frontend-design.md`) — chráni pred
   // zastaranou odpoveďou z PREDCHÁDZAJÚCEho `load()` volania (mount + refetch
   // po vrátení karty späť môžu bežať tesne po sebe).
-  const loadSeqRef = useRef(0);
+  const guard = useStaleResponseGuard();
 
   const load = useCallback(() => {
-    const seq = ++loadSeqRef.current;
+    const seq = guard.begin();
     fetchResolvedUpozornenia()
       .then((data) => {
-        if (loadSeqRef.current !== seq) return;
+        if (!guard.isLatest(seq)) return;
         setRows(data);
       })
       .catch((err: unknown) => {
-        if (loadSeqRef.current !== seq) return;
+        if (!guard.isLatest(seq)) return;
         if (err instanceof UpozorneniaUnauthorizedError) {
           onSessionExpired();
           return;

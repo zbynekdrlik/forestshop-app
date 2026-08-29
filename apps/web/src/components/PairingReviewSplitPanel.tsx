@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState, type JSX } from "react";
+import { useCallback, useEffect, useState, type JSX } from "react";
+import { useStaleResponseGuard } from "../useStaleResponseGuard.js";
 import {
   fetchPairingVariantLinks,
   PairingReviewUnauthorizedError,
@@ -153,17 +154,17 @@ export function PairingReviewSplitPanel({
   const [variants, setVariants] = useState<readonly PairingVariantLink[] | null>(null);
   const [variantsError, setVariantsError] = useState("");
   const [busyRowCodes, setBusyRowCodes] = useState<ReadonlySet<string>>(new Set());
-  const loadSeq = useRef(0);
+  const guard = useStaleResponseGuard();
 
   useEffect(() => {
-    const seq = (loadSeq.current += 1);
+    const seq = guard.begin();
     fetchPairingVariantLinks(item.productKey)
       .then((result) => {
-        if (seq !== loadSeq.current) return;
+        if (!guard.isLatest(seq)) return;
         setVariants(result);
       })
       .catch((err: unknown) => {
-        if (seq !== loadSeq.current) return;
+        if (!guard.isLatest(seq)) return;
         if (err instanceof PairingReviewUnauthorizedError) {
           onSessionExpired();
           return;

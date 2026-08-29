@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type JSX, type MouseEvent } f
 import type { Me } from "../api.js";
 import { applyThemeColors } from "../applyThemeColors.js";
 import { fetchThemeColors, resetThemeColors, saveThemeColors, ThemeColorsUnauthorizedError, type ThemeColor } from "../themeColorsApi.js";
+import { useStaleResponseGuard } from "../useStaleResponseGuard.js";
 
 // issue 264, majiteľ: "koliesko vpravo hore, vyskakovacie okno, naživo ako
 // bude ťahať farbu po palete tak sa mu to bude meniť na stránke". Viditeľné
@@ -84,7 +85,7 @@ export function ThemeColorPicker({ role, onSessionExpired }: { readonly role: Me
   // state with old values (same "latest wins" class of race as issue 151/251,
   // `.claude/rules/frontend-design.md`) — each `openPicker()` bumps this and
   // the `.then()` only applies if it is still the most recent request.
-  const fetchSeqRef = useRef(0);
+  const guard = useStaleResponseGuard();
 
   // Code review finding: closing (Escape/backdrop/Cancel) WHILE a save/reset
   // request is in flight reverted the live CSS preview to `baseline`
@@ -136,10 +137,10 @@ export function ThemeColorPicker({ role, onSessionExpired }: { readonly role: Me
     setDraft({});
     setBaseline({});
     setOpen(true);
-    const seq = ++fetchSeqRef.current;
+    const seq = guard.begin();
     fetchThemeColors()
       .then((list) => {
-        if (fetchSeqRef.current !== seq) return; // closed+reopened while this was in flight — a newer fetch already applied its own state
+        if (!guard.isLatest(seq)) return; // closed+reopened while this was in flight — a newer fetch already applied its own state
         setColors(list);
         const values = Object.fromEntries(list.map((c) => [c.key, c.value]));
         setDraft(values);
@@ -147,7 +148,7 @@ export function ThemeColorPicker({ role, onSessionExpired }: { readonly role: Me
         applyThemeColors(values);
       })
       .catch((err: unknown) => {
-        if (fetchSeqRef.current !== seq) return;
+        if (!guard.isLatest(seq)) return;
         if (err instanceof ThemeColorsUnauthorizedError) {
           onSessionExpired();
           return;

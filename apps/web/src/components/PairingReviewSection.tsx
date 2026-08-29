@@ -1,4 +1,5 @@
 import { useCallback, useContext, useEffect, useRef, useState, type JSX } from "react";
+import { useStaleResponseGuard } from "../useStaleResponseGuard.js";
 import type { Me } from "../api.js";
 import {
   PAGE_SIZE,
@@ -83,7 +84,7 @@ export function PairingReviewSection({ role, onSessionExpired }: { readonly role
   // počíta a vetví AŽ v návratovom JSX, nikdy skorším `return`om).
   const [activeTab, setActiveTab] = useState<"prehlad" | "hladat">("prehlad");
 
-  const searchSeq = useRef(0);
+  const guard = useStaleResponseGuard();
   const mountedRef = useRef(true);
   useEffect(() => {
     mountedRef.current = true;
@@ -110,13 +111,13 @@ export function PairingReviewSection({ role, onSessionExpired }: { readonly role
   const loadedFilterRef = useRef(filter);
 
   const load = useCallback((f: PairingReviewFilter) => {
-    const seq = (searchSeq.current += 1);
+    const seq = guard.begin();
     setError("");
     loadedFilterRef.current = f;
     loadMoreState.reset();
     searchPairingReview({ filter: f, page: 1 })
       .then((result) => {
-        if (!mountedRef.current || seq !== searchSeq.current) return;
+        if (!mountedRef.current || !guard.isLatest(seq)) return;
         setItems(result.items);
         setTotal(result.total);
         setGatheredTotal(result.gatheredTotal);
@@ -125,7 +126,7 @@ export function PairingReviewSection({ role, onSessionExpired }: { readonly role
         setLoaded(true);
       })
       .catch((err: unknown) => {
-        if (!mountedRef.current || seq !== searchSeq.current) return;
+        if (!mountedRef.current || !guard.isLatest(seq)) return;
         setLoaded(true);
         if (err instanceof PairingReviewUnauthorizedError) {
           onSessionExpired();

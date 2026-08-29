@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type SyntheticEvent, type JSX } from "react";
+import { useStaleResponseGuard } from "../useStaleResponseGuard.js";
 import type { Me } from "../api.js";
 import { formatSkDate, formatSkDateTime } from "../formatDate.js";
 import {
@@ -106,7 +107,7 @@ export function CatalogPage({
   // pomalšie (neindexovaný ILIKE nad celým katalógom), takže staršia, ale
   // širšia odpoveď môže dorásť neskôr než novšia, užšia. Bez tohto poradia
   // dokončenia by sa vykreslil zastaraný výsledok nad novým textom hľadania.
-  const searchSeq = useRef(0);
+  const guard = useStaleResponseGuard();
 
   // issue 254 (súrodenec issue 251's queryRef/stateRef nález, `.claude/
   // rules/frontend-design.md`): `runIngest`u's `.then()` (nižšie) volá
@@ -186,7 +187,7 @@ export function CatalogPage({
 
   const search = useCallback(
     (q: string, s: CatalogState) => {
-      const seq = (searchSeq.current += 1);
+      const seq = guard.begin();
       setSearchError("");
       searchedQueryRef.current = q;
       searchedStateRef.current = s;
@@ -194,14 +195,14 @@ export function CatalogPage({
       searchCatalogVariants({ q, state: s, page: 1 })
         .then((result) => {
           if (!mountedRef.current) return; // odmountované skôr, než odpoveď doletela
-          if (seq !== searchSeq.current) return; // medzitým prišla novšia požiadavka
+          if (!guard.isLatest(seq)) return; // medzitým prišla novšia požiadavka
           setItems(result.items);
           setTotal(result.total);
           setSearchLoaded(true);
         })
         .catch((err: unknown) => {
           if (!mountedRef.current) return;
-          if (seq !== searchSeq.current) return;
+          if (!guard.isLatest(seq)) return;
           setSearchLoaded(true);
           if (err instanceof CatalogUnauthorizedError) {
             onSessionExpired();

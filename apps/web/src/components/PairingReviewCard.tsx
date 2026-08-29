@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState, type JSX } from "react";
+import { useCallback, useEffect, useState, type JSX } from "react";
+import { useStaleResponseGuard } from "../useStaleResponseGuard.js";
 import type { Me } from "../api.js";
 import { validateSupplierLinkUrl } from "../ordersApi.js";
 import {
@@ -125,7 +126,7 @@ export function PairingReviewCard({
 
   // "Latest ref" vzor (`.claude/rules/frontend-design.md`) — panel sa môže
   // zavrieť/znovu otvoriť skôr, než dobehne pôvodný `fetchPairingCandidates`.
-  const openSeq = useRef(0);
+  const guard = useStaleResponseGuard();
 
   // issue 398/401 review nález: panel sa ukazuje AJ AUTOMATICKY (bez kliku na
   // "vyber url"), keď karta nemá kandidáta vôbec — pred touto opravou sa v
@@ -136,16 +137,16 @@ export function PairingReviewCard({
   // rules/pairing-search.md`'s E5 sekcia). issue 401 tento stav sprístupnilo
   // OVEĽA ČASTEJŠIE (každý produkt bez adaptéra ho má), preto oprava patrí sem.
   const loadCandidates = useCallback(() => {
-    const seq = (openSeq.current += 1);
+    const seq = guard.begin();
     setCandidatesError("");
     setCandidates(null);
     fetchPairingCandidates(item.productKey)
       .then((result) => {
-        if (seq !== openSeq.current) return;
+        if (!guard.isLatest(seq)) return;
         setCandidates(result);
       })
       .catch((err: unknown) => {
-        if (seq !== openSeq.current) return;
+        if (!guard.isLatest(seq)) return;
         if (err instanceof PairingReviewUnauthorizedError) {
           onSessionExpired();
           return;
@@ -189,7 +190,7 @@ export function PairingReviewCard({
   }, [autoShowsPanel, loadCandidates]);
 
   const closePanel = useCallback(() => {
-    openSeq.current += 1; // zahodí prípadnú ešte-bežiacu odpoveď na kandidátov
+    guard.cancel(); // zahodí prípadnú ešte-bežiacu odpoveď na kandidátov
     setPanelOpen(false);
     setActionError("");
   }, []);

@@ -1,4 +1,5 @@
-import { useCallback, useRef, useState, type SyntheticEvent, type JSX } from "react";
+import { useCallback, useState, type SyntheticEvent, type JSX } from "react";
+import { useStaleResponseGuard } from "../useStaleResponseGuard.js";
 import type { Me } from "../api.js";
 import { formatSkDateTime } from "../formatDate.js";
 import { validateSupplierLinkUrl } from "../ordersApi.js";
@@ -83,23 +84,23 @@ export function SearchSection({
   const [actionError, setActionError] = useState("");
   const [busy, setBusy] = useState(false);
 
-  // Len najnovšia požiadavka smie zapísať výsledok — rovnaký vzor ako
-  // `CatalogPage.tsx`/`SupplierLinksSection.tsx`'s `searchSeq`.
-  const searchSeq = useRef(0);
-  const detailSeq = useRef(0);
+  // Len najnovšia požiadavka smie zapísať výsledok (zdieľaný `useStaleResponseGuard`,
+  // issue 523) — dva nezávislé fetche (vyhľadávanie + detail), teda dva guardy.
+  const searchGuard = useStaleResponseGuard();
+  const detailGuard = useStaleResponseGuard();
 
   const search = useCallback(
     (q: string) => {
-      const seq = (searchSeq.current += 1);
+      const seq = searchGuard.begin();
       setSearchError("");
       globalSearch(q)
         .then((r) => {
-          if (seq !== searchSeq.current) return;
+          if (!searchGuard.isLatest(seq)) return;
           setResult(r.products);
           setSearched(true);
         })
         .catch((err: unknown) => {
-          if (seq !== searchSeq.current) return;
+          if (!searchGuard.isLatest(seq)) return;
           setSearched(true);
           if (err instanceof SearchUnauthorizedError) {
             onSessionExpired();
@@ -125,15 +126,15 @@ export function SearchSection({
       setDetailError("");
       setEditingLink(false);
       setActionError("");
-      const seq = (detailSeq.current += 1);
+      const seq = detailGuard.begin();
       fetchProductDetail(productKey)
         .then((d) => {
-          if (seq !== detailSeq.current) return;
+          if (!detailGuard.isLatest(seq)) return;
           setDetail(d);
           setDetailLoaded(true);
         })
         .catch((err: unknown) => {
-          if (seq !== detailSeq.current) return;
+          if (!detailGuard.isLatest(seq)) return;
           setDetailLoaded(true);
           if (err instanceof SearchUnauthorizedError) {
             onSessionExpired();
