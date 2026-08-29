@@ -142,6 +142,7 @@ it("zastaraná odpoveď staršieho filtra neprepíše prázdny výsledok najnov�
   });
   await act(async () => {
     deferreds[0]?.({ rows: [RIADOK, DUPLICITA], summary: SUHRN, period: "30" });
+    await Promise.resolve();
   });
   expect(screen.queryByTestId("mail-log-table")).not.toBeNull();
 
@@ -155,12 +156,14 @@ it("zastaraná odpoveď staršieho filtra neprepíše prázdny výsledok najnov�
   // Novší (status=failed) sa vráti PRVÝ → prázdny stav.
   await act(async () => {
     deferreds[2]?.({ rows: [], summary: SUHRN, period: "30" });
+    await Promise.resolve();
   });
   expect(screen.queryByTestId("mail-log-empty")).not.toBeNull();
 
   // Starší (zmena zdroja) sa vráti NESKÔR s riadkami — zastaraný, NESMIE prepísať.
   await act(async () => {
     deferreds[1]?.({ rows: [RIADOK, DUPLICITA], summary: SUHRN, period: "30" });
+    await Promise.resolve();
   });
   expect(screen.queryByTestId("mail-log-empty")).not.toBeNull();
   expect(screen.queryByTestId("mail-log-table")).toBeNull();

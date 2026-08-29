@@ -92,9 +92,7 @@ test("manažér filtruje podľa dodávateľa, vidí súhrn ostáva vybaviť a sk
   // issue 187: objednaná veľkosť musí byť na riadku VIDIEŤ — obsluha podľa
   // nej objednáva u dodávateľa. Fixtúrový variant "4859/46" má veľkosť "46"
   // (`sizeLabel` sa odvodzuje z časti kódu za lomkou, `map-row.ts`).
-  await expect(
-    page.getByTestId("supplier-DODAVATEL-TEST-1").locator(".ord-size"),
-  ).toHaveText("46");
+  await expect(page.getByTestId("supplier-DODAVATEL-TEST-1").locator(".ord-size")).toHaveText("46");
 
   // Klik na "(bez dodávateľa)" prepne filter na druhého dodávateľa.
   await page.getByTestId("supplier-chip-(bez dodávateľa)").click();
