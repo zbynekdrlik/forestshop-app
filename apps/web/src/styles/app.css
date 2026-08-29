@@ -807,7 +807,10 @@ tr:last-child td {
 }
 .next-calendar-event-row {
   margin: 0;
-  font-size: var(--fs-text-xs);
+  /* issue 520: Štěpán má problém text prečítať — o 1px väčšie písmo.
+     --fs-text-sm (13px) je presne --fs-text-xs (12px) + 1px, existujúci
+     token, žiadna nová hodnota (`.claude/rules/frontend-design.md`). */
+  font-size: var(--fs-text-sm);
   line-height: 1.2;
 }
 
