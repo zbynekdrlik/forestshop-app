@@ -1,5 +1,6 @@
-import { Fragment, useCallback, useEffect, useRef, useState, type JSX } from "react";
+import { Fragment, useCallback, useEffect, useState, type JSX } from "react";
 import { formatSkDateTime } from "../formatDate.js";
+import { useStaleResponseGuard } from "../useStaleResponseGuard.js";
 import {
   fetchMailLog,
   MailLogUnauthorizedError,
@@ -50,24 +51,24 @@ export function MailLogSection({ onSessionExpired }: { readonly onSessionExpired
   // rozbil hustú tabuľku), obsluha si ho vyžiada per riadok.
   const [expandedBodyIds, setExpandedBodyIds] = useState<ReadonlySet<string>>(new Set());
 
-  // issue 521: stale-response guard (rovnaký vzor ako `ThemeColorPicker`/
-  // `SupplierLinksSection`, issues 251/254/264). Dve rýchle zmeny filtra za
+  // issue 521/523: stale-response guard cez zdieľaný `useStaleResponseGuard`
+  // (issues 251/254/264). Dve rýchle zmeny filtra za
   // sebou vystrelia dva fetche naraz; keď sa STARŠÍ vráti AŽ PO novom, jeho
   // (už zastaraný) výsledok NESMIE prepísať to, čo najnovší filter zobrazil —
   // inak sa napr. `mail-log-empty` (status=failed) prepíše späť na tabuľku.
-  const fetchSeqRef = useRef(0);
+  const guard = useStaleResponseGuard();
 
   const load = useCallback(() => {
-    const seq = ++fetchSeqRef.current;
+    const seq = guard.begin();
     fetchMailLog({ source, status, period })
       .then((list) => {
-        if (fetchSeqRef.current !== seq) return; // novší filter už doletel — túto zastaranú odpoveď zahoď
+        if (!guard.isLatest(seq)) return; // novší filter už doletel — túto zastaranú odpoveď zahoď
         setData(list);
         setError("");
         setLoaded(true);
       })
       .catch((err: unknown) => {
-        if (fetchSeqRef.current !== seq) return;
+        if (!guard.isLatest(seq)) return;
         setLoaded(true);
         if (err instanceof MailLogUnauthorizedError) {
           onSessionExpired();

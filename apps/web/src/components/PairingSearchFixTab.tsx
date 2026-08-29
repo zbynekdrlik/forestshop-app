@@ -1,4 +1,5 @@
-import { useCallback, useRef, useState, type SyntheticEvent, type JSX } from "react";
+import { useCallback, useState, type SyntheticEvent, type JSX } from "react";
+import { useStaleResponseGuard } from "../useStaleResponseGuard.js";
 import type { Me } from "../api.js";
 import { fetchPairingReviewItem, PairingReviewUnauthorizedError, type PairingReviewItem } from "../pairingReviewApi.js";
 import { globalSearch, SearchUnauthorizedError, type ProductSearchHit } from "../searchApi.js";
@@ -45,26 +46,26 @@ export function PairingSearchFixTab({
   const [hits, setHits] = useState<readonly ProductSearchHit[]>([]);
   const [searched, setSearched] = useState(false);
   const [searchError, setSearchError] = useState("");
-  const searchSeq = useRef(0);
+  const searchGuard = useStaleResponseGuard();
 
   const [selectedProductKey, setSelectedProductKey] = useState<string | null>(null);
   const [item, setItem] = useState<PairingReviewItem | null>(null);
   const [itemLoaded, setItemLoaded] = useState(false);
   const [itemError, setItemError] = useState("");
-  const itemSeq = useRef(0);
+  const itemGuard = useStaleResponseGuard();
 
   const search = useCallback(
     (q: string) => {
-      const seq = (searchSeq.current += 1);
+      const seq = searchGuard.begin();
       setSearchError("");
       globalSearch(q)
         .then((r) => {
-          if (seq !== searchSeq.current) return;
+          if (!searchGuard.isLatest(seq)) return;
           setHits(dedupeByProductKey(r.products));
           setSearched(true);
         })
         .catch((err: unknown) => {
-          if (seq !== searchSeq.current) return;
+          if (!searchGuard.isLatest(seq)) return;
           setSearched(true);
           if (err instanceof SearchUnauthorizedError) {
             onSessionExpired();
@@ -88,15 +89,15 @@ export function PairingSearchFixTab({
       setItem(null);
       setItemLoaded(false);
       setItemError("");
-      const seq = (itemSeq.current += 1);
+      const seq = itemGuard.begin();
       fetchPairingReviewItem(productKey)
         .then((result) => {
-          if (seq !== itemSeq.current) return;
+          if (!itemGuard.isLatest(seq)) return;
           setItem(result);
           setItemLoaded(true);
         })
         .catch((err: unknown) => {
-          if (seq !== itemSeq.current) return;
+          if (!itemGuard.isLatest(seq)) return;
           setItemLoaded(true);
           if (err instanceof PairingReviewUnauthorizedError) {
             onSessionExpired();

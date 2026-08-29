@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type SyntheticEvent, type JSX } from "react";
+import { useStaleResponseGuard } from "../useStaleResponseGuard.js";
 import type { Me } from "../api.js";
 import {
   confirmPairing,
@@ -58,10 +59,10 @@ export function PairingSection({
   const [manuallyOpenedGroups, setManuallyOpenedGroups] = useState<ReadonlySet<string>>(new Set());
   const [actionError, setActionError] = useState("");
 
-  // Len najnovšia požiadavka smie zapísať výsledok — rovnaký dôvod ako
-  // `CatalogPage`'s `searchSeq` (neindexovaný ILIKE nad celým katalógom môže
-  // staršiu, širšiu odpoveď doručiť neskôr než novšiu, užšiu).
-  const searchSeq = useRef(0);
+  // Len najnovšia požiadavka smie zapísať výsledok (zdieľaný `useStaleResponseGuard`,
+  // issue 523) — neindexovaný ILIKE nad celým katalógom môže staršiu, širšiu
+  // odpoveď doručiť neskôr než novšiu, užšiu.
+  const guard = useStaleResponseGuard();
 
   // issue 255 (súrodenec issue 251's finding 3 — tento súbor je HIDDEN_TABS
   // komponent, `nav.ts`, odmountuje sa pri prepnutí záložky): rovnaký vzor
@@ -98,7 +99,7 @@ export function PairingSection({
 
   const search = useCallback(
     (q: string, s: PairingState) => {
-      const seq = (searchSeq.current += 1);
+      const seq = guard.begin();
       setSearchError("");
       searchedQueryRef.current = q;
       searchedStateRef.current = s;
@@ -106,14 +107,14 @@ export function PairingSection({
       searchPairings({ q, state: s, page: 1 })
         .then((result) => {
           if (!mountedRef.current) return; // odmountované skôr, než odpoveď doletela
-          if (seq !== searchSeq.current) return; // medzitým prišla novšia požiadavka
+          if (!guard.isLatest(seq)) return; // medzitým prišla novšia požiadavka
           setItems(result.items);
           setTotal(result.total);
           setSearchLoaded(true);
         })
         .catch((err: unknown) => {
           if (!mountedRef.current) return;
-          if (seq !== searchSeq.current) return;
+          if (!guard.isLatest(seq)) return;
           setSearchLoaded(true);
           if (err instanceof PairingUnauthorizedError) {
             onSessionExpired();
@@ -153,7 +154,7 @@ export function PairingSection({
   // (typicky v okamihu kliknutia). Ak sa medzitým (kým čaká na serverovú
   // odpoveď) zmení filter/dopyt, `refetch()` volaný z neskoro doručeného
   // `.then()` by aj tak zavolal `search` so STARÝMI hodnotami — a keďže
-  // `searchSeq` prideľuje poradové číslo pri ZAVOLANÍ (nie pri odpovedi),
+  // `guard.begin()` (`useStaleResponseGuard`) prideľuje poradové číslo pri ZAVOLANÍ (nie pri odpovedi),
   // takýto neskorý-no-zastaraný refetch dostane VYŠŠIE číslo než medzitým
   // spustené korektné vyhľadanie a jeho výsledok by ho ticho prepísal.
   // `queryRef`/`stateRef` sa preto syncujú PRIAMO V TELE komponentu (počas

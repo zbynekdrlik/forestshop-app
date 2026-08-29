@@ -1,4 +1,5 @@
-import { useCallback, useRef, useState, type JSX } from "react";
+import { useCallback, useState, type JSX } from "react";
+import { useStaleResponseGuard } from "../useStaleResponseGuard.js";
 import { globalSearch, SearchUnauthorizedError, type ProductSearchHit } from "../searchApi.js";
 
 // issue 410: pripínanie produktu na zápis "Objednávky predajne" — vyhľadáva
@@ -32,23 +33,22 @@ export function FloorNoteProductSearch({
   // môže mať dočasne prázdny), pri pripnutí sa `clampQuantity`-uje na ≥ 1.
   const [quantities, setQuantities] = useState<Record<string, string>>({});
 
-  // Len najnovšia požiadavka smie zapísať výsledok — rovnaký vzor ako
-  // `SearchSection.tsx`'s `searchSeq`.
-  const searchSeq = useRef(0);
+  // Len najnovšia požiadavka smie zapísať výsledok (zdieľaný `useStaleResponseGuard`, issue 523).
+  const guard = useStaleResponseGuard();
 
   const search = useCallback(() => {
     const q = query.trim();
     if (q === "") return;
-    const seq = (searchSeq.current += 1);
+    const seq = guard.begin();
     setError("");
     globalSearch(q)
       .then((r) => {
-        if (seq !== searchSeq.current) return;
+        if (!guard.isLatest(seq)) return;
         setResult(r.products);
         setSearched(true);
       })
       .catch((err: unknown) => {
-        if (seq !== searchSeq.current) return;
+        if (!guard.isLatest(seq)) return;
         setSearched(true);
         if (err instanceof SearchUnauthorizedError) {
           onSessionExpired();

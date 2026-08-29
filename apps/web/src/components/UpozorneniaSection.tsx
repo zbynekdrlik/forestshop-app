@@ -17,6 +17,7 @@ import {
   UpozorneniaUnauthorizedError,
   type UpozornenieRow,
 } from "../upozorneniaApi.js";
+import { useStaleResponseGuard } from "../useStaleResponseGuard.js";
 
 // issue 267: rovnaké dve role, ktoré appka všade inde vyžaduje na zápis
 // (`requireRole("admin", "manazer")`, `upozornenia-routes.ts`) — čítanie
@@ -70,22 +71,22 @@ export function UpozorneniaSection({ role, onSessionExpired }: { readonly role: 
   // žiadnu poistku proti ZASTARANEJ odpovedi — presne tá istá trieda race,
   // akú `.claude/rules/frontend-design.md` rieši "latest ref" vzorom (issue
   // 151/251/264: mikrotaska z PREDCHÁDZAJÚCEHO `load()` volania môže
-  // doraziť AŽ PO novšom a prepísať jeho výsledok zastaraným). `loadSeqRef`
-  // sa inkrementuje na ZAČIATKU každého `load()` volania; oba `.then()` nižšie
-  // sa uplatnia len ak je stále najnovšie.
-  const loadSeqRef = useRef(0);
+  // doraziť AŽ PO novšom a prepísať jeho výsledok zastaraným). Zdieľaný
+  // `useStaleResponseGuard` (issue 523): `guard.begin()` na ZAČIATKU každého
+  // `load()` volania; oba `.then()` nižšie sa uplatnia len ak je stále najnovšie.
+  const guard = useStaleResponseGuard();
   // issue 440: emoji picker vkladá na pozíciu kurzora príslušného poľa formulára.
   const draftTitleRef = useRef<HTMLInputElement>(null);
   const draftDetailsRef = useRef<HTMLTextAreaElement>(null);
 
   const load = useCallback(() => {
-    const seq = ++loadSeqRef.current;
+    const seq = guard.begin();
     // issue 283 (Vybavené záložka nahradila checkbox "aj vybavené"): tento
     // zoznam už NIKDY nesmie ukázať vyriešenú kartu — `includeResolved` je
     // preto vždy `false`, nie ovládané žiadnym filtrom.
     fetchUpozornenia({ includeResolved: false, includePostponed })
       .then((data) => {
-        if (loadSeqRef.current !== seq) return;
+        if (!guard.isLatest(seq)) return;
         setRows(data);
         if (data.length > 0) return;
         // Zoznam je prázdny pod AKTUÁLNYMI (možno užšími) filtrami — treba
@@ -94,14 +95,14 @@ export function UpozorneniaSection({ role, onSessionExpired }: { readonly role: 
         // odložené).
         fetchUpozornenia({ includeResolved: true, includePostponed: true })
           .then((all) => {
-            if (loadSeqRef.current === seq) setEmptyMessage(classifyEmptyMessage(all));
+            if (guard.isLatest(seq)) setEmptyMessage(classifyEmptyMessage(all));
           })
           .catch(() => {
-            if (loadSeqRef.current === seq) setEmptyMessage("Žiadne upozornenia v tomto zobrazení.");
+            if (guard.isLatest(seq)) setEmptyMessage("Žiadne upozornenia v tomto zobrazení.");
           });
       })
       .catch((err: unknown) => {
-        if (loadSeqRef.current !== seq) return;
+        if (!guard.isLatest(seq)) return;
         if (err instanceof UpozorneniaUnauthorizedError) {
           onSessionExpired();
           return;

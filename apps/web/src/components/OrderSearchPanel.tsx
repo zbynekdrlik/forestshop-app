@@ -1,4 +1,5 @@
-import { useCallback, useRef, useState, type SyntheticEvent, type JSX } from "react";
+import { useCallback, useState, type SyntheticEvent, type JSX } from "react";
+import { useStaleResponseGuard } from "../useStaleResponseGuard.js";
 import { globalSearch, SearchUnauthorizedError, type OrderSearchHit } from "../searchApi.js";
 
 // issue 289: "Eshop → Vyhľadať" — druhé, NEZÁVISLÉ pole "Objednávka" (vlastný
@@ -21,22 +22,21 @@ export function OrderSearchPanel({
   const [searched, setSearched] = useState(false);
   const [searchError, setSearchError] = useState("");
 
-  // Len najnovšia požiadavka smie zapísať výsledok — rovnaký vzor ako
-  // `SearchSection.tsx`'s `searchSeq`.
-  const searchSeq = useRef(0);
+  // Len najnovšia požiadavka smie zapísať výsledok (zdieľaný `useStaleResponseGuard`, issue 523).
+  const guard = useStaleResponseGuard();
 
   const search = useCallback(
     (q: string) => {
-      const seq = (searchSeq.current += 1);
+      const seq = guard.begin();
       setSearchError("");
       globalSearch(q)
         .then((r) => {
-          if (seq !== searchSeq.current) return;
+          if (!guard.isLatest(seq)) return;
           setResult(r.orders);
           setSearched(true);
         })
         .catch((err: unknown) => {
-          if (seq !== searchSeq.current) return;
+          if (!guard.isLatest(seq)) return;
           setSearched(true);
           if (err instanceof SearchUnauthorizedError) {
             onSessionExpired();
