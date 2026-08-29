@@ -49,10 +49,15 @@ test("predajňový produkt sa objaví v Na objednanie, dá sa objednať, zápis 
   // 🛍️ odkaz na mieste čísla objednávky vedie na zápis v „Objednávky predajňa".
   await expect(page.getByTestId(`floor-order-link-${noteId}-E2E-PREDAJNA-1`)).toHaveAttribute("href", "?tab=floor-orders");
 
-  // Označiť predajňový riadok ako objednaný.
+  // Označiť predajňový riadok ako objednaný. issue 521: `.click()` + neskoršie
+  // `expect().toBeChecked()`, NIKDY `.check()` — checkboxov `onChange` robí ASYNC
+  // serverový zápis a `.check()` si stav overí OKAMŽITE po kliku, takže pod
+  // 2-worker CI záťažou prehrá závod s optimistickým update-om ("Clicking the
+  // checkbox did not change its state"). Zdokumentovaný vzor `.claude/rules/testing.md`
+  // (issue 60) — `toBeChecked()` nižšie auto-retryuje, kým sa zápis potvrdí.
   const checkbox = page.getByTestId(`floor-ordered-checkbox-${noteId}-E2E-PREDAJNA-1`);
   await expect(checkbox).not.toBeChecked();
-  await checkbox.check();
+  await checkbox.click();
   await expect(checkbox).toBeChecked();
   await expect(boardRow).toHaveClass(/ordered/);
 

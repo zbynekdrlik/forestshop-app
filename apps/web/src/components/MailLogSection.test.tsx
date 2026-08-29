@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { MailLogSection } from "./MailLogSection.js";
 
@@ -118,6 +118,54 @@ it("zmena obdobia znovu načíta prehľad s tým obdobím", async () => {
 it("prázdny prehľad povie, že sa nič neposielalo — nie prázdnu tabuľku", async () => {
   renderSection([]);
   await screen.findByTestId("mail-log-empty");
+  expect(screen.queryByTestId("mail-log-table")).toBeNull();
+});
+
+// issue 521: dve rýchle zmeny filtra za sebou vystrelia DVA fetche naraz; keď
+// sa STARŠÍ (širší) fetch vráti AŽ PO novom (užšom, prázdnom), NESMIE prepísať
+// prázdny výsledok najnovšieho filtra. Rovnaký stale-response guard ako issues
+// 251/254/264. Bez guardu tabuľka „ožije" späť namiesto prázdneho stavu — presne
+// CI flake `mail-log.spec.ts:54` (`mail-log-empty` sa nikdy nevykreslí).
+it("zastaraná odpoveď staršieho filtra neprepíše prázdny výsledok najnovšieho (issue 521)", async () => {
+  const deferreds: Array<(value: unknown) => void> = [];
+  fetchMailLog.mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        deferreds.push(resolve);
+      }),
+  );
+  render(<MailLogSection onSessionExpired={vi.fn()} />);
+
+  // Prvé (počiatočné) načítanie vráti riadky → tabuľka + filtre sa vykreslia.
+  await waitFor(() => {
+    expect(deferreds).toHaveLength(1);
+  });
+  await act(async () => {
+    deferreds[0]?.({ rows: [RIADOK, DUPLICITA], summary: SUHRN, period: "30" });
+    await Promise.resolve();
+  });
+  expect(screen.queryByTestId("mail-log-table")).not.toBeNull();
+
+  // Dve rýchle zmeny filtra za sebou → DVA fetche naraz v lete.
+  fireEvent.change(screen.getByTestId("mail-log-filter-source"), { target: { value: "order_reminder" } }); // starší → riadky
+  fireEvent.change(screen.getByTestId("mail-log-filter-status"), { target: { value: "failed" } }); // novší → prázdno
+  await waitFor(() => {
+    expect(deferreds).toHaveLength(3);
+  });
+
+  // Novší (status=failed) sa vráti PRVÝ → prázdny stav.
+  await act(async () => {
+    deferreds[2]?.({ rows: [], summary: SUHRN, period: "30" });
+    await Promise.resolve();
+  });
+  expect(screen.queryByTestId("mail-log-empty")).not.toBeNull();
+
+  // Starší (zmena zdroja) sa vráti NESKÔR s riadkami — zastaraný, NESMIE prepísať.
+  await act(async () => {
+    deferreds[1]?.({ rows: [RIADOK, DUPLICITA], summary: SUHRN, period: "30" });
+    await Promise.resolve();
+  });
+  expect(screen.queryByTestId("mail-log-empty")).not.toBeNull();
   expect(screen.queryByTestId("mail-log-table")).toBeNull();
 });
 

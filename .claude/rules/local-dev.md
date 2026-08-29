@@ -250,3 +250,21 @@ paths:
   UPROSTRED práce: over `git log --oneline A..B` NAJPRV (mal by ukázať LEN
   commity tohto tiketu), a ak zoznam obsahuje cudzie SHA, posuň `A` na
   merge commit samotný.
+- **Cielený lokálny e2e beh na `forestshop-dev` môže zlyhať na
+  `http://127.0.0.1:3000/api/version is already used` — port 3000 na tomto
+  ZDIEĽANOM boxe drží CUDZÍ (nie-forestshop) proces, nie appka (issue 521;
+  prod appka je v kontajneri, publikuje 8901→3000, nie host:3000).** Cudzí
+  proces sa NEZABÍJA (`no-destructive-remote-actions.md`). `playwright.config.ts`
+  má porty 3000 (API) a 5173 (vite) NATVRDO. API port je env-prepínateľný
+  (`env.PORT`, default 3000), ALE **vite proxy cieľ je v `vite.config.ts`
+  NATVRDO (`proxy: { "/api": "http://127.0.0.1:3000" }`)**, takže presun API
+  portu vyžaduje aj DOČASNÚ zmenu `vite.config.ts`. Postup (overené #521):
+  DOČASNE (necommitované) `sed -i 's|3000|3001|'` v `vite.config.ts` (proxy)
+  + v `playwright.config.ts` (webServer `url` + do `env` pridaj `PORT: "3001"`),
+  spusti proti VLASTNEJ izolovanej pg (recept vyššie, issue 403), potom
+  `git checkout -- apps/web/vite.config.ts apps/web/playwright.config.ts`
+  (revert PRED akýmkoľvek `git add`). Vite na 5173 ostáva (býva voľný — over
+  `ss -ltn`). Cielené spustenie LEN vybraných spec-ov: `DATABASE_URL=...
+  pnpm --filter @forestshop/web exec playwright test tests/e2e/<a>.spec.ts
+  tests/e2e/<b>.spec.ts` (`exec` + priame cesty, nie `e2e --`, ktoré spustí
+  všetko — `.claude/rules/testing.md`).
