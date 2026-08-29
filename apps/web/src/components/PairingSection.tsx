@@ -154,7 +154,7 @@ export function PairingSection({
   // (typicky v okamihu kliknutia). Ak sa medzitým (kým čaká na serverovú
   // odpoveď) zmení filter/dopyt, `refetch()` volaný z neskoro doručeného
   // `.then()` by aj tak zavolal `search` so STARÝMI hodnotami — a keďže
-  // `searchSeq` prideľuje poradové číslo pri ZAVOLANÍ (nie pri odpovedi),
+  // `guard.begin()` (`useStaleResponseGuard`) prideľuje poradové číslo pri ZAVOLANÍ (nie pri odpovedi),
   // takýto neskorý-no-zastaraný refetch dostane VYŠŠIE číslo než medzitým
   // spustené korektné vyhľadanie a jeho výsledok by ho ticho prepísal.
   // `queryRef`/`stateRef` sa preto syncujú PRIAMO V TELE komponentu (počas
