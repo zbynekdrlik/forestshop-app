@@ -1530,3 +1530,26 @@ paths:
   accessible name — `getByRole` kliky s NEexact menom v e2e ostávajú bezpečné,
   exact-name kliky by sa rozbili. Pri pridávaní badge na existujúci tab netreba
   meniť nav counts logiku, len over e2e selektory tabu.
+- **Zdieľaný "stale-response guard" (ochrana pred prepísaním novšieho výsledku
+  ZASTARANOU odpoveďou staršieho fetchu — "latest ref" trieda vyššie, issue
+  151/251/254/264) je od issue 523 hook `apps/web/src/useStaleResponseGuard.ts`
+  — KAŽDÝ ĎALŠÍ komponent s filter/parametrom-riadeným fetchom ho MÁ POUŽIŤ,
+  nie znova vynachádzať inline `useRef(0)` + `const seq = ++ref.current` +
+  `if (seq !== ref.current) return` vzor** (rovnaká "použi zdieľaný mechanizmus,
+  nevynachádzaj" disciplína ako `useLoadMore.ts` pre stránkovanie). API:
+  `guard.begin()` (nový fetch → vráti seq, znehodnotí staršie prebiehajúce),
+  `guard.isLatest(seq)` (odpoveď sa smie uplatniť — použiteľné aj v `.then`,
+  `.catch`, `.finally` AJ vo vnorenom reťazci ako `UpozorneniaSection`'s
+  classify dopyt), `guard.cancel()` (zahoď prebiehajúci fetch pri zavretí
+  dialógu/panela, bez začatia nového — napr. `useCustomerContactMail.close()`,
+  `PairingReviewCard.closePanel()`). **Komponent s DVOMA nezávislými fetchmi
+  zavolá hook DVAKRÁT** (dva samostatné seq čítače — `SearchSection` search+detail,
+  `PairingSearchFixTab` search+item). Metódy sú `useMemo([])`-STABILNÉ (nad
+  `useRef`), takže sa nemusia dávať do `useCallback`/`useEffect` dependency polí
+  a nikdy nerozbijú memoizáciu volajúceho (repo nemá `react-hooks/exhaustive-deps`,
+  takže nestabilita by bola TICHÝ runtime bug). #523 zmigrovalo 16 inline výskytov
+  v 14 súboroch bez zmeny správania. **NEMIGRUJ ne-guard refy:** `useLoadMore`'s
+  paging `genRef` (vlastný hook), live-value `queryRef`/`stateRef`/`searchedQueryRef`
+  (synchronizované v render tele — iný účel), `mountedRef` (StrictMode unmount
+  guard, ostáva vedľa guardu v kombinovanom `if (!mountedRef.current || !guard.isLatest(seq))`),
+  `EmojiPickerButton`'s `rafRef`.
