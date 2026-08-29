@@ -144,3 +144,19 @@ paths:
   udalosťami (dayLimit 2 → 4 udalosti) — výsledky, ktoré `.slice(0,limit)`
   nedokáže vyrobiť; testy len s 1 udalosťou/deň prejdú aj na starom kóde
   (nedokazujú nič nové).
+- **Issue 520 (Štěpán: text kalendárového upozornenia príliš malý, +1px):
+  `--fs-text-xs` (12px) a `--fs-text-sm` (13px, `app.css` §1 typografia)
+  sú NÁHODOU presne 1px od seba** — `.next-calendar-event-row`'s
+  `font-size: var(--fs-text-xs)` (issue 382's pôvodná voľba, zdôvodnená
+  vyššie v tomto súbore výškou karty) sa tak dalo zväčšiť o presne 1px len
+  prepnutím na susedný existujúci token, bez zavedenia novej surovej
+  hodnoty (`.claude/rules/frontend-design.md`'s "reuse tokens" pravidlo).
+  Overené naživo (Playwright, throwaway skript proti lokálnemu dev serveru
+  s prepichnutým `window.fetch` na `/api/upozornenia/next-event` —
+  `.next-calendar-event-card`/-row sa dá takto rendrovať bez reálneho
+  `GOOGLE_CALENDAR_ICS_URL`): `getComputedStyle().fontSize` 12px pred,
+  13px po. Pri KAŽDOM ĎALŠOM "zväčši/zmenši písmo o N px" tickete v tejto
+  appke: NAJPRV skontroluj, či dva susedné `--fs-text-*` tokeny (`app.css`
+  §1) už nie sú presne N px od seba, než zavedieš `font-size: Npx`/nový
+  token — nie je to zaručené (napr. `-sm`→`-base` je len 0.75px), ale keď
+  sedí, je to najlacnejšia a najkonzistentnejšia oprava.
