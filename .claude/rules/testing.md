@@ -870,3 +870,22 @@ paths:
   badge `nav-badge-ulohy` už dnes správne overuje len `/^\d+$/`, nie presné
   číslo — zdieľaný počet naprieč účtami). Pri prevode akéhokoľvek ďalšieho
   per-user zoznamu na zdieľaný over toto ako prvé.
+- **Na obrazovke „Na objednanie" je predajňový (floor) riadok súbežného spec-u
+  FLOOR-MUTOVATEĽNÝ NA DVOCH miestach, nielen v čipe — aj v `orders-summary`
+  „N z M" (issue 521).** `OrdersToolbar.tsx` pridáva floor KUSY do total AJ
+  remaining súhrnu (`baseSummary` na l. 36 je iba order riadky, ale `summary` na
+  l. 39 = `baseSummary + floorTotalQty/floorRemainingQty`), a floor riadok padne
+  do skupiny podľa `effectiveSupplier` pripnutého produktu (E2E-PREDAJNA-1/2
+  nemajú `supplier` → „(bez dodávateľa)"). Takže pod paralelnými workermi (CI
+  `workers: undefined`, keď `floor-orders-board`/`floor-notes` drží NEVYBAVENÝ
+  pripnutý zápis) sú NESTÁLE: čip „Všetci (N)", čip „(bez dodávateľa) (N)", a
+  `orders-summary` „ostáva vybaviť N z M" globálne aj po kliku na „(bez
+  dodávateľa)". **Trap:** regexnúť LEN čip a nechať súhrn exact len PRESUNIE flake
+  na súhrn (predtým padal čip PRVÝ a maskoval ho) — regexuj OBE. FLOOR-IMMUNE (a
+  teda smú ostať exact): per-dodávateľské čipy dodávateľov BEZ floor riadkov
+  (DODAVATEL-TEST-1/2), súhrn ZÚŽENÝ na taký čip (DODAVATEL-TEST-1: „0 z 2 · Čaká
+  sa 2"), Σ chip-y (`computeVariantTotals` nad `group.lines`), a ROZPIS
+  „Čaká sa"/„Nedostupné" (iba order riadky, do neho sa floor nemieša) — ten v
+  regexe súhrnu drž exact. Pri KAŽDEJ ďalšej e2e asercii nad orders boardom over,
+  či hodnota nesie floor kusy (čip N, súhrn total/remaining) — ak áno, je
+  floor-mutovateľná; exact drž len na skupine bez floor riadkov alebo na rozpise.

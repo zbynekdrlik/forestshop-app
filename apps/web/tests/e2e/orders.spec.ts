@@ -45,10 +45,27 @@ test("manažér filtruje podľa dodávateľa, vidí súhrn ostáva vybaviť a sk
   // 5, "Všetci" 8, a súhrn dostal novú vetvu "Nedostupné 1".
   // issue 443: fixtúra pridala DRUHÚ nedostupnú objednávku "9099" (znova "40287"
   // bez dodávateľa) — aby "Nedostupné tovary" mala skupinu s 2 objednávkami pre
-  // súčtový odznak — takže "(bez dodávateľa)" má 6, "Všetci" 9 a "Nedostupné 2".
-  await expect(page.getByTestId("supplier-chip-all")).toHaveText("Všetci (9)");
+  // súčtový odznak — takže "(bez dodávateľa)" má 6 objednávkových riadkov,
+  // "Všetci" 9 a "Nedostupné 2".
+  // issue 521: čip "Všetci" a "(bez dodávateľa)" počítajú `objednávkové_riadky +
+  // predajňové (floor) riadky` (`OrdersToolbar.tsx`) — a súbežný spec
+  // (`floor-orders-board.spec`/`floor-notes.spec`) môže mať v CI (`workers:
+  // undefined`) v tom istom čase NEVYBAVENÝ floor_note s pripnutým E2E-PREDAJNA
+  // produktom (bez dodávateľa → padá do "(bez dodávateľa)"), čo tieto DVA počty
+  // prechodne o 1 zvýši. Preto sa asertuje len FORMÁT (regex), nie presné číslo
+  // (vzor issue 445/185 pre zdieľanú/súbežne-mutovateľnú hodnotu). POZOR: aj
+  // `orders-summary` "ostáva vybaviť N z M" nižšie SČÍTAVA floor KUSY do
+  // total/remaining (`OrdersToolbar.tsx:39`), takže je rovnako floor-mutovateľné
+  // a tiež sa regexuje. FLOOR-IMMUNE (a preto exact) ostáva: per-dodávateľské
+  // čipy DODAVATEL-TEST-1 (1) a DODAVATEL-TEST-2 (2) (floor riadky nikdy
+  // nepatria reálnemu dodávateľovi), súhrn zúžený na DODAVATEL-TEST-1
+  // ("0 z 2 · Čaká sa 2" — jeho skupina nemá floor riadky), a rozpis
+  // "Čaká sa"/"Nedostupné" (`OrdersToolbar.tsx:36` baseSummary = LEN order riadky,
+  // floor sa doň nemieša), ktorý v regexoch nižšie ostáva exact.
+  await expect(page.getByTestId("supplier-chip-all")).toHaveText(/^Všetci \(\d+\)$/);
   await expect(page.getByTestId("supplier-chip-DODAVATEL-TEST-1")).toHaveText("DODAVATEL-TEST-1 (1)");
-  await expect(page.getByTestId("supplier-chip-(bez dodávateľa)")).toHaveText("(bez dodávateľa) (6)");
+  await expect(page.getByTestId("supplier-chip-DODAVATEL-TEST-2")).toHaveText("DODAVATEL-TEST-2 (2)");
+  await expect(page.getByTestId("supplier-chip-(bez dodávateľa)")).toHaveText(/^\(bez dodávateľa\) \(\d+\)$/);
 
   // issue 452: čipy dodávateľov idú ABECEDNE (case-insensitive, slovenské
   // locale), "Všetci" prvý, "(bez dodávateľa)" naposledy — over skutočné
@@ -66,7 +83,10 @@ test("manažér filtruje podľa dodávateľa, vidí súhrn ostáva vybaviť a sk
   // 278=1, 40287(9008) nedostupne=1, 40287(9099) nedostupne=1 (issue 443) →
   // total 13, z toho nevybavené (všetky okrem caka_sa aj nedostupne)
   // 1+3+2+1+1+1 = 9, "Čaká sa" 2 (caka_sa kus), "Nedostupné" 2.
-  await expect(summary).toHaveText("Ostáva vybaviť 9 z 13 · Čaká sa 2 · Nedostupné 2");
+  // issue 521: "N z M" je floor-mutovateľné (súbežný E2E-PREDAJNA floor riadok
+  // pridá svoje kusy do total aj remaining) → regex; "Čaká sa 2 · Nedostupné 2"
+  // (iba order riadky) ostáva exact.
+  await expect(summary).toHaveText(/^Ostáva vybaviť \d+ z \d+ · Čaká sa 2 · Nedostupné 2$/);
 
   // Klik na chip DODAVATEL-TEST-1 zúži zoznam len na jeho skupinu.
   await page.getByTestId("supplier-chip-DODAVATEL-TEST-1").click();
@@ -79,19 +99,19 @@ test("manažér filtruje podľa dodávateľa, vidí súhrn ostáva vybaviť a sk
   // issue 187: objednaná veľkosť musí byť na riadku VIDIEŤ — obsluha podľa
   // nej objednáva u dodávateľa. Fixtúrový variant "4859/46" má veľkosť "46"
   // (`sizeLabel` sa odvodzuje z časti kódu za lomkou, `map-row.ts`).
-  await expect(
-    page.getByTestId("supplier-DODAVATEL-TEST-1").locator(".ord-size"),
-  ).toHaveText("46");
+  await expect(page.getByTestId("supplier-DODAVATEL-TEST-1").locator(".ord-size")).toHaveText("46");
 
   // Klik na "(bez dodávateľa)" prepne filter na druhého dodávateľa.
   await page.getByTestId("supplier-chip-(bez dodávateľa)").click();
   await expect(page.getByTestId("supplier-(bez dodávateľa)")).toBeVisible();
   await expect(page.getByTestId("supplier-DODAVATEL-TEST-1")).not.toBeVisible();
   // issue 176/443: dve 'nedostupne' objednávky "9008"+"9099" patria do "(bez
-  // dodávateľa)" (variant "40287" nemá dodávateľa) — celkový počet stúpne na
-  // 6, "Nedostupné 2", "ostáva vybaviť" ostáva 4 (nedostupné riadky sú už
-  // vybavené).
-  await expect(summary).toHaveText("(bez dodávateľa): ostáva vybaviť 4 z 6 · Nedostupné 2");
+  // dodávateľa)" (variant "40287" nemá dodávateľa) — celkový počet order riadkov
+  // je 6, "Nedostupné 2", "ostáva vybaviť" 4 (nedostupné riadky sú už vybavené).
+  // issue 521: "(bez dodávateľa)" je práve tá skupina, do ktorej padajú súbežné
+  // E2E-PREDAJNA floor riadky, takže "N z M" tu je floor-mutovateľné → regex;
+  // "Nedostupné 2" (iba order riadky) ostáva exact.
+  await expect(summary).toHaveText(/^\(bez dodávateľa\): ostáva vybaviť \d+ z \d+ · Nedostupné 2$/);
 
   // Späť na "Všetci" — obe skupiny opäť viditeľné.
   await page.getByTestId("supplier-chip-all").click();
