@@ -5,6 +5,7 @@ import {
   sendCustomerContactMail,
   type CustomerContactPreview,
 } from "./ordersApi.js";
+import { useStaleResponseGuard } from "./useStaleResponseGuard.js";
 
 // issue 500/502: ručný e-mail zákazníkovi z riadku objednávky (@ tlačidlo).
 // Zdieľané JADRO okna náhľadu — používa ho „Na objednanie" (`OrdersSection`) AJ
@@ -38,27 +39,27 @@ export function useCustomerContactMail(onSessionExpired: () => void): CustomerCo
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const triggerRef = useRef<HTMLElement | null>(null);
-  // issue 500 (review): generation guard — keď obsluha klikne @ na riadku A a
-  // rýchlo potom na B, VYHRÁ najnovší klik, nikdy ten, čo dobehne posledný.
-  // Bez neho by okno mohlo ukázať ZLÚ objednávku (frontend-design.md „latest
-  // ref"/`fetchSeqRef` vzor, issue 251/264). Zavretie okno tiež bumpne, takže
-  // dobiehajúci náhľad po zavretí sa ignoruje.
-  const seqRef = useRef(0);
+  // issue 500/523 (review): stale-response guard cez zdieľaný `useStaleResponseGuard`
+  // — keď obsluha klikne @ na riadku A a rýchlo potom na B, VYHRÁ najnovší klik,
+  // nikdy ten, čo dobehne posledný. Bez neho by okno mohlo ukázať ZLÚ objednávku
+  // (frontend-design.md „latest ref" vzor, issue 251/264). `close()` volá
+  // `guard.cancel()`, takže dobiehajúci náhľad po zavretí sa ignoruje.
+  const guard = useStaleResponseGuard();
 
   const open = useCallback(
     (orderCode: string, trigger: HTMLElement | null) => {
-      const seq = ++seqRef.current;
+      const seq = guard.begin();
       triggerRef.current = trigger;
       setError("");
       setBusy(true);
       fetchCustomerContactPreview(orderCode)
         .then((preview) => {
-          if (seq !== seqRef.current) return;
+          if (!guard.isLatest(seq)) return;
           setPending({ orderCode, preview });
           setBody(preview.text);
         })
         .catch((err: unknown) => {
-          if (seq !== seqRef.current) return;
+          if (!guard.isLatest(seq)) return;
           if (err instanceof OrdersUnauthorizedError) {
             onSessionExpired();
             return;
@@ -66,7 +67,7 @@ export function useCustomerContactMail(onSessionExpired: () => void): CustomerCo
           setError(err instanceof Error ? err.message : "Náhľad e-mailu sa nepodarilo načítať.");
         })
         .finally(() => {
-          if (seq === seqRef.current) setBusy(false);
+          if (guard.isLatest(seq)) setBusy(false);
         });
     },
     [onSessionExpired],
@@ -98,7 +99,7 @@ export function useCustomerContactMail(onSessionExpired: () => void): CustomerCo
   const close = useCallback(() => {
     // Zruší prípadný ešte bežiaci náhľad (generation guard) a VYČISTÍ chybu,
     // aby po zavretí okna neostala visieť ako sekciová `role="alert"` hláška.
-    seqRef.current++;
+    guard.cancel();
     setPending(null);
     setError("");
   }, []);
