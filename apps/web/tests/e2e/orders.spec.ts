@@ -45,10 +45,23 @@ test("manažér filtruje podľa dodávateľa, vidí súhrn ostáva vybaviť a sk
   // 5, "Všetci" 8, a súhrn dostal novú vetvu "Nedostupné 1".
   // issue 443: fixtúra pridala DRUHÚ nedostupnú objednávku "9099" (znova "40287"
   // bez dodávateľa) — aby "Nedostupné tovary" mala skupinu s 2 objednávkami pre
-  // súčtový odznak — takže "(bez dodávateľa)" má 6, "Všetci" 9 a "Nedostupné 2".
-  await expect(page.getByTestId("supplier-chip-all")).toHaveText("Všetci (9)");
+  // súčtový odznak — takže "(bez dodávateľa)" má 6 objednávkových riadkov,
+  // "Všetci" 9 a "Nedostupné 2".
+  // issue 521: čip "Všetci" a "(bez dodávateľa)" počítajú `objednávkové_riadky +
+  // predajňové (floor) riadky` (`OrdersToolbar.tsx`) — a súbežný spec
+  // (`floor-orders-board.spec`/`floor-notes.spec`) môže mať v CI (`workers:
+  // undefined`) v tom istom čase NEVYBAVENÝ floor_note s pripnutým E2E-PREDAJNA
+  // produktom (bez dodávateľa → padá do "(bez dodávateľa)"), čo tieto DVA počty
+  // prechodne o 1 zvýši. Preto sa asertuje len FORMÁT (regex), nie presné číslo
+  // (vzor issue 445/185 pre zdieľanú/súbežne-mutovateľnú hodnotu). PRESNÉ
+  // objednávkové počty ostávajú overené FLOOR-IMMUNE: DODAVATEL-TEST-1 (1) a
+  // DODAVATEL-TEST-2 (2) nižšie (floor riadky nikdy nepatria reálnemu
+  // dodávateľovi), a "(bez dodávateľa)" 6 cez `orders-summary` ("ostáva vybaviť
+  // 4 z 6", `summarizeOrderLines` počíta LEN objednávkové riadky).
+  await expect(page.getByTestId("supplier-chip-all")).toHaveText(/^Všetci \(\d+\)$/);
   await expect(page.getByTestId("supplier-chip-DODAVATEL-TEST-1")).toHaveText("DODAVATEL-TEST-1 (1)");
-  await expect(page.getByTestId("supplier-chip-(bez dodávateľa)")).toHaveText("(bez dodávateľa) (6)");
+  await expect(page.getByTestId("supplier-chip-DODAVATEL-TEST-2")).toHaveText("DODAVATEL-TEST-2 (2)");
+  await expect(page.getByTestId("supplier-chip-(bez dodávateľa)")).toHaveText(/^\(bez dodávateľa\) \(\d+\)$/);
 
   // issue 452: čipy dodávateľov idú ABECEDNE (case-insensitive, slovenské
   // locale), "Všetci" prvý, "(bez dodávateľa)" naposledy — over skutočné
