@@ -281,6 +281,20 @@ paths:
   KAŽDÝ ĎALŠÍ pokus "zjednodušiť" `ORDER BY` odkazom na alias z podobného
   agregátu: over PRIAMO integračným testom proti reálnej DB (nie len že
   `tsc`/`eslint` prejdú) — statická kontrola typov toto nezachytí.
+- **Drizzle `or(...conditions)` / `and(...conditions)` vráti `undefined`, keď je
+  pole podmienok PRÁZDNE — a `undefined` sa vnútri obklopujúceho `and(x,
+  undefined)` TICHO ZAHODÍ, takže dynamicky poskladaný `or(...pole)` nad
+  MOŽNO-prázdnym poľom FAILUJE OPEN (celá vetva zmizne).** Issue 526,
+  bezpečnostne-kritická: `and(eq(state,'sellable'), or(...MARKERS.map(...)))` by
+  pri prázdnom `MARKERS` skolaboval na holé `state='sellable'` (zapnutie VŠETKÉHO
+  predajného v „Vypredané → Skladom"). `tsc` to NEZACHYTÍ (drizzle typuje
+  `or(...)` ako `SQL | undefined`, čo je platný argument `and`-u). Fix pri KAŽDOM
+  dynamickom `or(...pole)`/`and(...pole)` v `WHERE`: buď zabezpeč NEPRÁZDNOSŤ na
+  úrovni TYPU (`readonly [T, ...T[]]` tuple na zdrojovom zozname), ALEBO daj
+  fail-safe default na mieste použitia — `or(...) ?? sql\`false\`` (žiadny match)
+  pre pozitívnu podmienku, `and(...) ?? sql\`true\`` pre reštriktívnu. Nikdy
+  nespoliehaj na to, že pole je „vždy neprázdne" — ak ho niekto raz vyprázdni,
+  chyba je tichá a v nebezpečnom smere.
 - **Nová `pgEnum` hodnota (`ALTER TYPE ... ADD VALUE`, napr. `mail_log_source`)
   je NA LOKÁLNEJ Postgres inštancii neviditeľná, kým nebeží `pnpm --filter
   @forestshop/api db:migrate` — integračné testy/`e2e-setup.ts` proti nej
