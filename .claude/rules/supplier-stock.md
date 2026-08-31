@@ -23,6 +23,35 @@ paths:
   `product_visibility = 'visible'` — bez nej by sa zapli. Každá ďalšia
   automatizácia, ktorá niečo ZAPÍNA, potrebuje tú istú podmienku; `state`
   sám nestačí.
+- **Predobjednávka je od issue 526 tiež vstupom do prepnutia, ale kotví sa na
+  `state='sellable'` + TEXTE, nie na novom stave.** Shoptet text „Predobjednávka"
+  necháva `deriveVariantState` na `sellable` (zákazník ho smie objednať), takže
+  katalóg / feed-cross-check / pairing / vyhľadávanie ho vidia presne ako
+  doteraz — vedome sa NEZAVIEDLA nová `variant_state` enum hodnota (bola by to
+  migrácia + owner-viditeľná prekvalifikácia naprieč všetkými konzumentmi
+  `state`, ktorú Štěpán nepýtal). `allRestockCandidates` (`restock/queries.ts`)
+  preto berie `state='out_of_stock' OR (state='sellable' AND
+  lower(availability_text) LIKE '%predobjedn%')`. Marker („predobjedn") žije
+  JEDINE v `availability.ts` (`PREORDER_MARKERS`, vedľa `OUT_OF_STOCK_MARKERS`),
+  odkiaľ ho `restock/queries.ts` importuje — SQL sa nikdy nerozíde s
+  interpretáciou textu. Kotva `state='sellable'` dáva ochrany zadarmo:
+  jednotlivo vypnutá predobjednávková veľkosť je už `discontinued` (`availability.ts`
+  kontroluje vypnutie PRED textom) a `detailOnly` predobjednávku vylúči existujúci
+  `product_visibility='visible'` filter — netreba nič duplikovať. Idempotencia
+  platí rovnako ako pri vypredaných: po prepnutí na „Skladom" je text „Skladom"
+  → LIKE nesedí → variant prestane byť kandidátom. **Feed-guard (issue 226) sa
+  na predobjednávku NEAPLIKUJE** (na rozdiel od vypredanej vetvy, kde feed
+  „in stock" je rozpor s naším `out_of_stock`): predobjednávka je `sellable`,
+  takže feed „in stock" je ZHODA (`compareStateToFeed`), nie rozpor — vylúčiť na
+  ňom kandidáta by ticho zahodilo predobjednávky, ktoré Shoptet vo feede hlási
+  ako „in stock" (naživo 31. 8. 2026 overené na produkte 15741: jeho
+  predobjednávkové varianty majú vo `google.xml` PRÁZDNU `<g:availability>`,
+  takže konkrétne tie prejdú aj so starým guardom — ale sémanticky je guard pre
+  predobjednávku zlý, preto je v `allRestockCandidates` zabalený IBA do
+  `out_of_stock` vetvy: `or(and(out_of_stock, feedNotInStock), and(sellable,
+  predobjednávka-text))`). `PREORDER_MARKERS` je NEPRÁZDNY tuple + `?? sql\`false\``
+  v query = fail-closed (prázdny zoznam nikdy nesmie zapnúť všetko predajné);
+  marker nesie slovenský („predobjedn") aj český („předobjedn") tvar.
 - **`supplier_stock.confirmed_at` je NIEČO INÉ než `checked_at` a
   automatizácia sa smie pozerať LEN naň.** `checked_at` je čas posledného
   POKUSU (aj neúspešného) a riadi preskakovanie čerstvých odkazov;

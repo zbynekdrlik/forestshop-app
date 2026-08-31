@@ -64,6 +64,9 @@ describe("prepínanie Vypredané → Skladom", () => {
       // každý `code` dostal vlastný produkt s vlastným `internalNote`.
       readonly productKey?: string;
       readonly sizeLabel?: string | null;
+      // issue 526: predobjednávka sa odlíši textom dostupnosti, nie stavom —
+      // predvolený „Vypredané" ostáva pre existujúce testy.
+      readonly availabilityText?: string;
     } = {},
   ): Promise<void> => {
     const productKey = over.productKey ?? `prod-${code}`;
@@ -87,8 +90,8 @@ describe("prepínanie Vypredané → Skladom", () => {
       name: `Produkt ${code}`,
       stock: 0,
       availabilityInStockText: "Skladom",
-      availabilityOutOfStockText: "Vypredané",
-      availabilityText: "Vypredané",
+      availabilityOutOfStockText: over.availabilityText ?? "Vypredané",
+      availabilityText: over.availabilityText ?? "Vypredané",
       productVisibility: over.productVisibility ?? "visible",
       state: over.state ?? "out_of_stock",
       missingSince: over.missingSince ?? null,
@@ -160,6 +163,98 @@ describe("prepínanie Vypredané → Skladom", () => {
     await seedVariant("D1", { state: "discontinued" });
 
     expect((await selectRestockCandidates(db, NOW)).picked).toHaveLength(0);
+  });
+
+  // issue 526 — jadro úlohy: predobjednávka (stav `sellable`, text
+  // „Predobjednávka"), ktorú dodávateľ potvrdene má, sa prepne na „Skladom".
+  it("prepne aj produkt v stave Predobjednávka, ktorý dodávateľ potvrdene má", async () => {
+    await seedSupplierStock();
+    await seedVariant("P1", { state: "sellable", availabilityText: "Predobjednávka" });
+
+    const result = await runRestock({ db, now: NOW, config: CONFIG, importToShoptet: okImport });
+
+    expect(result).toMatchObject({ status: "ok", switched: 1, codes: ["P1"] });
+  });
+
+  // Kontrola rozsahu: bežný predajný produkt (bez predobjednávky) sa NESMIE
+  // stať kandidátom len preto, že je `sellable` — inak by sa zapínalo naprázdno
+  // všetko, čo je v predaji.
+  it("neprepne bežný predajný produkt bez predobjednávky", async () => {
+    await seedSupplierStock();
+    await seedVariant("P2", { state: "sellable", availabilityText: "Skladom" });
+
+    expect((await selectRestockCandidates(db, NOW)).picked).toHaveLength(0);
+  });
+
+  // Jednotlivo vypnutá predobjednávková veľkosť je `discontinued` (vypnutie sa
+  // v `availability.ts` kontroluje PRED textom) — kotva `state='sellable'` ju
+  // musí vylúčiť, rovnako ako vypnutú vypredanú.
+  it("neprepne jednotlivo vypnutý predobjednávkový variant (discontinued)", async () => {
+    await seedSupplierStock();
+    await seedVariant("P3", { state: "discontinued", availabilityText: "Predobjednávka" });
+
+    expect((await selectRestockCandidates(db, NOW)).picked).toHaveLength(0);
+  });
+
+  // `detailOnly` predobjednávka je `sellable`, ale majiteľ ju vedome nepredáva
+  // v katalógu — `product_visibility` filter ju musí vylúčiť rovnako ako
+  // vypredanú `detailOnly`.
+  it("neprepne detailOnly predobjednávku", async () => {
+    await seedSupplierStock();
+    await seedVariant("P4", {
+      state: "sellable",
+      availabilityText: "Predobjednávka",
+      productVisibility: "detailOnly",
+    });
+
+    expect((await selectRestockCandidates(db, NOW)).picked).toHaveLength(0);
+  });
+
+  // issue 526 review: feed-guard (issue 226) sa NEAPLIKUJE na predobjednávku —
+  // sme `sellable`, takže feed „in stock" je ZHODA, nie rozpor. Predobjednávka
+  // s feedom „in stock" sa preto prepne (inak by feedom-„in stock" predobjednávky
+  // ticho vypadli a úloha by pre ne nič neurobila). Kontrast: vypredaná s
+  // feedom „in stock" sa NAOPAK podrží — to drží existujúci test „Z1".
+  it("prepne predobjednávku aj keď feed hovorí 'in stock' (na rozdiel od vypredanej)", async () => {
+    await seedSupplierStock();
+    await seedVariant("P5", { state: "sellable", availabilityText: "Predobjednávka" });
+    await db.insert(shopProductUrl).values({
+      code: "P5",
+      url: "https://www.forestshop.sk/p5/",
+      availability: "in stock",
+      fetchedAt: NOW,
+    });
+
+    expect((await selectRestockCandidates(db, NOW)).picked.map((c) => c.variantCode)).toEqual(["P5"]);
+  });
+
+  // Overovací zoznam musí ukázať PRESNE to, čo beh prepne — vrátane
+  // predobjednávkových kandidátov (listing = beh, spoločná `allRestockCandidates`).
+  it("overovací zoznam ukáže aj predobjednávkového kandidáta", async () => {
+    await seedSupplierStock();
+    await seedVariant("P6", { state: "sellable", availabilityText: "Predobjednávka" });
+
+    const zoznam = await listRestockWaiting(db, NOW, { limit: 50, offset: 0 });
+    expect(zoznam.rows.map((r) => r.variantCode)).toEqual(["P6"]);
+  });
+
+  // issue 526 review: match je SUBSTRING (`LIKE '%predobjedn%'`), rovnako ako
+  // `OUT_OF_STOCK_MARKERS`'s `.includes()` — text s markerom UPROSTRED sa tiež
+  // chytí. Pinuje substring sémantiku (mutácia na prefix-match by inak prešla).
+  it("prepne aj predobjednávkový text s markerom uprostred (substring, nie presná zhoda)", async () => {
+    await seedSupplierStock();
+    await seedVariant("P7", { state: "sellable", availabilityText: "Tovar na predobjednávku" });
+
+    expect((await selectRestockCandidates(db, NOW)).picked.map((c) => c.variantCode)).toEqual(["P7"]);
+  });
+
+  // issue 526 review: český tvar „Předobjednávka" (ř ≠ r) má vlastný marker
+  // („předobjedn") — bez neho by ho `LIKE '%predobjedn%'` nechytil.
+  it("prepne aj český tvar Předobjednávka", async () => {
+    await seedSupplierStock();
+    await seedVariant("P8", { state: "sellable", availabilityText: "Předobjednávka" });
+
+    expect((await selectRestockCandidates(db, NOW)).picked.map((c) => c.variantCode)).toEqual(["P8"]);
   });
 
   it("neprepne variant, ktorý zmizol z exportu", async () => {
