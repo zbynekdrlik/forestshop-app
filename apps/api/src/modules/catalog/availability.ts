@@ -23,6 +23,31 @@ const OUT_OF_STOCK_MARKERS: readonly string[] = [
   "neni skladem",
 ];
 
+// Shoptet text „Predobjednávka" — produkt, ktorý zákazník smie predobjednať,
+// ale u NÁS ešte nie je skladom. ZÁMERNE NIE JE `OUT_OF_STOCK_MARKERS`:
+// `deriveVariantState` ho necháva `sellable` (zákazník ho môže objednať),
+// takže katalóg / feed-cross-check / pairing / vyhľadávanie ho vidia presne
+// ako doteraz. Automatizácia „Vypredané → Skladom" (issue 526) ho však musí
+// sledovať rovnako ako vypredané: keď ho dodávateľ potvrdene má, prepnúť naň
+// „Skladom". Aby interpretácia tohto reťazca ostala v JEDNOM súbore (tu, vedľa
+// ostatných markerov) a nerozišla sa so SQL, `restock/queries.ts` importuje
+// tento zoznam a matchuje ho na `variant.availability_text` (LEN na `sellable`
+// riadkoch — vypnutý/detailOnly predobjednávkový variant je už `discontinued`
+// resp. mimo `visible`, takže sa kotvou `state='sellable'` + `visibility`
+// filtrom vylúči zadarmo). Marker je bez diakritiky (ASCII), preto match beží
+// nad `lower(...)` textom deterministicky, rovnako ako `OUT_OF_STOCK_MARKERS`.
+// Slovenský tvar „Predobjednávka" je overený v dátach (catalog.md); český
+// „Předobjednávka" (ř ≠ r) je INÝ reťazec a `LIKE '%predobjedn%'` ho nechytí —
+// pridaný defenzívne rovnakým precedensom ako `OUT_OF_STOCK_MARKERS`'s dvojica
+// „není/neni skladem" a Skladem/Skladom (tento obchod nesie aj české texty).
+// Marker nič ZLÉ zapnúť nemôže (zhoduje sa len s predobjednávkovým textom),
+// takže je to fail-closed doplnenie pokrytia, nie dohad meniaci správanie.
+// NEPRÁZDNY tuple: prázdny zoznam by cez `or(...[])=undefined` (drizzle) nechal
+// `restock/queries.ts`'s predobjednávkovú vetvu spadnúť na holé `state='sellable'`
+// (zapnutie VŠETKÉHO predajného) — typ to znemožní už pri kompilácii, plus tam
+// je `?? sql\`false\`` runtime poistka.
+export const PREORDER_MARKERS: readonly [string, ...string[]] = ["predobjedn", "předobjedn"];
+
 export interface AvailabilityInput {
   readonly stock: number;
   readonly inStockText: string;
