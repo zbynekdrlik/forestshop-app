@@ -228,10 +228,10 @@ it("odlíši predobjednávkového kandidáta od vypredaného badge-om", async ()
   fetchRestockStatus.mockResolvedValue(STATUS);
   render(<RestockSection role="admin" onSessionExpired={vi.fn()} />);
 
-  const vypredany = await screen.findByTestId("supplier-stock-candidate-type-60542");
+  const vypredany = await screen.findByTestId("restock-waiting-reason-60542");
   expect(vypredany.textContent).toBe("vypredané");
 
-  const predobjednavka = await screen.findByTestId("supplier-stock-candidate-type-15314");
+  const predobjednavka = await screen.findByTestId("restock-waiting-reason-15314");
   expect(predobjednavka.textContent).toBe("predobjednávka");
 });
 

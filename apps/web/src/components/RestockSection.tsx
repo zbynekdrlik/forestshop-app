@@ -384,7 +384,7 @@ export function RestockSection({
                       {row.variantCode}
                       <span
                         className="pill"
-                        data-testid={`supplier-stock-candidate-type-${row.variantCode}`}
+                        data-testid={`restock-waiting-reason-${row.variantCode}`}
                       >
                         {RESTOCK_REASON_LABEL[row.reason]}
                       </span>
