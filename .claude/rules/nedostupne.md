@@ -201,3 +201,22 @@ paths:
   tabuľka → doplnená do OBOCH TRUNCATE zoznamov (`tests/helpers/db.ts` +
   `scripts/e2e-setup.ts`, `truncate-list-completeness.test.ts` to vynucuje).
   Migrácia 0063 je plain CREATE TABLE + index (žiadny enum → žiadny #399 risk).
+- **issue 535: optimistický toggle „vyriešené", ktorého zoznam refetchujú INÉ
+  akcie (`saveNote`/`addLink`/`removeLink`/`confirmSend` volajú `load()`),
+  potrebuje aby `load()` REKONCILIOVAL nevyrovnané optimistické zmeny —
+  `useStaleResponseGuard` (PR #536) rieši len load-vs-load, NIE
+  load-vs-optimistický-zápis.** `useNedostupneResolved` vedie
+  `pendingResolvedRef: Map<variantCode, {desired, committed}>` (zapíše sa pri
+  toggle, zmaže pri chybe PUT + revert) a vystaví STABILNÝ `reconcileResolved(list)`
+  (`useCallback([])` nad refom — inak by refiroval `useEffect(load)`), ktorý
+  `load().then` zavolá PRED `setList`. Rekonciliácia je self-cleaning s
+  OHRANIČENOU životnosťou (code review nález, inak by nezhodný záznam maskoval
+  súbežnú CUDZIU zmenu donekonečna): server sa zhoduje → zmaž; nezhoduje +
+  necommitnutý → drž optimistickú hodnotu; nezhoduje + commitnutý (PUT `.then`
+  označí `committed`, len ak ho neprebil novší toggle) → ochráň JEDEN zastaraný
+  in-flight load a zmaž. **Toto je TRETÍ tvar „latest ref"/stale-response triedy
+  (`.claude/rules/frontend-design.md` issue 251/523: load-vs-load) — pri KAŽDOM
+  ďalšom optimistickom zápise, ktorého zoznam refetchuje iná akcia, over túto os,
+  nie len guard.** Pridružený nález: `setResolvedBusy("")` vo `.finally()` musí
+  byť FUNKČNÝ clear (`(cur) => cur === variantCode ? "" : cur`) — jediný skalár,
+  súbežný toggle iného variantu ho inak vyčistí mid-PUT.

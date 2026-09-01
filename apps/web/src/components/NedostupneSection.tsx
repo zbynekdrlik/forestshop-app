@@ -71,7 +71,7 @@ export function NedostupneSection({ role, onSessionExpired }: { readonly role: M
   // issue 531: ručné označenie „vyriešené" — stav + optimistický toggle žije vo
   // vlastnom hooku (eslint `max-lines`), rovnaká „lift do hooku" disciplína ako
   // `useLoadMore`/`useStaleResponseGuard`.
-  const { resolvedBusy, toggleResolved } = useNedostupneResolved({ setList, setActionError, onSessionExpired });
+  const { resolvedBusy, toggleResolved, reconcileResolved } = useNedostupneResolved({ setList, setActionError, onSessionExpired });
   // issue 251/523: stale-response guard — pod `<StrictMode>` sa mount `load()`
   // spustí dvakrát; pomalší duplicitný GET zoznamu inak doletí AŽ PO
   // optimistickom (od)označení checkboxu „vyriešené" (issue 531, žiadny refetch)
@@ -83,7 +83,9 @@ export function NedostupneSection({ role, onSessionExpired }: { readonly role: M
     fetchNedostupneList()
       .then((l) => {
         if (!guard.isLatest(seq)) return;
-        setList(l);
+        // issue 535: re-aplikuj nevyrovnané optimistické (od)označenia — akciou-
+        // spustený refetch môže niesť snímku spred práve prebiehajúceho toggle PUT.
+        setList(reconcileResolved(l));
         setLoaded(true);
       })
       .catch((err: unknown) => {
@@ -95,7 +97,7 @@ export function NedostupneSection({ role, onSessionExpired }: { readonly role: M
         }
         setError("Nedostupné tovary sa nepodarilo načítať.");
       });
-  }, [guard, onSessionExpired]);
+  }, [guard, reconcileResolved, onSessionExpired]);
 
   useEffect(load, [load]);
 
