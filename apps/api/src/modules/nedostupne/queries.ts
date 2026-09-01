@@ -9,6 +9,10 @@ import { loadSentNedostupne, sentKey } from "./state.js";
 
 export interface NedostupneOrderRow {
   readonly orderCode: string;
+  // issue 529: interné id objednávky — poznámka sa zapisuje cez EXISTUJÚCU
+  // cestu `PUT /api/orders/:id/comment` (`order.comment` → Shoptet writeback
+  // worker), tá istá zapisovacia cesta ako stĺpec POZNÁMKY v „Na objednanie".
+  readonly orderId: string;
   readonly adminLink: string;
   readonly customerName: string;
   readonly email: string;
@@ -16,6 +20,9 @@ export interface NedostupneOrderRow {
   readonly placedAt: string;
   readonly nedostupneSent: boolean;
   readonly alternativaSent: boolean;
+  // issue 529: aktuálna poznámka objednávky (`order.comment`) — predvyplní
+  // vstup poznámky, aby ju obsluha vedela upraviť, nie prepísať naslepo.
+  readonly comment: string | null;
 }
 
 export interface NedostupneGroup {
@@ -57,6 +64,8 @@ export async function listNedostupneGroups(db: Database, adminBaseUrl: string): 
       supplierLinkOverride: productSupplierLinkOverrides.url,
       ourProductUrl: shopProductUrl.url,
       orderCode: orders.externalOrderId,
+      orderId: orders.id,
+      comment: orders.comment,
       customerName: orders.customerName,
       email: orders.email,
       shoptetOrderId: orders.shoptetOrderId,
@@ -94,6 +103,7 @@ export async function listNedostupneGroups(db: Database, adminBaseUrl: string): 
     }
     group.orders.push({
       orderCode: row.orderCode,
+      orderId: row.orderId,
       adminLink: buildShoptetAdminOrderUrl(adminBaseUrl, row.orderCode, row.shoptetOrderId),
       customerName: row.customerName,
       email: row.email ?? "",
@@ -101,6 +111,7 @@ export async function listNedostupneGroups(db: Database, adminBaseUrl: string): 
       placedAt: row.placedAt.toISOString(),
       nedostupneSent: sent.has(sentKey(row.orderCode, row.variantCode, "nedostupne")),
       alternativaSent: sent.has(sentKey(row.orderCode, row.variantCode, "alternativa")),
+      comment: row.comment,
     });
   }
 

@@ -10,6 +10,10 @@ export type ReplacementLink = z.infer<typeof replacementLinkSchema>;
 
 const orderRowSchema = z.object({
   orderCode: z.string(),
+  // issue 529: interné id objednávky — vstup poznámky ho posiela do
+  // `updateOrderComment` (`PUT /api/orders/:id/comment`), tá istá zapisovacia
+  // cesta ako stĺpec POZNÁMKY v „Na objednanie".
+  orderId: z.string(),
   adminLink: z.string(),
   customerName: z.string(),
   email: z.string(),
@@ -17,6 +21,8 @@ const orderRowSchema = z.object({
   placedAt: z.string(),
   nedostupneSent: z.boolean(),
   alternativaSent: z.boolean(),
+  // issue 529: aktuálna poznámka objednávky (`order.comment`) — predvyplní vstup.
+  comment: z.string().nullable(),
 });
 
 const groupSchema = z.object({

@@ -26,6 +26,57 @@ export async function createDailyTask(db: Database, input: CreateDailyTaskInput)
   return { id: row.id };
 }
 
+export interface CreateVoiceDailyTaskInput {
+  readonly userId: string;
+  readonly text: string;
+  readonly audio: Buffer;
+  readonly audioMime: string;
+  // `null` = klient dĺžku nedodal (nepovinné). Berie sa z klientskeho časovača,
+  // nie z média (`<audio>` pri webm hlási `Infinity`).
+  readonly audioDurationMs: number | null;
+  readonly now: Date;
+}
+
+// issue 519: jediná zapisovacia cesta pre HLASOVÚ úlohu — vloží riadok AJ s
+// nahrávkou naraz (nikdy sa nestratí audio). Autor (`userId`) prichádza zo
+// session, presne ako `createDailyTask`. Invariant „buď všetky tri audio stĺpce
+// vyplnené, alebo žiadny" drží TÁTO funkcia (a `deleteDailyTaskAudio`), nie
+// schéma — plné odôvodnenie v dizajnovom komentári na tickete.
+export async function createVoiceDailyTask(db: Database, input: CreateVoiceDailyTaskInput): Promise<DailyTaskWriteResult> {
+  const [row] = await db
+    .insert(dailyTask)
+    .values({
+      userId: input.userId,
+      text: input.text,
+      audio: input.audio,
+      audioMime: input.audioMime,
+      audioDurationMs: input.audioDurationMs,
+      createdAt: input.now,
+      updatedAt: input.now,
+    })
+    .returning({ id: dailyTask.id });
+  if (row === undefined) throw new Error("Vloženie hlasovej úlohy zlyhalo bez chyby");
+  return { id: row.id };
+}
+
+export interface DeleteDailyTaskAudioInput {
+  readonly id: string;
+  readonly now: Date;
+}
+
+// issue 519: „potom sa dá odkaz vymazať" — zmaže LEN nahrávku (audio/mime/dĺžka
+// na `null`), úlohu aj jej text nechá (celá úloha sa maže existujúcim
+// `deleteDailyTask`). Zdieľaný zoznam (#487) — smie ktokoľvek prihlásený, žiadny
+// per-user filter. Neznámu/už zmazanú úlohu vráti ako `false`, nikdy 4xx.
+export async function deleteDailyTaskAudio(db: Database, input: DeleteDailyTaskAudioInput): Promise<boolean> {
+  const result = await db
+    .update(dailyTask)
+    .set({ audio: null, audioMime: null, audioDurationMs: null, updatedAt: input.now })
+    .where(eq(dailyTask.id, input.id))
+    .returning({ id: dailyTask.id });
+  return result.length > 0;
+}
+
 export interface UpdateDailyTaskTextInput {
   readonly id: string;
   readonly text: string;

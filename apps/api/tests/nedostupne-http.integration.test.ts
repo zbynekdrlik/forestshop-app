@@ -1,3 +1,4 @@
+import { eq } from "drizzle-orm";
 import { afterEach, expect, it } from "vitest";
 import { orderLines, orders, users } from "../src/db/schema.js";
 import { createApp } from "../src/http/app.js";
@@ -108,6 +109,22 @@ it("GET vráti nedostupný riadok zoskupený podľa variantu, spárovaný s obje
   expect(body.groups).toHaveLength(1);
   expect(body.groups[0]?.variantCode).toBe("N176A");
   expect(body.groups[0]?.orders[0]?.orderCode).toBe("17601001");
+});
+
+// issue 529: GET vracia `orderId` (interné id objednávky, potrebné pre zápis
+// poznámky cez `PUT /api/orders/:id/comment`) a aktuálnu `comment` (predvyplní
+// vstup poznámky), aby ju obsluha vedela upraviť, nie prepísať naslepo.
+it("GET vracia orderId a aktuálnu poznámku objednávky (issue 529)", async () => {
+  const { app, cookie, db } = await boot("citanie");
+  await seedNedostupneLine(db, "17601010", "N176CMT");
+  const [order] = await db.select({ id: orders.id }).from(orders).where(eq(orders.externalOrderId, "17601010"));
+  if (order === undefined) throw new Error("test objednávka sa nenašla");
+  await db.update(orders).set({ comment: "objednané u dodávateľa" }).where(eq(orders.id, order.id));
+
+  const res = await app.request("/api/nedostupne", { headers: { cookie } });
+  const body = (await res.json()) as { groups: { orders: { orderId: string; comment: string | null }[] }[] };
+  expect(body.groups[0]?.orders[0]?.orderId).toBe(order.id);
+  expect(body.groups[0]?.orders[0]?.comment).toBe("objednané u dodávateľa");
 });
 
 it("náhľad vráti presne to, čo by sa odoslalo — bez odoslania", async () => {

@@ -154,3 +154,81 @@ test("ručné odkazy náhrad, prekliky na e-shop/dodávateľa, povinný náhľad
 
   expect(chyby).toEqual([]);
 });
+
+// issue 529 (funkcia 1): 📦 preklik z „Nedostupné tovary" do „Na objednanie" —
+// celá navigácia stránky (`?tab=orders&highlight=<kód>`), po ktorej sa produkt
+// naskroluje a ZVÝRAZNÍ (nielen prepnutie tabu). Overuje sa proti fixtúrovému
+// variantu 40287 (názov „Čiapka Polar FOREST", bez dodávateľa — `.claude/rules/
+// orders.md`), ktorý je v „Na objednanie" ako otvorený nedostupný riadok.
+test("📦 preklik otvorí sekciu Na objednanie a zvýrazní daný produkt", async ({ page }) => {
+  const chyby: string[] = [];
+  page.on("console", (m) => {
+    if (m.type() === "error" || m.type() === "warning") chyby.push(m.text());
+  });
+  page.on("pageerror", (e) => {
+    chyby.push(e.message);
+  });
+
+  await page.goto("/?tab=nedostupne");
+  await page.getByLabel("E-mail").fill(E2E_NEDOSTUPNE_EMAIL);
+  await page.getByLabel("Heslo").fill(E2E_HESLO);
+  await page.getByRole("button", { name: "Prihlásiť sa" }).click();
+  await expect(page.getByRole("heading", { name: "Nedostupné tovary" })).toBeVisible();
+
+  const preklik = page.getByTestId("nedostupne-orders-link-40287");
+  await expect(preklik).toBeVisible();
+  await expect(preklik).toHaveAttribute("href", "?tab=orders&highlight=40287");
+  await preklik.click();
+
+  // Celá navigácia stránky → obrazovka „Na objednanie".
+  await expect(page.getByRole("heading", { name: "Na objednanie" })).toBeVisible();
+
+  // Riadok(y) produktu 40287 sú zvýraznené (dôkaz, že preklik naozaj naviedol
+  // na PRODUKT, nie len prepol tab) a zvýraznený riadok patrí tomuto produktu.
+  const zvyraznene = page.locator("tr.order-row--highlight");
+  await expect(zvyraznene.first()).toBeVisible();
+  await expect(zvyraznene.first()).toContainText("Čiapka Polar FOREST");
+
+  expect(chyby).toEqual([]);
+});
+
+// issue 529 (funkcia 2): poznámka zadaná v „Nedostupné tovary" sa zapíše ako
+// poznámka objednávky (`order.comment` cez `PUT /api/orders/:id/comment`, tá
+// istá cesta ako stĺpec POZNÁMKY v „Na objednanie" — odtiaľ ju Shoptet writeback
+// worker synchronizuje do eshopu). Overuje sa skutočný zápis: prežije reload.
+test("poznámka zadaná v Nedostupných sa uloží do objednávky a prežije reload", async ({ page }) => {
+  const chyby: string[] = [];
+  page.on("console", (m) => {
+    if (m.type() === "error" || m.type() === "warning") chyby.push(m.text());
+  });
+  page.on("pageerror", (e) => {
+    chyby.push(e.message);
+  });
+
+  await page.goto("/?tab=nedostupne");
+  await page.getByLabel("E-mail").fill(E2E_NEDOSTUPNE_EMAIL);
+  await page.getByLabel("Heslo").fill(E2E_HESLO);
+  await page.getByRole("button", { name: "Prihlásiť sa" }).click();
+  await expect(page.getByRole("heading", { name: "Nedostupné tovary" })).toBeVisible();
+
+  const noteInput = page.getByTestId("nedostupne-note-input-9008-40287");
+  await expect(noteInput).toBeVisible();
+  const text = `e2e poznámka do eshopu ${String(Date.now())}`;
+  await noteInput.fill(text);
+
+  // Počkaj na SKUTOČNÝ zápis (PUT), nie len na klik — inak by reload mohol
+  // predbehnúť neuzavretú požiadavku (`.claude/rules/orders.md` <select>/checkbox
+  // race trieda).
+  const [resp] = await Promise.all([
+    page.waitForResponse((r) => r.url().includes("/api/orders/") && r.url().endsWith("/comment") && r.request().method() === "PUT"),
+    page.getByTestId("nedostupne-note-save-9008-40287").click(),
+  ]);
+  expect(resp.status()).toBe(200);
+
+  // Prežije reload = naozaj sa uložilo do DB (predvyplní sa späť z `order.comment`).
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Nedostupné tovary" })).toBeVisible();
+  await expect(page.getByTestId("nedostupne-note-input-9008-40287")).toHaveValue(text);
+
+  expect(chyby).toEqual([]);
+});

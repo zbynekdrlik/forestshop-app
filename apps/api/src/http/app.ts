@@ -12,7 +12,7 @@ import { appVersion } from "../version.js";
 import { registerCalendarRoutes } from "./calendar-routes.js";
 import type { NextEventService } from "../modules/calendar/service.js";
 import { registerCatalogRoutes, type RunIngest } from "./catalog-routes.js";
-import { registerDailyTasksRoutes } from "./daily-tasks-routes.js";
+import { registerDailyTasksRoutes, type DailyTasksRunDeps } from "./daily-tasks-routes.js";
 import { registerDpdRoutes, type DpdRunDeps } from "./dpd-routes.js";
 import { registerFloorNotesRoutes } from "./floor-notes-routes.js";
 import { checkLoginRateLimit, clientIp } from "./login-rate-limit.js";
@@ -123,6 +123,11 @@ export function createApp(
     // rovnaký vzor ako `pairing-search/run.ts`) — testy dodajú vlastný s
     // injektovaným `Fetcher`, NIKDY nechodia na skutočnú sieť.
     readonly pairingSearchClient?: SearchClient;
+    // issue 519: "Hlasová poznámka do úloh" — voliteľný Whisper prepisový
+    // klient. `undefined` (predvolené) = poznámky sa ukladajú audio-only
+    // (rovnaký "configured" princíp ako `dpd`/`orderReminder.classifyClient`);
+    // `index.ts` v produkcii dodá reálny klient LEN keď je `OPENAI_API_KEY`.
+    readonly dailyTasks?: DailyTasksRunDeps;
   },
 ): Hono<AppBindings> {
   const app = new Hono<AppBindings>();
@@ -361,7 +366,7 @@ export function createApp(
   // dependency (na rozdiel od nedostupne/orderReminder vyššie) — táto
   // obrazovka neposiela mail ani nekontaktuje tretiu stranu.
   registerUpozorneniaRoutes(app, db);
-  registerDailyTasksRoutes(app, db);
+  registerDailyTasksRoutes(app, db, options.dailyTasks ?? {});
   // issue 437: "Poznámky" — ZDIEĽANÁ nástenka rýchlych poznámok (mobilný
   // zápis + PWA). Žiadny voliteľný dependency (na rozdiel od nedostupne/
   // orderReminder vyššie) — neposiela mail ani nekontaktuje tretiu stranu,

@@ -1553,3 +1553,26 @@ paths:
   (synchronizované v render tele — iný účel), `mountedRef` (StrictMode unmount
   guard, ostáva vedľa guardu v kombinovanom `if (!mountedRef.current || !guard.isLatest(seq))`),
   `EmojiPickerButton`'s `rafRef`.
+- **Skorý `if (ref.current) return;` NARROWNE `ref.current` na `false` pre
+  zvyšok funkcie — neskorší `if (!ref.current)` je potom VŽDY-pravdivý a
+  `@typescript-eslint/no-unnecessary-condition` ho ZHODÍ (issue 529).** TS
+  control-flow narrowing: keď medzi skorým returnom a neskorším čítaním nič
+  `ref.current` NEMUTUJE (odkrývacie vetvy len `return`-ujú), TS vie, že na
+  neskoršom mieste je hodnota stále `false`. `OrdersSection.tsx`'s highlight
+  efekt mal hore `if (highlightScrolledRef.current) return;` A dole
+  `if (!highlightScrolledRef.current) { ... }` — ten druhý bol mŕtvy a lint
+  padol na `184:9 Unnecessary conditional, value is always truthy`. Fix: telo
+  bloku odsaď priamo (netreba guard, hore je zaručené `false`). **Pasca pri
+  ladení: lint hlási RIADOK v `.tsx`, ale keď súbor medzi editmi „pláva",
+  starý `sed`/snímok riadku klame** — over presný riadok `awk 'NR==184{print}'`
+  na AKTUÁLNOM súbore, nie z pamäti; `--format json` dá aj `endColumn`
+  (rozsah znakov pomôže identifikovať uzol). NIE je to stale cache — narrowing
+  je reálny (posun súboru o N riadkov posunie chybu o presne N).
+- **jsdom NEIMPLEMENTUJE `Element.prototype.scrollIntoView` — unit test, ktorý
+  vyrenderuje kód volajúci `scrollIntoView`, ho musí POLYFILLOVAŤ**
+  (`Element.prototype.scrollIntoView = () => {};` pred `render()`, issue 529's
+  `OrdersSection.test.tsx` highlight test). Bez toho spadne `TypeError:
+  scrollIntoView is not a function`. Guard v produkčnom kóde (`typeof el
+  .scrollIntoView === "function"`) je ZLÁ cesta — `no-unnecessary-condition`
+  ho zhodí (DOM lib typuje metódu ako vždy-prítomnú); radšej čistý
+  `el?.scrollIntoView(...)` v kóde + polyfill v teste.

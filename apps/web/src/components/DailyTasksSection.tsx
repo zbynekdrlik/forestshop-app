@@ -1,54 +1,32 @@
 import { useCallback, useContext, useEffect, useRef, useState, type JSX } from "react";
 import {
   createDailyTask,
+  createVoiceDailyTask,
   DailyTasksUnauthorizedError,
   deleteDailyTask,
+  deleteDailyTaskAudio,
   fetchDailyTasks,
   setDailyTaskDone,
   updateDailyTaskEmoji,
   updateDailyTaskText,
-  type DailyTaskRow,
+  type DailyTaskRow as DailyTaskRowData,
 } from "../dailyTasksApi.js";
 import { DailyTasksBadgeRefreshContext } from "../dailyTasksBadgeContext.js";
+import { formatRecordingTime, useVoiceRecorder, type RecordingResult } from "../useVoiceRecorder.js";
+import { DailyTaskRow } from "./DailyTaskRow.js";
 import { EmojiPickerButton } from "./EmojiPickerButton.js";
 
-// issue 342 + 487: "Dôležité → Úlohy na dnes" — nahrádza šéfove poznámky písané
-// do Discord kanála #úlohy-na-dnes. PÔVODNE súkromný per-používateľský zoznam
-// (#342); od #487 ZDIEĽANÝ — každý prihlásený účet vidí a smie odfajknúť/upraviť/
-// zmazať VŠETKY úlohy, autor sa zobrazuje pri riadku (presne ako `NotesSection`/
-// Poznámky, #437). Na rozdiel od zvyšku appky (viď `UpozorneniaSection.tsx`'s
-// `CONTROL_ROLES`) tu NIE JE žiadne role-podmienené ovládanie — server na každú
-// akciu vyžaduje len `requireUser` (`daily-tasks-routes.ts`), takže aj rola
-// "citanie" smie pridávať/spracúvať. Preto komponent prijíma len
-// `onSessionExpired`, nie celý `SectionProps` — TypeScript-ovo je to stále
-// kompatibilné s `ComponentType<SectionProps>` (`nav.ts`), lebo objekt s VIAC
-// poľami (role navyše) sa dá vždy odovzdať tam, kde sa čaká len podmnožina.
-
-// Issue 403 (majiteľ: "stale to je otras" — naživo pomenované na tickete):
-// tri štrukturálne opravy, žiadna zmena funkčnosti/testid.
-// 1) `.ulohy-panel` (JSX nižšie) obmedzuje šírku pridávacieho riadku aj
-//    zoznamu na `max-width: 40rem` (app.css) — bez neho sa `.uloha-text`ov
-//    `flex:1 1 auto` naťahoval cez CELÚ neohraničenú `<section>` a
-//    `.uloha-actions`ov `margin-left:auto` odsúval ikony (✏️😊🗑) na
-//    vzdialený pravý okraj, s priemernou nameranou mŕtvou medzerou 771px pri
-//    1440px okne (komentár na tickete). Ohraničenie na 40rem (rovnaký
-//    ustálený vzor ako `.ord-supplier-link-edit`, issue 162) zníži ju na
-//    ~338px bez zmeny riadkovej výšky.
-// 2) Prepínač "vybavené" je teraz skutočný `<input type="checkbox">`
-//    namiesto `<button>`u s Unicode ☐/☑.
-// 3) `.uloha-row`'s `align-items` je `flex-start` namiesto `center`.
-
-// issue 471: emoji picker (zdieľaný `EmojiPickerButton`, issue 440) je zapojený
-// na DVE miesta:
-//  - INSERT do TEXTU úlohy (nový vstup aj inline edit) — vloženie na kurzor,
-//    presne ako Poznámky/Upozornenia.
-//  - PICK na označenie CELÉHO riadku — klik na 😊 otvorí picker a JEDNÝM klikom
-//    sa emoji rovno uloží (`PATCH …/emoji`); voľba „bez emoji" ho odstráni.
-//    Nahradilo pôvodný medzikrok s textovým poľom + Uložiť (issue 342/381),
-//    ktorý Štěpán opísal ako nepoužiteľný.
+// issue 342 + 487: "Dôležité → Úlohy na dnes" — zdieľaný zoznam úloh (každý účet
+// vidí a smie odfajknúť/upraviť/zmazať všetky; autor sa zobrazuje pri riadku).
+// issue 519: hlasová poznámka (Messenger-vzor) — mikrofón pri vstupe novej
+// úlohy. Mobil: mikrofón NAHRÁDZA emoji (emoji je len desktop cez CSS
+// `@media (max-width:36rem)`); desktop: mikrofón POPRI emoji. Stlač mikrofón →
+// nahráva → Hotovo → prepis (Whisper) alebo audio-only pri zlyhaní; nahrávka sa
+// dá potom prehrať aj zmazať (`DailyTaskRow`). Per-riadok rendering je vyčlenený
+// do `DailyTaskRow.tsx` (eslint `max-lines: 400`).
 
 export function DailyTasksSection({ onSessionExpired }: { readonly onSessionExpired: () => void }): JSX.Element {
-  const [rows, setRows] = useState<readonly DailyTaskRow[] | null>(null);
+  const [rows, setRows] = useState<readonly DailyTaskRowData[] | null>(null);
   const [error, setError] = useState("");
   const [newText, setNewText] = useState("");
   const [busyId, setBusyId] = useState("");
@@ -56,26 +34,11 @@ export function DailyTasksSection({ onSessionExpired }: { readonly onSessionExpi
   const [editingTextId, setEditingTextId] = useState<string | null>(null);
   const [textDraft, setTextDraft] = useState<Record<string, string>>({});
 
-  // issue 473: po každej count-meniacej mutácii (pridať/odfajknúť/zmazať) sa
-  // zavolá `refresh()` z `DailyTasksBadgeRefreshContext`, aby odznak v ľavom
-  // menu (`App.tsx` ho vlastní a fetchuje) klesol/stúpol HNEĎ bez reloadu —
-  // rovnaký vzor ako `UpozorneniaSection`. Úprava textu/emoji count NEMENÍ,
-  // tie refresh nevolajú.
   const { refresh: badgeRefresh } = useContext(DailyTasksBadgeRefreshContext);
 
-  // issue 471: emoji picker vkladá na pozíciu kurzora týchto polí. Nový vstup má
-  // vlastný ref; inline edit má JEDEN zdieľaný ref — appka dovolí najviac jeden
-  // riadok v editácii textu naraz, takže je namountované vždy najviac jedno pole.
   const newTextRef = useRef<HTMLInputElement>(null);
   const editTextRef = useRef<HTMLInputElement>(null);
 
-  // Code review (rovnaký nález ako issue 251's `SupplierLinksSection.tsx`/
-  // `PairingSection.tsx`): `saveText`'s `.then()` musí vedieť, KTORÝ riadok je
-  // PRÁVE editovaný V OKAMIHU, keď odpoveď doletí — nie ten, čo bol editovaný
-  // v momente kliknutia na Uložiť. Bez tohto by uloženie riadku A (ešte
-  // čakajúce na odpoveď) mohlo zavrieť editor riadku B, otvorený medzitým.
-  // "Latest ref" vzor — synchrónne priamo v tele komponentu, nie cez
-  // `useEffect`.
   const editingTextIdRef = useRef(editingTextId);
   editingTextIdRef.current = editingTextId;
 
@@ -97,11 +60,6 @@ export function DailyTasksSection({ onSessionExpired }: { readonly onSessionExpi
     load();
   }, [load]);
 
-  // Code review: KAŽDÁ mutácia (nielen počiatočný `load()`) musí rozlíšiť
-  // vypršanú reláciu (401) od bežného zlyhania — inak po vypršaní počas
-  // akcie appka len opakovane hlási všeobecnú chybu bez cesty späť na
-  // prihlásenie. Rovnaký vzor ako `NedostupneSection.tsx`'s každý mutačný
-  // `.catch()`.
   const handleActionError = useCallback(
     (err: unknown, fallback: string) => {
       if (err instanceof DailyTasksUnauthorizedError) {
@@ -132,8 +90,37 @@ export function DailyTasksSection({ onSessionExpired }: { readonly onSessionExpi
       });
   }, [newText, creating, load, handleActionError, badgeRefresh]);
 
+  // issue 519: hlasová poznámka. `useVoiceRecorder` nahrá blob; po „Hotovo" ho
+  // uploadneme a zoznam obnovíme. Reset hooku (`processing` → `idle`) beží cez
+  // ref (recorder objekt sa mení každý render). Zlyhanie uploadu = bežná chyba,
+  // nahrávka sa NA SERVERI aj tak neuloží (upload zlyhal), používateľ skúsi
+  // znova — server-side nikdy nestratí ÚSPEŠNE nahranú nahrávku (audio-only
+  // fallback pri zlyhaní PREPISU, nie uploadu).
+  const recorderResetRef = useRef<() => void>(() => {
+    // nastaví sa nižšie z `recorder.reset` (placeholder pre prvý render)
+  });
+  const uploadRecording = useCallback(
+    (result: RecordingResult) => {
+      setError("");
+      createVoiceDailyTask(result.blob, result.mime, result.durationMs)
+        .then(() => {
+          load();
+          badgeRefresh();
+        })
+        .catch((err: unknown) => {
+          handleActionError(err, "Hlasovú poznámku sa nepodarilo uložiť — skúste to znova.");
+        })
+        .finally(() => {
+          recorderResetRef.current();
+        });
+    },
+    [load, badgeRefresh, handleActionError],
+  );
+  const recorder = useVoiceRecorder({ onComplete: uploadRecording });
+  recorderResetRef.current = recorder.reset;
+
   const toggleDone = useCallback(
-    (row: DailyTaskRow) => {
+    (row: DailyTaskRowData) => {
       setBusyId(row.id);
       setError("");
       setDailyTaskDone(row.id, row.doneAt === null)
@@ -159,10 +146,6 @@ export function DailyTasksSection({ onSessionExpired }: { readonly onSessionExpi
       setError("");
       updateDailyTaskText(id, text)
         .then(() => {
-          // Code review: kým táto odpoveď čakala, používateľ mohol otvoriť
-          // INÝ riadok na úpravu textu (`editingTextId` sa presunul naň) —
-          // vtedy toto zatvorenie NESMIE prebehnúť, inak by ticho zavrelo
-          // CUDZÍ, práve rozpísaný editor.
           if (editingTextIdRef.current === id) setEditingTextId(null);
           load();
         })
@@ -176,9 +159,6 @@ export function DailyTasksSection({ onSessionExpired }: { readonly onSessionExpi
     [textDraft, load, handleActionError],
   );
 
-  // issue 471: jednoklikové označenie riadku — picker zavolá toto priamo s
-  // vybraným emoji (alebo `null` pri voľbe „bez emoji"). Žiadny draft ani
-  // medzikrokové textové pole; picker si popover zatvorí sám.
   const saveRowEmoji = useCallback(
     (id: string, emoji: string | null) => {
       setBusyId(id);
@@ -197,7 +177,7 @@ export function DailyTasksSection({ onSessionExpired }: { readonly onSessionExpi
     [load, handleActionError],
   );
 
-  const openTextEditor = useCallback((row: DailyTaskRow) => {
+  const openTextEditor = useCallback((row: DailyTaskRowData) => {
     setTextDraft((d) => ({ ...d, [row.id]: row.text }));
     setEditingTextId(row.id);
   }, []);
@@ -221,32 +201,104 @@ export function DailyTasksSection({ onSessionExpired }: { readonly onSessionExpi
     [load, handleActionError, badgeRefresh],
   );
 
+  // issue 519: zmazať LEN nahrávku (úloha aj text ostávajú).
+  const removeAudio = useCallback(
+    (id: string) => {
+      setBusyId(id);
+      setError("");
+      deleteDailyTaskAudio(id)
+        .then(() => {
+          load();
+        })
+        .catch((err: unknown) => {
+          handleActionError(err, "Nahrávku sa nepodarilo odstrániť — skúste to znova.");
+        })
+        .finally(() => {
+          setBusyId("");
+        });
+    },
+    [load, handleActionError],
+  );
+
+  const onDraftChange = useCallback((id: string, value: string) => {
+    setTextDraft((d) => ({ ...d, [id]: value }));
+  }, []);
+  const cancelEdit = useCallback(() => {
+    setEditingTextId(null);
+  }, []);
+
   const intro = <p>Zdieľaný zoznam úloh — nahrádza poznámky písané do Discordu. Vidia ho všetky prihlásené účty; pri každej úlohe je jej autor.</p>;
 
+  const recording = recorder.state !== "idle";
   const addRow = (
-    <div className="ulohy-add-row">
-      <input
-        ref={newTextRef}
-        value={newText}
-        onChange={(e) => {
-          setNewText(e.target.value);
-        }}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            addTask();
-          }
-        }}
-        aria-label="Nová úloha"
-        placeholder="Napíš úlohu a stlač Enter…"
-        data-testid="uloha-new-input"
-        disabled={creating}
-      />
-      <EmojiPickerButton targetRef={newTextRef} value={newText} onChange={setNewText} testId="uloha-new-emoji" disabled={creating} />
-      <button type="button" className="btn good sm" onClick={addTask} disabled={newText.trim() === "" || creating} data-testid="uloha-new-add">
-        + Pridať
-      </button>
+    <div className="ulohy-add-row" data-testid="uloha-add-row">
+      {recording ? (
+        <div className="ulohy-rec-bar" data-testid="uloha-rec-bar">
+          {recorder.state === "recording" ? (
+            <>
+              <span className="ulohy-rec-dot" aria-hidden="true" />
+              <span className="ulohy-rec-time" role="status" data-testid="uloha-rec-time">
+                {formatRecordingTime(recorder.elapsedMs)}
+              </span>
+              <button type="button" className="btn sm" onClick={recorder.cancel} aria-label="Zrušiť nahrávanie" data-testid="uloha-rec-cancel">
+                ✕ Zrušiť
+              </button>
+              <button type="button" className="btn good sm" onClick={recorder.stop} aria-label="Ukončiť nahrávanie" data-testid="uloha-rec-stop">
+                ■ Hotovo
+              </button>
+            </>
+          ) : (
+            <span className="ulohy-rec-processing" role="status" data-testid="uloha-rec-processing">
+              Prepisujem…
+            </span>
+          )}
+        </div>
+      ) : (
+        <>
+          <input
+            ref={newTextRef}
+            value={newText}
+            onChange={(e) => {
+              setNewText(e.target.value);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                addTask();
+              }
+            }}
+            aria-label="Nová úloha"
+            placeholder="Napíš úlohu a stlač Enter…"
+            data-testid="uloha-new-input"
+            disabled={creating}
+          />
+          {/* issue 519: mikrofón — VŽDY viditeľný. Na mobile (CSS
+              `@media max-width:36rem`) je emoji skrytý, takže mikrofón ho
+              nahrádza; na desktope sú oba. */}
+          <button
+            type="button"
+            className="uloha-mic-btn"
+            onClick={recorder.start}
+            disabled={creating}
+            title="Nahrať hlasovú poznámku"
+            aria-label="Nahrať hlasovú poznámku"
+            data-testid="uloha-new-mic"
+          >
+            🎤
+          </button>
+          <EmojiPickerButton targetRef={newTextRef} value={newText} onChange={setNewText} testId="uloha-new-emoji" disabled={creating} />
+          <button type="button" className="btn good sm" onClick={addTask} disabled={newText.trim() === "" || creating} data-testid="uloha-new-add">
+            + Pridať
+          </button>
+        </>
+      )}
     </div>
+  );
+
+  const recorderError = recorder.error !== "" && (
+    <p role="alert" data-testid="uloha-rec-error">
+      {recorder.error}
+    </p>
   );
 
   if (error !== "" && rows === null) {
@@ -255,6 +307,7 @@ export function DailyTasksSection({ onSessionExpired }: { readonly onSessionExpi
         {intro}
         <div className="ulohy-panel">
           {addRow}
+          {recorderError}
           <p role="alert">{error}</p>
         </div>
       </section>
@@ -266,6 +319,7 @@ export function DailyTasksSection({ onSessionExpired }: { readonly onSessionExpi
         {intro}
         <div className="ulohy-panel">
           {addRow}
+          {recorderError}
           <p>Načítavam…</p>
         </div>
       </section>
@@ -277,146 +331,33 @@ export function DailyTasksSection({ onSessionExpired }: { readonly onSessionExpi
       {intro}
       <div className="ulohy-panel">
         {addRow}
+        {recorderError}
         {error !== "" && <p role="alert">{error}</p>}
 
         {rows.length === 0 ? (
           <p data-testid="ulohy-empty">Žiadne úlohy — napíš prvú vyššie.</p>
         ) : (
           <div className="ulohy-list" data-testid="ulohy-list">
-            {rows.map((row) => {
-              const isDone = row.doneAt !== null;
-              const busy = busyId === row.id;
-              return (
-                <div className={"uloha-row" + (isDone ? " done" : "")} key={row.id} data-testid={`uloha-row-${row.id}`}>
-                  <input
-                    type="checkbox"
-                    className="uloha-done-toggle"
-                    checked={isDone}
-                    aria-label={isDone ? "Označiť ako nevybavené" : "Označiť ako vybavené"}
-                    title={isDone ? "Označiť ako nevybavené" : "Označiť ako vybavené"}
-                    disabled={busy}
-                    onChange={() => {
-                      toggleDone(row);
-                    }}
-                    data-testid={`uloha-done-${row.id}`}
-                  />
-
-                  {row.emoji !== null && (
-                    <span className="uloha-emoji" data-testid={`uloha-emoji-cell-${row.id}`} aria-hidden="true">
-                      {row.emoji}
-                    </span>
-                  )}
-
-                  {editingTextId === row.id ? (
-                    <>
-                      <input
-                        ref={editTextRef}
-                        className="uloha-edit-input"
-                        value={textDraft[row.id] ?? row.text}
-                        onChange={(e) => {
-                          const value = e.target.value;
-                          setTextDraft((d) => ({ ...d, [row.id]: value }));
-                        }}
-                        aria-label="Upraviť text úlohy"
-                        data-testid={`uloha-edit-input-${row.id}`}
-                        autoFocus
-                      />
-                      {/* issue 471: emoji DO textu aj v edit režime (insert na kurzor). */}
-                      <EmojiPickerButton
-                        targetRef={editTextRef}
-                        value={textDraft[row.id] ?? row.text}
-                        onChange={(v) => {
-                          setTextDraft((d) => ({ ...d, [row.id]: v }));
-                        }}
-                        testId={`uloha-edit-emoji-${row.id}`}
-                        disabled={busy}
-                      />
-                      <button
-                        type="button"
-                        className="uloha-icon-btn"
-                        disabled={busy}
-                        onClick={() => {
-                          saveText(row.id);
-                        }}
-                        title="Uložiť"
-                        aria-label="Uložiť text"
-                        data-testid={`uloha-edit-save-${row.id}`}
-                      >
-                        💾
-                      </button>
-                      <button
-                        type="button"
-                        className="uloha-icon-btn"
-                        onClick={() => {
-                          setEditingTextId(null);
-                        }}
-                        title="Zrušiť"
-                        aria-label="Zrušiť úpravu textu"
-                      >
-                        ✕
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <span className="uloha-text" data-testid={`uloha-text-${row.id}`}>
-                        {row.text}
-                      </span>
-                      {/* issue 487: zdieľaný zoznam — autor úlohy pri riadku (ako
-                          pri Poznámkach), aby bolo jasné, čí je záznam. */}
-                      <span className="uloha-author" data-testid={`uloha-author-${row.id}`}>
-                        {row.authorName}
-                      </span>
-                    </>
-                  )}
-
-                  {editingTextId !== row.id && (
-                    <div className="uloha-actions">
-                      <button
-                        type="button"
-                        className="uloha-icon-btn"
-                        onClick={() => {
-                          openTextEditor(row);
-                        }}
-                        title="Upraviť text"
-                        aria-label={`Upraviť text úlohy ${row.text}`}
-                        data-testid={`uloha-edit-${row.id}`}
-                      >
-                        ✏️
-                      </button>
-                      {/* issue 471: 😊 otvorí picker, JEDNÝM klikom uloží emoji k úlohe
-                          (`saveRowEmoji`); voľba „bez emoji" ho odstráni. `align="right"`
-                          ukotví popover k pravému okraju (picker je pri pravom okraji
-                          panela). Vzhľad prepínača je CSS-scopnutý na `.uloha-icon-btn`
-                          (`app.css`), takže hustota riadku ostáva rovnaká (issue 471). */}
-                      <EmojiPickerButton
-                        onPick={(emoji) => {
-                          saveRowEmoji(row.id, emoji);
-                        }}
-                        showClear
-                        align="right"
-                        label={`Pridať/zmeniť emoji úlohy ${row.text}`}
-                        title="Pridať/zmeniť emoji"
-                        testId={`uloha-emoji-${row.id}`}
-                        disabled={busy}
-                      />
-                      <button
-                        type="button"
-                        className="uloha-icon-btn"
-                        disabled={busy}
-                        onClick={() => {
-                          removeTask(row.id);
-                        }}
-                        title="Odstrániť"
-                        aria-label={`Odstrániť úlohu ${row.text}`}
-                        data-testid={`uloha-delete-${row.id}`}
-                      >
-                        🗑
-                      </button>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+            {rows.map((row) => (
+              <DailyTaskRow
+                key={row.id}
+                row={row}
+                busy={busyId === row.id}
+                editing={editingTextId === row.id}
+                draftValue={textDraft[row.id] ?? row.text}
+                editInputRef={editTextRef}
+                onToggleDone={toggleDone}
+                onOpenTextEditor={openTextEditor}
+                onDraftChange={(value) => {
+                  onDraftChange(row.id, value);
+                }}
+                onSaveText={saveText}
+                onCancelEdit={cancelEdit}
+                onSaveRowEmoji={saveRowEmoji}
+                onRemove={removeTask}
+                onDeleteAudio={removeAudio}
+              />
+            ))}
           </div>
         )}
       </div>
