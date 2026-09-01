@@ -82,9 +82,25 @@ test("napísať zápis, pripnúť produkt (priama aj náhradná adresa), prepnú
 
   // issue 453: upraviť počet produktu 1 z 2 na 3 (Enter commit), potom RELOAD
   // dokáže, že sa hodnota naozaj uložila do DB (nie len lokálny draft).
+  // Vstup je kontrolovaný lokálnym draftom, takže `toHaveValue("3")` je "3" v
+  // DOM-e OKAMŽITE po fill (`onChange` synchrónne), NEČAKÁ na async PATCH, čo
+  // Enter (→ blur → `commitQty` → `onUpdateQuantity`) spúšťa. Bez explicitného
+  // čakania na dokončenie zápisu `page.reload()` na pomalom CI runneri predbehne
+  // PATCH a po reloade je stará hodnota "2" (flaky race, ktorý zhodil main
+  // CI 33553887182, kým identický strom prešiel na dev 33552779623). Počkaj
+  // preto na 200 odpoveď PATCH endpointu množstva PRED reloadom — dôkazová sila
+  // testu ostáva (reload + asercie z DB nižšie sa nemenia), len sa odstraňuje
+  // závod medzi commitom a reloadom.
   await pocet1.fill("3");
+  const pocetUlozeny = page.waitForResponse(
+    (r) =>
+      r.request().method() === "PATCH" &&
+      /\/api\/floor-notes\/.+\/products\/.+\/quantity$/.test(r.url()) &&
+      r.status() === 200,
+  );
   await pocet1.press("Enter");
   await expect(pocet1).toHaveValue("3");
+  await pocetUlozeny;
   await page.reload();
   await expect(page.getByTestId("floor-notes-list")).toBeVisible();
   await expect(page.getByTestId(`floor-note-product-qty-input-${noteId}-E2E-PREDAJNA-1`)).toHaveValue("3");
