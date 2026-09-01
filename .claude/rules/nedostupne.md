@@ -3,6 +3,7 @@ paths:
   - "apps/api/src/modules/nedostupne/**"
   - "apps/api/src/http/nedostupne-routes.ts"
   - "apps/web/src/components/NedostupneSection*.tsx"
+  - "apps/web/src/components/NedostupneOrderNote.tsx"
   - "apps/web/src/nedostupneApi.ts"
   - "apps/api/src/modules/single-use-preview-tokens.ts"
   - "apps/api/src/modules/orders/merge-mail-preview-tokens.ts"
@@ -144,3 +145,35 @@ paths:
   konkrétnu farbu ("červené"/"zelené"), over najprv, či tá farba už v
   appke nemá iný, kolidujúci význam, než ju rovno použiješ — a zdôvodnenie
   zapíš na ticket, nech to vie posúdiť.
+- **issue 529: 📦 preklik z „Nedostupné tovary" do „Na objednanie" je CELÁ
+  navigácia stránky (`<a href="?tab=orders&highlight=<encodeURIComponent
+  (variantCode)>">`), nie in-SPA prepnutie tabu** — `App.tsx` číta `?tab`
+  LEN pri mounte a `NedostupneSection` nemá `selectTab` (len `role`/
+  `onSessionExpired`), takže rovnaký vzor ako `FloorOrderRow`'s
+  `?tab=floor-orders`. `OrdersSection` prečíta `highlight` z URL RAZ pri
+  mounte a JEDNORAZOVÝM branch-and-return efektom riadok odkryje +
+  naskroluje + zvýrazní (`order-row--highlight` + `data-order-highlight`,
+  CSS 3s jantárová `forwards` animácia). **Efekt musí byť STRÁŽENÝ hore
+  `if (highlightScrolledRef.current) return;`** — bez toho by počas ~4 s
+  zhášacieho okna VRÁTIL manuálny klik používateľa na chip / znovu-zapnutie
+  „skryť vybavené" (code review nález). Odkrytie: (1) chip filter →
+  `selectSupplier(cieľ)` keď je vybraný INÝ dodávateľ; (2) „skryť vybavené"
+  → `setHideResolved(false)` RAW setterom (NEpersistuje preferenciu — perzistuje
+  len `toggleHideResolved`), lebo nedostupný riadok je `isLineResolved`
+  (state !== "objednane"). 📦 je štvorcové tlačidlo ZDIEĽAJÚCE
+  `.customer-contact-btn` štýl (na `<a>` + `text-decoration:none`), NEgatované
+  (len navigácia); odkrývacie vetvy overuje UNIT test (e2e beží s čerstvým
+  úložiskom = žiadny chip/hideResolved).
+- **issue 529: poznámka na objednávkovom riadku sa zapíše ako poznámka
+  objednávky do eshopu cez EXISTUJÚCU cestu `updateOrderComment` →
+  `PUT /api/orders/:id/comment` → `order.comment` → Shoptet writeback worker
+  (`.claude/rules/shoptet-writeback.md`), NIKDY nový mechanizmus** — tá istá
+  cesta ako stĺpec POZNÁMKY v „Na objednanie". `NedostupneOrderRow` preto
+  nesie `orderId` + `comment` (queries.ts + zod schéma). Draft je per-riadok
+  (`${variantCode}|${orderCode}`, vzor `linkDrafts`), po uložení sa zahodí
+  draft objednávky VO VŠETKÝCH skupinách (kľúč `|<orderCode>` — tá istá
+  objednávka môže čakať na dva nedostupné varianty, inak zastaraný draft
+  maskuje čerstvú hodnotu). Uloženie NEZMENENEJ hodnoty je zablokované
+  (žiadny no-op PUT + zbytočné re-spustenie workera). Gated `canControl`
+  (admin/manazer, parita s `requireRole` na trase). Vykreslenie vyčlenené do
+  `NedostupneOrderNote.tsx` (eslint max-lines) — reuse `.ord-comment-input`.

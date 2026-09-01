@@ -1,4 +1,4 @@
-import { useCallback, useContext, useEffect, useMemo, useState, type JSX } from "react";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState, type JSX } from "react";
 import type { Me } from "../api.js";
 import {
   persistHideResolvedPreference,
@@ -125,6 +125,72 @@ export function OrdersSection({
   // issue 148 (vyňaté do `useSelectedSupplierFallback.ts`).
   useSelectedSupplierFallback(loaded, suppliers, selectedSupplier, selectSupplier);
 
+  // issue 529: preklik 📦 z „Nedostupné tovary" (`?tab=orders&highlight=<kód>`,
+  // celá navigácia stránky) — odkryje a zvýrazní riadok(y) daného variantu.
+  // `highlightCode` sa číta z URL RAZ pri mounte (rovnaký vzor ako `initialTabId`
+  // v `App.tsx`); `URLSearchParams.get` auto-dekóduje `/` v kóde variantu.
+  const [highlightCode, setHighlightCode] = useState<string | null>(() => {
+    const raw = new URLSearchParams(window.location.search).get("highlight");
+    return raw !== null && raw !== "" ? raw : null;
+  });
+  // Zvýraznenie sa naskroluje LEN raz — ďalšie prekreslenia (refetch `suppliers`)
+  // ho už neopakujú.
+  const highlightScrolledRef = useRef(false);
+  const highlightTimerRef = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (highlightTimerRef.current !== null) window.clearTimeout(highlightTimerRef.current);
+    },
+    [],
+  );
+  const stripHighlightParam = useCallback(() => {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("highlight");
+    window.history.replaceState(null, "", url);
+  }, []);
+  useEffect(() => {
+    if (!loaded || highlightCode === null) return;
+    // Zvýraznenie je JEDNORAZOVÉ: po naskrolovaní (krok 3 nastaví
+    // `highlightScrolledRef`) sa efekt už nesmie znova pliesť do filtra/„skryť
+    // vybavené" — inak by počas ~4 s okna (kým časovač nezhasne `highlightCode`)
+    // VRÁTIL manuálny klik používateľa na chip alebo znovu-zapnutie „skryť
+    // vybavené" (code review nález, issue 529). Odkrývacie kroky bežia LEN pred
+    // prvým naskrolovaním.
+    if (highlightScrolledRef.current) return;
+    const targetGroup = suppliers.find((group) => group.lines.some((line) => line.variantCode === highlightCode));
+    if (targetGroup === undefined) {
+      // Produkt už nie je medzi otvorenými objednávkami — nič na zvýraznenie.
+      setHighlightCode(null);
+      stripHighlightParam();
+      return;
+    }
+    // Krok 1: odkry skupinu skrytú chip filtrom. `null` = „Všetci" (všetko sa
+    // zobrazuje), vtedy netreba nič. Fallback hook nuluje LEN neplatný výber,
+    // takže platný výber tu nastavený neprepíše. Return → efekt sa spustí znova
+    // po prekreslení (branch-and-return, self-terminujúci).
+    if (selectedSupplier !== null && selectedSupplier !== targetGroup.supplier) {
+      selectSupplier(targetGroup.supplier);
+      return;
+    }
+    // Krok 2: odkry riadok skrytý „skryť vybavené" — nedostupný riadok je
+    // `isLineResolved` (state !== "objednane"). RAW setter NEpersistuje
+    // preferenciu používateľa (perzistuje len `toggleHideResolved`).
+    const targetHidden = hideResolved && targetGroup.lines.some((line) => line.variantCode === highlightCode && isLineResolved(line));
+    if (targetHidden) {
+      setHideResolved(false);
+      return;
+    }
+    // Krok 3: viditeľné → naskroluj a po ~4 s zhasni. Sem sa dostaneme LEN raz:
+    // horný `if (highlightScrolledRef.current) return;` vyššie zaručuje, že po
+    // nastavení refu tu už efekt nikdy znova neprebehne (žiadny druhý scroll).
+    highlightScrolledRef.current = true;
+    document.querySelector('[data-order-highlight="true"]')?.scrollIntoView({ block: "center" });
+    stripHighlightParam();
+    highlightTimerRef.current = window.setTimeout(() => {
+      setHighlightCode(null);
+    }, 4000);
+  }, [loaded, suppliers, highlightCode, selectedSupplier, hideResolved, selectSupplier, stripHighlightParam]);
+
   // `/api/orders/open` už zoraďuje riadky presne tak, ako majú byť zobrazené
   // (dodávateľ vzostupne, potom najnovšia objednávka prvá) — žiadne ďalšie
   // preskupovanie na klientovi.
@@ -210,6 +276,7 @@ export function OrdersSection({
           key={group.supplier}
           group={group}
           selectedSupplier={selectedSupplier}
+          highlightVariantCode={highlightCode}
           hideResolved={hideResolved}
           dirtyEditorLineIds={dirtyEditorLineIds}
           onEditorActivityChange={onEditorActivityChange}

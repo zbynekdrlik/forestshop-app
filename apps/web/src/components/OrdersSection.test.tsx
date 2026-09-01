@@ -489,3 +489,43 @@ it("zobrazí objednanú veľkosť pri mene produktu, a nič pri variante bez ve�
   expect(LINE_NOVA.sizeLabel).toBeNull();
   expect(screen.queryByTestId(`size-${LINE_NOVA.lineId}`)).toBeNull();
 });
+
+// issue 529: 📦 deep-link z „Nedostupné tovary" (`?tab=orders&highlight=<kód>`).
+// Test ODKRÝVACÍCH VETIEV, ktoré e2e (čerstvé úložisko: žiadny chip, „skryť
+// vybavené" vypnuté) nepokrýva: (1) skupina skrytá chip filtrom sa odkryje
+// prepnutím na dodávateľa cieľa; (2) riadok skrytý „skryť vybavené" (vybavený
+// riadok) sa odkryje vypnutím prepínača — BEZ zmeny ULOŽENEJ preferencie.
+// localStorage + URL sa po každom teste vyčistia (`.claude/rules/frontend-design.md`).
+afterEach(() => {
+  window.localStorage.clear();
+  window.history.replaceState(null, "", "/");
+});
+
+it("📦 highlight odkryje skupinu skrytú chipom aj riadok skrytý „skryť vybavené\" a zvýrazní ho", async () => {
+  // Uložený chip = INÝ dodávateľ (Alfa) → highlight musí prepnúť na Beta;
+  // „skryť vybavené" zapnuté → highlight musí odkryť vybavený riadok B-1
+  // (LINE_NOVA je v stave „skladom" = `isLineResolved`).
+  // jsdom neimplementuje `scrollIntoView` — highlight ho volá v kroku 3.
+  Element.prototype.scrollIntoView = () => {};
+  window.localStorage.setItem("forestshop.orders.selectedSupplier", "Dodávateľ Alfa");
+  window.localStorage.setItem("forestshop.orders.hideResolved", "1");
+  window.history.replaceState(null, "", "?tab=orders&highlight=B-1");
+
+  fetchOpenOrders.mockResolvedValue([
+    { supplier: "Dodávateľ Alfa", lines: [LINE_STARA], email: null },
+    { supplier: "Dodávateľ Beta", lines: [LINE_NOVA], email: null },
+  ]);
+
+  render(<OrdersSection role="manazer" onSessionExpired={() => {}} />);
+
+  // Riadok cieľového produktu je nakoniec viditeľný (skupina Beta odkrytá,
+  // „skryť vybavené" run-time vypnuté) a zvýraznený.
+  const row = await screen.findByTestId(`order-line-${LINE_NOVA.lineId}`);
+  expect(row.className).toContain("order-row--highlight");
+  expect(row.getAttribute("data-order-highlight")).toBe("true");
+  expect(screen.getByTestId("supplier-Dodávateľ Beta")).toBeTruthy();
+
+  // ULOŽENÁ preferencia „skryť vybavené" sa NEZMENILA — odkrytie je len run-time
+  // (RAW setter, nie `toggleHideResolved`).
+  expect(window.localStorage.getItem("forestshop.orders.hideResolved")).toBe("1");
+});
