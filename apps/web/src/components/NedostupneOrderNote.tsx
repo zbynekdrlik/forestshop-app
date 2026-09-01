@@ -14,6 +14,7 @@ export function NedostupneOrderNote({
   orderId,
   value,
   busy,
+  saveDisabled,
   onChange,
   onSave,
 }: {
@@ -22,6 +23,9 @@ export function NedostupneOrderNote({
   readonly orderId: string;
   readonly value: string;
   readonly busy: boolean;
+  // Uloženie zablokované (prebieha zápis ALEBO sa poznámka nezmenila) — vstup
+  // ostáva editovateľný (`disabled` len počas `busy`).
+  readonly saveDisabled: boolean;
   readonly onChange: (value: string) => void;
   readonly onSave: (orderId: string, value: string) => void;
 }): JSX.Element {
@@ -40,7 +44,7 @@ export function NedostupneOrderNote({
           onChange(e.target.value);
         }}
         onKeyDown={(e) => {
-          if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+          if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && !saveDisabled) {
             e.preventDefault();
             onSave(orderId, value);
           }
@@ -52,7 +56,7 @@ export function NedostupneOrderNote({
         data-testid={`nedostupne-note-save-${orderCode}-${variantCode}`}
         aria-label={`Uložiť poznámku do eshopu k objednávke ${orderCode}`}
         title="Uložiť poznámku (Ctrl+Enter)"
-        disabled={busy}
+        disabled={saveDisabled}
         onClick={() => {
           onSave(orderId, value);
         }}

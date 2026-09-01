@@ -150,6 +150,13 @@ export function OrdersSection({
   }, []);
   useEffect(() => {
     if (!loaded || highlightCode === null) return;
+    // Zvýraznenie je JEDNORAZOVÉ: po naskrolovaní (krok 3 nastaví
+    // `highlightScrolledRef`) sa efekt už nesmie znova pliesť do filtra/„skryť
+    // vybavené" — inak by počas ~4 s okna (kým časovač nezhasne `highlightCode`)
+    // VRÁTIL manuálny klik používateľa na chip alebo znovu-zapnutie „skryť
+    // vybavené" (code review nález, issue 529). Odkrývacie kroky bežia LEN pred
+    // prvým naskrolovaním.
+    if (highlightScrolledRef.current) return;
     const targetGroup = suppliers.find((group) => group.lines.some((line) => line.variantCode === highlightCode));
     if (targetGroup === undefined) {
       // Produkt už nie je medzi otvorenými objednávkami — nič na zvýraznenie.
@@ -173,17 +180,15 @@ export function OrdersSection({
       setHideResolved(false);
       return;
     }
-    // Krok 3: viditeľné → naskroluj raz, odstráň URL param a po ~4 s zhasni.
-    if (!highlightScrolledRef.current) {
-      highlightScrolledRef.current = true;
-      const el = document.querySelector('[data-order-highlight="true"]');
-      // `scrollIntoView` v jsdom neexistuje (unit test) — v prehliadači vždy je.
-      if (el !== null && typeof el.scrollIntoView === "function") el.scrollIntoView({ block: "center" });
-      stripHighlightParam();
-      highlightTimerRef.current = window.setTimeout(() => {
-        setHighlightCode(null);
-      }, 4000);
-    }
+    // Krok 3: viditeľné → naskroluj a po ~4 s zhasni. Sem sa dostaneme LEN raz:
+    // horný `if (highlightScrolledRef.current) return;` vyššie zaručuje, že po
+    // nastavení refu tu už efekt nikdy znova neprebehne (žiadny druhý scroll).
+    highlightScrolledRef.current = true;
+    document.querySelector('[data-order-highlight="true"]')?.scrollIntoView({ block: "center" });
+    stripHighlightParam();
+    highlightTimerRef.current = window.setTimeout(() => {
+      setHighlightCode(null);
+    }, 4000);
   }, [loaded, suppliers, highlightCode, selectedSupplier, hideResolved, selectSupplier, stripHighlightParam]);
 
   // `/api/orders/open` už zoraďuje riadky presne tak, ako majú byť zobrazené

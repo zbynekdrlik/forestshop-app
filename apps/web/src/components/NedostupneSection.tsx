@@ -190,13 +190,19 @@ export function NedostupneSection({ role, onSessionExpired }: { readonly role: M
   // uloženou hodnotou. Prázdny reťazec maže poznámku (server ho normalizuje na
   // `null`, rovnako ako `changeComment` v „Na objednanie").
   const saveNote = useCallback(
-    (noteKey: string, orderId: string, value: string) => {
+    (noteKey: string, orderCode: string, orderId: string, value: string) => {
       setActionError("");
       setNoteBusy(noteKey);
       const trimmed = value.trim();
       updateOrderComment(orderId, trimmed === "" ? null : trimmed)
         .then(() => {
-          setNoteDrafts((drafts) => Object.fromEntries(Object.entries(drafts).filter(([key]) => key !== noteKey)));
+          // Zahoď draft TEJTO objednávky VO VŠETKÝCH skupinách (poznámka patrí
+          // OBJEDNÁVKE, kľúč je `${variantCode}|${orderCode}`) — tá istá
+          // objednávka môže čakať na dva nedostupné varianty, takže po uložení
+          // sa jej riadky v oboch skupinách predvyplnia z novej `order.comment`,
+          // nikdy neostane zastaraný draft maskujúci čerstvú hodnotu (code
+          // review nález, issue 529).
+          setNoteDrafts((drafts) => Object.fromEntries(Object.entries(drafts).filter(([key]) => !key.endsWith(`|${orderCode}`))));
           load();
         })
         .catch((err: unknown) => {
@@ -387,11 +393,15 @@ export function NedostupneSection({ role, onSessionExpired }: { readonly role: M
                           orderId={order.orderId}
                           value={noteValue}
                           busy={noteBusyHere}
+                          // Uloženie nemá zmysel, keď sa poznámka nezmenila —
+                          // zbytočný PUT + re-spustenie Shoptet writeback workera
+                          // (code review nález, issue 529).
+                          saveDisabled={noteBusyHere || noteValue.trim() === (order.comment ?? "")}
                           onChange={(value) => {
                             setNoteDrafts((drafts) => ({ ...drafts, [noteKey]: value }));
                           }}
                           onSave={(orderId, value) => {
-                            saveNote(noteKey, orderId, value);
+                            saveNote(noteKey, order.orderCode, orderId, value);
                           }}
                         />
                       )}
