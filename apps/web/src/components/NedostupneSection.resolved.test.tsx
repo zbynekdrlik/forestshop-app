@@ -1,6 +1,8 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { StrictMode } from "react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { NedostupneSection } from "./NedostupneSection.js";
+import type { NedostupneList } from "../nedostupneApi.js";
 
 // issue 531: testy checkboxu „vyriešené" — vyčlenené z `NedostupneSection.test.tsx`
 // (eslint `max-lines: 400`), rovnaký split vzor ako `orders-http*.integration.test.ts`.
@@ -107,6 +109,59 @@ it("zlyhaný zápis vráti checkbox späť a zobrazí hlášku", async () => {
     expect(screen.getByTestId<HTMLInputElement>(CHECKBOX).checked).toBe(false);
   });
   await screen.findByText("Označenie sa nepodarilo uložiť.");
+});
+
+it("zastaraná odpoveď zoznamu (StrictMode duplicitný GET) nesmie prepísať optimistické odznačenie", async () => {
+  // issue 531 flake (main CI 33557805594, nedostupne.spec.ts checkbox toggle):
+  // appka beží pod `<StrictMode>` (main.tsx) a vo vývojovom móde (aj `pnpm
+  // e2e` cez vite dev) sa mount efekt `useEffect(load)` spustí DVAKRÁT → dva
+  // GET-y zoznamu. `load()` bez stale-response guardu (issue 251/523 trieda)
+  // aplikuje KAŽDÚ odpoveď na `setList` — takže pomalší duplicitný GET doletí
+  // AŽ PO optimistickom odznačení a prepíše ho späť na zaškrtnuté.
+  //
+  // Reprodukcia: PRVÝ (skorší) GET je zdržaný a zastaraný, DRUHÝ okamžitý —
+  // takže checkbox sa v OBOCH (rozbitej aj opravenej) verzii vykreslí z toho
+  // najnovšieho GET-u, a klobber pochádza zo zastaraného skoršieho GET-u
+  // (bez guardu ho aplikuje, s guardom ho zahodí).
+  const CHECKED: NedostupneList = { groups: [{ ...GROUP, resolved: true }], bccMissing: false, mailNotConfigured: false };
+  let resolveStale!: (value: NedostupneList) => void;
+  const stale = new Promise<NedostupneList>((r) => {
+    resolveStale = r;
+  });
+  fetchNedostupneList.mockReturnValueOnce(stale).mockResolvedValueOnce(CHECKED);
+  setNedostupneResolved.mockResolvedValue(undefined);
+
+  render(
+    <StrictMode>
+      <NedostupneSection role="manazer" onSessionExpired={vi.fn()} />
+    </StrictMode>,
+  );
+
+  // Checkbox sa vykreslí z NAJNOVŠIEHO (druhého, okamžitého) GET-u — zaškrtnutý.
+  const checkbox = await screen.findByTestId<HTMLInputElement>(CHECKBOX);
+  expect(checkbox.checked).toBe(true);
+
+  // Odznač (toggle) — optimisticky HNEĎ odznačené, PUT odletí.
+  fireEvent.click(checkbox);
+  expect(screen.getByTestId<HTMLInputElement>(CHECKBOX).checked).toBe(false);
+  await waitFor(() => {
+    expect(setNedostupneResolved).toHaveBeenCalledWith("40237/L", false);
+  });
+
+  // Doruč ZASTARANÚ odpoveď skoršieho GET-u (resolved=true) a POČKAJ, kým ju
+  // komponent CELÚ spracuje (`.then` mikrotaska + React re-render pod `act`) —
+  // deterministicky, žiadne pevné oneskorenie. Až POTOM plochá asercia: keby
+  // sa použil retrying `waitFor(false)`, prešiel by na PRVEJ (pred-klobber)
+  // kontrole aj proti rozbitému kódu (`.claude/rules/testing.md` — „čakanie
+  // urobí test zeleným zo zlého dôvodu").
+  await act(async () => {
+    resolveStale(CHECKED);
+    await stale;
+    await Promise.resolve();
+  });
+
+  // Musí ostať ODZNAČENÉ — zastaraná odpoveď nesmie prepísať optimistickú zmenu.
+  expect(screen.getByTestId<HTMLInputElement>(CHECKBOX).checked).toBe(false);
 });
 
 it("rola citanie vidí checkbox, ale nesmie ho prepnúť (disabled)", async () => {
