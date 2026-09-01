@@ -28,6 +28,13 @@ const STATE_LABEL: Readonly<Record<"sellable" | "out_of_stock" | "discontinued",
   discontinued: "ukončený predaj",
 };
 
+// issue 527: majiteľ overuje "Pripravené na prepnutie" v domnienke, že ide o
+// vypredaný produkt — odznak odlíši predobjednávkového kandidáta (issue 526).
+const RESTOCK_REASON_LABEL: Readonly<Record<"out_of_stock" | "preorder", string>> = {
+  out_of_stock: "vypredané",
+  preorder: "predobjednávka",
+};
+
 export function RestockSection({
   role,
   onSessionExpired,
@@ -373,7 +380,15 @@ export function RestockSection({
               <tbody>
                 {waitingList.rows.map((row) => (
                   <tr key={row.variantCode} data-testid={`restock-waiting-${row.variantCode}`}>
-                    <td>{row.variantCode}</td>
+                    <td>
+                      {row.variantCode}
+                      <span
+                        className="pill"
+                        data-testid={`restock-waiting-reason-${row.variantCode}`}
+                      >
+                        {RESTOCK_REASON_LABEL[row.reason]}
+                      </span>
+                    </td>
                     <td>{row.productName}</td>
                     <td>{row.supplier ?? "—"}</td>
                     <td>
