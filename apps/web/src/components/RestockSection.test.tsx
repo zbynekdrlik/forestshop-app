@@ -29,6 +29,7 @@ const WAITING = {
       supplierPrice: "24.00",
       confirmedAt: "2026-08-04T04:20:00.000Z",
       ourUrl: "https://www.forestshop.sk/ladvinka-swedteam-green/?variantId=4211",
+      reason: "out_of_stock" as const,
     },
     {
       // Kód, ktorý vo feede pre porovnávače NIE JE (issue 220) — dnes je
@@ -43,6 +44,8 @@ const WAITING = {
       supplierPrice: "59.00",
       confirmedAt: "2026-08-04T04:21:00.000Z",
       ourUrl: null,
+      // issue 527: druhý riadok je predobjednávkový kandidát (issue 526).
+      reason: "preorder" as const,
     },
   ],
   suppliers: [
@@ -216,6 +219,20 @@ it("pri každom čakajúcom produkte ponúkne odkaz na náš eshop aj k dodávat
   expect([...riadok.querySelectorAll("a")].every((a) => a.getAttribute("target") === "_blank")).toBe(
     true,
   );
+});
+
+// issue 527: majiteľ overuje "Pripravené na prepnutie" v domnienke, že ide
+// vždy o vypredaný produkt — badge musí odlíšiť predobjednávkového
+// kandidáta (issue 526) od skutočne vypredaného, priamo z API poľa `reason`.
+it("odlíši predobjednávkového kandidáta od vypredaného badge-om", async () => {
+  fetchRestockStatus.mockResolvedValue(STATUS);
+  render(<RestockSection role="admin" onSessionExpired={vi.fn()} />);
+
+  const vypredany = await screen.findByTestId("supplier-stock-candidate-type-60542");
+  expect(vypredany.textContent).toBe("vypredané");
+
+  const predobjednavka = await screen.findByTestId("supplier-stock-candidate-type-15314");
+  expect(predobjednavka.textContent).toBe("predobjednávka");
 });
 
 it("filter podľa dodávateľa načíta zoznam odznova od prvej stránky", async () => {

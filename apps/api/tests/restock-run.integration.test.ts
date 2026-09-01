@@ -238,6 +238,26 @@ describe("prepínanie Vypredané → Skladom", () => {
     expect(zoznam.rows.map((r) => r.variantCode)).toEqual(["P6"]);
   });
 
+  // issue 527: overovací zoznam musí niesť `reason`, aby ho UI vedelo
+  // rozlíšiť badge-om — vypredaný `state` aj predobjednávkový `state`+text
+  // v JEDNOM behu, jednoznačne priamo z `variants.state`.
+  it("overovací zoznam rozlíši dôvod kandidáta (vypredané vs predobjednávka)", async () => {
+    await seedSupplierStock();
+    await seedVariant("P9", { state: "out_of_stock" });
+    await seedSupplierStock({ link: "https://huntingshop.eu/bunda2" });
+    await seedVariant("P10", {
+      state: "sellable",
+      availabilityText: "Predobjednávka",
+      internalNote: "https://huntingshop.eu/bunda2",
+      productKey: "prod-P10",
+    });
+
+    const zoznam = await listRestockWaiting(db, NOW, { limit: 50, offset: 0 });
+    const byCode = new Map(zoznam.rows.map((r) => [r.variantCode, r.reason]));
+    expect(byCode.get("P9")).toBe("out_of_stock");
+    expect(byCode.get("P10")).toBe("preorder");
+  });
+
   // issue 526 review: match je SUBSTRING (`LIKE '%predobjedn%'`), rovnako ako
   // `OUT_OF_STOCK_MARKERS`'s `.includes()` — text s markerom UPROSTRED sa tiež
   // chytí. Pinuje substring sémantiku (mutácia na prefix-match by inak prešla).

@@ -124,6 +124,8 @@ const waitingSchema = z.object({
       // Priama adresa detailu z feedu (issue 220). `null` = kód vo feede nie
       // je; odkaz vtedy padne späť na vyhľadávanie podľa kódu.
       ourUrl: z.string().nullable(),
+      // issue 527: vypredaný, alebo predobjednávkový kandidát — badge v UI.
+      reason: z.enum(["out_of_stock", "preorder"]),
     }),
   ),
   suppliers: z.array(z.object({ name: z.string(), count: z.number() })),

@@ -15,6 +15,15 @@ import {
   SELLABLE_VISIBILITY,
 } from "./constants.js";
 
+/**
+ * Prečo je variant kandidátom (issue 527) — priamo z `variants.state`, nikdy
+ * z novej JS kontroly textu: `allRestockCandidates`'s `WHERE` garantuje, že
+ * jediné dve cesty do výsledku sú `state='out_of_stock'` alebo
+ * `state='sellable' AND isPreorderText`, takže `state` sám jednoznačne
+ * určuje dôvod (viď `reason` v `select`e nižšie).
+ */
+export type RestockCandidateReason = "out_of_stock" | "preorder";
+
 export interface RestockCandidate {
   readonly variantCode: string;
   readonly pairCode: string | null;
@@ -31,6 +40,8 @@ export interface RestockCandidate {
    * vyhľadávanie podľa kódu.
    */
   readonly ourUrl: string | null;
+  /** Vypredaný, alebo predobjednávkový (issue 526/527). */
+  readonly reason: RestockCandidateReason;
 }
 
 export interface RestockCandidates {
@@ -140,6 +151,9 @@ async function allRestockCandidates(db: Database, now: Date): Promise<readonly R
       supplierPrice: supplierStock.price,
       confirmedAt: supplierStock.confirmedAt,
       ourUrl: shopProductUrl.url,
+      // issue 527: jediné dve cesty cez WHERE nižšie sú `out_of_stock` alebo
+      // `sellable`+predobjednávkový text — `state` sám teda dôvod určuje.
+      reason: sql<RestockCandidateReason>`case when ${variants.state} = 'out_of_stock' then 'out_of_stock' else 'preorder' end`,
     })
     .from(variants)
     .innerJoin(products, eq(variants.productKey, products.key))
