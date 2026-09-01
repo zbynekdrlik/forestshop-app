@@ -14,6 +14,17 @@ paths:
 
 # Tests
 
+- **`<StrictMode>` dvojitý mount = dvojitý GET v `useEffect(load)` — pomalší
+  duplicitný GET doletí až PO používateľskej akcii a prepíše optimistický
+  stav späť** (flaky e2e „po odškrtnutí ostalo zaškrtnuté", main run
+  33557805594, `nedostupne.spec.ts`). Nie race testu — reálny bug: každý
+  load/refetch nad dátami mutovateľnými optimistickým toggle-om potrebuje
+  `useStaleResponseGuard` (vzor `NedostupneSection.load()`, fix 2d06fc5;
+  RED dôkaz da5b93e — unit test pod StrictMode). Na dev CI prechádzalo,
+  padlo až pod pomalším main behom. Pri „optimistický zápis + refetch bez
+  guardu" over TÚTO triedu pred hľadaním chyby v teste; sesterský tvar
+  (refetch po akcii) je #535.
+
 - **`test:integration` a `e2e` sa lokálne na dev1 default NESPÚŠŤAJÚ (issue
   351)** — bežia bezpodmienečne v `ci.yml` (`.claude/rules/ci.md`), lokálne
   ostáva len `pnpm gates:local` (typecheck+lint+unit testy). Spusti tú
