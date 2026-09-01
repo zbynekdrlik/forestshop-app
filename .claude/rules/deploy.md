@@ -11,6 +11,15 @@ paths:
 
 # Deployment (forestshop-dev — presunuté z dev2, issue 366)
 
+- **Verejná adresa APPKY je `forestshop.newlevel.media` — NIE
+  `forestshop-dev.newlevel.media`.** `forestshop-dev.newlevel.media` je len
+  A záznam (DNS-only, proxied=false) na verejnú IP boxu pre SSH/označenie
+  servera; na boxe na :443 nič nepočúva (appka beží na 127.0.0.1:8901 za
+  Cloudflare tunelom), takže `curl`/Playwright na `forestshop-dev.…` skončí
+  `ERR_CONNECTION_REFUSED` na ÚPLNE ZDRAVEJ appke — nie je to výpadok
+  (falošný poplach 1. 9. 2026 pri live overení issue 531). Live verify,
+  uptime check aj všetky 🌐 odkazy vždy na `https://forestshop.newlevel.media`.
+
 - **Cloudflare Error 1033 / HTTP 530 na oboch verejných adresách = tunel bez
   živého spojenia, NIE appka (issue 357, výpadok 12. 8. 2026 ráno).**
   `cloudflared` sa predvolene pripája protokolom QUIC (UDP 7844); keď QUIC
