@@ -18,6 +18,7 @@ import { ingestOrders, type RunOrdersIngest } from "./modules/orders/ingest.js";
 import { createHttpTrackingClient } from "./modules/posta-uncollected/tracking-client.js";
 import { runPostaUncollected } from "./modules/posta-uncollected/run.js";
 import { createOpenAiClassifyClient } from "./modules/order-reminder/classify-client.js";
+import { createOpenAiTranscribeClient } from "./modules/daily-tasks/transcribe-client.js";
 import { runOrderReminder } from "./modules/order-reminder/run.js";
 import {
   catalogImportJob,
@@ -219,6 +220,12 @@ const orderReminderDeps = {
   adminBaseUrl: env.SHOPTET_ADMIN_BASE_URL,
 };
 
+// issue 519: "Hlasová poznámka do úloh" — ten istý `OPENAI_API_KEY` (Whisper
+// prepis). Chýbajúci kľúč = `transcribeClient` je `undefined`, poznámky sa
+// ukladajú audio-only (nikdy sa nestratí nahrávka), presne ako klasifikátor
+// vyššie beží fail-graceful bez kľúča.
+const dailyTasksDeps = openAiApiKey === undefined ? {} : { transcribeClient: createOpenAiTranscribeClient({ apiKey: openAiApiKey }) };
+
 // issue 176: "Nedostupné tovary" — rovnaká úvaha ako #172/#173 vyššie: mail
 // transport (zdieľaný `sendSupplierMail`) a BCC adresa môžu chýbať,
 // `sendNedostupneEmail` to sama rieši fail-closed. ŽIADNY `classifyClient`
@@ -288,6 +295,7 @@ const app = createApp(db, {
   fetchSupplierPage,
   restock: { config: shoptetImportConfigFromBaseUrl(env.SHOPTET_ADMIN_BASE_URL, shoptetAdminUser ?? "", shoptetAdminPassword ?? "") },
   dpd: dpdDeps,
+  dailyTasks: dailyTasksDeps,
   ...(nextEventService === undefined ? {} : { nextEvent: nextEventService }),
 });
 

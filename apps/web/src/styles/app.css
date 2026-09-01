@@ -2752,6 +2752,90 @@ a.upozornenie-title:hover {
   cursor: not-allowed;
 }
 
+/* ---------------- HLASOVÁ POZNÁMKA (issue 519) ----------------
+   Mikrofón pri vstupe novej úlohy (vzor Messenger). Mikrofón je VŽDY
+   viditeľný; emoji picker v pridávacom riadku je na mobile (`@media
+   max-width:36rem`, mobilný breakpoint appky) SKRYTÝ — takže na telefóne
+   mikrofón nahrádza emoji, na desktope sú oba. */
+.uloha-mic-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  background: var(--fs-surface);
+  border: 1px solid var(--fs-border);
+  border-radius: var(--fs-radius-sm);
+  cursor: pointer;
+  line-height: 1;
+  padding: var(--fs-space-1) var(--fs-space-2);
+  font-size: var(--fs-text-base);
+}
+.uloha-mic-btn:hover {
+  background: var(--fs-surface-alt);
+}
+.uloha-mic-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+/* Nahrávacia lišta — zaberá celý pridávací riadok počas nahrávania/prepisu. */
+.ulohy-rec-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--fs-space-2);
+  flex: 1 1 auto;
+  min-height: 2.25rem;
+}
+.ulohy-rec-dot {
+  flex: 0 0 auto;
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 50%;
+  background: var(--fs-danger);
+  animation: ulohy-rec-pulse 1.2s ease-in-out infinite;
+}
+@keyframes ulohy-rec-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+.ulohy-rec-time {
+  flex: 1 1 auto;
+  font-variant-numeric: tabular-nums;
+  color: var(--fs-ink);
+}
+.ulohy-rec-processing {
+  flex: 1 1 auto;
+  color: var(--fs-ink-muted);
+  font-style: italic;
+}
+/* Ovládanie prehrávania nahrávky pri riadku úlohy. */
+.uloha-audio {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--fs-space-1);
+  flex: 0 0 auto;
+}
+.uloha-audio-time {
+  margin-left: 0.25rem;
+  font-size: var(--fs-text-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--fs-ink-muted);
+}
+.uloha-audio-failed {
+  font-size: var(--fs-text-xs);
+  color: var(--fs-danger);
+}
+/* Mobil: emoji picker v pridávacom riadku sa skryje — mikrofón ho nahrádza. */
+@media (max-width: 36rem) {
+  .ulohy-add-row .emoji-picker {
+    display: none;
+  }
+}
+
 /* ---------------- POZNÁMKY (issue 437) ----------------
    ZDIEĽANÁ nástenka rýchlych poznámok (mobilný zápis + PWA). Mobile-first:
    veľké textové pole hore + Uložiť, pod tým zoznam (autor + čas + telo,
