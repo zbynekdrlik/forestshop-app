@@ -2368,6 +2368,23 @@ tr:last-child td {
 .nedostupne-orders-link {
   text-decoration: none;
 }
+/* issue 531: štvorček „vyriešené" v hlavičke skupiny — rovnaký vzhľad ako
+   checkbox „Objednané" v „Na objednanie" (`.order-group input[type=checkbox]`).
+   Parent-scoped selektor (špecificita (0,0,2,1)) prebíja globálny
+   `input:not([type=hidden]){width:100%}` reset (issue 403 pasca — bare
+   `.nedostupne-resolved-checkbox` by prehral). `align-self: center`, lebo
+   hlavička je `align-items: baseline` a checkbox nemá textovú základňu. */
+.nedostupne-group-header input[type="checkbox"] {
+  width: 1.375rem;
+  height: 1.375rem;
+  accent-color: var(--fs-brand);
+  cursor: pointer;
+  align-self: center;
+  flex-shrink: 0;
+}
+.nedostupne-group-header input[type="checkbox"]:disabled {
+  cursor: not-allowed;
+}
 .nedostupne-preview-body {
   background: var(--fs-surface);
   padding: var(--fs-space-3);

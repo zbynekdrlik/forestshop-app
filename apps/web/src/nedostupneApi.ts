@@ -34,6 +34,8 @@ const groupSchema = z.object({
   ourProductUrl: z.string().nullable(),
   supplierUrl: z.string().nullable(),
   replacementLinks: z.array(replacementLinkSchema),
+  // issue 531: ručné označenie „vyriešené" pri karte produktu.
+  resolved: z.boolean(),
   orders: z.array(orderRowSchema),
 });
 export type NedostupneGroup = z.infer<typeof groupSchema>;
@@ -135,4 +137,16 @@ export async function removeReplacementLink(id: string): Promise<void> {
   const response = await fetch(`/api/nedostupne/replacement-links/${encodeURIComponent(id)}`, { method: "DELETE" });
   if (response.status === 401) throw new NedostupneUnauthorizedError();
   await readJson(response, "Odkaz sa nepodarilo zmazať");
+}
+
+// issue 531: prepnutie „vyriešené" pri karte produktu — idempotentné
+// nastavenie na želaný stav (server ho perzistuje, žiadny vedľajší efekt).
+export async function setNedostupneResolved(variantCode: string, resolved: boolean): Promise<void> {
+  const response = await fetch("/api/nedostupne/resolved", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ variantCode, resolved }),
+  });
+  if (response.status === 401) throw new NedostupneUnauthorizedError();
+  await readJson(response, "Označenie sa nepodarilo uložiť");
 }

@@ -5,6 +5,7 @@ import { resolveEffectiveSupplierLink } from "../orders/effective-supplier-link.
 import { buildShoptetAdminOrderUrl } from "../orders/queries.js";
 import { listOpenStatusNames } from "../orders/open-statuses.js";
 import { listReplacementLinksByVariant, type ReplacementLink } from "./replacement-links.js";
+import { loadResolvedVariants } from "./resolved.js";
 import { loadSentNedostupne, sentKey } from "./state.js";
 
 export interface NedostupneOrderRow {
@@ -40,6 +41,10 @@ export interface NedostupneGroup {
   // issue 238: majiteľove RUČNE vložené odkazy náhrad — nahrádza pôvodný
   // automatický zoznam z `product.relatedCodes`.
   readonly replacementLinks: readonly ReplacementLink[];
+  // issue 531: ručné označenie „vyriešené" pri karte produktu — PRÍTOMNOSŤ
+  // riadku v `nedostupne_resolved` (kľúč `variantCode`). Žiadny vedľajší efekt,
+  // len zobrazovací stav checkboxu (Štěpán: „nič ďalšie sa nestane").
+  readonly resolved: boolean;
   readonly orders: readonly NedostupneOrderRow[];
 }
 
@@ -83,6 +88,8 @@ export async function listNedostupneGroups(db: Database, adminBaseUrl: string): 
   if (rows.length === 0) return [];
 
   const sent = await loadSentNedostupne(db);
+  // issue 531: ktoré varianty sú ručne označené ako „vyriešené".
+  const resolvedVariants = await loadResolvedVariants(db);
   const replacementLinksByVariant = await listReplacementLinksByVariant(db, [...new Set(rows.map((r) => r.variantCode))]);
 
   const groups = new Map<
@@ -128,6 +135,7 @@ export async function listNedostupneGroups(db: Database, adminBaseUrl: string): 
       ourProductUrl: g.ourProductUrl,
       supplierUrl: g.supplierUrl,
       replacementLinks: replacementLinksByVariant.get(variantCode) ?? [],
+      resolved: resolvedVariants.has(variantCode),
       orders: g.orders,
     }))
     .sort((a, b) => {

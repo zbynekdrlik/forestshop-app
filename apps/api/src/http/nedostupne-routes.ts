@@ -7,6 +7,7 @@ import { EMAIL_TYPES } from "../modules/nedostupne/constants.js";
 import { consumePreviewToken, issuePreviewToken } from "../modules/nedostupne/preview-tokens.js";
 import { listNedostupneGroups } from "../modules/nedostupne/queries.js";
 import { addReplacementLink, removeReplacementLink } from "../modules/nedostupne/replacement-links.js";
+import { setVariantResolved } from "../modules/nedostupne/resolved.js";
 import { buildEmailForType, findNedostupneContext, sendNedostupneEmail } from "../modules/nedostupne/send.js";
 import type { MailTransport } from "../modules/mail/transport.js";
 import { startsWithFormulaChar } from "../modules/shoptet-writeback/formula-guard.js";
@@ -48,6 +49,11 @@ const replacementLinkBody = z.object({
     }),
 });
 const replacementLinkParam = z.object({ id: z.string().uuid() });
+
+// issue 531: ručné označenie „vyriešené" pri karte produktu — idempotentné
+// NASTAVENIE želaného stavu (nie POST/DELETE dvojica), keďže ide o boolean
+// prepínač. `variantCode` je kľúč skupiny (`NedostupneGroup`).
+const resolvedBody = z.object({ variantCode: z.string().trim().min(1).max(200), resolved: z.boolean() });
 
 function bccMissing(deps: NedostupneRunDeps): boolean {
   return deps.bccEmail === undefined || deps.bccEmail.trim() === "";
@@ -207,6 +213,34 @@ export function registerNedostupneRoutes(app: Hono<AppBindings>, db: Database, d
         });
       }
       return c.json({ ok: true as const, removed });
+    },
+  );
+
+  // issue 531: prepnutie „vyriešené" pri karte produktu — rovnaké oprávnenie
+  // ako ostatné zápisy na tejto obrazovke (admin/manazer, parita s poznámkou/
+  // odkazmi náhrad). Idempotentné nastavenie na želaný stav; „nič ďalšie sa
+  // nestane, len sa to označí" — žiadny vedľajší efekt (žiadny e-mail, žiadne
+  // filtrovanie), len persistovaný zobrazovací príznak.
+  app.put(
+    "/api/nedostupne/resolved",
+    requireSameOrigin(),
+    requireUser(db),
+    requireRole("admin", "manazer"),
+    zValidator("json", resolvedBody),
+    async (c) => {
+      const { variantCode, resolved } = c.req.valid("json");
+      const user = c.get("user");
+      const now = new Date();
+      await setVariantResolved(db, variantCode, resolved, now);
+      await record(db, {
+        at: now,
+        actorUserId: user.userId,
+        action: resolved ? "nedostupne.resolved.marked" : "nedostupne.resolved.cleared",
+        entity: "nedostupne_resolved",
+        entityId: variantCode,
+        data: { variantCode, resolved },
+      });
+      return c.json({ ok: true as const, resolved });
     },
   );
 }
