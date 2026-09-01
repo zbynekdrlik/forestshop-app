@@ -332,3 +332,83 @@ it("manazer zmaže odkaz náhrady — zmizne z GET zoznamu; zmazanie neznámeho 
   const delAgain = await app.request(`/api/nedostupne/replacement-links/${addBody.link.id}`, { method: "DELETE", headers: { cookie } });
   expect((await delAgain.json()) as { ok: boolean; removed: boolean }).toEqual({ ok: true, removed: false });
 });
+
+// ---------------- issue 531: checkbox „vyriešené" ----------------
+
+it("issue 531: GET zoznam má resolved=false pred označením", async () => {
+  const { app, cookie, db } = await boot("manazer");
+  await seedNedostupneLine(db, "17605001", "N531A");
+  const res = await app.request("/api/nedostupne", { headers: { cookie } });
+  const body = (await res.json()) as { groups: { variantCode: string; resolved: boolean }[] };
+  const group = body.groups.find((g) => g.variantCode === "N531A");
+  expect(group?.resolved).toBe(false);
+});
+
+it("issue 531: PUT resolved=true PERSISTUJE — GET zoznam ho ukáže ako resolved (prežije refresh)", async () => {
+  const { app, cookie, db } = await boot("manazer");
+  await seedNedostupneLine(db, "17605002", "N531B");
+
+  const put = await app.request("/api/nedostupne/resolved", {
+    method: "PUT",
+    headers: { cookie, "content-type": "application/json" },
+    body: JSON.stringify({ variantCode: "N531B", resolved: true }),
+  });
+  expect(put.status).toBe(200);
+  expect((await put.json()) as { ok: boolean; resolved: boolean }).toEqual({ ok: true, resolved: true });
+
+  const list = await app.request("/api/nedostupne", { headers: { cookie } });
+  const body = (await list.json()) as { groups: { variantCode: string; resolved: boolean }[] };
+  expect(body.groups.find((g) => g.variantCode === "N531B")?.resolved).toBe(true);
+});
+
+it("issue 531: PUT resolved=true je IDEMPOTENTNÉ (dvojklik neurobí druhý riadok), potom resolved=false ODZNAČÍ", async () => {
+  const { app, cookie, db } = await boot("manazer");
+  await seedNedostupneLine(db, "17605003", "N531C");
+
+  const mark = () =>
+    app.request("/api/nedostupne/resolved", {
+      method: "PUT",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({ variantCode: "N531C", resolved: true }),
+    });
+  expect((await mark()).status).toBe(200);
+  // Druhý zápis rovnakej hodnoty nesmie spadnúť na UNIQUE porušení.
+  expect((await mark()).status).toBe(200);
+
+  const afterMark = await app.request("/api/nedostupne", { headers: { cookie } });
+  expect(((await afterMark.json()) as { groups: { variantCode: string; resolved: boolean }[] }).groups.find((g) => g.variantCode === "N531C")?.resolved).toBe(true);
+
+  const clear = await app.request("/api/nedostupne/resolved", {
+    method: "PUT",
+    headers: { cookie, "content-type": "application/json" },
+    body: JSON.stringify({ variantCode: "N531C", resolved: false }),
+  });
+  expect(clear.status).toBe(200);
+
+  const afterClear = await app.request("/api/nedostupne", { headers: { cookie } });
+  expect(((await afterClear.json()) as { groups: { variantCode: string; resolved: boolean }[] }).groups.find((g) => g.variantCode === "N531C")?.resolved).toBe(false);
+});
+
+it("issue 531: PUT resolved=false na nikdy neoznačený variant je neškodné (ok, stále false)", async () => {
+  const { app, cookie, db } = await boot("manazer");
+  await seedNedostupneLine(db, "17605004", "N531D");
+  const res = await app.request("/api/nedostupne/resolved", {
+    method: "PUT",
+    headers: { cookie, "content-type": "application/json" },
+    body: JSON.stringify({ variantCode: "N531D", resolved: false }),
+  });
+  expect(res.status).toBe(200);
+  const list = await app.request("/api/nedostupne", { headers: { cookie } });
+  expect(((await list.json()) as { groups: { variantCode: string; resolved: boolean }[] }).groups.find((g) => g.variantCode === "N531D")?.resolved).toBe(false);
+});
+
+it("issue 531: rola citanie NESMIE prepnúť vyriešené (403)", async () => {
+  const { app, cookie, db } = await boot("citanie");
+  await seedNedostupneLine(db, "17605005", "N531E");
+  const res = await app.request("/api/nedostupne/resolved", {
+    method: "PUT",
+    headers: { cookie, "content-type": "application/json" },
+    body: JSON.stringify({ variantCode: "N531E", resolved: true }),
+  });
+  expect(res.status).toBe(403);
+});

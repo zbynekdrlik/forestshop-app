@@ -232,3 +232,55 @@ test("poznámka zadaná v Nedostupných sa uloží do objednávky a prežije rel
 
   expect(chyby).toEqual([]);
 });
+
+// issue 531: checkbox „vyriešené" pri karte produktu — klik = označené, prežije
+// reload (uložené na serveri), opätovný klik odznačí (toggle). „Nič ďalšie sa
+// nestane, len sa to označí" — žiadny e-mail, žiadne filtrovanie karty.
+test("checkbox vyriešené sa označí, prežije reload a dá sa odznačiť", async ({ page }) => {
+  const chyby: string[] = [];
+  page.on("console", (m) => {
+    if (m.type() === "error" || m.type() === "warning") chyby.push(m.text());
+  });
+  page.on("pageerror", (e) => {
+    chyby.push(e.message);
+  });
+
+  await page.goto("/?tab=nedostupne");
+  await page.getByLabel("E-mail").fill(E2E_NEDOSTUPNE_EMAIL);
+  await page.getByLabel("Heslo").fill(E2E_HESLO);
+  await page.getByRole("button", { name: "Prihlásiť sa" }).click();
+  await expect(page.getByRole("heading", { name: "Nedostupné tovary" })).toBeVisible();
+
+  const checkbox = page.getByTestId("nedostupne-resolved-checkbox-40287");
+  await expect(checkbox).toBeVisible();
+  await expect(checkbox).not.toBeChecked();
+
+  // Klik = označené. Počkaj na SKUTOČNÝ zápis (PUT), nie len na optimistický
+  // update — inak by reload predbehol neuzavretú požiadavku (rovnaká trieda
+  // ako poznámka vyššie / `.claude/rules/orders.md` checkbox race).
+  const [resp] = await Promise.all([
+    page.waitForResponse((r) => r.url().endsWith("/api/nedostupne/resolved") && r.request().method() === "PUT"),
+    checkbox.click(),
+  ]);
+  expect(resp.status()).toBe(200);
+  await expect(checkbox).toBeChecked();
+
+  // Prežije reload = uložené na serveri (zdieľané, prežije refresh).
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Nedostupné tovary" })).toBeVisible();
+  await expect(page.getByTestId("nedostupne-resolved-checkbox-40287")).toBeChecked();
+
+  // Opätovný klik ODZNAČÍ (toggle) — a to tiež prežije reload.
+  const [resp2] = await Promise.all([
+    page.waitForResponse((r) => r.url().endsWith("/api/nedostupne/resolved") && r.request().method() === "PUT"),
+    page.getByTestId("nedostupne-resolved-checkbox-40287").click(),
+  ]);
+  expect(resp2.status()).toBe(200);
+  await expect(page.getByTestId("nedostupne-resolved-checkbox-40287")).not.toBeChecked();
+
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Nedostupné tovary" })).toBeVisible();
+  await expect(page.getByTestId("nedostupne-resolved-checkbox-40287")).not.toBeChecked();
+
+  expect(chyby).toEqual([]);
+});

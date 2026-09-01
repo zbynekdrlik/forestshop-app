@@ -12,6 +12,7 @@ import {
   type NedostupneList,
   type NedostupnePreview,
 } from "../nedostupneApi.js";
+import { useNedostupneResolved } from "../useNedostupneResolved.js";
 import { formatNedostupneTotalChip } from "../nedostupneSummary.js";
 // issue 529: poznámka do eshopu — ZDIEĽANÁ zapisovacia cesta so stĺpcom POZNÁMKY
 // v „Na objednanie" (`updateOrderComment` → `PUT /api/orders/:id/comment` →
@@ -65,6 +66,10 @@ export function NedostupneSection({ role, onSessionExpired }: { readonly role: M
   // priamo aktuálnu `order.comment`.
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
   const [noteBusy, setNoteBusy] = useState("");
+  // issue 531: ručné označenie „vyriešené" — stav + optimistický toggle žije vo
+  // vlastnom hooku (eslint `max-lines`), rovnaká „lift do hooku" disciplína ako
+  // `useLoadMore`/`useStaleResponseGuard`.
+  const { resolvedBusy, toggleResolved } = useNedostupneResolved({ setList, setActionError, onSessionExpired });
 
   const load = useCallback(() => {
     fetchNedostupneList()
@@ -294,6 +299,24 @@ export function NedostupneSection({ role, onSessionExpired }: { readonly role: M
                   >
                     <span aria-hidden="true">📦</span>
                   </a>
+                  {/* issue 531: ručné označenie „vyriešené" — štvorček HNEĎ ZA
+                      📦 (per Štěpánov nákres), vizuál konzistentný s checkboxom
+                      „Objednané" v „Na objednanie" (`.nedostupne-group-header
+                      input[type=checkbox]`). Viditeľný VŠETKÝM (ako 📦),
+                      prepnúť smie len admin/manazer (`canControl`, server zápis
+                      aj tak gated). „Nič ďalšie sa nestane, len sa to označí." */}
+                  <input
+                    type="checkbox"
+                    className="nedostupne-resolved-checkbox"
+                    data-testid={`nedostupne-resolved-checkbox-${group.variantCode}`}
+                    aria-label={`Označiť ${itemLabel(group)} ako vyriešené`}
+                    title="Vyriešené"
+                    checked={group.resolved}
+                    disabled={!canControl || resolvedBusy === group.variantCode}
+                    onChange={(e) => {
+                      toggleResolved(group.variantCode, e.target.checked);
+                    }}
+                  />
                 </div>
 
                 {/* issue 238: majiteľove RUČNE vložené odkazy náhrad — nahrádza
