@@ -21,6 +21,7 @@ const ORDERS_TABLE_COLUMN_COUNT = 9;
 // poslalo pôvodný súbor cez eslint `max-lines: 400`, `.claude/rules/testing.md`).
 export function OrderLineRow({
   line,
+  highlighted = false,
   canChangeState,
   busyLineId,
   busyOrderedLineId,
@@ -40,6 +41,11 @@ export function OrderLineRow({
   onOpenCustomerContact,
 }: {
   readonly line: OrderLine;
+  // issue 529: TRUE keď sa na tento variant práve deep-linkovalo 📦 z „Nedostupné
+  // tovary" — pridá jednorazové vizuálne zvýraznenie riadku (`order-row--highlight`
+  // + `data-order-highlight`, po ktorom `OrdersSection` naskroluje). Voliteľné
+  // (default `false`) — „Riešiť" (`RiesitOrderRow`) ho neposiela.
+  readonly highlighted?: boolean;
   readonly canChangeState: boolean;
   readonly busyLineId: string | null;
   readonly busyOrderedLineId: string | null;
@@ -225,8 +231,11 @@ export function OrderLineRow({
         // farba je teraz na filtračnom čipe + hlavičke skupiny (`app.css`'s
         // `.chip`/`.toorder-supplier` komentár). `ordered` (stlmenie
         // priehľadnosťou, issue 60) ostáva nezmenené.
-        className={"order-row" + (line.ordered ? " ordered" : "")}
+        className={"order-row" + (line.ordered ? " ordered" : "") + (highlighted ? " order-row--highlight" : "")}
         data-testid={`order-line-${line.lineId}`}
+        // issue 529: cieľ scrollu pre 📦 deep-link (`OrdersSection` číta prvý
+        // taký prvok). Atribút je prítomný LEN na zvýraznenom riadku.
+        data-order-highlight={highlighted ? "true" : undefined}
       >
         <td>
           <input

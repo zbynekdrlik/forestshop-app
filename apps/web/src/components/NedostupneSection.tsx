@@ -13,7 +13,12 @@ import {
   type NedostupnePreview,
 } from "../nedostupneApi.js";
 import { formatNedostupneTotalChip } from "../nedostupneSummary.js";
+// issue 529: poznámka do eshopu — ZDIEĽANÁ zapisovacia cesta so stĺpcom POZNÁMKY
+// v „Na objednanie" (`updateOrderComment` → `PUT /api/orders/:id/comment` →
+// `order.comment` → Shoptet writeback worker), žiadny nový mechanizmus.
+import { updateOrderComment, OrdersUnauthorizedError } from "../ordersApi.js";
 import { MailPreviewDialog } from "./MailPreviewDialog.js";
+import { NedostupneOrderNote } from "./NedostupneOrderNote.js";
 
 // Rovnaké dve role, ktoré server vyžaduje na odoslanie (`requireRole("admin",
 // "manazer")`, `nedostupne-routes.ts`) — čítanie (zoznam) smie vidieť KAŽDÝ
@@ -52,6 +57,14 @@ export function NedostupneSection({ role, onSessionExpired }: { readonly role: M
   // (rôzne akcie na tej istej karte sa nesmú vzájomne blokovať).
   const [linkDrafts, setLinkDrafts] = useState<Record<string, string>>({});
   const [linkBusy, setLinkBusy] = useState("");
+  // issue 529: rozpísaná poznámka objednávky — per-riadok (kľúč
+  // `${variantCode}|${orderCode}`), rovnaký draft-map vzor ako `linkDrafts`
+  // vyššie (nie zložitejší `OrderLineRow` dirty-guard, ktorý rieši VIAC riadkov
+  // tej istej objednávky súčasne — tu je každý riadok samostatný input, po
+  // uložení sa zoznam znovu načíta zo servera). `undefined` v mape = zobraz
+  // priamo aktuálnu `order.comment`.
+  const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
+  const [noteBusy, setNoteBusy] = useState("");
 
   const load = useCallback(() => {
     fetchNedostupneList()
@@ -169,6 +182,37 @@ export function NedostupneSection({ role, onSessionExpired }: { readonly role: M
     [load, onSessionExpired],
   );
 
+  // issue 529: uloženie poznámky objednávky do eshopu — TÁ ISTÁ zapisovacia
+  // cesta ako stĺpec POZNÁMKY v „Na objednanie" (`updateOrderComment` →
+  // `PUT /api/orders/:id/comment` → `order.comment` → Shoptet writeback worker),
+  // žiadny nový mechanizmus. Po úspechu sa zoznam znovu načíta (server je zdroj
+  // pravdy) a draft daného riadku sa zahodí, aby predvyplnenie sedelo s novou
+  // uloženou hodnotou. Prázdny reťazec maže poznámku (server ho normalizuje na
+  // `null`, rovnako ako `changeComment` v „Na objednanie").
+  const saveNote = useCallback(
+    (noteKey: string, orderId: string, value: string) => {
+      setActionError("");
+      setNoteBusy(noteKey);
+      const trimmed = value.trim();
+      updateOrderComment(orderId, trimmed === "" ? null : trimmed)
+        .then(() => {
+          setNoteDrafts((drafts) => Object.fromEntries(Object.entries(drafts).filter(([key]) => key !== noteKey)));
+          load();
+        })
+        .catch((err: unknown) => {
+          if (err instanceof OrdersUnauthorizedError) {
+            onSessionExpired();
+            return;
+          }
+          setActionError(err instanceof Error ? err.message : "Poznámku sa nepodarilo uložiť.");
+        })
+        .finally(() => {
+          setNoteBusy("");
+        });
+    },
+    [load, onSessionExpired],
+  );
+
   if (!loaded) return <p>Načítavam…</p>;
   if (error !== "") return <p role="alert">{error}</p>;
   if (list === null) return <p role="alert">Nedostupné tovary sa nepodarilo načítať.</p>;
@@ -228,6 +272,22 @@ export function NedostupneSection({ role, onSessionExpired }: { readonly role: M
                       {totalChip.text}
                     </span>
                   )}
+                  {/* issue 529: preklik do „Na objednanie" presne na tento produkt.
+                      📦 (emoji sekcie „Na objednanie") bez textu, štvorcové tlačidlo
+                      rovnakého vzhľadu ako `@` (`.customer-contact-btn`). Celá
+                      navigácia stránky (`?tab=orders&highlight=<kód>`), rovnaký vzor
+                      ako `FloorOrderRow`'s `?tab=floor-orders` — NedostupneSection
+                      nemá `selectTab`; `OrdersSection` prečíta `highlight` z URL,
+                      odkryje skupinu/riadok (chip/„skryť vybavené") a zvýrazní ho. */}
+                  <a
+                    className="customer-contact-btn nedostupne-orders-link"
+                    href={`?tab=orders&highlight=${encodeURIComponent(group.variantCode)}`}
+                    data-testid={`nedostupne-orders-link-${group.variantCode}`}
+                    aria-label={`Otvoriť ${itemLabel(group)} v Na objednanie`}
+                    title="Otvoriť v Na objednanie"
+                  >
+                    <span aria-hidden="true">📦</span>
+                  </a>
                 </div>
 
                 {/* issue 238: majiteľove RUČNE vložené odkazy náhrad — nahrádza
@@ -298,6 +358,11 @@ export function NedostupneSection({ role, onSessionExpired }: { readonly role: M
                   // červený button variant, `--fs-danger`) NEZÁVISLE podľa
                   // svojho vlastného sent flagu; riadok tým ostáva nedotknutý.
                   const handled = order.nedostupneSent || order.alternativaSent;
+                  // issue 529: kľúč a zobrazovaná hodnota poznámky tohto riadku —
+                  // rozpísaný draft má prednosť pred uloženou `order.comment`.
+                  const noteKey = `${group.variantCode}|${order.orderCode}`;
+                  const noteValue = noteDrafts[noteKey] ?? (order.comment ?? "");
+                  const noteBusyHere = noteBusy === noteKey;
                   return (
                     <div
                       className={`nedostupne-order-row${handled ? " nedostupne-order-row--handled" : ""}`}
@@ -311,6 +376,25 @@ export function NedostupneSection({ role, onSessionExpired }: { readonly role: M
                       <span>{order.customerName}</span>
                       <span>{order.email === "" ? "(bez e-mailu)" : order.email}</span>
                       <span>{order.quantity} ks</span>
+                      {/* issue 529: poznámka, ktorá sa zapíše ako poznámka
+                          objednávky do eshopu (Shoptet) — rovnaká zapisovacia
+                          cesta ako stĺpec POZNÁMKY v „Na objednanie". Vykreslenie
+                          vyčlenené do `NedostupneOrderNote` (eslint max-lines). */}
+                      {canControl && (
+                        <NedostupneOrderNote
+                          orderCode={order.orderCode}
+                          variantCode={group.variantCode}
+                          orderId={order.orderId}
+                          value={noteValue}
+                          busy={noteBusyHere}
+                          onChange={(value) => {
+                            setNoteDrafts((drafts) => ({ ...drafts, [noteKey]: value }));
+                          }}
+                          onSave={(orderId, value) => {
+                            saveNote(noteKey, orderId, value);
+                          }}
+                        />
+                      )}
                       {canControl && (
                         <div className="nedostupne-order-actions">
                           <button

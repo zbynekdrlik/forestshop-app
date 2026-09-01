@@ -1214,6 +1214,22 @@ tr:last-child td {
 .orders-table tr.ordered {
   opacity: 0.55;
 }
+/* issue 529: jednorazové zvýraznenie riadku, na ktorý sa práve deep-linkovalo
+   📦 z „Nedostupné tovary" (`?tab=orders&highlight=<kód>`). Jantárové pozadie
+   (`--fs-warning-bg`) sa počas ~3 s vytratí (`forwards` → po dobehnutí ostane
+   priehľadné, žiadny záblesk keď `OrdersSection` po ~4 s triedu odoberie).
+   Aplikované na `<td>` (spoľahlivé pozadie bunky), nie priamo na `<tr>`. */
+@keyframes fs-order-highlight {
+  from {
+    background-color: var(--fs-warning-bg);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+.orders-table tr.order-row--highlight > td {
+  animation: fs-order-highlight 3s ease-out forwards;
+}
 /* issue 95: zvislé zarovnanie hore (nie stred) — zlúčené bunky (DODÁVATEĽ,
    POZNÁMKY) majú viac riadkov obsahu pod sebou a `top` drží prvý riadok
    zarovnaný s ostatnými bunkami toho istého riadku tabuľky. issue 105 bod 3:
@@ -2329,6 +2345,28 @@ tr:last-child td {
   gap: var(--fs-space-2);
   margin-left: auto;
   flex-wrap: wrap;
+}
+/* issue 529: poznámka do eshopu na objednávkovom riadku — vstup + 💾. Znovupoužíva
+   `.ord-comment-input` (`flex: 1 1 0%; max-width: 100%`, rovnaký štýl ako stĺpec
+   POZNÁMKY v „Na objednanie"); kontajner drží pole a tlačidlo vedľa seba, pole
+   rastie, tlačidlo sa nezmršťuje. `flex: 1 1 16rem` + `min-width` = na úzku šírku
+   sa poznámka zalomí na vlastný riadok karty (rovnaký vzor ako
+   `.nedostupne-replacement-link-add`). */
+.nedostupne-order-note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--fs-space-2);
+  flex: 1 1 16rem;
+  min-width: 12rem;
+}
+.nedostupne-order-note .btn {
+  flex-shrink: 0;
+}
+/* issue 529: 📦 preklik do „Na objednanie" v hlavičke skupiny — ZDIEĽA štvorcový
+   vzhľad `.customer-contact-btn` (obe triedy na `<a>`), len potláča predvolené
+   podčiarknutie odkazu. Žiadny nový vizuálny variant. */
+.nedostupne-orders-link {
+  text-decoration: none;
 }
 .nedostupne-preview-body {
   background: var(--fs-surface);

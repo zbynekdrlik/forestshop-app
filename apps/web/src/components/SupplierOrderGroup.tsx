@@ -55,9 +55,14 @@ export function SupplierOrderGroup({
   onConfirmSend,
   onOpenCustomerContact,
   selectedSupplier,
+  highlightVariantCode,
 }: {
   readonly group: SupplierOpenOrders;
   readonly hideResolved: boolean;
+  // issue 529: variant, na ktorý sa práve deep-linkovalo z „Nedostupné tovary"
+  // (📦, `?tab=orders&highlight=<kód>`) — riadky s týmto `variantCode` sa
+  // vizuálne zvýraznia. `null` = žiadne zvýraznenie.
+  readonly highlightVariantCode: string | null;
   // issue 263: predané ĎALEJ do `SupplierActionsPanel` (jeho `.toorder-
   // supplier` hlavičky `active` stav) — `OrdersSection.tsx`'s
   // `filteredGroups` už aj tak vykresľuje LEN vybranú skupinu, keď je
@@ -177,6 +182,7 @@ export function SupplierOrderGroup({
               <OrderLineRow
                 key={line.lineId}
                 line={line}
+                highlighted={highlightVariantCode !== null && line.variantCode === highlightVariantCode}
                 canChangeState={canChangeState}
                 busyLineId={busyLineId}
                 busyOrderedLineId={busyOrderedLineId}

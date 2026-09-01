@@ -19,6 +19,14 @@ vi.mock("../nedostupneApi.js", async (importOriginal) => {
 
 const { NedostupneUnauthorizedError } = await import("../nedostupneApi.js");
 
+// issue 529: poznámka do eshopu volá `updateOrderComment` z `ordersApi.js`.
+// `OrdersUnauthorizedError` ostáva SKUTOČNÁ trieda (`instanceof` v komponente).
+const { updateOrderComment } = vi.hoisted(() => ({ updateOrderComment: vi.fn() }));
+vi.mock("../ordersApi.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../ordersApi.js")>();
+  return { ...actual, updateOrderComment };
+});
+
 // issue 238: automatický "Náhrada:" zoznam (`alternatives`) je preč —
 // nahradený majiteľovými RUČNE vloženými odkazmi (`replacementLinks`) +
 // preklikom na náš e-shop (`ourProductUrl`) a na dodávateľa (`supplierUrl`).
@@ -32,6 +40,7 @@ const GROUP = {
   orders: [
     {
       orderCode: "17600001",
+      orderId: "order-1",
       adminLink: "https://www.forestshop.sk/admin/vyhladavanie/?string=17600001&src=orders",
       customerName: "Ján Novák",
       email: "jan@example.sk",
@@ -39,6 +48,7 @@ const GROUP = {
       placedAt: "2026-07-20T10:00:00.000Z",
       nedostupneSent: false,
       alternativaSent: false,
+      comment: null,
     },
   ],
 };
@@ -50,8 +60,8 @@ const LIST_WITH_GROUP = { groups: [GROUP], bccMissing: false, mailNotConfigured:
 const TWO_ORDER_GROUP = {
   ...GROUP,
   orders: [
-    { orderCode: "17600001", adminLink: "https://x/1", customerName: "Prvý Zákazník", email: "a@x.sk", quantity: 1, placedAt: "2026-07-20T10:00:00.000Z", nedostupneSent: false, alternativaSent: false },
-    { orderCode: "17600002", adminLink: "https://x/2", customerName: "Druhý Zákazník", email: "b@x.sk", quantity: 1, placedAt: "2026-07-21T10:00:00.000Z", nedostupneSent: false, alternativaSent: false },
+    { orderCode: "17600001", orderId: "order-1", adminLink: "https://x/1", customerName: "Prvý Zákazník", email: "a@x.sk", quantity: 1, placedAt: "2026-07-20T10:00:00.000Z", nedostupneSent: false, alternativaSent: false, comment: null },
+    { orderCode: "17600002", orderId: "order-2", adminLink: "https://x/2", customerName: "Druhý Zákazník", email: "b@x.sk", quantity: 1, placedAt: "2026-07-21T10:00:00.000Z", nedostupneSent: false, alternativaSent: false, comment: null },
   ],
 };
 const LIST_TWO_ORDERS = { groups: [TWO_ORDER_GROUP], bccMissing: false, mailNotConfigured: false };
@@ -409,4 +419,75 @@ it("hlavička skupiny s jedinou objednávkou NEUKÁŽE odznak súčtu", async ()
 
   await screen.findByTestId("nedostupne-group-40237/L");
   expect(screen.queryByTestId("nedostupne-total-40237/L")).toBeNull();
+});
+
+// issue 529: 📦 preklik do „Na objednanie" v hlavičke skupiny — celá navigácia
+// stránky (`?tab=orders&highlight=<kód>`), kód variantu URL-encodovaný.
+it("hlavička skupiny nesie 📦 preklik do sekcie Na objednanie so správnym href", async () => {
+  fetchNedostupneList.mockResolvedValue(LIST_WITH_GROUP);
+  render(<NedostupneSection role="manazer" onSessionExpired={vi.fn()} />);
+
+  const link = await screen.findByTestId("nedostupne-orders-link-40237/L");
+  expect(link.getAttribute("href")).toBe("?tab=orders&highlight=40237%2FL");
+  expect(link.getAttribute("aria-label")).toContain("Na objednanie");
+});
+
+// issue 529: 📦 je len navigácia — viditeľná AJ pre čitateľskú rolu, na rozdiel
+// od poznámky/odosielania (tie sú gated na admin/manazer).
+it("čitateľská rola (citanie) vidí 📦 preklik, ale NIE vstup poznámky", async () => {
+  fetchNedostupneList.mockResolvedValue(LIST_WITH_GROUP);
+  render(<NedostupneSection role="citanie" onSessionExpired={vi.fn()} />);
+
+  await screen.findByTestId("nedostupne-group-40237/L");
+  expect(screen.queryByTestId("nedostupne-orders-link-40237/L")).not.toBeNull();
+  expect(screen.queryByTestId("nedostupne-note-input-17600001-40237/L")).toBeNull();
+});
+
+// issue 529: poznámka objednávky sa zapíše do eshopu cez `updateOrderComment`.
+it("vstup poznámky je predvyplnený z order.comment", async () => {
+  fetchNedostupneList.mockResolvedValue({
+    groups: [{ ...GROUP, orders: [{ ...GROUP.orders[0], comment: "pôvodná poznámka" }] }],
+    bccMissing: false,
+    mailNotConfigured: false,
+  });
+  render(<NedostupneSection role="manazer" onSessionExpired={vi.fn()} />);
+
+  const input = await screen.findByTestId<HTMLTextAreaElement>("nedostupne-note-input-17600001-40237/L");
+  expect(input.value).toBe("pôvodná poznámka");
+});
+
+it("uloženie poznámky zavolá updateOrderComment(orderId, text) a znovu načíta zoznam", async () => {
+  fetchNedostupneList.mockResolvedValue(LIST_WITH_GROUP);
+  updateOrderComment.mockResolvedValue(undefined);
+  render(<NedostupneSection role="manazer" onSessionExpired={vi.fn()} />);
+  await screen.findByTestId("nedostupne-group-40237/L");
+
+  fireEvent.change(screen.getByTestId("nedostupne-note-input-17600001-40237/L"), { target: { value: "objednané u dodávateľa" } });
+  fireEvent.click(screen.getByTestId("nedostupne-note-save-17600001-40237/L"));
+
+  await waitFor(() => {
+    expect(updateOrderComment).toHaveBeenCalledWith("order-1", "objednané u dodávateľa");
+  });
+  // po úspechu sa zoznam znovu načíta (initial fetch + refetch po uložení)
+  await waitFor(() => {
+    expect(fetchNedostupneList).toHaveBeenCalledTimes(2);
+  });
+});
+
+it("prázdna poznámka sa uloží ako null (zmazanie poznámky)", async () => {
+  fetchNedostupneList.mockResolvedValue({
+    groups: [{ ...GROUP, orders: [{ ...GROUP.orders[0], comment: "niečo" }] }],
+    bccMissing: false,
+    mailNotConfigured: false,
+  });
+  updateOrderComment.mockResolvedValue(undefined);
+  render(<NedostupneSection role="manazer" onSessionExpired={vi.fn()} />);
+  await screen.findByTestId("nedostupne-group-40237/L");
+
+  fireEvent.change(screen.getByTestId("nedostupne-note-input-17600001-40237/L"), { target: { value: "   " } });
+  fireEvent.click(screen.getByTestId("nedostupne-note-save-17600001-40237/L"));
+
+  await waitFor(() => {
+    expect(updateOrderComment).toHaveBeenCalledWith("order-1", null);
+  });
 });
