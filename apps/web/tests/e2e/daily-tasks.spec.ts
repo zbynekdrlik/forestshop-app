@@ -110,3 +110,63 @@ test("emoji picker do textu úlohy + jednoklikové označenie riadku, upraviť, 
 
   expect(chyby).toEqual([]);
 });
+
+// issue 519: "Hlasová poznámka do úloh" — reálny prehliadač cez celý cyklus
+// nahrávania. E2E prostredie NEMÁ `OPENAI_API_KEY`, takže sa testuje AUDIO-ONLY
+// fallback (prepis sa nespustí, uloží sa zástupný text „🎤 Hlasová poznámka") —
+// vrátane prehrania a zmazania nahrávky. Fake mikrofón je zapnutý v
+// `playwright.config.ts` (`--use-fake-device-for-media-stream`). Reálny Whisper
+// prepis + reálny mikrofón overí supervisor pri živom nasadení. Konzola musí
+// zostať čistá (`.claude/rules/testing.md`). Test je SELF-CONTAINED — nesaháva
+// na globálnu prázdnotu ani počty (`daily_task` je zdieľaná tabuľka, issue 480),
+// pracuje výhradne s VLASTNÝM riadkom a po sebe upratuje.
+test("nahranie hlasovej poznámky (audio-only fallback): nahrať → uložiť → prehrať → zmazať nahrávku — konzola je čistá", async ({ page }) => {
+  const chyby: string[] = [];
+  page.on("console", (m) => {
+    if (m.type() === "error" || m.type() === "warning") chyby.push(m.text());
+  });
+  page.on("pageerror", (e) => {
+    chyby.push(e.message);
+  });
+
+  await page.goto("/?tab=ulohy");
+  await page.getByLabel("E-mail").fill(E2E_ULOHY_EMAIL);
+  await page.getByLabel("Heslo").fill(E2E_HESLO);
+  await page.getByRole("button", { name: "Prihlásiť sa" }).click();
+  await expect(page.getByRole("heading", { name: "Úlohy na dnes" })).toBeVisible();
+
+  // --- Nahrávanie (vzor Messenger) ---
+  await page.getByTestId("uloha-new-mic").click();
+  await expect(page.getByTestId("uloha-rec-bar")).toBeVisible();
+  await expect(page.getByTestId("uloha-rec-stop")).toBeVisible();
+  // Nahraj ~1,5 s reálneho (fake) zvuku, aby nahrávka bezpečne prekročila
+  // spodný strop veľkosti (1 KB) a server ju prijal (nie 400).
+  await page.waitForTimeout(1500);
+  await page.getByTestId("uloha-rec-stop").click();
+
+  // Prepis sa v e2e nespustí (bez kľúča) → uloží sa zástupný text audio-only.
+  // Objavenie riadku JE dôkaz, že nahrávka + upload + uloženie prebehli.
+  const mojRiadok = page.locator(".uloha-row").filter({ hasText: "Hlasová poznámka" });
+  await expect(mojRiadok).toBeVisible({ timeout: 15_000 });
+
+  const prehrat = mojRiadok.getByRole("button", { name: "Prehrať hlasovú poznámku" });
+  const zmazatNahravku = mojRiadok.getByRole("button", { name: "Zmazať hlasovú nahrávku" });
+  await expect(prehrat).toBeVisible();
+  await expect(zmazatNahravku).toBeVisible();
+
+  // --- Prehrať nahrávku (klik = user gesture) — nesmie zlyhať prehrávanie ---
+  await prehrat.click();
+  await page.waitForTimeout(600);
+  await expect(mojRiadok.locator(".uloha-audio-failed")).toHaveCount(0);
+
+  // --- Zmazať LEN nahrávku — úloha (zástupný text) OSTÁVA ---
+  await zmazatNahravku.click();
+  await expect(mojRiadok.getByRole("button", { name: "Prehrať hlasovú poznámku" })).toHaveCount(0);
+  await expect(mojRiadok).toBeVisible(); // úloha ostala
+
+  // Upratanie po teste — zmazať celú úlohu.
+  await mojRiadok.getByRole("button", { name: /^Odstrániť úlohu/ }).click();
+  await expect(page.locator(".uloha-row").filter({ hasText: "Hlasová poznámka" })).toHaveCount(0);
+
+  expect(chyby).toEqual([]);
+});

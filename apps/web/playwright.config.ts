@@ -9,7 +9,14 @@ export default defineConfig({
   // dotýkajúci sa obrazoviek) nezdvojnásobil zaťaženie. V CI (`process.env.CI`,
   // GitHub Actions ho nastavuje automaticky) ostáva predvolený počet.
   workers: process.env.CI ? undefined : 1,
-  use: { baseURL: "http://127.0.0.1:5173", trace: "on-first-retry" },
+  use: {
+    baseURL: "http://127.0.0.1:5173",
+    trace: "on-first-retry",
+    // issue 519: hlasová poznámka — fake mikrofón, aby `getUserMedia`/
+    // `MediaRecorder` fungoval headless bez reálneho hardvéru a bez dialógu na
+    // povolenie (auto-grant). Ovplyvňuje len testy, čo mikrofón používajú.
+    launchOptions: { args: ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"] },
+  },
   webServer: [
     {
       command: "pnpm exec tsx ../../scripts/e2e-setup.ts && pnpm --filter @forestshop/api start",

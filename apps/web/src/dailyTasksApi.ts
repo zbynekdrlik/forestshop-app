@@ -12,6 +12,10 @@ const rowSchema = z.object({
   authorUserId: z.string(),
   authorName: z.string(),
   doneAt: z.string().nullable(),
+  // issue 519: hlasová poznámka. `hasAudio` = riadok má nahrávku (streamuje sa
+  // z `dailyTaskAudioUrl`); `audioDurationMs` sa nesie pre zobrazenie dĺžky.
+  hasAudio: z.boolean(),
+  audioDurationMs: z.number().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -68,6 +72,31 @@ export async function createDailyTask(text: string): Promise<void> {
     body: JSON.stringify({ text }),
   });
   await readJson(response, "Úlohu sa nepodarilo pridať");
+}
+
+// issue 519: nahranie hlasovej poznámky (multipart). `durationMs` je z
+// klientskeho časovača (nepovinné). Server ju prepíše (Whisper) alebo uloží
+// audio-only pri zlyhaní — nikdy sa nestratí nahrávka. `Content-Type` sa
+// NENASTAVUJE ručne — `fetch` s `FormData` doplní `multipart/form-data` s
+// hranicou sám.
+export async function createVoiceDailyTask(audio: Blob, mime: string, durationMs: number | null): Promise<void> {
+  const form = new FormData();
+  form.append("audio", audio, `hlasova-poznamka.${mime.includes("mp4") ? "m4a" : "webm"}`);
+  if (durationMs !== null) form.append("durationMs", String(durationMs));
+  const response = await fetch("/api/daily-tasks/voice", { method: "POST", body: form });
+  await readJson(response, "Hlasovú poznámku sa nepodarilo uložiť");
+}
+
+// issue 519: URL na streamovanie nahrávky konkrétnej úlohy.
+export function dailyTaskAudioUrl(id: string): string {
+  return `/api/daily-tasks/${encodeURIComponent(id)}/audio`;
+}
+
+// issue 519: „potom sa dá odkaz vymazať" — zmaže LEN nahrávku, úlohu nechá.
+export async function deleteDailyTaskAudio(id: string): Promise<boolean> {
+  const response = await fetch(`/api/daily-tasks/${encodeURIComponent(id)}/audio`, { method: "DELETE" });
+  const body = (await readJson(response, "Nahrávku sa nepodarilo odstrániť")) as { readonly updated: boolean };
+  return body.updated;
 }
 
 export async function updateDailyTaskText(id: string, text: string): Promise<boolean> {
