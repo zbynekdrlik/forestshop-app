@@ -7,15 +7,16 @@ import type { NedostupneList } from "../nedostupneApi.js";
 // issue 531: testy checkboxu „vyriešené" — vyčlenené z `NedostupneSection.test.tsx`
 // (eslint `max-lines: 400`), rovnaký split vzor ako `orders-http*.integration.test.ts`.
 
-const { fetchNedostupneList, setNedostupneResolved } = vi.hoisted(() => ({
+const { fetchNedostupneList, setNedostupneResolved, removeReplacementLink } = vi.hoisted(() => ({
   fetchNedostupneList: vi.fn(),
   setNedostupneResolved: vi.fn(),
+  removeReplacementLink: vi.fn(),
 }));
 
 // `NedostupneUnauthorizedError` ostáva SKUTOČNÁ trieda (`instanceof` v hooku).
 vi.mock("../nedostupneApi.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../nedostupneApi.js")>();
-  return { ...actual, fetchNedostupneList, setNedostupneResolved };
+  return { ...actual, fetchNedostupneList, setNedostupneResolved, removeReplacementLink };
 });
 
 const GROUP = {
@@ -162,6 +163,57 @@ it("zastaraná odpoveď zoznamu (StrictMode duplicitný GET) nesmie prepísať o
 
   // Musí ostať ODZNAČENÉ — zastaraná odpoveď nesmie prepísať optimistickú zmenu.
   expect(screen.getByTestId<HTMLInputElement>(CHECKBOX).checked).toBe(false);
+});
+
+it("akciou-spustený refetch nesmie prepísať optimistické označenie vyriešené (issue 535)", async () => {
+  // issue 535 (sesterský race k #536): akcia (tu odstránenie odkazu náhrady)
+  // po úspechu volá `load()` (plný GET zoznamu). Kým GET letí, obsluha prepne
+  // checkbox „vyriešené" — optimistický `setList`, ŽIADNY `guard.begin()` (nie
+  // je to load). GET tak ostáva NAJNOVŠÍ load (prejde `isLatest`) a jeho
+  // snímka `resolved` (odfotená PRED tým, ako toggle PUT commitol) by
+  // optimistickú zmenu prepísala späť. Guard (load-vs-load) to nechytí — je to
+  // load-vs-optimistický-zápis, inú os rieši `reconcileResolved`.
+  const LINK = { id: "link-1", url: "https://example.sk/nahrada", createdAt: "2026-08-01T00:00:00.000Z" };
+  const WITH_LINK: NedostupneList = { groups: [{ ...GROUP, replacementLinks: [LINK] }], bccMissing: false, mailNotConfigured: false };
+  // GET#2 (refetch po odstránení odkazu) je ZASTARANÝ: odkaz už preč, ale
+  // `resolved=false` je snímka spred toggle-u.
+  const STALE: NedostupneList = { groups: [{ ...GROUP, replacementLinks: [], resolved: false }], bccMissing: false, mailNotConfigured: false };
+
+  let resolveRefetch!: (value: NedostupneList) => void;
+  const refetch = new Promise<NedostupneList>((r) => {
+    resolveRefetch = r;
+  });
+  fetchNedostupneList.mockResolvedValueOnce(WITH_LINK).mockReturnValueOnce(refetch);
+  removeReplacementLink.mockResolvedValue(undefined);
+  setNedostupneResolved.mockResolvedValue(undefined);
+
+  render(<NedostupneSection role="manazer" onSessionExpired={vi.fn()} />);
+  await screen.findByTestId(CHECKBOX);
+
+  // Akcia: odstráň odkaz náhrady → jej `.then(load)` spustí GET#2 (zdržaný).
+  fireEvent.click(screen.getByTestId(`nedostupne-replacement-link-remove-${LINK.id}`));
+  await waitFor(() => {
+    expect(fetchNedostupneList).toHaveBeenCalledTimes(2);
+  });
+
+  // Počas letu GET#2 obsluha OZNAČÍ „vyriešené" — optimisticky HNEĎ zaškrtnuté.
+  fireEvent.click(screen.getByTestId<HTMLInputElement>(CHECKBOX));
+  expect(screen.getByTestId<HTMLInputElement>(CHECKBOX).checked).toBe(true);
+  await waitFor(() => {
+    expect(setNedostupneResolved).toHaveBeenCalledWith("40237/L", true);
+  });
+
+  // Doruč ZASTARANÝ refetch (resolved=false) a počkaj, kým ho komponent CELÝ
+  // spracuje — deterministicky, nie retrying `waitFor(false)` (ten by prešiel
+  // na pred-klobber kontrole aj proti rozbitému kódu, `.claude/rules/testing.md`).
+  await act(async () => {
+    resolveRefetch(STALE);
+    await refetch;
+    await Promise.resolve();
+  });
+
+  // Musí ostať ZAŠKRTNUTÉ — akciou-spustený refetch nesmie prepísať optimistickú zmenu.
+  expect(screen.getByTestId<HTMLInputElement>(CHECKBOX).checked).toBe(true);
 });
 
 it("rola citanie vidí checkbox, ale nesmie ho prepnúť (disabled)", async () => {
