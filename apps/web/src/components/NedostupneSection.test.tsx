@@ -37,6 +37,7 @@ const GROUP = {
   ourProductUrl: "https://www.forestshop.sk/nohavice-forest-1003/",
   supplierUrl: "https://dodavatel.example/nohavice-1003",
   replacementLinks: [{ id: "link-1", url: "https://www.forestshop.sk/nahradny-produkt/" }],
+  resolved: false,
   orders: [
     {
       orderCode: "17600001",

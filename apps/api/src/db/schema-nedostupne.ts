@@ -52,3 +52,24 @@ export const nedostupneReplacementLinks = pgTable(
   },
   (t) => [index("nedostupne_replacement_link_variant_idx").on(t.variantCode)],
 );
+
+// issue 531: ručné označenie „vyriešené" pri karte produktu (Štěpán: „nič
+// ďalšie sa nestane, len sa to označí"). Kľúčovaná `variant_code` (PLAIN text,
+// BEZ FK — rovnaká konvencia ako `nedostupne_state`/`nedostupne_replacement_link`
+// vyššie), lebo obrazovka zoskupuje podľa VARIANTU (`NedostupneGroup`) a mock
+// dáva štvorček PRI KAŽDOM TOVARE (skupina). Na rozdiel od
+// `nedostupne_replacement_link` MÁ UNIQUE index — je to boolean per variant
+// (jeden riadok = najviac jeden), PRÍTOMNOSŤ riadku = vyriešené, žiadny riadok
+// = nevyriešené; toggle = idempotentný INSERT ... ON CONFLICT DO NOTHING /
+// DELETE (oba idempotentné, žiadny advisory zámok netreba — je to len boolean,
+// nie odoslanie e-mailu ako `nedostupne_state`). Prežije nočný katalógový
+// reimport rovnako ako susedné tabuľky — import sa jej nedotýka.
+export const nedostupneResolved = pgTable(
+  "nedostupne_resolved",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    variantCode: text("variant_code").notNull(),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("nedostupne_resolved_variant_uq").on(t.variantCode)],
+);

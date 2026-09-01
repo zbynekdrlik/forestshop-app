@@ -5,6 +5,7 @@ paths:
   - "apps/web/src/components/NedostupneSection*.tsx"
   - "apps/web/src/components/NedostupneOrderNote.tsx"
   - "apps/web/src/nedostupneApi.ts"
+  - "apps/web/src/useNedostupneResolved.ts"
   - "apps/api/src/modules/single-use-preview-tokens.ts"
   - "apps/api/src/modules/orders/merge-mail-preview-tokens.ts"
   - "apps/api/src/modules/orders/customer-contact-preview-tokens.ts"
@@ -177,3 +178,26 @@ paths:
   (žiadny no-op PUT + zbytočné re-spustenie workera). Gated `canControl`
   (admin/manazer, parita s `requireRole` na trase). Vykreslenie vyčlenené do
   `NedostupneOrderNote.tsx` (eslint max-lines) — reuse `.ord-comment-input`.
+- **issue 531: checkbox „vyriešené" pri karte produktu — nová tabuľka
+  `nedostupne_resolved` kľúčovaná `variant_code` (PLAIN text, BEZ FK, ale s
+  UNIQUE indexom — na rozdiel od `nedostupne_replacement_link`, lebo je to
+  boolean per variant), PRÍTOMNOSŤ riadku = vyriešené.** Toggle je idempotentný
+  v OBOCH smeroch (`setVariantResolved`, `resolved.ts`: `INSERT ... ON CONFLICT
+  DO NOTHING` / `DELETE`), preto ŽIADNY advisory zámok (na rozdiel od
+  `nedostupne_state`'s `NEDOSTUPNE_SEND_LOCK_KEY` — tam zámok chráni pred
+  dvojitým ODOSLANÍM e-mailu; tu je to len boolean, last-write-wins je OK).
+  `GET /api/nedostupne` pridáva `resolved: boolean` do skupiny (`loadResolvedVariants`
+  → `Set`, vzor `loadSentNedostupne`). Zápis `PUT /api/nedostupne/resolved`
+  `{variantCode, resolved}` — IDEMPOTENTNÉ nastavenie želaného stavu (nie
+  POST/DELETE dvojica ako odkazy náhrad), gated `requireRole("admin","manazer")`.
+  „Nič ďalšie sa nestane, len sa to označí" — žiadny e-mail, žiadne filtrovanie/
+  skrytie karty. Frontend: checkbox v `.nedostupne-group-header` ZA 📦, vizuál
+  ako „Objednané" (`.nedostupne-group-header input[type="checkbox"]` — parent-
+  scoped, špecificita (0,0,2,1) prebíja globálny `input{width:100%}` reset,
+  issue 403 pasca); viditeľný VŠETKÝM, `disabled` pre non-`canControl`. Toggle
+  je OPTIMISTICKÝ (lokálna zmena hneď + revert pri chybe, `useNedostupneResolved.ts`
+  hook — vyčlenené kvôli eslint `max-lines`) — ŽIADNY plný reload zoznamu,
+  lebo označenie nemení triedenie (`placedAt`) ani skladbu kariet. Nová root
+  tabuľka → doplnená do OBOCH TRUNCATE zoznamov (`tests/helpers/db.ts` +
+  `scripts/e2e-setup.ts`, `truncate-list-completeness.test.ts` to vynucuje).
+  Migrácia 0063 je plain CREATE TABLE + index (žiadny enum → žiadny #399 risk).
