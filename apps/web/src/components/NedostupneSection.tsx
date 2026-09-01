@@ -13,6 +13,7 @@ import {
   type NedostupnePreview,
 } from "../nedostupneApi.js";
 import { useNedostupneResolved } from "../useNedostupneResolved.js";
+import { useStaleResponseGuard } from "../useStaleResponseGuard.js";
 import { formatNedostupneTotalChip } from "../nedostupneSummary.js";
 // issue 529: poznámka do eshopu — ZDIEĽANÁ zapisovacia cesta so stĺpcom POZNÁMKY
 // v „Na objednanie" (`updateOrderComment` → `PUT /api/orders/:id/comment` →
@@ -20,6 +21,7 @@ import { formatNedostupneTotalChip } from "../nedostupneSummary.js";
 import { updateOrderComment, OrdersUnauthorizedError } from "../ordersApi.js";
 import { MailPreviewDialog } from "./MailPreviewDialog.js";
 import { NedostupneOrderNote } from "./NedostupneOrderNote.js";
+import { NedostupneResolvedCheckbox } from "./NedostupneResolvedCheckbox.js";
 
 // Rovnaké dve role, ktoré server vyžaduje na odoslanie (`requireRole("admin",
 // "manazer")`, `nedostupne-routes.ts`) — čítanie (zoznam) smie vidieť KAŽDÝ
@@ -70,14 +72,22 @@ export function NedostupneSection({ role, onSessionExpired }: { readonly role: M
   // vlastnom hooku (eslint `max-lines`), rovnaká „lift do hooku" disciplína ako
   // `useLoadMore`/`useStaleResponseGuard`.
   const { resolvedBusy, toggleResolved } = useNedostupneResolved({ setList, setActionError, onSessionExpired });
+  // issue 251/523: stale-response guard — pod `<StrictMode>` sa mount `load()`
+  // spustí dvakrát; pomalší duplicitný GET zoznamu inak doletí AŽ PO
+  // optimistickom (od)označení checkboxu „vyriešené" (issue 531, žiadny refetch)
+  // a prepíše ho späť. Uplatní sa len NAJNOVŠÍ `load()` (vzor `UpozorneniaSection`).
+  const guard = useStaleResponseGuard();
 
   const load = useCallback(() => {
+    const seq = guard.begin();
     fetchNedostupneList()
       .then((l) => {
+        if (!guard.isLatest(seq)) return;
         setList(l);
         setLoaded(true);
       })
       .catch((err: unknown) => {
+        if (!guard.isLatest(seq)) return;
         setLoaded(true);
         if (err instanceof NedostupneUnauthorizedError) {
           onSessionExpired();
@@ -85,7 +95,7 @@ export function NedostupneSection({ role, onSessionExpired }: { readonly role: M
         }
         setError("Nedostupné tovary sa nepodarilo načítať.");
       });
-  }, [onSessionExpired]);
+  }, [guard, onSessionExpired]);
 
   useEffect(load, [load]);
 
@@ -301,21 +311,16 @@ export function NedostupneSection({ role, onSessionExpired }: { readonly role: M
                   </a>
                   {/* issue 531: ručné označenie „vyriešené" — štvorček HNEĎ ZA
                       📦 (per Štěpánov nákres), vizuál konzistentný s checkboxom
-                      „Objednané" v „Na objednanie" (`.nedostupne-group-header
-                      input[type=checkbox]`). Viditeľný VŠETKÝM (ako 📦),
+                      „Objednané" v „Na objednanie". Viditeľný VŠETKÝM (ako 📦),
                       prepnúť smie len admin/manazer (`canControl`, server zápis
-                      aj tak gated). „Nič ďalšie sa nestane, len sa to označí." */}
-                  <input
-                    type="checkbox"
-                    className="nedostupne-resolved-checkbox"
-                    data-testid={`nedostupne-resolved-checkbox-${group.variantCode}`}
-                    aria-label={`Označiť ${itemLabel(group)} ako vyriešené`}
-                    title="Vyriešené"
-                    checked={group.resolved}
+                      aj tak gated). Vykreslenie vyčlenené do
+                      `NedostupneResolvedCheckbox` (eslint `max-lines`). */}
+                  <NedostupneResolvedCheckbox
+                    variantCode={group.variantCode}
+                    itemLabel={itemLabel(group)}
+                    resolved={group.resolved}
                     disabled={!canControl || resolvedBusy === group.variantCode}
-                    onChange={(e) => {
-                      toggleResolved(group.variantCode, e.target.checked);
-                    }}
+                    onToggle={toggleResolved}
                   />
                 </div>
 
