@@ -66,6 +66,30 @@ paths:
   skryje emoji na mobile (mikrofón ho nahrádza), na desktope sú oba. Žiadna JS
   detekcia šírky.
 
+- **Issue 538's fix opravil len RIADKY zoznamu (`.uloha-row`) — PRIDÁVACÍ
+  riadok (`.ulohy-add-row`) mal presne tú istú triedu chyby, len s iným
+  spúšťačom (follow-up k issue 538, žiadny nový issue — do-now cleanup).**
+  `.ulohy-add-row` je tiež `display:flex` bez `flex-wrap`, a vstup
+  (`min-width:8rem`=128px) je PEVNÝ, nie odvodený od `flex-basis:0%` ako
+  `.uloha-row`ov flexibilný text. Rail-mód (predvolený stav appky pod
+  ~640px, `Sidebar.tsx`) sa nepretečie — dostupná šírka `<main>` je tam
+  dosť veľká. Až keď používateľ sidebar RUČNE ROZBALÍ na úzkom (390px)
+  viewporte (`--fs-sidebar-width:250px` namiesto `--fs-sidebar-rail-
+  width:72px`), dostupná šírka `<main>` klesne pod vstupov pevný
+  min-width a riadok preteká — `flex-wrap:wrap` SAMO OSEBE nestačí, lebo
+  vstup PRETEČIE aj SÁM na vlastnom riadku. Fix (rovnaký `@media
+  (max-width: 36rem)` blok): `.ulohy-add-row { flex-wrap: wrap }` +
+  `.ulohy-add-row input { min-width: min(8rem, 100%) }` (`min()`-wrapper
+  vzor ako `.claude/rules/frontend-design.md`'s issue 382 grid entry —
+  nad 8rem kontajnerovej šírky sa správa identicky, pod ňou sa zmrští
+  namiesto pretečenia). **Test na KAŽDÝ ĎALŠÍ nález v TEJTO obrazovke:**
+  keď sa opravuje pretečenie JEDNÉHO flex riadku (`.uloha-row`/`.ulohy-
+  add-row`/budúci ďalší), skontroluj, či SUSEDNÝ riadok v tej istej
+  sekcii nemá TÚ ISTÚ triedu chyby s iným trigger-scenárom (rail vs.
+  rozbalený sidebar) — `.claude/rules/frontend-design.md`'s
+  `flex-basis`/`min-width` pasce sa opakujú naprieč appkou, aj v RÁMCI
+  jednej obrazovky.
+
 - **Testy:**
   - Web komponentové testy NEMAJÚ auto-cleanup (žiadne `globals: true`) — každý
     nový `*.test.tsx` MUSÍ `import { cleanup }` a volať ho v `afterEach`, inak sa

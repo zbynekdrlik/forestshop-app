@@ -220,3 +220,46 @@ test("mobil (390px): prepis dlhšieho textu úlohy sa zalamuje po slovách, nie 
 
   expect(chyby).toEqual([]);
 });
+
+// Follow-up k issue 538: issue 538's fix (`.uloha-row { flex-wrap: wrap }`)
+// rieši pretečenie RIADKOV zoznamu, ale NIE pridávacieho riadku
+// (`.ulohy-add-row` — vstup + mikrofón + "+ Pridať"), ktorý zostáva
+// `display:flex` bez `flex-wrap`. Na 390px viewporte s MANUÁLNE
+// ROZBALENÝM sidebarom (250px, na rozdiel od predvoleného rail-módu
+// 72px pod ~640px) je dostupná šírka `<main>` príliš úzka, aby sa vstup +
+// mikrofón + tlačidlo zmestili na jeden riadok bez zalomenia — appka
+// pretečie vodorovne (`.claude/rules/daily-tasks.md`). Test meria
+// `document.documentElement.scrollWidth` proti `window.innerWidth` presne
+// v tomto scenári (rozbalený sidebar), rail-mód aj desktop ostávajú
+// nedotknuté (mimo tejto media query).
+test("mobil (390px) s rozbaleným sidebarom: pridávací riadok Úloh na dnes nepreteká vodorovne", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+
+  const chyby: string[] = [];
+  page.on("console", (m) => {
+    if (m.type() === "error" || m.type() === "warning") chyby.push(m.text());
+  });
+  page.on("pageerror", (e) => {
+    chyby.push(e.message);
+  });
+
+  await page.goto("/?tab=ulohy");
+  await page.getByLabel("E-mail").fill(E2E_ULOHY_EMAIL);
+  await page.getByLabel("Heslo").fill(E2E_HESLO);
+  await page.getByRole("button", { name: "Prihlásiť sa" }).click();
+  await expect(page.getByRole("heading", { name: "Úlohy na dnes" })).toBeVisible();
+
+  // Sidebar štartuje na 390px v rail-móde (predvolené pod ~640px) — ručne
+  // ho rozbaliť, presne scenár z issue 538's živého overenia.
+  const railToggle = page.getByTestId("sidebar-rail-toggle");
+  await railToggle.click();
+  await expect(page.locator(".sidebar.sidebar-rail")).toHaveCount(0);
+
+  const addRow = page.getByTestId("uloha-add-row");
+  await expect(addRow).toBeVisible();
+
+  const [scrollWidth, innerWidth] = await page.evaluate(() => [document.documentElement.scrollWidth, window.innerWidth]);
+  expect(scrollWidth).toBeLessThanOrEqual(innerWidth);
+
+  expect(chyby).toEqual([]);
+});
