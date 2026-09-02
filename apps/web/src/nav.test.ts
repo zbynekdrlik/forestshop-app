@@ -38,7 +38,7 @@ import { DEFAULT_TAB_ID, HIDDEN_TABS, NAV, findTab, isVisibleTabId } from "./nav
 // "Eshop" (šéfov kolega Štěpán, Discord + nákres) — poradie priečinkov je teraz
 // Dôležité, Eshop, Vyšívanie, Slavosport, Systém, Automatizácie. Sú zatiaľ bez
 // záložiek (0/0), "Systém"/"Automatizácie" sa posunuli na indexy 4/5.
-it("NAV má šesť priečinkov (Dôležité/Eshop/Vyšívanie/Slavosport/Systém/Automatizácie), s 4/10/0/0/3/4 záložkami v poradí podľa dôležitosti", () => {
+it("NAV má šesť priečinkov (Dôležité/Eshop/Vyšívanie/Slavosport/Systém/Automatizácie), s 4/10/0/1/3/4 záložkami v poradí podľa dôležitosti", () => {
   expect(NAV).toHaveLength(6);
   expect(NAV.map((f) => f.label)).toEqual([
     "Dôležité",
@@ -55,10 +55,11 @@ it("NAV má šesť priečinkov (Dôležité/Eshop/Vyšívanie/Slavosport/Systém
   // (Eshop 9 → 10).
   expect(NAV[0]?.tabs).toHaveLength(4);
   expect(NAV[1]?.tabs).toHaveLength(10);
-  // issue 501: dve nové PRÁZDNE sekcie (Vyšívanie/Slavosport) — zatiaľ 0/0
+  // issue 501: Vyšívanie ostáva prázdna (0); issue 543 pridalo do Slavosport
+  // prvú záložku „Úhrady" (0 → 1).
   // záložiek; "Systém"/"Automatizácie" sa posunuli na indexy 4/5.
   expect(NAV[2]?.tabs).toHaveLength(0);
-  expect(NAV[3]?.tabs).toHaveLength(0);
+  expect(NAV[3]?.tabs).toHaveLength(1);
   expect(NAV[4]?.tabs).toHaveLength(3);
   expect(NAV[5]?.tabs).toHaveLength(4);
   expect(NAV[0]?.tabs.map((t) => t.label)).toEqual(["Upozornenia", "Úlohy na dnes", "Poznámky", "Objednať DPD"]);
@@ -76,6 +77,8 @@ it("NAV má šesť priečinkov (Dôležité/Eshop/Vyšívanie/Slavosport/Systém
   ]);
   // issue 212: "Dodávateľský sklad" — scraper dostupnosti u dodávateľa;
   // patrí do Systému (zadanie majiteľa), nie medzi Automatizácie.
+  // issue 543: prvá záložka v sekcii Slavosport.
+  expect(NAV[3]?.tabs.map((t) => t.label)).toEqual(["Úhrady"]);
   expect(NAV[4]?.tabs.map((t) => t.label)).toEqual(["Sync zo Shoptetu", "Texty e-mailov", "Dodávateľský sklad"]);
   // issue 193: "Odoslané e-maily" — prehľad toho, čo automatizácie poslali.
   expect(NAV[5]?.tabs.map((t) => t.label)).toEqual([
