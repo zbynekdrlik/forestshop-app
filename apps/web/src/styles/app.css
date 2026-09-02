@@ -2889,6 +2889,30 @@ a.upozornenie-title:hover {
   .ulohy-add-row .emoji-picker {
     display: none;
   }
+  /* issue 538: `.uloha-row` je `display:flex` bez `flex-wrap` (nowrap), takže
+     VŠETCI súrodenci (checkbox + autor + audio ovládanie + akcie, všetky
+     `flex:0 0 auto`) musia sedieť na JEDNOM riadku. Na mobile (rail-mód
+     sidebaru, `Sidebar.tsx`, sa zapína automaticky pod ~640px) je
+     `.ulohy-panel` len ~270px široký — súčet týchto pevných súrodencov sa
+     priblíži/prekročí túto šírku. Keďže `.uloha-text` je JEDINÝ flexibilný
+     prvok (flex:1 1 auto; min-width:0), celý deficit ide naň — nameraná
+     šírka 0px, a s `overflow-wrap: break-word` sa text zalomí PO JEDNOM
+     ZNAKU (žiadne slovo sa už do 0px stĺpca nezmestí). Fix: `flex-wrap:
+     wrap` necháva pevných súrodencov, čo sa na prvý riadok nezmestia,
+     prirodzene zalomiť na ĎALŠÍ riadok (rovnaký princíp ako `.ord-supplier-
+     assign`, issue 63), a `.uloha-text`ov `min-width: 10rem` mu garantuje
+     CELÝ vlastný riadok namiesto súperenia o zvyškovú (0px) šírku so
+     susedmi. Naživo overené (throwaway Playwright proti lokálnemu dev
+     serveru, 360px aj 390px, s audio riadkom aj bez neho, krátkym aj
+     180-znakovým textom): text sa zalamuje normálne po slovách, žiadne
+     vodorovné pretečenie (`scrollWidth === innerWidth`), edit-režim sa
+     zmestí bez kolízie. Desktop (mimo tejto media query) nezmenený. */
+  .uloha-row {
+    flex-wrap: wrap;
+  }
+  .uloha-text {
+    min-width: 10rem;
+  }
 }
 
 /* ---------------- POZNÁMKY (issue 437) ----------------
