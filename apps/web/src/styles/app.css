@@ -2913,6 +2913,40 @@ a.upozornenie-title:hover {
   .uloha-text {
     min-width: 10rem;
   }
+  /* Follow-up k issue 538 (do-now cleanup, zlyhal bundling gate, žiadny
+     nový issue): rovnaký princíp, ale na PRIDÁVACOM riadku, nie riadkoch
+     zoznamu. `.ulohy-add-row` je tiež `display:flex` bez `flex-wrap`
+     (nowrap) — vstup (`flex:1 1 0%; min-width:8rem`=128px), `.uloha-mic-
+     btn` a "+ Pridať" (`.btn.good.sm`) musia sedieť na JEDNOM riadku.
+     `.ulohy-panel`ov `max-width:40rem` len obmedzuje HORNÚ hranicu — jeho
+     SKUTOČNÁ šírka je odvodená od `<main>`, ktorá závisí od sidebaru
+     (`--fs-sidebar-width:250px` rozbalený vs. `--fs-sidebar-rail-
+     width:72px` v rail-móde). V rail-móde (predvolený stav appky pod
+     ~640px) sa vstup+mikrofón+tlačidlo zmestia (390-72=318px), no keď
+     používateľ sidebar RUČNE ROZBALÍ na 390px viewporte, dostupná šírka
+     `<main>` klesne na ~140px (390-250, mínus `<main>`'s vlastný 2×24px
+     padding = 92px obsahovej šírky) a pridávací riadok preteká vodorovne
+     (naživo overené: `document.documentElement.scrollWidth` 502px pri
+     390px viewporte, oproti 390px v rail-móde — `.claude/rules/
+     daily-tasks.md`). `flex-wrap: wrap` samo osebe NESTAČÍ (na rozdiel od
+     `.uloha-row` vyššie) — vstupov PEVNÝ `min-width:8rem`=128px je väčší
+     než 92px dostupnej šírky, takže aj SAMOTNÝ na vlastnom riadku
+     pretečie (zmerané: `scrollWidth` klesol na 402px, presne
+     274px+128px). Fix: `flex-wrap: wrap` (mikrofón/tlačidlo skočia na
+     ďalší riadok, keď sa nezmestia) + vstupov `min-width: min(8rem,
+     100%)` (nikdy nevynúti vstup ŠIRŠÍ než 100% dostupnej šírky
+     kontajnera — nad 8rem kontajnerovej šírky sa správa identicky ako
+     predtým, pod ňou sa zmrští namiesto pretečenia; rovnaký `min()`-
+     wrapper vzor ako issue 382's `minmax(min(500px,100%),1fr)`). V rail-
+     móde/desktope, kde sa dnes všetko zmestí na jeden riadok bez zmeny
+     šírky, obe pravidlá nemenia nič (wrap/zmrštenie sa aktivujú len keď
+     je to skutočne potrebné). */
+  .ulohy-add-row {
+    flex-wrap: wrap;
+  }
+  .ulohy-add-row input {
+    min-width: min(8rem, 100%);
+  }
 }
 
 /* ---------------- POZNÁMKY (issue 437) ----------------
