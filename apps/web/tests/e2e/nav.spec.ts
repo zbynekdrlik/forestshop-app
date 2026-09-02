@@ -44,8 +44,8 @@ const E2E_NAV_EMAIL = "e2e-nav@forestshop.sk";
 // issue 501 (2026-08-26): dva nové PRÁZDNE priečinky "Vyšívanie"/"Slavosport"
 // HNEĎ POD "Eshop" (šéfov kolega Štěpán, Discord + nákres) — celkovo šesť
 // priečinkov, poradie Dôležité/Eshop/Vyšívanie/Slavosport/Systém/Automatizácie.
-// Počet ZÁLOŽIEK sa NEMENÍ (nové sekcie sú zatiaľ bez záložiek) — stále 21.
-test("ľavé menu má šesť priečinkov (Dôležité/Eshop/Vyšívanie/Slavosport/Systém/Automatizácie) s dvadsiatimi jednou záložkami, klik prepne obrazovku, panel sa zbalí do lišty a stav si pamätá, konzola je čistá", async ({
+// issue 543 pridalo prvú záložku "Úhrady" do sekcie "Slavosport" — 21 → 22.
+test("ľavé menu má šesť priečinkov (Dôležité/Eshop/Vyšívanie/Slavosport/Systém/Automatizácie) s dvadsiatimi dvomi záložkami, klik prepne obrazovku, panel sa zbalí do lišty a stav si pamätá, konzola je čistá", async ({
   page,
 }) => {
   const chyby: string[] = [];
@@ -104,11 +104,13 @@ test("ľavé menu má šesť priečinkov (Dôležité/Eshop/Vyšívanie/Slavospo
   await expect(page.getByRole("button", { name: "Systém" })).toHaveAttribute("aria-expanded", "true");
   await expect(page.getByRole("button", { name: "Automatizácie" })).toHaveAttribute("aria-expanded", "true");
 
-  // Presne dvadsať záložiek v CELOM menu (issue 387 E5 pridalo "Párovanie",
+  // Presne dvadsaťdva záložiek v CELOM menu (issue 387 E5 pridalo "Párovanie",
   // E8 odstránilo "Vypredané → Skladom: návrhy odkazov", issue 400/E9
   // odstránilo "Párovanie produktov", issue 437 pridalo "Poznámky" — 19 → 20;
-  // issue 450 pridalo "Riešiť" pod "Nedostupné tovary" — 20 → 21).
-  await expect(page.locator(".side-nav .tab")).toHaveCount(21);
+  // issue 450 pridalo "Riešiť" pod "Nedostupné tovary" — 20 → 21; issue 543
+  // pridalo "Úhrady" do "Slavosport" — 21 → 22).
+  await expect(page.locator(".side-nav .tab")).toHaveCount(22);
+  await expect(page.getByTestId("nav-tab-uhrady")).toBeVisible();
   await expect(page.getByRole("button", { name: "Sync zo Shoptetu" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Texty e-mailov" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Na objednanie" })).toBeVisible();
@@ -296,7 +298,7 @@ test("ľavé menu má šesť priečinkov (Dôležité/Eshop/Vyšívanie/Slavospo
 
   // Hlavičky priečinkov zmiznú, ikony všetkých modulov ostanú.
   await expect(page.getByRole("button", { name: "Systém" })).toHaveCount(0);
-  await expect(page.locator(".side-nav .tab")).toHaveCount(21);
+  await expect(page.locator(".side-nav .tab")).toHaveCount(22);
   // Názov sa v lište ukáže bublinou pri prejdení myšou.
   await expect(page.getByRole("button", { name: "Na objednanie" })).toHaveAttribute(
     "title",

@@ -23,6 +23,7 @@ import { SchedulerSection } from "./components/SchedulerSection.js";
 import { SearchSection } from "./components/SearchSection.js";
 import { SupplierStockSection } from "./components/SupplierStockSection.js";
 import { SyncSection } from "./components/SyncSection.js";
+import { UhradySection } from "./components/UhradySection.js";
 import { UpozorneniaSection } from "./components/UpozorneniaSection.js";
 
 // Spoločný tvar props pre KAŽDÚ obrazovku registrovanú tu — presne to, čo dnes
@@ -190,7 +191,13 @@ export const NAV: readonly NavFolder[] = [
   {
     id: "slavosport",
     label: "Slavosport",
-    tabs: [],
+    // issue 543: šéfov kolega Štěpán (Discord, 1.9.2026) — prvá funkcia v
+    // dovtedy prázdnej sekcii SLAVOSPORT (#501): „Úhrady" — naskenované
+    // papierové FA na úhradu (upload JPG/PNG → grid thumbnailov s popisom,
+    // klik zväčší, po úhrade zmaž) + jednoriadkové poznámky navrchu (ako
+    // „Úlohy na dnes"). `wide` sa NENASTAVUJE — je to grid + jednoduché
+    // riadky, čitacia šírka stačí.
+    tabs: [{ id: "uhrady", label: "Úhrady", icon: "🧾", Component: UhradySection }],
   },
   {
     id: "system",

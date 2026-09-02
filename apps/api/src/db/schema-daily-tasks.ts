@@ -1,16 +1,13 @@
-import { customType, index, integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { index, integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { bytea } from "./bytea.js";
 import { users } from "./schema-users.js";
 
-// issue 519: binárny stĺpec pre hlasovú nahrávku. node-postgres nesie/prijíma
-// `bytea` ako `Buffer`, žiadna extra serializácia. Prvé použitie `bytea` v tejto
-// appke — krátke poznámky (~30–200 KB) sa ukladajú priamo na riadok `daily_task`
-// (nie na disk), takže jazdia na existujúcom DB zálohovaní aj zdieľanom modeli
-// (#487); plné odôvodnenie voľby úložiska je v dizajnovom komentári na tickete.
-const bytea = customType<{ data: Buffer }>({
-  dataType() {
-    return "bytea";
-  },
-});
+// issue 519: binárny stĺpec pre hlasovú nahrávku (prvé použitie `bytea` v appke).
+// node-postgres nesie/prijíma `bytea` ako `Buffer`, žiadna extra serializácia.
+// Krátke poznámky (~30–200 KB) sa ukladajú priamo na riadok `daily_task` (nie na
+// disk), takže jazdia na existujúcom DB zálohovaní aj zdieľanom modeli (#487).
+// `bytea` typ je od #543 review zdieľaný `./bytea.js` (druhý konzument je
+// `slavosport_payment_scan`).
 
 // issue 342 + 487: "Úlohy na dnes" — nahrádza šéfove poznámky písané do Discord
 // kanála #úlohy-na-dnes. PÔVODNE súkromný per-`user_id` zoznam (#342); od #487

@@ -23,6 +23,7 @@ import { registerMailLogRoutes } from "./mail-log-routes.js";
 import { registerMailTemplateRoutes } from "./mail-template-routes.js";
 import { registerNedostupneRoutes, type NedostupneRunDeps } from "./nedostupne-routes.js";
 import { registerNoteRoutes } from "./note-routes.js";
+import { registerUhradyRoutes } from "./uhrady-routes.js";
 import { registerOrderFlagsRoutes } from "./order-flags-routes.js";
 import { registerOrderMergeRoutes, type OrderMergeRunDeps } from "./order-merge-routes.js";
 import { registerOrderCustomerContactRoutes, type OrderCustomerContactRunDeps } from "./order-customer-contact-routes.js";
@@ -372,6 +373,11 @@ export function createApp(
   // orderReminder vyššie) — neposiela mail ani nekontaktuje tretiu stranu,
   // rovnako ako `registerUpozorneniaRoutes`/`registerDailyTasksRoutes`.
   registerNoteRoutes(app, db);
+  // issue 543: "SLAVOSPORT → Úhrady" — zdieľané jednoriadkové poznámky +
+  // upload naskenovaných FA (thumbnaily s popisom). Žiadny voliteľný
+  // dependency (neposiela mail ani nekontaktuje tretiu stranu), rovnako ako
+  // `registerNoteRoutes`/`registerDailyTasksRoutes`.
+  registerUhradyRoutes(app, db);
   // issue 309: rovnaká nástenka, ale NEZÁVISLÝ modul (žiadny dedupKey/
   // resolve/postpone — `upozornenia.md`'s návrhový komentár na tickete).
   registerCalendarRoutes(app, db, options.nextEvent);

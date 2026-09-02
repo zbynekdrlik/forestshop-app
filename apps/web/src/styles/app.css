@@ -4192,3 +4192,208 @@ a.upozornenie-title:hover {
   color: var(--fs-ink-muted);
   white-space: nowrap;
 }
+
+/* ---------------- SLAVOSPORT → ÚHRADY (issue 543) ----------------
+   Jednoriadkové poznámky navrchu (ako „Úlohy na dnes", bez hlasu) + upload
+   naskenovaných FA ako grid thumbnailov s popisom; klik zväčší (lightbox), po
+   úhrade sa dá zmazať s potvrdením. Tokeny/vzory zdieľané s `.ulohy-*`/
+   `.poznamky-*` vyššie. */
+.uhrady-notes-panel {
+  max-width: 40rem;
+  margin-bottom: var(--fs-space-6);
+}
+/* Pridávací riadok poznámky — flex ako `.ulohy-add-row`. Globálny reset
+   `input { width: 100% }` by inak zrazil tlačidlo na ďalší riadok; `flex: 1 1 0%`
+   (issue 105 flex-basis vzor) necháva vstup rásť, tlačidlo ostáva `flex: 0 0 auto`. */
+.uhrady-note-add {
+  display: flex;
+  gap: var(--fs-space-2);
+  margin-bottom: var(--fs-space-4);
+}
+/* PARENT-scoped (2 triedy) aby `width: auto` porazil globálny `input`
+   `width: 100%` reset (issue 403 pasca); `flex: 1 1 0%` je hlavný nosič šírky. */
+.uhrady-note-add .uhrady-note-input {
+  flex: 1 1 0%;
+  min-width: 8rem;
+  width: auto;
+}
+.uhrady-notes-list {
+  display: flex;
+  flex-direction: column;
+}
+.uhrady-note-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--fs-space-2);
+  padding: var(--fs-space-1) var(--fs-space-2);
+  border-bottom: 1px solid var(--fs-border-soft);
+  font-size: var(--fs-text-sm);
+}
+.uhrady-note-row:first-child {
+  border-top: 1px solid var(--fs-border-soft);
+}
+.uhrady-note-row:hover {
+  background: var(--fs-surface-alt);
+}
+.uhrady-note-content {
+  /* issue 105 flex-basis vzor — text rastie a zmršťuje sa, `min-width: 0`
+     dovolí zalomenie namiesto pretečenia (kôš ostáva `flex: 0 0 auto`). */
+  flex: 1 1 0%;
+  min-width: 0;
+}
+.uhrady-note-text {
+  overflow-wrap: break-word;
+}
+.uhrady-note-meta {
+  color: var(--fs-ink-muted);
+  font-size: var(--fs-text-xs);
+}
+.uhrady-note-delete {
+  flex: 0 0 auto;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: var(--fs-text-md);
+  padding: 0 var(--fs-space-1);
+  line-height: 1.5;
+}
+.uhrady-note-delete:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.uhrady-upload-heading {
+  font-size: var(--fs-text-lg);
+  margin: var(--fs-space-4) 0 var(--fs-space-2);
+}
+.uhrady-upload {
+  display: flex;
+  align-items: center;
+  gap: var(--fs-space-3);
+  margin-bottom: var(--fs-space-4);
+  flex-wrap: wrap;
+}
+/* `type="file"` vstup — globálny `width: 100%` reset (`input:not([type=hidden])`,
+   špecificita (0,1,1)) by ho roztiahol na celú šírku; PARENT-scoped selektor
+   (2 triedy = (0,2,0)) ho porazí, holá `.uhrady-file-input` (0,1,0) by prehrala
+   (issue 403 pasca, `.claude/rules/frontend-design.md`). */
+.uhrady-upload .uhrady-file-input {
+  width: auto;
+  max-width: 100%;
+}
+.uhrady-uploading {
+  color: var(--fs-ink-muted);
+  font-size: var(--fs-text-sm);
+}
+
+/* Grid thumbnailov ako v prieskumníku. `minmax(min(120px, 100%), 1fr)` —
+   `min()`-wrapper (issue 382) zaručí, že stĺpec nikdy nepresiahne šírku
+   kontajnera (žiadne vodorovné pretečenie na 390px). */
+.uhrady-scan-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(120px, 100%), 1fr));
+  gap: var(--fs-space-3);
+}
+.uhrady-scan-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--fs-space-1);
+  min-width: 0;
+}
+/* Thumbnail = tlačidlo (klik zväčší). Resetuje predvolené štýly tlačidla. */
+.uhrady-thumb-btn {
+  padding: 0;
+  border: 1px solid var(--fs-border);
+  background: var(--fs-surface);
+  border-radius: var(--fs-radius-sm);
+  overflow: hidden;
+  cursor: pointer;
+  display: block;
+  width: 100%;
+}
+.uhrady-thumb-btn:hover {
+  border-color: var(--fs-brand);
+}
+.uhrady-thumb-img {
+  display: block;
+  width: 100%;
+  height: 120px;
+  object-fit: cover;
+}
+/* Malé pole na popis pod thumbnailom. `width: 100%` z globálneho resetu
+   vyhovuje (chceme celú šírku karty), ale kompaktné `font-size`/`padding` by
+   holá `.uhrady-desc-input` (0,1,0) prehrala s resetovým `font: inherit`/
+   `padding` (0,1,1) — preto PARENT-scoped (0,2,0), issue 403 pasca. */
+.uhrady-scan-card .uhrady-desc-input {
+  font: inherit;
+  font-size: var(--fs-text-xs);
+  color: var(--fs-ink);
+  background: var(--fs-surface);
+  border: 1px solid var(--fs-border);
+  border-radius: var(--fs-radius-sm);
+  padding: var(--fs-space-1) var(--fs-space-2);
+}
+.uhrady-scan-delete {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--fs-danger);
+  font-size: var(--fs-text-xs);
+  padding: 0;
+}
+.uhrady-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--fs-space-1);
+  font-size: var(--fs-text-xs);
+}
+.uhrady-confirm-q {
+  color: var(--fs-ink-muted);
+}
+
+/* Lightbox — celoobrazovkové prekrytie s plnou veľkosťou obrázka. `position:
+   fixed; inset: 0` = nemôže spôsobiť vodorovné pretečenie stránky. */
+.uhrady-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.82);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--fs-space-4);
+}
+.uhrady-lightbox-img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  box-shadow: var(--fs-shadow-md);
+  border-radius: var(--fs-radius-sm);
+}
+.uhrady-lightbox-close {
+  position: absolute;
+  top: var(--fs-space-3);
+  right: var(--fs-space-4);
+  background: rgba(255, 255, 255, 0.9);
+  border: none;
+  border-radius: var(--fs-radius-sm);
+  cursor: pointer;
+  font-size: var(--fs-text-lg);
+  line-height: 1;
+  padding: var(--fs-space-2) var(--fs-space-3);
+}
+
+@media (max-width: 36rem) {
+  /* issue 538 vzor: pridávací riadok poznámky sa na úzkom (390px) okne s
+     ROZBALENÝM sidebarom zalomí namiesto pretečenia; vstupov floor cez
+     `min(8rem, 100%)` sa pod 8rem kontajnera zmrští, nad ňou sa správa
+     identicky (issue 382 `min()`-wrapper). */
+  .uhrady-note-add {
+    flex-wrap: wrap;
+  }
+  .uhrady-note-add .uhrady-note-input {
+    min-width: min(8rem, 100%);
+  }
+}
