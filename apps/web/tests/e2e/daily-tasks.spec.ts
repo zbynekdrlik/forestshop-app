@@ -170,3 +170,53 @@ test("nahranie hlasovej poznámky (audio-only fallback): nahrať → uložiť �
 
   expect(chyby).toEqual([]);
 });
+
+// issue 538: na mobilnom viewporte (~360-430px) sa text prepisu hlasovej
+// poznámky (aj bežný dlhší text) vykresľoval PO JEDNOM ZNAKU pod seba —
+// `.uloha-row`ov jediný flexibilný prvok `.uloha-text` (flex:1 1 auto;
+// min-width:0) dostal celý deficit, keď pevní súrodenci (autor + audio
+// ovládanie + akcie) na úzkom `.ulohy-panel`i (rail-mód sidebaru pod
+// ~640px) takmer/úplne zaplnili šírku riadku — nameraná šírka 0px
+// (`.claude/rules/daily-tasks.md`). Test meria SKUTOČNE vykreslenú šírku
+// textového elementu v reálnom 390px viewporte — musí prejsť len keď je
+// text zalomený NORMÁLNE (po slovách), nie keď skolaboval na ~1 znak.
+test("mobil (390px): prepis dlhšieho textu úlohy sa zalamuje po slovách, nie po znakoch", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+
+  const chyby: string[] = [];
+  page.on("console", (m) => {
+    if (m.type() === "error" || m.type() === "warning") chyby.push(m.text());
+  });
+  page.on("pageerror", (e) => {
+    chyby.push(e.message);
+  });
+
+  await page.goto("/?tab=ulohy");
+  await page.getByLabel("E-mail").fill(E2E_ULOHY_EMAIL);
+  await page.getByLabel("Heslo").fill(E2E_HESLO);
+  await page.getByRole("button", { name: "Prihlásiť sa" }).click();
+  await expect(page.getByRole("heading", { name: "Úlohy na dnes" })).toBeVisible();
+
+  const dlhyText = "Skúška mikrofónu, skúšame či to funguje a či sa text pekne zalomí na viac riadkov.";
+  const novyVstup = page.getByTestId("uloha-new-input");
+  await novyVstup.fill(dlhyText);
+  await novyVstup.press("Enter");
+
+  const riadok = page.locator(".uloha-row").filter({ hasText: "Skúška mikrofónu" });
+  await expect(riadok).toBeVisible();
+
+  const textWidth = await riadok.locator(".uloha-text").evaluate((el) => el.getBoundingClientRect().width);
+  // Jeden vykreslený znak pri tomto písme je cca 6-10px širokom (kolabovaný
+  // stĺpec); normálne zalomená šírka na 390px okne je ~200-260px. 100px je
+  // bezpečne nad kolapsom a bezpečne pod normálnou šírkou.
+  expect(textWidth).toBeGreaterThan(100);
+
+  // Riadok ostáva funkčný — ovládacie tlačidlo je stále viditeľné a klikateľné.
+  await expect(riadok.getByRole("button", { name: "Upraviť text" })).toBeVisible();
+
+  // Upratanie po teste.
+  await riadok.getByRole("button", { name: /^Odstrániť úlohu/ }).click();
+  await expect(page.locator(".uloha-row").filter({ hasText: "Skúška mikrofónu" })).toHaveCount(0);
+
+  expect(chyby).toEqual([]);
+});

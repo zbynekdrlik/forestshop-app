@@ -1576,3 +1576,36 @@ paths:
   .scrollIntoView === "function"`) je ZLÁ cesta — `no-unnecessary-condition`
   ho zhodí (DOM lib typuje metódu ako vždy-prítomnú); radšej čistý
   `el?.scrollIntoView(...)` v kóde + polyfill v teste.
+- **`flex-wrap` predvolene `nowrap` + JEDEN flexibilný prvok (`flex:1 1
+  auto; min-width:0`) medzi VIACERÝMI pevnými (`flex:0 0 auto`) súrodencami
+  na ÚZKOM riadku kolabuje na 0px šírku, nie len na "menšiu" šírku — a s
+  `overflow-wrap: break-word` sa text potom láme PO JEDNOM ZNAKU.** Issue
+  538 (`.uloha-row` v "Úlohy na dnes"): checkbox + autor + audio ovládanie
+  (▶+dĺžka+🗑) + akcie (✏️😊🗑) sú všetky `flex:0 0 auto`, `.uloha-text` je
+  jediný `flex:1 1 auto`. Na mobile (rail-mód sidebaru pod ~640px,
+  `.ulohy-panel` len ~270px) súčet pevných súrodencov PRIBLÍŽI/PREKROČÍ
+  dostupnú šírku, takže `.uloha-text` (s explicitným `min-width:0`, ktorý
+  DOVOĽUJE zmrštenie až na 0) dostane CELÝ deficit — nameraná šírka 0px
+  (nie napr. 40px), a keďže žiadne slovo sa do 0px stĺpca nezmestí,
+  `overflow-wrap: break-word` zalomí KAŽDÝ ZNAK zvlášť (naživo overené
+  throwaway Playwright: text-height 291px pre 20-znakový zástupný text
+  "🎤 Hlasová poznámka"). Toto je INÝ tvar issue 105's "flex-basis
+  rozhoduje o zalomení" pasce — tam šlo o RIADOK zalomenia jednej bunky
+  vnútri tabuľky s `flex-wrap:wrap` na rodičovi; tu rodič `flex-wrap` VÔBEC
+  NEMÁ (predvolené `nowrap`), takže sa nezalomí NIČ — celý deficit prevezme
+  jediný `min-width:0` prvok. Fix (mobilný `@media (max-width: 36rem)`
+  blok, `app.css`): `.uloha-row { flex-wrap: wrap; }` necháva pevné
+  súrodence, čo sa nezmestia, prirodzene skočiť na ĎALŠÍ riadok (rovnaký
+  princíp ako `.ord-supplier-assign`, issue 63), + `.uloha-text { min-width:
+  10rem; }` mu garantuje CELÝ vlastný riadok namiesto súperenia o
+  zvyškovú (0px) šírku. Overovacia technika (rovnaká ako issue 105/291):
+  throwaway Playwright proti lokálnemu dev serveru, reálny fake-mikrofón
+  cyklus (`--use-fake-device-for-media-stream`) presne ako
+  `daily-tasks.spec.ts`, `getBoundingClientRect()` na `.uloha-text` PRED aj
+  PO kandidátnej CSS zmene (`page.addStyleTag`). **Test na KAŽDÝ ĎALŠÍ
+  `display:flex` riadok v tejto appke s VIACERÝMI `flex:0 0 auto`
+  súrodencami a JEDNÝM `min-width:0` flexibilným prvkom, VYKRESLENÝ na
+  úzkom (mobilnom alebo zbalenom-sidebar rail) kontexte:** má rodič
+  `flex-wrap`? Ak nie, over reálne nameranú šírku toho flexibilného prvku
+  na najužšej cieľovej šírke — 0px (nie len "menej") je ľahko prehliadnuteľné
+  v CSS-only review, viditeľné len v reálnom render.
