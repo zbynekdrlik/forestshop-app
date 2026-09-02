@@ -2910,8 +2910,18 @@ a.upozornenie-title:hover {
   .uloha-row {
     flex-wrap: wrap;
   }
+  /* Do-now follow-up k issue 538 (žiadny nový issue): pevný `min-width:
+     10rem` (160px) garantuje `.uloha-text`u vlastný riadok v RAIL-móde
+     (dostupná šírka `.ulohy-panel`u >160px), ale pri RUČNE ROZBALENOM
+     sidebari (`--fs-sidebar-width: 250px`) klesne dostupná šírka pod
+     160px a pevný floor riadok pretlačí mimo viewport (naživo namerané:
+     scrollWidth 440px pri 390px okne). `min(10rem, 100%)`-wrapper
+     (rovnaký vzor ako `.ulohy-add-row input`, issue 538's druhý follow-up,
+     aj issue 382's grid `minmax(min(500px,100%),1fr)`): nad 160px
+     kontajnerovej šírky (rail-mód) sa správa identicky ako predtým, pod
+     ňou sa zmrští namiesto pretečenia. */
   .uloha-text {
-    min-width: 10rem;
+    min-width: min(10rem, 100%);
   }
   /* Follow-up k issue 538 (do-now cleanup, zlyhal bundling gate, žiadny
      nový issue): rovnaký princíp, ale na PRIDÁVACOM riadku, nie riadkoch
