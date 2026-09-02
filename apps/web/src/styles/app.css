@@ -4210,7 +4210,9 @@ a.upozornenie-title:hover {
   gap: var(--fs-space-2);
   margin-bottom: var(--fs-space-4);
 }
-.uhrady-note-input {
+/* PARENT-scoped (2 triedy) aby `width: auto` porazil globálny `input`
+   `width: 100%` reset (issue 403 pasca); `flex: 1 1 0%` je hlavný nosič šírky. */
+.uhrady-note-add .uhrady-note-input {
   flex: 1 1 0%;
   min-width: 8rem;
   width: auto;
@@ -4271,9 +4273,11 @@ a.upozornenie-title:hover {
   margin-bottom: var(--fs-space-4);
   flex-wrap: wrap;
 }
-/* `type="file"` vstup — globálny `width: 100%` reset by ho roztiahol na celú
-   šírku; tu ho vrátime na prirodzenú šírku, aby sedel vedľa „Nahrávam…". */
-.uhrady-file-input {
+/* `type="file"` vstup — globálny `width: 100%` reset (`input:not([type=hidden])`,
+   špecificita (0,1,1)) by ho roztiahol na celú šírku; PARENT-scoped selektor
+   (2 triedy = (0,2,0)) ho porazí, holá `.uhrady-file-input` (0,1,0) by prehrala
+   (issue 403 pasca, `.claude/rules/frontend-design.md`). */
+.uhrady-upload .uhrady-file-input {
   width: auto;
   max-width: 100%;
 }
@@ -4316,8 +4320,11 @@ a.upozornenie-title:hover {
   height: 120px;
   object-fit: cover;
 }
-/* Malé pole na popis pod thumbnailom (globálny `width: 100%` reset vyhovuje). */
-.uhrady-desc-input {
+/* Malé pole na popis pod thumbnailom. `width: 100%` z globálneho resetu
+   vyhovuje (chceme celú šírku karty), ale kompaktné `font-size`/`padding` by
+   holá `.uhrady-desc-input` (0,1,0) prehrala s resetovým `font: inherit`/
+   `padding` (0,1,1) — preto PARENT-scoped (0,2,0), issue 403 pasca. */
+.uhrady-scan-card .uhrady-desc-input {
   font: inherit;
   font-size: var(--fs-text-xs);
   color: var(--fs-ink);
@@ -4386,7 +4393,7 @@ a.upozornenie-title:hover {
   .uhrady-note-add {
     flex-wrap: wrap;
   }
-  .uhrady-note-input {
+  .uhrady-note-add .uhrady-note-input {
     min-width: min(8rem, 100%);
   }
 }

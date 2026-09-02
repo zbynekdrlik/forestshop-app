@@ -1,5 +1,5 @@
 import { useCallback, useState, type JSX } from "react";
-import { deletePaymentScan, updatePaymentScanDescription, uhradyScanImageUrl, type PaymentScanRow } from "../uhradyApi.js";
+import { deletePaymentScan, PAYMENT_SCAN_DESCRIPTION_MAX_CHARS, updatePaymentScanDescription, uhradyScanImageUrl, type PaymentScanRow } from "../uhradyApi.js";
 
 // issue 543: jedna dlaždica naskenovanej FA v gride (thumbnail + popis + mazanie
 // s potvrdením). Popis je VŽDY viditeľné pole s LOKÁLNYM draftom
@@ -72,7 +72,7 @@ export function PaymentScanCard({ scan, onOpenLightbox, onDescriptionSaved, onDe
         type="text"
         className="uhrady-desc-input"
         value={desc}
-        maxLength={500}
+        maxLength={PAYMENT_SCAN_DESCRIPTION_MAX_CHARS}
         onChange={(e) => {
           setDesc(e.target.value);
         }}

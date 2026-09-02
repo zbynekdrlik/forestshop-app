@@ -1,4 +1,5 @@
-import { customType, index, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { index, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { bytea } from "./bytea.js";
 import { users } from "./schema-users.js";
 
 // issue 543: "SLAVOSPORT → Úhrady" — miesto, kde si šéfov kolega Štěpán nahrá
@@ -11,13 +12,8 @@ import { users } from "./schema-users.js";
 // sekcia s vlastnou sémantikou (obrázok + popis), plné odôvodnenie v dizajnovom
 // komentári na tickete.
 
-// `bytea` — surové bajty obrázka na riadku (rovnaký vzor ako `daily_task.audio`,
-// #519). node-postgres nesie/prijíma `Buffer` bez extra serializácie.
-const bytea = customType<{ data: Buffer }>({
-  dataType() {
-    return "bytea";
-  },
-});
+// `bytea` (surové bajty obrázka na riadku, rovnaký vzor ako `daily_task.audio`,
+// #519) je teraz zdieľaný `./bytea.js` typ (#543 review — druhý konzument).
 
 // Jednoriadkové poznámky navrchu obrazovky. Minimalistické — zadanie žiada len
 // pridať/zoznam/zmazať (žiadny `resolved_at`/emoji ako pri `daily_task`).

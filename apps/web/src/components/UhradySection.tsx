@@ -5,6 +5,7 @@ import {
   deletePaymentNote,
   fetchPaymentNotes,
   fetchPaymentScans,
+  PAYMENT_NOTE_MAX_CHARS,
   uhradyScanImageUrl,
   UhradyUnauthorizedError,
   type PaymentNoteRow,
@@ -35,6 +36,11 @@ export function UhradySection({ onSessionExpired }: { readonly onSessionExpired:
   const [uploading, setUploading] = useState(false);
   const [lightbox, setLightbox] = useState<PaymentScanRow | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Lightbox prístupnosť: zapamätaj spúšťací prvok (thumbnail) a vráť naň fokus
+  // po zavretí; po otvorení presuň fokus na tlačidlo ✕ (klávesnica neostane za
+  // prekryvom).
+  const lightboxCloseRef = useRef<HTMLButtonElement>(null);
+  const lightboxReturnRef = useRef<HTMLElement | null>(null);
 
   const handleActionError = useCallback(
     (err: unknown, fallback: string) => {
@@ -42,7 +48,11 @@ export function UhradySection({ onSessionExpired }: { readonly onSessionExpired:
         onSessionExpired();
         return;
       }
-      setError(fallback);
+      // Ukáž KONKRÉTNu serverovú hlášku (uhradyApi ju vytiahne z tela do
+      // `Error.message` — napr. „Nepodporovaný formát — nahraj JPG alebo PNG.").
+      // Sieťový výpadok je `TypeError` („Failed to fetch") — pri ňom radšej
+      // zrozumiteľný fallback než surová technická hláška.
+      setError(err instanceof Error && !(err instanceof TypeError) && err.message !== "" ? err.message : fallback);
     },
     [onSessionExpired],
   );
@@ -111,21 +121,34 @@ export function UhradySection({ onSessionExpired }: { readonly onSessionExpired:
       setUploading(true);
       setError("");
       // Nahraj postupne (sekvenčne) — jednoduché a šetrné k 2-jadrovému boxu.
+      // PER-SÚBOR try/catch: zlyhanie jedného (napr. priveľký/zlý formát)
+      // NEZASTAVÍ ostatné a `loadScans()` VŽDY prebehne, takže úspešne
+      // nahraté skeny sa v gride objavia (inak by ostali neviditeľné do reloadu).
       void (async () => {
-        try {
-          for (const file of list) {
+        const errors: string[] = [];
+        let sessionExpired = false;
+        for (const file of list) {
+          try {
             await createPaymentScan(file, "");
+          } catch (err: unknown) {
+            if (err instanceof UhradyUnauthorizedError) {
+              onSessionExpired();
+              sessionExpired = true;
+              break;
+            }
+            const detail = err instanceof Error && !(err instanceof TypeError) && err.message !== "" ? err.message : "nepodarilo sa uložiť";
+            errors.push(`${file.name}: ${detail}`);
           }
-          loadScans();
-        } catch (err: unknown) {
-          handleActionError(err, "Sken sa nepodarilo uložiť — skúste to znova.");
-        } finally {
-          setUploading(false);
-          if (fileInputRef.current !== null) fileInputRef.current.value = "";
         }
+        if (!sessionExpired) {
+          loadScans();
+          setError(errors.length > 0 ? errors.join(" · ") : "");
+        }
+        setUploading(false);
+        if (fileInputRef.current !== null) fileInputRef.current.value = "";
       })();
     },
-    [uploading, loadScans, handleActionError],
+    [uploading, loadScans, onSessionExpired],
   );
 
   const onDescriptionSaved = useCallback((id: string, description: string) => {
@@ -137,17 +160,30 @@ export function UhradySection({ onSessionExpired }: { readonly onSessionExpired:
     setLightbox((prev) => (prev !== null && prev.id === id ? null : prev));
   }, []);
 
-  // Lightbox: zavri klávesom Esc, kým je otvorený.
+  const openLightbox = useCallback((scan: PaymentScanRow) => {
+    lightboxReturnRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setLightbox(scan);
+  }, []);
+
+  const closeLightbox = useCallback(() => {
+    setLightbox(null);
+    const back = lightboxReturnRef.current;
+    lightboxReturnRef.current = null;
+    if (back !== null && back.isConnected) back.focus();
+  }, []);
+
+  // Lightbox: po otvorení presuň fokus na ✕ a zavri klávesom Esc.
   useEffect(() => {
     if (lightbox === null) return;
+    lightboxCloseRef.current?.focus();
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key === "Escape") setLightbox(null);
+      if (e.key === "Escape") closeLightbox();
     };
     window.addEventListener("keydown", onKey);
     return () => {
       window.removeEventListener("keydown", onKey);
     };
-  }, [lightbox]);
+  }, [lightbox, closeLightbox]);
 
   const intro = <p>Naskenované papierové faktúry na úhradu a rýchle poznámky. Po úhrade sken zmaž. Vidia to všetci prihlásení.</p>;
 
@@ -168,7 +204,7 @@ export function UhradySection({ onSessionExpired }: { readonly onSessionExpired:
         }}
         aria-label="Nová poznámka"
         placeholder="Napíš poznámku a stlač Enter…"
-        maxLength={300}
+        maxLength={PAYMENT_NOTE_MAX_CHARS}
         disabled={addingNote}
         data-testid="uhrady-note-input"
       />
@@ -249,7 +285,7 @@ export function UhradySection({ onSessionExpired }: { readonly onSessionExpired:
             <PaymentScanCard
               key={scan.id}
               scan={scan}
-              onOpenLightbox={setLightbox}
+              onOpenLightbox={openLightbox}
               onDescriptionSaved={onDescriptionSaved}
               onDeleted={onScanDeleted}
               onError={handleActionError}
@@ -265,16 +301,13 @@ export function UhradySection({ onSessionExpired }: { readonly onSessionExpired:
           aria-modal="true"
           aria-label="Zväčšený sken faktúry"
           data-testid="uhrady-lightbox"
-          onClick={() => {
-            setLightbox(null);
-          }}
+          onClick={closeLightbox}
         >
           <button
             type="button"
+            ref={lightboxCloseRef}
             className="uhrady-lightbox-close"
-            onClick={() => {
-              setLightbox(null);
-            }}
+            onClick={closeLightbox}
             aria-label="Zavrieť"
             data-testid="uhrady-lightbox-close"
           >

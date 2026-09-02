@@ -17,8 +17,13 @@ function pngFile(name: string) {
 // popisu (prežije reload = server ho uložil), lightbox (klik zväčší, Esc aj ✕
 // zavrie), zmazanie skenu S POTVRDENÍM. Konzola musí zostať čistá
 // (`.claude/rules/testing.md`). Účet má rolu "sef" — zdieľaná obrazovka bez
-// role-gatingu. Test je SELF-CONTAINED a po sebe upratuje (skeny/poznámky sú
-// zdieľané tabuľky, filtruje VLASTNÉ fixtúry, #480).
+// role-gatingu. `slavosport_payment_note`/`slavosport_payment_scan` sú ZDIEĽANÉ
+// (globálne) tabuľky, takže globálne počty (`toHaveCount`) sú tu bezpečné LEN
+// preto, že tento spec je ich JEDINÝ e2e zapisovateľ (over `grep -rln
+// "api/uhrady\|uhrady-file-input\|uhrady-note-input" apps/web/tests/e2e/`) a po
+// sebe VŠETKO upratuje — rovnaká podmienka + presný vzor ako
+// `daily-tasks.spec.ts` (#480). Prvý ĎALŠÍ spec, čo zapíše do týchto tabuliek,
+// musí OBA prerobiť na „filtruj podľa VLASTNÉHO fixture" (#480).
 test("Úhrady: poznámky + upload 2 skenov + popis + lightbox + zmazanie s potvrdením — konzola je čistá", async ({ page }) => {
   const chyby: string[] = [];
   page.on("console", (m) => {

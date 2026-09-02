@@ -4,7 +4,7 @@ import { bodyLimit } from "hono/body-limit";
 import { z } from "zod";
 import type { Database } from "../db/client.js";
 import { getPaymentScanImage, listPaymentNotes, listPaymentScans } from "../modules/uhrady/queries.js";
-import { SCAN_DESCRIPTION_MAX_CHARS, SCAN_MAX_IMAGE_BYTES, SCAN_MIN_IMAGE_BYTES, isAllowedImageMime } from "../modules/uhrady/image.js";
+import { baseImageMime, isAllowedImageMime, looksLikeJpegOrPng, SCAN_DESCRIPTION_MAX_CHARS, SCAN_MAX_IMAGE_BYTES, SCAN_MIN_IMAGE_BYTES } from "../modules/uhrady/image.js";
 import {
   createPaymentNote,
   createPaymentScan,
@@ -79,11 +79,18 @@ export function registerUhradyRoutes(app: Hono<AppBindings>, db: Database): void
       if (image.length > SCAN_MAX_IMAGE_BYTES) {
         return c.json({ error: "Obrázok je priveľký." }, 413);
       }
+      // Signatúra súboru musí sedieť (MIME je od klienta) — bránime nahratiu
+      // HTML/skriptu s podvrhnutým `image/*` typom.
+      if (!looksLikeJpegOrPng(image)) {
+        return c.json({ error: "Súbor nie je platný JPG ani PNG obrázok." }, 400);
+      }
 
       const rawDescription = form["description"];
       const description = typeof rawDescription === "string" ? rawDescription.trim().slice(0, SCAN_DESCRIPTION_MAX_CHARS) : "";
 
-      const created = await createPaymentScan(db, { userId: user.userId, image, imageMime: mime, description, now: new Date() });
+      // Ulož KANONICKÉ base MIME (bez prípadného `;parametra`, malé písmená) —
+      // tá istá hodnota sa neskôr servíruje ako `Content-Type`.
+      const created = await createPaymentScan(db, { userId: user.userId, image, imageMime: baseImageMime(mime), description, now: new Date() });
       return c.json({ ok: true as const, id: created.id });
     },
   );

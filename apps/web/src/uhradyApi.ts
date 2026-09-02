@@ -1,5 +1,12 @@
 import { z } from "zod";
 
+// Klientske stropy dĺžky — ZRKADLIA serverové (`uhrady-routes.ts` zod `max(300)`
+// a `modules/uhrady/image.ts` `SCAN_DESCRIPTION_MAX_CHARS`). Držané tu (nie v
+// komponentoch) v jednom mieste, aby `maxLength` na vstupoch nedriftoval od
+// serverovej validácie (web nevie importovať z apps/api — samostatný balík).
+export const PAYMENT_NOTE_MAX_CHARS = 300;
+export const PAYMENT_SCAN_DESCRIPTION_MAX_CHARS = 500;
+
 // issue 543: "SLAVOSPORT → Úhrady" — zrkadlí `PaymentNoteRow`/`PaymentScanRow`
 // (`apps/api/src/modules/uhrady/queries.ts`). ZDIEĽANÝ zoznam, takže riadok
 // nesie aj `authorName`. Obrázok (bytea) sa NIKDY nevracia v zozname — grid ho

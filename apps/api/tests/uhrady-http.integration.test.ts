@@ -34,11 +34,32 @@ async function boot(role: UserRole = "sef") {
   return { app, cookie, db: ctx.db };
 }
 
+const PNG_SIG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+const JPEG_SIG = Buffer.from([0xff, 0xd8, 0xff]);
+
+// Postaví buffer PRESNEJ dĺžky `bytes` so správnou signatúrou pre `mime`
+// (route od tejto zmeny overuje magické bajty). Nepodporované mime dostane
+// surové bajty — signatúrny check ich aj tak nikdy nedosiahne (mime/veľkosť
+// zlyhá skôr).
+function imageBytes(bytes: number, mime: string): Buffer {
+  const base = mime.toLowerCase();
+  const sig = base.includes("png") ? PNG_SIG : base.includes("jpeg") || base.includes("jpg") ? JPEG_SIG : Buffer.alloc(0);
+  if (sig.length === 0 || bytes <= sig.length) return Buffer.alloc(bytes, 9);
+  return Buffer.concat([sig, Buffer.alloc(bytes - sig.length, 9)]);
+}
+
 function imageForm(bytes: number, mime: string, description?: string): FormData {
   const form = new FormData();
   const ext = mime.includes("png") ? "png" : "jpg";
-  form.append("image", new Blob([Buffer.alloc(bytes, 9)], { type: mime }), `fa.${ext}`);
+  form.append("image", new Blob([imageBytes(bytes, mime)], { type: mime }), `fa.${ext}`);
   if (description !== undefined) form.append("description", description);
+  return form;
+}
+
+// Platný mime + platná veľkosť, ale NEPLATNÁ signatúra (podvrhnutý obsah).
+function fakeSignatureForm(bytes: number, mime: string): FormData {
+  const form = new FormData();
+  form.append("image", new Blob([Buffer.alloc(bytes, 9)], { type: mime }), "fa.png");
   return form;
 }
 
@@ -148,11 +169,13 @@ describe("Úhrady — skeny FA", () => {
     expect(img.status).toBe(404);
   });
 
-  it("odmietne nepodporovaný formát (400), prázdny (400), priveľký (413) a NIČ neuloží", async () => {
+  it("odmietne nepodporovaný formát (400), prázdny (400), priveľký (413), podvrhnutú signatúru (400) a NIČ neuloží", async () => {
     const { app, cookie } = await boot();
     expect((await postScan(app, cookie, imageForm(4096, "application/pdf"))).status).toBe(400);
     expect((await postScan(app, cookie, imageForm(16, "image/png"))).status).toBe(400);
     expect((await postScan(app, cookie, imageForm(SCAN_MAX_IMAGE_BYTES + 1, "image/png"))).status).toBe(413);
+    // Platný mime + veľkosť, ale bajty nie sú PNG/JPEG → 400 (magic-byte check).
+    expect((await postScan(app, cookie, fakeSignatureForm(4096, "image/png"))).status).toBe(400);
     expect(await listScans(app, cookie)).toHaveLength(0);
   });
 
