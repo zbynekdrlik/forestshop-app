@@ -263,3 +263,62 @@ test("mobil (390px) s rozbaleným sidebarom: pridávací riadok Úloh na dnes ne
 
   expect(chyby).toEqual([]);
 });
+
+// Do-now follow-up k issue 538 (ticket je UŽ ZAVRETÝ, žiadny nový issue —
+// nájdené naživo na PROD 0.3.0-dev.318, 390×844, ROZBALENÝ sidebar):
+// predošlý follow-up test vyššie overil len PRIDÁVACÍ riadok (`.ulohy-add-
+// row`) s PRÁZDNYM zoznamom — nikdy nevytvoril žiadny `.uloha-row`, takže
+// nikdy nezacielil `.uloha-text`ov pevný `min-width: 10rem` (160px) z
+// media query `@media (max-width: 36rem)` (`app.css`). Pri rozbalenom
+// sidebari (`--fs-sidebar-width: 250px`) je dostupná šírka `<main>` menšia
+// než 160px, takže floor pretlačí riadok mimo viewport (naživo namerané:
+// `scrollWidth` 440px pri 390px okne). Tento test PRIDÁ úlohu s dosť
+// dlhým textom PRED rozbalením sidebaru (v predvolenom rail-móde sa
+// zmestí bez problémov), potom rozbalí sidebar a overí, že žiadny riadok
+// zoznamu (nielen pridávací riadok) nepretečie vodorovne — presne scenár
+// z majiteľovho naživo nálezu.
+test("mobil (390px) s rozbaleným sidebarom: riadok zoznamu Úloh na dnes nepreteká vodorovne", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+
+  const chyby: string[] = [];
+  page.on("console", (m) => {
+    if (m.type() === "error" || m.type() === "warning") chyby.push(m.text());
+  });
+  page.on("pageerror", (e) => {
+    chyby.push(e.message);
+  });
+
+  await page.goto("/?tab=ulohy");
+  await page.getByLabel("E-mail").fill(E2E_ULOHY_EMAIL);
+  await page.getByLabel("Heslo").fill(E2E_HESLO);
+  await page.getByRole("button", { name: "Prihlásiť sa" }).click();
+  await expect(page.getByRole("heading", { name: "Úlohy na dnes" })).toBeVisible();
+
+  // Pridať úlohu s dosť dlhým textom — v predvolenom rail-móde (72px
+  // sidebar) sa pridávací riadok zmestí bez problémov (existujúci fix,
+  // predošlý test vyššie).
+  const dlhyText = "Skontrolovať sklad a objednať chýbajúci tovar od dodávateľa do konca týždňa";
+  const novyVstup = page.getByTestId("uloha-new-input");
+  await novyVstup.fill(dlhyText);
+  await novyVstup.press("Enter");
+
+  const riadok = page.locator(".uloha-row").filter({ hasText: "Skontrolovať sklad" });
+  await expect(riadok).toBeVisible();
+
+  // Sidebar štartuje na 390px v rail-móde (predvolené pod ~640px) — ručne
+  // ho rozbaliť, presne majiteľov naživo scenár.
+  const railToggle = page.getByTestId("sidebar-rail-toggle");
+  await railToggle.click();
+  await expect(page.locator(".sidebar.sidebar-rail")).toHaveCount(0);
+
+  await expect(riadok).toBeVisible();
+
+  const [scrollWidth, innerWidth] = await page.evaluate(() => [document.documentElement.scrollWidth, window.innerWidth]);
+  expect(scrollWidth).toBeLessThanOrEqual(innerWidth);
+
+  // Upratanie po teste.
+  await riadok.getByRole("button", { name: /^Odstrániť úlohu/ }).click();
+  await expect(page.locator(".uloha-row").filter({ hasText: "Skontrolovať sklad" })).toHaveCount(0);
+
+  expect(chyby).toEqual([]);
+});

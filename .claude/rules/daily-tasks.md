@@ -90,6 +90,30 @@ paths:
   `flex-basis`/`min-width` pasce sa opakujú naprieč appkou, aj v RÁMCI
   jednej obrazovky.
 
+- **TRETÍ tvar tej istej triedy (do-now follow-up k issue 538, žiadny nový
+  issue, naživo nájdené na PROD 0.3.0-dev.318): `.uloha-text`ov VLASTNÝ fix
+  z issue 538 (`min-width: 10rem`, garantujúci mu vlastný riadok po
+  `.uloha-row { flex-wrap: wrap }`) je SÁM pevný `min-width` bez `min()`-
+  wrapperu — presne ten istý pattern, čo `.ulohy-add-row input` musel
+  dostať o riadok vyššie v druhom follow-upe.** V RAIL-móde (dostupná šírka
+  `.ulohy-panel`u > 160px) sa nič nemení. Až keď používateľ sidebar RUČNE
+  ROZBALÍ na 390px viewporte (`--fs-sidebar-width: 250px`), dostupná šírka
+  `<main>` klesne POD 160px a pevný `min-width` pretlačí RIADOK (nie len
+  pridávací riadok) mimo viewport (naživo namerané: `scrollWidth` 440px pri
+  390px okne). Fix: `.uloha-text { min-width: min(10rem, 100%); }` — nad
+  160px kontajnerovej šírky (rail-mód) sa správa identicky ako predtým, pod
+  ňou sa zmrští namiesto pretečenia; pôvodný issue 538 rail-mode test
+  (`textWidth > 100px`) ostáva zelený bez zmeny (floor v rail móde je
+  stále plných 160px). **Testovacia diera, prečo to CI/lokálny beh
+  nezachytili:** predošlý follow-up e2e test (druhý tvar vyššie) overoval
+  LEN `.ulohy-add-row` s PRÁZDNYM zoznamom úloh — nikdy nevytvoril žiadny
+  `.uloha-row`, takže nikdy nezacielil TENTO floor. **Pravidlo pre KAŽDÝ
+  ĎALŠÍ `min-width`/pevný floor pridaný v `@media (max-width: 36rem)`
+  bloku tejto obrazovky (`app.css`): VŽDY `min(<floor>, 100%)`, nikdy holý
+  `<floor>`** — a jeho e2e regresný test musí vytvoriť SKUTOČNÝ prvok
+  (riadok/vstup), na ktorý floor pôsobí, PRED rozbalením sidebaru, nielen
+  overiť prázdny/liveness stav obrazovky.
+
 - **Testy:**
   - Web komponentové testy NEMAJÚ auto-cleanup (žiadne `globals: true`) — každý
     nový `*.test.tsx` MUSÍ `import { cleanup }` a volať ho v `afterEach`, inak sa
