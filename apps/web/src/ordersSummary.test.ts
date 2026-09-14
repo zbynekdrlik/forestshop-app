@@ -177,8 +177,11 @@ it("formatVariantTotalChip vráti null, keď produkt má v skupine LEN jeden ria
 
 // issue 63 (nález pri kontrole issue 62): chip sa doteraz rozhodoval LEN
 // podľa `lineCount < 2`, nie podľa zvyšku — opakovaný produkt, ktorý je UŽ
-// celý vybavený, by preto navždy visel s "Σ 0 ks".
-it("formatVariantTotalChip vráti null, keď je produkt s ≥2 riadkami UŽ CELÝ vybavený (remaining === 0)", () => {
+// issue 546: aktualizované — pôvodne (#63) sa chip pri `remaining === 0`
+// SKRÝVAL, lebo zobrazoval `remaining` (nevybavené kusy) a „netreba nič
+// objednať". Po #546 chip ukazuje CELKOVÝ súčet kusov bez ohľadu na stav, tak
+// aj úplne vybavený opakovaný variant (≥2 riadky) ukáže svoj total (tu Σ 5).
+it("formatVariantTotalChip ukáže total aj keď je produkt s ≥2 riadkami UŽ CELÝ vybavený (issue 546)", () => {
   const totals = computeVariantTotals([
     variantLine("4859/46", 3, "objednane", true), // odškrtnutý → vybavený
     variantLine("4859/46", 2, "skladom", false), // posunutý stav → vybavený
@@ -186,10 +189,15 @@ it("formatVariantTotalChip vráti null, keď je produkt s ≥2 riadkami UŽ CEL�
   const vt = totals.get("4859/46");
   if (vt === undefined) throw new Error("4859/46 musí byť v mape");
   expect(vt.remaining).toBe(0);
-  expect(formatVariantTotalChip(vt)).toBeNull();
+  expect(formatVariantTotalChip(vt)).toEqual({
+    text: "Σ 5",
+    title: "Spolu vo všetkých objednávkach: 5 ks · nevybavené: 0 ks",
+  });
 });
 
-it("formatVariantTotalChip s ≥2 riadkami vráti text so ZOSTÁVAJÚCIM množstvom a tooltip s CELKOVÝM aj zostávajúcim", () => {
+// issue 546: aktualizované — chip zobrazuje CELKOVÝ súčet (`total`), nie
+// zostávajúce (`remaining`) množstvo. Tooltip nesie oba údaje.
+it("formatVariantTotalChip s ≥2 riadkami vráti text s CELKOVÝM súčtom a tooltip s celkovým aj zostávajúcim", () => {
   const totals = computeVariantTotals([
     variantLine("4859/46", 3, "objednane", false),
     variantLine("4859/46", 2, "skladom", false),
@@ -199,7 +207,7 @@ it("formatVariantTotalChip s ≥2 riadkami vráti text so ZOSTÁVAJÚCIM množst
   const chip = formatVariantTotalChip(vt);
   expect(chip).toEqual({
     // issue 214: bez jednotky — tá je už na riadku nad pilulkou ("3 ks").
-    text: "Σ 3",
+    text: "Σ 5",
     title: "Spolu vo všetkých objednávkach: 5 ks · nevybavené: 3 ks",
   });
 });

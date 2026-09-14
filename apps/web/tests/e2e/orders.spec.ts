@@ -202,11 +202,13 @@ const E2E_SUCET_EMAIL = "e2e-sucet@forestshop.sk";
 // issue 62: `scripts/e2e-setup.ts` zakladá DVE objednávky (9004 + 9005) od
 // dvoch rôznych zákazníkov nad TÝM ISTÝM variantom "60055/10" (3 ks + 2 ks,
 // obe vo východiskovom nevybavenom stave) pod novým dodávateľom
-// "DODAVATEL-TEST-2" — presne scenár, ktorý tento ticket rieši: chip
-// "Σ spolu" na OBOCH riadkoch ukazuje 5 ks (celé dopytované množstvo je
-// zároveň celé nevybavené) a po odškrtnutí JEDNÉHO riadku ako objednaného sa
-// ihneď (bez reloadu) prepočíta na 2 ks na OBOCH riadkoch naraz.
-test("súčet kusov toho istého produktu naprieč objednávkami dodávateľa sa prepočíta hneď po zmene stavu riadku, konzola je čistá", async ({
+// "DODAVATEL-TEST-2".
+// issue 546: chip „Σ" ukazuje CELKOVÝ súčet kusov (3 + 2 = 5) na OBOCH
+// riadkoch a NEMENÍ sa pri zmene stavu riadku (bez ohľadu na stav — Štěpánova
+// požiadavka). Okamžitý prepočet „bez reloadu" sa naďalej overuje cez tooltip
+// (`title`), ktorého časť „nevybavené" klesne z 5 na 2 hneď po odškrtnutí
+// jedného riadku ako objednaného.
+test("súčet kusov toho istého produktu naprieč objednávkami dodávateľa ukazuje total a tooltip sa prepočíta hneď po zmene stavu riadku, konzola je čistá", async ({
   page,
 }) => {
   const chyby: string[] = [];
@@ -232,7 +234,7 @@ test("súčet kusov toho istého produktu naprieč objednávkami dodávateľa sa
   const chipDruha = riadokDruha.locator("[data-testid^='qty-total-']");
 
   // Pred akoukoľvek zmenou: obe objednávky nevybavené → chip na OBOCH
-  // riadkoch ukazuje celé dopytované množstvo (3 + 2 = 5) ako zostávajúce.
+  // riadkoch ukazuje CELKOVÝ súčet (3 + 2 = 5), tooltip nevybavené: 5.
   await expect(chipPrva).toHaveText("Σ 5");
   await expect(chipPrva).toHaveAttribute("title", "Spolu vo všetkých objednávkach: 5 ks · nevybavené: 5 ks");
   await expect(chipDruha).toHaveText("Σ 5");
@@ -244,11 +246,12 @@ test("súčet kusov toho istého produktu naprieč objednávkami dodávateľa sa
   await checkboxPrva.click();
   await expect(checkboxPrva).toBeChecked();
 
-  // Prepočet je OKAMŽITÝ (bez `page.reload()`) a týka sa OBOCH riadkov
-  // naraz — presne požiadavka ticketu ("súčet sa musí prepočítať hneď po
-  // zmene stavu riadku, bez obnovenia stránky").
-  await expect(chipPrva).toHaveText("Σ 2");
-  await expect(chipDruha).toHaveText("Σ 2");
+  // issue 546: text chipu je CELKOVÝ súčet a NEMENÍ sa pri zmene stavu (Σ 5
+  // ostáva na OBOCH riadkoch). Okamžitý prepočet (bez `page.reload()`) sa
+  // prejaví v tooltipe: „nevybavené" klesne z 5 na 2 hneď, na OBOCH riadkoch.
+  await expect(chipPrva).toHaveText("Σ 5");
+  await expect(chipDruha).toHaveText("Σ 5");
+  await expect(chipPrva).toHaveAttribute("title", "Spolu vo všetkých objednávkach: 5 ks · nevybavené: 2 ks");
   await expect(chipDruha).toHaveAttribute("title", "Spolu vo všetkých objednávkach: 5 ks · nevybavené: 2 ks");
   await expect(page.getByRole("alert")).toHaveCount(0);
 
