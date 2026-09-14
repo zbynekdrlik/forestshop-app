@@ -157,12 +157,19 @@ export function computeVariantTotals(
 // Chip sa zobrazí LEN keď produkt genuinely opakuje naprieč VIACERÝMI
 // riadkami dodávateľa (`lineCount >= 2`, rovnaká podmienka ako stará appka's
 // `all.lines < 2` → žiadny chip) — jediný riadok produktu by chip len
-// zopakoval množstvo, ktoré je už vidno v stĺpci vedľa. issue 63 (nález pri
-// kontrole issue 62): rovnako sa chip schová, keď `remaining === 0` — celý
-// opakovaný produkt je UŽ vybavený naprieč všetkými riadkami, chip by inak
-// navždy visel s textom "Σ spolu 0 ks" aj keď netreba nič objednať.
+// zopakoval množstvo, ktoré je už vidno v stĺpci vedľa.
+//
+// issue 546 (Štěpán, Discord 14. 9. 2026): chip ukazuje CELKOVÝ počet kusov
+// variantu naprieč VŠETKÝMI riadkami skupiny (`vt.total`), BEZ OHĽADU na stav
+// riadku (Nevybavené aj Objednané) — nie len zostávajúce/nevybavené kusy.
+// Nahlásený prípad: variant v sekcii 2× (jeden riadok Nevybavené, jeden
+// Objednané/zaškrtnutý) svietil „Σ 1" (remaining), hoci v sekcii je 2×
+// (`total=2`). Toto MENÍ pôvodný zámer #62/#63 (chip zobrazoval `remaining` a
+// skrýval sa pri `remaining === 0`); Štěpánovo očakávanie je jasné: v sekcii
+// sú 2 → Σ 2. Preto sa zobrazuje `total` a strážka `remaining === 0` je
+// ODSTRÁNENÁ (aj úplne vybavený opakovaný variant ukáže svoj celkový súčet).
 export function formatVariantTotalChip(vt: VariantTotal): { readonly text: string; readonly title: string } | null {
-  if (vt.lineCount < 2 || vt.remaining === 0) return null;
+  if (vt.lineCount < 2) return null;
   return {
     // issue 204: text skrátený zo "Σ spolu N ks" na "Σ N ks" — dlhší tvar sa
     // do 54px stĺpca s množstvom nezmestil ani po zalomení pod množstvo
@@ -171,9 +178,8 @@ export function formatVariantTotalChip(vt: VariantTotal): { readonly text: strin
     // obsahu proti 16 px zobrazeným, takže `text-overflow: ellipsis` pilulku
     // orezal na "Σ…" na KAŽDEJ šírke okna a majiteľ z nej nič neprečítal.
     // Jednotka odpadá: riadok priamo NAD pilulkou už hovorí "N ks", takže
-    // "Σ 3" sa číta ako "spolu 3". Celé vysvetlenie nesie `title` nižšie,
-    // ktorý sa nemení.
-    text: `Σ ${String(vt.remaining)}`,
+    // "Σ 3" sa číta ako "spolu 3". Celé vysvetlenie nesie `title` nižšie.
+    text: `Σ ${String(vt.total)}`,
     title: `Spolu vo všetkých objednávkach: ${String(vt.total)} ks · nevybavené: ${String(vt.remaining)} ks`,
   };
 }

@@ -233,10 +233,18 @@ paths:
   `variantCode` (kód UŽ nesie aj veľkosť), počíta nad CELOU (nefiltrovanou)
   `group.lines` danej skupiny, nikdy nad pohľadom zúženým `hideResolved` —
   volajúci (`OrdersSection.tsx`) posiela vždy `group.lines`. Chip sa smie
-  zobraziť LEN keď produkt má v skupine ≥2 riadky (`lineCount >= 2`) A ešte
-  zostáva niečo objednať (`remaining > 0`, issue 63 — pôvodne sa rozhodovalo
-  LEN podľa `lineCount`, takže celý vybavený opakovaný produkt navždy
-  ukazoval "Σ spolu 0 ks"). Ako odvodená hodnota počítaná PRI KAŽDOM RENDRI
+  zobraziť LEN keď produkt má v skupine ≥2 riadky (`lineCount >= 2`).
+  **issue 546 (Štěpán, 14. 9. 2026): text chipu je CELKOVÝ súčet kusov
+  (`vt.total`), BEZ OHĽADU na stav riadku (Nevybavené aj Objednané) — NIE
+  zostávajúce/nevybavené kusy.** Nahlásený prípad: variant v sekcii 2× (jeden
+  riadok Nevybavené, jeden Objednané/zaškrtnutý) svietil „Σ 1" (remaining),
+  hoci v sekcii je 2× → má byť „Σ 2". Tým sa ZVRÁTIL pôvodný zámer #62/#63
+  (chip zobrazoval `remaining` a skrýval sa pri `remaining === 0`); strážka
+  `remaining === 0` je ODSTRÁNENÁ (aj úplne vybavený opakovaný produkt ukáže
+  svoj total). `remaining` zostáva len v `title` tooltipe („Spolu … N ks ·
+  nevybavené: M ks"). Pri ďalšej zmene tejto pilulky drž túto sémantiku:
+  pilulka = total (stav-nezávislý), tooltip nesie aj nevybavené. Ako odvodená
+  hodnota počítaná PRI KAŽDOM RENDRI
   (rovnaký vzor ako `isLineResolved`/`summarizeOrderLines` vyššie) sa
   automaticky prepočíta na akúkoľvek zmenu `suppliers` stavu — žiadny extra
   React stav, žiadny imperatívny prepočítavací krok. ĎALŠIA funkcia
