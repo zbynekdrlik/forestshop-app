@@ -204,6 +204,27 @@ it("formatVariantTotalChip s ≥2 riadkami vráti text so ZOSTÁVAJÚCIM množst
   });
 });
 
+// issue 546 (Štěpán, Discord 14. 9. 2026): variant 61259/56 je v sekcii „Na
+// objednanie" v DVOCH objednávkach — jednej Nevybavené (1 ks) a jednej
+// Objednané/zaškrtnutej (1 ks) — ale chip svietil „Σ 1" namiesto „Σ 2".
+// Príčina: chip zobrazoval `remaining` (nevybavené kusy), nie `total` (kusy
+// naprieč VŠETKÝMI riadkami bez ohľadu na stav). Regresný test: presne tento
+// prípad musí dať „Σ 2".
+it("formatVariantTotalChip zobrazí CELKOVÝ súčet kusov aj keď je časť riadkov už vybavená (issue 546)", () => {
+  const totals = computeVariantTotals([
+    variantLine("61259/56", 1, "objednane", false), // Nevybavené (nezaškrtnutý)
+    variantLine("61259/56", 1, "objednane", true), // Objednané (zaškrtnutý → vybavený)
+  ]);
+  const vt = totals.get("61259/56");
+  if (vt === undefined) throw new Error("61259/56 musí byť v mape");
+  expect(vt).toEqual({ total: 2, remaining: 1, lineCount: 2 });
+  const chip = formatVariantTotalChip(vt);
+  expect(chip).toEqual({
+    text: "Σ 2",
+    title: "Spolu vo všetkých objednávkach: 2 ks · nevybavené: 1 ks",
+  });
+});
+
 // issue 214: pilulka sa musí zmestiť do najužšej reálnej šírky stĺpca s
 // množstvom (nameraných 33 px voľného miesta pri 1280 px okna), inak ju
 // `text-overflow: ellipsis` oreže na "Σ…" a majiteľ z nej nič neprečíta.
