@@ -695,3 +695,78 @@ paths:
   linka (link nastavený v paneli, ale "✓ Hotovo" nekliknuté, alebo produkt
   vrátený z rozdelenia) sa VŠADE ignoruje — jej efektívna linka je produktová.
   Pri KAŽDEJ ďalšej zmene split logiky over všetky štyri miesta naraz.
+- **`tthunt.sk` (PrestaShop 1.7/8, issue 556) — TÁ ISTÁ šablóna ako wetland.sk,
+  znovupoužíva `wetlandVisibleAvailability` + `wetlandSizeList` + wetland
+  `CombinationEnumerator` bez nového parsera.** `<div id="product-details"
+  data-product="…">` nesie `quantity` + `attributes`; pole `availability` je
+  KONŠTANTNE „available" pri `allow_oosp:1` (skladom aj vypredané) — NIKDY sa
+  nečíta, rozhoduje `quantity` (`≥1` available, `≤0` unavailable) + krížová
+  kontrola JSON-LD (`parsePage`). `<select name="group[4]">` nesie všetky
+  veľkosti a `action=refresh` PLAIN GET (`?ajax=1&action=refresh&id_product=<id>&
+  group[N]=<id_attribute>&quantity_wanted=1`) FUNGUJE aj na tthunt (naživo overené
+  2026-09-18) → per-veľkosť enumerácia rovnako ako wetland fáza 2 (#552). Číslo
+  skupiny N sa berie z `name="group[N]"` (na tthunt vzorke to bolo `group[4]`,
+  nie natvrdo 1). Enumeračná `action=refresh` odpoveď NEMÁ JSON-LD → per-veľkosť
+  quantity je primárny signál. Jednoveľkostný produkt (bez `attributes`/selectu,
+  napr. puzdro 1388) → plošná VISIBLE cesta. Charset UTF-8.
+- **`grube.de`/`grube.sk` (vlastná platforma Grube, issue 557) — dostupnosť
+  VÝHRADNE z JSON-LD `Product.offers`, nikdy z viditeľného textu.** `offers` je
+  buď jeden `Offer`, alebo `AggregateOffer.offers[]` (VŠETKY veľkosti/farby v
+  jednom GET). Per ponuka: veľkosť = token za „Größe" v `name` (napr. „Farbe
+  grün-orange. Größe 3XL." → „3XL"), `available = availability InStock A
+  inventoryLevel.value ≥ 1` (BackOrder/SoldOut/inv 0 → unavailable). `grubeOffers`
+  (`availability-domain-rules.ts`) je JSON-LD parser, `grubeSizeList` (`parse.ts`,
+  SIZE) dedupuje podľa veľkosti cez `mergeSizeAvailability` — tá istá veľkosť vo
+  VIACERÝCH FARBÁCH so zhodnou dostupnosťou = jedna položka, s ROZPORNOU
+  (jedna farba skladom, druhá vypredaná) = ZAHODÍ (fail-closed; náš variant
+  nenesie farbu). Jeden Offer bez „Größe" (jednoveľkostný, napr. nôž) → blanket
+  cez `grubeVisibleAvailability` (VISIBLE); viac ponúk na blanket ceste → unknown
+  (nikdy dohad z prvej ponuky). Pasca: text „auf Lager" je šablónový šum (desiatky
+  výskytov aj na vypredanej stránke) — nikdy sa nečíta. Poznámka: `read`/`enumerate`
+  signatúry sú `(html)` bez `url`, takže sku↔`#itemId` sanity-check pri jednom
+  Offeri sa NEROBÍ (pri jedinej ponuke redundantný) — vedomé, bez API churnu.
+- **`pyra.eu` (+ `vo.pyra.eu`, WooCommerce/XStore, issue 559) — token skladu v
+  triede elementu `post-<postid>`, ukotvený na `postid-<id>` z `<body class>`.**
+  `pyraVisibleAvailability` (VISIBLE): `postid-(\d+)` z body → element s triedou
+  `post-<id>` → token `instock`/`outofstock`/`onbackorder`; krížová kontrola
+  JSON-LD (`parsePage`, rozpor → unknown). Pasca: `<p class="stock in-stock">Na
+  sklade</p>` patrí BLOKU súvisiacich produktov (na vypredanej stránke 10×, na
+  skladovej 6×) — NIKDY sa nečíta; rovnako sa nesmie čítať `post-<iné id>`
+  súvisiacich (na vypredanej stránke 8 súvisiacich `instock`). Ukotvenie na
+  `postId` z body je to, čo odlíši hlavný produkt. NIKDY nevracia `null` (pyra MÁ
+  JSON-LD) — chýbajúci postid/prvok/token → `unknown` (fail-closed, nikdy dôvera
+  samotnému JSON-LD). `vo.pyra.eu` pokryté sufix matchom hosta „pyra.eu".
+- **Shoptet VIACVARIANTOVÁ stránka (issue 558, `shoptet-multivariant.ts`) —
+  generické per-veľkosť pravidlo, zatiaľ LEN `luko.cz`.** Jednovariantová Shoptet
+  stránka má súhrnný `data-testid="labelAvailability"` (TEXT rule
+  `shoptetLabelAvailability`); VIACVARIANTOVÁ ho VÔBEC nemá — dostupnosť KAŽDEJ
+  kombinácie je v skrytom `<span class="parameter-dependent no-display <kľúč>">`.
+  `<kľúč>` = postupnosť párov `<paramId>-<valueId>` zľava (napr. `22-181-4-3-5-8`
+  = délka(22)=181, barva(4)=3, velikost(5)=8) — VEĽKOSTNÝ pár je ten s
+  `data-parameter-id` veľkostného `<select data-parameter-name="Velikost|Veľkosť">`.
+  Dedup podľa veľkosti (rôzne farby/dĺžky rovnakej veľkosti → zhoda = jedna,
+  rozpor = zahodí, fail-closed). Jednovariant ostáva na TEXT rule; keď má host
+  SIZE pravidlo a MÁME jeho veľkosti, starý plošný `''` riadok už NIE JE čerstvý
+  (`isLinkFresh`, samoopravné z #551 — luko sa prescrapuje na per-veľkosť).
+- **KRITICKÉ (luko.cz, issue 558, živý nález 2026-09-18): `numberAvailabilityAmount`
+  „(N ks)" NIE JE spoľahlivý signál dostupnosti — vypredaný variant môže naďalej
+  ukazovať kladné číslo.** Produkt 102131, veľkosť 47 (valueId 74): label
+  „Vyprodáno" (#cb0000), ALE „(3 ks)". Preto rozhoduje LABEL ako HARD-NEGATIVE
+  (`availabilityFromText`: „Vyprodáno"/„Nedostupné" → unavailable AJ pri kladnom
+  čísle); až potom `(N ks) ≥ 1` → available / `0` → unavailable; ak číslo chýba
+  (zubicek.cz), rozhodne samotný label. Dizajn (#555 návrh) pôvodne predpokladal
+  číslo ako primárny signál („odolný voči konštantnému odznaku") — živé dáta ukázali
+  opak (odznak NIE JE konštantný, číslo môže byť zastarané). Test pri KAŽDEJ ďalšej
+  Shoptet doméne s `numberAvailabilityAmount`: over polaritu labelu naživo, nespoliehaj
+  sa len na číslo.
+- **`zubicek.cz` (issue 558) ZÁMERNE nepridané do SIZE_AVAILABILITY_RULES — žiadny
+  živo overený vypredaný protipól.** zubicek je tá istá Shoptet šablóna ako luko
+  (rovnaké `availability-label` #009901/#cb0000), ale BEZ `numberAvailabilityAmount`
+  (len farba/text labelu). Preskúmaných VŠETKÝCH 126 rôznych zubicek produktov z DB
+  (2026-09-18) — ANI JEDEN nemal vypredaný variant (`#cb0000`/`Vyprodáno`/`Nedostupné`
+  = 0); väčšina zubicek variantných parametrov nie je „Velikost" (Délka/Varianta/
+  Motiv/Barevná varianta/Srst). Podľa disciplíny issue 230 („bez overeného protipólu
+  pravidlo nepridávaj, nie dohad podľa analógie s inou doménou") zubicek ostáva
+  TEXT-only (jednovariant), viacvariant `unknown`. `shoptet-multivariant.ts` je
+  generické — zubicek (alebo ďalšia Shoptet doména) sa pridá zápisom hosta v
+  `parse.ts` hneď, ako sa nájde živý vypredaný variant na overenie polarity.

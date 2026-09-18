@@ -23,7 +23,12 @@ const ROY_JSON_LD_INSTOCK = `<html><head>
 describe("hasKnownAvailabilityRule — issue 330", () => {
   it("doména BEZ textového ani viditeľného pravidla nemá známe pravidlo", () => {
     expect(hasKnownAvailabilityRule("https://www.roy.sk/p-3238/wachman-alfa")).toBe(false);
-    expect(hasKnownAvailabilityRule("https://www.grube.de/nieco")).toBe(false);
+    // Pôvodne tu bola `grube.de` ako príklad domény bez pravidla — od issue 557
+    // už grube.de/grube.sk MAJÚ pravidlo (VISIBLE + SIZE), takže `hasKnownAvailabilityRule`
+    // preň vracia `true`. Nahradené `lovuzdar.cz` (issue 332: hlavný produkt bez
+    // vlastného static prvku, zámerne bez pravidla), aby test naďalej overoval
+    // fail-closed vetvu pre doménu BEZ akéhokoľvek pravidla.
+    expect(hasKnownAvailabilityRule("https://www.lovuzdar.cz/nieco")).toBe(false);
   });
 
   it("doména s textovým pravidlom (huntingshop.eu) MÁ známe pravidlo, aj jej poddoména", () => {

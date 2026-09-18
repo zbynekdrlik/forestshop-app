@@ -638,10 +638,176 @@ function lesonaVisibleAvailability(html: string): VisibleAvailabilityHit | null 
   return { availability, text: matched };
 }
 
+// issue 557 — grube.de / grube.sk (vlastná platforma Grube). Dostupnosť žije v
+// JSON-LD `Product.offers`: buď jeden `Offer`, alebo `AggregateOffer.offers[]`
+// (VŠETKY veľkosti/farby v jednom GET). Per ponuka: `name` (napr. „Farbe
+// grün-orange. Größe 3XL."), `availability` (schema.org InStock/BackOrder/
+// SoldOut) a `inventoryLevel.value`. Veľkosť = token za „Größe"; ponuka bez
+// „Größe" (jednoveľkostný produkt = jeden Offer) je blanket. Text „auf Lager"
+// na stránke je šablónový šum (desiatky výskytov aj na vypredanej stránke) —
+// číta sa VÝHRADNE JSON-LD, nikdy viditeľný text.
+export interface GrubeOffer {
+  /** Token za „Größe" z `name` (napr. „3XL"), alebo `null` keď ponuka veľkosť nenesie. */
+  readonly sizeLabel: string | null;
+  /** InStock A inventoryLevel.value ≥ 1 → available; BackOrder/SoldOut/inv 0 → unavailable. */
+  readonly availability: "available" | "unavailable";
+}
+
+const GRUBE_SIZE_RE = /Größe\s+([^.\s]+)/i;
+
+/** `inventoryLevel.value` (číslo alebo číselný reťazec) na číslo, inak `NaN`. */
+function grubeInventoryValue(offer: Record<string, unknown>): number {
+  const level = offer["inventoryLevel"];
+  if (typeof level !== "object" || level === null) return Number.NaN;
+  const raw = (level as Record<string, unknown>)["value"];
+  if (typeof raw === "number") return raw;
+  if (typeof raw === "string" && raw.trim() !== "") return Number(raw);
+  return Number.NaN;
+}
+
+/** Rozhodne dostupnosť JEDNEJ ponuky: available LEN keď je token InStock A
+ * inventoryLevel.value ≥ 1 (BackOrder/SoldOut aj „InStock ale 0 kusov" =
+ * unavailable). Bezpečný smer: nečitateľná ponuka → unavailable (nikdy
+ * neprepne náš produkt na Skladom). */
+function grubeOfferAvailability(offer: Record<string, unknown>): "available" | "unavailable" {
+  const rawAvail = offer["availability"];
+  const token = typeof rawAvail === "string" ? (rawAvail.split("/").pop() ?? "").toLowerCase() : "";
+  const inventory = grubeInventoryValue(offer);
+  return token === "instock" && Number.isFinite(inventory) && inventory >= 1 ? "available" : "unavailable";
+}
+
+/** Zoznam ponúk z JSON-LD `Product.offers` (jeden `Offer`, `AggregateOffer.offers[]`
+ * alebo pole `offers[]`). Prechádza VŠETKY ld+json bloky a VŠETKY Product uzly. */
+export function grubeOffers(html: string): readonly GrubeOffer[] {
+  const result: GrubeOffer[] = [];
+  const pushOffer = (offer: unknown): void => {
+    if (typeof offer !== "object" || offer === null) return;
+    const record = offer as Record<string, unknown>;
+    const name = record["name"];
+    const sizeMatch = typeof name === "string" ? GRUBE_SIZE_RE.exec(name) : null;
+    result.push({
+      sizeLabel: sizeMatch === null ? null : (sizeMatch[1] ?? "").trim() || null,
+      availability: grubeOfferAvailability(record),
+    });
+  };
+  const readProduct = (node: Record<string, unknown>): void => {
+    const offers = node["offers"];
+    if (Array.isArray(offers)) {
+      for (const offer of offers) pushOffer(offer);
+    } else if (typeof offers === "object" && offers !== null) {
+      const sub = (offers as Record<string, unknown>)["offers"];
+      if (Array.isArray(sub)) for (const offer of sub) pushOffer(offer);
+      else pushOffer(offers);
+    }
+  };
+  // Code review issue 557 (🔵): pozbierajú sa Product uzly v poradí dokumentu a
+  // ponuky sa čítajú LEN z PRVÉHO (hlavný produkt). grube stránky nesú práve jeden
+  // `@type:Product` (naživo overené 2026-09-18 na 3 stránkach — druhý ld+json blok je
+  // BreadcrumbList), ale keby niekedy pribudol Product uzol súvisiaceho produktu
+  // (blok „Podobné"), jeho ponuky by inak mohli vpísať CUDZIE veľkosti do
+  // `grubeSizeList` — ukotvenie na prvý Product to uzavrie (dedup by rozpor zahodil =
+  // fail-closed, ale extra nekolízna veľkosť by prešla). Rovnaká „prvý patrí hlavnému
+  // produktu" disciplína ako odimon/fomei.
+  const isProductNode = (record: Record<string, unknown>): boolean => {
+    const type = record["@type"];
+    return (
+      (typeof type === "string" && type.toLowerCase().includes("product")) ||
+      (Array.isArray(type) && type.some((t) => typeof t === "string" && t.toLowerCase().includes("product")))
+    );
+  };
+  const products: Record<string, unknown>[] = [];
+  const walk = (node: unknown): void => {
+    if (Array.isArray(node)) {
+      for (const item of node) walk(item);
+      return;
+    }
+    if (typeof node !== "object" || node === null) return;
+    const record = node as Record<string, unknown>;
+    if (isProductNode(record)) {
+      products.push(record); // Product uzol sa nerozbaľuje ďalej — jeho `offers` číta readProduct
+      return;
+    }
+    for (const value of Object.values(record)) walk(value);
+  };
+  for (const block of html.matchAll(/<script\b[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)) {
+    const body = block[1];
+    if (body === undefined) continue;
+    try {
+      walk(JSON.parse(body));
+    } catch {
+      // Nevalidný JSON-LD sa preskočí, nikdy nezhodí beh (rovnako ako `fromJsonLd`).
+    }
+  }
+  const mainProduct = products[0];
+  if (mainProduct !== undefined) readProduct(mainProduct);
+  return result;
+}
+
+/**
+ * grube blanket cesta (jednoveľkostný produkt = jeden `Offer` bez „Größe"). Keď
+ * má stránka PRÁVE JEDNU ponuku → jej dostupnosť; viac ponúk (viacveľkostný
+ * produkt, kde náš variant nemá veľkosť) alebo žiadna → `unknown` (fail-closed,
+ * nikdy dohad z prvej ponuky). NIKDY nevracia `null` — grube JE overená doména
+ * (`knownDomain`), takže `null` by nechal `parsePage` uveriť samotnému JSON-LD
+ * (rovnaká obrana ako `wetlandVisibleAvailability`). Per-veľkosť čítanie je v
+ * `SIZE_AVAILABILITY_RULES` (`parse.ts`, `grubeSizeList`).
+ */
+export function grubeVisibleAvailability(html: string): VisibleAvailabilityHit {
+  const offers = grubeOffers(html);
+  if (offers.length === 1 && offers[0] !== undefined) {
+    return { availability: offers[0].availability, text: "" };
+  }
+  return { availability: "unknown", text: "" };
+}
+
+const PYRA_POSTID_RE = /<body\b[^>]*\bclass="[^"]*\bpostid-(\d+)\b[^"]*"/i;
+
+/**
+ * pyra.eu (+ vo.pyra.eu) — WooCommerce / XStore (issue 559). Hlavný produkt sa
+ * identifikuje cez `postid-<id>` v `<body class>`; jeho dostupnosť je TOKEN v
+ * triede elementu s `post-<id>` (`instock` / `outofstock` / `onbackorder`).
+ * NIKDY sa nečíta `p.stock` „Na sklade" (na vypredanej stránke 10× zo súvisiacich
+ * produktov) ani cudzie `post-<iné id>` triedy — ukotvenie na `postId` z body je
+ * to, čo odlíši hlavný produkt od súvisiacich. Krížovú kontrolu proti JSON-LD robí
+ * `parsePage` (VISIBLE mechanika, rozpor → `unknown`).
+ *
+ * NIKDY nevracia `null` (rovnaká obrana ako `wetlandVisibleAvailability`/
+ * `grubeVisibleAvailability`): pyra JE overená doména (`knownDomain`) a MÁ JSON-LD,
+ * takže `null` by nechal `parsePage` uveriť samotnému (možno klamúcemu) JSON-LD —
+ * chýbajúci postid / prvok / nerozpoznaný token vracia `unknown`.
+ */
+function pyraVisibleAvailability(html: string): VisibleAvailabilityHit {
+  const postId = PYRA_POSTID_RE.exec(html)?.[1];
+  if (postId === undefined) return { availability: "unknown", text: "" };
+  // `postId` je čisto číselný (`\d+`), takže jeho vloženie do RegExp je bezpečné.
+  const classMatch = new RegExp(`class="([^"]*\\bpost-${postId}\\b[^"]*)"`, "i").exec(html);
+  if (classMatch === null) return { availability: "unknown", text: "" };
+  const tokens = (classMatch[1] ?? "").split(/\s+/);
+  if (tokens.includes("instock")) return { availability: "available", text: "instock" };
+  if (tokens.includes("outofstock")) return { availability: "unavailable", text: "outofstock" };
+  if (tokens.includes("onbackorder")) return { availability: "unavailable", text: "onbackorder" };
+  return { availability: "unknown", text: "" };
+}
+
 const VISIBLE_AVAILABILITY_RULES: readonly VisibleAvailabilityRule[] = Object.freeze([
   { host: "odimon.sk", read: odimonVisibleAvailability },
   { host: "lesona.sk", read: lesonaVisibleAvailability },
   { host: "wetland.sk", read: wetlandVisibleAvailability },
+  // issue 556: tthunt.sk je tá istá PrestaShop 1.7/8 šablóna ako wetland.sk
+  // (`<div id="product-details" data-product="…">` s `quantity` + `attributes`,
+  // pole `availability` KONŠTANTNE "available" pri `allow_oosp:1`) — číta sa
+  // rovnakým `wetlandVisibleAvailability` (quantity + krížová kontrola JSON-LD
+  // robí `parsePage`). Blanket cesta pre jednoveľkostné tthunt produkty; per-veľkosť
+  // je v `SIZE_AVAILABILITY_RULES` (`parse.ts`). Naživo overené 2026-09-18.
+  { host: "tthunt.sk", read: wetlandVisibleAvailability },
+  // issue 557: grube.de/grube.sk blanket cesta (jeden Offer bez „Größe") —
+  // per-veľkosť je v `SIZE_AVAILABILITY_RULES`. VISIBLE záznam robí grube
+  // overenou doménou (`knownDomain`), takže jednoveľkostný produkt (companion
+  // nôž) dostane `available` z JSON-LD, nie fail-closed `unknown` (issue 330).
+  { host: "grube.de", read: grubeVisibleAvailability },
+  { host: "grube.sk", read: grubeVisibleAvailability },
+  // issue 559: pyra.eu (aj vo.pyra.eu cez sufix match). WooCommerce class token.
+  { host: "pyra.eu", read: pyraVisibleAvailability },
 ]);
 
 export function visibleAvailabilityFor(url: string, html: string): VisibleAvailabilityHit | null {

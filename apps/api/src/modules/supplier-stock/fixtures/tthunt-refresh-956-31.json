@@ -1,0 +1,4 @@
+{
+  "product_details": "<div class=\"info js-product-details\" id=\"product-details\" data-product=\"{&quot;id_product&quot;:956,&quot;id_product_attribute&quot;:3065,&quot;allow_oosp&quot;:1,&quot;quantity&quot;:0,&quot;availability&quot;:&quot;available&quot;,&quot;availability_message&quot;:&quot;dodanie 5-7 dní&quot;,&quot;attributes&quot;:{&quot;4&quot;:{&quot;id_attribute&quot;:&quot;31&quot;,&quot;id_attribute_group&quot;:&quot;4&quot;,&quot;name&quot;:&quot;XXL&quot;,&quot;group&quot;:&quot;Veľkosť oblečenia&quot;,&quot;public_group&quot;:&quot;Velkosť&quot;}}}\">x</div>",
+  "id_product_attribute": 3065
+}

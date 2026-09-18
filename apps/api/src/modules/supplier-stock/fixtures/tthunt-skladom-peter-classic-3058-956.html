@@ -1,0 +1,40 @@
+<!--
+  tthunt.sk (PrestaShop 1.7/8) — SKLADOM, veľkostný produkt (predvolená kombinácia L), issue 556.
+  Naživo stiahnuté 2026-09-18: swedteam košeľa peter classic (odkaz -3058-956.html).
+  Rovnaký tvar ako wetland: JSON s quantity + attributes v atribúte detailového bloku, JSON-LD schema.org/InStock,
+  select so všetkými veľkosťami (enumerácia cez action=refresh). Pole availability je KONŠTANTNE "available" (allow_oosp 1) — nikdy sa nečíta, rozhoduje quantity.
+  Orezané (attributes na name+group ako wetland fixţúry).
+-->
+<!doctype html>
+<html lang="sk">
+  <head>
+    <meta charset="utf-8" />
+    <title>Swedteam košeľa PETER CLASSIC</title>
+    <script type="application/ld+json">
+{
+  "@context": "https://schema.org/",
+  "@type": "Product",
+  "name": "Swedteam košeľa PETER CLASSIC",
+  "sku": "956",
+  "offers": {
+    "@type": "Offer",
+    "priceCurrency": "EUR",
+    "price": "71",
+    "availability": "https://schema.org/InStock",
+    "seller": {"@type": "Organization", "name": "TTHUNT s.r.o."}
+  }
+}
+    </script>
+  </head>
+  <body>
+    <div class="info js-product-details" id="product-details" data-product="{&quot;id_product&quot;:956,&quot;id_product_attribute&quot;:3058,&quot;allow_oosp&quot;:1,&quot;quantity&quot;:10,&quot;availability&quot;:&quot;available&quot;,&quot;availability_message&quot;:&quot;Skladom&quot;,&quot;attributes&quot;:{&quot;4&quot;:{&quot;id_attribute&quot;:&quot;33&quot;,&quot;id_attribute_group&quot;:&quot;4&quot;,&quot;name&quot;:&quot;L&quot;,&quot;group&quot;:&quot;Veľkosť oblečenia&quot;,&quot;public_group&quot;:&quot;Velkosť&quot;}}}">x</div>
+    <select class="form-control form-control-select" id="group_4" aria-label="Velkosť" data-product-attribute="4" name="group[4]">
+      <option value="27" title="S">S</option>
+      <option value="28" title="M">M</option>
+      <option value="33" title="L" selected="selected">L</option>
+      <option value="30" title="XL">XL</option>
+      <option value="31" title="XXL">XXL</option>
+      <option value="32" title="XXXL">XXXL</option>
+    </select>
+  </body>
+</html>
