@@ -358,20 +358,27 @@ function unescapeHtmlAttr(value: string): string {
  * proti JSON-LD robí `parsePage` (rovnaká VISIBLE_AVAILABILITY_RULES mechanika
  * ako odimon.sk, issue 225): pri rozpore quantity vs JSON-LD → `unknown`.
  *
- * `quantity ≥ 1` → available, `quantity ≤ 0` → unavailable. Chýbajúce/
- * nečíselné quantity (na product-details bloku, ktorý na stránke JE) → `unknown`
- * hit (nie `null`) — inak by `parsePage` na tejto teraz-overenej doméne
- * uveril samotnému JSON-LD. `null` sa vracia LEN keď na stránke NIE JE
- * product-details blok (napr. kategória/404) — vtedy nech rozhodne generická
- * vetva (tam je JSON-LD token na wetlande spoľahlivý). Kombináciu (veľkosť)
- * vyberá prípona URL `-<id_product>-<id_product_attribute>` (fáza 1 číta len
- * veľkosť z uloženého odkazu; per-veľkosť enumerácia je fáza 2).
+ * `quantity ≥ 1` → available, `quantity ≤ 0` → unavailable. **Táto funkcia
+ * NIKDY nevráti `null`** — pre wetland vždy rozhoduje quantity (primárny
+ * signál), JSON-LD je len krížová kontrola (`parsePage`), NIKDY samotný zdroj
+ * `available`. Keby sa vrátil `null`, `parsePage` by na tejto teraz-overenej
+ * doméne (`knownDomain === true`) preskočil fail-closed bránu a uveril
+ * SAMOTNÉMU JSON-LD `InStock` — presne ten falošný „skladom", ktorému má
+ * issue 549 zabrániť, keby produktová stránka niekedy nevykreslila
+ * product-details blok (drift šablóny) a JSON-LD by hlásil InStock (a JSON-LD
+ * dodávateľa VIE klamať, viď odimon.sk/lesona.sk). Preto: chýbajúci/
+ * nečitateľný blok ALEBO chýbajúce/nečíselné quantity → `unknown` hit
+ * (fail-closed) — `parsePage` ho pri akomkoľvek JSON-LD tokene vyhodnotí ako
+ * rozpor → `unknown`, nikdy `available`. Kategórie/404 (bez product-details)
+ * tak tiež končia na `unknown`, čo je pre automatiku bezpečné (nič neprepne).
+ * Kombináciu (veľkosť) vyberá prípona URL `-<id_product>-<id_product_attribute>`
+ * (fáza 1 číta len veľkosť z uloženého odkazu; per-veľkosť enumerácia je fáza 2).
  */
-function wetlandVisibleAvailability(html: string): VisibleAvailabilityHit | null {
+function wetlandVisibleAvailability(html: string): VisibleAvailabilityHit {
   const tag = WETLAND_PRODUCT_DETAILS_TAG_RE.exec(html);
-  if (tag === null) return null;
+  if (tag === null) return { availability: "unknown", text: "" };
   const dataProduct = WETLAND_DATA_PRODUCT_RE.exec(tag[0]);
-  if (dataProduct === null) return null;
+  if (dataProduct === null) return { availability: "unknown", text: "" };
   let parsed: unknown;
   try {
     parsed = JSON.parse(unescapeHtmlAttr(dataProduct[1] ?? ""));

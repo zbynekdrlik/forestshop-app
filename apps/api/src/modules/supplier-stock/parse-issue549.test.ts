@@ -71,7 +71,23 @@ describe("parsePage — issue 549: wetland.sk data-product.quantity + krížová
     expect(visibleAvailabilityFor(SKLADOM_URL, html)).toEqual({ availability: "unknown", text: "Skladom" });
   });
 
-  it("stránka bez data-product bloku → null (nechá generickú vetvu, žiadny wetland dohad)", () => {
-    expect(visibleAvailabilityFor(SKLADOM_URL, "<html><body>nič</body></html>")).toBeNull();
+  it("stránka bez data-product bloku → unknown hit (NIKDY null → nikdy dôvera samotnému JSON-LD)", () => {
+    expect(visibleAvailabilityFor(SKLADOM_URL, "<html><body>nič</body></html>")).toEqual({
+      availability: "unknown",
+      text: "",
+    });
+  });
+
+  it("code review issue 549: wetland stránka BEZ data-product ale s JSON-LD InStock → unknown, NIKDY available (fail-closed, quantity je primárny signál)", () => {
+    // Obrana do hĺbky: keby produktová stránka niekedy nevykreslila
+    // product-details blok (drift šablóny) a JSON-LD hlásil InStock, wetland
+    // je teraz overená doména (`knownDomain`), takže bez tejto poistky by
+    // `parsePage` uveril samotnému JSON-LD a vyhlásil available — presne ten
+    // falošný „skladom", ktorému má issue 549 zabrániť. `wetlandVisibleAvailability`
+    // preto nikdy nevracia null → JSON-LD je vždy len krížová kontrola.
+    const html =
+      '<html><head><script type="application/ld+json">{"@type":"Product","offers":{"@type":"Offer","availability":"https://schema.org/InStock"}}</script></head><body>bez product-details</body></html>';
+    const result = parsePage(html, SKLADOM_URL);
+    expect(result.availability).toBe("unknown");
   });
 });
