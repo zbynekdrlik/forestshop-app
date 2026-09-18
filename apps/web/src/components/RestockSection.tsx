@@ -178,7 +178,7 @@ export function RestockSection({
         {/* issue 548: stavový odznak Beží/Zastavené cez zdieľaný read-only
             StateChip (`pill`/`pill off`) — identický DOM (rovnaké triedy +
             testid), nulová vizuálna zmena, zjednotený so vzorom. */}
-        <StateChip base="pill" modifier={enabled ? undefined : "off"} testId="restock-status-pill">
+        <StateChip base="pill" modifier={enabled ? "" : "off"} testId="restock-status-pill">
           {enabled ? "Beží" : "Zastavené"}
         </StateChip>
         {canControl && (
