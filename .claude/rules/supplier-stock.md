@@ -275,8 +275,8 @@ paths:
   stránka nezobrazila (code review issue 551). Naživo overené 19. 9. 2026:
   wetland modeluje KAŽDÚ farbu ako samostatný produkt (iné `id_product`), takže
   reálna kombinácia nesie len veľkostný atribút — filter je obrana do hĺbky. **Enumerácia VŠETKÝCH kombinácií (aj tých, ktoré uložený
-  odkaz neukazuje) cez `associatedVariants` je stále fáza 2 (samostatný
-  ticket)** — tento fix rieši len kombináciu z odkazu.
+  odkaz neukazuje) je fáza 2 — HOTOVÁ v issue 552 (`action=refresh` GET per
+  veľkosť, viď bullet nižšie); tento #551 fix rieši len kombináciu z odkazu.**
 - **Plošný riadok (`size_label=''`) na doméne s `SIZE_AVAILABILITY_RULES`
   pravidlom, pre ktorú MÁME naše veľkosti, NIE JE čerstvý — issue 551
   dodatok.** `run.ts`'s `isLinkFresh` (nie `isFresh`) má navyše podmienku:
@@ -295,6 +295,55 @@ paths:
   per-veľkosť pravidlo (tthunt.sk, pyra.eu) — bez zásahu do DB. Odkazy BEZ
   našich veľkostí (jednoveľkostné — Ballistol olej) si plošný riadok +
   normálnu čerstvosť držia nezmenené.
+- **`wetland.sk` FÁZA 2 (issue 552) — enumerácia VŠETKÝCH veľkostí cez
+  PrestaShop `action=refresh` GET per veľkosť.** Bázová stránka ukazuje len
+  JEDNU kombináciu (z prípony odkazu), ale nesie `<select id="group_1"
+  name="group[N]">` so VŠETKÝMI veľkosťami (`<option value="<id_attribute>">`)
+  a `id_product` v `data-product`. `SIZE_AVAILABILITY_RULES` wetland pravidlo
+  dostalo voliteľný `enumerate: CombinationEnumerator` (`parse.ts`), ktorého
+  host-špecifické funkcie žijú v `availability-domain-rules.ts`:
+  `wetlandEnumerateCombinations` (z base stránky vyrobí refresh URL per
+  veľkosť — číslo skupiny N sa berie z `name="group[N]"`, nie natvrdo),
+  `unwrapWetlandCombinationResponse` (z JSON odpovede vyberie `product_details`
+  HTML) a `wetlandSuffixMismatch` (diagnostika zastaranej prípony). `run.ts` po
+  base GET zavolá enumeráciu cez TEN ISTÝ fetch klient + `PER_HOST_DELAY_MS`,
+  odpovede rozbalí, prečíta existujúcim `readWetlandCombination`/`wetlandSizeList`
+  (ZNOVUPOUŽITIE parsera, bez forku) a zlúči (`mergeSizeAvailability` — dedup
+  podľa názvu, rozpor dostupnosti zahodí = fail-closed). Zapíšu sa per-veľkosť
+  riadky pre VŠETKY naše veľkosti (`matchSizeLabel`), chýbajúce → `unknown`.
+  Kľúčové zistenia (naživo overené 18. 9. 2026, produkt 369, 9 veľkostí):
+  - **`action=refresh` je PLAIN GET** (`?ajax=1&action=refresh&id_product=<id>&
+    group[N]=<id_attribute>&quantity_wanted=1`) — bez cookies, bez XHR
+    hlavičky; vráti JSON s `id_product_attribute`, `product_url`,
+    `product_details` (ten istý `<div id="product-details" data-product=…>` s
+    `quantity` + `attributes` POŽADOVANEJ veľkosti). **BEZ JSON-LD** → per-veľkosť
+    `quantity` je primárny signál, JSON-LD krížová kontrola ostáva len na base
+    stránke (predvolená kombinácia, `wetlandSizeList`'s `fromJsonLd` check).
+  - **`data-product.images[*].associatedVariants` nesie IBA zoznam
+    `id_product_attribute` (reťazce), žiadne množstvo/názov/URL** — ako zdroj
+    skladu NEPOUŽITEĽNÉ (preto Prístup 1 čerpá zoznam veľkostí zo `<select>`u,
+    nie z tohto poľa). `associatedVariants` NIE JE top-level pole `data-product`.
+  - **`data-product.availability` je KONŠTANTNE `"available"` aj pri
+    `quantity 0`** (`allow_oosp:1`) — vypredaná veľkosť má navyše hlášku
+    „Centrálny sklad – doručenie do 3–5 dní"; NIKDY sa nečíta pole
+    `availability`, rozhoduje `quantity` (`≥1` available, `≤0` unavailable).
+  - **Zastaraná prípona `-<id_product>-<ipa>` sa 301-presmeruje na PREDVOLENÚ
+    kombináciu** (napr. zrušená veľkosť), takže fáza 1 mohla hlásiť sklad
+    CUDZEJ veľkosti — `wetlandSuffixMismatch` (base ipa ≠ prípona ipa) sa
+    LOGUJE ako varovanie; enumerácia zo `<select>`u je proti tomu imúnna.
+  - **Náklady:** ~1 + N requestov per odkaz (N = počet veľkostí), payload
+    ~73 KB/refresh (3× menej než combination-URL GET ~210 KB). Pri 315 wetland
+    odkazoch (248 rôznych `id_product`, 59 bez veľkostí) je to ~1300–1800
+    requestov navyše → +35–50 min pri `PER_HOST_DELAY_MS` 1500 ms.
+    `job_run.detail` teraz nesie `hostStats` (`requests`/`enumerationRequests`/
+    `elapsedMs` per host) — sleduj, či nočný beh nepresiahne 2 h; ak áno,
+    follow-up: wetland-špecifický delay alebo cache. `hosts` ostáva pre spätnú
+    kompatibilitu UI, `hostStats` je len navyše (`runResultSchema` v
+    `supplierStockApi.ts` je `z.object` → neznáme kľúče strippuje, UI nezmenené).
+  - Enumeračný hák je GENERICKÝ (`CombinationEnumerator`) — ĎALŠÍ PrestaShop
+    host (tthunt.sk/pyra.eu, #555) ho dostane za cenu jednej funkcie
+    (`targets`/`unwrap`). Produkt bez veľkostného `<select>`u (jednoveľkostný)
+    → `targets` prázdne → padne na plošný riadok fázy 1 (nezmenené).
 - **NÁŠ VLASTNÝ e-shop (`forestshop.sk`) sa dokáže omylom dostať do
   `supplier_stock` presne tou istou cestou ako skutočný dodávateľ — issue
   227, 21 odkazov** — `extractSupplierLink` (`catalog/supplier-link.ts`)

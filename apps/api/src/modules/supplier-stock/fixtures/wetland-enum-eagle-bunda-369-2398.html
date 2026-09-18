@@ -1,0 +1,68 @@
+<!--
+  wetland.sk (PrestaShop 1.7/8) — BAZOVA stranka pre enumeraciu VSETKYCH velkosti, issue 552.
+  Nazivo stiahnute 18. 9. 2026 (211 897 B), orezane: ponechany je len JSON-LD
+  (predvolena kombinacia — krizova kontrola), detailovy blok s data-product
+  (predvolena kombinacia 48, id-product-attribute 2398, quantity 0 = vypredane,
+  attributes trimnute na name+group ako issue 549/551) a REALNY velkostny
+  select id="group_1" name="group[1]" s 9 hodnotami. Odkaz z bug reportu:
+  https://www.wetland.sk/bundy/deerhunter-eagle-jacket-polovnicka-bunda-369-2398
+  Zmerane nazivo 18. 9.: 48 to 0, 52 to 1, 60 to 1, 62 to 1, ostatne 0
+  (enumeracia cez action=refresh, viz wetland-enum-refresh-369-*.json).
+  Pole availability vnutri data-product je konstantne "available" (allow_oosp 1)
+  a NIKDY sa neberie — rozhoduje quantity.
+-->
+<!doctype html>
+<html lang="sk">
+  <head>
+    <meta charset="utf-8" />
+    <title>DEERHUNTER Eagle Jacket - poľovnícka bunda</title>
+    <script type="application/ld+json">
+{
+  "@context": "https://schema.org/",
+  "@type": "Product",
+  "name": "DEERHUNTER Eagle Jacket - poľovnícka bunda",
+  "sku": "5786-379",
+  "offers": {
+    "@type": "Offer",
+    "priceCurrency": "EUR",
+    "price": "199.9",
+    "availability": "https://schema.org/BackOrder",
+    "seller": { "@type": "Organization", "name": "Wetland.sk" }
+  }
+}
+    </script>
+  </head>
+  <body>
+    <div
+      class="info js-product-details"
+      id="product-details"
+      data-product="{&quot;id_product&quot;:369,&quot;id_product_attribute&quot;:2398,&quot;quantity&quot;:0,&quot;allow_oosp&quot;:1,&quot;availability&quot;:&quot;available&quot;,&quot;availability_message&quot;:&quot;Centrálny sklad – doručenie do 3–5 dní&quot;,&quot;attributes&quot;:{&quot;1&quot;:{&quot;id_attribute&quot;:&quot;9&quot;,&quot;id_attribute_group&quot;:&quot;1&quot;,&quot;name&quot;:&quot;48&quot;,&quot;group&quot;:&quot;Veľkosť&quot;,&quot;public_group&quot;:&quot;Veľkosť&quot;}}}"
+    >
+      <span class="product-availability success">
+        <i class="material-icons">check</i>
+        Centrálny sklad – doručenie do 3–5 dní
+      </span>
+    </div>
+    <div class="product-variants js-product-variants">
+      <div class="clearfix product-variants-item">
+        <span class="control-label">Veľkosť</span>
+        <select
+            class="form-select"
+            id="group_1"
+            aria-label="Veľkosť"
+            data-product-attribute="1"
+            name="group[1]">
+          <option value="10" title="50">50</option>
+          <option value="30" title="52">52</option>
+          <option value="31" title="54">54</option>
+          <option value="9" title="48" selected="selected">48</option>
+          <option value="32" title="56">56</option>
+          <option value="33" title="58">58</option>
+          <option value="13" title="60">60</option>
+          <option value="34" title="62">62</option>
+          <option value="35" title="64">64</option>
+        </select>
+      </div>
+    </div>
+  </body>
+</html>

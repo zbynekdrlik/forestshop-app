@@ -12,6 +12,19 @@
 
 export type SupplierAvailability = "available" | "unavailable" | "unknown";
 
+/**
+ * Jedna kombinácia (veľkosť) na enumeráciu — `url` je adresa, z ktorej sa
+ * dostupnosť TEJTO veľkosti prečíta, `label` je jej viditeľný názov (napr.
+ * "52"). Vyčlenené sem (nie do `parse.ts`), aby ho `availability-domain-
+ * rules.ts` (per-doménová enumerácia, issue 552) mohol vracať bez cyklického
+ * importu späť z `parse.ts` — rovnaká jednosmerná disciplína ako
+ * `SupplierAvailability`/`hostOf`.
+ */
+export interface CombinationTarget {
+  readonly url: string;
+  readonly label: string;
+}
+
 /** Doména bez `www.`, malými písmenami. Neplatná URL → prázdny reťazec. */
 export function hostOf(url: string): string {
   let host = "";

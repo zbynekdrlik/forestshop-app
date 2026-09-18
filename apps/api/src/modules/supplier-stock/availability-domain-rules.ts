@@ -11,7 +11,13 @@
 // funkčne bezpečný, ale zbytočne cyklický import; `availability-
 // primitives.ts` je spoločný jednosmerný základ pre oba súbory.
 
-import { availabilityFromText, decodeNumericEntities, hostOf, type SupplierAvailability } from "./availability-primitives.js";
+import {
+  availabilityFromText,
+  type CombinationTarget,
+  decodeNumericEntities,
+  hostOf,
+  type SupplierAvailability,
+} from "./availability-primitives.js";
 
 interface TextAvailabilityRule {
   readonly host: string;
@@ -443,20 +449,31 @@ function wetlandAttributeNames(raw: unknown): readonly string[] {
  * nečitateľný blok alebo quantity → `unknown` (fail-closed, nikdy tichý ústup
  * na možno klamúci JSON-LD — pozri issue 549 obranu do hĺbky).
  */
-export function readWetlandCombination(html: string): WetlandCombination {
+/**
+ * Vytiahne a rozparsuje `data-product` JSON z detailového bloku wetland
+ * stránky. `null` = blok nie je / JSON sa nedá prečítať (fail-closed).
+ * Zdieľané `readWetlandCombination` (dostupnosť + veľkosti) aj
+ * `wetlandEnumerateCombinations`/`wetlandSuffixMismatch` (issue 552 —
+ * potrebujú `id_product`/`id_product_attribute` z toho istého JSON-u).
+ */
+function parseWetlandDataProduct(html: string): Record<string, unknown> | null {
   const tag = WETLAND_PRODUCT_DETAILS_TAG_RE.exec(html);
-  if (tag === null) return { availability: "unknown", text: "", attributeNames: [] };
+  if (tag === null) return null;
   const dataProduct = WETLAND_DATA_PRODUCT_RE.exec(tag[0]);
-  if (dataProduct === null) return { availability: "unknown", text: "", attributeNames: [] };
-  let parsed: unknown;
+  if (dataProduct === null) return null;
   try {
-    parsed = JSON.parse(unescapeHtmlAttr(dataProduct[1] ?? ""));
+    const parsed: unknown = JSON.parse(unescapeHtmlAttr(dataProduct[1] ?? ""));
+    return typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : {};
   } catch {
     // Product-details blok na stránke JE, len jeho JSON sa nedá prečítať —
-    // fail-closed `unknown`, nikdy tichý ústup na (možno klamúci) JSON-LD.
-    return { availability: "unknown", text: "", attributeNames: [] };
+    // fail-closed (`null`), nikdy tichý ústup na (možno klamúci) JSON-LD.
+    return null;
   }
-  const record = typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : {};
+}
+
+export function readWetlandCombination(html: string): WetlandCombination {
+  const record = parseWetlandDataProduct(html);
+  if (record === null) return { availability: "unknown", text: "", attributeNames: [] };
   const rawMessage = record["availability_message"];
   const text = typeof rawMessage === "string" ? rawMessage.trim() : "";
   const attributeNames = wetlandAttributeNames(record["attributes"]);
@@ -474,6 +491,110 @@ export function readWetlandCombination(html: string): WetlandCombination {
 function wetlandVisibleAvailability(html: string): VisibleAvailabilityHit {
   const { availability, text } = readWetlandCombination(html);
   return { availability, text };
+}
+
+/** Hodnotu `id_product`/`id_product_attribute` z `data-product` (číslo alebo
+ * reťazec) na neprázdny reťazec, inak `""`. */
+function idFieldToString(value: unknown): string {
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  if (typeof value === "string" && value.trim() !== "") return value.trim();
+  return "";
+}
+
+// issue 552 — enumerácia VŠETKÝCH kombinácií (veľkostí). Bázová stránka
+// wetland.sk (PrestaShop) ukazuje LEN jednu kombináciu (z prípony odkazu),
+// ale nesie `<select id="group_1" name="group[N]">` so VŠETKÝMI veľkosťami
+// (`<option value="<id_attribute>">názov`) a `id_product` v `data-product`.
+// Pre každú veľkosť sa poskladá PrestaShop `action=refresh` GET (naživo
+// overené 18. 9. 2026: plain GET bez cookies/XHR hlavičky), ktorý vráti JSON
+// s `product_details` pre POŽADOVANÚ veľkosť. `name="group[N]"` nesie číslo
+// skupiny N (nemusí byť 1) — berie sa priamo z markupu, nie natvrdo.
+const WETLAND_GROUP_SELECT_RE = /<select\b[^>]*\bname="group\[(\d+)\]"[^>]*>([\s\S]*?)<\/select>/i;
+const WETLAND_OPTION_RE = /<option\b[^>]*\bvalue="([^"]*)"[^>]*>([\s\S]*?)<\/option>/gi;
+
+/**
+ * URL na `action=refresh` per VEĽKOSŤ z bázovej wetland stránky (issue 552).
+ * Prázdny zoznam, keď stránka nemá `id_product` alebo veľkostný `<select>`
+ * (jednoveľkostný produkt — enumerácia sa preskočí, ostáva plošný riadok
+ * fázy 1). `link` sa zbaví prípadného query stringu pred zložením URL.
+ * Duplicitné `id_attribute` sa preskočia (nikdy dva rovnaké requesty).
+ */
+export function wetlandEnumerateCombinations(html: string, link: string): readonly CombinationTarget[] {
+  const record = parseWetlandDataProduct(html);
+  if (record === null) return [];
+  const idProduct = idFieldToString(record["id_product"]);
+  // `id_product`/`id_attribute` sú v PrestaShope VŽDY číselné — vpisujú sa
+  // NEescapované do refresh URL, takže sa gatujú na `\d+` (code review 🔵, issue
+  // 552). Nejde o SSRF (`base` je z NÁŠHO uloženého odkazu, host sa nemení),
+  // ale kompromitovaná dodávateľská stránka by inak vedela vpísať `&`/medzeru a
+  // znečistiť query parametre — nečíselnú hodnotu radšej preskočíme.
+  if (!/^\d+$/.test(idProduct)) return [];
+  const selectMatch = WETLAND_GROUP_SELECT_RE.exec(html);
+  if (selectMatch === null) return [];
+  const groupNum = selectMatch[1] ?? "";
+  const optionsHtml = selectMatch[2] ?? "";
+  const base = link.split("?")[0] ?? link;
+  const targets: CombinationTarget[] = [];
+  const seen = new Set<string>();
+  for (const [, idAttributeRaw, rawLabel] of optionsHtml.matchAll(WETLAND_OPTION_RE)) {
+    const idAttribute = (idAttributeRaw ?? "").trim();
+    if (!/^\d+$/.test(idAttribute) || seen.has(idAttribute)) continue;
+    seen.add(idAttribute);
+    const label = decodeNumericEntities(rawLabel ?? "")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    const url = `${base}?ajax=1&action=refresh&id_product=${idProduct}&group[${groupNum}]=${idAttribute}&quantity_wanted=1`;
+    targets.push({ url, label });
+  }
+  return targets;
+}
+
+/**
+ * Rozbalí PrestaShop `action=refresh` JSON odpoveď na HTML `product_details`
+ * (blok s `data-product` požadovanej kombinácie), ktoré potom číta zdieľané
+ * `readWetlandCombination`/`wetlandSizeList` (znovupoužitie parsera, bez
+ * forku). Nevalidný JSON / chýbajúce `product_details` → prázdny reťazec →
+ * `readWetlandCombination` vráti `unknown` (fail-closed). Odpoveď NEMÁ JSON-LD
+ * (naživo overené), takže per-veľkosť quantity je primárny signál a JSON-LD
+ * krížová kontrola ostáva len na bázovej stránke (predvolená kombinácia).
+ */
+export function unwrapWetlandCombinationResponse(rawResponse: string): string {
+  try {
+    const parsed: unknown = JSON.parse(rawResponse);
+    if (typeof parsed === "object" && parsed !== null) {
+      const details = (parsed as Record<string, unknown>)["product_details"];
+      if (typeof details === "string") return details;
+    }
+  } catch {
+    // Nevalidný JSON → prázdny HTML → fail-closed `unknown`.
+  }
+  return "";
+}
+
+const WETLAND_SUFFIX_RE = /-(\d+)-(\d+)(?:[/?#]|$)/;
+
+/**
+ * Nesúlad medzi `id_product_attribute` v prípone ULOŽENÉHO odkazu
+ * (`-<id_product>-<ipa>`) a kombináciou, ktorú bázová stránka reálne
+ * vyrenderovala (issue 552). Zastaraná prípona (napr. zrušená veľkosť) sa
+ * na wetland.sk 301-presmeruje na PREDVOLENÚ kombináciu, takže fáza 1 mohla
+ * hlásiť sklad CUDZEJ veľkosti — `run.ts` tento nesúlad zaloguje ako
+ * varovanie (enumerácia zo `<select>` je proti tomu imúnna, číta všetky
+ * veľkosti nanovo). `null` = prípona sedí, nie je prípona, alebo stránka
+ * nemá kombináciu (ipa 0/chýba).
+ */
+export function wetlandSuffixMismatch(
+  html: string,
+  link: string,
+): { readonly expected: string; readonly actual: string } | null {
+  const record = parseWetlandDataProduct(html);
+  if (record === null) return null;
+  const actual = idFieldToString(record["id_product_attribute"]);
+  if (actual === "" || actual === "0") return null;
+  const expected = WETLAND_SUFFIX_RE.exec(link)?.[2];
+  if (expected === undefined) return null;
+  return expected === actual ? null : { expected, actual };
 }
 
 const LESONA_AVAILABILITY_RE = /<span\b[^>]*\bid="product-availability"[^>]*>([\s\S]*?)<\/span>/i;

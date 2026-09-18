@@ -7,6 +7,7 @@
 import { and, eq, isNotNull, like, notInArray, or } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
 import { pairingDecisions, pairingVariantLinks, productSupplierLinkOverrides, products, supplierStock, variants } from "../../db/schema.js";
+import { log } from "../../logger.js";
 import { extractSupplierLink } from "../catalog/supplier-link.js";
 import { resolveEffectiveSupplierLink } from "../orders/effective-supplier-link.js";
 import { MAX_AGE_HOURS, OWN_SHOP_HOST, PER_HOST_DELAY_MS, SUPPLIER_STOCK_RUN_LOCK_KEY } from "./constants.js";
@@ -15,8 +16,12 @@ import {
   hasSizeAvailabilityRule,
   hostOf,
   matchSizeLabel,
+  mergeSizeAvailability,
+  parseCombinationResponse,
   parsePage,
   parseSizeAvailability,
+  type SizeAvailability,
+  sizeCombinationEnumeratorFor,
   type SupplierAvailability,
   type SupplierStockSource,
 } from "./parse.js";
@@ -37,6 +42,26 @@ export interface SupplierStockRunResult {
   /** Kontrola sama zlyhala (sieť, časový limit, HTTP chyba) — za LINKU. */
   readonly failed: number;
   readonly hosts: readonly string[];
+  /** issue 552: počty HTTP requestov + čas per host (base GET + enumeračné
+   * `action=refresh` GET-y). Pre `job_run.detail` — sledovanie nákladov
+   * enumerácie (či nočný beh nepresiahne 2 h). `hosts` ostáva pre spätnú
+   * kompatibilitu UI; `hostStats` je len navyše (UI Zod schéma neznáme kľúče
+   * strippuje). */
+  readonly hostStats: readonly SupplierStockHostStat[];
+}
+
+export interface SupplierStockHostStat {
+  readonly host: string;
+  /** Všetky HTTP requesty na tento host (base + enumeračné). */
+  readonly requests: number;
+  /** Z toho enumeračných (`action=refresh`) — koľko navyše stála fáza 2. */
+  readonly enumerationRequests: number;
+  /** Wall-clock od prvého po posledný request na tomto hoste. Beh je sériový a
+   * odkazy sú zoradené (rovnaký host je spravidla súvislo), takže to je dobrý
+   * odhad času stráveného na hoste vrátane `PER_HOST_DELAY_MS` páuz — POZOR,
+   * ak sa hosty prekladajú, zahŕňa aj čas strávený medzitým na INÝCH hostoch
+   * (diagnostika pre `job_run.detail`, nie presné meranie, code review 🔵). */
+  readonly elapsedMs: number;
 }
 
 export interface RunSupplierStockOptions {
@@ -258,8 +283,32 @@ export async function runSupplierStockLocked(options: RunSupplierStockOptions): 
   const counts = { available: 0, unavailable: 0, unknown: 0, failed: 0 };
   const hosts = new Set<string>();
   const lastFetchByHost = new Map<string, number>();
+  const hostStats = new Map<string, { requests: number; enumerationRequests: number; firstAt: number; lastAt: number }>();
   let skipped = 0;
   let checked = 0;
+
+  // Slušnosť + štatistika: pauza sa počíta od POSLEDNEJ požiadavky na TÚ ISTÚ
+  // doménu (striedanie domén tak nie je trestané), každý request sa započíta do
+  // `hostStats` (base aj enumeračný) pre `job_run.detail` (issue 552).
+  const fetchWithDelay = async (url: string, isEnumeration: boolean): Promise<Awaited<ReturnType<PageFetcher>>> => {
+    const h = hostOf(url);
+    const last = lastFetchByHost.get(h);
+    if (last !== undefined) {
+      const waitMs = PER_HOST_DELAY_MS - (Date.now() - last);
+      if (waitMs > 0) await sleep(waitMs);
+    }
+    const startedAt = Date.now();
+    const result = await fetchPage(url);
+    const finishedAt = Date.now();
+    lastFetchByHost.set(h, finishedAt);
+    const stat = hostStats.get(h) ?? { requests: 0, enumerationRequests: 0, firstAt: startedAt, lastAt: finishedAt };
+    stat.requests += 1;
+    if (isEnumeration) stat.enumerationRequests += 1;
+    stat.firstAt = Math.min(stat.firstAt, startedAt);
+    stat.lastAt = Math.max(stat.lastAt, finishedAt);
+    hostStats.set(h, stat);
+    return result;
+  };
 
   for (const link of links) {
     const host = hostOf(link);
@@ -273,15 +322,7 @@ export async function runSupplierStockLocked(options: RunSupplierStockOptions): 
       continue;
     }
 
-    // Slušnosť: pauza sa počíta od POSLEDNEJ požiadavky na TÚ ISTÚ doménu,
-    // nie paušálne medzi všetkými — striedanie domén tak nie je trestané.
-    const last = lastFetchByHost.get(host);
-    if (last !== undefined) {
-      const waitMs = PER_HOST_DELAY_MS - (Date.now() - last);
-      if (waitMs > 0) await sleep(waitMs);
-    }
-    const fetched = await fetchPage(link);
-    lastFetchByHost.set(host, Date.now());
+    const fetched = await fetchWithDelay(link, false);
     checked += 1;
 
     if (!fetched.ok) {
@@ -305,7 +346,40 @@ export async function runSupplierStockLocked(options: RunSupplierStockOptions): 
     }
 
     const ourSizes = ourSizesByLink.get(link) ?? [];
-    const sizeList = parseSizeAvailability(fetched.html, link);
+    // Base kombinácia (predvolená, z prípony odkazu) — JSON-LD krížová kontrola
+    // ostáva len tu (`parseSizeAvailability`→`wetlandSizeList`).
+    let sizeList = parseSizeAvailability(fetched.html, link);
+
+    // issue 552: enumerácia VŠETKÝCH veľkostí. Host s enumeračným pravidlom a
+    // našimi veľkosťami: z bázovej stránky sa poskladajú `action=refresh`
+    // GET-y per veľkosť (ten istý fetch klient + per-host delay), odpovede sa
+    // rozbalia a zlúčia s bázovou kombináciou (dedup podľa názvu). Produkt bez
+    // veľkostného <select>u (jednoveľkostný) → `targets` prázdne → padne na
+    // plošný riadok fázy 1 (nezmenené).
+    const enumerator = ourSizes.length > 0 ? sizeCombinationEnumeratorFor(link) : null;
+    if (enumerator !== null) {
+      const targets = enumerator.targets(fetched.html, link);
+      if (targets.length > 0) {
+        const mismatch = enumerator.suffixMismatch?.(fetched.html, link) ?? null;
+        if (mismatch !== null) {
+          log.warn(
+            { link, suffixIpa: mismatch.expected, fetchedIpa: mismatch.actual },
+            "Dodávateľský sklad: zastaraná prípona odkazu (301 na predvolenú kombináciu), enumerujem zo selectu",
+          );
+        }
+        const merged: SizeAvailability[] = [...(sizeList ?? [])];
+        for (const target of targets) {
+          const comboFetched = await fetchWithDelay(target.url, true);
+          if (!comboFetched.ok) continue; // zlyhaná veľkosť sa preskočí, ostatné sa aj tak zapíšu
+          merged.push(...parseCombinationResponse(comboFetched.html, link));
+        }
+        sizeList = mergeSizeAvailability(merged);
+        log.info(
+          { link, enumerationRequests: targets.length, sizes: sizeList.length },
+          "Dodávateľský sklad: enumerácia veľkostí wetland.sk",
+        );
+      }
+    }
 
     let rows: readonly StockRowInput[];
     if (sizeList !== null && ourSizes.length > 0) {
@@ -355,6 +429,14 @@ export async function runSupplierStockLocked(options: RunSupplierStockOptions): 
     unknown: counts.unknown,
     failed: counts.failed,
     hosts: [...hosts].sort((a, b) => a.localeCompare(b)),
+    hostStats: [...hostStats.entries()]
+      .map(([host, s]) => ({
+        host,
+        requests: s.requests,
+        enumerationRequests: s.enumerationRequests,
+        elapsedMs: s.lastAt - s.firstAt,
+      }))
+      .sort((a, b) => a.host.localeCompare(b.host)),
   };
 }
 

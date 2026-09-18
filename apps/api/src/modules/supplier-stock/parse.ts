@@ -28,11 +28,19 @@ import {
   hasKnownAvailabilityRule,
   readWetlandCombination,
   textAvailabilityRuleFor,
+  unwrapWetlandCombinationResponse,
   visibleAvailabilityFor,
+  wetlandEnumerateCombinations,
+  wetlandSuffixMismatch,
 } from "./availability-domain-rules.js";
-import { availabilityFromText, hostOf, type SupplierAvailability } from "./availability-primitives.js";
+import {
+  availabilityFromText,
+  type CombinationTarget,
+  hostOf,
+  type SupplierAvailability,
+} from "./availability-primitives.js";
 
-export type { SupplierAvailability };
+export type { CombinationTarget, SupplierAvailability };
 export { availabilityFromText, hostOf };
 
 export type SupplierStockSource = "json_ld" | "meta" | "text" | "size_list" | "none";
@@ -188,9 +196,26 @@ export interface SizeAvailability {
   readonly availability: "available" | "unavailable";
 }
 
+/**
+ * Voliteľná enumerácia VŠETKÝCH kombinácií (veľkostí) hosta (issue 552).
+ * Generický hák — host-špecifická je len funkcia, ktorá z bázovej stránky
+ * vyrobí URL per veľkosť (`targets`) a rozbalí odpoveď na HTML pre `read`
+ * (`unwrap`). `suffixMismatch` je voliteľná diagnostika (zastaraná prípona
+ * odkazu vs. načítaná kombinácia) na logovanie. Vďaka tomu ho dostane
+ * ĽUBOVOĽNÝ ďalší PrestaShop host (tthunt.sk/pyra.eu, #555) za cenu jednej
+ * funkcie.
+ */
+export interface CombinationEnumerator {
+  readonly targets: (html: string, link: string) => readonly CombinationTarget[];
+  readonly unwrap: (rawResponse: string) => string;
+  readonly suffixMismatch?: (html: string, link: string) => { readonly expected: string; readonly actual: string } | null;
+}
+
 interface SizeAvailabilityRule {
   readonly host: string;
   readonly read: (html: string) => readonly SizeAvailability[];
+  // issue 552: enumerácia všetkých veľkostí (dnes len wetland.sk).
+  readonly enumerate?: CombinationEnumerator;
 }
 
 // Živo overené (issue 224 code review): `class="clearfix product-variants-item"`
@@ -309,7 +334,16 @@ function wetlandSizeList(html: string): readonly SizeAvailability[] {
 const SIZE_AVAILABILITY_RULES: readonly SizeAvailabilityRule[] = Object.freeze([
   { host: "shop.lasting.eu", read: lastingSizeList },
   { host: "chiruca.sk", read: chirucaSizeList },
-  { host: "wetland.sk", read: wetlandSizeList },
+  {
+    host: "wetland.sk",
+    read: wetlandSizeList,
+    // issue 552: enumerácia všetkých veľkostí cez PrestaShop action=refresh.
+    enumerate: {
+      targets: wetlandEnumerateCombinations,
+      unwrap: unwrapWetlandCombinationResponse,
+      suffixMismatch: wetlandSuffixMismatch,
+    },
+  },
 ]);
 
 function sizeAvailabilityRuleFor(url: string): SizeAvailabilityRule | null {
@@ -341,6 +375,55 @@ export function parseSizeAvailability(html: string, url: string): readonly SizeA
   if (rule === null) return null;
   const sizes = rule.read(html);
   return sizes.length > 0 ? sizes : null;
+}
+
+/**
+ * Enumerátor kombinácií pre HOST odkazu (issue 552), alebo `null`, keď host
+ * nemá size-rule ALEBO jeho size-rule enumeráciu nedeklaruje (napr.
+ * shop.lasting.eu — celý zoznam veľkostí je na jednej stránke, netreba per-
+ * veľkosť GET). `run.ts` ho volá po base GET.
+ */
+export function sizeCombinationEnumeratorFor(url: string): CombinationEnumerator | null {
+  return sizeAvailabilityRuleFor(url)?.enumerate ?? null;
+}
+
+/**
+ * Rozbalí a prečíta jednu `action=refresh` odpoveď (issue 552): host-špecifický
+ * `unwrap` vyberie HTML `product_details`, existujúci `read` (napr.
+ * `wetlandSizeList`) z neho prečíta veľkosť + dostupnosť. Prázdno, keď host
+ * nemá enumeráciu alebo sa odpoveď nedá prečítať (fail-closed).
+ */
+export function parseCombinationResponse(rawResponse: string, url: string): readonly SizeAvailability[] {
+  const rule = sizeAvailabilityRuleFor(url);
+  if (rule?.enumerate === undefined) return [];
+  return rule.read(rule.enumerate.unwrap(rawResponse));
+}
+
+/**
+ * Zlúči viac zoznamov veľkostí do jedného, deduplikovaného podľa NÁZVU
+ * veľkosti (issue 552) — bázová kombinácia + enumeračné odpovede sa prekrývajú
+ * v predvolenej veľkosti. Rovnaká veľkosť s ROVNAKOU dostupnosťou → jedna
+ * položka; s ROZPORNOU dostupnosťou → veľkosť sa ZAHODÍ (fail-closed, naša
+ * veľkosť potom padne na `unknown` cez `matchSizeLabel` bez hitu — nikdy dohad,
+ * rovnaká disciplína ako rozpor JSON-LD vs quantity).
+ */
+export function mergeSizeAvailability(...lists: readonly (readonly SizeAvailability[])[]): readonly SizeAvailability[] {
+  const byLabel = new Map<string, SizeAvailability | null>();
+  for (const list of lists) {
+    for (const size of list) {
+      const existing = byLabel.get(size.sizeLabel);
+      if (existing === undefined) {
+        byLabel.set(size.sizeLabel, size);
+      } else if (existing !== null && existing.availability !== size.availability) {
+        byLabel.set(size.sizeLabel, null); // rozpor → zahodiť
+      }
+    }
+  }
+  const result: SizeAvailability[] = [];
+  for (const value of byLabel.values()) {
+    if (value !== null) result.push(value);
+  }
+  return result;
 }
 
 /** Rozdelí veľkostné označenie na porovnateľné časti — oddeľovače (`/`, `-`,
