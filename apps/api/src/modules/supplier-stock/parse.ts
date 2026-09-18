@@ -509,6 +509,46 @@ export function matchSizeLabel(ourSizeLabel: string, supplierSizeLabels: readonl
   return matches.length === 1 ? (matches[0] ?? null) : null;
 }
 
+/** Výsledok zloženia viactokenového štítku — dostupnosť + dodávateľské štítky,
+ * ktoré sa na naše tokeny spárovali (prázdne, keď je výsledok `unknown`). */
+export interface FoldedSize {
+  readonly availability: SupplierAvailability;
+  readonly matchedLabels: readonly string[];
+}
+
+/**
+ * Zloží dostupnosť VIACTOKENOVÉHO nášho štítku (napr. „39-40", „47/48",
+ * „51/52") z JEDNOTLIVÝCH veľkostí dodávateľa — použije sa, keď priama zhoda
+ * cez `matchSizeLabel` zlyhala, lebo dodávateľ predáva po JEDNOM čísle (luko.cz
+ * košele „38,39,…,54"), kým my držíme PÁROVÉ štítky (issue 558). Každý náš
+ * token sa vyhľadá v `sizeList` (cez `matchSizeLabel`, tá istá tolerancia
+ * skrátenia) a výsledky sa ZLOŽIA: všetky `available` → `available`, všetky
+ * `unavailable` → `unavailable`, čokoľvek CHÝBA alebo je ZMIEŠANÉ → `unknown`
+ * (fail-closed, rovnaká disciplína ako `mergeSizeAvailability` — nikdy sa
+ * nepovie `available` na neúplnom/rozpornom páre). `null` = náš štítok NEMÁ
+ * viac tokenov (jednotokenový rieši `matchSizeLabel`, nie táto funkcia).
+ */
+export function foldMultiTokenSizeAvailability(
+  ourSizeLabel: string,
+  sizeList: readonly SizeAvailability[],
+): FoldedSize | null {
+  const ours = sizeTokens(ourSizeLabel);
+  if (ours.length < 2) return null;
+  const labels = sizeList.map((s) => s.sizeLabel);
+  const matchedLabels: string[] = [];
+  const availabilities: SizeAvailability["availability"][] = [];
+  for (const token of ours) {
+    const matched = matchSizeLabel(token, labels);
+    const hit = matched === null ? undefined : sizeList.find((s) => s.sizeLabel === matched);
+    if (hit === undefined) return { availability: "unknown", matchedLabels: [] };
+    matchedLabels.push(hit.sizeLabel);
+    availabilities.push(hit.availability);
+  }
+  if (availabilities.every((a) => a === "available")) return { availability: "available", matchedLabels };
+  if (availabilities.every((a) => a === "unavailable")) return { availability: "unavailable", matchedLabels };
+  return { availability: "unknown", matchedLabels: [] };
+}
+
 /**
  * Celé čítanie stránky. `url` rozhoduje o dvoch veciach: (a) či sa smie
  * použiť voľný text a z KTOREJ oblasti (issue 223), (b) či sa JSON-LD musí

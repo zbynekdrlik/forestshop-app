@@ -13,10 +13,12 @@ import { resolveEffectiveSupplierLink } from "../orders/effective-supplier-link.
 import { MAX_AGE_HOURS, OWN_SHOP_HOST, PER_HOST_DELAY_MS, SUPPLIER_STOCK_RUN_LOCK_KEY } from "./constants.js";
 import type { PageFetcher } from "./page-fetcher.js";
 import {
+  foldMultiTokenSizeAvailability,
   hasSizeAvailabilityRule,
   hostOf,
   matchSizeLabel,
   mergeSizeAvailability,
+  type ParsedPage,
   parseCombinationResponse,
   parsePage,
   parseSizeAvailability,
@@ -210,12 +212,64 @@ export async function runSupplierStock(options: RunSupplierStockOptions): Promis
   }
 }
 
-interface StockRowInput {
+export interface StockRowInput {
   readonly sizeLabel: string;
   readonly availability: SupplierAvailability;
   readonly availabilityText: string;
   readonly price: number | null;
   readonly source: SupplierStockSource;
+}
+
+/**
+ * Poskladá riadky pre JEDNU linku z (už zlúčeného, issue 552) zoznamu veľkostí
+ * a prečítanej stránky — ČISTÁ funkcia (testovateľná bez DB/siete).
+ *
+ * Tri cesty:
+ *  1. `sizeList` čitateľný + máme veľkosti → per-veľkosť riadok. Priama zhoda
+ *     (`matchSizeLabel`); ak zlyhá, PÁROVÝ štítok sa zloží z jednotlivých čísel
+ *     dodávateľa (`foldMultiTokenSizeAvailability`, issue 558 A). Bez zhody →
+ *     `unknown`/`none`.
+ *  2. `sizeList` === null na doméne so SIZE pravidlom a držíme >1 veľkosť →
+ *     per-veľkosť `unknown` NAMIESTO plošného riadku (issue 558 B). Plošný `''`
+ *     riadok by sa cez `size_label=''` JOIN (`restock/queries.ts`) spároval s
+ *     KAŽDOU našou veľkosťou — presne ten over-match, aký issue 551 rieši pre
+ *     wetland; per-veľkosť `unknown` nič neprepne (kandidát vyžaduje `available`).
+ *  3. inak (host bez SIZE pravidla, alebo ≤1 veľkosť) → plošný riadok z
+ *     `parsePage` (nezmenené správanie pre Ballistol/jednoveľkostné produkty).
+ */
+export function buildSizeStockRows(args: {
+  readonly ourSizes: readonly string[];
+  readonly sizeList: readonly SizeAvailability[] | null;
+  readonly hostHasSizeRule: boolean;
+  readonly page: ParsedPage;
+}): readonly StockRowInput[] {
+  const { ourSizes, sizeList, hostHasSizeRule, page } = args;
+  const perSize = sizeList !== null ? ourSizes.length > 0 : hostHasSizeRule && ourSizes.length > 1;
+  if (!perSize) {
+    return [
+      {
+        sizeLabel: "",
+        availability: page.availability,
+        availabilityText: page.availabilityText,
+        price: page.price,
+        source: page.source,
+      },
+    ];
+  }
+  const list = sizeList ?? [];
+  const labels = list.map((s) => s.sizeLabel);
+  return ourSizes.map((ourLabel): StockRowInput => {
+    const matched = matchSizeLabel(ourLabel, labels);
+    const hit = matched === null ? null : (list.find((s) => s.sizeLabel === matched) ?? null);
+    if (hit !== null) {
+      return { sizeLabel: ourLabel, availability: hit.availability, availabilityText: hit.sizeLabel, price: page.price, source: "size_list" };
+    }
+    const folded = foldMultiTokenSizeAvailability(ourLabel, list);
+    if (folded !== null && folded.availability !== "unknown") {
+      return { sizeLabel: ourLabel, availability: folded.availability, availabilityText: folded.matchedLabels.join(", "), price: page.price, source: "size_list" };
+    }
+    return { sizeLabel: ourLabel, availability: "unknown", availabilityText: "", price: page.price, source: "none" };
+  });
 }
 
 // issue 413: exportované pre `startRunNow` (`modules/scheduler/run-now.ts`),
@@ -381,32 +435,12 @@ export async function runSupplierStockLocked(options: RunSupplierStockOptions): 
       }
     }
 
-    let rows: readonly StockRowInput[];
-    if (sizeList !== null && ourSizes.length > 0) {
-      const pageParsed = parsePage(fetched.html, link);
-      rows = ourSizes.map((ourLabel) => {
-        const matched = matchSizeLabel(ourLabel, sizeList.map((s) => s.sizeLabel));
-        const hit = matched === null ? null : (sizeList.find((s) => s.sizeLabel === matched) ?? null);
-        return {
-          sizeLabel: ourLabel,
-          availability: hit?.availability ?? "unknown",
-          availabilityText: hit?.sizeLabel ?? "",
-          price: pageParsed.price,
-          source: hit !== null ? "size_list" : "none",
-        };
-      });
-    } else {
-      const pageParsed = parsePage(fetched.html, link);
-      rows = [
-        {
-          sizeLabel: "",
-          availability: pageParsed.availability,
-          availabilityText: pageParsed.availabilityText,
-          price: pageParsed.price,
-          source: pageParsed.source,
-        },
-      ];
-    }
+    const rows = buildSizeStockRows({
+      ourSizes,
+      sizeList,
+      hostHasSizeRule: hasSizeAvailabilityRule(host),
+      page: parsePage(fetched.html, link),
+    });
 
     for (const row of rows) counts[row.availability] += 1;
     await writeSupplierStockRows(db, {
