@@ -40,6 +40,7 @@ import {
   hostOf,
   type SupplierAvailability,
 } from "./availability-primitives.js";
+import { shoptetMultiVariantSizeList } from "./shoptet-multivariant.js";
 
 export type { CombinationTarget, SupplierAvailability };
 export { availabilityFromText, hostOf };
@@ -356,6 +357,11 @@ const SIZE_AVAILABILITY_RULES: readonly SizeAvailabilityRule[] = Object.freeze([
   // žiadny enumerátor). grube.de aj grube.sk je ten istý e-shop.
   { host: "grube.de", read: grubeSizeList },
   { host: "grube.sk", read: grubeSizeList },
+  // issue 558: luko.cz Shoptet viacvariantová stránka (generické pravidlo
+  // `shoptet-multivariant.ts`). Jednovariantová luko stránka ostáva na
+  // `shoptetLabelAvailability` (TEXT rule). zubicek.cz zámerne NEregistrované —
+  // žiadny živo overený vypredaný protipól (viď issue 558, disciplína issue 230).
+  { host: "luko.cz", read: shoptetMultiVariantSizeList },
   {
     host: "wetland.sk",
     read: wetlandSizeList,
