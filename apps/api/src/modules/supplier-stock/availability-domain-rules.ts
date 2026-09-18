@@ -16,6 +16,8 @@ import {
   type CombinationTarget,
   decodeNumericEntities,
   hostOf,
+  isSizeParamName,
+  normalizeSizeParamName,
   type SupplierAvailability,
 } from "./availability-primitives.js";
 
@@ -395,15 +397,12 @@ export interface WetlandCombination {
 }
 
 /** Normalizuje názov atribútovej skupiny na porovnanie bez diakritiky a bez
- * ohľadu na veľkosť písmen ("Veľkosť" → "velkost"). */
+ * ohľadu na veľkosť písmen ("Veľkosť" → "velkost"). Ne-reťazcová hodnota
+ * (`entry["group"]` je `unknown`) → prázdny reťazec; samotnú normalizáciu robí
+ * zdieľaná `normalizeSizeParamName` (jeden zdroj pravdy s Shoptet stranou,
+ * `availability-primitives.ts`). */
 function normalizeAttributeGroup(value: unknown): string {
-  return typeof value === "string"
-    ? value
-        .normalize("NFD")
-        .replace(/[̀-ͯ]/g, "")
-        .toLowerCase()
-        .replace(/[^a-z]/g, "")
-    : "";
+  return typeof value === "string" ? normalizeSizeParamName(value) : "";
 }
 
 /**
@@ -416,10 +415,17 @@ function normalizeAttributeGroup(value: unknown): string {
  * SAMOSTATNÝ produkt (iné `id_product`), takže reálna kombinácia nesie len
  * veľkostný atribút — filter je obrana do hĺbky, nie riešenie pozorovaného
  * prípadu.
+ *
+ * Rozhoduje zdieľaný slovník `isSizeParamName` (`availability-primitives.ts`) —
+ * ten istý, aký používa Shoptet strana (`findSizeParam`,
+ * `shoptet-multivariant.ts`). OBSAHOVÁ (nie prefixová) zhoda: tthunt „Konfekčná
+ * veľkosť" → `konfekcnavelkost` prejde (issue 556 zvyšok — starý
+ * `startsWith("velkost")` ju NEROZPOZNAL), zatiaľ čo farebné skupiny aj „Veľkosť
+ * balenia" (`baleni` negatívny výraz) ostávajú vylúčené.
  */
 function isWetlandSizeGroup(entry: Record<string, unknown>): boolean {
   const groups = [normalizeAttributeGroup(entry["group"]), normalizeAttributeGroup(entry["public_group"])];
-  return groups.some((g) => g.startsWith("velkost") || g.startsWith("velikost"));
+  return groups.some((g) => isSizeParamName(g));
 }
 
 /** Názvy hodnôt VEĽKOSTNEJ skupiny zvolenej kombinácie z

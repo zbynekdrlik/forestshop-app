@@ -118,3 +118,47 @@ export function availabilityFromText(text: string): {
   if (inStock !== undefined) return { availability: "available", matched: inStock };
   return { availability: "unknown", matched: "" };
 }
+
+/** Normalizuje názov veľkostného parametra / atribútovej skupiny na porovnanie
+ * bez diakritiky, bez ohľadu na veľkosť písmen a bez nepísmenových znakov
+ * („Veľkosť" → `velkost`, „Konfekčná veľkosť" → `konfekcnavelkost`). JEDINÁ
+ * normalizačná funkcia pre OBE strany parsera (Shoptet `findSizeParam`,
+ * PrestaShop/wetland `isWetlandSizeGroup`) — jej výstup je vstupom do
+ * `isSizeParamName`, takže „rovnaký slovník → rovnaký výsledok na oboch stranách"
+ * nestojí na dvoch bajt-identických kópiách normalizátora (code review issue 556). */
+export function normalizeSizeParamName(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z]/g, "");
+}
+
+/** Veľkostné výrazy, ktoré NORMALIZOVANÝ (bez diakritiky/veľkosti písmen/nepísmen)
+ * názov parametra/atribútovej skupiny musí OBSAHOVAŤ (nie len presne rovnať sa im).
+ * „veľkosť" po odstránení diakritiky = `velkost`; `velikost` je český tvar, `size`
+ * anglický. Obsahová (nie prefixová) zhoda pokrýva obe strany parsera: Shoptet
+ * „Veľkosť PONOŽKY" → `velkostponozky` (issue 566) aj PrestaShop/wetland „Konfekčná
+ * veľkosť" → `konfekcnavelkost` (issue 556 zvyšok). */
+const SIZE_NAME_TERMS: readonly string[] = Object.freeze(["velikost", "velkost", "size"]);
+
+/** Negatívny zoznam (issue 566): normalizované podreťazce, ktoré veľkostný výraz
+ * síce OBSAHUJÚ, ale variantovou veľkosťou kusu NIE SÚ — napr. „Veľkosť balenia"
+ * (`velkostbalenia` = veľkosť multipacku, nie kusu). Porovnáva sa `.includes()`,
+ * takže jediný podreťazec `baleni` pokrýva všetky tvary — sk „balenie"/„balenia"
+ * (`velkostbalenia`/`velkostbalenie`) aj cz „balení" (`baleni`). „Optické zvětšení"
+ * (hunting24.cz) veľkostný výraz VÔBEC neobsahuje, takže ho odmietne už samotná
+ * obsahová zhoda — tento zoznam je poistka pre parametre, ktoré veľkostné slovo
+ * obsahujú v inom význame. */
+const NON_SIZE_NAME_TERMS: readonly string[] = Object.freeze(["baleni"]);
+
+/** `true`, keď NORMALIZOVANÝ názov parametra/skupiny označuje variantovú VEĽKOSŤ —
+ * obsahuje veľkostný výraz a zároveň žiadny výraz z negatívneho zoznamu. Jediný
+ * zdroj pravdy pre OBE strany parsera (Shoptet `findSizeParam`,
+ * `shoptet-multivariant.ts`; PrestaShop/wetland `isWetlandSizeGroup`,
+ * `availability-domain-rules.ts`) — vstupom je už normalizovaný reťazec (každá
+ * strana normalizuje vlastnou, ale zhodnou NFD funkciou). */
+export function isSizeParamName(normalized: string): boolean {
+  if (NON_SIZE_NAME_TERMS.some((term) => normalized.includes(term))) return false;
+  return SIZE_NAME_TERMS.some((term) => normalized.includes(term));
+}

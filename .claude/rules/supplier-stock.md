@@ -816,3 +816,24 @@ paths:
   line-based `grep 'parameter-dependent no-display'` na surovom HTML nájde 0 —
   pri manuálnom skenovaní/diagnostike stránky najprv `tr '\n\t' '  '` (splošti),
   inak to vyzerá, akoby stránka varianty nemala. Živo overené issue 566.
+- **Slovník názvu VEĽKOSTNÉHO parametra je od issue 556 (zvyšok) JEDEN, v
+  `availability-primitives.ts` — `SIZE_NAME_TERMS`/`NON_SIZE_NAME_TERMS`/
+  `isSizeParamName(normalized)` — a používajú ho OBE strany parsera.** Predtým
+  žil len v `shoptet-multivariant.ts` (Shoptet `findSizeParam`, issue 566), kým
+  PrestaShop/wetland strana (`isWetlandSizeGroup`, `availability-domain-rules.ts`)
+  mala vlastnú, UŽŠIU podmienku `startsWith("velkost"/"velikost")` — tá
+  NEROZPOZNALA tthunt skupinu „Konfekčná veľkosť" (normalizované
+  `konfekcnavelkost` OBSAHUJE `velkost`, ale nezačína ním), takže per-veľkosť
+  čítač vrátil prázdno a nočný beh zapísal N riadkov `unknown|none` (PROD 18. 9.
+  2026: 28 odkazov so všetkými riadkami `none`, väčšina tento prípad). Teraz obe
+  strany volajú `isSizeParamName` (OBSAHOVÁ zhoda + negatívny zoznam `baleni`):
+  konzumenti sú `findSizeParam` (Shoptet, normalizuje `normalizeParamName`) a
+  `isWetlandSizeGroup` (PrestaShop/wetland/tthunt, normalizuje
+  `normalizeAttributeGroup` — obe funkcie robia rovnaké NFD + strip). Farebné
+  skupiny (issue 551 vylúčenie) aj „Veľkosť balenia"/„Optické zvětšení" ostávajú
+  vylúčené na oboch stranách. `run.ts` sa NEZMENIL — návrh zámerne zamietol
+  plošný fallback z prázdnej enumerácie (`run.ts:376`): `unknown` riadky sú
+  fail-closed a ostávajú, aby sa nezaviedlo falošné „Skladom" pri viacveľkostnom
+  produkte (chyba z issue 551). Shared-benefit: každý ďalší host s prefixovaným
+  názvom veľkosti (Shoptet aj PrestaShop) prejde bez zásahu. Fixtúra:
+  `tthunt-konfekcna-ridge-pro-4104-1322.html` (RED test v `parse-issue556.test.ts`).
