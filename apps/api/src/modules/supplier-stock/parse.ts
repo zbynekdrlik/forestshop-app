@@ -280,10 +280,11 @@ function chirucaSizeList(html: string): readonly SizeAvailability[] {
  * wetland.sk (issue 551): PrestaShop stránka ukazuje VŽDY JEDNU kombináciu —
  * tú zo prípony odkazu `-<id_product>-<id_product_attribute>`. Jej dostupnosť
  * (quantity + krížová kontrola JSON-LD z issue 549) a názov(-y) hodnôt sú v
- * `data-product` (`readWetlandCombination`). Vraciame JEDNU položku na názov
- * kombinácie (kandidátny zoznam, z ktorého `matchSizeLabel` v `run.ts` vyberie
- * NAŠU zhodnú veľkosť; ostatné naše veľkosti toho odkazu → `unknown`, presne
- * ako lasting/chiruca, keď stránka veľkosť neukáže).
+ * `data-product` (`readWetlandCombination`, ktorý vráti len VEĽKOSTNÚ skupinu
+ * — farba/odtieň vylúčené). Vraciame JEDNU položku na názov veľkosti
+ * (kandidátny zoznam, z ktorého `matchSizeLabel` v `run.ts` vyberie NAŠU
+ * zhodnú veľkosť; ostatné naše veľkosti toho odkazu → `unknown`, presne ako
+ * lasting/chiruca, keď stránka veľkosť neukáže).
  *
  * Produkt BEZ `attributes` (jednoveľkostný — pero, opasok, olej) → prázdny
  * zoznam → `parseSizeAvailability` vráti `null` → `run.ts` padne na blanket

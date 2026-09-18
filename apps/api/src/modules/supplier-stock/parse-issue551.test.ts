@@ -63,6 +63,29 @@ describe("parseSizeAvailability — issue 551: wetland.sk vráti JEDNU kombinác
   it("iná doména (bez wetland pravidla) → null", () => {
     expect(parseSizeAvailability(ERIC, "https://www.huntingshop.eu/p/1")).toBeNull();
   });
+
+  it("code review issue 551: FARBA v kombinácii sa NEDOSTANE do kandidátov (len veľkostná skupina)", () => {
+    // Syntetický prípad (naživo sa 2-skupinový produkt nenašiel — wetland
+    // modeluje farbu ako samostatný produkt): kombinácia so skupinou Veľkosť
+    // "M" A skupinou Farba "Limetka". Vrátiť sa smie LEN "M" — inak by názov
+    // farby "Limetka" cez prefixové párovanie matchSizeLabel sadol na našu
+    // krátku veľkosť "L" a prepol veľkosť, ktorú stránka nezobrazila.
+    const html =
+      '<html><head><script type="application/ld+json">' +
+      '{"@type":"Product","offers":{"@type":"Offer","availability":"https://schema.org/InStock"}}' +
+      "</script></head><body>" +
+      '<div id="product-details" data-product="{&quot;id_product&quot;:1,&quot;id_product_attribute&quot;:2,' +
+      "&quot;quantity&quot;:3,&quot;availability_message&quot;:&quot;Skladom&quot;," +
+      "&quot;attributes&quot;:{&quot;1&quot;:{&quot;name&quot;:&quot;M&quot;,&quot;group&quot;:&quot;Veľkosť&quot;}," +
+      "&quot;2&quot;:{&quot;name&quot;:&quot;Limetka&quot;,&quot;group&quot;:&quot;Farba&quot;}}}\">x</div>" +
+      "</body></html>";
+    const sizes = parseSizeAvailability(html, ERIC_URL);
+    expect(sizes).toEqual([{ sizeLabel: "M", availability: "available" }]);
+    const supplierLabels = (sizes ?? []).map((s) => s.sizeLabel);
+    // Naša "L" sa NESMIE spárovať s farbou "Limetka".
+    expect(matchSizeLabel("L", supplierLabels)).toBeNull();
+    expect(matchSizeLabel("M", supplierLabels)).toBe("M");
+  });
 });
 
 describe("matchSizeLabel nad wetland kombináciou — issue 551: naše veľkosti odkazu 542-8845", () => {

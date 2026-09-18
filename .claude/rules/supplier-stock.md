@@ -268,9 +268,13 @@ paths:
   (obsluhuje blanket cestu cez `parsePage`), nebolo z neho ODOBRANÉ; odobrať
   by znamenalo pre no-size wetland buď fail-closed `unknown`, alebo dôveru
   samotnému (klamúcemu) JSON-LD — čo issue 549 zakazuje. `readWetlandCombination`
-  vracia VŠETKY hodnoty kombinácie (veľkosť aj prípadnú farbu) ako kandidátny
-  zoznam — ktorá je NAŠA veľkosť rozhodne `matchSizeLabel`, nikdy sa nehádame
-  z názvu skupiny. **Enumerácia VŠETKÝCH kombinácií (aj tých, ktoré uložený
+  vracia LEN hodnoty VEĽKOSTNEJ skupiny (`group`/`public_group` „Veľkosť"/
+  „Velikost", `isWetlandSizeGroup`) — farba/odtieň sa vylúči, inak by názov
+  farby („Limetka" → token „LIMETKA") mohol cez prefixové párovanie
+  `matchSizeLabel` sadnúť na našu krátku veľkosť („L") a prepnúť veľkosť, ktorú
+  stránka nezobrazila (code review issue 551). Naživo overené 19. 9. 2026:
+  wetland modeluje KAŽDÚ farbu ako samostatný produkt (iné `id_product`), takže
+  reálna kombinácia nesie len veľkostný atribút — filter je obrana do hĺbky. **Enumerácia VŠETKÝCH kombinácií (aj tých, ktoré uložený
   odkaz neukazuje) cez `associatedVariants` je stále fáza 2 (samostatný
   ticket)** — tento fix rieši len kombináciu z odkazu.
 - **NÁŠ VLASTNÝ e-shop (`forestshop.sk`) sa dokáže omylom dostať do
