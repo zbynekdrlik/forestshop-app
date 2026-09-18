@@ -25,9 +25,16 @@ const PETER = fixture("tthunt-skladom-peter-classic-3058-956.html");
 const REFRESH_S = fixture("tthunt-refresh-956-27.json");
 const REFRESH_XXL = fixture("tthunt-refresh-956-31.json");
 const PUZDRO = fixture("tthunt-skladom-puzdro-1388.html");
+// issue 556 (zvyšok): reálna tthunt stránka, kde je veľkostná skupina pomenovaná
+// „Konfekčná veľkosť" (normalizované `konfekcnavelkost`) namiesto „Veľkosť" —
+// starý `isWetlandSizeGroup` (`startsWith("velkost")`) ju NEROZPOZNAL → per-veľkosť
+// čítač vrátil prázdno a beh zapísal N riadkov `unknown|none`. Stiahnuté browser UA
+// 2026-09-18, HTTP 200, UTF-8: quantity 20 / JSON-LD InStock, veľkosť „46".
+const RIDGE = fixture("tthunt-konfekcna-ridge-pro-4104-1322.html");
 
 const PETER_URL = "https://www.tthunt.sk/kosele/swedteam-kosela-peter-classic-3058-956.html";
 const PUZDRO_URL = "https://www.tthunt.sk/ruksaky-ladvinky-tasky-penazenky/puzdro-na-dalekohlad-1388.html";
+const RIDGE_URL = "https://www.tthunt.sk/muzi/ridge-pro-desolve-veil-4104-1322.html";
 
 const refreshUrl = (idAttribute: string): string =>
   `${PETER_URL}?ajax=1&action=refresh&id_product=956&group[4]=${idAttribute}&quantity_wanted=1`;
@@ -39,6 +46,13 @@ describe("parseSizeAvailability — issue 556: tthunt.sk vráti kombináciu z pr
 
   it("jednoveľkostný produkt (puzdro 1388, bez attributes) → null (padne na blanket cez parsePage)", () => {
     expect(parseSizeAvailability(PUZDRO, PUZDRO_URL)).toBeNull();
+  });
+
+  it("skupina „Konfekčná veľkosť” (ridge pro 4104-1322) → veľkosť 46 available (obsahová zhoda názvu)", () => {
+    // issue 556 (zvyšok): normalizovaný názov skupiny `konfekcnavelkost` OBSAHUJE
+    // `velkost`, ale nezačína ním — po zjednotení slovníka veľkostného parametra
+    // (`isSizeParamName`) sa rozpozná rovnako ako na Shoptet strane (issue 566).
+    expect(parseSizeAvailability(RIDGE, RIDGE_URL)).toEqual([{ sizeLabel: "46", availability: "available" }]);
   });
 });
 
