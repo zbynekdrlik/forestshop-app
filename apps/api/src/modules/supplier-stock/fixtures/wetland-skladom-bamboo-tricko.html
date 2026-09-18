@@ -1,0 +1,45 @@
+<!--
+  wetland.sk (PrestaShop 1.7/8) — SKLADOM príklad, issue 549.
+  Naživo stiahnuté 18. 9. 2026:
+  https://www.wetland.sk/tricka-a-natelniky/deerhunter-bamboo-t-shirt-tricko-4374-19868
+  Orezané: ponechaný je len detailový blok s atribútom data-product (JSON
+  zvolenej kombinácie/veľkosti, description skrátené) a Product JSON-LD.
+  Rozhodujúce: quantity 8 (skladom) + JSON-LD schema.org/InStock. Pole
+  availability vnútri data-product JSON je konštantné "available" (allow_oosp
+  1) a NIKDY sa neberie — dôkaz, prečo rozhoduje quantity.
+-->
+<!doctype html>
+<html lang="sk">
+  <head>
+    <meta charset="utf-8" />
+    <title>DEERHUNTER Bamboo T-shirt - tričko</title>
+    <script type="application/ld+json">
+{
+  "@context": "https://schema.org/",
+  "@type": "Product",
+  "name": "DEERHUNTER Bamboo T-shirt - tričko",
+  "sku": "8685-388",
+  "brand": { "@type": "Brand", "name": "Deerhunter" },
+  "offers": {
+    "@type": "Offer",
+    "priceCurrency": "EUR",
+    "price": "29.9",
+    "availability": "https://schema.org/InStock",
+    "seller": { "@type": "Organization", "name": "Wetland.sk" }
+  }
+}
+    </script>
+  </head>
+  <body>
+    <div
+      class="info js-product-details"
+      id="product-details"
+      data-product="{&quot;id_product&quot;:4374,&quot;id_product_attribute&quot;:19868,&quot;reference&quot;:&quot;8685-388&quot;,&quot;name&quot;:&quot;DEERHUNTER Bamboo T-shirt - tričko&quot;,&quot;quantity&quot;:8,&quot;out_of_stock&quot;:2,&quot;allow_oosp&quot;:1,&quot;availability&quot;:&quot;available&quot;,&quot;availability_message&quot;:&quot;Skladom – ihneď k odberu&quot;,&quot;available_for_order&quot;:&quot;1&quot;,&quot;price_amount&quot;:29.9,&quot;cache_default_attribute&quot;:&quot;19868&quot;}"
+    >
+      <span class="product-availability success">
+        <i class="material-icons">check</i>
+        Skladom – ihneď k odberu
+      </span>
+    </div>
+  </body>
+</html>

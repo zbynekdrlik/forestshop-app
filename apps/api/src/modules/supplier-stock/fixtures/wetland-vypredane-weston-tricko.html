@@ -1,0 +1,45 @@
+<!--
+  wetland.sk (PrestaShop 1.7/8) — VYPREDANÝ príklad, issue 549.
+  Naživo stiahnuté 18. 9. 2026:
+  https://www.wetland.sk/tricka-a-natelniky/deerhunter-weston-t-shirt-tricko-4373-14154
+  (odkaz nájdený v PROD supplier_stock, link like 4373-14154).
+  Orezané rovnako ako skladom fixtúra. Rozhodujúce: quantity 0 (vypredané) +
+  JSON-LD schema.org/BackOrder. Vizuálny "success" štítok aj pole availability
+  v data-product JSON sú KONŠTANTNE "available"/"skladom" (allow_oosp 1) —
+  presne to je dôvod, prečo sa nesmú brať a rozhoduje quantity + JSON-LD.
+-->
+<!doctype html>
+<html lang="sk">
+  <head>
+    <meta charset="utf-8" />
+    <title>DEERHUNTER Weston T-shirt - tričko</title>
+    <script type="application/ld+json">
+{
+  "@context": "https://schema.org/",
+  "@type": "Product",
+  "name": "DEERHUNTER Weston T-shirt - tričko",
+  "sku": "8684-610",
+  "brand": { "@type": "Brand", "name": "Deerhunter" },
+  "offers": {
+    "@type": "Offer",
+    "priceCurrency": "EUR",
+    "price": "24.9",
+    "availability": "https://schema.org/BackOrder",
+    "seller": { "@type": "Organization", "name": "Wetland.sk" }
+  }
+}
+    </script>
+  </head>
+  <body>
+    <div
+      class="info js-product-details"
+      id="product-details"
+      data-product="{&quot;id_product&quot;:4373,&quot;id_product_attribute&quot;:14154,&quot;reference&quot;:&quot;8684-610&quot;,&quot;name&quot;:&quot;DEERHUNTER Weston T-shirt - tričko&quot;,&quot;quantity&quot;:0,&quot;out_of_stock&quot;:2,&quot;allow_oosp&quot;:1,&quot;availability&quot;:&quot;available&quot;,&quot;availability_message&quot;:&quot;Centrálny sklad – doručenie do 3–5 dní&quot;,&quot;available_for_order&quot;:&quot;1&quot;,&quot;price_amount&quot;:24.9,&quot;cache_default_attribute&quot;:&quot;14154&quot;}"
+    >
+      <span class="product-availability success">
+        <i class="material-icons">check</i>
+        Centrálny sklad – doručenie do 3–5 dní
+      </span>
+    </div>
+  </body>
+</html>

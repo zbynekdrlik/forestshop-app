@@ -319,6 +319,88 @@ function odimonVisibleAvailability(html: string): VisibleAvailabilityHit | null 
   return { availability: token === "available" ? "available" : "unavailable", text };
 }
 
+// issue 549 — wetland.sk (PrestaShop 1.7/8). Otváracia značka detailového
+// bloku nesie atribút s JSON zvolenej kombinácie (veľkosti). `id="product-…"`
+// je ukotvené na presnú zatváraciu úvodzovku, takže sa nezhoduje s
+// `id="product-…-heading"`/`-collapse` na tej istej stránke; hodnota atribútu
+// je HTML-escapovaný JSON (žiadny doslovný `>` — všetky sú `&gt;`), takže
+// `[^>]*` po úvodnej značke skončí až na skutočnom konci značky.
+const WETLAND_PRODUCT_DETAILS_TAG_RE = /<div\b[^>]*\bid="product-details"[^>]*>/i;
+const WETLAND_DATA_PRODUCT_RE = /\bdata-product="([\s\S]*?)"/i;
+
+/**
+ * HTML-unescape hodnoty atribútu (`htmlspecialchars(ENT_QUOTES)`, ktorý dáva
+ * PrestaShop) späť na skutočný text PRED `JSON.parse`. `&amp;` sa nahrádza AKO
+ * POSLEDNÉ — inak by `&amp;quot;` (doslovné `&quot;` v pôvodných dátach)
+ * skončilo ako `"` a rozbilo JSON. Číselné entity toto pole reálne nenesie
+ * (názvy/apostrofy idú cez `&#039;`), preto stačí týchto päť.
+ */
+function unescapeHtmlAttr(value: string): string {
+  return value
+    .replace(/&quot;/g, '"')
+    .replace(/&#0*39;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&");
+}
+
+/**
+ * wetland.sk (issue 549): PrestaShop s `allow_oosp:1` má pole `availability`
+ * v `data-product` JSON aj CSS odznak `.success` KONŠTANTNE "available"/
+ * skladom aj pre vypredaný tovar — preto sa pri issue 230 nenašiel overený
+ * vypredaný príklad a doména ostala `unknown` (fail-closed, issue 330).
+ * Živý rozbor 18. 9. 2026 našiel DVA rozhodujúce nezávislé signály:
+ *   1. `data-product.quantity` (skladom 8 / vypredané 0) — PRIMÁRNY signál,
+ *   2. JSON-LD `offers.availability` token (InStock ↔ quantity≥1,
+ *      BackOrder/OutOfStock ↔ quantity≤0) — KRÍŽOVÁ kontrola.
+ * Táto funkcia číta LEN quantity + `availability_message` (text pre appku);
+ * NIKDY konštantné pole `availability` ani `.success` odznak. Krížovú kontrolu
+ * proti JSON-LD robí `parsePage` (rovnaká VISIBLE_AVAILABILITY_RULES mechanika
+ * ako odimon.sk, issue 225): pri rozpore quantity vs JSON-LD → `unknown`.
+ *
+ * `quantity ≥ 1` → available, `quantity ≤ 0` → unavailable. **Táto funkcia
+ * NIKDY nevráti `null`** — pre wetland vždy rozhoduje quantity (primárny
+ * signál), JSON-LD je len krížová kontrola (`parsePage`), NIKDY samotný zdroj
+ * `available`. Keby sa vrátil `null`, `parsePage` by na tejto teraz-overenej
+ * doméne (`knownDomain === true`) preskočil fail-closed bránu a uveril
+ * SAMOTNÉMU JSON-LD `InStock` — presne ten falošný „skladom", ktorému má
+ * issue 549 zabrániť, keby produktová stránka niekedy nevykreslila
+ * product-details blok (drift šablóny) a JSON-LD by hlásil InStock (a JSON-LD
+ * dodávateľa VIE klamať, viď odimon.sk/lesona.sk). Preto: chýbajúci/
+ * nečitateľný blok ALEBO chýbajúce/nečíselné quantity → `unknown` hit
+ * (fail-closed) — `parsePage` ho pri akomkoľvek JSON-LD tokene vyhodnotí ako
+ * rozpor → `unknown`, nikdy `available`. Kategórie/404 (bez product-details)
+ * tak tiež končia na `unknown`, čo je pre automatiku bezpečné (nič neprepne).
+ * Kombináciu (veľkosť) vyberá prípona URL `-<id_product>-<id_product_attribute>`
+ * (fáza 1 číta len veľkosť z uloženého odkazu; per-veľkosť enumerácia je fáza 2).
+ */
+function wetlandVisibleAvailability(html: string): VisibleAvailabilityHit {
+  const tag = WETLAND_PRODUCT_DETAILS_TAG_RE.exec(html);
+  if (tag === null) return { availability: "unknown", text: "" };
+  const dataProduct = WETLAND_DATA_PRODUCT_RE.exec(tag[0]);
+  if (dataProduct === null) return { availability: "unknown", text: "" };
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(unescapeHtmlAttr(dataProduct[1] ?? ""));
+  } catch {
+    // Product-details blok na stránke JE, len jeho JSON sa nedá prečítať —
+    // fail-closed `unknown`, nikdy tichý ústup na (možno klamúci) JSON-LD.
+    return { availability: "unknown", text: "" };
+  }
+  const record = typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : {};
+  const rawMessage = record["availability_message"];
+  const text = typeof rawMessage === "string" ? rawMessage.trim() : "";
+  const rawQuantity = record["quantity"];
+  const quantity =
+    typeof rawQuantity === "number"
+      ? rawQuantity
+      : typeof rawQuantity === "string" && rawQuantity.trim() !== ""
+        ? Number(rawQuantity)
+        : Number.NaN;
+  if (!Number.isFinite(quantity)) return { availability: "unknown", text };
+  return { availability: quantity >= 1 ? "available" : "unavailable", text };
+}
+
 const LESONA_AVAILABILITY_RE = /<span\b[^>]*\bid="product-availability"[^>]*>([\s\S]*?)<\/span>/i;
 
 /**
@@ -363,6 +445,7 @@ function lesonaVisibleAvailability(html: string): VisibleAvailabilityHit | null 
 const VISIBLE_AVAILABILITY_RULES: readonly VisibleAvailabilityRule[] = Object.freeze([
   { host: "odimon.sk", read: odimonVisibleAvailability },
   { host: "lesona.sk", read: lesonaVisibleAvailability },
+  { host: "wetland.sk", read: wetlandVisibleAvailability },
 ]);
 
 export function visibleAvailabilityFor(url: string, html: string): VisibleAvailabilityHit | null {

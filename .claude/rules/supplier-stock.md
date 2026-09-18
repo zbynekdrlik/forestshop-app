@@ -210,14 +210,39 @@ paths:
   vtedy sa pravidlo NEPRIDÁVA, nie hádá.** Issue 230: pre `trigona.sk` sa
   naživo overili OBE polarity (31 vzoriek, farba `#00b020`/`#024bbd`
   krížovo overená proti JSON-LD na TOM ISTOM produkte) → pravidlo pridané.
-  Pre `wetland.sk` sa naživo overilo 67+ reálnych produktových stránok
-  naprieč 3 kategóriami a VŽDY mal produkt rovnaký ("success") štítok —
-  ani JEDEN overený vypredaný príklad sa nenašiel (6 `unknown` riadkov v
-  produkčnej DB boli všetky HTTP 404 mŕtve odkazy, nie živé vypredané
-  stránky). Záver: pravidlo pre `wetland.sk` sa NEPRIDALO, doména ostáva
-  `unknown` presne ako predtým — dokumentované v `constants.ts` aj na
-  ticket-e, nie tichá medzera. Vzor na ĎALŠIU doménu bez overeného
-  protipólu: rovnaký postup, nie dohad podľa analógie s inou doménou.
+  Pre `wetland.sk` sa pri issue 230 naživo overilo 67+ reálnych
+  produktových stránok naprieč 3 kategóriami a VŽDY mal produkt rovnaký
+  ("success") štítok — ani JEDEN overený vypredaný príklad sa vtedy
+  nenašiel, takže sa pravidlo NEPRIDALO. **Toto sa issue 549 VYRIEŠILO** —
+  dôvod, prečo bola doména „vždy skladom", bol `allow_oosp:1`: VIDITEĽNÝ
+  štítok/pole `availability` sú konštantné, ale skutočný stav nesie
+  `data-product.quantity` (viď nasledujúci bullet). Vzor na ĎALŠIU doménu
+  bez overeného protipólu: rovnaký postup, nie dohad podľa analógie s inou
+  doménou — a keď „vždy skladom" pochádza z `allow_oosp:1` (PrestaShop
+  predaj-aj-pri-nule), hľadaj číselný `quantity`, nie viditeľný štítok.
+- **`wetland.sk` (PrestaShop 1.7/8, issue 549) — rozhoduje
+  `data-product.quantity` + krížová kontrola JSON-LD, NIKDY viditeľný štítok
+  ani pole `availability`.** Doména má `allow_oosp:1` (predaj povolený aj pri
+  nulovej zásobe), takže pole `availability` v `data-product` JSON aj CSS
+  odznak `.success` sú KONŠTANTNE „available"/skladom pre skladový AJ
+  vypredaný tovar (preto issue 230 nenašla protipól). Dva rozhodujúce
+  nezávislé signály (naživo overené 18. 9. 2026): (1) `data-product.quantity`
+  z `<div id="product-details" data-product="…">` (skladom 8 / vypredané 0),
+  (2) JSON-LD `offers.availability` token (InStock vs BackOrder). Pravidlo
+  (`wetlandVisibleAvailability` v `availability-domain-rules.ts`,
+  `VISIBLE_AVAILABILITY_RULES`) číta LEN `quantity` (`≥1` available, `≤0`
+  unavailable, chýba → `unknown`) a `availability_message` ako
+  `availabilityText`; krížovú kontrolu proti JSON-LD robí `parsePage` (rozpor
+  quantity vs JSON-LD → `unknown`, rovnaká VISIBLE mechanika ako odimon.sk
+  issue 225). **Atribút `data-product` je HTML-escapovaný JSON —
+  HTML-unescape (`unescapeHtmlAttr`) PRED `JSON.parse`; `&amp;` sa nahrádza
+  AKO POSLEDNÉ.** `null` (nechá generickú vetvu) sa vracia LEN keď na stránke
+  NIE JE `product-details` blok; blok BEZ čitateľného quantity → `unknown`
+  hit, nikdy tichý ústup na samotný JSON-LD. **Fáza 1 číta dostupnosť
+  KOMBINÁCIE zvolenej príponou URL `-<id_product>-<id_product_attribute>`
+  (nie po veľkostiach)** — per-veľkosť enumerácia cez `associatedVariants` je
+  fáza 2 (samostatný ticket). Charset stránky je UTF-8 (overené `curl -sI`),
+  takže žiadny windows-1250 mojibake problém ako trigona.sk.
 - **NÁŠ VLASTNÝ e-shop (`forestshop.sk`) sa dokáže omylom dostať do
   `supplier_stock` presne tou istou cestou ako skutočný dodávateľ — issue
   227, 21 odkazov** — `extractSupplierLink` (`catalog/supplier-link.ts`)
