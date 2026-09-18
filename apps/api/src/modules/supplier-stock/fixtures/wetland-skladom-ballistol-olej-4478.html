@@ -1,0 +1,50 @@
+<!--
+  wetland.sk (PrestaShop 1.7/8) — PRODUKT BEZ VEĽKOSTÍ (žiadny kľúč attributes
+  v data-product, id_product_attribute 0), issue 551.
+  Naživo stiahnuté 19. 9. 2026:
+  https://www.wetland.sk/doplnky/ballistol-universal-oil-035l-olej-na-cistenie-4478
+  Rozhodujúce: bez attributes → per-veľkosť čítač vráti prázdno → run.ts padne
+  na blanket vetvu (ourSizes.length === 0) a zapíše plošný riadok "" ako
+  doteraz (issue 549). quantity 2 + JSON-LD InStock → available.
+-->
+<!doctype html>
+<html lang="sk">
+  <head>
+    <meta charset="utf-8" />
+    <title>BALLISTOL Universal Oil 0,35l - olej na čistenie</title>
+    <script type="application/ld+json">
+{
+  "@context": "https://schema.org/",
+  "@type": "Product",
+  "name": "BALLISTOL Universal Oil 0,35l - olej na čistenie",
+  "sku": "192607-99",
+  "brand": {
+    "@type": "Brand",
+    "name": "Deerhunter"
+  },
+  "offers": {
+    "@type": "Offer",
+    "priceCurrency": "EUR",
+    "price": "9.99",
+    "availability": "https://schema.org/InStock",
+    "seller": {
+      "@type": "Organization",
+      "name": "Wetland.sk"
+    }
+  }
+}
+    </script>
+  </head>
+  <body>
+    <div
+      class="info js-product-details"
+      id="product-details"
+      data-product="{&quot;id_product&quot;:4478,&quot;id_product_attribute&quot;:0,&quot;reference&quot;:&quot;192607-99&quot;,&quot;name&quot;:&quot;BALLISTOL Universal Oil 0,35l - olej na čistenie&quot;,&quot;quantity&quot;:2,&quot;out_of_stock&quot;:2,&quot;allow_oosp&quot;:1,&quot;availability&quot;:&quot;available&quot;,&quot;availability_message&quot;:&quot;Skladom – ihneď k odberu&quot;,&quot;available_for_order&quot;:&quot;1&quot;,&quot;price_amount&quot;:9.99,&quot;cache_default_attribute&quot;:&quot;0&quot;}"
+    >
+      <span class="product-availability success">
+        <i class="material-icons">check</i>
+        Skladom – ihneď k odberu
+      </span>
+    </div>
+  </body>
+</html>

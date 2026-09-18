@@ -23,6 +23,13 @@ const LASTING_BONY_URL =
 const LASTING_HILA_URL =
   "https://shop.lasting.eu/cs/trika-kratky-rukav-mqc/16926-56344-hila-damske-merino-triko-s-tiskem-8995067844631.html";
 
+// issue 551 — wetland.sk kombinácia z odkazu: per-veľkosť riadok, nie blanket.
+const WETLAND_ERIC = fixture("wetland-skladom-eric-kosela-542-8845.html");
+const WETLAND_BALLISTOL = fixture("wetland-skladom-ballistol-olej-4478.html");
+const WETLAND_ERIC_URL = "https://www.wetland.sk/kosele/deerhunter-eric-shirt-polovnicka-kosela-542-8845";
+const WETLAND_BALLISTOL_URL =
+  "https://www.wetland.sk/doplnky/ballistol-universal-oil-035l-olej-na-cistenie-4478";
+
 // Žiadny test nesmie siahnuť na skutočnú stránku dodávateľa — sťahovanie je
 // vždy vlastná implementácia, nikdy `fetchSupplierPage`.
 const okPage = (html: string): PageFetchResult => ({ ok: true, html, httpStatus: 200, error: null });
@@ -331,5 +338,83 @@ describe("beh dodávateľského skladu — issue 224: dostupnosť po veľkosti",
 
     const lx = await rowFor(LASTING_BONY_URL, "L-X");
     expect(lx?.availability).toBe("unavailable");
+  });
+});
+
+describe("beh dodávateľského skladu — issue 551: wetland.sk per-veľkosť pre kombináciu z odkazu", () => {
+  let db: Database;
+  let close: () => Promise<void>;
+
+  beforeEach(async () => {
+    ({ db, close } = await withCleanDb());
+  });
+  afterEach(async () => {
+    await close();
+  });
+
+  const rowFor = async (
+    link: string,
+    sizeLabel: string,
+  ): Promise<typeof supplierStock.$inferSelect | undefined> => {
+    const [found] = await db
+      .select()
+      .from(supplierStock)
+      .where(and(eq(supplierStock.link, link), eq(supplierStock.sizeLabel, sizeLabel)));
+    return found;
+  };
+
+  const allRowsFor = async (link: string): Promise<(typeof supplierStock.$inferSelect)[]> =>
+    db.select().from(supplierStock).where(eq(supplierStock.link, link));
+
+  it("kombinácia 39/40 z odkazu prepne LEN našu 39/40 — 41/42 a 43/44 ostávajú unknown, žiadny blanket riadok", async () => {
+    // Reprodukcia bugu z PROD 18. 9.: jeden wetland odkaz (kombinácia 39/40)
+    // pokrýva u nás tri veľkosti. Pred fixom sa zapísal blanket "" riadok a
+    // restock join by prepol všetky tri. Po fixe sa zapíše per-veľkosť.
+    await insertTestVariantForProduct(db, "erickosela", "erickosela/39-40", {
+      sizeLabel: "39/40",
+      internalNote: WETLAND_ERIC_URL,
+    });
+    await insertTestVariantForProduct(db, "erickosela", "erickosela/41-42", { sizeLabel: "41/42" });
+    await insertTestVariantForProduct(db, "erickosela", "erickosela/43-44", { sizeLabel: "43/44" });
+
+    await runSupplierStock({
+      db,
+      now: NOW,
+      sleep: noSleep,
+      fetchPage: () => Promise.resolve(okPage(WETLAND_ERIC)),
+    });
+
+    const matched = await rowFor(WETLAND_ERIC_URL, "39/40");
+    expect(matched?.availability).toBe("available");
+    expect(matched?.source).toBe("size_list");
+    expect(matched?.availabilityText).toBe("39/40");
+
+    expect((await rowFor(WETLAND_ERIC_URL, "41/42"))?.availability).toBe("unknown");
+    expect((await rowFor(WETLAND_ERIC_URL, "43/44"))?.availability).toBe("unknown");
+
+    // Kľúčové: ŽIADNY plošný riadok "" — inak by restock join prepol cudzie veľkosti.
+    expect(await rowFor(WETLAND_ERIC_URL, "")).toBeUndefined();
+    const all = await allRowsFor(WETLAND_ERIC_URL);
+    expect(all.map((r) => r.sizeLabel).sort()).toEqual(["39/40", "41/42", "43/44"]);
+  });
+
+  it("produkt bez veľkostí (olej, žiadny náš size_label) ostáva blanket riadok '' available (issue 549 zachované)", async () => {
+    await insertTestVariantForProduct(db, "ballistololej", "ballistololej/x", {
+      sizeLabel: null,
+      internalNote: WETLAND_BALLISTOL_URL,
+    });
+
+    await runSupplierStock({
+      db,
+      now: NOW,
+      sleep: noSleep,
+      fetchPage: () => Promise.resolve(okPage(WETLAND_BALLISTOL)),
+    });
+
+    const blanket = await rowFor(WETLAND_BALLISTOL_URL, "");
+    expect(blanket?.availability).toBe("available");
+    expect(blanket?.source).toBe("text");
+    const all = await allRowsFor(WETLAND_BALLISTOL_URL);
+    expect(all.map((r) => r.sizeLabel)).toEqual([""]);
   });
 });

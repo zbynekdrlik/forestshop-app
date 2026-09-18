@@ -374,22 +374,92 @@ function unescapeHtmlAttr(value: string): string {
  * Kombináciu (veľkosť) vyberá prípona URL `-<id_product>-<id_product_attribute>`
  * (fáza 1 číta len veľkosť z uloženého odkazu; per-veľkosť enumerácia je fáza 2).
  */
-function wetlandVisibleAvailability(html: string): VisibleAvailabilityHit {
+/**
+ * Prečítaná wetland kombinácia (issue 549 + 551). `availability` je
+ * quantity-based (nikdy konštantné pole `availability`/`.success`), `text` je
+ * `availability_message`, `attributeNames` sú názvy hodnôt VEĽKOSTNEJ skupiny
+ * zvolenej kombinácie z `data-product.attributes` (`attributes[*].name` kde
+ * `group` je „Veľkosť", napr. "39/40"; farba/odtieň sa vylúči) — prázdne, keď
+ * produkt veľkostný atribút NEMÁ (jednoveľkostný produkt: pero, opasok, olej).
+ */
+export interface WetlandCombination {
+  readonly availability: SupplierAvailability;
+  readonly text: string;
+  readonly attributeNames: readonly string[];
+}
+
+/** Normalizuje názov atribútovej skupiny na porovnanie bez diakritiky a bez
+ * ohľadu na veľkosť písmen ("Veľkosť" → "velkost"). */
+function normalizeAttributeGroup(value: unknown): string {
+  return typeof value === "string"
+    ? value
+        .normalize("NFD")
+        .replace(/[̀-ͯ]/g, "")
+        .toLowerCase()
+        .replace(/[^a-z]/g, "")
+    : "";
+}
+
+/**
+ * `true`, keď je atribútová skupina VEĽKOSŤ (sk „Veľkosť" / cz „Velikost").
+ * Iba veľkostná skupina sa smie dostať do zoznamu kandidátov pre
+ * `matchSizeLabel` — inak by názov FARBY/odtieňa („Limetka" → token
+ * „LIMETKA") mohol cez prefixové párovanie sadnúť na našu krátku veľkosť
+ * („L") a prepnúť veľkosť, ktorú stránka vôbec nezobrazila (code review issue
+ * 551). Naživo overené 19. 9. 2026: wetland.sk modeluje KAŽDÚ farbu ako
+ * SAMOSTATNÝ produkt (iné `id_product`), takže reálna kombinácia nesie len
+ * veľkostný atribút — filter je obrana do hĺbky, nie riešenie pozorovaného
+ * prípadu.
+ */
+function isWetlandSizeGroup(entry: Record<string, unknown>): boolean {
+  const groups = [normalizeAttributeGroup(entry["group"]), normalizeAttributeGroup(entry["public_group"])];
+  return groups.some((g) => g.startsWith("velkost") || g.startsWith("velikost"));
+}
+
+/** Názvy hodnôt VEĽKOSTNEJ skupiny zvolenej kombinácie z
+ * `data-product.attributes` (`{ "1": { name, group } }`). Iné skupiny
+ * (farba/odtieň) sa vylúčia (`isWetlandSizeGroup`). Prázdne pole = žiadny
+ * veľkostný atribút (jednoveľkostný produkt bez `attributes`, alebo kombinácia
+ * bez veľkostnej skupiny) → beh padne na blanket riadok. Kandidátny zoznam,
+ * z ktorého `matchSizeLabel` (`parse.ts`) vyberie NAŠU zhodnú veľkosť —
+ * rovnaká disciplína ako zoznam veľkostí u lasting/chiruca. */
+function wetlandAttributeNames(raw: unknown): readonly string[] {
+  if (typeof raw !== "object" || raw === null) return [];
+  const names: string[] = [];
+  for (const value of Object.values(raw as Record<string, unknown>)) {
+    if (typeof value !== "object" || value === null) continue;
+    const entry = value as Record<string, unknown>;
+    if (!isWetlandSizeGroup(entry)) continue;
+    const name = entry["name"];
+    if (typeof name === "string" && name.trim() !== "") names.push(name.trim());
+  }
+  return names;
+}
+
+/**
+ * Jadro čítania wetland `data-product` (issue 549) rozšírené o názvy kombinácie
+ * (issue 551). `wetlandVisibleAvailability` (blanket/no-size cesta) aj
+ * `wetlandSizeList` (`parse.ts`, per-veľkosť cesta) ho zdieľajú. Chýbajúci/
+ * nečitateľný blok alebo quantity → `unknown` (fail-closed, nikdy tichý ústup
+ * na možno klamúci JSON-LD — pozri issue 549 obranu do hĺbky).
+ */
+export function readWetlandCombination(html: string): WetlandCombination {
   const tag = WETLAND_PRODUCT_DETAILS_TAG_RE.exec(html);
-  if (tag === null) return { availability: "unknown", text: "" };
+  if (tag === null) return { availability: "unknown", text: "", attributeNames: [] };
   const dataProduct = WETLAND_DATA_PRODUCT_RE.exec(tag[0]);
-  if (dataProduct === null) return { availability: "unknown", text: "" };
+  if (dataProduct === null) return { availability: "unknown", text: "", attributeNames: [] };
   let parsed: unknown;
   try {
     parsed = JSON.parse(unescapeHtmlAttr(dataProduct[1] ?? ""));
   } catch {
     // Product-details blok na stránke JE, len jeho JSON sa nedá prečítať —
     // fail-closed `unknown`, nikdy tichý ústup na (možno klamúci) JSON-LD.
-    return { availability: "unknown", text: "" };
+    return { availability: "unknown", text: "", attributeNames: [] };
   }
   const record = typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : {};
   const rawMessage = record["availability_message"];
   const text = typeof rawMessage === "string" ? rawMessage.trim() : "";
+  const attributeNames = wetlandAttributeNames(record["attributes"]);
   const rawQuantity = record["quantity"];
   const quantity =
     typeof rawQuantity === "number"
@@ -397,8 +467,13 @@ function wetlandVisibleAvailability(html: string): VisibleAvailabilityHit {
       : typeof rawQuantity === "string" && rawQuantity.trim() !== ""
         ? Number(rawQuantity)
         : Number.NaN;
-  if (!Number.isFinite(quantity)) return { availability: "unknown", text };
-  return { availability: quantity >= 1 ? "available" : "unavailable", text };
+  if (!Number.isFinite(quantity)) return { availability: "unknown", text, attributeNames };
+  return { availability: quantity >= 1 ? "available" : "unavailable", text, attributeNames };
+}
+
+function wetlandVisibleAvailability(html: string): VisibleAvailabilityHit {
+  const { availability, text } = readWetlandCombination(html);
+  return { availability, text };
 }
 
 const LESONA_AVAILABILITY_RE = /<span\b[^>]*\bid="product-availability"[^>]*>([\s\S]*?)<\/span>/i;

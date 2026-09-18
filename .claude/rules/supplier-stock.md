@@ -243,6 +243,40 @@ paths:
   (nie po veľkostiach)** — per-veľkosť enumerácia cez `associatedVariants` je
   fáza 2 (samostatný ticket). Charset stránky je UTF-8 (overené `curl -sI`),
   takže žiadny windows-1250 mojibake problém ako trigona.sk.
+- **`wetland.sk` (issue 551) je aj v `SIZE_AVAILABILITY_RULES` — pre kombináciu
+  z odkazu zapisuje PER-VEĽKOSŤ riadok, nie plošný `''`.** Stránka wetland.sk
+  (PrestaShop) ukazuje VŽDY JEDNU kombináciu — tú z prípony odkazu
+  `-<id_product>-<id_product_attribute>` — a jej veľkosť je v
+  `data-product.attributes[*].name` (napr. „39/40"). Issue 549 čítal správnu
+  dostupnosť, ale zapisoval ju ako plošný riadok (`size_label=''`, bol LEN vo
+  `VISIBLE_AVAILABILITY_RULES`), takže `restock/queries.ts` blanket-párovanie
+  prepínalo VŠETKY naše veľkosti toho odkazu (živý bug PROD 18. 9. 2026: 3 zo
+  4 kandidátov mali inú veľkosť než skladovú). Fix: `wetlandSizeList`
+  (`parse.ts`, `SIZE_AVAILABILITY_RULES`) číta cez zdieľané
+  `readWetlandCombination` (`availability-domain-rules.ts`) dostupnosť
+  (quantity + krížová kontrola JSON-LD z issue 549, robí ju SÁM čítač — nie
+  `parsePage`, ktorý per-veľkosť vetva na dostupnosť nevolá) AJ názvy hodnôt
+  kombinácie z `attributes`, a vráti JEDNU položku na názov. `run.ts`'s
+  per-veľkosť vetva (`sizeList !== null && ourSizes.length > 0`) potom cez
+  `matchSizeLabel` spáruje LEN našu zhodnú veľkosť; ostatné → `unknown` (ako
+  lasting/chiruca). Rozpor quantity vs JSON-LD ALEBO nečitateľné quantity →
+  čítač vráti prázdno → beh padne na blanket vetvu → `unknown` (fail-closed).
+  **Produkt BEZ `attributes` (jednoveľkostný — pero, opasok, olej) → čítač
+  vráti prázdno → `parseSizeAvailability` `null` → `run.ts` blanket vetva
+  (`ourSizes.length === 0`) zapíše plošný riadok `''` PRESNE ako issue 549** —
+  preto `wetlandVisibleAvailability` ZOSTÁVA aj vo `VISIBLE_AVAILABILITY_RULES`
+  (obsluhuje blanket cestu cez `parsePage`), nebolo z neho ODOBRANÉ; odobrať
+  by znamenalo pre no-size wetland buď fail-closed `unknown`, alebo dôveru
+  samotnému (klamúcemu) JSON-LD — čo issue 549 zakazuje. `readWetlandCombination`
+  vracia LEN hodnoty VEĽKOSTNEJ skupiny (`group`/`public_group` „Veľkosť"/
+  „Velikost", `isWetlandSizeGroup`) — farba/odtieň sa vylúči, inak by názov
+  farby („Limetka" → token „LIMETKA") mohol cez prefixové párovanie
+  `matchSizeLabel` sadnúť na našu krátku veľkosť („L") a prepnúť veľkosť, ktorú
+  stránka nezobrazila (code review issue 551). Naživo overené 19. 9. 2026:
+  wetland modeluje KAŽDÚ farbu ako samostatný produkt (iné `id_product`), takže
+  reálna kombinácia nesie len veľkostný atribút — filter je obrana do hĺbky. **Enumerácia VŠETKÝCH kombinácií (aj tých, ktoré uložený
+  odkaz neukazuje) cez `associatedVariants` je stále fáza 2 (samostatný
+  ticket)** — tento fix rieši len kombináciu z odkazu.
 - **NÁŠ VLASTNÝ e-shop (`forestshop.sk`) sa dokáže omylom dostať do
   `supplier_stock` presne tou istou cestou ako skutočný dodávateľ — issue
   227, 21 odkazov** — `extractSupplierLink` (`catalog/supplier-link.ts`)

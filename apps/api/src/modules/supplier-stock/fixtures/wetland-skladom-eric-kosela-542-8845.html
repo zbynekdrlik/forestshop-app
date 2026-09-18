@@ -1,0 +1,51 @@
+<!--
+  wetland.sk (PrestaShop 1.7/8) — SKLADOM, JEDNA kombinácia (veľkosť 39/40), issue 551.
+  Naživo stiahnuté 19. 9. 2026:
+  https://www.wetland.sk/kosele/deerhunter-eric-shirt-polovnicka-kosela-542-8845
+  (odkaz z bug reportu — kombinácia zo prípony -542-8845). Rozhodujúce: stránka
+  ukazuje LEN kombináciu 39/40 (data-product.attributes[*].name), quantity 2
+  (skladom) + JSON-LD schema.org/InStock. Naša veľkosť 39/40 sa spáruje, 41/42
+  a 43/44 (iné naše veľkosti toho istého odkazu) NIE — ostávajú unknown.
+  Orezané rovnako ako issue 549 fixtúry (attributes trimnuté na name+group).
+-->
+<!doctype html>
+<html lang="sk">
+  <head>
+    <meta charset="utf-8" />
+    <title>DEERHUNTER Eric Shirt - poľovnícka košeľa</title>
+    <script type="application/ld+json">
+{
+  "@context": "https://schema.org/",
+  "@type": "Product",
+  "name": "DEERHUNTER Eric Shirt - poľovnícka košeľa",
+  "sku": "8178-38178",
+  "brand": {
+    "@type": "Brand",
+    "name": "Deerhunter"
+  },
+  "offers": {
+    "@type": "Offer",
+    "priceCurrency": "EUR",
+    "price": "79.9",
+    "availability": "https://schema.org/InStock",
+    "seller": {
+      "@type": "Organization",
+      "name": "Wetland.sk"
+    }
+  }
+}
+    </script>
+  </head>
+  <body>
+    <div
+      class="info js-product-details"
+      id="product-details"
+      data-product="{&quot;id_product&quot;:542,&quot;id_product_attribute&quot;:8845,&quot;reference&quot;:&quot;8178-38178&quot;,&quot;name&quot;:&quot;DEERHUNTER Eric Shirt - poľovnícka košeľa&quot;,&quot;quantity&quot;:2,&quot;out_of_stock&quot;:2,&quot;allow_oosp&quot;:1,&quot;availability&quot;:&quot;available&quot;,&quot;availability_message&quot;:&quot;Skladom – ihneď k odberu&quot;,&quot;available_for_order&quot;:&quot;1&quot;,&quot;price_amount&quot;:79.9,&quot;cache_default_attribute&quot;:&quot;8845&quot;,&quot;attributes&quot;:{&quot;1&quot;:{&quot;id_attribute&quot;:&quot;16&quot;,&quot;id_attribute_group&quot;:&quot;1&quot;,&quot;name&quot;:&quot;39/40&quot;,&quot;group&quot;:&quot;Veľkosť&quot;,&quot;public_group&quot;:&quot;Veľkosť&quot;}}}"
+    >
+      <span class="product-availability success">
+        <i class="material-icons">check</i>
+        Skladom – ihneď k odberu
+      </span>
+    </div>
+  </body>
+</html>
