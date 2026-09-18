@@ -344,6 +344,20 @@ const SIZE_AVAILABILITY_RULES: readonly SizeAvailabilityRule[] = Object.freeze([
       suffixMismatch: wetlandSuffixMismatch,
     },
   },
+  {
+    // issue 556: tthunt.sk je tá istá PrestaShop 1.7/8 šablóna ako wetland.sk —
+    // ten istý `data-product` JSON (quantity + attributes) aj `<select
+    // name="group[N]">`, a `action=refresh` GET naživo overený 2026-09-18, že
+    // funguje aj tu. Preto znovupoužíva `wetlandSizeList` aj celý wetland
+    // enumerátor (generický `CombinationEnumerator` z issue 552) bez forku.
+    host: "tthunt.sk",
+    read: wetlandSizeList,
+    enumerate: {
+      targets: wetlandEnumerateCombinations,
+      unwrap: unwrapWetlandCombinationResponse,
+      suffixMismatch: wetlandSuffixMismatch,
+    },
+  },
 ]);
 
 function sizeAvailabilityRuleFor(url: string): SizeAvailabilityRule | null {

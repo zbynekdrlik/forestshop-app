@@ -642,6 +642,13 @@ const VISIBLE_AVAILABILITY_RULES: readonly VisibleAvailabilityRule[] = Object.fr
   { host: "odimon.sk", read: odimonVisibleAvailability },
   { host: "lesona.sk", read: lesonaVisibleAvailability },
   { host: "wetland.sk", read: wetlandVisibleAvailability },
+  // issue 556: tthunt.sk je tá istá PrestaShop 1.7/8 šablóna ako wetland.sk
+  // (`<div id="product-details" data-product="…">` s `quantity` + `attributes`,
+  // pole `availability` KONŠTANTNE "available" pri `allow_oosp:1`) — číta sa
+  // rovnakým `wetlandVisibleAvailability` (quantity + krížová kontrola JSON-LD
+  // robí `parsePage`). Blanket cesta pre jednoveľkostné tthunt produkty; per-veľkosť
+  // je v `SIZE_AVAILABILITY_RULES` (`parse.ts`). Naživo overené 2026-09-18.
+  { host: "tthunt.sk", read: wetlandVisibleAvailability },
 ]);
 
 export function visibleAvailabilityFor(url: string, html: string): VisibleAvailabilityHit | null {
