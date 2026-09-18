@@ -362,6 +362,12 @@ const SIZE_AVAILABILITY_RULES: readonly SizeAvailabilityRule[] = Object.freeze([
   // `shoptetLabelAvailability` (TEXT rule). zubicek.cz zámerne NEregistrované —
   // žiadny živo overený vypredaný protipól (viď issue 558, disciplína issue 230).
   { host: "luko.cz", read: shoptetMultiVariantSizeList },
+  // issue 566: soxland.sk je tá istá Shoptet viacvariantová šablóna (generické
+  // `shoptet-multivariant.ts`), len parameter sa volá „Veľkosť PONOŽKY" (findSizeParam
+  // ho berie podľa OBSAHU názvu). Živá polarita overená 2026-09-18: produkt
+  // dr-hunter-funkcne-celorocne-termo-ponozky-odlahcene-zelene má veľkosti 37-38/39-41
+  // „Momentálne nedostupné" (unavailable) a 42-44/45-47/48-49 „Skladom" (available).
+  { host: "soxland.sk", read: shoptetMultiVariantSizeList },
   {
     host: "wetland.sk",
     read: wetlandSizeList,

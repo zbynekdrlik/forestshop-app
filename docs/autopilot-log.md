@@ -4588,3 +4588,38 @@ Live rozbor + fixtúry 2026-09-18 (curl `Mozilla/5.0`, PROD DB SELECT-only).
 
 153 supplier-stock unit testov zelených, tsc + eslint čisté. Tickety ostávajú
 OTVORENÉ (worktree worker, PR/merge/deploy/overenie rieši supervisor).
+
+## issue 548 (PR B) — zjednotenie dizajnu sekcií podľa „Na objednanie"
+Worktree worker (branch worktree-agent-acccfb40d6ae47f9e), bump 0.3.0-dev.332.
+PR B slice (Nedostupné tovary, Upozornenia, Vypredané → Skladom) — adopcia
+zdieľaných primitívov PR A (SectionShell/StateChip), Prístup 1 z main
+design-recordu, len vzhľad. Commity: 92ef72b (bump) → f4c22f4 [red] e2e
+sections-shell PR B rozšírenie → e4a8244 [green] adopcia → 40e2f47 (fix:
+StateChip modifier="" pod exactOptionalPropertyTypes).
+- Nedostupné: koreň <section>→SectionShell, skoré-returny→loading/error sloty,
+  prázdny stav .empty, dve tlačidlá náhľadu btn lg→btn sm (design-authorized).
+- Upozornenia: 4 návratové vetvy <section>→SectionShell, načítavanie .loading
+  role=status, prázdny stav .empty; tablist + toolbar behavioural, nezmenené.
+- Vypredané → Skladom: koreň <div>→SectionShell, .chip počítadlá→StateChip
+  chip-neutral (zámerný prechod z výrazne-zelenej), status/reason pill→StateChip,
+  3 generické <table>→.orders-table, vnorené načítavanie→.loading.
+Žiadne premenované/odstránené testidy, žiadny nový h1/h2. gates:local ZELENÉ
+(api 1110 + web 798, tsc+eslint čisté). E2E beží v CI (nespúšťa sa lokálne na
+forestshop-dev). Fresh-context review dispatch ORPHANOVAL (#363) → in-context
+review nad plným diffom, PASS 0🔴0🟡. Playbook: StateChip modifier="" gotcha +
+PR B adoptéri doplnené do frontend-design.md. Ticket OTVORENÝ (worktree worker,
+PR/merge/deploy rieši supervisor). IconButton/ActionBar + zvyšné sekcie → PR C.
+
+## issue 566 — supplier-stock: Shoptet viacvariant veľkosť podľa obsahu názvu (soxland.sk)
+- Verzia 0.3.0-dev.331 (1d9adb3). RED 843065e → GREEN 9191baa.
+- `findSizeParam` (`shoptet-multivariant.ts`): presná zhoda „Velikost/Veľkosť" →
+  obsahová zhoda (`SIZE_NAME_TERMS` velikost|velkost|size) + negatívny zoznam
+  (`NON_SIZE_NAME_TERMS` balenia/balenie/baleni). soxland „Veľkosť PONOŽKY" teraz
+  prejde; hunting24 „Optické zvětšení" nie.
+- `soxland.sk` pridaný do `SIZE_AVAILABILITY_RULES` (`parse.ts`) — polarita overená
+  naživo 2026-09-18 (celoročné: 37-38/39-41 Momentálne nedostupné, zvyšok Skladom).
+- Reálne fixtures: soxland-drhunter-tenke-ponozky (all available),
+  soxland-drhunter-celorocne-nedostupne (mixed), hunting24-nv007-opticke-zvetseni (negatívny).
+- Test názvy: „soxland Veľkosť PONOŽKY (tenke/celoročné)", „hunting24 Optické zvětšení negatívny",
+  „presná zhoda Velikost naďalej funguje", „negatívny zoznam Veľkosť balenia".
+- Worktree worker (branch worktree-agent-abecfd51f4c32bcc9) — PR/merge/deploy/overenie rieši supervisor.

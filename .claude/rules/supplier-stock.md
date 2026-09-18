@@ -375,6 +375,25 @@ paths:
   Efektívna linka je čistá JS funkcia (regex + coalesce), preto „načítaj do JS"
   vzor (rovnako ako `computeCatalogCoverage`/`determineReviewPopulationKeys`),
   nie SQL JOIN, ktorý by zaviedol druhú rozíditeľnú definíciu.
+- **Efektívny odkaz na dodávateľa má JEDNU definíciu na každej strane, obe v
+  `modules/orders/effective-supplier-link.ts` (issue 565):** JS
+  `resolveEffectiveSupplierLink` (čítacie cesty: orders, mail, nedostupne,
+  pairing-review, product-links, coverage, `collectSupplierLinks`) a SQL
+  `effectiveSupplierLinkSql` (množinové dopyty, kde sa odkaz musí počítať priamo
+  v SQL). Poradie oboch je ZHODNÉ: split `pairing_variant_link.url`
+  (`pairing_decision.status='split'`) → `product_supplier_link_override.url`
+  (DOSLOVNE, bez orezania — je to čistá URL, nie voľný text) → prvá URL z
+  `product.internal_note` (orezaná ako v `supplier-link.ts`). **Jediný SQL
+  konzument dnes je `restock/queries.ts`** (`allRestockCandidates` — kandidát aj
+  overovací zoznam bežia cez ten istý `link = effectiveSupplierLinkSql` v ON
+  klauzule `supplier_stock` innerJoinu; tabuľky `product_supplier_link_override`
+  / `pairing_variant_link` / `pairing_decision` sú preto v JOIN zozname PRED tým
+  innerJoinom). Pred issue 565 mal `restock/queries.ts` VLASTNÚ SQL kópiu
+  coalesce BEZ override — napísanú pred issue 448 — takže produkt s override
+  odkazom (Vyhľadať → detail, issue 239/240) sa scrapoval, ale reštok ho pri
+  prepínaní Vypredané → Skladom nikdy nenašiel. Nový množinový konzument
+  efektívneho odkazu importuje `effectiveSupplierLinkSql`, nikdy si nepíše ďalšiu
+  kópiu coalesce.
 - **Ten istý Shoptet FRONTEND ŠABLÓNOVÝ prvok (`<span class="availability-
   label" ... data-testid="labelAvailability">`) sa opakuje NAPRIEČ VIACERÝMI
   nezávislými doménami (issue 227: `virginiashop.sk`, `tenolix.cz`,
@@ -737,13 +756,15 @@ paths:
   JSON-LD) — chýbajúci postid/prvok/token → `unknown` (fail-closed, nikdy dôvera
   samotnému JSON-LD). `vo.pyra.eu` pokryté sufix matchom hosta „pyra.eu".
 - **Shoptet VIACVARIANTOVÁ stránka (issue 558, `shoptet-multivariant.ts`) —
-  generické per-veľkosť pravidlo, zatiaľ LEN `luko.cz`.** Jednovariantová Shoptet
-  stránka má súhrnný `data-testid="labelAvailability"` (TEXT rule
-  `shoptetLabelAvailability`); VIACVARIANTOVÁ ho VÔBEC nemá — dostupnosť KAŽDEJ
-  kombinácie je v skrytom `<span class="parameter-dependent no-display <kľúč>">`.
+  generické per-veľkosť pravidlo, hosty `luko.cz` + `soxland.sk` (issue 566).**
+  Jednovariantová Shoptet stránka má súhrnný `data-testid="labelAvailability"`
+  (TEXT rule `shoptetLabelAvailability`); VIACVARIANTOVÁ ho VÔBEC nemá —
+  dostupnosť KAŽDEJ kombinácie je v skrytom
+  `<span class="parameter-dependent no-display <kľúč>">`.
   `<kľúč>` = postupnosť párov `<paramId>-<valueId>` zľava (napr. `22-181-4-3-5-8`
   = délka(22)=181, barva(4)=3, velikost(5)=8) — VEĽKOSTNÝ pár je ten s
-  `data-parameter-id` veľkostného `<select data-parameter-name="Velikost|Veľkosť">`.
+  `data-parameter-id` veľkostného `<select data-parameter-name>`, ktorého názov
+  OBSAHUJE veľkostný výraz (issue 566, viď nižšie).
   Dedup podľa veľkosti (rôzne farby/dĺžky rovnakej veľkosti → zhoda = jedna,
   rozpor = zahodí, fail-closed). Jednovariant ostáva na TEXT rule; keď má host
   SIZE pravidlo a MÁME jeho veľkosti, starý plošný `''` riadok už NIE JE čerstvý
@@ -770,3 +791,28 @@ paths:
   TEXT-only (jednovariant), viacvariant `unknown`. `shoptet-multivariant.ts` je
   generické — zubicek (alebo ďalšia Shoptet doména) sa pridá zápisom hosta v
   `parse.ts` hneď, ako sa nájde živý vypredaný variant na overenie polarity.
+- **`findSizeParam` (`shoptet-multivariant.ts`) berie veľkostný `<select>` podľa
+  OBSAHU názvu, nie presnej zhody (issue 566).** soxland.sk pomenúva parameter
+  „Veľkosť PONOŽKY" (normalizované `velkostponozky`) — presná zhoda
+  „Velikost"/„Veľkosť" (pôvodné #558) ju nenašla → všetkých ~53 riadkov soxland
+  ostávalo `unknown`. Teraz `isSizeParamName(normalized)` = obsahuje niektorý zo
+  `SIZE_NAME_TERMS` (`velikost`|`velkost`|`size` — „veľkosť" po odstránení
+  diakritiky = `velkost`) A neobsahuje žiadny z `NON_SIZE_NAME_TERMS`
+  (`balenia`/`balenie`/`baleni` = veľkosť multipacku, nie kusu). „Optické
+  zvětšení" (hunting24.cz, normalizované `optickezvetseni`) veľkostný výraz
+  VÔBEC neobsahuje → neberie sa už samotnou obsahovou zhodou (negatívny fixture
+  `hunting24-nv007-opticke-zvetseni.html`, ktorý MÁ vlastné `parameter-dependent`
+  spany — dôkaz, že sa cudzí parameter nevezme ani keď stránka varianty má).
+  `soxland.sk` je zapnutý v `SIZE_AVAILABILITY_RULES` — polarita overená naživo
+  2026-09-18: `dr-hunter-funkcne-celorocne-termo-ponozky-odlahcene-zelene`
+  má 37-38/39-41 „Momentálne nedostupné" (unavailable) a 42-44/45-47/48-49
+  „Skladom" (available); `dr-hunter-tenke-letne-ponozky-zelene` má všetkých 5
+  „Skladom". Ďalšia Shoptet doména s inak pomenovaným veľkostným parametrom
+  prejde bez zásahu (shared-benefit) — pridá sa len zápisom hosta po overení
+  polarity (disciplína issue 230).
+- **POZOR: soxland.sk (a novšia Shoptet šablóna) dáva do hodnoty atribútu
+  `class` NEWLINE — `class="parameter-dependent\n no-display 5-355"`.** Kód to
+  zvláda (`[^"]*` v regexe matchuje aj newline, `split(/\s+/)` rozbije kľúč), ALE
+  line-based `grep 'parameter-dependent no-display'` na surovom HTML nájde 0 —
+  pri manuálnom skenovaní/diagnostike stránky najprv `tr '\n\t' '  '` (splošti),
+  inak to vyzerá, akoby stránka varianty nemala. Živo overené issue 566.
