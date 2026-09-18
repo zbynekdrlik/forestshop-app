@@ -55,10 +55,18 @@ export const USER_AGENT =
 // a neoverí vlastný výrez, ostávajú bez textovej úrovne).
 //
 // `trigona.sk` dostala vlastný výrez v issue 230 (farebný `StockCountText`
-// štítok pri produkte). `wetland.sk` zostáva bez pravidla ZÁMERNE — naživo
-// overených 67+ produktových stránok malo VŽDY rovnaký ("success") štítok,
-// takže sa nepodarilo nájsť overený "vypredaný" príklad a pridanie pravidla
-// by bol nepodložený dohad (viď issue 230 komentáre).
+// štítok pri produkte).
+//
+// `wetland.sk` (PrestaShop 1.7/8) dostala overené pravidlo v issue 549 —
+// `VISIBLE_AVAILABILITY_RULES` (`availability-domain-rules.ts`,
+// `wetlandVisibleAvailability`). Pri issue 230 zostala bez pravidla, lebo pole
+// `availability` v `data-product` JSON aj CSS odznak `.success` sú KONŠTANTNE
+// "available"/skladom (`allow_oosp:1`), takže sa 67+ stránok javilo rovnako a
+// vypredaný protipól sa nenašiel. Živý rozbor 18. 9. 2026 našiel dva
+// rozhodujúce nezávislé signály: `data-product.quantity` (skladom 8 /
+// vypredané 0) + JSON-LD `offers.availability` token (InStock vs BackOrder) —
+// pravidlo číta quantity a krížovo ho overuje proti JSON-LD (rozpor →
+// `unknown`), NIKDY konštantné `availability`/`.success`.
 
 // issue 227: 21 odkazov v `internalNote` omylom mieri na NÁŠ VLASTNÝ e-shop
 // (`extractSupplierLink`'s regex vytiahne akúkoľvek URL z voľného textu,
