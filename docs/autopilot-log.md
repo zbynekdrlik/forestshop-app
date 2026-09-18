@@ -4623,3 +4623,16 @@ PR/merge/deploy rieši supervisor). IconButton/ActionBar + zvyšné sekcie → P
 - Test názvy: „soxland Veľkosť PONOŽKY (tenke/celoročné)", „hunting24 Optické zvětšení negatívny",
   „presná zhoda Velikost naďalej funguje", „negatívny zoznam Veľkosť balenia".
 - Worktree worker (branch worktree-agent-abecfd51f4c32bcc9) — PR/merge/deploy/overenie rieši supervisor.
+
+## issue 558 (zvyšok) — luko.cz párové štítky + blanket over-match (2026-09-19)
+- (A) `foldMultiTokenSizeAvailability` (parse.ts vedľa matchSizeLabel): párový náš
+  štítok (39-40/47-48/51-52) sa zloží z jednotlivých čísel dodávateľa; fail-closed
+  (chýba/zmiešané → unknown). RED ed93702 → GREEN 2fd2c38.
+- (B) `buildSizeStockRows` (run.ts, čistá funkcia): host so SIZE pravidlom + null zoznam
+  (jediná možnosť) + >1 veľkosť → per-veľkosť unknown namiesto plošného riadku (rovnaký
+  over-match guard ako issue 551 pre wetland). RED 19e8b1c → GREEN 128a657.
+- Live fixtúry (browser UA, HTTP 200 2026-09-19): luko-viacvelkostna-122212 (A, predáva
+  38..54 jednotlivo), luko-skladem-halenka-162214 (B, jediná možnosť „Velikost 50").
+- Test: parse-issue558-zvysok.test.ts. matchSizeLabel signatúra NEZMENENÁ (lasting/
+  chiruca/wetland/grube cesty netknuté).
+- Worktree worker (branch worktree-agent-af6dfad8f6a7ef18d) — PR/merge/deploy rieši supervisor.
