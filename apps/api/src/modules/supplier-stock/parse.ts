@@ -25,6 +25,7 @@
 // neprepne produkt (issue 213).
 
 import {
+  grubeOffers,
   hasKnownAvailabilityRule,
   readWetlandCombination,
   textAvailabilityRuleFor,
@@ -331,9 +332,30 @@ function wetlandSizeList(html: string): readonly SizeAvailability[] {
   return combo.attributeNames.map((name) => ({ sizeLabel: name, availability }));
 }
 
+/**
+ * grube.de/grube.sk (issue 557): per-veľkosť dostupnosť z JSON-LD ponúk
+ * (`grubeOffers`, `availability-domain-rules.ts`). Berie LEN ponuky s „Größe"
+ * tokenom a dedupuje ich podľa veľkosti cez `mergeSizeAvailability` — tá istá
+ * veľkosť vo viacerých FARBÁCH so zhodnou dostupnosťou = jedna položka, s
+ * ROZPORNOU (jedna farba skladom, druhá vypredaná) = ZAHODÍ (fail-closed; náš
+ * variant nenesie farbu, takže sa nemá ako rozhodnúť → `unknown`). Produkt bez
+ * „Größe" ponúk (jeden Offer, jednoveľkostný) → prázdno → `parseSizeAvailability`
+ * `null` → `run.ts` blanket cez `grubeVisibleAvailability`.
+ */
+function grubeSizeList(html: string): readonly SizeAvailability[] {
+  const sized = grubeOffers(html).flatMap((offer): SizeAvailability[] =>
+    offer.sizeLabel === null ? [] : [{ sizeLabel: offer.sizeLabel, availability: offer.availability }],
+  );
+  return mergeSizeAvailability(sized);
+}
+
 const SIZE_AVAILABILITY_RULES: readonly SizeAvailabilityRule[] = Object.freeze([
   { host: "shop.lasting.eu", read: lastingSizeList },
   { host: "chiruca.sk", read: chirucaSizeList },
+  // issue 557: grube per-veľkosť z JSON-LD (všetky veľkosti v jednom GET →
+  // žiadny enumerátor). grube.de aj grube.sk je ten istý e-shop.
+  { host: "grube.de", read: grubeSizeList },
+  { host: "grube.sk", read: grubeSizeList },
   {
     host: "wetland.sk",
     read: wetlandSizeList,
