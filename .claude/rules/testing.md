@@ -25,6 +25,18 @@ paths:
   guardu" over TÚTO triedu pred hľadaním chyby v teste; sesterský tvar
   (refetch po akcii) je #535.
 
+- **Worktree-izolovaný worker nemá vlastné `node_modules` ani migrovanú DB —
+  pred lokálnym integračným behom `pnpm install --frozen-lockfile` (rýchle,
+  hardlinky zo zdieľaného pnpm store) A `DATABASE_URL=postgres://forestshop:
+  forestshop@127.0.0.1:5433/forestshop pnpm --filter @forestshop/api exec
+  drizzle-kit migrate`.** Zistené issue 551 dodatok: dev/test DB na 5433 bola
+  pozadu (chýbala `slavosport_payment_note`), takže `withCleanDb()`'s TRUNCATE
+  padol v `beforeEach` na `relation "…" does not exist` + `close is not a
+  function` — vyzeralo ako zlyhanie testu, no bola to len nezmigrovaná DB (nie
+  môj assert). Aplikuj migrácie (dopredné/aditívne, bezpečné na LOKÁLNEJ 5433,
+  NIKDY 5432 = prod bez host-portu) PRED behom. Jeden cielený súbor spustíš cez
+  `pnpm --filter @forestshop/api exec vitest run tests/<súbor>.integration.test.ts`
+  (nie `pnpm test`/`-r test`).
 - **`test:integration` a `e2e` sa lokálne na dev1 default NESPÚŠŤAJÚ (issue
   351)** — bežia bezpodmienečne v `ci.yml` (`.claude/rules/ci.md`), lokálne
   ostáva len `pnpm gates:local` (typecheck+lint+unit testy). Spusti tú

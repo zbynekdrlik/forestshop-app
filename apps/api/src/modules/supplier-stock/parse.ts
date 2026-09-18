@@ -319,6 +319,16 @@ function sizeAvailabilityRuleFor(url: string): SizeAvailabilityRule | null {
 }
 
 /**
+ * `true`, keď HOST (nie URL) má pravidlo na čítanie zoznamu veľkostí
+ * (`SIZE_AVAILABILITY_RULES`) — issue 551 (dodatok): `run.ts`'s `isLinkFresh`
+ * ho potrebuje, aby plošný riadok (`size_label=''`) na takej doméne nikdy
+ * nebral ako čerstvý (mohla ho zapísať len staršia verzia pravidla).
+ */
+export function hasSizeAvailabilityRule(host: string): boolean {
+  return SIZE_AVAILABILITY_RULES.some((rule) => host === rule.host || host.endsWith(`.${rule.host}`));
+}
+
+/**
  * Zoznam veľkostí a ich dostupnosti PRIAMO zo stránky (issue 224), alebo
  * `null`, keď doména nemá overené pravidlo ALEBO stránka žiadny takýto
  * zoznam neobsahuje (napr. jednoveľkostný produkt). `null` je zámerne INÝ
