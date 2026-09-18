@@ -89,3 +89,41 @@ describe("buildSizeStockRows — issue 558 (A): live fixtúra model-122212", () 
     expect(rows.some((r) => r.sizeLabel === "")).toBe(false);
   });
 });
+
+const HALENKA_162214 = fixture("luko-skladem-halenka-162214.html");
+const URL_162214 = "https://www.luko.cz/halenky-s-dlouhym-rukavem/damska-halenka-s-dlouhym-rukavem-model-162214/";
+// Halenka má 9 veľkostí (34–50), stránka len JEDNU možnosť „Velikost".
+const OUR_162214 = ["34", "36", "38", "40", "42", "44", "46", "48", "50"] as const;
+
+describe("buildSizeStockRows — issue 558 (B): jediná možnosť → per-veľkosť unknown, nie plošný", () => {
+  it("model-162214: jedna možnosť Velikost → parseSizeAvailability null, parsePage available/text", () => {
+    expect(parseSizeAvailability(HALENKA_162214, URL_162214)).toBeNull();
+    const page = parsePage(HALENKA_162214, URL_162214);
+    expect(page.availability).toBe("available");
+    expect(page.source).toBe("text");
+  });
+
+  it("host so SIZE pravidlom + null zoznam + >1 veľkosť → per-veľkosť unknown, ŽIADNY plošný riadok", () => {
+    const page = parsePage(HALENKA_162214, URL_162214);
+    const rows = buildSizeStockRows({ ourSizes: [...OUR_162214], sizeList: null, hostHasSizeRule: true, page });
+    expect(rows.length).toBe(OUR_162214.length);
+    expect(rows.every((r) => r.availability === "unknown")).toBe(true);
+    expect(rows.every((r) => r.source === "none")).toBe(true);
+    expect(rows.some((r) => r.sizeLabel === "")).toBe(false);
+  });
+
+  it("host BEZ SIZE pravidla + null zoznam → plošný riadok (nezmenené, Ballistol)", () => {
+    const page = parsePage(HALENKA_162214, URL_162214);
+    const rows = buildSizeStockRows({ ourSizes: [...OUR_162214], sizeList: null, hostHasSizeRule: false, page });
+    expect(rows).toEqual([
+      { sizeLabel: "", availability: page.availability, availabilityText: page.availabilityText, price: page.price, source: page.source },
+    ]);
+  });
+
+  it("host so SIZE pravidlom ale len 1 naša veľkosť → plošný riadok (dizajn: len pri >1)", () => {
+    const page = parsePage(HALENKA_162214, URL_162214);
+    const rows = buildSizeStockRows({ ourSizes: ["50"], sizeList: null, hostHasSizeRule: true, page });
+    expect(rows.length).toBe(1);
+    expect(rows[0]?.sizeLabel).toBe("");
+  });
+});

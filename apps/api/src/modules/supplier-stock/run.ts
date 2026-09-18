@@ -243,8 +243,8 @@ export function buildSizeStockRows(args: {
   readonly hostHasSizeRule: boolean;
   readonly page: ParsedPage;
 }): readonly StockRowInput[] {
-  const { ourSizes, sizeList, hostHasSizeRule, page } = args;
-  const perSize = sizeList !== null ? ourSizes.length > 0 : hostHasSizeRule && ourSizes.length > 1;
+  const { ourSizes, sizeList, page } = args; // issue 558 B: hostHasSizeRule doplní GREEN commit
+  const perSize = sizeList !== null && ourSizes.length > 0;
   if (!perSize) {
     return [
       {
