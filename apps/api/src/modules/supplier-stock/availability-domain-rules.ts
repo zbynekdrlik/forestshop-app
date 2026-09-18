@@ -743,6 +743,35 @@ export function grubeVisibleAvailability(html: string): VisibleAvailabilityHit {
   return { availability: "unknown", text: "" };
 }
 
+const PYRA_POSTID_RE = /<body\b[^>]*\bclass="[^"]*\bpostid-(\d+)\b[^"]*"/i;
+
+/**
+ * pyra.eu (+ vo.pyra.eu) — WooCommerce / XStore (issue 559). Hlavný produkt sa
+ * identifikuje cez `postid-<id>` v `<body class>`; jeho dostupnosť je TOKEN v
+ * triede elementu s `post-<id>` (`instock` / `outofstock` / `onbackorder`).
+ * NIKDY sa nečíta `p.stock` „Na sklade" (na vypredanej stránke 10× zo súvisiacich
+ * produktov) ani cudzie `post-<iné id>` triedy — ukotvenie na `postId` z body je
+ * to, čo odlíši hlavný produkt od súvisiacich. Krížovú kontrolu proti JSON-LD robí
+ * `parsePage` (VISIBLE mechanika, rozpor → `unknown`).
+ *
+ * NIKDY nevracia `null` (rovnaká obrana ako `wetlandVisibleAvailability`/
+ * `grubeVisibleAvailability`): pyra JE overená doména (`knownDomain`) a MÁ JSON-LD,
+ * takže `null` by nechal `parsePage` uveriť samotnému (možno klamúcemu) JSON-LD —
+ * chýbajúci postid / prvok / nerozpoznaný token vracia `unknown`.
+ */
+function pyraVisibleAvailability(html: string): VisibleAvailabilityHit {
+  const postId = PYRA_POSTID_RE.exec(html)?.[1];
+  if (postId === undefined) return { availability: "unknown", text: "" };
+  // `postId` je čisto číselný (`\d+`), takže jeho vloženie do RegExp je bezpečné.
+  const classMatch = new RegExp(`class="([^"]*\\bpost-${postId}\\b[^"]*)"`, "i").exec(html);
+  if (classMatch === null) return { availability: "unknown", text: "" };
+  const tokens = (classMatch[1] ?? "").split(/\s+/);
+  if (tokens.includes("instock")) return { availability: "available", text: "instock" };
+  if (tokens.includes("outofstock")) return { availability: "unavailable", text: "outofstock" };
+  if (tokens.includes("onbackorder")) return { availability: "unavailable", text: "onbackorder" };
+  return { availability: "unknown", text: "" };
+}
+
 const VISIBLE_AVAILABILITY_RULES: readonly VisibleAvailabilityRule[] = Object.freeze([
   { host: "odimon.sk", read: odimonVisibleAvailability },
   { host: "lesona.sk", read: lesonaVisibleAvailability },
@@ -760,6 +789,8 @@ const VISIBLE_AVAILABILITY_RULES: readonly VisibleAvailabilityRule[] = Object.fr
   // nôž) dostane `available` z JSON-LD, nie fail-closed `unknown` (issue 330).
   { host: "grube.de", read: grubeVisibleAvailability },
   { host: "grube.sk", read: grubeVisibleAvailability },
+  // issue 559: pyra.eu (aj vo.pyra.eu cez sufix match). WooCommerce class token.
+  { host: "pyra.eu", read: pyraVisibleAvailability },
 ]);
 
 export function visibleAvailabilityFor(url: string, html: string): VisibleAvailabilityHit | null {
