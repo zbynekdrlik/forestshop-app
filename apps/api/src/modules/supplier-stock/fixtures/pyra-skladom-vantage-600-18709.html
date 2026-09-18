@@ -1,0 +1,55 @@
+<!--
+  pyra.eu (WooCommerce / XStore) — SKLADOM, issue 559. Naživo 2026-09-18:
+  Hawke Vantage 600 laser range finder. Hlavný produkt: element s triedou
+  post-<id> (id z body postid-<id>) nesie token instock; JSON-LD InStock.
+  Pasca: p.stock „Na sklade“ patrí BLOKU súvisiacich produktov (naživo 6×) —
+  nikdy sa nečíta. Orezané (reálne triedy hlavného aj súvisiacich prvkov).
+-->
+<!doctype html>
+<html lang="sk">
+  <head>
+    <meta charset="utf-8" />
+    <title>Hawke Vantage 600 Laser Range Finder</title>
+    <script type="application/ld+json">
+{
+  "@context": "https://schema.org/",
+  "@type": "Product",
+  "name": "Hawke Vantage 600 Laser Range Finder",
+  "offers": {
+    "@type": "Offer",
+    "priceCurrency": "EUR",
+    "price": "999",
+    "availability": "https://schema.org/InStock"
+  }
+}
+    </script>
+  </head>
+  <body class="wp-singular product-template-default single single-product postid-18709 wp-theme-xstore theme-xstore woocommerce woocommerce-page">
+    <div class="single-product single-product-page product type-product post-18709 status-publish first instock product_cat-optika has-post-thumbnail taxable purchasable product-type-simple">
+      <h1 class="product_title">Hawke Vantage 600 Laser Range Finder</h1>
+      <p class="stock in-stock step-3">Na sklade</p>
+    </div>
+    <section class="related products">
+      <ul class="products">
+        <li class="product type-product post-1383 status-publish instock product-view-default">
+          <p class="stock in-stock step-3">Na sklade</p>
+        </li>
+        <li class="product type-product post-1371 status-publish instock product-view-default">
+          <p class="stock in-stock step-3">Na sklade</p>
+        </li>
+        <li class="product type-product post-1326 status-publish instock product-view-default">
+          <p class="stock in-stock step-3">Na sklade</p>
+        </li>
+        <li class="product type-product post-1369 status-publish instock product-view-default">
+          <p class="stock in-stock step-3">Na sklade</p>
+        </li>
+        <li class="product type-product post-1521 status-publish instock product-view-default">
+          <p class="stock in-stock step-3">Na sklade</p>
+        </li>
+        <li class="product type-product post-1524 status-publish instock product-view-default">
+          <p class="stock in-stock step-3">Na sklade</p>
+        </li>
+      </ul>
+    </section>
+  </body>
+</html>

@@ -25,6 +25,7 @@
 // neprepne produkt (issue 213).
 
 import {
+  grubeOffers,
   hasKnownAvailabilityRule,
   readWetlandCombination,
   textAvailabilityRuleFor,
@@ -39,6 +40,7 @@ import {
   hostOf,
   type SupplierAvailability,
 } from "./availability-primitives.js";
+import { shoptetMultiVariantSizeList } from "./shoptet-multivariant.js";
 
 export type { CombinationTarget, SupplierAvailability };
 export { availabilityFromText, hostOf };
@@ -331,13 +333,53 @@ function wetlandSizeList(html: string): readonly SizeAvailability[] {
   return combo.attributeNames.map((name) => ({ sizeLabel: name, availability }));
 }
 
+/**
+ * grube.de/grube.sk (issue 557): per-veľkosť dostupnosť z JSON-LD ponúk
+ * (`grubeOffers`, `availability-domain-rules.ts`). Berie LEN ponuky s „Größe"
+ * tokenom a dedupuje ich podľa veľkosti cez `mergeSizeAvailability` — tá istá
+ * veľkosť vo viacerých FARBÁCH so zhodnou dostupnosťou = jedna položka, s
+ * ROZPORNOU (jedna farba skladom, druhá vypredaná) = ZAHODÍ (fail-closed; náš
+ * variant nenesie farbu, takže sa nemá ako rozhodnúť → `unknown`). Produkt bez
+ * „Größe" ponúk (jeden Offer, jednoveľkostný) → prázdno → `parseSizeAvailability`
+ * `null` → `run.ts` blanket cez `grubeVisibleAvailability`.
+ */
+function grubeSizeList(html: string): readonly SizeAvailability[] {
+  const sized = grubeOffers(html).flatMap((offer): SizeAvailability[] =>
+    offer.sizeLabel === null ? [] : [{ sizeLabel: offer.sizeLabel, availability: offer.availability }],
+  );
+  return mergeSizeAvailability(sized);
+}
+
 const SIZE_AVAILABILITY_RULES: readonly SizeAvailabilityRule[] = Object.freeze([
   { host: "shop.lasting.eu", read: lastingSizeList },
   { host: "chiruca.sk", read: chirucaSizeList },
+  // issue 557: grube per-veľkosť z JSON-LD (všetky veľkosti v jednom GET →
+  // žiadny enumerátor). grube.de aj grube.sk je ten istý e-shop.
+  { host: "grube.de", read: grubeSizeList },
+  { host: "grube.sk", read: grubeSizeList },
+  // issue 558: luko.cz Shoptet viacvariantová stránka (generické pravidlo
+  // `shoptet-multivariant.ts`). Jednovariantová luko stránka ostáva na
+  // `shoptetLabelAvailability` (TEXT rule). zubicek.cz zámerne NEregistrované —
+  // žiadny živo overený vypredaný protipól (viď issue 558, disciplína issue 230).
+  { host: "luko.cz", read: shoptetMultiVariantSizeList },
   {
     host: "wetland.sk",
     read: wetlandSizeList,
     // issue 552: enumerácia všetkých veľkostí cez PrestaShop action=refresh.
+    enumerate: {
+      targets: wetlandEnumerateCombinations,
+      unwrap: unwrapWetlandCombinationResponse,
+      suffixMismatch: wetlandSuffixMismatch,
+    },
+  },
+  {
+    // issue 556: tthunt.sk je tá istá PrestaShop 1.7/8 šablóna ako wetland.sk —
+    // ten istý `data-product` JSON (quantity + attributes) aj `<select
+    // name="group[N]">`, a `action=refresh` GET naživo overený 2026-09-18, že
+    // funguje aj tu. Preto znovupoužíva `wetlandSizeList` aj celý wetland
+    // enumerátor (generický `CombinationEnumerator` z issue 552) bez forku.
+    host: "tthunt.sk",
+    read: wetlandSizeList,
     enumerate: {
       targets: wetlandEnumerateCombinations,
       unwrap: unwrapWetlandCombinationResponse,
