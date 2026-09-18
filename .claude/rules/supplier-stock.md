@@ -277,6 +277,24 @@ paths:
   reálna kombinácia nesie len veľkostný atribút — filter je obrana do hĺbky. **Enumerácia VŠETKÝCH kombinácií (aj tých, ktoré uložený
   odkaz neukazuje) cez `associatedVariants` je stále fáza 2 (samostatný
   ticket)** — tento fix rieši len kombináciu z odkazu.
+- **Plošný riadok (`size_label=''`) na doméne s `SIZE_AVAILABILITY_RULES`
+  pravidlom, pre ktorú MÁME naše veľkosti, NIE JE čerstvý — issue 551
+  dodatok.** `run.ts`'s `isLinkFresh` (nie `isFresh`) má navyše podmienku:
+  keď má host pravidlo (`hasSizeAvailabilityRule`, `parse.ts`) A
+  `ourSizesByLink.get(link)` je neprázdne A linka má plošný riadok, linka sa
+  NEBERIE ako čerstvá, aj keby `confirmed_at` bolo mladšie než
+  `MAX_AGE_HOURS`. Dôvod: taký plošný riadok mohla zapísať len STARŠIA
+  verzia pravidla (pred #551), keď wetland.sk ešte nebolo v
+  `SIZE_AVAILABILITY_RULES` — bez tejto podmienky by ho nočný beh preskočil
+  ako čerstvý a `restock/queries.ts`'s blanket-párovanie (`size_label=''` OR
+  vetva) by prepínalo VŠETKY naše veľkosti toho odkazu až do vypršania 20 h
+  (živý PROD bug 18. 9. 2026: 3 zo 4 kandidátov mali cudziu veľkosť aj po
+  nasadení samotného #551 fixu). Nasledujúci beh linku prečíta znovu a
+  `writeSupplierStockRows` plošný riadok nahradí per-veľkosť riadkami.
+  **Samoopravné pre KAŽDÚ budúcu doménu** prechádzajúcu z plošného na
+  per-veľkosť pravidlo (tthunt.sk, pyra.eu) — bez zásahu do DB. Odkazy BEZ
+  našich veľkostí (jednoveľkostné — Ballistol olej) si plošný riadok +
+  normálnu čerstvosť držia nezmenené.
 - **NÁŠ VLASTNÝ e-shop (`forestshop.sk`) sa dokáže omylom dostať do
   `supplier_stock` presne tou istou cestou ako skutočný dodávateľ — issue
   227, 21 odkazov** — `extractSupplierLink` (`catalog/supplier-link.ts`)

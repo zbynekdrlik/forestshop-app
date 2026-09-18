@@ -12,6 +12,7 @@ import { resolveEffectiveSupplierLink } from "../orders/effective-supplier-link.
 import { MAX_AGE_HOURS, OWN_SHOP_HOST, PER_HOST_DELAY_MS, SUPPLIER_STOCK_RUN_LOCK_KEY } from "./constants.js";
 import type { PageFetcher } from "./page-fetcher.js";
 import {
+  hasSizeAvailabilityRule,
   hostOf,
   matchSizeLabel,
   parsePage,
@@ -214,9 +215,17 @@ export async function runSupplierStockLocked(options: RunSupplierStockOptions): 
   // čerstvé potvrdenie, celá linka sa musí skúsiť znova (jeden fetch aj tak
   // vždy prepíše všetky veľkosti tej istej linky).
   const existing = await db
-    .select({ link: supplierStock.link, ok: supplierStock.ok, confirmedAt: supplierStock.confirmedAt })
+    .select({
+      link: supplierStock.link,
+      sizeLabel: supplierStock.sizeLabel,
+      ok: supplierStock.ok,
+      confirmedAt: supplierStock.confirmedAt,
+    })
     .from(supplierStock);
-  const rowsByLink = new Map<string, { readonly ok: boolean; readonly confirmedAt: Date | null }[]>();
+  const rowsByLink = new Map<
+    string,
+    { readonly sizeLabel: string; readonly ok: boolean; readonly confirmedAt: Date | null }[]
+  >();
   for (const row of existing) {
     const rows = rowsByLink.get(row.link) ?? [];
     rows.push(row);
@@ -224,7 +233,21 @@ export async function runSupplierStockLocked(options: RunSupplierStockOptions): 
   }
   const isLinkFresh = (link: string): boolean => {
     const rows = rowsByLink.get(link);
-    return rows !== undefined && rows.length > 0 && rows.every((row) => isFresh(row, now));
+    if (rows === undefined || rows.length === 0) return false;
+    // issue 551 (dodatok): plošný riadok (`size_label=''`) na doméne s
+    // per-veľkosť pravidlom, pre ktorú MÁME naše veľkosti, mohla zapísať len
+    // STARŠIA verzia pravidla — nikdy nie je čerstvý, aby ho nasledujúci beh
+    // prepísal per-veľkosť riadkami (inak by `restock` blanket-párovanie
+    // prepínalo cudzie veľkosti až do vypršania `MAX_AGE_HOURS`). Odkazy bez
+    // našich veľkostí (Ballistol) si plošný riadok + normálnu čerstvosť držia.
+    if (
+      hasSizeAvailabilityRule(hostOf(link)) &&
+      (ourSizesByLink.get(link) ?? []).length > 0 &&
+      rows.some((row) => row.sizeLabel === "")
+    ) {
+      return false;
+    }
+    return rows.every((row) => isFresh(row, now));
   };
 
   const counts = { available: 0, unavailable: 0, unknown: 0, failed: 0 };
