@@ -4561,3 +4561,30 @@ Bundle (jedna PR #165, dev→main), rovnaké súbory (`OrderLineRow.tsx`/`app.cs
 - Layout (2×36px v úzkom col-supplier) — UNVERIFIED, nasadzovateľ overí naživo.
 - Tickety 500/502 ostávajú OTVORENÉ (worktree worker, PR do dev; merge/deploy/
   overenie rieši supervisor).
+
+## 2026-09-18 — bundle #556 #557 #558 #559 (pokrytie dodávateľov ≥ 80 %, podtickety #555)
+
+Worktree worker (branch worktree-agent-acf1043933721428c), bump 0.3.0-dev.328.
+Návrh dizajnu (Prístup 1) authored by main (Design-by: main, issue #556 comment).
+Live rozbor + fixtúry 2026-09-18 (curl `Mozilla/5.0`, PROD DB SELECT-only).
+
+- #556 tthunt.sk (PrestaShop) — VISIBLE (wetlandVisibleAvailability) + SIZE
+  (wetlandSizeList + wetland CombinationEnumerator, action=refresh naživo overený).
+  RED 9da3d72 → GREEN c4774d1. parse-issue556.test.ts (8). Fixtúry: peter classic
+  3058-956 (sized), refresh 27/31, puzdro 1388 (blanket).
+- #557 grube.de/grube.sk — grubeOffers (JSON-LD parser) + grubeSizeList (SIZE) +
+  grubeVisibleAvailability (VISIBLE blanket). RED 8f25ddb → GREEN 937df80.
+  parse-issue557.test.ts (9). Fixtúry: softshelljacke 594088 (AggregateOffer mix),
+  companion 549057 (jeden Offer). Test-fix parse-issue330 (grube už má pravidlo →
+  lovuzdar.cz), rovnaký commit.
+- #559 pyra.eu (+vo.pyra.eu, WooCommerce) — pyraVisibleAvailability (VISIBLE,
+  postid→post-<id> class token). RED 4adaf7d → GREEN c58312f. parse-issue559.test.ts
+  (7). Fixtúry: vantage 18709 (instock), sidewinder 22111 (onbackorder).
+- #558 luko.cz (Shoptet viacvariant) — nový modul shoptet-multivariant.ts
+  (shoptetMultiVariantSizeList, SIZE). RED 58d5e0c → GREEN 3408a1c.
+  parse-issue558.test.ts (9). Fixtúry: 102131 (single param, mix), 242206 (multi
+  param). Živý nález: (N ks) nespoľahlivé (Vyprodáno so „(3 ks)") → label má prednosť.
+  zubicek.cz NEregistrované — 0 vypredaných z 126 produktov (disciplína #230).
+
+153 supplier-stock unit testov zelených, tsc + eslint čisté. Tickety ostávajú
+OTVORENÉ (worktree worker, PR/merge/deploy/overenie rieši supervisor).
