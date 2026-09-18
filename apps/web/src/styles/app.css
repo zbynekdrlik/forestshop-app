@@ -248,6 +248,22 @@ tr:last-child td {
   padding: var(--fs-space-5) 0;
 }
 
+/* issue 548 (PR A): jednotný NEUTRÁLNY (tlmený) načítavací indikátor zdieľanej
+   kostry sekcie (`SectionShell`). Nesie `role="status"` (a11y + e2e kontrakt),
+   ale prepisuje zelené „success" pozadie z `[role="status"]` vyššie —
+   načítavanie nie je úspech. Rovnaká špecifickosť ako `[role="status"]`,
+   deklarované NESKÔR v súbore → víťazí. `font-size` sa VÝSLOVNE vracia na
+   `--fs-text-base` (inak by prevládlo `[role="status"]`'s `--fs-text-sm`),
+   takže veľkosť sedí s pôvodným holým `<p>`; farba je zámerne tlmená
+   (načítavanie je sekundárny stav) — jednotné vo všetkých sekciách. */
+.loading {
+  color: var(--fs-ink-faint);
+  background: none;
+  font-size: var(--fs-text-base);
+  padding: var(--fs-space-2) 0;
+  margin: 0;
+}
+
 /* ---------------- 3. LAYOUT SHELL ---------------- */
 .app-shell {
   display: flex;

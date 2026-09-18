@@ -9,6 +9,8 @@ import {
   type SupplierAvailability,
   type SupplierStockStatus,
 } from "../supplierStockApi.js";
+import { SectionShell } from "./section/SectionShell.js";
+import { StateChip } from "./section/StateChip.js";
 
 // Rovnaké dve role, ktoré server vyžaduje pre "Spustiť teraz"
 // (`requireRole("admin", "manazer")`, `supplier-stock-routes.ts`) — prehľad
@@ -101,13 +103,13 @@ export function SupplierStockSection({
       });
   }, [onSessionExpired]);
 
-  if (!loaded) return <p role="status">Načítavam…</p>;
-  if (status === null) return <p role="alert">{error === "" ? "Nepodarilo sa načítať." : error}</p>;
+  if (!loaded) return <SectionShell testId="supplier-stock-section" loading />;
+  if (status === null) return <SectionShell testId="supplier-stock-section" error={error === "" ? "Nepodarilo sa načítať." : error} />;
 
   const { overview, unreadable, rows, hostOverview, ownShopLinksCount, lastRun } = status;
 
   return (
-    <div data-testid="supplier-stock-section">
+    <SectionShell testId="supplier-stock-section">
       {error !== "" && <p role="alert">{error}</p>}
 
       <p>
@@ -116,24 +118,28 @@ export function SupplierStockSection({
       </p>
 
       <div className="autohead">
-        <span className="chip" data-testid="ss-total">
+        {/* issue 548: počítadlá sú READ-ONLY štatistiky (nie interaktívne
+            filtre) — zdieľaný `StateChip` v neutrálnom `chip chip-neutral`
+            štýle ich vizuálne odlíši od farebných filtrovacích čipov vzoru.
+            Testidy (`ss-*`) ostávajú nezmenené. */}
+        <StateChip base="chip" modifier="chip-neutral" testId="ss-total">
           {/* issue 224: `overview.total` počíta RIADKY (dvojica odkaz+veľkosť),
               nie unikátne odkazy — odkaz s pravidlom na veľkosti prispieva
               viac než jedným záznamom, takže "odkazov" by bolo zavádzajúce. */}
           Sledovaných záznamov: {overview.total}
-        </span>
-        <span className="chip" data-testid="ss-available">
+        </StateChip>
+        <StateChip base="chip" modifier="chip-neutral" testId="ss-available">
           Skladom: {overview.available}
-        </span>
-        <span className="chip" data-testid="ss-unavailable">
+        </StateChip>
+        <StateChip base="chip" modifier="chip-neutral" testId="ss-unavailable">
           Vypredané: {overview.unavailable}
-        </span>
-        <span className="chip" data-testid="ss-unknown">
+        </StateChip>
+        <StateChip base="chip" modifier="chip-neutral" testId="ss-unknown">
           Neviem: {overview.unknown}
-        </span>
-        <span className="chip" data-testid="ss-failed">
+        </StateChip>
+        <StateChip base="chip" modifier="chip-neutral" testId="ss-failed">
           Zlyhalo: {overview.failed}
-        </span>
+        </StateChip>
         {canControl && (
           <button
             type="button"
@@ -172,7 +178,7 @@ export function SupplierStockSection({
           <p className="empty">Zatiaľ žiadne — všetky sledované odkazy sa darí prečítať.</p>
         ) : (
           <div className="fs-table-wrap">
-            <table>
+            <table className="orders-table">
               <thead>
                 <tr>
                   <th scope="col">Dodávateľ</th>
@@ -212,7 +218,7 @@ export function SupplierStockSection({
           <p className="empty">Zatiaľ nič — kontrola ešte nebežala.</p>
         ) : (
           <div className="fs-table-wrap">
-            <table>
+            <table className="orders-table">
               <thead>
                 <tr>
                   <th scope="col">Doména</th>
@@ -246,7 +252,7 @@ export function SupplierStockSection({
           <p className="empty">Zatiaľ nič — kontrola ešte nebežala.</p>
         ) : (
           <div className="fs-table-wrap">
-            <table>
+            <table className="orders-table">
               <thead>
                 <tr>
                   <th scope="col">Dodávateľ</th>
@@ -282,6 +288,6 @@ export function SupplierStockSection({
           </div>
         )}
       </div>
-    </div>
+    </SectionShell>
   );
 }

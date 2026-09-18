@@ -1,6 +1,5 @@
 import { useCallback, useContext, useEffect, useState, type JSX, type SyntheticEvent } from "react";
 import type { Me } from "../api.js";
-import { formatSkDate } from "../formatDate.js";
 import {
   clearOrderClaim,
   fetchClaimOrders,
@@ -9,6 +8,8 @@ import {
   type ClaimOrderRow,
 } from "../orderFlagsApi.js";
 import { OrderFlagsBadgeRefreshContext } from "../orderFlagsBadgeContext.js";
+import { OrderFlagTable } from "./OrderFlagTable.js";
+import { SectionShell } from "./section/SectionShell.js";
 
 // issue 290: "Eshop → Reklamácie" — Shoptet nemá pre reklamácie žiadny
 // použiteľný stav/príznak (overené naživo na produkcii, tiket), appka si
@@ -97,75 +98,58 @@ export function ClaimOrdersSection({ role, onSessionExpired }: { readonly role: 
     [load, onSessionExpired, badgeRefresh],
   );
 
-  if (error !== "") return <p role="alert">{error}</p>;
-  if (rows === null) return <p>Načítavam…</p>;
-
   return (
-    <section>
-      <p>Objednávky ručne označené ako reklamácia — Shoptet pre reklamácie nemá vlastný stav, appka si ich preto vedie sama.</p>
+    <SectionShell loading={rows === null && error === ""} error={error}>
+      {error === "" && rows !== null && (
+        <>
+          <p>Objednávky ručne označené ako reklamácia — Shoptet pre reklamácie nemá vlastný stav, appka si ich preto vedie sama.</p>
 
-      {canControl && (
-        <form className="card" onSubmit={mark}>
-          <label>
-            Číslo objednávky
-            <input
-              type="text"
-              value={orderCode}
-              onChange={(e) => {
-                setOrderCode(e.target.value);
-              }}
-              data-testid="claim-order-code"
-            />
-          </label>
-          <label>
-            Poznámka (nepovinné)
-            <input
-              type="text"
-              value={note}
-              onChange={(e) => {
-                setNote(e.target.value);
-              }}
-              data-testid="claim-note-input"
-            />
-          </label>
-          {markError !== "" && <p role="alert">{markError}</p>}
-          <button type="submit" className="btn" disabled={busy || orderCode.trim() === ""} data-testid="claim-mark-submit">
-            Označiť ako reklamáciu
-          </button>
-        </form>
-      )}
+          {canControl && (
+            <form className="card" onSubmit={mark}>
+              <label>
+                Číslo objednávky
+                <input
+                  type="text"
+                  value={orderCode}
+                  onChange={(e) => {
+                    setOrderCode(e.target.value);
+                  }}
+                  data-testid="claim-order-code"
+                />
+              </label>
+              <label>
+                Poznámka (nepovinné)
+                <input
+                  type="text"
+                  value={note}
+                  onChange={(e) => {
+                    setNote(e.target.value);
+                  }}
+                  data-testid="claim-note-input"
+                />
+              </label>
+              {markError !== "" && <p role="alert">{markError}</p>}
+              <button type="submit" className="btn" disabled={busy || orderCode.trim() === ""} data-testid="claim-mark-submit">
+                Označiť ako reklamáciu
+              </button>
+            </form>
+          )}
 
-      {rows.length === 0 ? (
-        <p data-testid="claims-empty">Momentálne nie je označená žiadna reklamácia.</p>
-      ) : (
-        <div className="fs-table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Objednávka</th>
-                <th>Zákazník</th>
-                <th>Dátum</th>
-                <th>Suma</th>
-                <th>Stav</th>
-                <th>Poznámka</th>
-                {canControl && <th>Akcia</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                <tr key={row.id} data-testid={`claim-row-${row.externalOrderId}`}>
-                  <td>
-                    <a href={row.adminUrl} target="_blank" rel="noreferrer">
-                      č. {row.externalOrderId}
-                    </a>
-                  </td>
-                  <td>{row.customerName}</td>
-                  <td>{formatSkDate(row.placedAt)}</td>
-                  <td>{row.totalPriceWithVat === null ? "—" : `${row.totalPriceWithVat} €`}</td>
-                  <td>{row.statusName}</td>
-                  <td>{row.claimNote === null || row.claimNote === "" ? "—" : row.claimNote}</td>
-                  {canControl && (
-                    <td>
+          {rows.length === 0 ? (
+            <p className="empty" data-testid="claims-empty">Momentálne nie je označená žiadna reklamácia.</p>
+          ) : (
+            // issue 548: zdieľaná `OrderFlagTable` — Reklamácie ukazujú `claimNote`,
+            // NEmajú „nevybavené" odznak a majú akčný stĺpec (zrušiť), len keď
+            // má obsluha oprávnenie. Testid riadku (`claim-row-*`) aj tlačidla
+            // (`claim-clear-*`) ostávajú nezmenené.
+            <OrderFlagTable
+              testIdPrefix="claim-row"
+              rows={rows}
+              note={(row) => row.claimNote}
+              showUnresolved={false}
+              actions={
+                canControl
+                  ? (row) => (
                       <button
                         type="button"
                         className="btn sm ghost"
@@ -177,14 +161,13 @@ export function ClaimOrdersSection({ role, onSessionExpired }: { readonly role: 
                       >
                         Zrušiť reklamáciu
                       </button>
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                    )
+                  : undefined
+              }
+            />
+          )}
+        </>
       )}
-    </section>
+    </SectionShell>
   );
 }

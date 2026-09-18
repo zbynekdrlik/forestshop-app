@@ -2,6 +2,7 @@ import { useEffect, useState, type JSX } from "react";
 import type { Me } from "../api.js";
 import { fetchReturnedOrders, OrderFlagsUnauthorizedError, type OrderFlagRow } from "../orderFlagsApi.js";
 import { OrderFlagTable } from "./OrderFlagTable.js";
+import { SectionShell } from "./section/SectionShell.js";
 
 // issue 290 → 516: "Eshop → Vrátený tovar" — READ-ONLY zoznam AKTÍVnych
 // vrátení (stav "Vratený tovar", `modules/orders/order-flags.ts`). Issue 516
@@ -26,17 +27,18 @@ export function ReturnedOrdersSection({ onSessionExpired }: { readonly role: Me[
       });
   }, [onSessionExpired]);
 
-  if (error !== "") return <p role="alert">{error}</p>;
-  if (rows === null) return <p>Načítavam…</p>;
-
   return (
-    <section>
-      <p>Objednávky, ktoré Shoptet eviduje v stave „Vratený tovar“ — aktívne vrátenia, ktoré treba vybaviť. Vybavené dobropisy („Vybavený Dobropis“) sa tu už nezobrazujú. Farebný štítok „nevybavené“ znamená, že na nástenke Upozornenia je k tejto objednávke ešte otvorená karta.</p>
-      {rows.length === 0 ? (
-        <p data-testid="returned-empty">Momentálne žiadny tovar nie je vrátený.</p>
-      ) : (
-        <OrderFlagTable testIdPrefix="returned-row" rows={rows} />
+    <SectionShell loading={rows === null && error === ""} error={error}>
+      {error === "" && rows !== null && (
+        <>
+          <p>Objednávky, ktoré Shoptet eviduje v stave „Vratený tovar“ — aktívne vrátenia, ktoré treba vybaviť. Vybavené dobropisy („Vybavený Dobropis“) sa tu už nezobrazujú. Farebný štítok „nevybavené“ znamená, že na nástenke Upozornenia je k tejto objednávke ešte otvorená karta.</p>
+          {rows.length === 0 ? (
+            <p className="empty" data-testid="returned-empty">Momentálne žiadny tovar nie je vrátený.</p>
+          ) : (
+            <OrderFlagTable testIdPrefix="returned-row" rows={rows} />
+          )}
+        </>
       )}
-    </section>
+    </SectionShell>
   );
 }
