@@ -63,3 +63,47 @@ test("všetky sekcie PR A zdieľajú kostru section.orders-section, konzola je �
 
   expect(chyby).toEqual([]);
 });
+
+// issue 548 (PR B): rovnaké zjednotenie kostry pre tri ďalšie sekcie —
+// „Nedostupné tovary" (priečinok „Eshop", rozbalený), „Upozornenia"
+// (priečinok „Dôležité", rozbalený) a „Vypredané → Skladom" (priečinok
+// „Automatizácie", štartuje ZBALENÝ — najprv rozbaliť). Pre každú overí, že
+// koreň je zdieľaný `section.orders-section` (SectionShell), že titul kreslí
+// Topbar (žiadny vlastný `<h1>/<h2>` v `<main>`) a že konzola je počas celého
+// prechodu čistá. Dáta jednotlivých sekcií pokrývajú ich vlastné spec súbory
+// (`nedostupne`/`upozornenia`/`restock-*`) — tu overujeme len JEDNOTNÚ kostru.
+const SEKCIE_PR_B = [
+  { nazov: "Nedostupné tovary", priecinok: null },
+  { nazov: "Upozornenia", priecinok: null },
+  { nazov: "Vypredané → Skladom", priecinok: "Automatizácie" },
+] as const;
+
+test("sekcie PR B zdieľajú kostru section.orders-section, žiadny vlastný h1/h2 v main, konzola čistá", async ({ page }) => {
+  const chyby: string[] = [];
+  page.on("console", (m) => {
+    if (m.type() === "error" || m.type() === "warning") chyby.push(m.text());
+  });
+  page.on("pageerror", (e) => {
+    chyby.push(e.message);
+  });
+
+  await page.goto("/");
+  await page.getByLabel("E-mail").fill(E2E_SHELL_EMAIL);
+  await page.getByLabel("Heslo").fill(E2E_HESLO);
+  await page.getByRole("button", { name: "Prihlásiť sa" }).click();
+  await expect(page.getByRole("heading", { name: "Na objednanie" })).toBeVisible();
+
+  for (const { nazov, priecinok } of SEKCIE_PR_B) {
+    if (priecinok !== null) await page.getByRole("button", { name: priecinok }).click();
+    await page.getByRole("button", { name: nazov }).click();
+    // Titul kreslí Topbar (`<header class="topbar"><h1>`), nie sekcia.
+    await expect(page.getByRole("heading", { name: nazov })).toBeVisible();
+    // Zdieľaná kostra: koreň sekcie je `section.orders-section` (SectionShell).
+    await expect(page.locator("section.orders-section")).toBeVisible();
+    // Sekcia si nekreslí vlastný nadpis — `<main>` neobsahuje žiadny h1/h2
+    // (h3 v kartách je povolený, `.claude/rules/frontend-design.md`).
+    await expect(page.locator("main h1, main h2")).toHaveCount(0);
+  }
+
+  expect(chyby).toEqual([]);
+});
