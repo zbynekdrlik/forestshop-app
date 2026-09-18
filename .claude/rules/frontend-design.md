@@ -1638,6 +1638,18 @@ paths:
     (`<span>`). PR A ho používa pre `OrderFlagTable` „nevybavené" pill a
     read-only počítadlá Dodávateľského skladu (`chip chip-neutral` = neutrálne
     štatistiky, vizuálne odlíšené od farebných filtrovacích čipov vzoru).
+    **PR B (#548) pridalo adoptérov Nedostupné/Upozornenia/Vypredané→Skladom**;
+    Restock `.chip` počítadlá (`restock-waiting`/`-range`) → `chip chip-neutral`
+    (POZOR: holé `.chip` je od #263 VÝRAZNE zelené „todo", takže prechod na
+    `chip-neutral` je ZÁMERNÁ vizuálna zmena — neutrálna read-only štatistika,
+    presne ako SupplierStock v PR A, nie regresia), stavový/reason odznak →
+    `StateChip base="pill"`. **`modifier` je `?: string` pod
+    `exactOptionalPropertyTypes: true` — NIKDY doň neposielaj explicitné
+    `undefined`** (napr. `modifier={enabled ? undefined : "off"}` padne na
+    `tsc` s TS2375, rovnaká trieda ako `OrderFlagTable`'s `actions` prop nižšie).
+    Podmienený modifikátor píš `modifier={enabled ? "" : "off"}` — class-filter
+    v `StateChip` (`c !== "" `) prázdny reťazec zahodí, takže `""` dá to isté
+    ako „žiadny modifikátor" a DOM je identický (`base` sám).
   - **`IconButton` + `ActionBar` ešte NEEXISTUJÚ** — návrh ich plánuje, ale
     ich adoptéri (`.uloha-icon-btn`, `.poznamka-icon-btn`, `.uhrady-note-
     delete`, `.floor-note-icon-btn`) žijú v sekciách PR C (Úlohy/Úhrady/
