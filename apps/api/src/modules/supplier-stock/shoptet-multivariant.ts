@@ -51,17 +51,39 @@ interface SizeParam {
   readonly options: ReadonlyMap<string, string>;
 }
 
-/** Nájde VEĽKOSTNÝ `<select>` (data-parameter-name Velikost/Veľkosť) — jeho
- * `data-parameter-id` a mapu `option value` → text. `null` = žiadny (jednovariantová
- * stránka, alebo produkt bez veľkostného parametra). */
+/** Veľkostné výrazy, ktoré normalizovaný názov parametra musí OBSAHOVAŤ (nie len
+ * presne rovnať sa im) — soxland.sk „Veľkosť PONOŽKY" → `velkostponozky` obsahuje
+ * `velkost` (issue 566). „veľkosť" po odstránení diakritiky = `velkost`; `velikost`
+ * je český tvar, `size` anglický. */
+const SIZE_NAME_TERMS: readonly string[] = Object.freeze(["velikost", "velkost", "size"]);
+
+/** Negatívny zoznam (issue 566): normalizované podreťazce, ktoré veľkostný výraz
+ * síce OBSAHUJÚ, ale variantovou veľkosťou kusu NIE SÚ — napr. „Veľkosť balenia"
+ * (`velkostbalenia` = veľkosť multipacku, nie ponožky) na obchode s viac-kusovými
+ * baleniami. Bez neho by obsahová zhoda taký parameter mylne prijala. „Optické
+ * zvětšení" (hunting24.cz) veľkostný výraz VÔBEC neobsahuje, takže ho odmietne už
+ * samotná obsahová zhoda (náš negatívny fixture test) — tento zoznam je poistka
+ * pre parametre, ktoré veľkostné slovo obsahujú v inom význame. */
+const NON_SIZE_NAME_TERMS: readonly string[] = Object.freeze(["balenia", "balenie", "baleni"]);
+
+/** `true`, keď normalizovaný názov parametra označuje variantovú VEĽKOSŤ —
+ * obsahuje veľkostný výraz a zároveň žiadny výraz z negatívneho zoznamu. */
+function isSizeParamName(normalized: string): boolean {
+  if (NON_SIZE_NAME_TERMS.some((term) => normalized.includes(term))) return false;
+  return SIZE_NAME_TERMS.some((term) => normalized.includes(term));
+}
+
+/** Nájde VEĽKOSTNÝ `<select>` (názov OBSAHUJE veľkostný výraz — issue 566, napr.
+ * „Velikost", „Veľkosť", „Veľkosť PONOŽKY") — jeho `data-parameter-id` a mapu
+ * `option value` → text. `null` = žiadny (jednovariantová stránka, alebo produkt
+ * bez veľkostného parametra, alebo len ne-veľkostný parameter ako „Optické zvětšení"). */
 function findSizeParam(html: string): SizeParam | null {
   for (const selectMatch of html.matchAll(/<select\b([^>]*)>([\s\S]*?)<\/select>/gi)) {
     const attrs = selectMatch[1] ?? "";
     const paramId = /data-parameter-id="(\d+)"/i.exec(attrs)?.[1];
     const paramName = /data-parameter-name="([^"]*)"/i.exec(attrs)?.[1];
     if (paramId === undefined || paramName === undefined) continue;
-    const normalized = normalizeParamName(paramName);
-    if (normalized !== "velikost" && normalized !== "velkost") continue;
+    if (!isSizeParamName(normalizeParamName(paramName))) continue;
     const options = new Map<string, string>();
     for (const optionMatch of (selectMatch[2] ?? "").matchAll(/<option\b[^>]*\bvalue="(\d+)"[^>]*>([\s\S]*?)<\/option>/gi)) {
       const text = stripToText(optionMatch[2] ?? "");
