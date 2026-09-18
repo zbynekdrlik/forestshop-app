@@ -5,6 +5,7 @@ import { EmojiPickerButton } from "./EmojiPickerButton.js";
 import { NextCalendarEventCard } from "./NextCalendarEventCard.js";
 import { UpozornenieCard } from "./UpozornenieCard.js";
 import { UpozorneniaResolvedList } from "./UpozorneniaResolvedList.js";
+import { SectionShell } from "./section/SectionShell.js";
 import {
   cancelPostponeUpozornenie,
   createOwnNote,
@@ -222,7 +223,7 @@ export function UpozorneniaSection({ role, onSessionExpired }: { readonly role: 
 
   if (activeTab === "vybavene") {
     return (
-      <section>
+      <SectionShell>
         {intro}
         {nextEventCard}
         {tabBar}
@@ -234,7 +235,7 @@ export function UpozorneniaSection({ role, onSessionExpired }: { readonly role: 
             refreshBadge();
           }}
         />
-      </section>
+      </SectionShell>
     );
   }
 
@@ -242,27 +243,27 @@ export function UpozorneniaSection({ role, onSessionExpired }: { readonly role: 
   // tomuto zoznamu) sa smú vyhodnotiť.
   if (error !== "" && rows === null) {
     return (
-      <section>
+      <SectionShell>
         {intro}
         {nextEventCard}
         {tabBar}
         <p role="alert">{error}</p>
-      </section>
+      </SectionShell>
     );
   }
   if (rows === null) {
     return (
-      <section>
+      <SectionShell>
         {intro}
         {nextEventCard}
         {tabBar}
-        <p>Načítavam…</p>
-      </section>
+        <p className="loading" role="status">Načítavam…</p>
+      </SectionShell>
     );
   }
 
   return (
-    <section>
+    <SectionShell>
       {intro}
       {nextEventCard}
       {tabBar}
@@ -368,7 +369,7 @@ export function UpozorneniaSection({ role, onSessionExpired }: { readonly role: 
       )}
 
       {rows.length === 0 ? (
-        <p data-testid="upozornenia-empty">{emptyMessage}</p>
+        <p className="empty" data-testid="upozornenia-empty">{emptyMessage}</p>
       ) : (
         <div className="upozornenia-list" data-testid="upozornenia-list">
           {rows.map((row) => (
@@ -402,6 +403,6 @@ export function UpozorneniaSection({ role, onSessionExpired }: { readonly role: 
           ))}
         </div>
       )}
-    </section>
+    </SectionShell>
   );
 }

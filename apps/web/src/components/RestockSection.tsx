@@ -12,6 +12,8 @@ import {
   type RestockWaitingPage,
 } from "../restockApi.js";
 import { feedOnlyProductLink, ourProductLink } from "../shopLinks.js";
+import { SectionShell } from "./section/SectionShell.js";
+import { StateChip } from "./section/StateChip.js";
 
 // Majiteľ si chce vzorku preklikať po stovkách („potváram si zo sto a overím"),
 // takže stránka je 100 riadkov, nie tradičných 20.
@@ -156,13 +158,13 @@ export function RestockSection({
       });
   }, [onSessionExpired]);
 
-  if (!loaded) return <p role="status">Načítavam…</p>;
-  if (status === null) return <p role="alert">{error === "" ? "Nepodarilo sa načítať." : error}</p>;
+  if (!loaded) return <SectionShell testId="restock-section" loading />;
+  if (status === null) return <SectionShell testId="restock-section" error={error === "" ? "Nepodarilo sa načítať." : error} />;
 
   const { enabled, maxPerRun, waiting, feedConflicts, events, lastRun } = status;
 
   return (
-    <div data-testid="restock-section">
+    <SectionShell testId="restock-section">
       {error !== "" && <p role="alert">{error}</p>}
 
       <p>
@@ -173,9 +175,12 @@ export function RestockSection({
       </p>
 
       <div className="autohead">
-        <span className={"pill" + (enabled ? "" : " off")} data-testid="restock-status-pill">
+        {/* issue 548: stavový odznak Beží/Zastavené cez zdieľaný read-only
+            StateChip (`pill`/`pill off`) — identický DOM (rovnaké triedy +
+            testid), nulová vizuálna zmena, zjednotený so vzorom. */}
+        <StateChip base="pill" modifier={enabled ? "" : "off"} testId="restock-status-pill">
           {enabled ? "Beží" : "Zastavené"}
-        </span>
+        </StateChip>
         {canControl && (
           <button type="button" className="btn sm" disabled={toggleBusy} onClick={toggle} data-testid="restock-toggle">
             {enabled ? "⏹ Stop" : "▶️ Štart"}
@@ -192,10 +197,13 @@ export function RestockSection({
             {runBusy ? "Prepínam…" : "⚡ Spustiť teraz"}
           </button>
         )}
-        <span className="chip" data-testid="restock-waiting">
+        {/* issue 548: READ-ONLY počítadlo (nie filter) — neutrálny StateChip
+            `chip chip-neutral`, odlíšený od farebných filtrovacích čipov
+            vzoru, rovnako ako počítadlá Dodávateľského skladu (PR A). */}
+        <StateChip base="chip" modifier="chip-neutral" testId="restock-waiting">
           Pripravených na prepnutie: {waiting.now}
           {waiting.overLimit > 0 && ` (+${String(waiting.overLimit)} nad strop)`}
-        </span>
+        </StateChip>
       </div>
 
       {lastRun !== null && (
@@ -225,7 +233,7 @@ export function RestockSection({
               prepnutie, kým sa rozpor nevysvetlí.
             </p>
             <div className="fs-table-wrap">
-              <table>
+              <table className="orders-table">
                 <thead>
                   <tr>
                     <th scope="col">Kód</th>
@@ -262,7 +270,7 @@ export function RestockSection({
           <p className="empty">Zatiaľ nič — automatizácia ešte nič neprepla.</p>
         ) : (
           <div className="fs-table-wrap">
-            <table>
+            <table className="orders-table">
               <thead>
                 <tr>
                   <th scope="col">Kedy</th>
@@ -354,19 +362,19 @@ export function RestockSection({
             Ďalších {PAGE_SIZE} →
           </button>
           {waitingList !== null && waitingList.total > 0 && (
-            <span className="chip" data-testid="restock-waiting-range">
+            <StateChip base="chip" modifier="chip-neutral" testId="restock-waiting-range">
               {offset + 1}–{Math.min(offset + waitingList.rows.length, waitingList.total)} z {waitingList.total}
-            </span>
+            </StateChip>
           )}
         </div>
 
         {waitingList === null ? (
-          <p role="status">Načítavam zoznam…</p>
+          <p className="loading" role="status">Načítavam zoznam…</p>
         ) : waitingList.rows.length === 0 ? (
           <p className="empty">Nič nečaká — žiadny vypredaný produkt nemá čerstvé potvrdenie od dodávateľa.</p>
         ) : (
           <div className="fs-table-wrap">
-            <table>
+            <table className="orders-table">
               <thead>
                 <tr>
                   <th scope="col">Kód</th>
@@ -382,12 +390,9 @@ export function RestockSection({
                   <tr key={row.variantCode} data-testid={`restock-waiting-${row.variantCode}`}>
                     <td>
                       {row.variantCode}
-                      <span
-                        className="pill"
-                        data-testid={`restock-waiting-reason-${row.variantCode}`}
-                      >
+                      <StateChip base="pill" testId={`restock-waiting-reason-${row.variantCode}`}>
                         {RESTOCK_REASON_LABEL[row.reason]}
-                      </span>
+                      </StateChip>
                     </td>
                     <td>{row.productName}</td>
                     <td>{row.supplier ?? "—"}</td>
@@ -412,6 +417,6 @@ export function RestockSection({
           </div>
         )}
       </div>
-    </div>
+    </SectionShell>
   );
 }
