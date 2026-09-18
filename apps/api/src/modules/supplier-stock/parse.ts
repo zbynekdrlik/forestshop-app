@@ -24,7 +24,12 @@
 // Čokoľvek, čo neprejde ani jednou úrovňou, je `unknown` — a `unknown` nikdy
 // neprepne produkt (issue 213).
 
-import { hasKnownAvailabilityRule, textAvailabilityRuleFor, visibleAvailabilityFor } from "./availability-domain-rules.js";
+import {
+  hasKnownAvailabilityRule,
+  readWetlandCombination,
+  textAvailabilityRuleFor,
+  visibleAvailabilityFor,
+} from "./availability-domain-rules.js";
 import { availabilityFromText, hostOf, type SupplierAvailability } from "./availability-primitives.js";
 
 export type { SupplierAvailability };
@@ -271,9 +276,39 @@ function chirucaSizeList(html: string): readonly SizeAvailability[] {
   return result;
 }
 
+/**
+ * wetland.sk (issue 551): PrestaShop stránka ukazuje VŽDY JEDNU kombináciu —
+ * tú zo prípony odkazu `-<id_product>-<id_product_attribute>`. Jej dostupnosť
+ * (quantity + krížová kontrola JSON-LD z issue 549) a názov(-y) hodnôt sú v
+ * `data-product` (`readWetlandCombination`). Vraciame JEDNU položku na názov
+ * kombinácie (kandidátny zoznam, z ktorého `matchSizeLabel` v `run.ts` vyberie
+ * NAŠU zhodnú veľkosť; ostatné naše veľkosti toho odkazu → `unknown`, presne
+ * ako lasting/chiruca, keď stránka veľkosť neukáže).
+ *
+ * Produkt BEZ `attributes` (jednoveľkostný — pero, opasok, olej) → prázdny
+ * zoznam → `parseSizeAvailability` vráti `null` → `run.ts` padne na blanket
+ * riadok cez `parsePage`/`VISIBLE_AVAILABILITY_RULES` (issue 549 nezmenené).
+ *
+ * Krížová kontrola JSON-LD je TU (nie v `parsePage`, ktorý per-veľkosť vetva
+ * na dostupnosť nevolá): rozpor quantity vs JSON-LD → prázdno → blanket vetva
+ * to vyhodnotí ako `unknown` (fail-closed, nikdy `available` na rozpore —
+ * rovnaká disciplína ako `parsePage` VISIBLE, issue 225/549). Nečitateľné
+ * quantity (`unknown`) → tiež prázdno → blanket → `unknown`.
+ */
+function wetlandSizeList(html: string): readonly SizeAvailability[] {
+  const combo = readWetlandCombination(html);
+  if (combo.attributeNames.length === 0) return [];
+  if (combo.availability === "unknown") return [];
+  const jsonLd = fromJsonLd(html);
+  if (jsonLd !== null && jsonLd.availability !== combo.availability) return [];
+  const availability = combo.availability;
+  return combo.attributeNames.map((name) => ({ sizeLabel: name, availability }));
+}
+
 const SIZE_AVAILABILITY_RULES: readonly SizeAvailabilityRule[] = Object.freeze([
   { host: "shop.lasting.eu", read: lastingSizeList },
   { host: "chiruca.sk", read: chirucaSizeList },
+  { host: "wetland.sk", read: wetlandSizeList },
 ]);
 
 function sizeAvailabilityRuleFor(url: string): SizeAvailabilityRule | null {

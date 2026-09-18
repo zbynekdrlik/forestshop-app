@@ -374,22 +374,60 @@ function unescapeHtmlAttr(value: string): string {
  * Kombináciu (veľkosť) vyberá prípona URL `-<id_product>-<id_product_attribute>`
  * (fáza 1 číta len veľkosť z uloženého odkazu; per-veľkosť enumerácia je fáza 2).
  */
-function wetlandVisibleAvailability(html: string): VisibleAvailabilityHit {
+/**
+ * Prečítaná wetland kombinácia (issue 549 + 551). `availability` je
+ * quantity-based (nikdy konštantné pole `availability`/`.success`), `text` je
+ * `availability_message`, `attributeNames` sú názvy hodnôt ZVOLENEJ kombinácie
+ * z `data-product.attributes` (`attributes[*].name`, napr. "39/40") — prázdne,
+ * keď produkt `attributes` NEMÁ (jednoveľkostný produkt: pero, opasok, olej).
+ */
+export interface WetlandCombination {
+  readonly availability: SupplierAvailability;
+  readonly text: string;
+  readonly attributeNames: readonly string[];
+}
+
+/** Názvy hodnôt kombinácie z `data-product.attributes` (`{ "1": { name } }`).
+ * Nečíselné/nečitateľné položky sa ticho preskočia; prázdne pole = žiadne
+ * `attributes` (jednoveľkostný produkt). Vracia VŠETKY hodnoty kombinácie
+ * (veľkosť aj prípadná farba) — ktorá z nich je NAŠA veľkosť rozhodne až
+ * `matchSizeLabel` (`parse.ts`), rovnaká disciplína ako zoznam veľkostí u
+ * lasting/chiruca (kandidátny zoznam, z ktorého vyberie našu zhodu). */
+function wetlandAttributeNames(raw: unknown): readonly string[] {
+  if (typeof raw !== "object" || raw === null) return [];
+  const names: string[] = [];
+  for (const value of Object.values(raw as Record<string, unknown>)) {
+    if (typeof value !== "object" || value === null) continue;
+    const name = (value as Record<string, unknown>)["name"];
+    if (typeof name === "string" && name.trim() !== "") names.push(name.trim());
+  }
+  return names;
+}
+
+/**
+ * Jadro čítania wetland `data-product` (issue 549) rozšírené o názvy kombinácie
+ * (issue 551). `wetlandVisibleAvailability` (blanket/no-size cesta) aj
+ * `wetlandSizeList` (`parse.ts`, per-veľkosť cesta) ho zdieľajú. Chýbajúci/
+ * nečitateľný blok alebo quantity → `unknown` (fail-closed, nikdy tichý ústup
+ * na možno klamúci JSON-LD — pozri issue 549 obranu do hĺbky).
+ */
+export function readWetlandCombination(html: string): WetlandCombination {
   const tag = WETLAND_PRODUCT_DETAILS_TAG_RE.exec(html);
-  if (tag === null) return { availability: "unknown", text: "" };
+  if (tag === null) return { availability: "unknown", text: "", attributeNames: [] };
   const dataProduct = WETLAND_DATA_PRODUCT_RE.exec(tag[0]);
-  if (dataProduct === null) return { availability: "unknown", text: "" };
+  if (dataProduct === null) return { availability: "unknown", text: "", attributeNames: [] };
   let parsed: unknown;
   try {
     parsed = JSON.parse(unescapeHtmlAttr(dataProduct[1] ?? ""));
   } catch {
     // Product-details blok na stránke JE, len jeho JSON sa nedá prečítať —
     // fail-closed `unknown`, nikdy tichý ústup na (možno klamúci) JSON-LD.
-    return { availability: "unknown", text: "" };
+    return { availability: "unknown", text: "", attributeNames: [] };
   }
   const record = typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : {};
   const rawMessage = record["availability_message"];
   const text = typeof rawMessage === "string" ? rawMessage.trim() : "";
+  const attributeNames = wetlandAttributeNames(record["attributes"]);
   const rawQuantity = record["quantity"];
   const quantity =
     typeof rawQuantity === "number"
@@ -397,8 +435,13 @@ function wetlandVisibleAvailability(html: string): VisibleAvailabilityHit {
       : typeof rawQuantity === "string" && rawQuantity.trim() !== ""
         ? Number(rawQuantity)
         : Number.NaN;
-  if (!Number.isFinite(quantity)) return { availability: "unknown", text };
-  return { availability: quantity >= 1 ? "available" : "unavailable", text };
+  if (!Number.isFinite(quantity)) return { availability: "unknown", text, attributeNames };
+  return { availability: quantity >= 1 ? "available" : "unavailable", text, attributeNames };
+}
+
+function wetlandVisibleAvailability(html: string): VisibleAvailabilityHit {
+  const { availability, text } = readWetlandCombination(html);
+  return { availability, text };
 }
 
 const LESONA_AVAILABILITY_RE = /<span\b[^>]*\bid="product-availability"[^>]*>([\s\S]*?)<\/span>/i;
