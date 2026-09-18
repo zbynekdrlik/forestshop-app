@@ -1,0 +1,117 @@
+<!--
+  grube.de (vlastná platforma Grube) — AggregateOffer, MIX skladom/vypredané, issue 557.
+  Naživo stiahnuté 2026-09-18: Percussion Softshelljacke (594088). Orezané na jednu farbu
+  (grün-orange) — reálne ponuky. Veľkosť = token za „Größe“ v offers[].name;
+  available = availability InStock A inventoryLevel.value >= 1; BackOrder/SoldOut = unavailable.
+  Text „auf Lager“ v body je šablónový šum — nikdy sa nečíta (rozhoduje JSON-LD).
+-->
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <title>Percussion Softshelljacke</title>
+    <script type="application/ld+json">
+{
+  "@context": "https://schema.org/",
+  "@type": "Product",
+  "name": "Percussion Softshelljacke",
+  "offers": {
+    "@type": "AggregateOffer",
+    "priceCurrency": "EUR",
+    "lowPrice": "84.90",
+    "highPrice": "84.90",
+    "offerCount": 7,
+    "offers": [
+      {
+        "@type": "Offer",
+        "sku": "5940884567",
+        "name": "Farbe grün-orange. Größe S.",
+        "priceCurrency": "EUR",
+        "price": "84.90",
+        "availability": "https://schema.org/InStock",
+        "inventoryLevel": {
+          "@type": "QuantitativeValue",
+          "value": 2
+        }
+      },
+      {
+        "@type": "Offer",
+        "sku": "5940884560",
+        "name": "Farbe grün-orange. Größe M.",
+        "priceCurrency": "EUR",
+        "price": "84.90",
+        "availability": "https://schema.org/InStock",
+        "inventoryLevel": {
+          "@type": "QuantitativeValue",
+          "value": 6
+        }
+      },
+      {
+        "@type": "Offer",
+        "sku": "5940884536",
+        "name": "Farbe grün-orange. Größe L.",
+        "priceCurrency": "EUR",
+        "price": "84.90",
+        "availability": "https://schema.org/InStock",
+        "inventoryLevel": {
+          "@type": "QuantitativeValue",
+          "value": 6
+        }
+      },
+      {
+        "@type": "Offer",
+        "sku": "5940884585",
+        "name": "Farbe grün-orange. Größe XL.",
+        "priceCurrency": "EUR",
+        "price": "84.90",
+        "availability": "https://schema.org/InStock",
+        "inventoryLevel": {
+          "@type": "QuantitativeValue",
+          "value": 3
+        }
+      },
+      {
+        "@type": "Offer",
+        "sku": "5940884592",
+        "name": "Farbe grün-orange. Größe XXL.",
+        "priceCurrency": "EUR",
+        "price": "84.90",
+        "availability": "https://schema.org/InStock",
+        "inventoryLevel": {
+          "@type": "QuantitativeValue",
+          "value": 7
+        }
+      },
+      {
+        "@type": "Offer",
+        "sku": "5940884519",
+        "name": "Farbe grün-orange. Größe 3XL.",
+        "priceCurrency": "EUR",
+        "price": "84.90",
+        "availability": "https://schema.org/BackOrder",
+        "inventoryLevel": {
+          "@type": "QuantitativeValue",
+          "value": 0
+        }
+      },
+      {
+        "@type": "Offer",
+        "sku": "5940884532",
+        "name": "Farbe grün-orange. Größe 4XL.",
+        "priceCurrency": "EUR",
+        "price": "84.90",
+        "availability": "https://schema.org/InStock",
+        "inventoryLevel": {
+          "@type": "QuantitativeValue",
+          "value": 2
+        }
+      }
+    ]
+  }
+}
+    </script>
+  </head>
+  <body>
+    <p>Farbe: grün-orange. Auf Lager. Auf Lager. Auf Lager.</p>
+  </body>
+</html>
