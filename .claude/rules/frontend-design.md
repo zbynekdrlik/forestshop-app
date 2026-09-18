@@ -1609,3 +1609,53 @@ paths:
   `flex-wrap`? Ak nie, over reálne nameranú šírku toho flexibilného prvku
   na najužšej cieľovej šírke — 0px (nie len "menej") je ľahko prehliadnuteľné
   v CSS-only review, viditeľné len v reálnom render.
+- **Zdieľané prezentačné primitívy sekcie žijú v `apps/web/src/components/
+  section/` (issue 548, PR A) — KAŽDÁ sekcia má stavať kostru z nich, nie si
+  znova písať vlastný „pomiešaný" markup** (rovnaká „použi zdieľaný
+  mechanizmus, nevynachádzaj" disciplína ako `useLoadMore`/
+  `useStaleResponseGuard`). Tri primitívy:
+  - **`SectionShell`** — koreň `<section className="orders-section">` +
+    štandardné stavové sloty: `loading` (`<p className="loading"
+    role="status">`, NEUTRÁLNY vzhľad cez `.loading` triedu, nie zelený
+    `[role="status"]` box), `error` (`[role="alert"]`), a `children`.
+    Voliteľný `testId` (napr. `supplier-stock-section`) a `loadingText`.
+    `loading` aj `children` sa renderujú SÚČASNE (ako vzor „Na objednanie" —
+    dlaždice sú vidno aj počas načítania); sekcia, ktorá chce načítanie
+    „namiesto obsahu", jednoducho nepošle `children`, kým sa nenačíta
+    (`{error === "" && rows !== null && (<>…</>)}`). Nahrádza skoré-return
+    `if (!loaded) return <p>Načítavam…</p>` vzory, ktoré nemali `.orders-
+    section` kostru.
+  - **`SectionHeader`** — bez titulu (titul kreslí Topbar): `.orders-toolbar`
+    obal → voliteľný `.chip-row` s `filters` + voliteľný riadok súhrnu
+    (`.orders-summary` + pravé `actions`). DOM je BYTE-IDENTICKÝ s pôvodným
+    `OrdersToolbar` markupom, keď sú sloty vyplnené — preto sa vzor dá naň
+    prepísať bez vizuálnej zmeny (yardstick). `summaryTestId` zachová
+    `data-testid="orders-summary"`.
+  - **`StateChip`** — jeden nosič „bublinkových" odznakov/počítadiel:
+    `base` (`chip`|`pill`) + voliteľný `modifier` VEDĽA (`chip-neutral`,
+    `done`, `off`, …). Modifikátor sa zámerne NEMENUJE/nemapuje, aby e2e CSS
+    lokátory (`.chip`, `.pill`) ostali nedotknuté. Read-only odznaky/počítadlá
+    (`<span>`). PR A ho používa pre `OrderFlagTable` „nevybavené" pill a
+    read-only počítadlá Dodávateľského skladu (`chip chip-neutral` = neutrálne
+    štatistiky, vizuálne odlíšené od farebných filtrovacích čipov vzoru).
+  - **`IconButton` + `ActionBar` ešte NEEXISTUJÚ** — návrh ich plánuje, ale
+    ich adoptéri (`.uloha-icon-btn`, `.poznamka-icon-btn`, `.uhrady-note-
+    delete`, `.floor-note-icon-btn`) žijú v sekciách PR C (Úlohy/Úhrady/
+    Predajňa/Poznámky); vytvoria sa AŽ tam, spolu s adoptérmi (žiadny mŕtvy
+    kód v PR A).
+  - **Kontrakty pri adopcii:** žiadna viditeľná sekcia NESMIE získať/stratiť
+    vlastný `<h1>/<h2>` (`nav.ts` — titul kreslí Topbar; `nav.spec.ts` +
+    `mobile-responsive.spec.ts` to overujú); e2e CSS lokátory a `data-testid`
+    sa ZACHOVÁVAJÚ (nové triedy pridaj VEDĽA, nikdy nepremenuj); prázdny stav
+    = `p.empty`, načítavanie = `role=status`. Nový zdieľaný e2e
+    `sections-shell.spec.ts` prejde všetky viditeľné taby PR A a overí
+    `section.orders-section` + čistú konzolu — pri pridaní ĎALŠEJ sekcie do
+    kostry ju doň pridaj.
+  - **`OrderFlagTable` je od PR A zdieľaná aj pre Reklamácie** (predtým len
+    Výmena/Vrátený): voliteľné props `note` (accessor, default `row.comment`),
+    `showUnresolved` (default true), `actions`/`actionsHeader` (akčný stĺpec).
+    `ClaimOrderRow extends OrderFlagRow`, takže Reklamácie ju volajú s
+    `note={(r)=>r.claimNote}`, `showUnresolved={false}` a `actions` (zrušiť).
+    Pri `exactOptionalPropertyTypes: true` musí prop, ktorému sa explicitne
+    posiela `undefined` (`actions={canControl ? fn : undefined}`), mať typ
+    `((row:T)=>ReactNode) | undefined`, nie len `?:`.

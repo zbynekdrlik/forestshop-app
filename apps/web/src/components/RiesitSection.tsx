@@ -147,7 +147,11 @@ export function RiesitSection({
         </p>
       )}
 
-      {!board.loaded && <p>Načítavam…</p>}
+      {!board.loaded && (
+        <p className="loading" role="status">
+          Načítavam…
+        </p>
+      )}
       {board.error !== "" && <p role="alert">{board.error}</p>}
       <OrderWriteFailuresBanner
         failures={board.writeFailures}

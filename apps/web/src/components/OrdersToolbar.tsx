@@ -1,6 +1,7 @@
 import type { JSX } from "react";
 import type { FloorOrderRow, OrderLine, SupplierOpenOrders } from "../ordersApi.js";
 import { formatOrderSummaryText, sortSuppliersForChips, summarizeOrderLines } from "../ordersSummary.js";
+import { SectionHeader } from "./section/SectionHeader.js";
 
 // issue 61 — filtrovacie štítky dodávateľov + súhrn "ostáva vybaviť" +
 // prepínač "skryť vybavené". Čisto prezentačný komponent: `OrdersSection.tsx`
@@ -38,9 +39,17 @@ export function OrdersToolbar({
   const floorRemainingQty = scopedFloorRows.filter((row) => !row.ordered).reduce((sum, row) => sum + row.quantity, 0);
   const summary = { ...baseSummary, total: baseSummary.total + floorTotalQty, remaining: baseSummary.remaining + floorRemainingQty };
 
+  // issue 548: rozloženie hlavičky (čipy + súhrn + akcie) je teraz zdieľaný
+  // `SectionHeader` (vzor pre ostatné sekcie). DOM je byte-identický s
+  // pôvodným markupom — testidy `orders-toolbar`/`orders-summary`/
+  // `supplier-chip-*`/`orders-hide-resolved-toggle` aj triedy ostávajú.
   return (
-    <div className="orders-toolbar" data-testid="orders-toolbar">
-      <div className="chip-row">
+    <SectionHeader
+      testId="orders-toolbar"
+      summaryTestId="orders-summary"
+      summary={formatOrderSummaryText(summary, selectedSupplier)}
+      filters={
+        <>
         {/* issue 263: majiteľ, "'Všetci' chip keeps its neutral/selected
             behaviour — it has no data state of its own" — na rozdiel od
             skutočného dodávateľa (súčet naprieč VŠETKÝMI dodávateľmi zriedka
@@ -84,11 +93,9 @@ export function OrdersToolbar({
             </button>
           );
         })}
-      </div>
-      <div className="orders-toolbar-summary-row">
-        <p className="orders-summary" data-testid="orders-summary">
-          {formatOrderSummaryText(summary, selectedSupplier)}
-        </p>
+        </>
+      }
+      actions={
         <button
           type="button"
           className={"btn sm ghost" + (hideResolved ? " on" : "")}
@@ -102,7 +109,7 @@ export function OrdersToolbar({
         >
           {hideResolved ? "🙈 Vybavené skryté" : "👁 Skryť vybavené"}
         </button>
-      </div>
-    </div>
+      }
+    />
   );
 }
