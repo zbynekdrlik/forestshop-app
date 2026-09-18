@@ -22,7 +22,7 @@
 // disciplína ako `mergeSizeAvailability`/`matchSizeLabel`). Generické — ďalšia Shoptet
 // doména so živo overeným vypredaným protipólom sa pridá len zápisom hosta v `parse.ts`.
 
-import { availabilityFromText, type SupplierAvailability } from "./availability-primitives.js";
+import { availabilityFromText, isSizeParamName, type SupplierAvailability } from "./availability-primitives.js";
 
 /** Jedna veľkosť dodávateľa (rovnaký tvar ako `SizeAvailability` v `parse.ts` —
  * štruktúrne kompatibilný, aby ho `SIZE_AVAILABILITY_RULES.read` prijal bez cyklu). */
@@ -49,30 +49,6 @@ interface SizeParam {
   readonly paramId: string;
   /** `valueId` → text veľkosti (napr. „38"). */
   readonly options: ReadonlyMap<string, string>;
-}
-
-/** Veľkostné výrazy, ktoré normalizovaný názov parametra musí OBSAHOVAŤ (nie len
- * presne rovnať sa im) — soxland.sk „Veľkosť PONOŽKY" → `velkostponozky` obsahuje
- * `velkost` (issue 566). „veľkosť" po odstránení diakritiky = `velkost`; `velikost`
- * je český tvar, `size` anglický. */
-const SIZE_NAME_TERMS: readonly string[] = Object.freeze(["velikost", "velkost", "size"]);
-
-/** Negatívny zoznam (issue 566): normalizované podreťazce, ktoré veľkostný výraz
- * síce OBSAHUJÚ, ale variantovou veľkosťou kusu NIE SÚ — napr. „Veľkosť balenia"
- * (`velkostbalenia` = veľkosť multipacku, nie ponožky) na obchode s viac-kusovými
- * baleniami. Bez neho by obsahová zhoda taký parameter mylne prijala. Porovnáva sa
- * `.includes()`, takže jediný podreťazec `baleni` pokrýva všetky tvary — sk
- * „balenie"/„balenia" (`velkostbalenia`/`velkostbalenie`) aj cz „balení" (normalizované
- * `baleni`). „Optické zvětšení" (hunting24.cz) veľkostný výraz VÔBEC neobsahuje, takže
- * ho odmietne už samotná obsahová zhoda (náš negatívny fixture test) — tento zoznam je
- * poistka pre parametre, ktoré veľkostné slovo obsahujú v inom význame. */
-const NON_SIZE_NAME_TERMS: readonly string[] = Object.freeze(["baleni"]);
-
-/** `true`, keď normalizovaný názov parametra označuje variantovú VEĽKOSŤ —
- * obsahuje veľkostný výraz a zároveň žiadny výraz z negatívneho zoznamu. */
-function isSizeParamName(normalized: string): boolean {
-  if (NON_SIZE_NAME_TERMS.some((term) => normalized.includes(term))) return false;
-  return SIZE_NAME_TERMS.some((term) => normalized.includes(term));
 }
 
 /** Nájde VEĽKOSTNÝ `<select>` (názov OBSAHUJE veľkostný výraz — issue 566, napr.
