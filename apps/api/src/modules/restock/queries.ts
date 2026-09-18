@@ -152,9 +152,11 @@ async function allRestockCandidates(db: Database, now: Date): Promise<readonly R
     })
     .from(variants)
     .innerJoin(products, eq(variants.productKey, products.key))
-    // issue 423: LEFT JOINy PRED `supplierStock` innerJoinom — jeho ON
-    // klauzula (`eq(supplierStock.link, link)`) referencuje `link`, ktorý
-    // referencuje tieto dve tabuľky, takže musia byť v JOIN zozname skôr.
+    // issue 423 + 565: LEFT JOINy PRED `supplierStock` innerJoinom — jeho ON
+    // klauzula (`eq(supplierStock.link, link)`) referencuje `link`
+    // (`effectiveSupplierLinkSql`), ktorý referencuje tieto tabuľky
+    // (`pairing_variant_link`, `pairing_decision`) a nižšie
+    // `product_supplier_link_override`, takže musia byť v JOIN zozname skôr.
     .leftJoin(pairingVariantLinks, eq(pairingVariantLinks.code, variants.code))
     .leftJoin(pairingDecisions, eq(pairingDecisions.productKey, products.key))
     // issue 565: override odkaz (Vyhľadať → detail produktu, issue 239/240) je
