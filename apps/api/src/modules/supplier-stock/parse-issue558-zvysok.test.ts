@@ -27,7 +27,7 @@ const URL_122212 = "https://www.luko.cz/kosile-s-dlouhym-rukavem-2/panska-flanel
 // Dodávateľ predáva jednotlivé čísla, my držíme párové štítky.
 const OUR_122212 = ["38", "39-40", "41-42", "47-48", "49-50", "51-52", "55-56"] as const;
 
-const row = (rows: readonly { readonly sizeLabel: string }[], label: string) =>
+const row = <T extends { readonly sizeLabel: string }>(rows: readonly T[], label: string): T | undefined =>
   rows.find((r) => r.sizeLabel === label);
 
 describe("foldMultiTokenSizeAvailability — issue 558 (A): rozklad párového štítku", () => {
