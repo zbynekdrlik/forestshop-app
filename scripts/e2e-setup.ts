@@ -236,6 +236,12 @@ const E2E_POZNAMKY_EMAIL = "e2e-poznamky@forestshop.sk"; // musí sa zhodovať s
 // `uhrady-routes.ts`).
 const E2E_UHRADY_EMAIL = "e2e-uhrady@forestshop.sk"; // musí sa zhodovať s hodnotou v uhrady.spec.ts
 
+// issue 548 (PR A): vlastný, IZOLOVANÝ účet pre `sections-shell.spec.ts` (rovnaký
+// mechanizmus ako `E2E_NAV_EMAIL` a spol. — zdieľaný `e2e@forestshop.sk` je už na
+// hranici `MAX_ATTEMPTS`). Rola "manazer" — spec prechádza všetky sekcie PR A
+// vrátane tých, čo vyžadujú admin/manazer (Reklamácie/Zlúčenie/DS).
+const E2E_SHELL_EMAIL = "e2e-shell@forestshop.sk"; // musí sa zhodovať s hodnotou v sections-shell.spec.ts
+
 const { db, pool } = createDb();
 // Konštantný literál bez interpolácie — obyčajný reťazec je tu rovnako bezpečný
 // ako `sql` tagovaná šablóna (tú používa ekvivalentný apps/api/tests/helpers/db.ts),
@@ -420,6 +426,7 @@ await db.insert(users).values({ email: E2E_MOBIL_EMAIL, passwordHash: await hash
 await db.insert(users).values({ email: E2E_ULOHY_EMAIL, passwordHash: await hashPassword(E2E_HESLO), displayName: "E2E Čitateľ", role: "citanie" });
 await db.insert(users).values({ email: E2E_POZNAMKY_EMAIL, passwordHash: await hashPassword(E2E_HESLO), displayName: "E2E Šéf", role: "sef" });
 await db.insert(users).values({ email: E2E_UHRADY_EMAIL, passwordHash: await hashPassword(E2E_HESLO), displayName: "E2E Šéf", role: "sef" });
+await db.insert(users).values({ email: E2E_SHELL_EMAIL, passwordHash: await hashPassword(E2E_HESLO), displayName: "E2E Manažér", role: "manazer" });
 
 // Katalóg pre E2E: tá istá commitnutá fixtúra ako v jednotkových testoch, cez tú istú
 // službu importu — E2E tak overuje skutočnú cestu dát, nie ručne nasypané riadky.
