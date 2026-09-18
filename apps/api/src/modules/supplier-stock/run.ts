@@ -56,8 +56,11 @@ export interface SupplierStockHostStat {
   readonly requests: number;
   /** Z toho enumeračných (`action=refresh`) — koľko navyše stála fáza 2. */
   readonly enumerationRequests: number;
-  /** Uplynulý čas na tomto hoste (od prvého requestu po posledný), vrátane
-   * `PER_HOST_DELAY_MS` páuz medzi nimi. */
+  /** Wall-clock od prvého po posledný request na tomto hoste. Beh je sériový a
+   * odkazy sú zoradené (rovnaký host je spravidla súvislo), takže to je dobrý
+   * odhad času stráveného na hoste vrátane `PER_HOST_DELAY_MS` páuz — POZOR,
+   * ak sa hosty prekladajú, zahŕňa aj čas strávený medzitým na INÝCH hostoch
+   * (diagnostika pre `job_run.detail`, nie presné meranie, code review 🔵). */
   readonly elapsedMs: number;
 }
 

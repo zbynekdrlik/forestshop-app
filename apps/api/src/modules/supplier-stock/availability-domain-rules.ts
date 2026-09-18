@@ -523,7 +523,12 @@ export function wetlandEnumerateCombinations(html: string, link: string): readon
   const record = parseWetlandDataProduct(html);
   if (record === null) return [];
   const idProduct = idFieldToString(record["id_product"]);
-  if (idProduct === "") return [];
+  // `id_product`/`id_attribute` sú v PrestaShope VŽDY číselné — vpisujú sa
+  // NEescapované do refresh URL, takže sa gatujú na `\d+` (code review 🔵, issue
+  // 552). Nejde o SSRF (`base` je z NÁŠHO uloženého odkazu, host sa nemení),
+  // ale kompromitovaná dodávateľská stránka by inak vedela vpísať `&`/medzeru a
+  // znečistiť query parametre — nečíselnú hodnotu radšej preskočíme.
+  if (!/^\d+$/.test(idProduct)) return [];
   const selectMatch = WETLAND_GROUP_SELECT_RE.exec(html);
   if (selectMatch === null) return [];
   const groupNum = selectMatch[1] ?? "";
@@ -533,7 +538,7 @@ export function wetlandEnumerateCombinations(html: string, link: string): readon
   const seen = new Set<string>();
   for (const [, idAttributeRaw, rawLabel] of optionsHtml.matchAll(WETLAND_OPTION_RE)) {
     const idAttribute = (idAttributeRaw ?? "").trim();
-    if (idAttribute === "" || seen.has(idAttribute)) continue;
+    if (!/^\d+$/.test(idAttribute) || seen.has(idAttribute)) continue;
     seen.add(idAttribute);
     const label = decodeNumericEntities(rawLabel ?? "")
       .replace(/<[^>]+>/g, " ")
