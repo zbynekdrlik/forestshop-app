@@ -19,6 +19,7 @@ import { SupplierOrderGroup } from "./SupplierOrderGroup.js";
 import { CustomerContactDialog } from "./CustomerContactDialog.js";
 import { useCustomerContactMail } from "../useCustomerContactMail.js";
 import { fetchOpenOrders, NEZNAMY_DODAVATEL } from "../ordersApi.js";
+import { SectionShell } from "./section/SectionShell.js";
 
 // Rovnaké dve role, ktoré server vyžaduje pre
 // `POST /api/orders/lines/:lineId/state` (`requireRole("admin", "manazer")`,
@@ -230,9 +231,7 @@ export function OrdersSection({
   const contact = useCustomerContactMail(onSessionExpired);
 
   return (
-    <section className="orders-section">
-      {!loaded && <p>Načítavam otvorené objednávky…</p>}
-      {error !== "" && <p role="alert">{error}</p>}
+    <SectionShell loading={!loaded} loadingText="Načítavam otvorené objednávky…" error={error}>
       {/* issue 237: blok dlaždíc NAD zoznamom — nezávislý od `loaded`/
           `totalLines` (vlastný stav vnútri), lebo "Prehľad e-shopu" má
           zmysel zobraziť aj keď "Na objednanie" nemá momentálne žiadny
@@ -319,6 +318,6 @@ export function OrdersSection({
       {/* issue 500: okno na ručný e-mail zákazníkovi — JEDNO na celú sekciu
           (zdieľané s „Riešiť" #502), otvorí ho @ tlačidlo ktoréhokoľvek riadku. */}
       <CustomerContactDialog contact={contact} />
-    </section>
+    </SectionShell>
   );
 }

@@ -248,6 +248,19 @@ tr:last-child td {
   padding: var(--fs-space-5) 0;
 }
 
+/* issue 548 (PR A): jednotný NEUTRÁLNY načítavací indikátor zdieľanej kostry
+   sekcie (`SectionShell`). Nesie `role="status"` (a11y + e2e kontrakt), ale
+   NIE zelené „success" pozadie z `[role="status"]` vyššie — načítavanie nie je
+   úspech. Rovnaká špecifickosť ako `[role="status"]`, deklarované NESKÔR v
+   súbore → víťazí. Vzhľad je zhodný s pôvodným holým `<p>Načítavam…</p>`
+   (vzor „Na objednanie" sa teda vizuálne nemení). */
+.loading {
+  color: var(--fs-ink-faint);
+  background: none;
+  padding: var(--fs-space-2) 0;
+  margin: 0;
+}
+
 /* ---------------- 3. LAYOUT SHELL ---------------- */
 .app-shell {
   display: flex;

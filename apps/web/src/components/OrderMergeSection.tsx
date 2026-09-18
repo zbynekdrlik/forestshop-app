@@ -10,6 +10,7 @@ import {
   type OrderMergePreview,
 } from "../orderMergeApi.js";
 import { MailPreviewDialog } from "./MailPreviewDialog.js";
+import { SectionShell } from "./section/SectionShell.js";
 
 // issue 257: "Zlúčenie objednávok" — vlastná záložka v Eshope (majiteľova
 // korekcia: "malo by to byt zalozka v eshope a mali by tam vyskocit ak su
@@ -122,100 +123,105 @@ export function OrderMergeSection({ role, onSessionExpired }: { readonly role: M
       });
   }, [pending, editedBody, load, onSessionExpired]);
 
-  if (!loaded) return <p>Načítavam…</p>;
-  if (error !== "") return <p role="alert">{error}</p>;
-  if (list === null) return <p role="alert">Zoznam kandidátov na zlúčenie sa nepodarilo načítať.</p>;
+  // issue 548: načítavanie/chyba už NENAHRÁDZAJÚ celú obrazovku — bežia cez
+  // zdieľanú kostru `SectionShell` (`.orders-section` + `role=status`/
+  // `[role=alert]` slot), rovnako ako vzor „Na objednanie".
+  const shellError = !loaded ? "" : error !== "" ? error : list === null ? "Zoznam kandidátov na zlúčenie sa nepodarilo načítať." : "";
 
   return (
-    <section>
-      <p>Zákazníci, ktorí majú viac ako jednu otvorenú objednávku — dá sa im poslať e-mail, že ich objednávky posielame spolu ako jednu zásielku.</p>
+    <SectionShell loading={!loaded} error={shellError}>
+      {loaded && error === "" && list !== null && (
+        <>
+          <p>Zákazníci, ktorí majú viac ako jednu otvorenú objednávku — dá sa im poslať e-mail, že ich objednávky posielame spolu ako jednu zásielku.</p>
 
-      {list.bccMissing && (
-        <p role="alert" data-testid="order-merge-bcc-missing">
-          ⚠️ Chýba adresa pre skrytú kópiu majiteľovi (ORDER_MERGE_BCC_EMAIL) — automatizácia zatiaľ NEPOŠLE žiadny e-mail zákazníkovi.
-        </p>
-      )}
-      {list.mailNotConfigured && (
-        <p role="alert" data-testid="order-merge-mail-not-configured">
-          ⚠️ Odosielanie e-mailov nie je nakonfigurované (chýba MAIL_HOST).
-        </p>
-      )}
-      {actionError !== "" && <p role="alert">{actionError}</p>}
+          {list.bccMissing && (
+            <p role="alert" data-testid="order-merge-bcc-missing">
+              ⚠️ Chýba adresa pre skrytú kópiu majiteľovi (ORDER_MERGE_BCC_EMAIL) — automatizácia zatiaľ NEPOŠLE žiadny e-mail zákazníkovi.
+            </p>
+          )}
+          {list.mailNotConfigured && (
+            <p role="alert" data-testid="order-merge-mail-not-configured">
+              ⚠️ Odosielanie e-mailov nie je nakonfigurované (chýba MAIL_HOST).
+            </p>
+          )}
+          {actionError !== "" && <p role="alert">{actionError}</p>}
 
-      {list.groups.length === 0 ? (
-        <p data-testid="order-merge-empty">Momentálne žiadny zákazník nemá viac ako jednu otvorenú objednávku.</p>
-      ) : (
-        <div className="order-merge-groups" data-testid="order-merge-groups">
-          {list.groups.map((group) => {
-            const key = groupKey(group);
-            const busy = busyKey === key;
-            // Testid podľa VIDITEĽNÉHO Shoptet čísla objednávky (nie
-            // interného DB `orderId`, UUID) — rovnaký zámer ako
-            // `NedostupneSection.tsx`'s `variantCode`-kľúčované testid,
-            // stabilné a čitateľné aj v e2e teste napísanom vopred.
-            const testKey = group.orders[0]?.externalOrderId ?? key;
-            return (
-              <div className="card" key={key} data-testid={`order-merge-group-${testKey}`}>
-                <div className="order-merge-group-header">
-                  <span className="order-merge-customer">{group.customerName}</span>
-                  <span>{group.email === null || group.email === "" ? "(bez e-mailu)" : group.email}</span>
-                </div>
-                <ul className="order-merge-orders">
-                  {group.orders.map((o) => (
-                    // issue 512: číslo objednávky je klikateľné — priamy odkaz
-                    // do Shoptet administrácie (rovnaký `.ord-admin-link` vzor
-                    // ako „Na objednanie"/„Riešiť"/„Vyhľadať").
-                    <li key={o.orderId}>
-                      č.{" "}
-                      <a
-                        href={o.adminUrl}
-                        target="_blank"
-                        rel="noreferrer noopener"
-                        className="ord-admin-link"
-                        aria-label={`Otvoriť objednávku ${o.externalOrderId} v administrácii Shoptet`}
-                        title="Otvoriť v administrácii Shoptet"
+          {list.groups.length === 0 ? (
+            <p className="empty" data-testid="order-merge-empty">Momentálne žiadny zákazník nemá viac ako jednu otvorenú objednávku.</p>
+          ) : (
+            <div className="order-merge-groups" data-testid="order-merge-groups">
+              {list.groups.map((group) => {
+                const key = groupKey(group);
+                const busy = busyKey === key;
+                // Testid podľa VIDITEĽNÉHO Shoptet čísla objednávky (nie
+                // interného DB `orderId`, UUID) — rovnaký zámer ako
+                // `NedostupneSection.tsx`'s `variantCode`-kľúčované testid,
+                // stabilné a čitateľné aj v e2e teste napísanom vopred.
+                const testKey = group.orders[0]?.externalOrderId ?? key;
+                return (
+                  <div className="card" key={key} data-testid={`order-merge-group-${testKey}`}>
+                    <div className="order-merge-group-header">
+                      <span className="order-merge-customer">{group.customerName}</span>
+                      <span>{group.email === null || group.email === "" ? "(bez e-mailu)" : group.email}</span>
+                    </div>
+                    <ul className="order-merge-orders">
+                      {group.orders.map((o) => (
+                        // issue 512: číslo objednávky je klikateľné — priamy odkaz
+                        // do Shoptet administrácie (rovnaký `.ord-admin-link` vzor
+                        // ako „Na objednanie"/„Riešiť"/„Vyhľadať").
+                        <li key={o.orderId}>
+                          č.{" "}
+                          <a
+                            href={o.adminUrl}
+                            target="_blank"
+                            rel="noreferrer noopener"
+                            className="ord-admin-link"
+                            aria-label={`Otvoriť objednávku ${o.externalOrderId} v administrácii Shoptet`}
+                            title="Otvoriť v administrácii Shoptet"
+                          >
+                            {o.externalOrderId}
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                    {canControl && (
+                      <button
+                        type="button"
+                        className="btn sm ghost"
+                        disabled={busy}
+                        onClick={() => {
+                          openPreview(group);
+                        }}
+                        data-testid={`order-merge-send-${testKey}`}
                       >
-                        {o.externalOrderId}
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-                {canControl && (
-                  <button
-                    type="button"
-                    className="btn lg ghost"
-                    disabled={busy}
-                    onClick={() => {
-                      openPreview(group);
-                    }}
-                    data-testid={`order-merge-send-${testKey}`}
-                  >
-                    ✉️ Poslať e-mail o zlúčení — náhľad
-                  </button>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
+                        ✉️ Poslať e-mail o zlúčení — náhľad
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
-      {pending !== null && (
-        <MailPreviewDialog
-          testId="order-merge-preview"
-          title="Náhľad e-mailu — povinné pred odoslaním"
-          recipient={pending.preview.recipient}
-          subject={pending.preview.subject}
-          bodyText={editedBody}
-          onBodyTextChange={setEditedBody}
-          confirmLabel="📧 Odoslať zákazníkovi"
-          confirmDisabled={busyKey !== "" || editedBody.trim() === ""}
-          onConfirm={confirmSend}
-          returnFocusRef={triggerRef}
-          onClose={() => {
-            setPending(null);
-          }}
-        />
+          {pending !== null && (
+            <MailPreviewDialog
+              testId="order-merge-preview"
+              title="Náhľad e-mailu — povinné pred odoslaním"
+              recipient={pending.preview.recipient}
+              subject={pending.preview.subject}
+              bodyText={editedBody}
+              onBodyTextChange={setEditedBody}
+              confirmLabel="📧 Odoslať zákazníkovi"
+              confirmDisabled={busyKey !== "" || editedBody.trim() === ""}
+              onConfirm={confirmSend}
+              returnFocusRef={triggerRef}
+              onClose={() => {
+                setPending(null);
+              }}
+            />
+          )}
+        </>
       )}
-    </section>
+    </SectionShell>
   );
 }

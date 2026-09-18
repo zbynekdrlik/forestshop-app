@@ -2,6 +2,7 @@ import { useEffect, useState, type JSX } from "react";
 import type { Me } from "../api.js";
 import { fetchExchangeOrders, OrderFlagsUnauthorizedError, type OrderFlagRow } from "../orderFlagsApi.js";
 import { OrderFlagTable } from "./OrderFlagTable.js";
+import { SectionShell } from "./section/SectionShell.js";
 
 // issue 290 → 514: "Eshop → Výmena tovaru" — READ-ONLY zoznam AKTÍVnych
 // výmen (stav "Výmena tovaru", `modules/orders/order-flags.ts`). Issue 514
@@ -27,17 +28,18 @@ export function ExchangeOrdersSection({ onSessionExpired }: { readonly role: Me[
       });
   }, [onSessionExpired]);
 
-  if (error !== "") return <p role="alert">{error}</p>;
-  if (rows === null) return <p>Načítavam…</p>;
-
   return (
-    <section>
-      <p>Objednávky, ktoré Shoptet eviduje v stave „Výmena tovaru“ — aktívne výmeny, ktoré treba vybaviť. Vybavené výmeny („Vybavená výmena“) sa tu už nezobrazujú.</p>
-      {rows.length === 0 ? (
-        <p data-testid="exchange-empty">Momentálne žiadna objednávka nie je vo výmene.</p>
-      ) : (
-        <OrderFlagTable testIdPrefix="exchange-row" rows={rows} />
+    <SectionShell loading={rows === null && error === ""} error={error}>
+      {error === "" && rows !== null && (
+        <>
+          <p>Objednávky, ktoré Shoptet eviduje v stave „Výmena tovaru“ — aktívne výmeny, ktoré treba vybaviť. Vybavené výmeny („Vybavená výmena“) sa tu už nezobrazujú.</p>
+          {rows.length === 0 ? (
+            <p className="empty" data-testid="exchange-empty">Momentálne žiadna objednávka nie je vo výmene.</p>
+          ) : (
+            <OrderFlagTable testIdPrefix="exchange-row" rows={rows} />
+          )}
+        </>
       )}
-    </section>
+    </SectionShell>
   );
 }

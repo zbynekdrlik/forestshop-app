@@ -8,6 +8,7 @@ import { OrderWriteFailuresBanner } from "./OrderWriteFailuresBanner.js";
 import { RiesitOrderRow } from "./RiesitOrderRow.js";
 import { CustomerContactDialog } from "./CustomerContactDialog.js";
 import { useCustomerContactMail } from "../useCustomerContactMail.js";
+import { SectionHeader } from "./section/SectionHeader.js";
 
 // issue 450: šéfov kolega Štěpán (Discord 19.8.2026) — pôvodne placeholder.
 // issue 476 (Štěpán, Discord 23.8.2026): funkcia doplnená — sekcia „Riešiť"
@@ -147,7 +148,11 @@ export function RiesitSection({
         </p>
       )}
 
-      {!board.loaded && <p>Načítavam…</p>}
+      {!board.loaded && (
+        <p className="loading" role="status">
+          Načítavam…
+        </p>
+      )}
       {board.error !== "" && <p role="alert">{board.error}</p>}
       <OrderWriteFailuresBanner
         failures={board.writeFailures}
@@ -155,6 +160,15 @@ export function RiesitSection({
           board.setWriteFailures([]);
         }}
       />
+      {/* issue 548: súhrn počtu objednávok na riešenie cez zdieľaný
+          SectionHeader (vzor „Na objednanie" má súhrn nad zoznamom); bez
+          filtračných čipov — Riešiť ich nemá. */}
+      {board.loaded && orders.length > 0 && (
+        <SectionHeader
+          summary={`Objednávok na riešenie: ${String(orders.length)}`}
+          summaryTestId="riesit-summary"
+        />
+      )}
       {board.loaded && orders.length === 0 && (
         <p className="empty" data-testid="riesit-empty">
           Zatiaľ tu nie sú žiadne objednávky na riešenie. Označ riadok tlačidlom „Riešiť" v „Na objednanie",
