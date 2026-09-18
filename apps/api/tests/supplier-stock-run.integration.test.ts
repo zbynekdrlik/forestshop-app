@@ -56,7 +56,14 @@ describe("beh dodávateľského skladu", () => {
 
   it("skontroluje každý odkaz z katalógu a zapíše dostupnosť aj cenu", async () => {
     await insertTestVariant(db, "A1", "Dod 1", { internalNote: "https://huntingshop.eu/a" });
-    await insertTestVariant(db, "B1", "Dod 2", { internalNote: "Dodávateľ: X - https://wetland.sk/b" });
+    // Generický OutOfStock odkaz musí byť na doméne BEZ vlastného pravidla —
+    // tu sa testuje, že samotný JSON-LD OutOfStock na neoverenej doméne dá
+    // `unavailable`. Predtým tu bola wetland.sk; od issue 549 má wetland.sk
+    // overené `data-product.quantity` pravidlo, takže stránka s LEN JSON-LD (bez
+    // product-details bloku) na ňom správne končí na `unknown` (JSON-LD nesmie
+    // sám rozhodnúť) — to je pokryté v parse-issue549.test.ts. dogtrace.com je
+    // stále bez pravidla, takže drží pôvodný zámer tohto testu.
+    await insertTestVariant(db, "B1", "Dod 2", { internalNote: "Dodávateľ: X - https://dogtrace.com/b" });
 
     const result = await runSupplierStock({
       db,
@@ -70,7 +77,7 @@ describe("beh dodávateľského skladu", () => {
     expect(a?.availability).toBe("available");
     expect(a?.price).toBe("12.50");
     expect(a?.confirmedAt).not.toBeNull();
-    expect((await row("https://wetland.sk/b"))?.availability).toBe("unavailable");
+    expect((await row("https://dogtrace.com/b"))?.availability).toBe("unavailable");
   });
 
   it("produkt bez odkazu na dodávateľa sa vôbec nekontroluje", async () => {
