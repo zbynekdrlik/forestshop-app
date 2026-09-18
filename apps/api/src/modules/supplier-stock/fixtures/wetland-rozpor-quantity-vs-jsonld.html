@@ -1,0 +1,39 @@
+<!--
+  wetland.sk — SYNTETICKÝ prípad ROZPORU, issue 549 (nie naživo stiahnuté).
+  data-product hlási quantity 5 (podľa quantity by bolo "available"), ale
+  Product JSON-LD hlási schema.org/BackOrder (podľa krížovej kontroly
+  "unavailable"). Stránka si protirečí → výsledok musí byť "unknown"
+  (fail-closed, nikdy sa nevyhlási available na rozpore) — rovnaká disciplína
+  ako odimon.sk (issue 225). Postavené na štruktúre skladom fixtúry, zmenené
+  je len quantity vs JSON-LD token.
+-->
+<!doctype html>
+<html lang="sk">
+  <head>
+    <meta charset="utf-8" />
+    <title>Wetland rozpor — quantity vs JSON-LD</title>
+    <script type="application/ld+json">
+{
+  "@context": "https://schema.org/",
+  "@type": "Product",
+  "name": "Testovací rozporový produkt",
+  "sku": "0000-000",
+  "offers": {
+    "@type": "Offer",
+    "priceCurrency": "EUR",
+    "price": "19.9",
+    "availability": "https://schema.org/BackOrder"
+  }
+}
+    </script>
+  </head>
+  <body>
+    <div
+      class="info js-product-details"
+      id="product-details"
+      data-product="{&quot;id_product&quot;:9999,&quot;id_product_attribute&quot;:99999,&quot;reference&quot;:&quot;0000-000&quot;,&quot;name&quot;:&quot;Testovací rozporový produkt&quot;,&quot;quantity&quot;:5,&quot;out_of_stock&quot;:2,&quot;allow_oosp&quot;:1,&quot;availability&quot;:&quot;available&quot;,&quot;availability_message&quot;:&quot;Skladom – ihneď k odberu&quot;,&quot;available_for_order&quot;:&quot;1&quot;,&quot;price_amount&quot;:19.9,&quot;cache_default_attribute&quot;:&quot;99999&quot;}"
+    >
+      <span class="product-availability success">Skladom – ihneď k odberu</span>
+    </div>
+  </body>
+</html>
