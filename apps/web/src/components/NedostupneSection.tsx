@@ -22,6 +22,7 @@ import { updateOrderComment, OrdersUnauthorizedError } from "../ordersApi.js";
 import { MailPreviewDialog } from "./MailPreviewDialog.js";
 import { NedostupneOrderNote } from "./NedostupneOrderNote.js";
 import { NedostupneResolvedCheckbox } from "./NedostupneResolvedCheckbox.js";
+import { SectionShell } from "./section/SectionShell.js";
 
 // Rovnaké dve role, ktoré server vyžaduje na odoslanie (`requireRole("admin",
 // "manazer")`, `nedostupne-routes.ts`) — čítanie (zoznam) smie vidieť KAŽDÝ
@@ -236,12 +237,12 @@ export function NedostupneSection({ role, onSessionExpired }: { readonly role: M
     [load, onSessionExpired],
   );
 
-  if (!loaded) return <p>Načítavam…</p>;
-  if (error !== "") return <p role="alert">{error}</p>;
-  if (list === null) return <p role="alert">Nedostupné tovary sa nepodarilo načítať.</p>;
+  if (!loaded) return <SectionShell loading />;
+  if (error !== "") return <SectionShell error={error} />;
+  if (list === null) return <SectionShell error="Nedostupné tovary sa nepodarilo načítať." />;
 
   return (
-    <section>
+    <SectionShell>
       <p>Tovary, ktoré dodávateľ nemá, spárované s otvorenými objednávkami zákazníkov, ktorí na ne čakajú.</p>
 
       {list.bccMissing && (
@@ -257,7 +258,7 @@ export function NedostupneSection({ role, onSessionExpired }: { readonly role: M
       {actionError !== "" && <p role="alert">{actionError}</p>}
 
       {list.groups.length === 0 ? (
-        <p data-testid="nedostupne-empty">Žiadny tovar momentálne nie je označený ako nedostupný.</p>
+        <p className="empty" data-testid="nedostupne-empty">Žiadny tovar momentálne nie je označený ako nedostupný.</p>
       ) : (
         <div className="nedostupne-groups" data-testid="nedostupne-groups">
           {list.groups.map((group) => {
@@ -439,7 +440,7 @@ export function NedostupneSection({ role, onSessionExpired }: { readonly role: M
                         <div className="nedostupne-order-actions">
                           <button
                             type="button"
-                            className={`btn lg ${order.nedostupneSent ? "bad" : "ghost"}`}
+                            className={`btn sm ${order.nedostupneSent ? "bad" : "ghost"}`}
                             disabled={rowBusy || order.nedostupneSent}
                             onClick={() => {
                               openPreview(order.orderCode, group.variantCode, "nedostupne");
@@ -450,7 +451,7 @@ export function NedostupneSection({ role, onSessionExpired }: { readonly role: M
                           </button>
                           <button
                             type="button"
-                            className={`btn lg ${order.alternativaSent ? "bad" : "ghost"}`}
+                            className={`btn sm ${order.alternativaSent ? "bad" : "ghost"}`}
                             disabled={rowBusy || order.alternativaSent}
                             onClick={() => {
                               openPreview(order.orderCode, group.variantCode, "alternativa");
@@ -492,6 +493,6 @@ export function NedostupneSection({ role, onSessionExpired }: { readonly role: M
           }}
         />
       )}
-    </section>
+    </SectionShell>
   );
 }
