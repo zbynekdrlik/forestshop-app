@@ -240,6 +240,11 @@ export async function runSupplierStockLocked(options: RunSupplierStockOptions): 
     // prepísal per-veľkosť riadkami (inak by `restock` blanket-párovanie
     // prepínalo cudzie veľkosti až do vypršania `MAX_AGE_HOURS`). Odkazy bez
     // našich veľkostí (Ballistol) si plošný riadok + normálnu čerstvosť držia.
+    // Pozn.: odkaz na size-rule doméne s našimi veľkosťami, ktorého stránka
+    // nevráti čitateľný zoznam veľkostí (`parseSizeAvailability`→`null`), zapíše
+    // plošný `''` riadok (`else` vetva nižšie) a bude sa preto preverovať KAŽDÝ
+    // beh — vedomý konzervatívny kompromis (radšej znova preveriť možno-zastaraný
+    // plošný riadok, než cacheovať možno-nesprávny), nie caching bug.
     if (
       hasSizeAvailabilityRule(hostOf(link)) &&
       (ourSizesByLink.get(link) ?? []).length > 0 &&
