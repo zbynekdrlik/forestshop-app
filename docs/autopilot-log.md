@@ -4639,3 +4639,15 @@ PR/merge/deploy rieši supervisor). IconButton/ActionBar + zvyšné sekcie → P
   HTTP 200, quantity 20 / JSON-LD InStock, veľkosť 46).
 - Testy: 164 supplier-stock unit testov zelených (parse-issue556 9/9, 551/558/566 beze zmeny).
 - Worktree worker (branch worktree-agent-ae84dae1651c93c32) — PR/merge/deploy/overenie rieši supervisor.
+## issue 558 (zvyšok) — luko.cz párové štítky + blanket over-match (2026-09-19)
+- (A) `foldMultiTokenSizeAvailability` (parse.ts vedľa matchSizeLabel): párový náš
+  štítok (39-40/47-48/51-52) sa zloží z jednotlivých čísel dodávateľa; fail-closed
+  (chýba/zmiešané → unknown). RED ed93702 → GREEN 2fd2c38.
+- (B) `buildSizeStockRows` (run.ts, čistá funkcia): host so SIZE pravidlom + null zoznam
+  (jediná možnosť) + >1 veľkosť → per-veľkosť unknown namiesto plošného riadku (rovnaký
+  over-match guard ako issue 551 pre wetland). RED 19e8b1c → GREEN 128a657.
+- Live fixtúry (browser UA, HTTP 200 2026-09-19): luko-viacvelkostna-122212 (A, predáva
+  38..54 jednotlivo), luko-skladem-halenka-162214 (B, jediná možnosť „Velikost 50").
+- Test: parse-issue558-zvysok.test.ts. matchSizeLabel signatúra NEZMENENÁ (lasting/
+  chiruca/wetland/grube cesty netknuté).
+- Worktree worker (branch worktree-agent-af6dfad8f6a7ef18d) — PR/merge/deploy rieši supervisor.

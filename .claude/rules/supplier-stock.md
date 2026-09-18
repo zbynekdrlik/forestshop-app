@@ -837,3 +837,27 @@ paths:
   produkte (chyba z issue 551). Shared-benefit: každý ďalší host s prefixovaným
   názvom veľkosti (Shoptet aj PrestaShop) prejde bez zásahu. Fixtúra:
   `tthunt-konfekcna-ridge-pro-4104-1322.html` (RED test v `parse-issue556.test.ts`).
+- **Párový náš štítok vs jednotlivé čísla dodávateľa — `foldMultiTokenSizeAvailability`
+  (`parse.ts`, vedľa `matchSizeLabel`, issue 558 zvyšok).** luko.cz predáva košele po
+  JEDNOM čísle goliera (`38,39,…,54`), kým NÁŠ `size_label` je PÁROVÝ (`39-40`, `47/48`,
+  `51/52`). `matchSizeLabel` vyžaduje ROVNAKÝ počet tokenov, takže párový štítok priamu
+  zhodu nikdy nenašiel → 192 variantov `unknown`. Fold: keď priama zhoda zlyhá a náš
+  štítok má >1 token, rozloží ho na tokeny, KAŽDÝ vyhľadá v zozname (znova cez
+  `matchSizeLabel`, tá istá tolerancia) a ZLOŽÍ dostupnosť — **všetky available →
+  available, všetky unavailable → unavailable, čokoľvek CHÝBA alebo je ZMIEŠANÉ →
+  unknown** (fail-closed, rovnaká disciplína ako `mergeSizeAvailability`; nikdy sa
+  nepovie `available` na neúplnom/rozpornom páre, napr. `49-50` keď dodávateľ 50
+  nepredáva). Jednotokenový štítok → `null` (rieši ho `matchSizeLabel`). Shared-benefit:
+  každý dodávateľ predávajúci jednotlivé čísla, kým my držíme rozsahy (košele, ponožky).
+- **Host so SIZE pravidlom NIKDY nevyrába plošný `''` riadok, keď držíme >1 veľkosť —
+  `buildSizeStockRows` (`run.ts`, issue 558 zvyšok).** Jednovariantová „Velikost" stránka
+  (napr. luko `damska-halenka-…-162214`, jediná možnosť) → `parseSizeAvailability` `null`
+  → predtým `else` vetva zapísala plošný riadok `''|available|skladem`, ktorý cez
+  `size_label=''` JOIN (`restock/queries.ts`) prekryl VŠETKÝCH 9 našich veľkostí = 9
+  falošných kandidátov. Riešenie je ROVNAKÝ over-match guard ako issue 551 pre wetland,
+  len pre null-vetvu: keď `sizeList === null` A host má SIZE pravidlo
+  (`hasSizeAvailabilityRule`) A `ourSizes.length > 1`, builder zapíše per-veľkosť
+  `unknown` riadky NAMIESTO plošného (`unknown` nikdy neprepne — kandidát vyžaduje
+  `available`). Host BEZ SIZE pravidla (Ballistol) alebo ≤1 naša veľkosť → plošný riadok
+  ako doteraz. Row-logika je vyčlenená do ČISTEJ exportovanej `buildSizeStockRows`
+  (testuje sa bez DB — `run.ts` nemá vlastný test).
