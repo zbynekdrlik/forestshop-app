@@ -79,6 +79,20 @@ describe("parseSizeAvailability — issue 557: grube AggregateOffer per veľkos�
   it("iná doména (bez grube pravidla) → null", () => {
     expect(parseSizeAvailability(SOFTSHELL, "https://www.huntingshop.eu/p/1")).toBeNull();
   });
+
+  it("code review 🔵: číta sa LEN prvý (hlavný) Product uzol — súvisiaci produkt neinjektuje cudzie veľkosti", () => {
+    // Dva Product uzly: hlavný (Größe M available) + súvisiaci NIŽŠIE (Größe M SoldOut).
+    // Bez ukotvenia na prvý Product by sa obe M videli → rozpor → M by sa zahodila.
+    // S ukotvením sa číta len hlavný → M available.
+    const mainProduct = { "@context": "https://schema.org/", "@type": "Product", name: "Hlavný",
+      offers: { "@type": "AggregateOffer", offers: [offer("Farbe khaki. Größe M.", "InStock", 5)] } };
+    const relatedProduct = { "@context": "https://schema.org/", "@type": "Product", name: "Súvisiaci",
+      offers: { "@type": "AggregateOffer", offers: [offer("Farbe grün. Größe M.", "SoldOut", 0)] } };
+    const html =
+      `<html><head><script type="application/ld+json">${JSON.stringify(mainProduct)}</script></head>` +
+      `<body><script type="application/ld+json">${JSON.stringify(relatedProduct)}</script></body></html>`;
+    expect(parseSizeAvailability(html, SOFTSHELL_URL)).toEqual([{ sizeLabel: "M", availability: "available" }]);
+  });
 });
 
 describe("parsePage / visibleAvailabilityFor — issue 557: grube blanket (jeden Offer bez Größe)", () => {

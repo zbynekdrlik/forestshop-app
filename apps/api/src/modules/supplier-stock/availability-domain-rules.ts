@@ -700,6 +700,22 @@ export function grubeOffers(html: string): readonly GrubeOffer[] {
       else pushOffer(offers);
     }
   };
+  // Code review issue 557 (🔵): pozbierajú sa Product uzly v poradí dokumentu a
+  // ponuky sa čítajú LEN z PRVÉHO (hlavný produkt). grube stránky nesú práve jeden
+  // `@type:Product` (naživo overené 2026-09-18 na 3 stránkach — druhý ld+json blok je
+  // BreadcrumbList), ale keby niekedy pribudol Product uzol súvisiaceho produktu
+  // (blok „Podobné"), jeho ponuky by inak mohli vpísať CUDZIE veľkosti do
+  // `grubeSizeList` — ukotvenie na prvý Product to uzavrie (dedup by rozpor zahodil =
+  // fail-closed, ale extra nekolízna veľkosť by prešla). Rovnaká „prvý patrí hlavnému
+  // produktu" disciplína ako odimon/fomei.
+  const isProductNode = (record: Record<string, unknown>): boolean => {
+    const type = record["@type"];
+    return (
+      (typeof type === "string" && type.toLowerCase().includes("product")) ||
+      (Array.isArray(type) && type.some((t) => typeof t === "string" && t.toLowerCase().includes("product")))
+    );
+  };
+  const products: Record<string, unknown>[] = [];
   const walk = (node: unknown): void => {
     if (Array.isArray(node)) {
       for (const item of node) walk(item);
@@ -707,10 +723,9 @@ export function grubeOffers(html: string): readonly GrubeOffer[] {
     }
     if (typeof node !== "object" || node === null) return;
     const record = node as Record<string, unknown>;
-    const type = record["@type"];
-    if ((typeof type === "string" && type.toLowerCase().includes("product")) ||
-      (Array.isArray(type) && type.some((t) => typeof t === "string" && t.toLowerCase().includes("product")))) {
-      readProduct(record);
+    if (isProductNode(record)) {
+      products.push(record); // Product uzol sa nerozbaľuje ďalej — jeho `offers` číta readProduct
+      return;
     }
     for (const value of Object.values(record)) walk(value);
   };
@@ -723,6 +738,8 @@ export function grubeOffers(html: string): readonly GrubeOffer[] {
       // Nevalidný JSON-LD sa preskočí, nikdy nezhodí beh (rovnako ako `fromJsonLd`).
     }
   }
+  const mainProduct = products[0];
+  if (mainProduct !== undefined) readProduct(mainProduct);
   return result;
 }
 
