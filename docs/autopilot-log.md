@@ -4609,3 +4609,17 @@ forestshop-dev). Fresh-context review dispatch ORPHANOVAL (#363) → in-context
 review nad plným diffom, PASS 0🔴0🟡. Playbook: StateChip modifier="" gotcha +
 PR B adoptéri doplnené do frontend-design.md. Ticket OTVORENÝ (worktree worker,
 PR/merge/deploy rieši supervisor). IconButton/ActionBar + zvyšné sekcie → PR C.
+
+## issue 566 — supplier-stock: Shoptet viacvariant veľkosť podľa obsahu názvu (soxland.sk)
+- Verzia 0.3.0-dev.331 (1d9adb3). RED 843065e → GREEN 9191baa.
+- `findSizeParam` (`shoptet-multivariant.ts`): presná zhoda „Velikost/Veľkosť" →
+  obsahová zhoda (`SIZE_NAME_TERMS` velikost|velkost|size) + negatívny zoznam
+  (`NON_SIZE_NAME_TERMS` balenia/balenie/baleni). soxland „Veľkosť PONOŽKY" teraz
+  prejde; hunting24 „Optické zvětšení" nie.
+- `soxland.sk` pridaný do `SIZE_AVAILABILITY_RULES` (`parse.ts`) — polarita overená
+  naživo 2026-09-18 (celoročné: 37-38/39-41 Momentálne nedostupné, zvyšok Skladom).
+- Reálne fixtures: soxland-drhunter-tenke-ponozky (all available),
+  soxland-drhunter-celorocne-nedostupne (mixed), hunting24-nv007-opticke-zvetseni (negatívny).
+- Test názvy: „soxland Veľkosť PONOŽKY (tenke/celoročné)", „hunting24 Optické zvětšení negatívny",
+  „presná zhoda Velikost naďalej funguje", „negatívny zoznam Veľkosť balenia".
+- Worktree worker (branch worktree-agent-abecfd51f4c32bcc9) — PR/merge/deploy/overenie rieši supervisor.
