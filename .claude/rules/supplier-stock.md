@@ -375,6 +375,25 @@ paths:
   Efektívna linka je čistá JS funkcia (regex + coalesce), preto „načítaj do JS"
   vzor (rovnako ako `computeCatalogCoverage`/`determineReviewPopulationKeys`),
   nie SQL JOIN, ktorý by zaviedol druhú rozíditeľnú definíciu.
+- **Efektívny odkaz na dodávateľa má JEDNU definíciu na každej strane, obe v
+  `modules/orders/effective-supplier-link.ts` (issue 565):** JS
+  `resolveEffectiveSupplierLink` (čítacie cesty: orders, mail, nedostupne,
+  pairing-review, product-links, coverage, `collectSupplierLinks`) a SQL
+  `effectiveSupplierLinkSql` (množinové dopyty, kde sa odkaz musí počítať priamo
+  v SQL). Poradie oboch je ZHODNÉ: split `pairing_variant_link.url`
+  (`pairing_decision.status='split'`) → `product_supplier_link_override.url`
+  (DOSLOVNE, bez orezania — je to čistá URL, nie voľný text) → prvá URL z
+  `product.internal_note` (orezaná ako v `supplier-link.ts`). **Jediný SQL
+  konzument dnes je `restock/queries.ts`** (`allRestockCandidates` — kandidát aj
+  overovací zoznam bežia cez ten istý `link = effectiveSupplierLinkSql` v ON
+  klauzule `supplier_stock` innerJoinu; tabuľky `product_supplier_link_override`
+  / `pairing_variant_link` / `pairing_decision` sú preto v JOIN zozname PRED tým
+  innerJoinom). Pred issue 565 mal `restock/queries.ts` VLASTNÚ SQL kópiu
+  coalesce BEZ override — napísanú pred issue 448 — takže produkt s override
+  odkazom (Vyhľadať → detail, issue 239/240) sa scrapoval, ale reštok ho pri
+  prepínaní Vypredané → Skladom nikdy nenašiel. Nový množinový konzument
+  efektívneho odkazu importuje `effectiveSupplierLinkSql`, nikdy si nepíše ďalšiu
+  kópiu coalesce.
 - **Ten istý Shoptet FRONTEND ŠABLÓNOVÝ prvok (`<span class="availability-
   label" ... data-testid="labelAvailability">`) sa opakuje NAPRIEČ VIACERÝMI
   nezávislými doménami (issue 227: `virginiashop.sk`, `tenolix.cz`,
