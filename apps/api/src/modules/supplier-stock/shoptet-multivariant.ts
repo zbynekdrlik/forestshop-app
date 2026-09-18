@@ -22,22 +22,18 @@
 // disciplína ako `mergeSizeAvailability`/`matchSizeLabel`). Generické — ďalšia Shoptet
 // doména so živo overeným vypredaným protipólom sa pridá len zápisom hosta v `parse.ts`.
 
-import { availabilityFromText, isSizeParamName, type SupplierAvailability } from "./availability-primitives.js";
+import {
+  availabilityFromText,
+  isSizeParamName,
+  normalizeSizeParamName,
+  type SupplierAvailability,
+} from "./availability-primitives.js";
 
 /** Jedna veľkosť dodávateľa (rovnaký tvar ako `SizeAvailability` v `parse.ts` —
  * štruktúrne kompatibilný, aby ho `SIZE_AVAILABILITY_RULES.read` prijal bez cyklu). */
 interface ShoptetSize {
   readonly sizeLabel: string;
   readonly availability: "available" | "unavailable";
-}
-
-/** Normalizuje názov parametra na porovnanie bez diakritiky/veľkosti písmen. */
-function normalizeParamName(value: string): string {
-  return value
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z]/g, "");
 }
 
 /** Očisti HTML fragment na holý text. */
@@ -61,7 +57,7 @@ function findSizeParam(html: string): SizeParam | null {
     const paramId = /data-parameter-id="(\d+)"/i.exec(attrs)?.[1];
     const paramName = /data-parameter-name="([^"]*)"/i.exec(attrs)?.[1];
     if (paramId === undefined || paramName === undefined) continue;
-    if (!isSizeParamName(normalizeParamName(paramName))) continue;
+    if (!isSizeParamName(normalizeSizeParamName(paramName))) continue;
     const options = new Map<string, string>();
     for (const optionMatch of (selectMatch[2] ?? "").matchAll(/<option\b[^>]*\bvalue="(\d+)"[^>]*>([\s\S]*?)<\/option>/gi)) {
       const text = stripToText(optionMatch[2] ?? "");

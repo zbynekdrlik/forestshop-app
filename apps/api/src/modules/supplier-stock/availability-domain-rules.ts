@@ -17,6 +17,7 @@ import {
   decodeNumericEntities,
   hostOf,
   isSizeParamName,
+  normalizeSizeParamName,
   type SupplierAvailability,
 } from "./availability-primitives.js";
 
@@ -396,15 +397,12 @@ export interface WetlandCombination {
 }
 
 /** Normalizuje názov atribútovej skupiny na porovnanie bez diakritiky a bez
- * ohľadu na veľkosť písmen ("Veľkosť" → "velkost"). */
+ * ohľadu na veľkosť písmen ("Veľkosť" → "velkost"). Ne-reťazcová hodnota
+ * (`entry["group"]` je `unknown`) → prázdny reťazec; samotnú normalizáciu robí
+ * zdieľaná `normalizeSizeParamName` (jeden zdroj pravdy s Shoptet stranou,
+ * `availability-primitives.ts`). */
 function normalizeAttributeGroup(value: unknown): string {
-  return typeof value === "string"
-    ? value
-        .normalize("NFD")
-        .replace(/[̀-ͯ]/g, "")
-        .toLowerCase()
-        .replace(/[^a-z]/g, "")
-    : "";
+  return typeof value === "string" ? normalizeSizeParamName(value) : "";
 }
 
 /**

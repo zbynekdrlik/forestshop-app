@@ -119,6 +119,21 @@ export function availabilityFromText(text: string): {
   return { availability: "unknown", matched: "" };
 }
 
+/** Normalizuje názov veľkostného parametra / atribútovej skupiny na porovnanie
+ * bez diakritiky, bez ohľadu na veľkosť písmen a bez nepísmenových znakov
+ * („Veľkosť" → `velkost`, „Konfekčná veľkosť" → `konfekcnavelkost`). JEDINÁ
+ * normalizačná funkcia pre OBE strany parsera (Shoptet `findSizeParam`,
+ * PrestaShop/wetland `isWetlandSizeGroup`) — jej výstup je vstupom do
+ * `isSizeParamName`, takže „rovnaký slovník → rovnaký výsledok na oboch stranách"
+ * nestojí na dvoch bajt-identických kópiách normalizátora (code review issue 556). */
+export function normalizeSizeParamName(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z]/g, "");
+}
+
 /** Veľkostné výrazy, ktoré NORMALIZOVANÝ (bez diakritiky/veľkosti písmen/nepísmen)
  * názov parametra/atribútovej skupiny musí OBSAHOVAŤ (nie len presne rovnať sa im).
  * „veľkosť" po odstránení diakritiky = `velkost`; `velikost` je český tvar, `size`
