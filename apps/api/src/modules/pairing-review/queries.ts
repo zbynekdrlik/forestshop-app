@@ -135,12 +135,17 @@ export interface PairingReviewSearchResult {
   readonly linkedTotal: number;
   /** issue 432 — SKUTOČNÉ katalógové pokrytie linkami (na rozdiel od
    * `gatheredTotal`/`linkedTotal`, ktoré merajú veľkosť recenznej FRONTY):
-   * `catalogActive` = počet produktov s aspoň jedným PREDAJNÝM (`variant.state
-   * === "sellable"`) variantom (menovateľ); `catalogLinked` = koľko z NICH má
-   * efektívnu dodávateľskú linku (čitateľ). Počítané NEZÁVISLE od populácie
-   * fronty — `computeCatalogCoverage`. */
+   * `catalogActive` = počet AKTÍVNYCH produktov (menovateľ); `catalogLinked`
+   * = koľko z NICH má efektívnu dodávateľskú linku (čitateľ). Počítané
+   * NEZÁVISLE od populácie fronty — `computeCatalogCoverage`. issue 571 —
+   * „aktívny" = `rollupProductState` ∈ {`sellable`, `out_of_stock`} (nie
+   * ukončený), rovnaká definícia ako filter/karta, žiadny druhý predikát. */
   readonly catalogLinked: number;
   readonly catalogActive: number;
+  /** issue 571 — aktívne produkty BEZ efektívnej dodávateľskej linky =
+   * `catalogActive − catalogLinked`. Horný ukazovateľ obrazovky „chýba K"; na
+   * tých istých dátach sa rovná `total` filtra `unreviewed`. */
+  readonly catalogMissing: number;
   /** issue 446 — badge záložky Párovanie: AKTÍVNE nenapárované produkty
    * (≥1 sellable variant AND bez efektívneho odkazu AND bez terminálneho
    * rozhodnutia unavailable/discontinued/split). Podmnožina `catalogActive −
@@ -174,7 +179,7 @@ interface VariantRow {
  * "Nie je skladom", nikdy len `out_of_stock`. Produkt bez VARIANTOV vôbec
  * (teoreticky nemožné — katalógový import ich vždy páruje) padá na "Už sa
  * nebude predávať", nikdy nevyhodí. */
-function rollupProductState(rows: readonly VariantRow[]): PairingReviewProductState {
+function rollupProductState(rows: readonly Pick<VariantRow, "state" | "productVisibility" | "missingSince">[]): PairingReviewProductState {
   if (rows.some((r) => r.state === "sellable")) return "sellable";
   if (rows.some((r) => r.state === "out_of_stock" && r.productVisibility === SELLABLE_VISIBILITY && r.missingSince === null)) {
     return "out_of_stock";
@@ -230,22 +235,40 @@ async function determineReviewPopulationKeys(db: Database): Promise<string[]> {
 
 // issue 432 — SKUTOČNÉ katalógové pokrytie linkami. NA ROZDIEL od
 // `gatheredTotal`/`linkedTotal` (veľkosť recenznej FRONTY = únia gatherované ∪
-// bez-linky ∪ rozhodnuté) toto meria KATALÓG: `catalogActive` = produkty s
-// aspoň jedným PREDAJNÝM (`variant.state === "sellable"`) variantom, `catalogLinked`
-// = koľko z NICH má EFEKTÍVNU dodávateľskú linku (`resolveEffectiveSupplierLink`
-// = override ∪ `internalNote` extrakcia — TÁ ISTÁ čítacia logika, žiadny
-// duplicitný regex). Rovnaký MVP "načítaj celý katalóg do JS" vzor ako
-// `determineReviewPopulationKeys` (efektívna linka je čistá JS funkcia, nedá sa
-// vyjadriť ako SQL predikát bez duplicity). Počíta sa NEZÁVISLE od populácie
-// fronty — aktívny olinkovaný produkt MIMO populácie (má linku, nebol
-// gatherovaný ani rozhodnutý) sa v pokrytí správne objaví, hoci `linkedTotal`
-// (odvodený z fronty) ho minie.
+// bez-linky ∪ rozhodnuté) toto meria KATALÓG. issue 571 — „aktívny produkt" =
+// `rollupProductState(varianty)` ∈ {`sellable`, `out_of_stock`} (nie ukončený),
+// TÁ ISTÁ funkcia ako filter/karta, žiadny druhý predikát — predtým to bolo len
+// „aspoň jeden sellable variant", čo míňalo vypredané produkty (len viditeľný
+// `out_of_stock`), ktoré job restock prepína a majiteľ ich chce v menovateli.
+// `catalogLinked` = koľko z aktívnych má EFEKTÍVNU dodávateľskú linku
+// (`resolveEffectiveSupplierLink` = override ∪ `internalNote` extrakcia — TÁ
+// ISTÁ čítacia logika, žiadny duplicitný regex). `catalogMissing` =
+// `catalogActive − catalogLinked` (horný ukazovateľ „chýba K", rovná sa `total`
+// filtra `unreviewed`). Rovnaký MVP „načítaj celý katalóg do JS" vzor ako
+// `determineReviewPopulationKeys`. Počíta sa NEZÁVISLE od populácie fronty —
+// aktívny olinkovaný produkt MIMO populácie (má linku, nebol gatherovaný ani
+// rozhodnutý) sa v pokrytí správne objaví, hoci `linkedTotal` (odvodený z
+// fronty) ho minie.
 async function computeCatalogCoverage(
   db: Database,
-): Promise<{ readonly catalogActive: number; readonly catalogLinked: number; readonly activeUnpaired: number }> {
-  const sellableRows = await db.selectDistinct({ productKey: variants.productKey }).from(variants).where(eq(variants.state, "sellable"));
-  const activeKeys = sellableRows.map((r) => r.productKey);
-  if (activeKeys.length === 0) return { catalogActive: 0, catalogLinked: 0, activeUnpaired: 0 };
+): Promise<{ readonly catalogActive: number; readonly catalogLinked: number; readonly catalogMissing: number; readonly activeUnpaired: number }> {
+  // Aktívne kľúče cez `rollupProductState` (potrebuje state+visibility+missingSince
+  // na variant) — jeden prechod cez varianty, zoskupenie po produkte.
+  const rollupRows = await db
+    .select({ productKey: variants.productKey, state: variants.state, productVisibility: variants.productVisibility, missingSince: variants.missingSince })
+    .from(variants);
+  const variantsByProduct = new Map<string, (typeof rollupRows)[number][]>();
+  for (const row of rollupRows) {
+    const bucket = variantsByProduct.get(row.productKey);
+    if (bucket === undefined) variantsByProduct.set(row.productKey, [row]);
+    else bucket.push(row);
+  }
+  const activeKeys: string[] = [];
+  for (const [key, rows] of variantsByProduct) {
+    const st = rollupProductState(rows);
+    if (st === "sellable" || st === "out_of_stock") activeKeys.push(key);
+  }
+  if (activeKeys.length === 0) return { catalogActive: 0, catalogLinked: 0, catalogMissing: 0, activeUnpaired: 0 };
 
   const productRows = await db.select({ key: products.key, internalNote: products.internalNote }).from(products).where(inArray(products.key, activeKeys));
   const internalNoteByKey = new Map(productRows.map((r) => [r.key, r.internalNote]));
@@ -284,7 +307,7 @@ async function computeCatalogCoverage(
     }
     if (!terminalDecided.has(key)) activeUnpaired += 1;
   }
-  return { catalogActive: activeKeys.length, catalogLinked, activeUnpaired };
+  return { catalogActive: activeKeys.length, catalogLinked, catalogMissing: activeKeys.length - catalogLinked, activeUnpaired };
 }
 
 // issue 399 — zdieľané budovanie karty(-diet) pre KONKRÉTNU množinu
@@ -521,9 +544,9 @@ export async function getPairingReviewItem(db: Database, productKey: string): Pr
 export async function listPairingReview(db: Database, input: PairingReviewSearchInput): Promise<PairingReviewSearchResult> {
   // issue 432 — katalógové pokrytie sa počíta NEZÁVISLE od populácie fronty
   // (aj keď je fronta prázdna — napr. všetko olinkované — pokrytie ostáva správne).
-  const { catalogActive, catalogLinked, activeUnpaired } = await computeCatalogCoverage(db);
+  const { catalogActive, catalogLinked, catalogMissing, activeUnpaired } = await computeCatalogCoverage(db);
   const productKeys = await determineReviewPopulationKeys(db);
-  if (productKeys.length === 0) return { total: 0, gatheredTotal: 0, linkedTotal: 0, catalogLinked, catalogActive, activeUnpaired, items: [] };
+  if (productKeys.length === 0) return { total: 0, gatheredTotal: 0, linkedTotal: 0, catalogLinked, catalogActive, catalogMissing, activeUnpaired, items: [] };
 
   const allItems = await buildPairingReviewItems(db, productKeys);
 
@@ -551,6 +574,13 @@ export async function listPairingReview(db: Database, input: PairingReviewSearch
   // zrevidovaný, netreba naň ďalej upozorňovať v "Nezrevidované".
   function isUnreviewed(item: PairingReviewItem): boolean {
     if (item.hasEffectiveLink) return false;
+    // issue 571 — ukončené produkty (`rollupProductState === "discontinued"`:
+    // žiadny sellable variant, žiadny viditeľný out_of_stock bez missing_since)
+    // odkaz nikdy nedostanú a nič sa u nich neprepína — do fronty Nezrevidované
+    // nepatria (ostávajú pod 🚫 Nepredáva sa a Všetky). Nav odznak
+    // `pairingReviewUnreviewedCount` (= `activeUnpaired`) zdieľa tú istú
+    // „aktívny = sellable ∪ out_of_stock" definíciu, klesne sám.
+    if (item.productState === "discontinued") return false;
     if (item.decision !== null && (item.decision.status === "unavailable" || item.decision.status === "discontinued" || item.decision.status === "split")) return false;
     return true;
   }
@@ -591,7 +621,7 @@ export async function listPairingReview(db: Database, input: PairingReviewSearch
   const start = (input.page - 1) * input.pageSize;
   const items = filtered.slice(start, start + input.pageSize);
 
-  return { total, gatheredTotal, linkedTotal, catalogLinked, catalogActive, activeUnpaired, items };
+  return { total, gatheredTotal, linkedTotal, catalogLinked, catalogActive, catalogMissing, activeUnpaired, items };
 }
 
 export interface PairingReviewCandidate {

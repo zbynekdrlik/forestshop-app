@@ -3653,9 +3653,9 @@ a.upozornenie-title:hover {
 .pairing-review-progress-text {
   color: var(--fs-ink-muted);
 }
-/* issue 432 — veľkosť recenznej fronty ako menší, decentnejší riadok pod
-   hlavným ukazovateľom katalógového pokrytia. */
-.pairing-review-progress-queue {
+/* issue 432/571 — „chýba K" (aktívne bez odkazu) ako menší, decentnejší riadok
+   pod hlavným ukazovateľom katalógového pokrytia (nahradilo veľkosť fronty). */
+.pairing-review-progress-missing {
   font-size: var(--fs-text-xs);
   color: var(--fs-ink-muted);
 }

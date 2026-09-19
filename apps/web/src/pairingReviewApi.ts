@@ -70,6 +70,9 @@ const searchSchema = z.object({
   // linkou), na rozdiel od `gatheredTotal`/`linkedTotal` (veľkosť recenznej fronty).
   catalogLinked: z.number(),
   catalogActive: z.number(),
+  // issue 571 — aktívne produkty bez efektívneho odkazu (catalogActive −
+  // catalogLinked); horný ukazovateľ „chýba K", rovná sa total filtra unreviewed.
+  catalogMissing: z.number(),
   // issue 446 — badge záložky Párovanie: AKTÍVNE nenapárované produkty (≥1
   // sellable variant, bez efektívneho odkazu, bez terminálneho rozhodnutia).
   activeUnpaired: z.number(),
