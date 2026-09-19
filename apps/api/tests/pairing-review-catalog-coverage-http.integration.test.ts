@@ -57,6 +57,8 @@ interface Telo {
   // issue 446 — badge záložky Párovanie = aktívne (≥1 sellable) produkty bez
   // efektívneho odkazu a bez terminálneho rozhodnutia.
   readonly activeUnpaired: number;
+  // issue 571 — členstvo produktu vo výsledku filtra (stačí productKey).
+  readonly items: readonly { readonly productKey: string }[];
 }
 
 async function fetchCoverage(app: Awaited<ReturnType<typeof boot>>["app"], cookie: string): Promise<Telo> {
