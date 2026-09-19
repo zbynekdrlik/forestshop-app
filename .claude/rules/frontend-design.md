@@ -1671,3 +1671,25 @@ paths:
     Pri `exactOptionalPropertyTypes: true` musí prop, ktorému sa explicitne
     posiela `undefined` (`actions={canControl ? fn : undefined}`), mať typ
     `((row:T)=>ReactNode) | undefined`, nie len `?:`.
+  - **PR C (issue 548): `IconButton` (`.icon-btn`) + adopcia SectionShell v
+    Predajňa/Úlohy/Úhrady.** `components/section/IconButton.tsx` = jedno ikonové
+    tlačidlo (`type=button`, props onClick/disabled/title/ariaLabel/ariaPressed/
+    testId/className, `className` = DODATOČNÁ pozíciová trieda VEDĽA `.icon-btn`).
+    Sekcie s intro/add-row (kreslia sa VŽDY) používajú `SectionShell` len ako
+    KOREŇ (`section.orders-section`), stavy inline: `<p className="loading"
+    role="status">` / `<p className="empty" data-testid=…>` (rovnaký vzor ako PR B
+    Upozornenia). Úhrady vlastný `<h2>` → `<h3>` (class `.uhrady-upload-heading`
+    nesie font-size/margins, vzhľad zhodný, `main` bez h1/h2). Interaktívne
+    markery (`.floor-note-marker` = toggle `<button>`) OSTÁVAJÚ interaktívne —
+    `StateChip` je len na READ-ONLY. Odklad na PR D: `ActionBar` (jeho `btn lg`
+    adoptéri sú v ostatných taboch DPD/Šablóny/ThemeColorPicker/MailPreviewDialog,
+    nie v CORE), `CompactRow` (3 row-klony majú GENUINE odlišné CSS → zjednotenie
+    by zmenilo vzhľad), `.poznamka-icon-btn` (NotesSection), ostatné registry taby.
+  - **PASCA pri „zoštíhlení zdieľanej triedy na iba-pozíciu" (PR C review 🔴):**
+    keď vizuál presunieš zo starej triedy (napr. `.floor-note-icon-btn`) do NOVEJ
+    zdieľanej (`.icon-btn`) a starú necháš len s `flex:…`, MUSÍŠ skonvertovať
+    KAŽDÉHO konzumenta starej triedy — inak neskonvertované tlačidlo stratí vzhľad
+    (default browser button). Pred zoštíhlením: `grep -rn "<trieda>" apps/web/src`
+    a over VŠETKY výskyty (nielen sekciu, ktorú práve upravuješ). Review našiel
+    prehliadnutý `FloorNoteProductChip.tsx` (detach ✖). typecheck/eslint/RTL to
+    NECHYTIA (netestujú computed style) — grep je jediná istota.
