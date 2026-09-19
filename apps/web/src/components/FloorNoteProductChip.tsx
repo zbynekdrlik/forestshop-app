@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type JSX } from "react";
 import type { FloorNoteProduct } from "../floorNotesApi.js";
 import { ourProductLink } from "../shopLinks.js";
+import { IconButton } from "./section/IconButton.js";
 
 // issue 453: jeden pripnutý produkt na zázname "Objednávky predajne" —
 // klikateľný odkaz (priamy alebo vizuálne odlíšený náhradný, issue 410) +
@@ -103,17 +104,16 @@ export function FloorNoteProductChip({
       )}
 
       {canEdit && (
-        <button
-          type="button"
+        <IconButton
           className="floor-note-icon-btn"
           disabled={busy}
           onClick={onDetach}
           title="Odopnúť"
-          aria-label={`Odopnúť produkt ${product.productName} zo zápisu ${noteId}`}
-          data-testid={`floor-note-product-detach-${noteId}-${product.variantCode}`}
+          ariaLabel={`Odopnúť produkt ${product.productName} zo zápisu ${noteId}`}
+          testId={`floor-note-product-detach-${noteId}-${product.variantCode}`}
         >
           ✖
-        </button>
+        </IconButton>
       )}
     </span>
   );
