@@ -2,6 +2,7 @@ import { useRef, useState, type JSX, type RefObject } from "react";
 import { dailyTaskAudioUrl, type DailyTaskRow as DailyTaskRowData } from "../dailyTasksApi.js";
 import { formatRecordingTime } from "../useVoiceRecorder.js";
 import { EmojiPickerButton } from "./EmojiPickerButton.js";
+import { IconButton } from "./section/IconButton.js";
 
 // issue 519: per-riadok rendering „Úloh na dnes" vyčlenený z `DailyTasksSection`
 // (eslint `max-lines: 400`, `.claude/rules/frontend-design.md` — pull out the
@@ -98,30 +99,26 @@ export function DailyTaskRow(props: DailyTaskRowProps): JSX.Element {
             testId={`uloha-edit-emoji-${row.id}`}
             disabled={busy}
           />
-          <button
-            type="button"
-            className="uloha-icon-btn"
+          <IconButton
             disabled={busy}
             onClick={() => {
               props.onSaveText(row.id);
             }}
             title="Uložiť"
-            aria-label="Uložiť text"
-            data-testid={`uloha-edit-save-${row.id}`}
+            ariaLabel="Uložiť text"
+            testId={`uloha-edit-save-${row.id}`}
           >
             💾
-          </button>
-          <button
-            type="button"
-            className="uloha-icon-btn"
+          </IconButton>
+          <IconButton
             onClick={() => {
               props.onCancelEdit();
             }}
             title="Zrušiť"
-            aria-label="Zrušiť úpravu textu"
+            ariaLabel="Zrušiť úpravu textu"
           >
             ✕
-          </button>
+          </IconButton>
         </>
       ) : (
         <>
@@ -157,52 +154,46 @@ export function DailyTaskRow(props: DailyTaskRowProps): JSX.Element {
             }}
             data-testid={`uloha-audio-el-${row.id}`}
           />
-          <button
-            type="button"
-            className="uloha-icon-btn"
+          <IconButton
             onClick={togglePlay}
             title={playing ? "Pozastaviť" : "Prehrať hlasovú poznámku"}
-            aria-label={playing ? "Pozastaviť nahrávku" : "Prehrať hlasovú poznámku"}
-            data-testid={`uloha-audio-play-${row.id}`}
+            ariaLabel={playing ? "Pozastaviť nahrávku" : "Prehrať hlasovú poznámku"}
+            testId={`uloha-audio-play-${row.id}`}
           >
             {playing ? "⏸" : "▶"}
             {durationLabel !== "" && <span className="uloha-audio-time">{durationLabel}</span>}
-          </button>
+          </IconButton>
           {playbackFailed && (
             <span className="uloha-audio-failed" role="alert" data-testid={`uloha-audio-failed-${row.id}`}>
               Prehrávanie zlyhalo
             </span>
           )}
-          <button
-            type="button"
-            className="uloha-icon-btn"
+          <IconButton
             disabled={busy}
             onClick={() => {
               props.onDeleteAudio(row.id);
             }}
             title="Zmazať nahrávku"
-            aria-label="Zmazať hlasovú nahrávku"
-            data-testid={`uloha-audio-delete-${row.id}`}
+            ariaLabel="Zmazať hlasovú nahrávku"
+            testId={`uloha-audio-delete-${row.id}`}
           >
             🗑
-          </button>
+          </IconButton>
         </span>
       )}
 
       {!editing && (
         <div className="uloha-actions">
-          <button
-            type="button"
-            className="uloha-icon-btn"
+          <IconButton
             onClick={() => {
               props.onOpenTextEditor(row);
             }}
             title="Upraviť text"
-            aria-label={`Upraviť text úlohy ${row.text}`}
-            data-testid={`uloha-edit-${row.id}`}
+            ariaLabel={`Upraviť text úlohy ${row.text}`}
+            testId={`uloha-edit-${row.id}`}
           >
             ✏️
-          </button>
+          </IconButton>
           {/* issue 471: 😊 otvorí picker, JEDNÝM klikom uloží emoji k úlohe. */}
           <EmojiPickerButton
             onPick={(emoji) => {
@@ -215,19 +206,17 @@ export function DailyTaskRow(props: DailyTaskRowProps): JSX.Element {
             testId={`uloha-emoji-${row.id}`}
             disabled={busy}
           />
-          <button
-            type="button"
-            className="uloha-icon-btn"
+          <IconButton
             disabled={busy}
             onClick={() => {
               props.onRemove(row.id);
             }}
             title="Odstrániť"
-            aria-label={`Odstrániť úlohu ${row.text}`}
-            data-testid={`uloha-delete-${row.id}`}
+            ariaLabel={`Odstrániť úlohu ${row.text}`}
+            testId={`uloha-delete-${row.id}`}
           >
             🗑
-          </button>
+          </IconButton>
         </div>
       )}
     </div>

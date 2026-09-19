@@ -5,6 +5,7 @@ import type { ProductSearchHit } from "../searchApi.js";
 import type { FloorNoteRow as FloorNoteRowData } from "../floorNotesApi.js";
 import { FloorNoteProductChip } from "./FloorNoteProductChip.js";
 import { FloorNoteProductSearch } from "./FloorNoteProductSearch.js";
+import { IconButton } from "./section/IconButton.js";
 
 // issue 410: jeden zápis "Eshop → Objednávky predajňa" — voľný text (rastúca
 // textarea, žiadne odoslanie Enterom, `autoResizeTextarea.ts`), tri
@@ -108,17 +109,16 @@ export function FloorNoteRow({
         </div>
         <span className="floor-note-time">{formatSkDateTime(row.createdAt)}</span>
         {canEdit && (
-          <button
-            type="button"
+          <IconButton
             className="floor-note-icon-btn"
             disabled={busy}
             onClick={onDelete}
             title="Odstrániť"
-            aria-label={`Odstrániť zápis ${row.id}`}
-            data-testid={`floor-note-delete-${row.id}`}
+            ariaLabel={`Odstrániť zápis ${row.id}`}
+            testId={`floor-note-delete-${row.id}`}
           >
             🗑
-          </button>
+          </IconButton>
         )}
       </div>
 
@@ -158,17 +158,16 @@ export function FloorNoteRow({
             {row.text}
           </p>
           {canEdit && (
-            <button
-              type="button"
+            <IconButton
               className="floor-note-icon-btn"
               disabled={busy}
               onClick={startEdit}
               title="Upraviť text"
-              aria-label={`Upraviť text zápisu ${row.id}`}
-              data-testid={`floor-note-edit-${row.id}`}
+              ariaLabel={`Upraviť text zápisu ${row.id}`}
+              testId={`floor-note-edit-${row.id}`}
             >
               ✏️
-            </button>
+            </IconButton>
           )}
         </div>
       )}

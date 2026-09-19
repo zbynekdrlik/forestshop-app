@@ -73,11 +73,9 @@ test("všetky sekcie PR A zdieľajú kostru section.orders-section, konzola je �
 // `SectionShell` (koreň) + zmene Úhrady `<h2>`→`<h3>` je GREEN. Dáta sekcií
 // pokrývajú ich vlastné spec súbory (`floor-notes`/`daily-tasks`/`uhrady`) —
 // tu overujeme len JEDNOTNÚ kostru + čistú konzolu.
-const SEKCIE_PR_C = [
-  { nazov: "Objednávky predajňa", priecinok: null },
-  { nazov: "Úlohy na dnes", priecinok: null },
-  { nazov: "Úhrady", priecinok: null },
-] as const;
+// Všetky tri sú v priečinkoch rozbalených predvolene („Eshop"/„Dôležité"/
+// „Slavosport" — žiadny `defaultCollapsed`), takže stačí kliknúť na záložku.
+const SEKCIE_PR_C = ["Objednávky predajňa", "Úlohy na dnes", "Úhrady"] as const;
 
 test("sekcie PR C zdieľajú kostru section.orders-section, žiadny vlastný h1/h2 v main, konzola čistá", async ({ page }) => {
   const chyby: string[] = [];
@@ -94,8 +92,7 @@ test("sekcie PR C zdieľajú kostru section.orders-section, žiadny vlastný h1/
   await page.getByRole("button", { name: "Prihlásiť sa" }).click();
   await expect(page.getByRole("heading", { name: "Na objednanie" })).toBeVisible();
 
-  for (const { nazov, priecinok } of SEKCIE_PR_C) {
-    if (priecinok !== null) await page.getByRole("button", { name: priecinok }).click();
+  for (const nazov of SEKCIE_PR_C) {
     await page.getByRole("button", { name: nazov }).click();
     // Titul kreslí Topbar (`<header class="topbar"><h1>`), nie sekcia.
     await expect(page.getByRole("heading", { name: nazov })).toBeVisible();
