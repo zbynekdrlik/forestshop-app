@@ -12,6 +12,8 @@ import {
   type PaymentScanRow,
 } from "../uhradyApi.js";
 import { PaymentScanCard } from "./PaymentScanCard.js";
+import { IconButton } from "./section/IconButton.js";
+import { SectionShell } from "./section/SectionShell.js";
 
 // issue 543: "SLAVOSPORT → Úhrady" — jednoriadkové poznámky navrchu (ako „Úlohy
 // na dnes", ale BEZ hlasu/audio) + upload naskenovaných FA, ktoré treba
@@ -208,23 +210,32 @@ export function UhradySection({ onSessionExpired }: { readonly onSessionExpired:
         disabled={addingNote}
         data-testid="uhrady-note-input"
       />
-      <button type="button" className="btn good" onClick={addNote} disabled={newNote.trim() === "" || addingNote} data-testid="uhrady-note-add">
+      <button type="button" className="btn good sm" onClick={addNote} disabled={newNote.trim() === "" || addingNote} data-testid="uhrady-note-add">
         Pridať
       </button>
     </div>
   );
 
+  // issue 548 (PR C): zdieľaná kostra `SectionShell` (koreň `section.orders-section`)
+  // + jednotné stavové sloty (`.loading` `role=status` / `p.empty`). `uhrady`
+  // trieda ostáva VEDĽA (žiadny CSS ani e2e lokátor ju nepoužíva, nechávam kvôli
+  // „pridávať vedľa, nepremenúvať"). Error/intro/stavy ostávajú inline (layout
+  // sa kreslí VŽDY), poradie a všetky testidy zachované.
   return (
-    <section className="uhrady">
+    <SectionShell className="orders-section uhrady">
       {intro}
       {error !== "" && <p role="alert">{error}</p>}
 
       <div className="uhrady-notes-panel">
         {noteAddRow}
         {notes === null ? (
-          <p>Načítavam…</p>
+          <p className="loading" role="status">
+            Načítavam…
+          </p>
         ) : notes.length === 0 ? (
-          <p data-testid="uhrady-notes-empty">Žiadne poznámky — napíš prvú vyššie.</p>
+          <p className="empty" data-testid="uhrady-notes-empty">
+            Žiadne poznámky — napíš prvú vyššie.
+          </p>
         ) : (
           <div className="uhrady-notes-list" data-testid="uhrady-notes-list">
             {notes.map((row) => {
@@ -237,19 +248,18 @@ export function UhradySection({ onSessionExpired }: { readonly onSessionExpired:
                       {row.authorName} · {formatCas(row.createdAt)}
                     </div>
                   </div>
-                  <button
-                    type="button"
+                  <IconButton
                     className="uhrady-note-delete"
                     disabled={busy}
                     onClick={() => {
                       removeNote(row.id);
                     }}
                     title="Odstrániť poznámku"
-                    aria-label={`Odstrániť poznámku ${row.text}`}
-                    data-testid={`uhrady-note-delete-${row.id}`}
+                    ariaLabel={`Odstrániť poznámku ${row.text}`}
+                    testId={`uhrady-note-delete-${row.id}`}
                   >
                     🗑
-                  </button>
+                  </IconButton>
                 </div>
               );
             })}
@@ -257,7 +267,11 @@ export function UhradySection({ onSessionExpired }: { readonly onSessionExpired:
         )}
       </div>
 
-      <h2 className="uhrady-upload-heading">Nahrať súbor</h2>
+      {/* issue 548 (PR C): `<h3>` (nie `<h2>`) — viditeľná záložka nesmie mať
+          vlastný `<h1>/<h2>` v `<main>` (titul kreslí Topbar, `nav.ts` kontrakt);
+          class `.uhrady-upload-heading` nesie font-size/margins, takže vzhľad je
+          zhodný, `h3` je v `main` povolený (`frontend-design.md`). */}
+      <h3 className="uhrady-upload-heading">Nahrať súbor</h3>
       <div className="uhrady-upload">
         <input
           ref={fileInputRef}
@@ -276,9 +290,13 @@ export function UhradySection({ onSessionExpired }: { readonly onSessionExpired:
       </div>
 
       {scans === null ? (
-        <p>Načítavam skeny…</p>
+        <p className="loading" role="status">
+          Načítavam skeny…
+        </p>
       ) : scans.length === 0 ? (
-        <p data-testid="uhrady-scans-empty">Zatiaľ žiadne naskenované faktúry — nahraj prvú vyššie.</p>
+        <p className="empty" data-testid="uhrady-scans-empty">
+          Zatiaľ žiadne naskenované faktúry — nahraj prvú vyššie.
+        </p>
       ) : (
         <div className="uhrady-scan-grid" data-testid="uhrady-scan-grid">
           {scans.map((scan) => (
@@ -323,6 +341,6 @@ export function UhradySection({ onSessionExpired }: { readonly onSessionExpired:
           />
         </div>
       )}
-    </section>
+    </SectionShell>
   );
 }

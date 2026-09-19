@@ -4651,3 +4651,17 @@ PR/merge/deploy rieši supervisor). IconButton/ActionBar + zvyšné sekcie → P
 - Test: parse-issue558-zvysok.test.ts. matchSizeLabel signatúra NEZMENENÁ (lasting/
   chiruca/wetland/grube cesty netknuté).
 - Worktree worker (branch worktree-agent-af6dfad8f6a7ef18d) — PR/merge/deploy rieši supervisor.
+
+## issue 548 (PR C) — zjednotenie dizajnu sekcií (worktree worker)
+- Verzia 0.3.0-dev.334 → 0.3.0-dev.335 (commit b1ebffc).
+- Nový primitív `IconButton` (`components/section/IconButton.tsx`, CSS `.icon-btn`) —
+  zjednocuje `.uloha-icon-btn`/`.floor-note-icon-btn`/`.uhrady-note-delete`; legacy triedy
+  ostávajú len ako pozíciové háčiky (`flex:0 0 auto`).
+- SectionShell koreň v FloorNotesSection/DailyTasksSection/UhradySection; loading→`.loading role=status`,
+  empty→`p.empty`. Úhrady `<h2>`→`<h3>`, `btn good`→`btn good sm`. Predajňa markery ostali interaktívne.
+- RED cc4fbbd (sections-shell.spec.ts PR C taby) → GREEN 1440f2f → review-fix 5ab985c
+  (FloorNoteProductChip ✖ tlačidlo prehliadnuté pri zoštíhlení `.floor-note-icon-btn`, konvertované na IconButton).
+- gates:local zelené (typecheck+lint+api 1131+web 798). e2e beží v CI (RED by construction lokálne).
+- Odklad na PR D: ActionBar, CompactRow, `.poznamka-icon-btn`, ostatné registry taby (DPD/Poznámky/Vyhľadať/
+  Párovanie/Kniha e-mailov/Šablóny/Sync/Pošta/Pripomienky). ~134 net LoC reálnej zmeny.
+- Worktree worker (branch worktree-agent-af90edd2112194cd2) — PR/merge/deploy rieši supervisor.

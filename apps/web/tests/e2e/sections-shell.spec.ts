@@ -64,6 +64,48 @@ test("všetky sekcie PR A zdieľajú kostru section.orders-section, konzola je �
   expect(chyby).toEqual([]);
 });
 
+// issue 548 (PR C): rovnaké zjednotenie kostry pre tri sekcie s vlastným
+// „pomiešaným" markupom — „Objednávky predajňa" (priečinok „Eshop", rozbalený),
+// „Úlohy na dnes" (priečinok „Dôležité", rozbalený) a „Úhrady" (priečinok
+// „Slavosport", rozbalený — `defaultCollapsed` nenastavený). Pred adopciou
+// mali holý `<section>` / `<section class="uhrady">` (nie `section.orders-section`)
+// a Úhrady navyše vlastný `<h2>` v `<main>` → tento test je RED; po adopcii
+// `SectionShell` (koreň) + zmene Úhrady `<h2>`→`<h3>` je GREEN. Dáta sekcií
+// pokrývajú ich vlastné spec súbory (`floor-notes`/`daily-tasks`/`uhrady`) —
+// tu overujeme len JEDNOTNÚ kostru + čistú konzolu.
+// Všetky tri sú v priečinkoch rozbalených predvolene („Eshop"/„Dôležité"/
+// „Slavosport" — žiadny `defaultCollapsed`), takže stačí kliknúť na záložku.
+const SEKCIE_PR_C = ["Objednávky predajňa", "Úlohy na dnes", "Úhrady"] as const;
+
+test("sekcie PR C zdieľajú kostru section.orders-section, žiadny vlastný h1/h2 v main, konzola čistá", async ({ page }) => {
+  const chyby: string[] = [];
+  page.on("console", (m) => {
+    if (m.type() === "error" || m.type() === "warning") chyby.push(m.text());
+  });
+  page.on("pageerror", (e) => {
+    chyby.push(e.message);
+  });
+
+  await page.goto("/");
+  await page.getByLabel("E-mail").fill(E2E_SHELL_EMAIL);
+  await page.getByLabel("Heslo").fill(E2E_HESLO);
+  await page.getByRole("button", { name: "Prihlásiť sa" }).click();
+  await expect(page.getByRole("heading", { name: "Na objednanie" })).toBeVisible();
+
+  for (const nazov of SEKCIE_PR_C) {
+    await page.getByRole("button", { name: nazov }).click();
+    // Titul kreslí Topbar (`<header class="topbar"><h1>`), nie sekcia.
+    await expect(page.getByRole("heading", { name: nazov })).toBeVisible();
+    // Zdieľaná kostra: koreň sekcie je `section.orders-section` (SectionShell).
+    await expect(page.locator("section.orders-section")).toBeVisible();
+    // Sekcia si nekreslí vlastný nadpis — `<main>` neobsahuje žiadny h1/h2
+    // (h3 „Nahrať súbor" v Úhradách je povolený, `.claude/rules/frontend-design.md`).
+    await expect(page.locator("main h1, main h2")).toHaveCount(0);
+  }
+
+  expect(chyby).toEqual([]);
+});
+
 // issue 548 (PR B): rovnaké zjednotenie kostry pre tri ďalšie sekcie —
 // „Nedostupné tovary" (priečinok „Eshop", rozbalený), „Upozornenia"
 // (priečinok „Dôležité", rozbalený) a „Vypredané → Skladom" (priečinok

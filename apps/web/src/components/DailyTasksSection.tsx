@@ -15,6 +15,7 @@ import { DailyTasksBadgeRefreshContext } from "../dailyTasksBadgeContext.js";
 import { formatRecordingTime, useVoiceRecorder, type RecordingResult } from "../useVoiceRecorder.js";
 import { DailyTaskRow } from "./DailyTaskRow.js";
 import { EmojiPickerButton } from "./EmojiPickerButton.js";
+import { SectionShell } from "./section/SectionShell.js";
 
 // issue 342 + 487: "Dôležité → Úlohy na dnes" — zdieľaný zoznam úloh (každý účet
 // vidí a smie odfajknúť/upraviť/zmazať všetky; autor sa zobrazuje pri riadku).
@@ -301,41 +302,29 @@ export function DailyTasksSection({ onSessionExpired }: { readonly onSessionExpi
     </p>
   );
 
-  if (error !== "" && rows === null) {
-    return (
-      <section>
-        {intro}
-        <div className="ulohy-panel">
-          {addRow}
-          {recorderError}
-          <p role="alert">{error}</p>
-        </div>
-      </section>
-    );
-  }
-  if (rows === null) {
-    return (
-      <section>
-        {intro}
-        <div className="ulohy-panel">
-          {addRow}
-          {recorderError}
-          <p>Načítavam…</p>
-        </div>
-      </section>
-    );
-  }
-
+  // issue 548 (PR C): zdieľaná kostra `SectionShell` (koreň `section.orders-section`)
+  // + jednotné stavové sloty. Layout (intro + add-row) sa kreslí VŽDY, až potom
+  // stav, preto `SectionShell` slúži len ako koreň a načítavanie/prázdno sú
+  // inline (`.loading` `role=status` / `p.empty`) — rovnaký vzor ako PR B pri
+  // Upozorneniach. Poradie a všetky testidy zachované.
   return (
-    <section>
+    <SectionShell>
       {intro}
       <div className="ulohy-panel">
         {addRow}
         {recorderError}
         {error !== "" && <p role="alert">{error}</p>}
 
-        {rows.length === 0 ? (
-          <p data-testid="ulohy-empty">Žiadne úlohy — napíš prvú vyššie.</p>
+        {rows === null ? (
+          error === "" && (
+            <p className="loading" role="status">
+              Načítavam…
+            </p>
+          )
+        ) : rows.length === 0 ? (
+          <p className="empty" data-testid="ulohy-empty">
+            Žiadne úlohy — napíš prvú vyššie.
+          </p>
         ) : (
           <div className="ulohy-list" data-testid="ulohy-list">
             {rows.map((row) => (
@@ -361,6 +350,6 @@ export function DailyTasksSection({ onSessionExpired }: { readonly onSessionExpi
           </div>
         )}
       </div>
-    </section>
+    </SectionShell>
   );
 }

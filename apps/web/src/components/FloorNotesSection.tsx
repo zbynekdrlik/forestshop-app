@@ -18,6 +18,7 @@ import {
 import { FloorNotesBadgeRefreshContext } from "../floorNotesBadgeContext.js";
 import type { ProductSearchHit } from "../searchApi.js";
 import { FloorNoteRow } from "./FloorNoteRow.js";
+import { SectionShell } from "./section/SectionShell.js";
 
 // issue 410: "Eshop → Objednávky predajňa" — nahrádza Štěpánovo Discord
 // vlákno vlastnými zápismi z predajne (design komentár na ticket-e). Táto
@@ -237,27 +238,28 @@ export function FloorNotesSection({ role, onSessionExpired }: { readonly role: M
     </div>
   );
 
-  if (rows === null) {
-    return (
-      <section>
-        {intro}
-        <div className="floor-notes-panel">
-          {addRow}
-          {error !== "" ? <p role="alert">{error}</p> : <p>Načítavam…</p>}
-        </div>
-      </section>
-    );
-  }
-
+  // issue 548 (PR C): zdieľaná kostra `SectionShell` (koreň `section.orders-section`)
+  // + jednotné stavové sloty. Layout (intro + add-row) sa kreslí VŽDY, až potom
+  // stav, preto `SectionShell` slúži len ako koreň a načítavanie/prázdno sú
+  // inline (`.loading` `role=status` / `p.empty`) — rovnaký vzor ako PR B pri
+  // Upozorneniach. Poradie a všetky testidy zachované.
   return (
-    <section>
+    <SectionShell>
       {intro}
       <div className="floor-notes-panel">
         {addRow}
         {error !== "" && <p role="alert">{error}</p>}
 
-        {rows.length === 0 ? (
-          <p data-testid="floor-notes-empty">Zatiaľ žiadne zápisy.</p>
+        {rows === null ? (
+          error === "" && (
+            <p className="loading" role="status">
+              Načítavam…
+            </p>
+          )
+        ) : rows.length === 0 ? (
+          <p className="empty" data-testid="floor-notes-empty">
+            Zatiaľ žiadne zápisy.
+          </p>
         ) : (
           <div className="floor-notes-list" data-testid="floor-notes-list">
             {rows.map((row) => (
@@ -290,6 +292,6 @@ export function FloorNotesSection({ role, onSessionExpired }: { readonly role: M
           </div>
         )}
       </div>
-    </section>
+    </SectionShell>
   );
 }
