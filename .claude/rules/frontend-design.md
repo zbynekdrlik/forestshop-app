@@ -1693,3 +1693,35 @@ paths:
     a over VŠETKY výskyty (nielen sekciu, ktorú práve upravuješ). Review našiel
     prehliadnutý `FloorNoteProductChip.tsx` (detach ✖). typecheck/eslint/RTL to
     NECHYTIA (netestujú computed style) — grep je jediná istota.
+  - **PR D (issue 548, POSLEDNÁ dávka): `ActionBar` (`.action-bar`) + adopcia
+    SectionShell v OSTATNÝCH viditeľných registry taboch.** `components/section/
+    ActionBar.tsx` = akčný rad `.btn sm` (`flex; flex-wrap; gap`) — bývalé
+    `.mt-actions` PREMENOVANÉ (identické CSS, žiadna vizuálna zmena), jediný
+    adoptér `MailTemplateEditor` (btn lg → btn sm). SectionShell + `.loading
+    role=status` / `p.empty` adoptované v DPD/Poznámky/Vyhľadať/Párovanie/Kniha
+    e-mailov/Šablóny/Sync/Pošta/Pripomienky. `.poznamka-icon-btn` → IconButton
+    (CSS zoštíhlené na iba-pozíciu, presne ako `.floor-note-icon-btn` v PR C).
+  - **DVA tvary SectionShell adopcie — vyber podľa toho, ako sekcia dnes kreslí
+    stavy:** (1) **KOREŇ-ONLY** (sekcia kreslí intro/add-row VŽDY, stavy inline):
+    `<section>` → `<SectionShell testId=…>`, holé `<p>Načítavam…</p>` →
+    `<p className="loading" role="status">`, prázdny `<p>` → `p.empty` (PR C
+    Predajňa/Úlohy, PR D DPD/Poznámky/Vyhľadať/Párovanie). (2) **PLNÝ SLOT**
+    (sekcia mala „skorý-return nahrádza celú obrazovku": `if (!loaded) return
+    <p>Načítavam…</p>; if (error) return <p role=alert>…; return <section>…`):
+    prepíš tie skoré-returny na JEDNORIADKOVÉ `return <SectionShell loading />;`
+    / `return <SectionShell error={…} />;` a hlavný `<section>` → `<SectionShell>`
+    — TELO obrazovky ostane NEDOTKNUTÉ (žiadne pre-indentovanie = malý diff),
+    a `section.orders-section` je prítomné v KAŽDOM stave (loading/error/loaded),
+    nie len po načítaní (PR D MailLog/Šablóny/Sync/Pošta/Pripomienky). Pri (2)
+    over, že hodnota odvodená AŽ ZA guardom (`const result = status.lastRun?.result`)
+    ostane za `status===null` guardom — nikdy ju nepresúvaj do children fragmentu.
+  - **`btn lg` sa NIE VŽDY zjednocuje na `btn sm` — modálne akcie a zámerne
+    prominentné primárne CTA sa ponechávajú (a zdôvodnia na tickete).** PR D:
+    MailPreviewDialog + ThemeColorPicker sú MODÁLY (`.modal-actions`) — ich `btn
+    lg` je modálna konvencia, NIE sekčný akčný rad, nechať. DpdSection „Objednať
+    zvoz" je osamotené najprominentnejšie primárne tlačidlo (issue 451 to
+    zdokumentoval) — nechať `btn good lg`. Zjednotil sa LEN skutočný sekčný
+    akčný rad (`.mt-actions` v Šablónach). Dominantný jazyk sekcií je `btn sm`
+    (~73 výskytov vs. 9× `lg`, VŠETKY v tých 4 súboroch) — pri „zjednoť tlačidlá"
+    over `grep -rnoE 'className="btn[^"]*lg'` a KAŽDÝ výskyt posúď zvlášť
+    (modál/CTA = nechať, sekčný rad = na `sm`), nikdy paušálne všetky na `sm`.

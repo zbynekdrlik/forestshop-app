@@ -11,6 +11,7 @@ import {
   type MailLogRow,
   type MailLogSource,
 } from "../mailLogApi.js";
+import { SectionShell } from "./section/SectionShell.js";
 
 // issue 193, majiteľ: "v automatizaciach dufam su vsetky potrebne statistiky
 // komu sa poslal mail a tak dalej". Jedna obrazovka pre VŠETKÝCH odosielateľov
@@ -80,12 +81,16 @@ export function MailLogSection({ onSessionExpired }: { readonly onSessionExpired
 
   useEffect(load, [load]);
 
-  if (!loaded) return <p>Načítavam…</p>;
-  if (error !== "") return <p role="alert">{error}</p>;
-  if (data === null) return <p role="alert">Prehľad odoslaných e-mailov sa nepodarilo načítať.</p>;
+  // issue 548 (PR D): zdieľaná kostra `SectionShell` (koreň `section.orders-section`)
+  // + jednotné stavové sloty (`.loading role=status` / `role=alert`). Načítavanie
+  // aj chyba nahrádzajú obsah (skorý-return vzor), preto ostávajú ako samostatné
+  // návraty, len obalené kostrou; telo obrazovky ostáva nezmenené.
+  if (!loaded) return <SectionShell loading />;
+  if (error !== "") return <SectionShell error={error} />;
+  if (data === null) return <SectionShell error="Prehľad odoslaných e-mailov sa nepodarilo načítať." />;
 
   return (
-    <section>
+    <SectionShell>
       <p>
         Každý e-mail, ktorý appka poslala v mene obchodu — komu, kedy, čoho sa týkal a či odoslanie prešlo. Zapisujú sa aj pokusy, ktoré neprešli, aj tie, ktoré
         appka zámerne neposlala (napríklad aby zákazník nedostal to isté dvakrát).
@@ -237,6 +242,6 @@ export function MailLogSection({ onSessionExpired }: { readonly onSessionExpired
           </table>
         </div>
       )}
-    </section>
+    </SectionShell>
   );
 }

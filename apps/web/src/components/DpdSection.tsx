@@ -12,6 +12,7 @@ import {
   type DpdShippableOrder,
 } from "../dpdApi.js";
 import { formatSkDateTime } from "../formatDate.js";
+import { SectionShell } from "./section/SectionShell.js";
 
 // issue 445: slovenské množné číslo pre feedback text pri hornom tlačidle
 // ("Objednané: N zásielok"/"N úspešných, M chýb") — šéf ho číta na telefóne,
@@ -213,8 +214,12 @@ export function DpdSection({ role, onSessionExpired }: { readonly role: Me["role
       });
   }
 
+  // issue 548 (PR D): zdieľaná kostra `SectionShell` (koreň `section.orders-section`)
+  // len ako KOREŇ — stavy sú inline (sekcia ich kreslí spolu s obsahom). Primárne
+  // tlačidlo „Objednať zvoz" ostáva `btn good lg` (issue 451 ho vedome spravilo
+  // najprominentnejším — nie je to akčný rad sekcie ani dialóg, viď issue 548).
   return (
-    <section data-testid="dpd-section">
+    <SectionShell testId="dpd-section">
       {!configured && loaded && (
         <p role="alert" data-testid="dpd-not-configured">
           DPD preprava nie je nakonfigurovaná (chýba prihlásenie do dpdshipper.sk).
@@ -282,7 +287,11 @@ export function DpdSection({ role, onSessionExpired }: { readonly role: Me["role
         </div>
       )}
 
-      {loaded && orders.length === 0 && <p data-testid="dpd-empty">Žiadna objednávka nečaká na odoslanie.</p>}
+      {loaded && orders.length === 0 && (
+        <p className="empty" data-testid="dpd-empty">
+          Žiadna objednávka nečaká na odoslanie.
+        </p>
+      )}
 
       {orders.length > 0 && (
         <>
@@ -386,6 +395,6 @@ export function DpdSection({ role, onSessionExpired }: { readonly role: Me["role
           </button>
         </div>
       )}
-    </section>
+    </SectionShell>
   );
 }

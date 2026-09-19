@@ -13,6 +13,7 @@ import { PairingReviewBadgeRefreshContext } from "../pairingReviewBadgeContext.j
 import { useLoadMore } from "../useLoadMore.js";
 import { PairingReviewCard } from "./PairingReviewCard.js";
 import { PairingSearchFixTab } from "./PairingSearchFixTab.js";
+import { SectionShell } from "./section/SectionShell.js";
 
 // issue 387 E5: "Eshop → Párovanie" — čítacia obrazovka (karty + filtre) nad
 // tým, čo E3 (gather)/E4 (verify) zozbierali. Design komentár na tickete
@@ -238,15 +239,15 @@ export function PairingReviewSection({ role, onSessionExpired }: { readonly role
 
   if (activeTab === "hladat") {
     return (
-      <section data-testid="pairing-review-section">
+      <SectionShell testId="pairing-review-section">
         {tabBar}
         <PairingSearchFixTab role={role} onSessionExpired={onSessionExpired} />
-      </section>
+      </SectionShell>
     );
   }
 
   return (
-    <section data-testid="pairing-review-section">
+    <SectionShell testId="pairing-review-section">
       {tabBar}
       <p>
         Produkty bez napárovaného odkazu na dodávateľa — vľavo náš produkt, vpravo najlepší nájdený kandidát (ak ho
@@ -291,7 +292,9 @@ export function PairingReviewSection({ role, onSessionExpired }: { readonly role
       </p>
 
       {loaded && total === 0 ? (
-        <p data-testid="pairing-review-empty">Žiadny produkt v tomto filtri.</p>
+        <p className="empty" data-testid="pairing-review-empty">
+          Žiadny produkt v tomto filtri.
+        </p>
       ) : (
         <div className="pairing-review-list">
           {items.map((item) => (
@@ -312,6 +315,6 @@ export function PairingReviewSection({ role, onSessionExpired }: { readonly role
           {loadMoreState.loadingMore ? "Načítavam…" : `Načítať ďalšie (${String(Math.min(PAGE_SIZE, total - items.length))})`}
         </button>
       )}
-    </section>
+    </SectionShell>
   );
 }

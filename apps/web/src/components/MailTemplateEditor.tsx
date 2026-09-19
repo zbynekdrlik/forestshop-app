@@ -8,6 +8,7 @@ import {
   type MailTemplate,
   type MailTemplateHistoryEntry,
 } from "../mailTemplatesApi.js";
+import { ActionBar } from "./section/ActionBar.js";
 
 // issue 192: úprava JEDNÉHO druhu e-mailu. Rodič komponent montuje nanovo pri
 // zmene druhu (`key={template.key}`), takže rozpísané znenie sa načíta z props
@@ -253,17 +254,17 @@ export function MailTemplateEditor({
           )}
 
           {canEdit && (
-            <div className="mt-actions">
-              <button type="button" className="btn lg good" disabled={busy || !dirty} onClick={save} data-testid="mail-template-save">
+            <ActionBar>
+              <button type="button" className="btn sm good" disabled={busy || !dirty} onClick={save} data-testid="mail-template-save">
                 💾 Uložiť znenie
               </button>
-              <button type="button" className="btn lg ghost" disabled={busy || !template.isCustomized} onClick={restoreOriginal} data-testid="mail-template-reset">
+              <button type="button" className="btn sm ghost" disabled={busy || !template.isCustomized} onClick={restoreOriginal} data-testid="mail-template-reset">
                 ↩ Vrátiť pôvodné znenie
               </button>
-              <button type="button" className="btn lg ghost" onClick={loadHistory} data-testid="mail-template-history-load">
+              <button type="button" className="btn sm ghost" onClick={loadHistory} data-testid="mail-template-history-load">
                 🕓 História zmien
               </button>
-            </div>
+            </ActionBar>
           )}
         </div>
 

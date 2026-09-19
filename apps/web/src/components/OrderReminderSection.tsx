@@ -13,6 +13,7 @@ import {
   type OrderReminderStatus,
 } from "../orderReminderApi.js";
 import { OrderReminderEmailedRow, OrderReminderNoEmailRow, OrderReminderNoteRow, OrderReminderSkippedRow } from "./OrderReminderRow.js";
+import { SectionShell } from "./section/SectionShell.js";
 
 // Rovnaké dve role, ktoré server vyžaduje pre Štart/Stop + ručné akcie
 // (`requireRole("admin", "manazer")`, `order-reminder-routes.ts`) — čítanie
@@ -153,14 +154,17 @@ export function OrderReminderSection({
     [onSessionExpired],
   );
 
-  if (!loaded) return <p>Načítavam…</p>;
-  if (error !== "") return <p role="alert">{error}</p>;
-  if (status === null) return <p role="alert">Pripomienky objednávok sa nepodarili načítať.</p>;
+  // issue 548 (PR D): zdieľaná kostra `SectionShell` (koreň `section.orders-section`)
+  // + jednotné stavové sloty; načítavanie/chyba nahrádzajú obsah (skorý-return),
+  // telo obrazovky ostáva nezmenené.
+  if (!loaded) return <SectionShell loading />;
+  if (error !== "") return <SectionShell error={error} />;
+  if (status === null) return <SectionShell error="Pripomienky objednávok sa nepodarili načítať." />;
 
   const result = status.lastRun?.result ?? null;
 
   return (
-    <section>
+    <SectionShell>
       <div className="autohead">
         <span className={"pill" + (status.enabled ? "" : " off")} data-testid="order-reminder-status-pill">
           {status.enabled ? "Beží" : "Zastavené"}
@@ -361,6 +365,6 @@ export function OrderReminderSection({
           </button>
         </div>
       )}
-    </section>
+    </SectionShell>
   );
 }

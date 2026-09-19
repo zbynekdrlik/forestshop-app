@@ -4665,3 +4665,20 @@ PR/merge/deploy rieši supervisor). IconButton/ActionBar + zvyšné sekcie → P
 - Odklad na PR D: ActionBar, CompactRow, `.poznamka-icon-btn`, ostatné registry taby (DPD/Poznámky/Vyhľadať/
   Párovanie/Kniha e-mailov/Šablóny/Sync/Pošta/Pripomienky). ~134 net LoC reálnej zmeny.
 - Worktree worker (branch worktree-agent-af90edd2112194cd2) — PR/merge/deploy rieši supervisor.
+
+## issue 548 — Zjednotenie dizajnu sekcií (slice PR D, posledná) — 2026-09-19
+
+- Verzia 0.3.0-dev.335 → 336 (commit 2ea11bb, FIRST).
+- ActionBar primitív (`components/section/ActionBar.tsx`, `.action-bar` = `.btn sm` akčný rad,
+  bývalé `.mt-actions` premenované — identické CSS). Adoptér MailTemplateEditor (btn lg → btn sm).
+- SectionShell koreň (`section.orders-section`) + `.loading role=status` / `p.empty` v 9 taboch:
+  DpdSection, NotesSection, SearchSection (2 korene), PairingReviewSection (2 korene), MailLogSection,
+  MailTemplatesSection, SyncSection, PostaUncollectedSection, OrderReminderSection.
+  Dva tvary adopcie: koreň-only (inline stavy) vs. plný-slot (skorý-return → jednoriadkový SectionShell).
+- NotesSection `.poznamka-icon-btn` → IconButton (CSS zoštíhlené na iba-pozíciu, vzhľad nesie `.icon-btn`).
+- `btn lg` ZÁMERNE ponechané (zdokumentované): MailPreviewDialog + ThemeColorPicker (modály `.modal-actions`),
+  DpdSection primárne „Objednať zvoz" (issue 451). CompactRow NEROBENÝ (genuine odlišné CSS).
+- RED (e2e sections-shell.spec.ts PR D taby) → GREEN 399a856. gates:local zelené (typecheck+lint+api+web 798).
+  e2e beží v CI (RED by construction lokálne). Review: 0 🔴 0 🟡 1 🔵 (ActionBar single-consumer, advisory).
+- ~105 net LoC (198 ins / 93 del), v rozpočte ≤ ~300. VŠETKY viditeľné NAV taby sú teraz zjednotené.
+- Worktree worker (branch worktree-agent-a72c8725b1d08f0a8) — PR/merge/deploy rieši supervisor.
