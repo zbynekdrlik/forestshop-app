@@ -67,7 +67,7 @@ afterEach(() => {
 });
 
 it("zobrazí karty pre napárovaný aj nenapárovaný produkt s progress počítadlom", async () => {
-  searchPairingReview.mockResolvedValue({ total: 2, gatheredTotal: 5, linkedTotal: 3, catalogLinked: 2081, catalogActive: 2528, items: [MATCHED_ITEM, UNMATCHED_ITEM] });
+  searchPairingReview.mockResolvedValue({ total: 2, gatheredTotal: 5, linkedTotal: 3, catalogLinked: 2081, catalogActive: 2528, catalogMissing: 447, items: [MATCHED_ITEM, UNMATCHED_ITEM] });
 
   render(<PairingReviewSection role="citanie" onSessionExpired={() => {}} />);
 
@@ -87,11 +87,14 @@ it("zobrazí karty pre napárovaný aj nenapárovaný produkt s progress počít
   const progress = screen.getByTestId("pairing-review-progress");
   expect(progress.textContent).toContain("2081 / 2528 aktívnych produktov s odkazom na dodávateľa");
   expect(progress.textContent).not.toContain("3 / 5");
-  expect(screen.getByTestId("pairing-review-progress-queue").textContent).toContain("vo fronte na revíziu: 5");
+  // issue 571 — front-based riadok "vo fronte na revíziu" nahradený "chýba K"
+  // (K = catalogMissing = aktívne bez odkazu), starý testid zanikol.
+  expect(screen.queryByTestId("pairing-review-progress-queue")).toBeNull();
+  expect(screen.getByTestId("pairing-review-progress-missing").textContent).toContain("chýba 447");
 });
 
 it("keď zoznam nezodpovedá žiadnemu produktu, zobrazí informačnú vetu", async () => {
-  searchPairingReview.mockResolvedValue({ total: 0, gatheredTotal: 0, linkedTotal: 0, catalogLinked: 0, catalogActive: 0, items: [] });
+  searchPairingReview.mockResolvedValue({ total: 0, gatheredTotal: 0, linkedTotal: 0, catalogLinked: 0, catalogActive: 0, catalogMissing: 0, items: [] });
 
   render(<PairingReviewSection role="citanie" onSessionExpired={() => {}} />);
 
@@ -113,7 +116,7 @@ it("pri 401 zavolá onSessionExpired namiesto zobrazenia všeobecnej chyby", asy
 // prvé volanie po mounte MUSÍ toto poslať, aj bez akéhokoľvek predošlého
 // localStorage záznamu.
 it("predvolený filter pri prvom otvorení je 'unreviewed'", async () => {
-  searchPairingReview.mockResolvedValue({ total: 0, gatheredTotal: 0, linkedTotal: 0, catalogLinked: 0, catalogActive: 0, items: [] });
+  searchPairingReview.mockResolvedValue({ total: 0, gatheredTotal: 0, linkedTotal: 0, catalogLinked: 0, catalogActive: 0, catalogMissing: 0, items: [] });
 
   render(<PairingReviewSection role="citanie" onSessionExpired={() => {}} />);
 
@@ -123,13 +126,13 @@ it("predvolený filter pri prvom otvorení je 'unreviewed'", async () => {
 });
 
 it("klik na iný filter znova načíta zoznam s novým filtrom a zapamätá si ho do localStorage", async () => {
-  searchPairingReview.mockResolvedValue({ total: 0, gatheredTotal: 0, linkedTotal: 0, catalogLinked: 0, catalogActive: 0, items: [] });
+  searchPairingReview.mockResolvedValue({ total: 0, gatheredTotal: 0, linkedTotal: 0, catalogLinked: 0, catalogActive: 0, catalogMissing: 0, items: [] });
 
   render(<PairingReviewSection role="citanie" onSessionExpired={() => {}} />);
   await screen.findByTestId("pairing-review-empty");
 
   searchPairingReview.mockClear();
-  searchPairingReview.mockResolvedValue({ total: 1, gatheredTotal: 4, linkedTotal: 4, catalogLinked: 4, catalogActive: 4, items: [MATCHED_ITEM] });
+  searchPairingReview.mockResolvedValue({ total: 1, gatheredTotal: 4, linkedTotal: 4, catalogLinked: 4, catalogActive: 4, catalogMissing: 0, items: [MATCHED_ITEM] });
 
   screen.getByTestId("pairing-review-filter-matched").click();
 
@@ -142,7 +145,7 @@ it("klik na iný filter znova načíta zoznam s novým filtrom a zapamätá si h
 // issue 398 — plný zoznam z majiteľovho komentára na tickete musí byť
 // naozaj VYKRESLENÝ, nielen definovaný v type/kóde.
 it("issue 398: filtre '✓ Dobré/Vybrané' a '⛔ Vyriešené-vypnuté' sú vykreslené a fungujú", async () => {
-  searchPairingReview.mockResolvedValue({ total: 0, gatheredTotal: 0, linkedTotal: 0, catalogLinked: 0, catalogActive: 0, items: [] });
+  searchPairingReview.mockResolvedValue({ total: 0, gatheredTotal: 0, linkedTotal: 0, catalogLinked: 0, catalogActive: 0, catalogMissing: 0, items: [] });
 
   render(<PairingReviewSection role="citanie" onSessionExpired={() => {}} />);
   await screen.findByTestId("pairing-review-empty");
@@ -151,7 +154,7 @@ it("issue 398: filtre '✓ Dobré/Vybrané' a '⛔ Vyriešené-vypnuté' sú vyk
   expect(screen.getByTestId("pairing-review-filter-terminal").textContent).toBe("⛔ Vyriešené-vypnuté");
 
   searchPairingReview.mockClear();
-  searchPairingReview.mockResolvedValue({ total: 0, gatheredTotal: 0, linkedTotal: 0, catalogLinked: 0, catalogActive: 0, items: [] });
+  searchPairingReview.mockResolvedValue({ total: 0, gatheredTotal: 0, linkedTotal: 0, catalogLinked: 0, catalogActive: 0, catalogMissing: 0, items: [] });
   screen.getByTestId("pairing-review-filter-terminal").click();
 
   await waitFor(() => {
@@ -164,7 +167,7 @@ it("issue 398: filtre '✓ Dobré/Vybrané' a '⛔ Vyriešené-vypnuté' sú vyk
 // záložky. Tento test dokazuje, že karta samotná (nie navigácia) NEPOUŽÍVA
 // zdieľaný nejednoznačný accessible name.
 it("hlavička karty 'Náš produkt' je odlíšená od 'Navrhnutý kandidát' — bez vlastného <h1>/<h2> obrazovky", async () => {
-  searchPairingReview.mockResolvedValue({ total: 1, gatheredTotal: 1, linkedTotal: 0, catalogLinked: 0, catalogActive: 1, items: [MATCHED_ITEM] });
+  searchPairingReview.mockResolvedValue({ total: 1, gatheredTotal: 1, linkedTotal: 0, catalogLinked: 0, catalogActive: 1, catalogMissing: 1, items: [MATCHED_ITEM] });
 
   render(<PairingReviewSection role="citanie" onSessionExpired={() => {}} />);
   await screen.findByTestId("pairing-review-card-PR-1");
@@ -187,7 +190,7 @@ it("klik na 'Hľadať / opraviť' prepne na vyhľadávaciu záložku, aj keď 'P
 });
 
 it("prepnutie späť na 'Prehľad' ukáže pôvodný zoznam bez nového vyhľadávania", async () => {
-  searchPairingReview.mockResolvedValue({ total: 0, gatheredTotal: 0, linkedTotal: 0, catalogLinked: 0, catalogActive: 0, items: [] });
+  searchPairingReview.mockResolvedValue({ total: 0, gatheredTotal: 0, linkedTotal: 0, catalogLinked: 0, catalogActive: 0, catalogMissing: 0, items: [] });
 
   render(<PairingReviewSection role="manazer" onSessionExpired={() => {}} />);
   await screen.findByTestId("pairing-review-empty");

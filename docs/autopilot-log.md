@@ -4682,3 +4682,12 @@ PR/merge/deploy rieši supervisor). IconButton/ActionBar + zvyšné sekcie → P
   e2e beží v CI (RED by construction lokálne). Review: 0 🔴 0 🟡 1 🔵 (ActionBar single-consumer, advisory).
 - ~105 net LoC (198 ins / 93 del), v rozpočte ≤ ~300. VŠETKY viditeľné NAV taby sú teraz zjednotené.
 - Worktree worker (branch worktree-agent-a72c8725b1d08f0a8) — PR/merge/deploy rieši supervisor.
+
+## issue 571 — Párovanie: ukončené produkty von z Nezrevidované + horné štatistiky napárované / chýba (v0.3.0-dev.337)
+- Commity: 0517c0e (bump) · 2367ece [red] · 77a86f2 [green] · 55811c6 [refactor coverage.ts split].
+- `isUnreviewed`: `productState === "discontinued"` → false (ukončené len pod 🚫/Všetky); nav odznak (`activeUnpaired`) zdieľa predikát, klesol sám.
+- `computeCatalogCoverage`: aktívny = `rollupProductState` ∈ {sellable, out_of_stock} (znovupoužitý rollup, žiadny druhý predikát), pridané `catalogMissing` = aktívne bez odkazu a bez terminálneho rozhodnutia (== activeUnpaired == total(unreviewed), review 571: NIE catalogActive − catalogLinked — split so sellable variantom by rozišiel čísla; test (d)).
+- Frontend: „vo fronte na revíziu" (`gatheredTotal`) → „chýba {catalogMissing}", testid+CSS `pairing-review-progress-queue` → `-missing`. `gatheredTotal`/`linkedTotal` ostali v API (nezobrazené).
+- RED→GREEN: integračné (a) discontinued nie v unreviewed/je v st3 · (b) out_of_stock aktívny + v catalogMissing · (c) catalogMissing === total(unreviewed). Sekcia unit + e2e nový testid.
+- `queries.ts` prekročil max-lines 400 → rollupProductState + computeCatalogCoverage vyčlenené do `coverage.ts` (type-only import späť, žiadny runtime cyklus).
+- gates:local EXIT=0 (typecheck+lint+798 web+api unit). Integračné 23/23 (catalog-coverage+http), sibling pairing-review 47/47. Worktree worker; PR/merge/deploy rieši supervisor.

@@ -69,13 +69,14 @@ export function PairingReviewSection({ role, onSessionExpired }: { readonly role
   const [filter, setFilter] = useState<PairingReviewFilter>(readStoredFilter);
   const [items, setItems] = useState<readonly PairingReviewItem[]>([]);
   const [total, setTotal] = useState(0);
-  const [gatheredTotal, setGatheredTotal] = useState(0);
   // issue 432 — katalógové pokrytie (hlavný ukazovateľ): `catalogLinked` /
-  // `catalogActive` = aktívne produkty (s aspoň jedným predajným variantom) s
-  // efektívnou linkou / všetky aktívne produkty. NEZÁVISLÉ od `gatheredTotal`
-  // (veľkosť recenznej fronty, teraz už len samostatný menší riadok).
+  // `catalogActive` = aktívne produkty (sellable ∪ out_of_stock, issue 571) s
+  // efektívnou linkou / všetky aktívne produkty. issue 571 — `catalogMissing`
+  // (= aktívne bez odkazu) nahradilo zobrazenie veľkosti fronty (`gatheredTotal`),
+  // ktoré sa už na obrazovke neukazuje (API pole ostáva, len sa nečíta).
   const [catalogLinked, setCatalogLinked] = useState(0);
   const [catalogActive, setCatalogActive] = useState(0);
+  const [catalogMissing, setCatalogMissing] = useState(0);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState("");
   // issue 399 — "Hľadať / opraviť" pod-záložka, NEZÁVISLÁ od "Prehľad"'s
@@ -121,9 +122,9 @@ export function PairingReviewSection({ role, onSessionExpired }: { readonly role
         if (!mountedRef.current || !guard.isLatest(seq)) return;
         setItems(result.items);
         setTotal(result.total);
-        setGatheredTotal(result.gatheredTotal);
         setCatalogLinked(result.catalogLinked);
         setCatalogActive(result.catalogActive);
+        setCatalogMissing(result.catalogMissing);
         setLoaded(true);
       })
       .catch((err: unknown) => {
@@ -265,8 +266,8 @@ export function PairingReviewSection({ role, onSessionExpired }: { readonly role
             <div className="pairing-review-progress-bar-fill" style={{ width: `${String(progressPct)}%` }} />
           </div>
         </div>
-        <span className="pairing-review-progress-queue" data-testid="pairing-review-progress-queue">
-          vo fronte na revíziu: {String(gatheredTotal)}
+        <span className="pairing-review-progress-missing" data-testid="pairing-review-progress-missing">
+          chýba {String(catalogMissing)}
         </span>
       </div>
 

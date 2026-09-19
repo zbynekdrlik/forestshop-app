@@ -66,6 +66,11 @@ test("predvolený filter 'Nezrevidované' ukáže produkty bez linky (s aj bez k
   await page.getByTestId("nav-tab-pairing-review").click();
   await expect(page.getByRole("heading", { name: "Párovanie", exact: true })).toBeVisible();
 
+  // issue 571 — horný riadok "chýba K" (nahradil front-based "vo fronte na
+  // revíziu: N"): nezáporné celé číslo, starý testid zanikol.
+  await expect(page.getByTestId("pairing-review-progress-missing")).toHaveText(/^chýba \d+$/);
+  await expect(page.getByTestId("pairing-review-progress-queue")).toHaveCount(0);
+
   // issue 398 — napárovaný produkt: karta ukazuje náš produkt aj navrhnutého
   // kandidáta, so ŠTYRMI akčnými tlačidlami PRIAMO na karte (✓ Dobré / vyber
   // url / 📦 / 🚫), žiadny "✗ Zlé" medzikrok.

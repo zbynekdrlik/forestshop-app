@@ -51,9 +51,14 @@ interface Telo {
   readonly linkedTotal: number;
   readonly catalogLinked: number;
   readonly catalogActive: number;
+  // issue 571 — aktívne bez efektívneho odkazu (catalogActive − catalogLinked),
+  // rovnaké číslo ako `total` filtra `unreviewed` (horný text "chýba K").
+  readonly catalogMissing: number;
   // issue 446 — badge záložky Párovanie = aktívne (≥1 sellable) produkty bez
   // efektívneho odkazu a bez terminálneho rozhodnutia.
   readonly activeUnpaired: number;
+  // issue 571 — členstvo produktu vo výsledku filtra (stačí productKey).
+  readonly items: readonly { readonly productKey: string }[];
 }
 
 async function fetchCoverage(app: Awaited<ReturnType<typeof boot>>["app"], cookie: string): Promise<Telo> {
@@ -156,4 +161,106 @@ it("issue 446: activeUnpaired ráta LEN aktívne bez odkazu a bez terminálneho 
   expect(telo.catalogActive).toBe(3);
   // Badge = LEN AU-ACTIVE (bez odkazu, bez terminálneho rozhodnutia).
   expect(telo.activeUnpaired).toBe(1);
+});
+
+// issue 571 — helper na počet a členstvo pre KONKRÉTNY filter (nie len
+// `filter=all` pokrytie); `pageSize=200` aby sa všetky seedované produkty
+// zmestili do `items` pri kontrole členstva.
+async function fetchFilter(app: Awaited<ReturnType<typeof boot>>["app"], cookie: string, filter: string): Promise<Telo> {
+  return (await (await app.request(`/api/pairing-review?filter=${filter}&pageSize=200`, { headers: { cookie } })).json()) as Telo;
+}
+
+// issue 571 — ukončené produkty („Nepredáva sa") von z filtra Nezrevidované a
+// z počtu „chýba"; aktívny = `rollupProductState` in {sellable, out_of_stock}
+// (nie ukončený). Majiteľ (ROZHODNUTÉ): číslo hore „chýba K" = presne počet
+// vo filtri Nezrevidované, jedna definícia „aktívny" pre filter, badge aj štatistiku.
+it("issue 571 (a): ukončený produkt bez odkazu NIE JE v 'unreviewed', ale JE v 'st3'", async () => {
+  const { app, cookie, db } = await boot("citanie");
+  const snapshotId = await insertTestSnapshot(db);
+
+  // Ukončený (žiadny sellable, žiadny viditeľný out_of_stock) + bez odkazu.
+  await seedProduct(db, snapshotId, "S571-DISC", {
+    name: "Ukončený bez odkazu",
+    variants: [{ code: "S571-DISC/1", state: "discontinued" }],
+  });
+
+  const unreviewed = await fetchFilter(app, cookie, "unreviewed");
+  const st3 = await fetchFilter(app, cookie, "st3");
+
+  expect(unreviewed.items.some((i) => i.productKey === "S571-DISC")).toBe(false);
+  expect(st3.items.some((i) => i.productKey === "S571-DISC")).toBe(true);
+});
+
+it("issue 571 (b): produkt LEN s viditeľným out_of_stock variantom je aktívny — v 'catalogActive' a (bez odkazu) v 'catalogMissing'", async () => {
+  const { app, cookie, db } = await boot("citanie");
+  const snapshotId = await insertTestSnapshot(db);
+
+  // Len viditeľný out_of_stock variant (default productVisibility "visible",
+  // missingSince null) → rollup "out_of_stock" = aktívny; bez odkazu.
+  await seedProduct(db, snapshotId, "S571-OOS", {
+    name: "Vypredaný bez odkazu",
+    variants: [{ code: "S571-OOS/1", state: "out_of_stock" }],
+  });
+
+  const telo = await fetchFilter(app, cookie, "all");
+
+  expect(telo.catalogActive).toBe(1);
+  expect(telo.catalogLinked).toBe(0);
+  expect(telo.catalogMissing).toBe(1);
+});
+
+it("issue 571 (c): catalogMissing === total(unreviewed) na tých istých dátach", async () => {
+  const { app, cookie, db } = await boot("citanie");
+  const snapshotId = await insertTestSnapshot(db);
+
+  // Zmiešaná vzorka: aktívny bez odkazu, vypredaný bez odkazu, aktívny s
+  // odkazom, ukončený bez odkazu.
+  await seedProduct(db, snapshotId, "S571C-SELL-NOLINK", { name: "Aktívny bez odkazu" });
+  await seedProduct(db, snapshotId, "S571C-OOS-NOLINK", {
+    name: "Vypredaný bez odkazu",
+    variants: [{ code: "S571C-OOS-NOLINK/1", state: "out_of_stock" }],
+  });
+  await seedProduct(db, snapshotId, "S571C-SELL-LINK", { name: "Aktívny s odkazom", internalNote: "https://dodavatel.example.com/s571c" });
+  await seedProduct(db, snapshotId, "S571C-DISC-NOLINK", {
+    name: "Ukončený bez odkazu",
+    variants: [{ code: "S571C-DISC-NOLINK/1", state: "discontinued" }],
+  });
+
+  const all = await fetchFilter(app, cookie, "all");
+  const unreviewed = await fetchFilter(app, cookie, "unreviewed");
+
+  // Aktívne = SELL-NOLINK, OOS-NOLINK, SELL-LINK (nie DISC-NOLINK).
+  expect(all.catalogActive).toBe(3);
+  // Olinkované = SELL-LINK.
+  expect(all.catalogLinked).toBe(1);
+  // Chýba = catalogActive − catalogLinked = 2 (SELL-NOLINK, OOS-NOLINK).
+  expect(all.catalogMissing).toBe(2);
+  // A presne toľko je aj vo filtri Nezrevidované.
+  expect(unreviewed.total).toBe(all.catalogMissing);
+});
+
+it("issue 571 (d): aktívny s TERMINÁLNYM rozhodnutím (split) bez odkazu NIE JE v 'chýba' ani 'unreviewed' — catalogMissing vylučuje terminálne, na rozdiel od catalogActive − catalogLinked", async () => {
+  const { app, cookie, db } = await boot("citanie");
+  const snapshotId = await insertTestSnapshot(db);
+  const [u] = await db.select({ id: users.id }).from(users).limit(1);
+  if (u === undefined) throw new Error("testovací používateľ chýba");
+
+  // Aktívny (sellable) bez product-linky, ALE terminálne rozhodnutý split —
+  // linky má per veľkosť (`hasEffectiveLink` false), no JE zrevidovaný. Presne
+  // prípad, kde catalogActive − catalogLinked (= 1) NESEDÍ s filtrom (= 0).
+  await seedProduct(db, snapshotId, "S571D-SPLIT", { name: "Aktívny split bez product-linky" });
+  await db.insert(pairingDecisions).values({ productKey: "S571D-SPLIT", status: "split", url: null, decidedBy: u.id, decidedAt: new Date(), updatedAt: new Date() });
+
+  const all = await fetchFilter(app, cookie, "all");
+  const unreviewed = await fetchFilter(app, cookie, "unreviewed");
+
+  expect(all.catalogActive).toBe(1);
+  expect(all.catalogLinked).toBe(0);
+  // catalogActive − catalogLinked = 1 (zahrnulo by terminálne rozhodnutý), ALE
+  // catalogMissing = 0 (vylučuje terminálne) = presne filter aj nav odznak.
+  expect(all.catalogActive - all.catalogLinked).toBe(1);
+  expect(all.catalogMissing).toBe(0);
+  expect(all.activeUnpaired).toBe(0);
+  expect(unreviewed.total).toBe(0);
+  expect(all.catalogMissing).toBe(unreviewed.total);
 });
