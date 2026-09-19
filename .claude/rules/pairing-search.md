@@ -957,3 +957,36 @@ vyradilo #311 aj jeho playbook súbor (návrh, sekcia 4); router v
   počíta sa · internal_note URL počíta sa · bez linky len menovateľ · bez
   sellable variantu ani v menovateli · aktívny olinkovaný MIMO fronty sa
   ráta).
+
+## issue 571 — ukončené produkty von z „Nezrevidované" + horné štatistiky napárované / chýba
+
+- **JEDNA definícia „aktívny produkt" pre filter, nav odznak AJ hornú
+  štatistiku: `rollupProductState(varianty)` ∈ {`sellable`, `out_of_stock`}
+  (t. j. `≠ discontinued`) — žiadny druhý predikát.** Pred issue 571 mal
+  `computeCatalogCoverage` (issue 432) vlastnú užšiu definíciu „aspoň jeden
+  `sellable` variant" (SQL `selectDistinct WHERE state='sellable'`), ktorá
+  míňala ~24 vypredaných produktov (len viditeľný `out_of_stock`), hoci job
+  restock ich reálne prepína. Teraz `computeCatalogCoverage` načíta varianty,
+  zoskupí po produkte a volá TÚ ISTÚ `rollupProductState` ako filter/karta
+  (vyčlenená spolu s ním do `coverage.ts` kvôli eslint `max-lines: 400`).
+- **„Nezrevidované" (`isUnreviewed`) = AKTÍVNY produkt bez efektívnej linky.**
+  Pridané `if (item.productState === "discontinued") return false;` — ukončené
+  produkty (na PROD ~1831) odkaz nikdy nedostanú a nič sa u nich neprepína,
+  takže do fronty revízie nepatria. Ostávajú dostupné pod filtrom 🚫 Nepredáva
+  sa a Všetky (populácia `determineReviewPopulationKeys` sa NEMENÍ — len filter
+  ich už nezaráta). Nav odznak `pairingReviewUnreviewedCount` (= `activeUnpaired`
+  z `computeCatalogCoverage`) zdieľa tú istú „aktívny" definíciu, takže klesol
+  automaticky — žiadny samostatný predikát na badge.
+- **Horné číslo = `catalogMissing = catalogActive − catalogLinked` („chýba K"),
+  NAHRADILO front-based „vo fronte na revíziu: N" (`gatheredTotal`).** Na tých
+  istých dátach `catalogMissing === total(unreviewed)` (integračný test to
+  asertuje) — jedno číslo pre „koľko aktívnych ešte nemá odkaz" hore aj vo
+  filtri, koniec zmätku z issue 432 (dve rôzne množiny). Frontend testid
+  `pairing-review-progress-queue` → `pairing-review-progress-missing` (aj CSS
+  trieda), text „chýba {catalogMissing}".
+- **`gatheredTotal`/`linkedTotal` OSTÁVAJÚ v API odpovedi, len sa NEZOBRAZUJÚ**
+  (design vetva „inak ponechať, len sa nezobrazí") — `pairing-review-http
+  .integration.test.ts` ich stále overuje ako veľkosť fronty (sémanticky
+  platné, populácia sa nemení). Odstránenie by zbytočne prepísalo cudzí test.
+- **Očakávané PROD čísla po nasadení (19. 9. 2026): napárované ≈ 2129, aktívne
+  ≈ 2588, chýba ≈ 459 = Nezrevidované** (predtým Nezrevidované 2290).
