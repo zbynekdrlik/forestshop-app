@@ -12,6 +12,7 @@ import {
   type PostaUncollectedStatus,
 } from "../postaUncollectedApi.js";
 import { PostaUncollectedRow } from "./PostaUncollectedRow.js";
+import { SectionShell } from "./section/SectionShell.js";
 
 // Rovnaké dve role, ktoré server vyžaduje pre Štart/Stop + "Spustiť teraz"
 // (`requireRole("admin", "manazer")`, `posta-uncollected-routes.ts`) —
@@ -126,14 +127,17 @@ export function PostaUncollectedSection({
     [onSessionExpired],
   );
 
-  if (!loaded) return <p>Načítavam…</p>;
-  if (error !== "") return <p role="alert">{error}</p>;
-  if (status === null) return <p role="alert">Nevyzdvihnuté zásielky sa nepodarili načítať.</p>;
+  // issue 548 (PR D): zdieľaná kostra `SectionShell` (koreň `section.orders-section`)
+  // + jednotné stavové sloty; načítavanie/chyba nahrádzajú obsah (skorý-return),
+  // telo obrazovky ostáva nezmenené.
+  if (!loaded) return <SectionShell loading />;
+  if (error !== "") return <SectionShell error={error} />;
+  if (status === null) return <SectionShell error="Nevyzdvihnuté zásielky sa nepodarili načítať." />;
 
   const result = status.lastRun?.result ?? null;
 
   return (
-    <section>
+    <SectionShell>
       <div className="autohead">
         <span className={"pill" + (status.enabled ? "" : " off")} data-testid="posta-status-pill">
           {status.enabled ? "Beží" : "Zastavené"}
@@ -266,6 +270,6 @@ export function PostaUncollectedSection({
           </button>
         </div>
       )}
-    </section>
+    </SectionShell>
   );
 }

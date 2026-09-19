@@ -13,6 +13,7 @@ import {
 } from "../searchApi.js";
 import { saveProductLink, SupplierLinksUnauthorizedError } from "../supplierLinksApi.js";
 import { OrderSearchPanel } from "./OrderSearchPanel.js";
+import { SectionShell } from "./section/SectionShell.js";
 
 // issue 289: "Eshop → Vyhľadať" — DVE nezávislé, popísané polia namiesto
 // jedného spoločného (issue 240): "Produkt" (tento súbor — kód, názov,
@@ -197,7 +198,7 @@ export function SearchSection({
   if (selectedProductKey !== null) {
     return (
       <>
-        <section data-testid="search-detail-section">
+        <SectionShell testId="search-detail-section">
           <p>
             <button type="button" className="btn sm ghost" data-testid="search-back" onClick={backToSearch}>
               ← Späť na hľadanie
@@ -205,7 +206,9 @@ export function SearchSection({
           </p>
 
           {!detailLoaded ? (
-            <p>Načítavam…</p>
+            <p className="loading" role="status">
+              Načítavam…
+            </p>
           ) : detail === null ? (
             <p role="alert" data-testid="search-detail-not-found">
               Produkt sa nenašiel.
@@ -327,7 +330,7 @@ export function SearchSection({
               </div>
             </>
           )}
-        </section>
+        </SectionShell>
         <OrderSearchPanel onSessionExpired={onSessionExpired} />
       </>
     );
@@ -335,7 +338,7 @@ export function SearchSection({
 
   return (
     <>
-      <section data-testid="search-section">
+      <SectionShell testId="search-section">
         <form onSubmit={submit}>
           <div className="field">
             <label htmlFor="search-product-q">Produkt</label>
@@ -362,7 +365,11 @@ export function SearchSection({
 
         {searchError !== "" && <p role="alert">{searchError}</p>}
 
-        {searched && result.length === 0 && <p data-testid="search-product-empty">Produktu nezodpovedá nič.</p>}
+        {searched && result.length === 0 && (
+          <p className="empty" data-testid="search-product-empty">
+            Produktu nezodpovedá nič.
+          </p>
+        )}
 
         {result.length > 0 && (
           <div data-testid="search-products">
@@ -406,7 +413,7 @@ export function SearchSection({
             </div>
           </div>
         )}
-      </section>
+      </SectionShell>
 
       <OrderSearchPanel onSessionExpired={onSessionExpired} />
     </>

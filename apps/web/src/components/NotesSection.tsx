@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type JSX } from "react";
 import { createNote, deleteNote, fetchNotes, NotesUnauthorizedError, setNoteResolved, type NoteRow } from "../notesApi.js";
 import { EmojiPickerButton } from "./EmojiPickerButton.js";
+import { IconButton } from "./section/IconButton.js";
+import { SectionShell } from "./section/SectionShell.js";
 
 // issue 437: "Poznámky" — ZDIEĽANÁ nástenka rýchlych poznámok (mobilný zápis +
 // PWA). Rovnako ako `DailyTasksSection.tsx` (od #487 tiež zdieľaný) sú
@@ -141,38 +143,28 @@ export function NotesSection({ onSessionExpired }: { readonly onSessionExpired: 
     </div>
   );
 
-  if (error !== "" && rows === null) {
-    return (
-      <section>
-        {intro}
-        <div className="poznamky-panel">
-          {addRow}
-          <p role="alert">{error}</p>
-        </div>
-      </section>
-    );
-  }
-  if (rows === null) {
-    return (
-      <section>
-        {intro}
-        <div className="poznamky-panel">
-          {addRow}
-          <p>Načítavam…</p>
-        </div>
-      </section>
-    );
-  }
-
+  // issue 548 (PR D): zdieľaná kostra `SectionShell` (koreň `section.orders-section`)
+  // + jednotné stavové sloty. Layout (intro + add-row) sa kreslí VŽDY, až potom
+  // stav, preto `SectionShell` slúži len ako KOREŇ a načítavanie/prázdno sú inline
+  // (`.loading role=status` / `p.empty`) — rovnaký vzor ako PR C pri Predajni.
+  // Poradie a všetky testidy zachované.
   return (
-    <section>
+    <SectionShell>
       {intro}
       <div className="poznamky-panel">
         {addRow}
         {error !== "" && <p role="alert">{error}</p>}
 
-        {rows.length === 0 ? (
-          <p data-testid="poznamky-empty">Žiadne poznámky — napíš prvú vyššie.</p>
+        {rows === null ? (
+          error === "" && (
+            <p className="loading" role="status">
+              Načítavam…
+            </p>
+          )
+        ) : rows.length === 0 ? (
+          <p className="empty" data-testid="poznamky-empty">
+            Žiadne poznámky — napíš prvú vyššie.
+          </p>
         ) : (
           <div className="poznamky-list" data-testid="poznamky-list">
             {rows.map((row) => {
@@ -202,25 +194,24 @@ export function NotesSection({ onSessionExpired }: { readonly onSessionExpired: 
                     </div>
                   </div>
 
-                  <button
-                    type="button"
+                  <IconButton
                     className="poznamka-icon-btn"
                     disabled={busy}
                     onClick={() => {
                       removeNote(row.id);
                     }}
                     title="Odstrániť poznámku"
-                    aria-label={`Odstrániť poznámku ${row.body}`}
-                    data-testid={`poznamka-delete-${row.id}`}
+                    ariaLabel={`Odstrániť poznámku ${row.body}`}
+                    testId={`poznamka-delete-${row.id}`}
                   >
                     🗑
-                  </button>
+                  </IconButton>
                 </div>
               );
             })}
           </div>
         )}
       </div>
-    </section>
+    </SectionShell>
   );
 }

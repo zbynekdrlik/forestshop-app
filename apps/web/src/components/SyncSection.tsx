@@ -6,6 +6,7 @@ import { OrdersUnauthorizedError, triggerOrdersIngest, type OrdersIngestOutcome 
 import { fetchJobRuns, SchedulerUnauthorizedError, type JobRun } from "../schedulerApi.js";
 import { detailText, jobLabel, STATUS_LABELS } from "../schedulerLabels.js";
 import { CATALOG_STALE_AFTER_MS, computeSyncStatus, ORDERS_STALE_AFTER_MS } from "../syncStatus.js";
+import { SectionShell } from "./section/SectionShell.js";
 
 // Rovnaké dve role, ktoré server vyžaduje pre `GET /api/scheduler/runs`
 // AJ pre obe ručné tlačidlá importu (`requireRole("admin", "manazer")`,
@@ -191,10 +192,11 @@ export function SyncSection({
   const catalogRun = runs.find((r) => r.jobName === CATALOG_JOB_NAME);
   const ordersRun = runs.find((r) => r.jobName === ORDERS_JOB_NAME);
 
+  // issue 548 (PR D): zdieľaná kostra `SectionShell` (koreň `section.orders-section`)
+  // + jednotné stavové sloty (`.loading role=status` / `role=alert`); obsah sa
+  // kreslí až po načítaní (rovnako ako pôvodne). Telo obrazovky nezmenené.
   return (
-    <section>
-      {!loaded && <p>Načítavam prehľad synchronizácie…</p>}
-      {error !== "" && <p role="alert">{error}</p>}
+    <SectionShell loading={!loaded} loadingText="Načítavam prehľad synchronizácie…" error={error}>
       {loaded && (
         <>
           <IngestChannel
@@ -247,6 +249,6 @@ export function SyncSection({
           )}
         </>
       )}
-    </section>
+    </SectionShell>
   );
 }

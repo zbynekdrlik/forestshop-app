@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type JSX } from "react";
 import type { Me } from "../api.js";
 import { fetchMailTemplates, MailTemplatesUnauthorizedError, type MailTemplate } from "../mailTemplatesApi.js";
 import { MailTemplateEditor } from "./MailTemplateEditor.js";
+import { SectionShell } from "./section/SectionShell.js";
 
 // issue 192, majiteľ: "pri každej veci čo posiela mail by mala byť možnosť
 // zmeniť text mailu". Vľavo zoznam druhov e-mailov, vpravo úprava vybraného.
@@ -36,14 +37,17 @@ export function MailTemplatesSection({ role, onSessionExpired }: { readonly role
 
   useEffect(load, [load]);
 
-  if (!loaded) return <p>Načítavam…</p>;
-  if (error !== "") return <p role="alert">{error}</p>;
-  if (templates === null) return <p role="alert">Texty e-mailov sa nepodarilo načítať.</p>;
+  // issue 548 (PR D): zdieľaná kostra `SectionShell` (koreň `section.orders-section`)
+  // + jednotné stavové sloty; načítavanie/chyba nahrádzajú obsah (skorý-return),
+  // telo obrazovky ostáva nezmenené.
+  if (!loaded) return <SectionShell loading />;
+  if (error !== "") return <SectionShell error={error} />;
+  if (templates === null) return <SectionShell error="Texty e-mailov sa nepodarilo načítať." />;
 
   const selected = templates.find((t) => t.key === selectedKey) ?? templates[0];
 
   return (
-    <section>
+    <SectionShell>
       <p>
         Znenie každého e-mailu, ktorý appka posiela. Polia v zložených zátvorkách sa pri odoslaní nahradia skutočnými údajmi — meno zákazníka, číslo objednávky a
         podobne.
@@ -81,6 +85,6 @@ export function MailTemplatesSection({ role, onSessionExpired }: { readonly role
           />
         )}
       </div>
-    </section>
+    </SectionShell>
   );
 }
