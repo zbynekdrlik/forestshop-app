@@ -142,9 +142,11 @@ export interface PairingReviewSearchResult {
    * ukončený), rovnaká definícia ako filter/karta, žiadny druhý predikát. */
   readonly catalogLinked: number;
   readonly catalogActive: number;
-  /** issue 571 — aktívne produkty BEZ efektívnej dodávateľskej linky =
-   * `catalogActive − catalogLinked`. Horný ukazovateľ obrazovky „chýba K"; na
-   * tých istých dátach sa rovná `total` filtra `unreviewed`. */
+  /** issue 571 — aktívne produkty BEZ efektívnej dodávateľskej linky A BEZ
+   * terminálneho rozhodnutia = presne `activeUnpaired` (nav odznak) a `total`
+   * filtra `unreviewed`. Horný ukazovateľ obrazovky „chýba K"; rovná sa filtru
+   * VŽDY (nie `catalogActive − catalogLinked`, ktoré by zahrnulo terminálne
+   * rozhodnuté aktívne bez linky, napr. split — review issue 571). */
   readonly catalogMissing: number;
   /** issue 446 — badge záložky Párovanie: AKTÍVNE nenapárované produkty
    * (≥1 sellable variant AND bez efektívneho odkazu AND bez terminálneho

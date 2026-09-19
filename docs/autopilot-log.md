@@ -4686,7 +4686,7 @@ PR/merge/deploy rieši supervisor). IconButton/ActionBar + zvyšné sekcie → P
 ## issue 571 — Párovanie: ukončené produkty von z Nezrevidované + horné štatistiky napárované / chýba (v0.3.0-dev.337)
 - Commity: 0517c0e (bump) · 2367ece [red] · 77a86f2 [green] · 55811c6 [refactor coverage.ts split].
 - `isUnreviewed`: `productState === "discontinued"` → false (ukončené len pod 🚫/Všetky); nav odznak (`activeUnpaired`) zdieľa predikát, klesol sám.
-- `computeCatalogCoverage`: aktívny = `rollupProductState` ∈ {sellable, out_of_stock} (znovupoužitý rollup, žiadny druhý predikát), pridané `catalogMissing = catalogActive − catalogLinked`.
+- `computeCatalogCoverage`: aktívny = `rollupProductState` ∈ {sellable, out_of_stock} (znovupoužitý rollup, žiadny druhý predikát), pridané `catalogMissing` = aktívne bez odkazu a bez terminálneho rozhodnutia (== activeUnpaired == total(unreviewed), review 571: NIE catalogActive − catalogLinked — split so sellable variantom by rozišiel čísla; test (d)).
 - Frontend: „vo fronte na revíziu" (`gatheredTotal`) → „chýba {catalogMissing}", testid+CSS `pairing-review-progress-queue` → `-missing`. `gatheredTotal`/`linkedTotal` ostali v API (nezobrazené).
 - RED→GREEN: integračné (a) discontinued nie v unreviewed/je v st3 · (b) out_of_stock aktívny + v catalogMissing · (c) catalogMissing === total(unreviewed). Sekcia unit + e2e nový testid.
 - `queries.ts` prekročil max-lines 400 → rollupProductState + computeCatalogCoverage vyčlenené do `coverage.ts` (type-only import späť, žiadny runtime cyklus).

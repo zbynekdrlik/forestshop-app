@@ -977,11 +977,18 @@ vyradilo #311 aj jeho playbook súbor (návrh, sekcia 4); router v
   ich už nezaráta). Nav odznak `pairingReviewUnreviewedCount` (= `activeUnpaired`
   z `computeCatalogCoverage`) zdieľa tú istú „aktívny" definíciu, takže klesol
   automaticky — žiadny samostatný predikát na badge.
-- **Horné číslo = `catalogMissing = catalogActive − catalogLinked` („chýba K"),
-  NAHRADILO front-based „vo fronte na revíziu: N" (`gatheredTotal`).** Na tých
-  istých dátach `catalogMissing === total(unreviewed)` (integračný test to
-  asertuje) — jedno číslo pre „koľko aktívnych ešte nemá odkaz" hore aj vo
-  filtri, koniec zmätku z issue 432 (dve rôzne množiny). Frontend testid
+- **Horné číslo = `catalogMissing` („chýba K"), NAHRADILO front-based „vo fronte
+  na revíziu: N" (`gatheredTotal`).** `catalogMissing` = aktívne BEZ odkazu A BEZ
+  terminálneho rozhodnutia — teda PRESNE `activeUnpaired` (nav odznak) aj `total`
+  filtra `unreviewed`, `catalogMissing === total(unreviewed)` VŽDY (integračný
+  test (c) aj (d) to asertujú, vrátane split prípadu). **POZOR: NIE
+  `catalogActive − catalogLinked`** — to by zahrnulo aktívne terminálne
+  rozhodnuté bez linky (napr. split produkt so sellable variantom: linky per
+  veľkosť, `hasEffectiveLink` false, no JE zrevidovaný) a „chýba K" by sa
+  rozišlo s filtrom aj s odznakom (review issue 571 🟡, pôvodný návrh mal
+  `catalogActive − catalogLinked`, opravené). Jedno číslo pre „koľko aktívnych
+  ešte treba olinkovať" hore, vo filtri aj na odznaku — koniec zmätku z issue
+  432. Frontend testid
   `pairing-review-progress-queue` → `pairing-review-progress-missing` (aj CSS
   trieda), text „chýba {catalogMissing}".
 - **`gatheredTotal`/`linkedTotal` OSTÁVAJÚ v API odpovedi, len sa NEZOBRAZUJÚ**

@@ -45,9 +45,13 @@ export function rollupProductState(rows: readonly RollupVariant[]): PairingRevie
 // `out_of_stock`), ktoré job restock prepína a majiteľ ich chce v menovateli.
 // `catalogLinked` = koľko z aktívnych má EFEKTÍVNU dodávateľskú linku
 // (`resolveEffectiveSupplierLink` = override ∪ `internalNote` extrakcia — TÁ
-// ISTÁ čítacia logika, žiadny duplicitný regex). `catalogMissing` =
-// `catalogActive − catalogLinked` (horný ukazovateľ „chýba K", rovná sa `total`
-// filtra `unreviewed`). Rovnaký MVP „načítaj celý katalóg do JS" vzor ako
+// ISTÁ čítacia logika, žiadny duplicitný regex). `catalogMissing` (horný
+// ukazovateľ „chýba K") = aktívne BEZ odkazu A BEZ terminálneho rozhodnutia —
+// t. j. PRESNE `activeUnpaired` (nav odznak) a `total` filtra `unreviewed`
+// (review issue 571: NIE `catalogActive − catalogLinked`, to by zahrnulo aj
+// aktívne terminálne rozhodnuté bez linky, napr. split produkt so sellable
+// variantom, a „chýba K" by sa rozišlo s filtrom aj s odznakom). Rovnaký MVP
+// „načítaj celý katalóg do JS" vzor ako
 // `determineReviewPopulationKeys`. Počíta sa NEZÁVISLE od populácie fronty —
 // aktívny olinkovaný produkt MIMO populácie (má linku, nebol gatherovaný ani
 // rozhodnutý) sa v pokrytí správne objaví, hoci `linkedTotal` (odvodený z
@@ -110,5 +114,8 @@ export async function computeCatalogCoverage(
     }
     if (!terminalDecided.has(key)) activeUnpaired += 1;
   }
-  return { catalogActive: activeKeys.length, catalogLinked, catalogMissing: activeKeys.length - catalogLinked, activeUnpaired };
+  // catalogMissing == activeUnpaired ZÁMERNE (jeden predikát: aktívne bez
+  // odkazu a bez terminálneho rozhodnutia) — tak sa „chýba K", nav odznak aj
+  // filter Nezrevidované nikdy nerozídu (review issue 571).
+  return { catalogActive: activeKeys.length, catalogLinked, catalogMissing: activeUnpaired, activeUnpaired };
 }

@@ -238,3 +238,29 @@ it("issue 571 (c): catalogMissing === total(unreviewed) na tých istých dátach
   // A presne toľko je aj vo filtri Nezrevidované.
   expect(unreviewed.total).toBe(all.catalogMissing);
 });
+
+it("issue 571 (d): aktívny s TERMINÁLNYM rozhodnutím (split) bez odkazu NIE JE v 'chýba' ani 'unreviewed' — catalogMissing vylučuje terminálne, na rozdiel od catalogActive − catalogLinked", async () => {
+  const { app, cookie, db } = await boot("citanie");
+  const snapshotId = await insertTestSnapshot(db);
+  const [u] = await db.select({ id: users.id }).from(users).limit(1);
+  if (u === undefined) throw new Error("testovací používateľ chýba");
+
+  // Aktívny (sellable) bez product-linky, ALE terminálne rozhodnutý split —
+  // linky má per veľkosť (`hasEffectiveLink` false), no JE zrevidovaný. Presne
+  // prípad, kde catalogActive − catalogLinked (= 1) NESEDÍ s filtrom (= 0).
+  await seedProduct(db, snapshotId, "S571D-SPLIT", { name: "Aktívny split bez product-linky" });
+  await db.insert(pairingDecisions).values({ productKey: "S571D-SPLIT", status: "split", url: null, decidedBy: u.id, decidedAt: new Date(), updatedAt: new Date() });
+
+  const all = await fetchFilter(app, cookie, "all");
+  const unreviewed = await fetchFilter(app, cookie, "unreviewed");
+
+  expect(all.catalogActive).toBe(1);
+  expect(all.catalogLinked).toBe(0);
+  // catalogActive − catalogLinked = 1 (zahrnulo by terminálne rozhodnutý), ALE
+  // catalogMissing = 0 (vylučuje terminálne) = presne filter aj nav odznak.
+  expect(all.catalogActive - all.catalogLinked).toBe(1);
+  expect(all.catalogMissing).toBe(0);
+  expect(all.activeUnpaired).toBe(0);
+  expect(unreviewed.total).toBe(0);
+  expect(all.catalogMissing).toBe(unreviewed.total);
+});
