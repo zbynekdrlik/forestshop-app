@@ -22,6 +22,7 @@ import {
   parseCombinationResponse,
   parsePage,
   parseSizeAvailability,
+  selectEnumerationTargets,
   type SizeAvailability,
   sizeCombinationEnumeratorFor,
   type SupplierAvailability,
@@ -58,6 +59,10 @@ export interface SupplierStockHostStat {
   readonly requests: number;
   /** Z toho enumeračných (`action=refresh`) — koľko navyše stála fáza 2. */
   readonly enumerationRequests: number;
+  /** issue 561: koľko enumeračných cieľov sa PREDFILTROVALO (dodávateľove
+   * veľkosti, ktoré NEMÁME) a teda sa nestiahli — priama miera úspory
+   * requestov predfiltra. */
+  readonly enumerationSkipped: number;
   /** Wall-clock od prvého po posledný request na tomto hoste. Beh je sériový a
    * odkazy sú zoradené (rovnaký host je spravidla súvislo), takže to je dobrý
    * odhad času stráveného na hoste vrátane `PER_HOST_DELAY_MS` páuz — POZOR,
@@ -337,7 +342,10 @@ export async function runSupplierStockLocked(options: RunSupplierStockOptions): 
   const counts = { available: 0, unavailable: 0, unknown: 0, failed: 0 };
   const hosts = new Set<string>();
   const lastFetchByHost = new Map<string, number>();
-  const hostStats = new Map<string, { requests: number; enumerationRequests: number; firstAt: number; lastAt: number }>();
+  const hostStats = new Map<
+    string,
+    { requests: number; enumerationRequests: number; enumerationSkipped: number; firstAt: number; lastAt: number }
+  >();
   let skipped = 0;
   let checked = 0;
 
@@ -355,7 +363,7 @@ export async function runSupplierStockLocked(options: RunSupplierStockOptions): 
     const result = await fetchPage(url);
     const finishedAt = Date.now();
     lastFetchByHost.set(h, finishedAt);
-    const stat = hostStats.get(h) ?? { requests: 0, enumerationRequests: 0, firstAt: startedAt, lastAt: finishedAt };
+    const stat = hostStats.get(h) ?? { requests: 0, enumerationRequests: 0, enumerationSkipped: 0, firstAt: startedAt, lastAt: finishedAt };
     stat.requests += 1;
     if (isEnumeration) stat.enumerationRequests += 1;
     stat.firstAt = Math.min(stat.firstAt, startedAt);
@@ -412,7 +420,15 @@ export async function runSupplierStockLocked(options: RunSupplierStockOptions): 
     // plošný riadok fázy 1 (nezmenené).
     const enumerator = ourSizes.length > 0 ? sizeCombinationEnumeratorFor(link) : null;
     if (enumerator !== null) {
-      const targets = enumerator.targets(fetched.html, link);
+      // issue 561: predfilter na NAŠE veľkosti — dodávateľove veľkosti, ktoré
+      // nemáme, sa nesťahujú (wetland: ~82 % requestov bolo zbytočných).
+      const allTargets = enumerator.targets(fetched.html, link);
+      const targets = selectEnumerationTargets(allTargets, ourSizes);
+      const enumerationSkipped = allTargets.length - targets.length;
+      if (enumerationSkipped > 0) {
+        const hostStat = hostStats.get(host);
+        if (hostStat !== undefined) hostStat.enumerationSkipped += enumerationSkipped;
+      }
       if (targets.length > 0) {
         const mismatch = enumerator.suffixMismatch?.(fetched.html, link) ?? null;
         if (mismatch !== null) {
@@ -429,7 +445,7 @@ export async function runSupplierStockLocked(options: RunSupplierStockOptions): 
         }
         sizeList = mergeSizeAvailability(merged);
         log.info(
-          { link, enumerationRequests: targets.length, sizes: sizeList.length },
+          { link, enumerationRequests: targets.length, enumerationSkipped, sizes: sizeList.length },
           "Dodávateľský sklad: enumerácia veľkostí wetland.sk",
         );
       }
@@ -468,6 +484,7 @@ export async function runSupplierStockLocked(options: RunSupplierStockOptions): 
         host,
         requests: s.requests,
         enumerationRequests: s.enumerationRequests,
+        enumerationSkipped: s.enumerationSkipped,
         elapsedMs: s.lastAt - s.firstAt,
       }))
       .sort((a, b) => a.host.localeCompare(b.host)),

@@ -95,8 +95,11 @@ describe("beh dodávateľského skladu — issue 552: enumerácia všetkých ve�
       fetchPage: wetlandFetcher((u) => urls.push(u)),
     });
 
-    // Base GET (1) + 9 enumeračných GET-ov.
-    expect(urls.filter((u) => u.includes("action=refresh"))).toHaveLength(9);
+    // issue 561: predfilter na naše veľkosti — z 9 cieľov dodávateľa sa
+    // enumerujú len 3 (48/52/60, ktoré máme; 99 dodávateľ nemá, netreba). Base
+    // GET stále presne jeden. Riadky nižšie ostávajú IDENTICKÉ (správnosť sa
+    // nemení, mení sa len počet requestov).
+    expect(urls.filter((u) => u.includes("action=refresh"))).toHaveLength(3);
     expect(urls.filter((u) => !u.includes("action=refresh"))).toEqual([LINK]);
 
     // Per-veľkosť riadky pre VŠETKY naše veľkosti; žiadny plošný ('') riadok.
@@ -128,8 +131,11 @@ describe("beh dodávateľského skladu — issue 552: enumerácia všetkých ve�
 
     const wetland = result.hostStats.find((h) => h.host === "wetland.sk");
     expect(wetland).toBeDefined();
-    expect(wetland?.requests).toBe(10); // 1 base + 9 enumeračných
-    expect(wetland?.enumerationRequests).toBe(9);
+    // issue 561: máme len 48+52, dodávateľ má 9 veľkostí → 2 enumeračné GET-y
+    // (nie 9), 7 predfiltrovaných.
+    expect(wetland?.requests).toBe(3); // 1 base + 2 enumeračné
+    expect(wetland?.enumerationRequests).toBe(2);
+    expect(wetland?.enumerationSkipped).toBe(7);
     expect(wetland?.elapsedMs).toBeGreaterThanOrEqual(0);
   });
 

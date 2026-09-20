@@ -1,4 +1,5 @@
 import type { Database } from "../../db/client.js";
+import { log } from "../../logger.js";
 import { cleanupExpiredSessions } from "../auth/sessions.js";
 import type { RunIngest } from "../catalog/ingest.js";
 import { pruneRawSnapshots } from "../catalog/raw-store.js";
@@ -10,7 +11,7 @@ import { isOrderReminderEnabled } from "../order-reminder/settings.js";
 import type { OrderReminderRunResult } from "../order-reminder/run.js";
 import type { OrderNoteWritebackRunResult } from "../shoptet-writeback/run-order-note-writeback.js";
 import type { ShoptetWritebackSequenceResult } from "../shoptet-writeback/run-writeback-sequence.js";
-import { RESTOCK_JOB_NAME } from "../restock/constants.js";
+import { RESTOCK_JOB_NAME, RESTOCK_RUN_LOCK_KEY } from "../restock/constants.js";
 import type { RestockRunResult } from "../restock/run.js";
 import { isRestockEnabled } from "../restock/run.js";
 import { SHOP_FEED_JOB_NAME } from "../shop-feed/constants.js";
@@ -22,6 +23,7 @@ import type { SupplierStockRunResult } from "../supplier-stock/run.js";
 import { PAIRING_SEARCH_JOB_NAME } from "../pairing-search/constants.js";
 import { isPairingSearchEnabled } from "../pairing-search/settings.js";
 import type { PairingSearchRunResult } from "../pairing-search/run.js";
+import { startRunNow } from "./run-now.js";
 import type { ScheduledJob } from "./types.js";
 
 export const CATALOG_IMPORT_JOB_NAME = "catalog-import";
@@ -323,12 +325,32 @@ export type RunSupplierStock = (db: Database, now: Date) => Promise<SupplierStoc
  * `orderReminderJob`): scraper nikam nezapisuje, len číta stránky
  * dodávateľov — chrániť treba až zápis do Shoptetu, ktorý robí issue 213.
  */
-export function supplierStockJob(run: RunSupplierStock): ScheduledJob {
+/** issue 561: voliteľný hák spustený PO ÚSPEŠNOM behu supplier-stocku (nie po
+ * zlyhaní) — `index.ts` ním reťazí restock (viď `buildRestockAfterSupplierStock`
+ * nižšie). Chyba v `afterRun` sa LOGUJE, ale nezhodí supplier-stock beh: jeho
+ * `job_run` riadok je už čo je (scraper dobehol), reťaz je len nadstavba. */
+export type SupplierStockAfterRun = (db: Database, now: Date) => Promise<void>;
+
+export function supplierStockJob(run: RunSupplierStock, afterRun?: SupplierStockAfterRun): ScheduledJob {
   return {
     name: SUPPLIER_STOCK_JOB_NAME,
     schedule: { kind: "daily", hourLocal: 4, minuteLocal: 20 },
     async run(db, now) {
-      return { detail: await run(db, now) };
+      // `run` vyhodí pri zlyhaní scrapera → afterRun sa NIKDY nespustí (reťaz
+      // nemá bežať nad neúplnými dátami), chybu prevezme scheduler.ts.
+      const detail = await run(db, now);
+      if (afterRun !== undefined) {
+        try {
+          await afterRun(db, now);
+        } catch (error) {
+          const rawErrorMessage = error instanceof Error ? error.message : String(error);
+          log.error(
+            { jobName: SUPPLIER_STOCK_JOB_NAME, rawErrorMessage },
+            "supplier-stock: reťazený afterRun (restock) zlyhal — supplier-stock beh ostáva úspešný",
+          );
+        }
+      }
+      return { detail };
     },
   };
 }
@@ -345,21 +367,85 @@ export type RunRestock = (db: Database, now: Date) => Promise<RestockRunResult>;
  * beží vždy, bez ohľadu na prepínač (explicitná ľudská akcia — rovnaká úvaha
  * ako `postaUncollectedJob`).
  */
+/** issue 561: jediný zdroj pravdy pre dôvod „vypnuté" a hlášku „chýbajú údaje"
+ * — zdieľajú ich naplánovaný `restockJob` (04:50) aj reťazený `afterRun`
+ * (`buildRestockAfterSupplierStock`), aby to bola JEDNA logika, nie dve kópie. */
+export const RESTOCK_DISABLED_REASON = "automatizácia je vypnutá (Štart/Stop)";
+export const RESTOCK_MISSING_CREDENTIALS_MESSAGE =
+  "Chýbajú prihlasovacie údaje do Shoptet administrácie — prepnutie sa nedá zapísať.";
+/** issue 561: detail reťazeného restocku nesie tento `trigger`, aby sa
+ * v `job_run` odlíšil od naplánovaného 04:50 fallbacku (schema-kompatibilné —
+ * UI Zod schéma neznáme kľúče strippuje). */
+export const RESTOCK_TRIGGER_AFTER_SUPPLIER_STOCK = "after-supplier-stock";
+
+export type RestockRunDecision =
+  | { readonly action: "skip"; readonly detail: { readonly skipped: true; readonly reason: string } }
+  | { readonly action: "run"; readonly run: RunRestock };
+
+/**
+ * Zdieľaná brána restocku (issue 561) — rešpektuje `isRestockEnabled` A
+ * chýbajúce Shoptet údaje PRESNE ako pôvodný `restockJob.run`: vypnuté →
+ * `skip` so štandardným dôvodom; zapnuté ale bez údajov (`run === undefined`)
+ * → vyhodí; inak `run` s úzko-typovaným (nie-undefined) `run`. Vypnuté sa
+ * kontroluje PRV než údaje (rovnaké poradie ako predtým). Používajú ju obe
+ * cesty (naplánovaný `restockJob` aj reťazený `afterRun`), takže sa nemôžu
+ * rozísť.
+ */
+export async function decideRestockRun(db: Database, run: RunRestock | undefined): Promise<RestockRunDecision> {
+  const enabled = await isRestockEnabled(db);
+  if (!enabled) return { action: "skip", detail: { skipped: true, reason: RESTOCK_DISABLED_REASON } };
+  if (run === undefined) throw new Error(RESTOCK_MISSING_CREDENTIALS_MESSAGE);
+  return { action: "run", run };
+}
+
 export function restockJob(run: RunRestock | undefined): ScheduledJob {
   return {
     name: RESTOCK_JOB_NAME,
     schedule: { kind: "daily", hourLocal: 4, minuteLocal: 50 },
     async run(db, now) {
-      const enabled = await isRestockEnabled(db);
-      if (!enabled) {
-        return { detail: { skipped: true, reason: "automatizácia je vypnutá (Štart/Stop)" } };
-      }
-      if (run === undefined) {
-        throw new Error("Chýbajú prihlasovacie údaje do Shoptet administrácie — prepnutie sa nedá zapísať.");
-      }
-      return { detail: await run(db, now) };
+      const decision = await decideRestockRun(db, run);
+      if (decision.action === "skip") return { detail: decision.detail };
+      return { detail: await decision.run(db, now) };
     },
   };
+}
+
+/**
+ * issue 561: `afterRun` hák pre `supplierStockJob`, ktorý po dobehnutí
+ * supplier-stocku spustí restock cez EXISTUJÚCI `startRunNow` (ten istý
+ * mechanizmus ako tlačidlo „Spustiť teraz", `run-now.ts`: neblokujúci
+ * `pg_try_advisory_lock`, vlastný `job_run` riadok, fire-and-forget). `run`
+ * MUSÍ byť ODOMKNUTÝ variant (`runRestockLocked`) — `startRunNow` zámok už
+ * drží, takže `runRestock` (ktorý si berie ten istý zámok znova) by uviazol
+ * (viď `run-now.ts` modulový komentár). Naplánovaný `restockJob` (04:50)
+ * ostáva ako fallback (idempotentný). Reťazený beh nesie `trigger`.
+ */
+export function buildRestockAfterSupplierStock(run: RunRestock | undefined): SupplierStockAfterRun {
+  return async (db, now) => {
+    await startRunNow(
+      db,
+      {
+        jobName: RESTOCK_JOB_NAME,
+        lockKey: RESTOCK_RUN_LOCK_KEY,
+        run: (n) => runChainedRestock(db, n, run),
+      },
+      now,
+      () => undefined,
+    );
+  };
+}
+
+async function runChainedRestock(
+  db: Database,
+  now: Date,
+  run: RunRestock | undefined,
+): Promise<Record<string, unknown>> {
+  const decision = await decideRestockRun(db, run);
+  if (decision.action === "skip") {
+    return { ...decision.detail, trigger: RESTOCK_TRIGGER_AFTER_SUPPLIER_STOCK };
+  }
+  const result = await decision.run(db, now);
+  return { ...result, trigger: RESTOCK_TRIGGER_AFTER_SUPPLIER_STOCK };
 }
 
 export type RunShopFeed = (db: Database, now: Date) => Promise<ShopFeedRunResult>;
