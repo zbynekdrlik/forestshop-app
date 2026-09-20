@@ -30,6 +30,7 @@ import {
   shopSitemapJob,
   supplierStockJob,
   restockJob,
+  buildRestockAfterSupplierStock,
   postaUncollectedJob,
   pruneRawExportsJob,
   pruneRawOrdersJob,
@@ -43,7 +44,7 @@ import { runShopFeed } from "./modules/shop-feed/run.js";
 import { runShopSitemap } from "./modules/shop-sitemap/run.js";
 import { fetchSupplierPage } from "./modules/supplier-stock/page-fetcher.js";
 import { runSupplierStock } from "./modules/supplier-stock/run.js";
-import { runRestock } from "./modules/restock/run.js";
+import { runRestock, runRestockLocked } from "./modules/restock/run.js";
 import { startScheduler } from "./modules/scheduler/scheduler.js";
 import { orderNoteWritebackConfigFromBaseUrl, shoptetImportConfigFromBaseUrl } from "./modules/shoptet-writeback/config.js";
 import { dpdPortalConfigFromBaseUrl } from "./modules/dpd/config.js";
@@ -176,6 +177,21 @@ const runRestockFn =
     ? undefined
     : (db2: typeof db, now: Date) =>
         runRestock({
+          db: db2,
+          now,
+          config: shoptetImportConfigFromBaseUrl(env.SHOPTET_ADMIN_BASE_URL, shoptetAdminUser, shoptetAdminPassword),
+        });
+
+// issue 561: reťazený restock za supplier-stock beží cez `startRunNow`, ktoré
+// už DRŽÍ restock advisory zámok — musí teda volať ODOMKNUTÝ variant
+// (`runRestockLocked`), inak by si vnútri seba vzal ten istý zámok znova a
+// uviazol (viď `scheduler/run-now.ts` modulový komentár). Tá istá fail-closed
+// podmienka na prihlasovacie údaje ako `runRestockFn` vyššie.
+const runRestockLockedFn =
+  shoptetAdminUser === undefined || shoptetAdminPassword === undefined
+    ? undefined
+    : (db2: typeof db, now: Date) =>
+        runRestockLocked({
           db: db2,
           now,
           config: shoptetImportConfigFromBaseUrl(env.SHOPTET_ADMIN_BASE_URL, shoptetAdminUser, shoptetAdminPassword),
@@ -323,7 +339,14 @@ const scheduler = startScheduler(db, [
   orderReminderJob((db2, now) => runOrderReminder({ db: db2, now, ...orderReminderDeps })),
   shopFeedJob((db2, now) => runShopFeed({ db: db2, now, fetchFeed: fetchShopFeed })),
   shopSitemapJob((db2, now) => runShopSitemap({ db: db2, now })),
-  supplierStockJob((db2, now) => runSupplierStock({ db: db2, now, fetchPage: fetchSupplierPage })),
+  // issue 561: supplier-stock po úspechu REŤAZÍ restock (aby prepnutie
+  // Vypredané → Skladom bežalo nad ČERSTVÝMI dátami z tejto noci, nie 24 h
+  // staré — celý beh od #552 trvá > 2 h, takže pevný slot 04:50 bežal nad
+  // včerajškom). `restockJob(runRestockFn)` 04:50 OSTÁVA ako fallback.
+  supplierStockJob(
+    (db2, now) => runSupplierStock({ db: db2, now, fetchPage: fetchSupplierPage }),
+    buildRestockAfterSupplierStock(runRestockLockedFn),
+  ),
   restockJob(runRestockFn),
   // issue 387 E3: žiadne prihlasovacie údaje potrebné (verejné vyhľadávacie
   // stránky dodávateľov) — na rozdiel od `restockJob`/`shoptetWritebackJob`

@@ -861,3 +861,39 @@ paths:
   `available`). Host BEZ SIZE pravidla (Ballistol) alebo ≤1 naša veľkosť → plošný riadok
   ako doteraz. Row-logika je vyčlenená do ČISTEJ exportovanej `buildSizeStockRows`
   (testuje sa bez DB — `run.ts` nemá vlastný test).
+- **`isDue` pasca: ručný „Spustiť teraz" PO lokálnej polnoci potlačí nočný beh
+  toho dňa (issue 561, nález 19. 9. 2026).** `scheduler.ts`'s `isDue`
+  periodizuje `daily` job podľa LOKÁLNEHO dňa (Europe/Bratislava). Ručný
+  `run-now` zapisuje ten istý `job_name` ako naplánovaný beh, takže ručné
+  spustenie napr. o 01:18 lokálne (= 23:18 UTC predošlého dňa) spadne do
+  ROVNAKÉHO lokálneho dňa ako slot 04:20 → plánovač nočný beh vynechá. Pri
+  overovaní na PROD spúšťaj ručné behy PRED polnocou, alebo počítaj s tým, že
+  nočný beh v ten deň vypadne. Nie je to chyba plánovača.
+- **Predfilter enumerácie na naše veľkosti (issue 561, `selectEnumerationTargets`
+  v `parse.ts`).** Enumerácia (#552) sťahovala KAŽDÚ veľkosť z dodávateľovho
+  `<select>`u. Meranie nočného behu 20. 9. 2026 (`job_run.detail.hostStats`):
+  celý beh 122 min (nad stropom 2 h); wetland.sk 1752 req / **1440 enum (82 %)**
+  / 53,6 min; tthunt.sk 360 / 265 / 9,9 min; trigona.sk 176 req / 47 min
+  (pomalý host ~16 s/req); huntingshop.eu 528 / 19 min. `selectEnumerationTargets`
+  ponechá cieľ len ak sa `matchSizeLabel(ourSize,[label])` trafí pre NIEKTORÚ
+  našu veľkosť ALEBO pre NIEKTORÝ token viactokenovej našej veľkosti (rovnaké
+  `sizeTokens` delenie ako `foldMultiTokenSizeAvailability` — **párový štítok
+  „39-40" MUSÍ ponechať ciele „39" AJ „40"**, inak fold vráti `unknown`). Žiadna
+  zhoda → ponechá VŠETKY ciele (fail-open na SŤAHOVANIE, nie na správnosť —
+  riadky sa aj tak zapíšu cez `matchSizeLabel`). Správnosť riadkov pre naše
+  veľkosti sa NEMENÍ; klesá len počet requestov. `hostStats` účtuje aj
+  `enumerationSkipped` (schema-kompatibilné, UI strippuje neznáme kľúče).
+- **Restock beží REŤAZENÝ za supplier-stock, nie o pevný čas (issue 561).**
+  Od #552 (enumerácia) trvá celý supplier-stock beh > 2 h, takže pevný slot
+  restocku 04:50 (30 min po štarte 04:20) bežal nad dátami zo VČERA (prepnutie
+  Vypredané → Skladom prišlo ~24 h neskoro). `supplierStockJob(run, afterRun?)`
+  po ÚSPECHU zavolá `afterRun`; `index.ts` cez `buildRestockAfterSupplierStock`
+  spustí restock cez EXISTUJÚCI `startRunNow` (neblokujúci `pg_try_advisory_lock`,
+  vlastný `job_run` riadok, `trigger: "after-supplier-stock"`). Reťaz MUSÍ volať
+  `runRestockLocked` (odomknutý variant), nie `runRestock` — `startRunNow` už
+  drží zámok 787_878_008, `runRestock` by si ho vzal znova a uviazol. Naplánovaný
+  `restockJob` 04:50 OSTÁVA ako fallback (idempotentný, prepne aspoň podľa
+  48 h platných potvrdení pri zlyhaní supplier-stocku). Pri zlyhaní supplier-stocku
+  sa reťaz NESPUSTÍ (afterRun sa nezavolá); chyba v afterRun sa loguje, nikdy
+  nezhodí supplier-stock beh. Brána `decideRestockRun` (`enabled` + chýbajúce
+  Shoptet údaje) je JEDNA logika pre naplánovaný aj reťazený restock.

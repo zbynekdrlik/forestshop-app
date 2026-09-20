@@ -4691,3 +4691,9 @@ PR/merge/deploy rieši supervisor). IconButton/ActionBar + zvyšné sekcie → P
 - RED→GREEN: integračné (a) discontinued nie v unreviewed/je v st3 · (b) out_of_stock aktívny + v catalogMissing · (c) catalogMissing === total(unreviewed). Sekcia unit + e2e nový testid.
 - `queries.ts` prekročil max-lines 400 → rollupProductState + computeCatalogCoverage vyčlenené do `coverage.ts` (type-only import späť, žiadny runtime cyklus).
 - gates:local EXIT=0 (typecheck+lint+798 web+api unit). Integračné 23/23 (catalog-coverage+http), sibling pairing-review 47/47. Worktree worker; PR/merge/deploy rieši supervisor.
+
+## issue 561 — wetland predfilter enumerácie + reťazenie restocku (0.3.0-dev.338)
+- Prístup 1 (design-record main): `selectEnumerationTargets` (parse.ts) predfiltruje enumeračné ciele na naše veľkosti (aj tokeny párových štítkov, fail-open) pred fetchom; run.ts účtuje `enumerationSkipped` v hostStats. Meranie 20. 9.: celý beh 122 min, wetland 1440/1752 req enum (82 %).
+- `supplierStockJob(run, afterRun?)` + `buildRestockAfterSupplierStock` reťazí restock cez existujúci `startRunNow` (`runRestockLocked`, trigger after-supplier-stock); zdieľaná brána `decideRestockRun`; `restockJob` 04:50 ostáva fallback; žiadny nový advisory zámok.
+- RED→GREEN commity: 2367ece→(N/A) ... test af32f6c → green 4f3d24e. Unit parse-issue561 (5) + jobs.test (7) + index-wiring (3); integ supplier-stock-run-issue561 (2) + restock-chained (2) + upravený enum test (počty 9→3/2, riadky identické).
+- gates:local EXIT=0. Integračné (targeted) 8/8. Worktree worker; PR/merge/deploy rieši supervisor.

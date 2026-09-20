@@ -36,3 +36,24 @@ describe("index.ts wiring: createApp dostáva restock deps (issue 319)", () => {
     expect(callBlock).toMatch(/shoptetAdminPassword\s*\?\?\s*""/);
   });
 });
+
+// issue 561: reťazenie restocku za supplier-stock. `supplierStockJob` dostáva
+// DRUHÝ argument (`afterRun`) postavený cez `buildRestockAfterSupplierStock`,
+// a jeho reťazený `run` MUSÍ používať `runRestockLocked` (NIE `runRestock` —
+// ten berie ten istý advisory zámok znova a `startRunNow`, ktoré ho už drží,
+// by uviazlo). Rovnaký statický dôvod ako vyššie: `index.ts` beží celý na
+// module-top-level, nedá sa importovať; overuje sa zdrojový text.
+describe("index.ts wiring: supplierStockJob reťazí restock (issue 561)", () => {
+  const indexSrc = readFileSync(fileURLToPath(new URL("./index.ts", import.meta.url)), "utf8");
+
+  it("supplierStockJob v registri dostáva afterRun cez buildRestockAfterSupplierStock", () => {
+    const callMatch = /supplierStockJob\([\s\S]*?buildRestockAfterSupplierStock\(/.exec(indexSrc);
+    expect(callMatch, "supplierStockJob(..., buildRestockAfterSupplierStock(...)) sa v index.ts nenašlo").not.toBeNull();
+  });
+
+  it("reťazený restock beží cez runRestockLocked, NIE cez runRestock (inak deadlock so startRunNow zámkom)", () => {
+    // Existuje `(db..., now) => runRestockLocked({...})` — odomknutý variant,
+    // presne ako to vyžaduje `startRunNow` (`run-now.ts` modulový komentár).
+    expect(indexSrc).toMatch(/runRestockLocked\(\{/);
+  });
+});

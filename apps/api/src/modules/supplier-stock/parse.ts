@@ -509,6 +509,41 @@ export function matchSizeLabel(ourSizeLabel: string, supplierSizeLabels: readonl
   return matches.length === 1 ? (matches[0] ?? null) : null;
 }
 
+/** `true`, keď enumeračný cieľ (jedna dodávateľova veľkosť) je pre NÁS
+ * relevantný: buď sa priamo páruje na našu veľkosť (`matchSizeLabel`), alebo
+ * na NIEKTORÝ token viactokenovej našej veľkosti — párový štítok „39-40"
+ * potrebuje ciele „39" AJ „40", inak by `foldMultiTokenSizeAvailability`
+ * vrátil `unknown` (fail-closed neúplný pár). Jednotokenová naša veľkosť sa na
+ * dodávateľov PÁROVÝ štítok nikdy nespáruje (rôzny počet tokenov) — rovnaká
+ * disciplína ako `matchSizeLabel` — takže taký cieľ netreba (riadok by bol
+ * `unknown` aj pri stiahnutí). */
+function targetMatchesOurSize(targetLabel: string, ourSizeLabel: string): boolean {
+  if (matchSizeLabel(ourSizeLabel, [targetLabel]) !== null) return true;
+  const tokens = sizeTokens(ourSizeLabel);
+  if (tokens.length < 2) return false;
+  return tokens.some((token) => matchSizeLabel(token, [targetLabel]) !== null);
+}
+
+/**
+ * Predfilter enumeračných cieľov na NAŠE veľkosti — issue 561 (follow-up #552).
+ * Enumerácia (#552) sťahovala KAŽDÝ `target` zo `<select>`u dodávateľa, aj tie
+ * veľkosti, ktoré vôbec nemáme (wetland: 1440 z 1752 requestov = 82 %, nočný
+ * beh 122 min nad stropom 2 h). Ponechá len ciele relevantné pre naše veľkosti
+ * (`targetMatchesOurSize`). Keď sa NIČ nespáruje, ponechá VŠETKY ciele
+ * (fail-open na SŤAHOVANIE, nie na správnosť — riadky sa aj tak zapíšu cez
+ * `matchSizeLabel`/`foldMultiTokenSizeAvailability` v `buildSizeStockRows`, a
+ * radšej stiahnuť navyše než slepo vynechať pri nečakanom tvare štítkov).
+ * Správnosť riadkov pre naše veľkosti sa NEMENÍ — mení sa len počet requestov.
+ */
+export function selectEnumerationTargets(
+  targets: readonly CombinationTarget[],
+  ourSizes: readonly string[],
+): readonly CombinationTarget[] {
+  if (targets.length === 0) return targets;
+  const kept = targets.filter((target) => ourSizes.some((ourSize) => targetMatchesOurSize(target.label, ourSize)));
+  return kept.length > 0 ? kept : targets;
+}
+
 /** Výsledok zloženia viactokenového štítku — dostupnosť + dodávateľské štítky,
  * ktoré sa na naše tokeny spárovali (prázdne, keď je výsledok `unknown`). */
 export interface FoldedSize {

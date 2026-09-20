@@ -224,3 +224,20 @@ paths:
   `supplier-stock-http.integration.test.ts` (rozšírený, `boot()` dostal
   parameter role namiesto natvrdo "citanie") to doplnili presne týmto
   vzorom — žiadny z nich nikdy nedotkne živú tretiu stranu.
+
+- **Vzor „job B po jobe A" = `afterRun` hák + `startRunNow`, NIE pevný časový
+  posun (issue 561).** Keď job B (restock) musí bežať PO dobehnutí joba A
+  (supplier-stock) a dĺžka A je premenlivá (od #552 enumerácie 122 min, po
+  predfiltri menej, po pribúdajúcich hostoch viac), pevný slot „30 min po štarte
+  A" je chyba: B bežal nad dátami zo včera. Riešenie: A dostane voliteľný
+  `afterRun?(db, now)` hák, ktorý sa zavolá LEN po ÚSPECHU A (po zlyhaní nie —
+  B nemá bežať nad neúplnými dátami); `index.ts` cez `afterRun` spustí B cez
+  EXISTUJÚCI `startRunNow` (rovnaký mechanizmus ako tlačidlo „Spustiť teraz":
+  neblokujúci `pg_try_advisory_lock`, vlastný `job_run` riadok, fire-and-forget).
+  B tak dostane vlastný `job_run` záznam (viditeľnosť) a jeho `detail` nesie
+  `trigger`, aby sa reťazený beh odlíšil od naplánovaného fallbacku. Reťaz
+  MUSÍ volať ODOMKNUTÝ variant business funkcie (`runXxxLocked`), lebo
+  `startRunNow` už drží advisory zámok (viď `run-now.ts` — inak deadlock).
+  Naplánovaný slot B (04:50) OSTÁVA ako fallback pre prípad zlyhania A. Chyba
+  v `afterRun` sa LOGUJE, nikdy nezhodí job A. Žiadny NOVÝ advisory zámok — reťaz
+  znovupoužíva zámok joba B (787_878_008 pre restock).
