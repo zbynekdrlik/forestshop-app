@@ -10,7 +10,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Database } from "../../db/client.js";
 import { SUPPLIER_STOCK_JOB_NAME } from "../supplier-stock/constants.js";
-import type { RunSupplierStock } from "../supplier-stock/run.js";
 
 vi.mock("../restock/run.js", () => ({ isRestockEnabled: vi.fn() }));
 import { isRestockEnabled } from "../restock/run.js";
@@ -20,6 +19,7 @@ import {
   decideRestockRun,
   supplierStockJob,
   type RunRestock,
+  type RunSupplierStock,
 } from "./jobs.js";
 
 const DB = {} as Database;

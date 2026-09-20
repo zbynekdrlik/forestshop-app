@@ -7,7 +7,6 @@
 // zápis `job_run` riadku aj detailu; `startRunNow` beží fire-and-forget, takže
 // čakáme na konečný stav cez `waitForJobRunSettled`.
 import { afterEach, describe, expect, it } from "vitest";
-import type { Database } from "../src/db/client.js";
 import { RESTOCK_JOB_NAME } from "../src/modules/restock/constants.js";
 import { setRestockEnabled } from "../src/modules/restock/run.js";
 import {
@@ -16,7 +15,6 @@ import {
   buildRestockAfterSupplierStock,
   type RunRestock,
 } from "../src/modules/scheduler/jobs.js";
-import { getLatestJobRun } from "../src/modules/scheduler/queries.js";
 import { withCleanDb } from "./helpers/db.js";
 import { waitForJobRunSettled } from "./helpers/job-run.js";
 
