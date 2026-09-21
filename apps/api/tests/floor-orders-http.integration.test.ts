@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { afterEach, expect, it } from "vitest";
-import { auditEvents, floorNoteProducts, floorNotes, orderLines, orderOpenStatuses, orders, users } from "../src/db/schema.js";
+import { auditEvents, floorNoteProducts, floorNotes, orderLines, orderOpenStatuses, orders, shopProductUrl, users } from "../src/db/schema.js";
 import { createApp } from "../src/http/app.js";
 import { resetLoginRateLimit } from "../src/http/login-rate-limit.js";
 import { hashPassword } from "../src/modules/auth/passwords.js";
@@ -70,11 +70,18 @@ interface BoardGroup {
   readonly floorRows: readonly {
     readonly noteId: string;
     readonly variantCode: string;
+    readonly productKey: string;
     readonly productName: string;
     readonly customerName: string;
     readonly quantity: number;
     readonly ordered: boolean;
     readonly createdAt: string;
+    // issue 575
+    readonly ourUrl: string | null;
+    readonly supplierUrl: string | null;
+    readonly supplierNote: string | null;
+    readonly state: string;
+    readonly comment: string | null;
   }[];
 }
 
@@ -251,14 +258,58 @@ it("vybavený (resolved) zápis → jeho predajňové riadky z Na objednanie zmi
   expect((await board(app, cookie)).some((g) => g.floorRows.some((r) => r.variantCode === "FLOOR-RES"))).toBe(false);
 });
 
-it("sekcia Riešiť predajňové riadky NEobsahuje", async () => {
+it("sekcia Riešiť NEobsahuje predajňový riadok v INOM stave než riesit (default objednane)", async () => {
   const { app, cookie, db } = await boot("manazer");
   await insertTestVariant(db, "FLOOR-RIE", "Dod");
   const noteId = await createNote(app, cookie, "Nepatrí do Riešiť");
   await attach(app, cookie, noteId, "FLOOR-RIE");
 
+  // Default stav položky je „objednane" → do „Riešiť" nepatrí (issue 575).
   const riesit = await board(app, cookie, "/api/orders/riesit");
   expect(riesit.some((g) => g.floorRows.length > 0)).toBe(false);
+});
+
+// issue 575: predajňový riadok v board-e nesie rovnaké polia ako order riadok.
+it("predajňový riadok v Na objednanie nesie productKey/ourUrl/supplierUrl/state/comment", async () => {
+  const { app, cookie, db } = await boot("manazer");
+  await insertTestVariant(db, "FLOOR-FIELDS", "Dod", { internalNote: "objednať tu https://dodavatel.example/produkt" });
+  await db.insert(shopProductUrl).values({ code: "FLOOR-FIELDS", url: "https://www.forestshop.sk/produkt/", fetchedAt: new Date() });
+  const noteId = await createNote(app, cookie, "Zákazník");
+  await attach(app, cookie, noteId, "FLOOR-FIELDS");
+  await app.request(`/api/floor-notes/${noteId}/products/FLOOR-FIELDS/comment`, {
+    method: "PATCH",
+    headers: { cookie, "content-type": "application/json" },
+    body: JSON.stringify({ comment: "poznámka k položke" }),
+  });
+
+  const row = (await board(app, cookie)).find((g) => g.supplier === "Dod")?.floorRows[0];
+  expect(row?.productKey).toBe("FLOOR-FIELDS");
+  expect(row?.ourUrl).toBe("https://www.forestshop.sk/produkt/");
+  expect(row?.supplierUrl).toBe("https://dodavatel.example/produkt");
+  expect(row?.state).toBe("objednane");
+  expect(row?.comment).toBe("poznámka k položke");
+});
+
+// issue 575: floor riadok so stavom riesit sa OBJAVÍ v sekcii „Riešiť".
+it("predajňový riadok v stave riesit sa objaví v sekcii Riešiť a riesit/count ho ráta", async () => {
+  const { app, cookie, db } = await boot("manazer");
+  await insertTestVariant(db, "FLOOR-INRIE", "Dod");
+  const noteId = await createNote(app, cookie, "Do Riešiť");
+  await attach(app, cookie, noteId, "FLOOR-INRIE");
+  await app.request(`/api/floor-notes/${noteId}/products/FLOOR-INRIE/state`, {
+    method: "POST",
+    headers: { cookie, "content-type": "application/json" },
+    body: JSON.stringify({ state: "riesit" }),
+  });
+
+  const riesit = await board(app, cookie, "/api/orders/riesit");
+  const row = riesit.flatMap((g) => g.floorRows).find((r) => r.variantCode === "FLOOR-INRIE");
+  expect(row).toBeDefined();
+  expect(row?.state).toBe("riesit");
+
+  // riesit/count ráta aj floor riadky so stavom riesit.
+  const countRes = await app.request("/api/orders/riesit/count", { headers: { cookie } });
+  expect(((await countRes.json()) as { count: number }).count).toBe(1);
 });
 
 it("predajňové riadky sa zobrazia aj keď nie sú nastavené žiadne otvorené stavy objednávok", async () => {

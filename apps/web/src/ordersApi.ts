@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ORDER_LINE_STATES } from "./orderLineStates.js";
 
 // Zrkadlí `OrderLineState`/`OpenOrderLine`/`SupplierOpenOrders` z
 // `apps/api/src/modules/orders/queries.ts` — vlastná zod schéma namiesto
@@ -41,7 +42,7 @@ const orderLineSchema = z.object({
   // odvodené, treba sync na oboch stranách). Bez novej hodnoty by frontend
   // odmietol (zod parse) KAŽDÝ riadok v tom stave a `OrderLine["state"]` typ
   // by ju nepoznal (padne `STATE_LABELS`/`STATE_DISPLAY_ORDER` úplnosť).
-  state: z.enum(["objednane", "caka_sa", "skladom", "nedostupne", "riesit", "objednane_stav"]),
+  state: z.enum(ORDER_LINE_STATES),
   // issue 60: nezávislý príznak "objednané u dodávateľa" (viď `state.ts`'s
   // komentár) — oddelené od `state` vyššie.
   ordered: z.boolean(),
@@ -103,10 +104,26 @@ export type OrdersIngestOutcome = z.infer<typeof ordersIngestOutcomeSchema>;
 const floorRowSchema = z.object({
   noteId: z.string(),
   variantCode: z.string(),
+  // issue 575: `product.key` — PRODUKTOVÝ zápis odkazu na dodávateľa
+  // (`product-links`, zdieľané s objednávkou).
+  productKey: z.string(),
   productName: z.string(),
   sizeLabel: z.string().nullable(),
   customerName: z.string(),
   quantity: z.number(),
+  // issue 575: naša adresa produktu (`shop_product_url`), `null` = kód sa
+  // vykreslí ako neaktívny text (nikdy vyhľadávací fallback). `.regex` je druhá
+  // vrstva overenia, rovnaký vzor ako `orderLineSchema.ourUrl`.
+  ourUrl: z.string().regex(/^https?:\/\//).nullable(),
+  // issue 575: odkaz na dodávateľa (efektívna cesta zhodná s order line) +
+  // surový text pre plain-text fallback.
+  supplierUrl: z.string().regex(/^https?:\/\//).nullable(),
+  supplierNote: z.string().nullable(),
+  // issue 575: stav položky — RUČNE zrkadlí `orderLineState.enumValues`
+  // (rovnako ako `orderLineSchema.state`), aby zod prijal každý stav.
+  state: z.enum(ORDER_LINE_STATES),
+  // issue 575: per-položková poznámka.
+  comment: z.string().nullable(),
   createdAt: z.string(),
   ordered: z.boolean(),
 });
@@ -399,6 +416,50 @@ export async function setFloorRowOrdered(noteId: string, variantCode: string, or
     },
   );
   await readJson(response, "Zmena príznaku objednané sa nepodarila");
+}
+
+// issue 575: stav / poznámka / odkaz na dodávateľa predajňového riadku v board-e
+// „Na objednanie". Umiestnené TU (vedľa `setFloorRowOrdered`, NIE vo
+// `floorNotesApi.ts`), pretože sú to BOARD mutácie konzumované
+// `useOrderLinesBoard` — cez zdieľaný `readJson` hádžu `OrdersUnauthorizedError`,
+// takže 401 → session-expired sa spracuje jednotne so všetkými ostatnými board
+// mutáciami (`floorNotesApi.ts`'s vlastný `readJson` hádže inú triedu chyby).
+export async function setFloorRowState(noteId: string, variantCode: string, state: OrderLine["state"]): Promise<void> {
+  const response = await fetch(
+    `/api/floor-notes/${encodeURIComponent(noteId)}/products/${encodeURIComponent(variantCode)}/state`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ state }),
+    },
+  );
+  await readJson(response, "Zmena stavu sa nepodarila");
+}
+
+export async function setFloorRowComment(noteId: string, variantCode: string, comment: string | null): Promise<void> {
+  const response = await fetch(
+    `/api/floor-notes/${encodeURIComponent(noteId)}/products/${encodeURIComponent(variantCode)}/comment`,
+    {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ comment: comment ?? "" }),
+    },
+  );
+  await readJson(response, "Uloženie poznámky sa nepodarilo");
+}
+
+// issue 575: odkaz na dodávateľa predajňového riadku ide PRODUKTOVOU cestou
+// (`POST /api/product-links/:productKey`) — TÁ ISTÁ zdieľaná zapisovacia cesta
+// ako pri objednávke (`product_supplier_link_override`, kľúč `product.key`),
+// takže zmena sa prejaví na VŠETKÝCH riadkoch (objednávkových aj predajňových)
+// toho istého produktu. Hádže `OrdersUnauthorizedError` (board konzistencia).
+export async function setFloorRowSupplierLink(productKey: string, url: string): Promise<void> {
+  const response = await fetch(`/api/product-links/${encodeURIComponent(productKey)}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ url }),
+  });
+  await readJson(response, "Uloženie odkazu na dodávateľa sa nepodarilo");
 }
 
 // #31: e-mailový kontakt dodávateľa + odoslanie objednávky mailom.

@@ -6,6 +6,8 @@ import {
   formatOrderCount,
   formatOrderSummaryText,
   formatVariantTotalChip,
+  isFloorRowHidden,
+  isFloorRowResolved,
   isLineHiddenByFilter,
   isLineResolved,
   isStaleOrderLine,
@@ -414,4 +416,30 @@ it("sortSuppliersForChips — nemení vstupné pole (vráti novú kópiu)", () =
   const zoradené = sortSuppliersForChips(vstup);
   expect(vstup.map((g) => g.supplier)).toEqual(["WETLAND", "BETALOV"]);
   expect(zoradené).not.toBe(vstup);
+});
+
+// issue 575: predajňový (floor) riadok „vybavený" = objednaný ALEBO stav
+// postúpil za predvolený „objednane" (zrkadlí `isLineResolved`).
+it("isFloorRowResolved — neobjednaný v predvolenom stave nie je vybavený", () => {
+  expect(isFloorRowResolved({ ordered: false, state: "objednane" })).toBe(false);
+});
+
+it("isFloorRowResolved — objednaný je vybavený aj v predvolenom stave", () => {
+  expect(isFloorRowResolved({ ordered: true, state: "objednane" })).toBe(true);
+});
+
+it("isFloorRowResolved — postúpený stav je vybavený aj bez objednania (issue 575)", () => {
+  expect(isFloorRowResolved({ ordered: false, state: "skladom" })).toBe(true);
+  expect(isFloorRowResolved({ ordered: false, state: "riesit" })).toBe(true);
+  expect(isFloorRowResolved({ ordered: false, state: "nedostupne" })).toBe(true);
+});
+
+it("isFloorRowHidden — skryje vybavený floor riadok len pri „skryť vybavené\"", () => {
+  // Postúpený stav sa skryje pri hideResolved (predtým sa skrýval len `ordered`).
+  expect(isFloorRowHidden({ ordered: false, state: "skladom" }, true)).toBe(true);
+  expect(isFloorRowHidden({ ordered: false, state: "skladom" }, false)).toBe(false);
+  // Nevybavený sa neskryje nikdy.
+  expect(isFloorRowHidden({ ordered: false, state: "objednane" }, true)).toBe(false);
+  // Objednaný sa skryje (issue 480 správanie ostáva).
+  expect(isFloorRowHidden({ ordered: true, state: "objednane" }, true)).toBe(true);
 });

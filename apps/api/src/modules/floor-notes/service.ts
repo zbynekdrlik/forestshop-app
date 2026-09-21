@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
-import { floorNoteProducts, floorNotes, variants } from "../../db/schema.js";
+import { floorNoteProducts, floorNotes, variants, type OrderLineState } from "../../db/schema.js";
 import { record } from "../audit/service.js";
 
 export interface CreateFloorNoteInput {
@@ -220,6 +220,101 @@ export async function setFloorNoteProductOrdered(
         variantCode: input.variantCode,
         from: row.orderedAt !== null,
         to: input.ordered,
+      },
+    });
+
+    return "ok";
+  });
+}
+
+export interface SetFloorNoteProductStateInput {
+  readonly floorNoteId: string;
+  readonly variantCode: string;
+  readonly state: OrderLineState;
+  readonly actorUserId: string;
+  readonly now: Date;
+}
+
+export type SetFloorNoteProductFieldResult = "ok" | "not_found";
+
+// issue 575: stav položky v board-e „Na objednanie" (rovnaké možnosti ako
+// e-shopová objednávka). Presný vzor `setFloorNoteProductOrdered` vyššie: tx +
+// `.for("update")` (proti súbežnej zmene TEJ ISTEJ položky — audit `from` by
+// inak mohol prečítať zastaraný stav) + audit `floor_note_product.state.changed`
+// v tej istej transakcii. NEprepočítava note-level 🛒 (`ordered` je NEZÁVISLÝ
+// príznak od `state`, presne ako `order_line.state` vs `order_line.ordered`).
+export async function setFloorNoteProductState(
+  db: Database,
+  input: SetFloorNoteProductStateInput,
+): Promise<SetFloorNoteProductFieldResult> {
+  return db.transaction(async (tx) => {
+    const [row] = await tx
+      .select({ id: floorNoteProducts.id, state: floorNoteProducts.state })
+      .from(floorNoteProducts)
+      .where(and(eq(floorNoteProducts.floorNoteId, input.floorNoteId), eq(floorNoteProducts.variantCode, input.variantCode)))
+      .for("update")
+      .limit(1);
+    if (row === undefined) return "not_found";
+
+    await tx.update(floorNoteProducts).set({ state: input.state }).where(eq(floorNoteProducts.id, row.id));
+
+    await record(tx, {
+      at: input.now,
+      actorUserId: input.actorUserId,
+      action: "floor_note_product.state.changed",
+      entity: "floor_note_product",
+      entityId: row.id,
+      data: {
+        floorNoteId: input.floorNoteId,
+        variantCode: input.variantCode,
+        from: row.state,
+        to: input.state,
+      },
+    });
+
+    return "ok";
+  });
+}
+
+export interface SetFloorNoteProductCommentInput {
+  readonly floorNoteId: string;
+  readonly variantCode: string;
+  // Prázdny reťazec (po orezaní na trase) sa normalizuje na `null` = žiadna
+  // poznámka (rovnaký vzor ako `setOrderComment`, `orders/state.ts`).
+  readonly comment: string | null;
+  readonly actorUserId: string;
+  readonly now: Date;
+}
+
+// issue 575: per-položková poznámka. Rovnaký transakčný/audit vzor ako
+// `setFloorNoteProductState`. NEbumpuje `floor_note.updated_at` — poznámka je
+// atribút junction riadku (rovnaký zámer ako `updateFloorNoteProductQuantity`).
+export async function setFloorNoteProductComment(
+  db: Database,
+  input: SetFloorNoteProductCommentInput,
+): Promise<SetFloorNoteProductFieldResult> {
+  return db.transaction(async (tx) => {
+    const [row] = await tx
+      .select({ id: floorNoteProducts.id, comment: floorNoteProducts.comment })
+      .from(floorNoteProducts)
+      .where(and(eq(floorNoteProducts.floorNoteId, input.floorNoteId), eq(floorNoteProducts.variantCode, input.variantCode)))
+      .for("update")
+      .limit(1);
+    if (row === undefined) return "not_found";
+
+    await tx.update(floorNoteProducts).set({ comment: input.comment }).where(eq(floorNoteProducts.id, row.id));
+
+    await record(tx, {
+      at: input.now,
+      actorUserId: input.actorUserId,
+      action: "floor_note_product.comment.changed",
+      entity: "floor_note_product",
+      entityId: row.id,
+      data: {
+        floorNoteId: input.floorNoteId,
+        variantCode: input.variantCode,
+        from: row.comment,
+        to: input.comment,
       },
     });
 

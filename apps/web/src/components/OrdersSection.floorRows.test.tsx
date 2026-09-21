@@ -10,16 +10,33 @@ import { OrdersSection } from "./OrdersSection.js";
 // integrácia cez `OrdersSection` (rovnaký vzor ako `OrdersSection.ordered.test
 // .tsx`), mockujúci API vrstvu.
 
-const { fetchOpenOrders, fetchOrdersOverview, setFloorRowOrdered, setSupplierLinesOrdered } = vi.hoisted(() => ({
+const {
+  fetchOpenOrders,
+  fetchOrdersOverview,
+  setFloorRowOrdered,
+  setFloorRowState,
+  setFloorRowComment,
+  setSupplierLinesOrdered,
+} = vi.hoisted(() => ({
   fetchOpenOrders: vi.fn(),
   fetchOrdersOverview: vi.fn(),
   setFloorRowOrdered: vi.fn(),
+  setFloorRowState: vi.fn(),
+  setFloorRowComment: vi.fn(),
   setSupplierLinesOrdered: vi.fn(),
 }));
 
 vi.mock("../ordersApi.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../ordersApi.js")>();
-  return { ...actual, fetchOpenOrders, fetchOrdersOverview, setFloorRowOrdered, setSupplierLinesOrdered };
+  return {
+    ...actual,
+    fetchOpenOrders,
+    fetchOrdersOverview,
+    setFloorRowOrdered,
+    setFloorRowState,
+    setFloorRowComment,
+    setSupplierLinesOrdered,
+  };
 });
 
 const NOTE_ID = "note-1111-1111-1111-111111111111";
@@ -28,10 +45,16 @@ function floorRow(overrides: Record<string, unknown> = {}) {
   return {
     noteId: NOTE_ID,
     variantCode: "FLOOR-1",
+    productKey: "pk-floor-1",
     productName: "Čelovka FOREST",
     sizeLabel: null,
     customerName: "Jožko Predajňa",
     quantity: 2,
+    ourUrl: null,
+    supplierUrl: null,
+    supplierNote: null,
+    state: "objednane" as const,
+    comment: null,
     createdAt: "2026-08-20T00:00:00.000Z",
     ordered: false,
     ...overrides,
@@ -184,6 +207,66 @@ it("skupina LEN s predajňovými riadkami (bez objednávok) sa vykreslí, nie pr
   expect(screen.queryByTestId("orders-empty")).toBeNull();
   // Hlavička skupiny počíta predajňový riadok (nie „0 riadky").
   expect(screen.getByTestId("supplier-Len Predajňa").textContent).toContain("Len Predajňa — 1 riadok");
+});
+
+// issue 575: predajňový riadok má stavové tlačidlá ako e-shopová objednávka.
+it("predajňový riadok vykreslí stavové tlačidlá; klik zavolá API a lokálne prepne stav", async () => {
+  fetchOpenOrders.mockResolvedValue([{ supplier: "Dodávateľ Alfa", lines: [], floorRows: [floorRow()], email: null }]);
+  setFloorRowState.mockResolvedValue(undefined);
+
+  render(<OrdersSection role="manazer" onSessionExpired={() => {}} />);
+
+  const idKey = `floor-${NOTE_ID}-FLOOR-1`;
+  const skladom = await screen.findByTestId(`state-btn-skladom-${idKey}`);
+  // Testid ZÁMERNE nemá prefix `order-line-` ani `state-btn-<s>-<lineId>` tvar.
+  expect(skladom.getAttribute("aria-checked")).toBe("false");
+  expect(screen.getByTestId(`state-btn-objednane-${idKey}`).getAttribute("aria-checked")).toBe("true");
+
+  fireEvent.click(skladom);
+
+  await waitFor(() => {
+    expect(setFloorRowState).toHaveBeenCalledWith(NOTE_ID, "FLOOR-1", "skladom");
+  });
+  await waitFor(() => {
+    expect(screen.getByTestId(`state-btn-skladom-${idKey}`).getAttribute("aria-checked")).toBe("true");
+  });
+  expect(fetchOpenOrders).toHaveBeenCalledTimes(1);
+  expect(screen.queryByRole("alert")).toBeNull();
+});
+
+// issue 575: kód produktu je odkaz na náš eshop, keď je adresa známa.
+it("kód produktu je odkaz na náš eshop, keď floor riadok nesie ourUrl", async () => {
+  fetchOpenOrders.mockResolvedValue([
+    {
+      supplier: "Dodávateľ Alfa",
+      lines: [],
+      floorRows: [floorRow({ ourUrl: "https://www.forestshop.sk/celovka/" })],
+      email: null,
+    },
+  ]);
+
+  render(<OrdersSection role="manazer" onSessionExpired={() => {}} />);
+
+  const link = await screen.findByTestId(`floor-code-link-${NOTE_ID}-FLOOR-1`);
+  expect(link.getAttribute("href")).toBe("https://www.forestshop.sk/celovka/");
+  expect(link.textContent).toBe("FLOOR-1");
+});
+
+// issue 575: per-položková poznámka sa uloží cez API a lokálne sa premietne.
+it("uloženie poznámky predajňového riadku zavolá API s hodnotou", async () => {
+  fetchOpenOrders.mockResolvedValue([{ supplier: "Dodávateľ Alfa", lines: [], floorRows: [floorRow()], email: null }]);
+  setFloorRowComment.mockResolvedValue(undefined);
+
+  render(<OrdersSection role="manazer" onSessionExpired={() => {}} />);
+
+  const textarea = await screen.findByTestId<HTMLTextAreaElement>(`floor-comment-input-${NOTE_ID}-FLOOR-1`);
+  fireEvent.change(textarea, { target: { value: "objednať v pondelok" } });
+  fireEvent.click(screen.getByTestId(`floor-comment-save-${NOTE_ID}-FLOOR-1`));
+
+  await waitFor(() => {
+    expect(setFloorRowComment).toHaveBeenCalledWith(NOTE_ID, "FLOOR-1", "objednať v pondelok");
+  });
+  expect(screen.queryByRole("alert")).toBeNull();
 });
 
 it("skryť vybavené skryje objednaný predajňový riadok", async () => {

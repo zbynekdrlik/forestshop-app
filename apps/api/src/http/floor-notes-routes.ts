@@ -2,6 +2,7 @@ import { zValidator } from "@hono/zod-validator";
 import type { Hono } from "hono";
 import { z } from "zod";
 import type { Database } from "../db/client.js";
+import { orderLineState } from "../db/schema.js";
 import {
   attachFloorNoteProduct,
   createFloorNote,
@@ -9,7 +10,9 @@ import {
   detachFloorNoteProduct,
   setFloorNoteCalled,
   setFloorNoteOrdered,
+  setFloorNoteProductComment,
   setFloorNoteProductOrdered,
+  setFloorNoteProductState,
   setFloorNoteResolved,
   updateFloorNoteProductQuantity,
   updateFloorNoteText,
@@ -33,6 +36,15 @@ const markerBody = z.object({ value: z.boolean() });
 const quantitySchema = z.number().int().min(1).max(1_000_000);
 const attachBody = z.object({ variantCode: z.string().trim().min(1).max(100), quantity: quantitySchema.default(1) });
 const quantityBody = z.object({ quantity: quantitySchema });
+// issue 575: stav položky — čerpaný priamo z `orderLineState.enumValues`
+// (ZDIEĽANÝ zdroj pravdy s e-shopovou objednávkou, `orders-routes.ts`'s
+// `orderLineStateBody`), takže nová hodnota enumu sa prejaví na oboch trasách
+// bez rizika rozídenia.
+const stateBody = z.object({ state: z.enum(orderLineState.enumValues) });
+// issue 575: per-položková poznámka — trim + strop (rovnaký vzor ako
+// `orderCommentBody`, `orders-routes.ts`). Prázdny reťazec = zmazať poznámku,
+// service ho normalizuje na `null`.
+const commentBody = z.object({ comment: z.string().trim().max(2000) });
 const idParam = z.object({ id: z.string().uuid() });
 const productParam = z.object({ id: z.string().uuid(), variantCode: z.string() });
 
@@ -182,6 +194,64 @@ export function registerFloorNotesRoutes(app: Hono<AppBindings>, db: Database): 
         return c.json({ error: "Položka zápisu sa nenašla" }, 404);
       }
       return c.json({ ok: true as const, ordered: value });
+    },
+  );
+
+  // issue 575: stav položky v board-e „Na objednanie" — rovnaké možnosti ako
+  // e-shopová objednávka (Nevybavené / Riešiť / Čaká sa / Skladom / Nedostupné /
+  // Objednané). 6-segmentová trasa (`.../products/:variantCode/state`) sa
+  // nekolíduje s ostatnými (iný posledný literál / iná metóda,
+  // `.claude/rules/http-routes.md`). Rovnaké oprávnenie + CSRF disciplína.
+  app.post(
+    "/api/floor-notes/:id/products/:variantCode/state",
+    requireSameOrigin(),
+    requireUser(db),
+    requireRole("admin", "manazer"),
+    zValidator("param", productParam),
+    zValidator("json", stateBody),
+    async (c) => {
+      const { id, variantCode } = c.req.valid("param");
+      const { state } = c.req.valid("json");
+      const user = c.get("user");
+      const result = await setFloorNoteProductState(db, {
+        floorNoteId: id,
+        variantCode,
+        state,
+        actorUserId: user.userId,
+        now: new Date(),
+      });
+      if (result === "not_found") {
+        return c.json({ error: "Položka zápisu sa nenašla" }, 404);
+      }
+      return c.json({ ok: true as const, state });
+    },
+  );
+
+  // issue 575: per-položková poznámka. Prázdny reťazec (po orezaní) sa
+  // normalizuje na `null` (rovnaký vzor ako `PUT /api/orders/:id/comment`).
+  app.patch(
+    "/api/floor-notes/:id/products/:variantCode/comment",
+    requireSameOrigin(),
+    requireUser(db),
+    requireRole("admin", "manazer"),
+    zValidator("param", productParam),
+    zValidator("json", commentBody),
+    async (c) => {
+      const { id, variantCode } = c.req.valid("param");
+      const { comment } = c.req.valid("json");
+      const user = c.get("user");
+      const normalizedComment = comment === "" ? null : comment;
+      const result = await setFloorNoteProductComment(db, {
+        floorNoteId: id,
+        variantCode,
+        comment: normalizedComment,
+        actorUserId: user.userId,
+        now: new Date(),
+      });
+      if (result === "not_found") {
+        return c.json({ error: "Položka zápisu sa nenašla" }, 404);
+      }
+      return c.json({ ok: true as const, comment: normalizedComment });
     },
   );
 

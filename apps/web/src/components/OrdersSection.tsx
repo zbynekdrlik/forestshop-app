@@ -8,7 +8,7 @@ import {
 } from "../ordersDisplayPreferences.js";
 import { OrdersRemainingCountContext } from "../ordersRemainingCountContext.js";
 import { RiesitBadgeRefreshContext } from "../riesitBadgeContext.js";
-import { isFloorRowHidden, isLineHiddenByFilter, isLineResolved } from "../ordersSummary.js";
+import { isFloorRowHidden, isFloorRowResolved, isLineHiddenByFilter, isLineResolved } from "../ordersSummary.js";
 import { useOrderLinesBoard } from "../useOrderLinesBoard.js";
 import { useSelectedSupplierFallback } from "../useSelectedSupplierFallback.js";
 import { OrderOpenStatusesPanel } from "./OrderOpenStatusesPanel.js";
@@ -66,6 +66,9 @@ export function OrdersSection({
     busySupplierLinkLineId,
     busyCommentOrderId,
     busyFloorRowKey,
+    busyFloorStateKey,
+    busyFloorCommentKey,
+    busyFloorLinkKey,
     supplierDrafts,
     dirtyEditorLineIds,
     onEditorActivityChange,
@@ -76,6 +79,9 @@ export function OrdersSection({
     changeState,
     changeOrdered,
     changeFloorOrdered,
+    changeFloorState,
+    changeFloorComment,
+    setFloorLink,
     assignSupplier,
     changeComment,
     toggleGroupOrdered,
@@ -115,11 +121,12 @@ export function OrdersSection({
   useEffect(() => {
     if (!loaded) return;
     const allLines = suppliers.flatMap((group) => group.lines);
-    // issue 480: odznak počíta aj NEOBJEDNANÉ predajňové riadky (konzistentne s
-    // tým, ako sa počítajú e-shopové — neobjednaný sa počíta, objednaný nie).
+    // issue 480/575: odznak počíta aj NEVYBAVENÉ predajňové riadky (konzistentne
+    // s e-shopovými — teraz cez `isFloorRowResolved`, ktoré zohľadní aj stav
+    // položky, nielen `ordered`).
     const allFloorRows = suppliers.flatMap((group) => group.floorRows ?? []);
     setOrdersRemainingCount(
-      allLines.filter((l) => !isLineResolved(l)).length + allFloorRows.filter((r) => !r.ordered).length,
+      allLines.filter((l) => !isLineResolved(l)).length + allFloorRows.filter((r) => !isFloorRowResolved(r)).length,
     );
   }, [loaded, suppliers, setOrdersRemainingCount]);
 
@@ -288,9 +295,15 @@ export function OrdersSection({
           busySupplierLinkLineId={busySupplierLinkLineId}
           busyCommentOrderId={busyCommentOrderId}
           busyFloorRowKey={busyFloorRowKey}
+          busyFloorStateKey={busyFloorStateKey}
+          busyFloorCommentKey={busyFloorCommentKey}
+          busyFloorLinkKey={busyFloorLinkKey}
           onChangeState={changeState}
           onChangeOrdered={changeOrdered}
           onChangeFloorOrdered={changeFloorOrdered}
+          onChangeFloorState={changeFloorState}
+          onChangeFloorComment={changeFloorComment}
+          onSetFloorLink={setFloorLink}
           onAssignSupplier={assignSupplier}
           onSetSupplierLink={setSupplierLink}
           onChangeComment={changeComment}

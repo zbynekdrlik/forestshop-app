@@ -25,13 +25,19 @@ export function isLineHiddenByFilter(
   return hideResolved && isLineResolved(line) && !dirtyEditorLineIds.has(line.lineId);
 }
 
-// issue 480: predajňový (floor) riadok je „vybavený" — a teda skrytý pri
-// prepínači „skryť vybavené" — práve keď je objednaný. `ordered` je jediná
-// terminálna sémantika floor riadku (nemá stav ani `dirtyEditorLineIds`
-// výnimku, tie sú len pre order_line inline editory). Samostatná funkcia (nie
-// `isLineHiddenByFilter`), keďže floor riadok nemá `state`/`lineId`.
-export function isFloorRowHidden(row: Pick<FloorOrderRow, "ordered">, hideResolved: boolean): boolean {
-  return hideResolved && row.ordered;
+// issue 575: predajňový (floor) riadok je „vybavený" ROVNAKOU sémantikou ako
+// e-shopový (`isLineResolved`) — objednaný ALEBO stav postúpil za predvolený
+// „objednane" (issue 480 mal len `ordered`, teraz má floor riadok aj stav).
+export function isFloorRowResolved(row: Pick<FloorOrderRow, "ordered" | "state">): boolean {
+  return row.ordered || row.state !== "objednane";
+}
+
+// issue 480/575: floor riadok skrytý pri prepínači „skryť vybavené" práve keď je
+// „vybavený" (`isFloorRowResolved`). Samostatná funkcia (nie
+// `isLineHiddenByFilter`), keďže floor riadok nemá `lineId`/`dirtyEditorLineIds`
+// výnimku (tá je len pre order_line inline editory).
+export function isFloorRowHidden(row: Pick<FloorOrderRow, "ordered" | "state">, hideResolved: boolean): boolean {
+  return hideResolved && isFloorRowResolved(row);
 }
 
 // issue 260: každé pole je súčet `quantity` (počet KUSOV naprieč riadkami),

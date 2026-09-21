@@ -29,9 +29,15 @@ export function SupplierOrderGroup({
   busySupplierLinkLineId,
   busyCommentOrderId,
   busyFloorRowKey,
+  busyFloorStateKey,
+  busyFloorCommentKey,
+  busyFloorLinkKey,
   onChangeState,
   onChangeOrdered,
   onChangeFloorOrdered,
+  onChangeFloorState,
+  onChangeFloorComment,
+  onSetFloorLink,
   onAssignSupplier,
   onSetSupplierLink,
   onChangeComment,
@@ -92,10 +98,18 @@ export function SupplierOrderGroup({
   // issue 480: kľúč (`noteId::variantCode`) predajňového riadku, ktorého zápis
   // „objednané" PRÁVE TERAZ prebieha.
   readonly busyFloorRowKey: string | null;
+  // issue 575: busy-guardy pre stav / poznámku / odkaz predajňového riadku.
+  readonly busyFloorStateKey: string | null;
+  readonly busyFloorCommentKey: string | null;
+  readonly busyFloorLinkKey: string | null;
   readonly onChangeState: (lineId: string, newState: OrderLine["state"]) => void;
   readonly onChangeOrdered: (lineId: string, ordered: boolean) => void;
   // issue 480: prepnutie „objednané" na predajňovom riadku.
   readonly onChangeFloorOrdered: (noteId: string, variantCode: string, ordered: boolean) => void;
+  // issue 575: zmena stavu / poznámky / odkazu predajňového riadku.
+  readonly onChangeFloorState: (noteId: string, variantCode: string, newState: OrderLine["state"]) => void;
+  readonly onChangeFloorComment: (noteId: string, variantCode: string, comment: string | null) => void;
+  readonly onSetFloorLink: (noteId: string, variantCode: string, productKey: string, url: string) => boolean;
   readonly onAssignSupplier: (lineId: string, supplier: string) => void;
   // issue 166: `boolean` návratová hodnota — pozri `OrderLineRow.tsx`'s komentár.
   readonly onSetSupplierLink: (lineId: string, url: string) => boolean;
@@ -214,10 +228,16 @@ export function SupplierOrderGroup({
                 row={row}
                 canChangeState={canChangeState}
                 busyFloorRowKey={busyFloorRowKey}
+                busyFloorStateKey={busyFloorStateKey}
+                busyFloorCommentKey={busyFloorCommentKey}
+                busyFloorLinkKey={busyFloorLinkKey}
                 // Review of PR 75/76 (issue 60) obojsmerný busy-guard: kým beží
                 // hromadná akcia skupiny, jednotlivý floor riadok sa nedá meniť.
                 supplierBusy={busyOrderedSupplier === group.supplier}
                 onChangeOrdered={onChangeFloorOrdered}
+                onChangeState={onChangeFloorState}
+                onChangeComment={onChangeFloorComment}
+                onSetSupplierLink={onSetFloorLink}
               />
             ))}
           </tbody>

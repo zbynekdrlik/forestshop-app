@@ -1,6 +1,7 @@
 import { boolean, check, index, integer, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { variants } from "./schema-catalog.js";
+import { orderLineState } from "./schema-orders.js";
 import { users } from "./schema-users.js";
 
 // issue 410: "Eshop → Objednávky predajňa" — nahrádza Štěpánovo Discord vlákno
@@ -82,6 +83,20 @@ export const floorNoteProducts = pgTable(
     // majú `ordered_at`. Predajňové riadky do „Na objednanie" pridáva
     // `orders/queries.ts` (rovnaká efektívna dodávateľská cesta ako order_line).
     orderedAt: timestamp("ordered_at", { withTimezone: true }),
+    // issue 575: stav položky v board-e „Na objednanie" — rovnaké možnosti ako
+    // e-shopová objednávka (Štěpán). ZNOVUPOUŽITÝ existujúci enum
+    // `order_line_state` (`schema-orders.ts`) — NIE nový typ, NIE `ADD VALUE`
+    // (žiadna 55P04 past, `.claude/rules/database.md`), takže sa zdieľajú
+    // labely/farby/poradie tlačidiel (`orderLineStateLabels.ts`) a nový stav
+    // (napr. `objednane_stav`, issue 493) sa prejaví na oboch miestach naraz.
+    // `objednane` je VÝCHODISKOVÝ „Nevybavené" (rovnaká sémantika ako
+    // `order_line.state`), NOT NULL DEFAULT ho backfilne pri `ADD COLUMN`.
+    state: orderLineState("state").notNull().default("objednane"),
+    // issue 575: per-položková poznámka — „poznámka len ak sa dá zapísať do
+    // objednávky predajne" (Štěpán): PER POLOŽKA (nie za celý zápis, ten je
+    // `floor_note.text`), aby bola viditeľná aj na čipe položky v „Objednávky
+    // predajňa". `NULL` = žiadna poznámka.
+    comment: text("comment"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [

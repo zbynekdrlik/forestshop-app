@@ -1,6 +1,6 @@
 import type { JSX } from "react";
 import type { OrderMailPreview, SupplierOpenOrders } from "../ordersApi.js";
-import { summarizeOrderLines } from "../ordersSummary.js";
+import { isFloorRowResolved, summarizeOrderLines } from "../ordersSummary.js";
 import { SHOW_ORDER_MAIL_ACTIONS } from "./orderScreenFlags.js";
 
 // issue 61 — mechanicky vyňaté z `OrdersSection.tsx` (hlavička skupiny +
@@ -90,7 +90,7 @@ export function SupplierActionsPanel({
   const done =
     group.lines.length + floorRows.length > 0 &&
     summarizeOrderLines(group.lines).remaining === 0 &&
-    floorRows.every((r) => r.ordered);
+    floorRows.every((r) => isFloorRowResolved(r));
   // issue 480: hromadné tlačidlo je znefunkčnené aj kým beží per-floor-row zápis
   // niektorého riadku TEJTO skupiny (mirror `busyOrderedLineId`, obojsmerný
   // busy-guard z issue 60).

@@ -63,7 +63,8 @@ describe("POST /api/floor-notes/:id/products", () => {
     const list = await app.request("/api/floor-notes", { headers: { cookie } });
     const row = ((await list.json()) as { rows: readonly { id: string; products: readonly { variantCode: string; quantity: number; shopUrl: string | null }[] }[] }).rows.find((r) => r.id === id);
     // issue 453: pripnutie bez počtu dostane default 1 (dôkaz defaultu na čítacej ceste).
-    expect(row?.products).toEqual([{ variantCode: "E2E-PIN-1", productName: "Test produkt E2E-PIN-1", sizeLabel: null, quantity: 1, shopUrl: "https://www.forestshop.sk/pin-1/" }]);
+    // issue 575: položka nesie aj `state` (default „objednane") + `comment` (null).
+    expect(row?.products).toEqual([{ variantCode: "E2E-PIN-1", productName: "Test produkt E2E-PIN-1", sizeLabel: null, quantity: 1, shopUrl: "https://www.forestshop.sk/pin-1/", state: "objednane", comment: null }]);
   });
 
   it("pripnutý produkt BEZ shop_product_url riadku má shopUrl:null (frontend rieši náhradný odkaz)", async () => {

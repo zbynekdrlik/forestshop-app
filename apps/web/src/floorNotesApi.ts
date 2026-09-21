@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ORDER_LINE_STATES } from "./orderLineStates.js";
 
 // issue 410: "Eshop → Objednávky predajňa" — zrkadlí `FloorNoteRow`/
 // `FloorNoteProductRow` (`apps/api/src/modules/floor-notes/queries.ts`).
@@ -12,6 +13,13 @@ const productSchema = z.object({
   // issue 453: počet kusov (celé číslo ≥ 1).
   quantity: z.number().int(),
   shopUrl: z.string().nullable(),
+  // issue 575: stav položky (nastavený v board-e „Na objednanie") — v zázname
+  // predajne sa zobrazí read-only odznak, keď je stav ≠ „Nevybavené". RUČNE
+  // zrkadlí `orderLineState.enumValues` (rovnako ako `ordersApi.ts`).
+  state: z.enum(ORDER_LINE_STATES),
+  // issue 575: per-položková poznámka (nastavená v board-e „Na objednanie") —
+  // zobrazí sa v zázname predajne.
+  comment: z.string().nullable(),
 });
 export type FloorNoteProduct = z.infer<typeof productSchema>;
 

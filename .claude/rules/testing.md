@@ -36,7 +36,15 @@ paths:
   môj assert). Aplikuj migrácie (dopredné/aditívne, bezpečné na LOKÁLNEJ 5433,
   NIKDY 5432 = prod bez host-portu) PRED behom. Jeden cielený súbor spustíš cez
   `pnpm --filter @forestshop/api exec vitest run tests/<súbor>.integration.test.ts`
-  (nie `pnpm test`/`-r test`).
+  (nie `pnpm test`/`-r test`). **E2E navyše potrebuje nainštalovaný Playwright
+  chromium — čerstvý `pnpm install` do worktree ho NEPRINESIE** (browser cache
+  `~/.cache/ms-playwright/` je mimo `node_modules` a viazaná na PRESNÚ verziu
+  playwrightu z lockfilu; iná verzia v cache = `Executable doesn't exist at
+  …/chromium_headless_shell-<N>`, ktoré Playwright hlási ako „zlyhané" testy,
+  hoci webServer nabehol OK). Fix: `pnpm --filter @forestshop/web exec playwright
+  install chromium` (jednorazovo, ~115 MB), potom cielené specy cez
+  `DATABASE_URL=… pnpm --filter @forestshop/web exec playwright test
+  tests/e2e/<súbor>.spec.ts` (issue 575).
 - **`test:integration` a `e2e` sa lokálne na dev1 default NESPÚŠŤAJÚ (issue
   351)** — bežia bezpodmienečne v `ci.yml` (`.claude/rules/ci.md`), lokálne
   ostáva len `pnpm gates:local` (typecheck+lint+unit testy). Spusti tú
