@@ -79,3 +79,83 @@ test("predajňový produkt sa objaví v Na objednanie, dá sa objednať, zápis 
 
   expect(chyby).toEqual([]);
 });
+
+// issue 575 (Štěpán): predajňový riadok v „Na objednanie" má rovnaké ovládanie
+// ako e-shopová objednávka — kód s odkazom, stavové tlačidlá a poznámka.
+// Celý tok reálnym prehliadačom: pripnúť produkt → v „Na objednanie" má kód
+// odkaz + uložiť poznámku + kliknúť stav „Riešiť" → po reloade stav drží →
+// riadok je viditeľný v záložke „Riešiť" → poznámka aj stav sú vidno na čipe v
+// „Objednávky predajňa". Konzola čistá. Filtruje LEN VLASTNÝ zápis (unikátny
+// text) — zdieľaná globálna `floor_note` tabuľka, paralelné workery
+// (`.claude/rules/testing.md`).
+test("predajňový riadok má kód s odkazom, poznámku a stavové tlačidlá; stav Riešiť sa uloží a prejaví v Riešiť aj na čipe — konzola čistá", async ({ page }) => {
+  const chyby: string[] = [];
+  page.on("console", (m) => {
+    if (m.type() === "error" || m.type() === "warning") chyby.push(m.text());
+  });
+  page.on("pageerror", (e) => {
+    chyby.push(e.message);
+  });
+
+  await page.goto("/?tab=floor-orders");
+  await page.getByLabel("E-mail").fill(E2E_PREDAJNA_EMAIL);
+  await page.getByLabel("Heslo").fill(E2E_HESLO);
+  await page.getByRole("button", { name: "Prihlásiť sa" }).click();
+  await expect(page.getByRole("heading", { name: "Objednávky predajňa" })).toBeVisible();
+
+  await page.getByTestId("floor-note-new-input").fill("E2E R575 Zákazník");
+  await page.getByTestId("floor-note-new-add").click();
+  const riadokZapisu = page.locator('[data-testid^="floor-note-row-"]').filter({ hasText: "E2E R575 Zákazník" });
+  await expect(riadokZapisu).toHaveCount(1);
+  const noteId = (await riadokZapisu.getAttribute("data-testid"))?.replace("floor-note-row-", "") ?? "";
+  expect(noteId).not.toBe("");
+
+  await page.getByTestId(`floor-note-attach-toggle-${noteId}`).click();
+  await page.getByTestId("floor-note-product-search-input").fill("E2E Predajňa Bunda Rogaland");
+  await page.getByTestId("floor-note-product-search-submit").click();
+  await page.getByTestId("floor-note-product-pin-E2E-PREDAJNA-1").click();
+  await expect(page.getByTestId(`floor-note-product-link-${noteId}-E2E-PREDAJNA-1`)).toBeVisible();
+
+  // „Na objednanie" — kód produktu je odkaz na náš eshop (E2E-PREDAJNA-1 má
+  // shop_product_url vo fixtúre).
+  await page.goto("/?tab=orders");
+  await expect(page.getByTestId(`floor-order-row-${noteId}-E2E-PREDAJNA-1`)).toBeVisible();
+  await expect(page.getByTestId(`floor-code-link-${noteId}-E2E-PREDAJNA-1`)).toHaveAttribute(
+    "href",
+    "https://www.forestshop.sk/e2e-predajna-bunda-rogaland/",
+  );
+
+  // Uložiť per-položkovú poznámku.
+  await page.getByTestId(`floor-comment-input-${noteId}-E2E-PREDAJNA-1`).fill("objednať u dodávateľa");
+  await page.getByTestId(`floor-comment-save-${noteId}-E2E-PREDAJNA-1`).click();
+
+  // Kliknúť stav „Riešiť". Testid `state-btn-riesit-floor-<noteId>-<code>` —
+  // zámerne bez prefixu `order-line-`.
+  const idKey = `floor-${noteId}-E2E-PREDAJNA-1`;
+  const riesitBtn = page.getByTestId(`state-btn-riesit-${idKey}`);
+  await expect(riesitBtn).toHaveAttribute("aria-checked", "false");
+  await riesitBtn.click();
+  await expect(riesitBtn).toHaveAttribute("aria-checked", "true");
+
+  // Po reloade stav drží (uložený na floor_note_product).
+  await page.goto("/?tab=orders");
+  await expect(page.getByTestId(`state-btn-riesit-${idKey}`)).toHaveAttribute("aria-checked", "true");
+
+  // Riadok je viditeľný v záložke „Riešiť" (samostatná tabuľka „Predajňa").
+  await page.goto("/?tab=riesit");
+  await expect(page.getByTestId("riesit-floor")).toBeVisible();
+  await expect(page.getByTestId(`floor-order-row-${noteId}-E2E-PREDAJNA-1`)).toBeVisible();
+
+  // Poznámka aj stav sú viditeľné na čipe v „Objednávky predajňa".
+  await page.goto("/?tab=floor-orders");
+  await expect(page.getByTestId(`floor-note-product-state-${noteId}-E2E-PREDAJNA-1`)).toHaveText("Riešiť");
+  await expect(page.getByTestId(`floor-note-product-comment-${noteId}-E2E-PREDAJNA-1`)).toContainText(
+    "objednať u dodávateľa",
+  );
+
+  // Upratať.
+  await page.getByTestId(`floor-note-delete-${noteId}`).click();
+  await expect(page.getByTestId(`floor-note-row-${noteId}`)).toHaveCount(0);
+
+  expect(chyby).toEqual([]);
+});
