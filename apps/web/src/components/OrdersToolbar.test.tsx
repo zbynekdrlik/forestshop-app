@@ -230,10 +230,16 @@ it("issue 480 — chip zahŕňa predajňové riadky v počte aj v done farbe, fl
   const floorRow = (ordered: boolean) => ({
     noteId: "n1",
     variantCode: "F-1",
+    productKey: "pk-f1",
     productName: "Produkt",
     sizeLabel: null,
     customerName: "Zákazník",
     quantity: 1,
+    ourUrl: null,
+    supplierUrl: null,
+    supplierNote: null,
+    state: "objednane" as const,
+    comment: null,
     createdAt: "2026-08-20T00:00:00.000Z",
     ordered,
   });

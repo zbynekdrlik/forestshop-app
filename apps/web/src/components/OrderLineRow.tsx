@@ -362,8 +362,10 @@ export function OrderLineRow({
             <div className="ord-supplier-top">
               <div className="ord-supplier-cell" data-testid={`supplier-link-${line.lineId}`}>
                 {/* issue 500: obsah bunky (🔗 / poznámka / hint / „—") vyčlenený
-                    do `OrderSupplierLinkDisplay` (eslint `max-lines`). */}
-                <OrderSupplierLinkDisplay line={line} />
+                    do `OrderSupplierLinkDisplay` (eslint `max-lines`). issue 575:
+                    `data` objekt (zdieľané s `FloorOrderRow`); `OrderLine` ho
+                    štrukturálne spĺňa. */}
+                <OrderSupplierLinkDisplay data={line} />
               </div>
               {/* issue 500/502: @ tlačidlo — otvorí okno na ručný e-mail
                   zákazníkovi (`OrdersSection.tsx` vlastní modál). Gated na

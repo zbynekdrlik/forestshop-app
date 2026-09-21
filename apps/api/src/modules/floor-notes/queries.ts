@@ -1,6 +1,6 @@
 import { asc, count, desc, eq } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
-import { floorNoteProducts, floorNotes, shopProductUrl, variants } from "../../db/schema.js";
+import { floorNoteProducts, floorNotes, shopProductUrl, variants, type OrderLineState } from "../../db/schema.js";
 
 // issue 410: "Eshop → Objednávky predajňa" — čítacia strana. Zoznam nemá
 // stránkovanie (na rozdiel od `floor-orders-queries.ts`, ktoré nahrádza) —
@@ -19,6 +19,10 @@ export interface FloorNoteProductRow {
   // (nie tento dopyt) rozhoduje o vizuálne odlíšenom náhradnom odkaze
   // (`ourProductLink`/`isSearchFallback`, design komentár na ticket-e).
   readonly shopUrl: string | null;
+  // issue 575: stav + poznámka položky (nastavené v board-e „Na objednanie") —
+  // zobrazujú sa na čipe v zázname predajne (read-only odznak + text).
+  readonly state: OrderLineState;
+  readonly comment: string | null;
 }
 
 export interface FloorNoteRow {
@@ -60,6 +64,8 @@ export async function listFloorNotes(db: Database): Promise<readonly FloorNoteRo
       sizeLabel: variants.sizeLabel,
       quantity: floorNoteProducts.quantity,
       shopUrl: shopProductUrl.url,
+      state: floorNoteProducts.state,
+      comment: floorNoteProducts.comment,
     })
     .from(floorNoteProducts)
     .innerJoin(variants, eq(variants.code, floorNoteProducts.variantCode))
@@ -69,7 +75,15 @@ export async function listFloorNotes(db: Database): Promise<readonly FloorNoteRo
   const byNote = new Map<string, FloorNoteProductRow[]>();
   for (const row of productRows) {
     const list = byNote.get(row.floorNoteId) ?? [];
-    list.push({ variantCode: row.variantCode, productName: row.productName, sizeLabel: row.sizeLabel, quantity: row.quantity, shopUrl: row.shopUrl });
+    list.push({
+      variantCode: row.variantCode,
+      productName: row.productName,
+      sizeLabel: row.sizeLabel,
+      quantity: row.quantity,
+      shopUrl: row.shopUrl,
+      state: row.state,
+      comment: row.comment,
+    });
     byNote.set(row.floorNoteId, list);
   }
 

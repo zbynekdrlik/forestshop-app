@@ -1,6 +1,6 @@
 import type { JSX } from "react";
 import type { FloorOrderRow, OrderLine, SupplierOpenOrders } from "../ordersApi.js";
-import { formatOrderSummaryText, sortSuppliersForChips, summarizeOrderLines } from "../ordersSummary.js";
+import { formatOrderSummaryText, isFloorRowResolved, sortSuppliersForChips, summarizeOrderLines } from "../ordersSummary.js";
 import { SectionHeader } from "./section/SectionHeader.js";
 
 // issue 61 — filtrovacie štítky dodávateľov + súhrn "ostáva vybaviť" +
@@ -36,7 +36,11 @@ export function OrdersToolbar({
   // stav), takže sa doň nemieša.
   const baseSummary = summarizeOrderLines(scopedLines);
   const floorTotalQty = scopedFloorRows.reduce((sum, row) => sum + row.quantity, 0);
-  const floorRemainingQty = scopedFloorRows.filter((row) => !row.ordered).reduce((sum, row) => sum + row.quantity, 0);
+  // issue 575: „remaining" floor riadku zrkadlí `isFloorRowResolved` (objednaný
+  // ALEBO stav postúpil), nie len `!ordered` — konzistentne s order riadkom.
+  const floorRemainingQty = scopedFloorRows
+    .filter((row) => !isFloorRowResolved(row))
+    .reduce((sum, row) => sum + row.quantity, 0);
   const summary = { ...baseSummary, total: baseSummary.total + floorTotalQty, remaining: baseSummary.remaining + floorRemainingQty };
 
   // issue 548: rozloženie hlavičky (čipy + súhrn + akcie) je teraz zdieľaný
@@ -78,7 +82,7 @@ export function OrdersToolbar({
           const done =
             group.lines.length + groupFloorRows.length > 0 &&
             summarizeOrderLines(group.lines).remaining === 0 &&
-            groupFloorRows.every((row) => row.ordered);
+            groupFloorRows.every((row) => isFloorRowResolved(row));
           return (
             <button
               key={group.supplier}

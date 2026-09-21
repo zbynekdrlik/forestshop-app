@@ -33,8 +33,8 @@ const ROW_BEZ_PRODUKTOV = {
   products: [],
 };
 
-const PRODUKT_S_ODKAZOM = { variantCode: "40237/L", productName: "Bunda Rogaland", sizeLabel: "L", quantity: 2, shopUrl: "https://www.forestshop.sk/bunda/" };
-const PRODUKT_BEZ_ODKAZU = { variantCode: "60035/M", productName: "Čiapka Polar", sizeLabel: null, quantity: 1, shopUrl: null };
+const PRODUKT_S_ODKAZOM = { variantCode: "40237/L", productName: "Bunda Rogaland", sizeLabel: "L", quantity: 2, shopUrl: "https://www.forestshop.sk/bunda/", state: "objednane" as const, comment: null };
+const PRODUKT_BEZ_ODKAZU = { variantCode: "60035/M", productName: "Čiapka Polar", sizeLabel: null, quantity: 1, shopUrl: null, state: "objednane" as const, comment: null };
 
 const SEARCH_HIT = {
   productKey: "P1",

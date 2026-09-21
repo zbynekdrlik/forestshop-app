@@ -4,6 +4,8 @@ import { fetchRiesitOrders, OrdersUnauthorizedError, setOrderLinesRiesitByCode }
 import { RiesitBadgeRefreshContext } from "../riesitBadgeContext.js";
 import { groupRiesitLinesByOrder } from "../riesitOrders.js";
 import { useOrderLinesBoard } from "../useOrderLinesBoard.js";
+import { FloorOrderRow } from "./FloorOrderRow.js";
+import { OrderLinesTableHead } from "./OrderLinesTableHead.js";
 import { OrderWriteFailuresBanner } from "./OrderWriteFailuresBanner.js";
 import { RiesitOrderRow } from "./RiesitOrderRow.js";
 import { CustomerContactDialog } from "./CustomerContactDialog.js";
@@ -102,6 +104,13 @@ export function RiesitSection({
   // (žiadny nový dopyt) — preskupené podľa `orderId`, najnovšia prvá.
   const orders = groupRiesitLinesByOrder(board.suppliers);
 
+  // issue 575: predajňové (floor) riadky so stavom `riesit` — server ich do
+  // `/api/orders/riesit` už zúžil na `state = riesit` (`queries.ts`). Nie sú to
+  // objednávky (kľúč `noteId::variantCode`, žiadny `orderId`), takže ich
+  // `groupRiesitLinesByOrder`/`RiesitOrderRow` nevykreslí — zobrazia sa nižšie
+  // ako samostatná „Na objednanie" tabuľka s plnými ovládačmi (`FloorOrderRow`).
+  const floorRows = board.suppliers.flatMap((group) => group.floorRows ?? []);
+
   return (
     <section className="orders-section" data-testid="riesit-section">
       {canChangeState && (
@@ -159,7 +168,7 @@ export function RiesitSection({
           board.setWriteFailures([]);
         }}
       />
-      {board.loaded && orders.length === 0 && (
+      {board.loaded && orders.length === 0 && floorRows.length === 0 && (
         <p className="empty" data-testid="riesit-empty">
           Zatiaľ tu nie sú žiadne objednávky na riešenie. Označ riadok tlačidlom „Riešiť" v „Na objednanie",
           alebo zadaj číslo objednávky vyššie.
@@ -176,6 +185,36 @@ export function RiesitSection({
               onOpenCustomerContact={contact.open}
             />
           ))}
+        </div>
+      )}
+      {/* issue 575: predajňové riadky v stave „Riešiť" — samostatná tabuľka
+          (predajňa nie je objednávka), rovnaké ovládače ako v „Na objednanie". */}
+      {floorRows.length > 0 && (
+        <div className="riesit-floor" data-testid="riesit-floor">
+          <h3 className="riesit-floor-heading">Predajňa</h3>
+          <div className="orders-table-wrap">
+            <table className="orders-table">
+              <OrderLinesTableHead />
+              <tbody>
+                {floorRows.map((row) => (
+                  <FloorOrderRow
+                    key={`${row.noteId}::${row.variantCode}`}
+                    row={row}
+                    canChangeState={canChangeState}
+                    busyFloorRowKey={board.busyFloorRowKey}
+                    busyFloorStateKey={board.busyFloorStateKey}
+                    busyFloorCommentKey={board.busyFloorCommentKey}
+                    busyFloorLinkKey={board.busyFloorLinkKey}
+                    supplierBusy={false}
+                    onChangeOrdered={board.changeFloorOrdered}
+                    onChangeState={board.changeFloorState}
+                    onChangeComment={board.changeFloorComment}
+                    onSetSupplierLink={board.setFloorLink}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
       {/* issue 502: okno na ručný e-mail zákazníkovi — zdieľané s „Na

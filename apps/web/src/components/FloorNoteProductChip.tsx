@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState, type JSX } from "react";
 import type { FloorNoteProduct } from "../floorNotesApi.js";
+import { STATE_LABELS } from "../orderLineStateLabels.js";
 import { ourProductLink } from "../shopLinks.js";
 import { IconButton } from "./section/IconButton.js";
+import { StateChip } from "./section/StateChip.js";
 
 // issue 453: jeden pripnutý produkt na zázname "Objednávky predajne" —
 // klikateľný odkaz (priamy alebo vizuálne odlíšený náhradný, issue 410) +
@@ -100,6 +102,23 @@ export function FloorNoteProductChip({
       ) : (
         <span className="floor-note-product-qty" data-testid={`floor-note-product-qty-${noteId}-${product.variantCode}`}>
           {product.quantity} ks
+        </span>
+      )}
+
+      {/* issue 575: stav položky (keď postúpil za „Nevybavené") + per-položková
+          poznámka, obe nastavené v board-e „Na objednanie" — read-only tu. */}
+      {product.state !== "objednane" && (
+        <StateChip base="pill" testId={`floor-note-product-state-${noteId}-${product.variantCode}`}>
+          {STATE_LABELS[product.state]}
+        </StateChip>
+      )}
+      {product.comment !== null && product.comment !== "" && (
+        <span
+          className="floor-note-product-comment"
+          title={product.comment}
+          data-testid={`floor-note-product-comment-${noteId}-${product.variantCode}`}
+        >
+          📝 {product.comment}
         </span>
       )}
 

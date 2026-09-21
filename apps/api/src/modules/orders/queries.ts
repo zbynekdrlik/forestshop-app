@@ -125,6 +125,10 @@ export interface FloorOrderRow {
   // treba na zapisovaciu trasu „objednané" aj ako stabilný React key.
   readonly noteId: string;
   readonly variantCode: string;
+  // issue 575: `product.key` — potrebné na PRODUKTOVÝ zápis odkazu na dodávateľa
+  // (`POST /api/product-links/:productKey`), rovnaká zdieľaná cesta ako order
+  // line (`product_supplier_link_override`).
+  readonly productKey: string;
   readonly productName: string;
   readonly sizeLabel: string | null;
   // Meno zákazníka = PRVÝ riadok voľného textu zápisu, orezaný (zadanie
@@ -132,11 +136,27 @@ export interface FloorOrderRow {
   // `createBody`'s `.min(1)`).
   readonly customerName: string;
   readonly quantity: number;
+  // issue 575: priama adresa NÁŠHO produktu z feedu (`shop_product_url`),
+  // `null` keď kód vo feede nie je — presne ako `OpenOrderLine.ourUrl` (kód sa
+  // vtedy vykreslí ako neaktívny text, nikdy vyhľadávací fallback).
+  readonly ourUrl: string | null;
+  // issue 575: odkaz na dodávateľa (EFEKTÍVNA cesta zhodná s order line —
+  // `resolveEffectiveSupplierLink` nad `products.internal_note` +
+  // `product_supplier_link_override`), `null` keď žiadny; `supplierNote` je
+  // surový text pre plain-text fallback.
+  readonly supplierUrl: string | null;
+  readonly supplierNote: string | null;
+  // issue 575: stav položky — rovnaké možnosti a sémantika ako `order_line.state`
+  // (zdieľaný enum).
+  readonly state: OrderLineState;
+  // issue 575: per-položková poznámka, `null` keď žiadna.
+  readonly comment: string | null;
   // `floor_note.created_at` (dátum zápisu) — ISO 8601 reťazec, rovnaký tvar
   // ako `OpenOrderLine.placedAt`, aby triedenie skupín fungovalo jednotne.
   readonly createdAt: string;
-  // `floor_note_product.ordered_at !== null` — jediná „vybavené" sémantika
-  // floor riadku (žiadny stav).
+  // `floor_note_product.ordered_at !== null` — nezávislý príznak „objednané u
+  // dodávateľa" (rovnaká sémantika ako `order_line.ordered`, oddelené od
+  // `state`).
   readonly ordered: boolean;
 }
 
@@ -221,10 +241,20 @@ async function listUnresolvedFloorOrderRows(
       noteText: floorNotes.text,
       noteCreatedAt: floorNotes.createdAt,
       variantCode: floorNoteProducts.variantCode,
+      // issue 575: `product.key` + efektívny odkaz na dodávateľa TOU ISTOU
+      // cestou ako order line (`resolveEffectiveSupplierLink` nad
+      // `products.internal_note` + `product_supplier_link_override`) + naša
+      // adresa (`shop_product_url` leftJoin na variantCode) + stav + poznámka.
+      productKey: products.key,
       productName: variants.name,
       sizeLabel: variants.sizeLabel,
       quantity: floorNoteProducts.quantity,
       orderedAt: floorNoteProducts.orderedAt,
+      state: floorNoteProducts.state,
+      comment: floorNoteProducts.comment,
+      internalNote: products.internalNote,
+      supplierLinkOverride: productSupplierLinkOverrides.url,
+      ourUrl: shopProductUrl.url,
       effectiveSupplier: effectiveSupplierSql,
     })
     .from(floorNoteProducts)
@@ -232,21 +262,35 @@ async function listUnresolvedFloorOrderRows(
     .innerJoin(variants, eq(variants.code, floorNoteProducts.variantCode))
     .innerJoin(products, eq(products.key, variants.productKey))
     .leftJoin(productSupplierOverrides, eq(productSupplierOverrides.productKey, products.key))
+    .leftJoin(productSupplierLinkOverrides, eq(productSupplierLinkOverrides.productKey, products.key))
+    // issue 575: LEFT (ako order line, issue 276) — variant bez záznamu vo
+    // feede NESMIE zo zoznamu vypadnúť, len jeho kód sa vykreslí ako neaktívny.
+    .leftJoin(shopProductUrl, eq(shopProductUrl.code, floorNoteProducts.variantCode))
     .where(eq(floorNotes.resolved, false))
     .orderBy(desc(floorNotes.createdAt), desc(floorNoteProducts.id));
 
-  return rows.map((row) => ({
-    noteId: row.noteId,
-    variantCode: row.variantCode,
-    productName: row.productName,
-    sizeLabel: row.sizeLabel,
-    // Meno zákazníka = prvý riadok textu zápisu, orezaný (zadanie klienta).
-    customerName: (row.noteText.split(/\r?\n/)[0] ?? "").trim(),
-    quantity: row.quantity,
-    createdAt: row.noteCreatedAt.toISOString(),
-    ordered: row.orderedAt !== null,
-    effectiveSupplier: row.effectiveSupplier,
-  }));
+  return rows.map((row) => {
+    // issue 575: TÁ ISTÁ efektívna cesta odkazu na dodávateľa ako order line.
+    const supplierLink = resolveEffectiveSupplierLink(row.internalNote, row.supplierLinkOverride);
+    return {
+      noteId: row.noteId,
+      variantCode: row.variantCode,
+      productKey: row.productKey,
+      productName: row.productName,
+      sizeLabel: row.sizeLabel,
+      // Meno zákazníka = prvý riadok textu zápisu, orezaný (zadanie klienta).
+      customerName: (row.noteText.split(/\r?\n/)[0] ?? "").trim(),
+      quantity: row.quantity,
+      ourUrl: row.ourUrl,
+      supplierUrl: supplierLink.url,
+      supplierNote: supplierLink.note,
+      state: row.state,
+      comment: row.comment,
+      createdAt: row.noteCreatedAt.toISOString(),
+      ordered: row.orderedAt !== null,
+      effectiveSupplier: row.effectiveSupplier,
+    };
+  });
 }
 
 export async function listOpenOrderLinesBySupplier(
@@ -261,12 +305,13 @@ export async function listOpenOrderLinesBySupplier(
 ): Promise<readonly SupplierOpenOrders[]> {
   const openStatuses = await listOpenStatusNames(db);
   const stateFilter = opts?.stateFilter;
-  // issue 480: sekcia „Riešiť" (stateFilter) potrebuje nastavené otvorené stavy
-  // — bez nich niet čo filtrovať, vráť prázdno (nezmenené správanie). „Na
-  // objednanie" (stateFilter undefined) môže mať PREDAJŇOVÉ riadky aj bez
-  // otvorených objednávok/stavov, takže sa NEsmie predčasne vrátiť — order-line
-  // dopyt sa len preskočí (prázdne `rows`), floor riadky sa pridajú nižšie.
-  if (openStatuses.length === 0 && stateFilter !== undefined) return [];
+  // issue 480/575: predajňové (floor) riadky sú NEZÁVISLÉ od otvorených stavov
+  // objednávok — a od issue 575 sa pridávajú do OBOCH boardov (Na objednanie:
+  // všetky; Riešiť: tie so `state = stateFilter`). Preto tu už NIE je predčasný
+  // `return []` pri prázdnych otvorených stavoch ani pre „Riešiť" — order-line
+  // dopyt sa len preskočí (prázdne `rows`), floor riadky sa pridajú nižšie
+  // (inak by floor riadok so stavom `riesit` do sekcie „Riešiť" nikdy nevošiel,
+  // keby neboli nastavené otvorené stavy objednávok).
 
   // issue 431: počet otvorených objednávok na zákazníka, spočítaný RAZ pre
   // celý zoznam (nie per riadok) — priloží sa ku každému riadku nižšie podľa
@@ -389,26 +434,26 @@ export async function listOpenOrderLinesBySupplier(
     }
   }
 
-  // issue 480: predajňové (floor) riadky sa pridávajú LEN do „Na objednanie"
-  // (`stateFilter === undefined`) — NIKDY do sekcie „Riešiť" (tá filtruje na
-  // stav `riesit`, ktorý floor riadky nemajú). Zaraďujú sa do TEJ ISTEJ
+  // issue 480/575: predajňové (floor) riadky sa pridávajú do OBOCH boardov —
+  // „Na objednanie" (`stateFilter === undefined`) dostane VŠETKY, sekcia
+  // „Riešiť" (`stateFilter` nastavený) len tie, ktorých `state === stateFilter`
+  // (rovnaké možnosti = aj rovnaké miesto v Riešiť). Zaraďujú sa do TEJ ISTEJ
   // `bySupplier` mapy rovnakým normalizovaným kľúčom, takže produkt bez
   // otvorenej objednávky vytvorí novú skupinu (aj `NEZNAMY_DODAVATEL`), a
   // prispievajú do `spellingCounts`, aby floor-only skupina mala kanonický
   // pravopis pre `pickCanonicalSupplierSpelling` nižšie.
-  if (stateFilter === undefined) {
-    const floorRawRows = await listUnresolvedFloorOrderRows(db);
-    for (const { effectiveSupplier, ...floorRow } of floorRawRows) {
-      const groupKey = effectiveSupplier === null ? NULL_GROUP_KEY : normalizeSupplierKeyJs(effectiveSupplier);
-      let acc = bySupplier.get(groupKey);
-      if (acc === undefined) {
-        acc = { lines: [], floorRows: [], spellingCounts: new Map() };
-        bySupplier.set(groupKey, acc);
-      }
-      acc.floorRows.push(floorRow);
-      if (effectiveSupplier !== null) {
-        acc.spellingCounts.set(effectiveSupplier, (acc.spellingCounts.get(effectiveSupplier) ?? 0) + 1);
-      }
+  const floorRawRows = await listUnresolvedFloorOrderRows(db);
+  for (const { effectiveSupplier, ...floorRow } of floorRawRows) {
+    if (stateFilter !== undefined && floorRow.state !== stateFilter) continue;
+    const groupKey = effectiveSupplier === null ? NULL_GROUP_KEY : normalizeSupplierKeyJs(effectiveSupplier);
+    let acc = bySupplier.get(groupKey);
+    if (acc === undefined) {
+      acc = { lines: [], floorRows: [], spellingCounts: new Map() };
+      bySupplier.set(groupKey, acc);
+    }
+    acc.floorRows.push(floorRow);
+    if (effectiveSupplier !== null) {
+      acc.spellingCounts.set(effectiveSupplier, (acc.spellingCounts.get(effectiveSupplier) ?? 0) + 1);
     }
   }
 

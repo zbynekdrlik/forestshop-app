@@ -16,7 +16,7 @@ const ROW = {
   called: false,
   createdAt: "2026-08-11T08:00:00.000Z",
   updatedAt: "2026-08-11T08:00:00.000Z",
-  products: [{ variantCode: "40237/L", productName: "Bunda Rogaland", sizeLabel: "L", quantity: 3, shopUrl: "https://www.forestshop.sk/bunda/" }],
+  products: [{ variantCode: "40237/L", productName: "Bunda Rogaland", sizeLabel: "L", quantity: 3, shopUrl: "https://www.forestshop.sk/bunda/", state: "objednane" as const, comment: null }],
 };
 
 afterEach(() => {
