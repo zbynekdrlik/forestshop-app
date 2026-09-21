@@ -198,7 +198,7 @@ export function registerFloorNotesRoutes(app: Hono<AppBindings>, db: Database): 
   );
 
   // issue 575: stav položky v board-e „Na objednanie" — rovnaké možnosti ako
-  // e-shopová objednávka (Nevybavené / Riešiť / Čaká sa / Skladom / Nedostupné /
+  // e-shopová objednávka (Nemáme / Riešiť / Čaká sa / Skladom / Nedostupné /
   // Objednané). 6-segmentová trasa (`.../products/:variantCode/state`) sa
   // nekolíduje s ostatnými (iný posledný literál / iná metóda,
   // `.claude/rules/http-routes.md`). Rovnaké oprávnenie + CSRF disciplína.

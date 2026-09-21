@@ -36,7 +36,7 @@ export const orderLineState = pgEnum("order_line_state", [
   // rozhodnutie 5423135473 — PREHLASUJE pôvodný dizajn z tela ticketu). Presne
   // princíp `riesit`/`nedostupne` (jeden radio klaster, svieti len jeden).
   // POZOR NA NÁZOV: interná hodnota je `objednane_stav`, NIE `objednane` —
-  // `objednane` je UŽ DEFAULT (label „Nevybavené", issue 60) a `order_line
+  // `objednane` je UŽ DEFAULT (label „Nemáme", issue 577; predtým „Nevybavené", issue 60) a `order_line
   // .ordered` boolean (✓ checkbox) nesie nadväzné toky; nový stav musí mať
   // ODLIŠNÚ hodnotu, inak by koliboval s oboma (`.claude/rules/orders.md`
   // „naming trap"). Pridaný na KONIEC enumu inkrementálnou migráciou `ALTER

@@ -105,7 +105,7 @@ export function FloorNoteProductChip({
         </span>
       )}
 
-      {/* issue 575: stav položky (keď postúpil za „Nevybavené") + per-položková
+      {/* issue 575: stav položky (keď postúpil za „Nemáme") + per-položková
           poznámka, obe nastavené v board-e „Na objednanie" — read-only tu. */}
       {product.state !== "objednane" && (
         <StateChip base="pill" testId={`floor-note-product-state-${noteId}-${product.variantCode}`}>
