@@ -340,6 +340,18 @@ paths:
     follow-up: wetland-špecifický delay alebo cache. `hosts` ostáva pre spätnú
     kompatibilitu UI, `hostStats` je len navyše (`runResultSchema` v
     `supplierStockApi.ts` je `z.object` → neznáme kľúče strippuje, UI nezmenené).
+    **`elapsedMs` NIE JE spoľahlivá miera záťaže hosta (issue 561, Nález 1,
+    21. 9. 2026):** je to wall-clock medzi PRVÝM a POSLEDNÝM requestom hosta v
+    sériovej slučke, a odkazy sú zoradené podľa URL. Host, ktorý má odkazy AJ
+    `https://host/…` AJ `https://www.host/…` (trigona.sk, wetland.sk), ich
+    `hostOf` zlúči pod JEDEN host, ale v zoradenom poradí ležia ĎALEKO od seba —
+    medzi nimi bežia CUDZIE hosty, ktorých čas sa započíta do `elapsedMs`. Preto
+    `requests`/`enumerationRequests`/`enumerationSkipped` sú spoľahlivé, ale
+    `elapsedMs` má zmysel LEN pri hostoch bez www/non-www miešania. Konkrétne
+    trigona.sk „48 min" bol tento artefakt — živé sondy uložených trigona
+    odkazov odpovedajú za 0,15–0,23 s (73 kB, 177/178 riadkov ok), NIE je to
+    pomalý host. Pri triáži „ktorý host beh spomaľuje" ver počtu requestov,
+    nie `elapsedMs`, kým si neoveril, že host nemá www/non-www miešanie.
   - Enumeračný hák je GENERICKÝ (`CombinationEnumerator`) — ĎALŠÍ PrestaShop
     host (tthunt.sk/pyra.eu, #555) ho dostane za cenu jednej funkcie
     (`targets`/`unwrap`). Produkt bez veľkostného `<select>`u (jednoveľkostný)
@@ -897,3 +909,27 @@ paths:
   sa reťaz NESPUSTÍ (afterRun sa nezavolá); chyba v afterRun sa loguje, nikdy
   nezhodí supplier-stock beh. Brána `decideRestockRun` (`enabled` + chýbajúce
   Shoptet údaje) je JEDNA logika pre naplánovaný aj reťazený restock.
+  **Reťaz posiela do `startRunNow` vlastný `new Date()`, NIE tick-ové `now`
+  supplier-stocku (issue 561, Nález 2, PROD 21. 9. 2026).**
+  `buildRestockAfterSupplierStock` ZÁMERNE ignoruje `now` supplier-stocku
+  (jeho ŠTART, na PROD ~2 h pred dobehnutím) a berie `new Date()` — svoj
+  skutočný čas štartu. `startRunNow` tento čas zapíše ako `job_run.started_at`
+  reťazeného restocku (`run-now.ts` `.values({ startedAt: now })`) A odovzdá ho
+  `run(now)`. S tick-ovým `now` supplier-stocku vyzeral reťazený restock ako
+  falošný ~2-hodinový beh (started_at 02:20:52 = štart supplier-stocku namiesto
+  ~04:17) → zlý „Posledný beh" čas v UI + hláška „Beh už prebieha (spustený o
+  …)" by ukázala 02:20. Regresia: `restock-chained.integration.test.ts`
+  asertuje `started_at` reťaze > tick-ové `now`.
+- **Meranie nočného behu 21. 9. 2026 (prvý beh s predfiltrom + reťazením,
+  0.3.0-dev.338, issue 561).** Celý supplier-stock beh **117 min** (02:20 →
+  04:17 UTC; predtým 20. 9. bez predfiltra 122 min). wetland.sk **1594 req /
+  1282 enum / 163 skipped / 47,9 min** (20. 9.: 1752 / 1440 / – / 53,6 min);
+  tthunt.sk 335 / 240 / 25 / 9,1 min. **Predfilter ušetril ~10 % (188
+  preskočených enum requestov), nie odhadovaných −500–700** — pri väčšine
+  wetland produktov máme takmer všetky dodávateľove veľkosti (select sedí s
+  našimi), takže sa málo dá vynechať; počty available/unavailable/unknown ±2
+  (riadky pre naše veľkosti nezmenené). Reťazený restock bežal HNEĎ po
+  dobehnutí supplier-stocku (`trigger: "after-supplier-stock"`, finished
+  04:17:27) + fallback 02:50 — obe `nothing_to_do`. Beh ostáva ~2 h (dominuje
+  sériový počet requestov ~4200 × ~1,6 s); ďalšie skracovanie (paralelizácia
+  hostov = zamietnutý Prístup 3) sa nerobí bez požiadavky majiteľa.

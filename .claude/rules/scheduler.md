@@ -241,3 +241,10 @@ paths:
   Naplánovaný slot B (04:50) OSTÁVA ako fallback pre prípad zlyhania A. Chyba
   v `afterRun` sa LOGUJE, nikdy nezhodí job A. Žiadny NOVÝ advisory zámok — reťaz
   znovupoužíva zámok joba B (787_878_008 pre restock).
+  **Reťaz posiela vlastný `new Date()` do `startRunNow`, NIE tick-ové `now` joba
+  A (issue 561, Nález 2, PROD 21. 9. 2026).** Job B štartuje AŽ po dobehnutí A
+  (na PROD ~2 h po tick-u A), takže musí do `startRunNow` poslať `new Date()` —
+  svoj skutočný čas štartu. `startRunNow` (`run-now.ts`) tento čas zapíše ako
+  `job_run.started_at` joba B a odovzdá ho `run(now)`. S tick-ovým `now` joba A
+  by riadok B vyzeral ako falošný ~2-hodinový beh (started_at = štart A) → zlý
+  „Posledný beh" čas + zlá hláška „Beh už prebieha (spustený o …)".
