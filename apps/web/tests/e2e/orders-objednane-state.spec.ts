@@ -10,7 +10,7 @@ const E2E_HESLO = "e2e-test-heslo"; // účet existuje len v testovacej databáz
 const E2E_OBJEDNANE_EMAIL = "e2e-objednane@forestshop.sk";
 
 // issue 493: šiesty EXKLUZÍVNY stav klastra „Objednané" (interná hodnota
-// `objednane_stav`, NIE `objednane` = default „Nevybavené") na hlavnej tabuľke
+// `objednane_stav`, NIE `objednane` = default „Nemáme") na hlavnej tabuľke
 // „Na objednanie" — klik-flow s kontrolou nulovej konzoly.
 //
 // Prečo prepichnutý `window.fetch` (`addInitScript`), nie reálne seedované dáta:
@@ -108,13 +108,13 @@ test("Na objednanie: klik na Objednané prepne riadok do 6. stavu (objednane_sta
 
   // 6. tlačidlo „Objednané" (interná hodnota `objednane_stav`) je súčasťou
   // klastra; `getByTestId` je PRESNÁ zhoda, takže `state-btn-objednane-<id>`
-  // (Nevybavené) a `state-btn-objednane_stav-<id>` (Objednané) sa nemiešajú.
+  // (Nemáme) a `state-btn-objednane_stav-<id>` (Objednané) sa nemiešajú.
   const objednaneBtn = page.getByTestId(`state-btn-objednane_stav-${FAKE_LINE_ID}`);
   const nevybaveneBtn = page.getByTestId(`state-btn-objednane-${FAKE_LINE_ID}`);
   await expect(objednaneBtn).toBeVisible();
   await expect(objednaneBtn).toHaveText("Objednané");
 
-  // Východiskovo je aktívny predvolený stav „Nevybavené", nie „Objednané".
+  // Východiskovo je aktívny predvolený stav „Nemáme", nie „Objednané".
   await expect(nevybaveneBtn).toHaveAttribute("aria-checked", "true");
   await expect(objednaneBtn).toHaveAttribute("aria-checked", "false");
 

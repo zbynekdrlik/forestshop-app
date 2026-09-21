@@ -372,9 +372,9 @@ test("manažér vidí otvorené objednávky zoskupené podľa dodávateľa, konz
   await expect(kodBez).toHaveText("40287");
   await expect(riadokBez.getByLabel("Zmeniť stav riadku objednávky 9002 / 40287")).toBeVisible();
   // Predvolený stav riadku (schema default "objednane") a chýbajúca veľkosť —
-  // issue 60: premenované na "Nevybavené" (slovo "Objednané" teraz patrí
+  // issue 60/577: premenované na "Nemáme" (slovo "Objednané" teraz patrí
   // výlučne novému odškrtávaciemu políčku).
-  await expect(riadokBez).toContainText("Nevybavené");
+  await expect(riadokBez).toContainText("Nemáme");
 
   // issue 65: objednávka 9002 zámerne nesie placedAt hlboko v minulosti
   // (`scripts/e2e-setup.ts`) a zostáva NEVYBAVENÁ (predvolený stav) — presne

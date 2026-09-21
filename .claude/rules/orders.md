@@ -190,7 +190,7 @@ paths:
 - **`order_line.ordered` (issue 60) je NEZÁVISLÝ boolean od `order_line.state`
   enumu — nezamieňať.** `state` (objednane/caka_sa/skladom/nedostupne) sleduje
   POSTUP u dodávateľa (a jeho `objednane` hodnota je VÝCHODISKOVÝ/predvolený
-  stav riadku — vo frontende zobrazený ako "Nevybavené", NIE "Objednané", od
+  stav riadku — vo frontende zobrazený ako "Nemáme" (issue 577; predtým „Nevybavené"), NIE "Objednané", od
   issue 60). `ordered` je samostatný príznak "manažér toto reálne objednal u
   dodávateľa" (checkbox + hromadné tlačidlo na "Na objednanie", `state.ts`'s
   `setOrderLineOrdered`/`setSupplierLinesOrdered`) — rovnaký zámer ako stará
@@ -199,6 +199,12 @@ paths:
   aj ďalej filtruje LEN podľa `state === "objednane"`, `ordered` na ňu vôbec
   nevplýva. Ďalšia funkcia, ktorá by potrebovala "bolo toto už vybavené",
   siahni po `ordered`, nie po pridávaní ďalšej hodnoty do `state` enumu.
+- **Pri grepe `Nevybaven` cez repo POZOR na tri RÔZNE veci (issue 577):**
+  (a) label stavu riadku `objednane` = „Nemáme" (`orderLineStateLabels.ts`, jediný
+  zdroj — premenovať pri zmene labelu); (b) Shoptet stav OBJEDNÁVKY „Nevybavená"
+  (`stuck-status.ts` + testy, `orders-ingest-stuck-upozornenie`) = úplne iná vec,
+  NEMENIŤ; (c) tooltip starej objednávky „Nevybavená objednávka stará N dní"
+  (`OrderLineRow` stale-badge) = iný koncept, NEMENIŤ.
 - **Audit `entity` musí byť to, čo sa REÁLNE MUTUJE, nikdy zoskupovací kľúč
   vstupu.** Code review na PR 75 (finding 1): `setSupplierLinesOrdered`
   (hromadné "objednané" na CELÚ skupinu dodávateľa, `state.ts`) pôvodne
@@ -235,9 +241,9 @@ paths:
   volajúci (`OrdersSection.tsx`) posiela vždy `group.lines`. Chip sa smie
   zobraziť LEN keď produkt má v skupine ≥2 riadky (`lineCount >= 2`).
   **issue 546 (Štěpán, 14. 9. 2026): text chipu je CELKOVÝ súčet kusov
-  (`vt.total`), BEZ OHĽADU na stav riadku (Nevybavené aj Objednané) — NIE
+  (`vt.total`), BEZ OHĽADU na stav riadku (Nemáme aj Objednané) — NIE
   zostávajúce/nevybavené kusy.** Nahlásený prípad: variant v sekcii 2× (jeden
-  riadok Nevybavené, jeden Objednané/zaškrtnutý) svietil „Σ 1" (remaining),
+  riadok Nemáme, jeden Objednané/zaškrtnutý) svietil „Σ 1" (remaining),
   hoci v sekcii je 2× → má byť „Σ 2". Tým sa ZVRÁTIL pôvodný zámer #62/#63
   (chip zobrazoval `remaining` a skrýval sa pri `remaining === 0`); strážka
   `remaining === 0` je ODSTRÁNENÁ (aj úplne vybavený opakovaný produkt ukáže
@@ -818,7 +824,7 @@ paths:
 - **NAMING TRAP — v appke sú TRI/ŠTYRI rôzne „objednané"-podobné pojmy, NIKDY ich
   nezamieňaj (issue 493, Štěpán binding rozhodnutie 5423135473).** Po pridaní 6.
   stavu enumu existujú súčasne: **(a)** enum hodnota `objednane` = DEFAULT stav
-  riadku, vo frontende label **„Nevybavené"** (issue 60 — NIE „Objednané"!);
+  riadku, vo frontende label **„Nemáme"** (issue 577; predtým „Nevybavené", issue 60 — NIE „Objednané"!);
   **(b)** enum hodnota `objednane_stav` = 6. EXKLUZÍVNY stav, label **„Objednané"**
   (issue 493, stav PRODUKTU — princíp `riesit`/`nedostupne`); **(c)**
   `order_line.ordered` boolean = ✓ checkbox „vybavil som akýmkoľvek spôsobom"

@@ -215,14 +215,14 @@ it("formatVariantTotalChip s ≥2 riadkami vráti text s CELKOVÝM súčtom a to
 });
 
 // issue 546 (Štěpán, Discord 14. 9. 2026): variant 61259/56 je v sekcii „Na
-// objednanie" v DVOCH objednávkach — jednej Nevybavené (1 ks) a jednej
+// objednanie" v DVOCH objednávkach — jednej Nemáme (1 ks) a jednej
 // Objednané/zaškrtnutej (1 ks) — ale chip svietil „Σ 1" namiesto „Σ 2".
 // Príčina: chip zobrazoval `remaining` (nevybavené kusy), nie `total` (kusy
 // naprieč VŠETKÝMI riadkami bez ohľadu na stav). Regresný test: presne tento
 // prípad musí dať „Σ 2".
 it("formatVariantTotalChip zobrazí CELKOVÝ súčet kusov aj keď je časť riadkov už vybavená (issue 546)", () => {
   const totals = computeVariantTotals([
-    variantLine("61259/56", 1, "objednane", false), // Nevybavené (nezaškrtnutý)
+    variantLine("61259/56", 1, "objednane", false), // Nemáme (nezaškrtnutý)
     variantLine("61259/56", 1, "objednane", true), // Objednané (zaškrtnutý → vybavený)
   ]);
   const vt = totals.get("61259/56");
@@ -438,7 +438,7 @@ it("isFloorRowHidden — skryje vybavený floor riadok len pri „skryť vybaven
   // Postúpený stav sa skryje pri hideResolved (predtým sa skrýval len `ordered`).
   expect(isFloorRowHidden({ ordered: false, state: "skladom" }, true)).toBe(true);
   expect(isFloorRowHidden({ ordered: false, state: "skladom" }, false)).toBe(false);
-  // Nevybavený sa neskryje nikdy.
+  // „Nemáme" (objednane) sa neskryje nikdy.
   expect(isFloorRowHidden({ ordered: false, state: "objednane" }, true)).toBe(false);
   // Objednaný sa skryje (issue 480 správanie ostáva).
   expect(isFloorRowHidden({ ordered: true, state: "objednane" }, true)).toBe(true);

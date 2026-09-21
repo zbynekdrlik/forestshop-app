@@ -167,8 +167,8 @@ export function computeVariantTotals(
 //
 // issue 546 (Štěpán, Discord 14. 9. 2026): chip ukazuje CELKOVÝ počet kusov
 // variantu naprieč VŠETKÝMI riadkami skupiny (`vt.total`), BEZ OHĽADU na stav
-// riadku (Nevybavené aj Objednané) — nie len zostávajúce/nevybavené kusy.
-// Nahlásený prípad: variant v sekcii 2× (jeden riadok Nevybavené, jeden
+// riadku (Nemáme aj Objednané) — nie len zostávajúce/nevybavené kusy.
+// Nahlásený prípad: variant v sekcii 2× (jeden riadok Nemáme, jeden
 // Objednané/zaškrtnutý) svietil „Σ 1" (remaining), hoci v sekcii je 2×
 // (`total=2`). Toto MENÍ pôvodný zámer #62/#63 (chip zobrazoval `remaining` a
 // skrýval sa pri `remaining === 0`); Štěpánovo očakávanie je jasné: v sekcii

@@ -2,7 +2,7 @@ import type { OrderLine } from "./ordersApi.js";
 
 // issue 60: `objednane` je VÝCHODISKOVÝ stav riadku (pred tým, než sa
 // čokoľvek stane), NIE potvrdenie, že manažér objednal — preto sa nazýva
-// "Nevybavené", nie "Objednané" (to slovo teraz patrí VÝLUČNE odškrtávaciemu
+// "Nemáme" (issue 577; predtým „Nevybavené"), nie "Objednané" (to slovo teraz patrí VÝLUČNE odškrtávaciemu
 // políčku v tomto riadku, `OrderLine["ordered"]`, aby appka nemala na jednej
 // obrazovke tri rôzne veci s tým istým názvom).
 //
@@ -11,7 +11,7 @@ import type { OrderLine } from "./ordersApi.js";
 // potrebujú TIEŽ; `OrderLineRow.tsx` sám importuje `OrderLineStateButtons`,
 // takže zdieľaná hodnota nesmie žiť ani v jednom z nich (cyklický import).
 export const STATE_LABELS: Record<OrderLine["state"], string> = {
-  objednane: "Nevybavené",
+  objednane: "Nemáme",
   caka_sa: "Čaká sa",
   skladom: "Skladom",
   nedostupne: "Nedostupné",
@@ -23,12 +23,12 @@ export const STATE_LABELS: Record<OrderLine["state"], string> = {
   // je zámerne rovnaké slovo ako ✓ checkbox `OrderLine["ordered"]`, ale je to INÁ
   // vec — checkbox = „vybavil som akýmkoľvek spôsobom", tento STAV = stav produktu
   // (`.claude/rules/orders.md` „naming trap"). Interná hodnota preto NESMIE byť
-  // `objednane` (to je default „Nevybavené").
+  // `objednane` (to je default „Nemáme").
   objednane_stav: "Objednané",
 };
 
 // issue 476/493: PORADIE tlačidiel v klastri stavov (mockup Štěpán, ROZHODNUTÉ)
-// — horný rad Nevybavené · Riešiť · Čaká sa, dolný rad Skladom · Nedostupné ·
+// — horný rad Nemáme · Riešiť · Čaká sa, dolný rad Skladom · Nedostupné ·
 // Objednané (`OrderLineStateButtons.tsx` renderuje 3-stĺpcovú mriežku, 6 tlačidiel
 // spadne ako 3+3). issue 493: „Objednané" je 6. slot = dolný rad 3. miesto vedľa
 // Nedostupné, pod Čaká sa (presne screenshot/binding rozhodnutie Štěpán). Zámerne

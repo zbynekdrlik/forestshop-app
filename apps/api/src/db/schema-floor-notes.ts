@@ -89,7 +89,7 @@ export const floorNoteProducts = pgTable(
     // (žiadna 55P04 past, `.claude/rules/database.md`), takže sa zdieľajú
     // labely/farby/poradie tlačidiel (`orderLineStateLabels.ts`) a nový stav
     // (napr. `objednane_stav`, issue 493) sa prejaví na oboch miestach naraz.
-    // `objednane` je VÝCHODISKOVÝ „Nevybavené" (rovnaká sémantika ako
+    // `objednane` je VÝCHODISKOVÝ „Nemáme" (issue 577; rovnaká sémantika ako
     // `order_line.state`), NOT NULL DEFAULT ho backfilne pri `ADD COLUMN`.
     state: orderLineState("state").notNull().default("objednane"),
     // issue 575: per-položková poznámka — „poznámka len ak sa dá zapísať do
