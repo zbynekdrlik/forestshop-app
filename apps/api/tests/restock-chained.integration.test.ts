@@ -84,7 +84,7 @@ describe("buildRestockAfterSupplierStock — issue 561: reťazenie restocku za s
     // Nález 2: reťaz posiela do `run` (a do `job_run.started_at`) svoj SKUTOČNÝ
     // čas štartu (`new Date()`), NIE tick-ové `now` supplier-stocku (`NOW`).
     expect(receivedNow).toBeDefined();
-    expect(receivedNow!.getTime()).toBeGreaterThan(NOW.getTime());
+    expect(receivedNow?.getTime() ?? 0).toBeGreaterThan(NOW.getTime());
     expect(new Date(finalRun.startedAt).getTime()).toBeGreaterThan(NOW.getTime());
   });
 });
