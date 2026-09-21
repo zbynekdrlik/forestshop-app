@@ -117,9 +117,9 @@ it("zoskupí riadky podľa dodávateľa a zobrazí produkt, veľkosť, množstvo
   expect(novy.textContent).toContain("Zavolať pred doručením");
 
   const stary = screen.getByTestId(`order-line-${LINE_STARA.lineId}`);
-  // issue 60: východiskový stav "objednane" sa teraz volá "Nevybavené" — slovo
+  // issue 60/577: východiskový stav "objednane" sa teraz volá "Nemáme" — slovo
   // "Objednané" je odteraz VÝLUČNE nové odškrtávacie políčko, nie tento stav.
-  expect(stary.textContent).toContain("Nevybavené");
+  expect(stary.textContent).toContain("Nemáme");
 });
 
 // issue 95: 13 pôvodných stĺpcov → 10 (VEĽKOSŤ zlúčená do KÓD, PRIRADENIE
