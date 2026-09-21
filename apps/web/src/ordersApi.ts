@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ORDER_LINE_STATES } from "./orderLineStates.js";
 
 // Zrkadlí `OrderLineState`/`OpenOrderLine`/`SupplierOpenOrders` z
 // `apps/api/src/modules/orders/queries.ts` — vlastná zod schéma namiesto
@@ -41,7 +42,7 @@ const orderLineSchema = z.object({
   // odvodené, treba sync na oboch stranách). Bez novej hodnoty by frontend
   // odmietol (zod parse) KAŽDÝ riadok v tom stave a `OrderLine["state"]` typ
   // by ju nepoznal (padne `STATE_LABELS`/`STATE_DISPLAY_ORDER` úplnosť).
-  state: z.enum(["objednane", "caka_sa", "skladom", "nedostupne", "riesit", "objednane_stav"]),
+  state: z.enum(ORDER_LINE_STATES),
   // issue 60: nezávislý príznak "objednané u dodávateľa" (viď `state.ts`'s
   // komentár) — oddelené od `state` vyššie.
   ordered: z.boolean(),
@@ -120,7 +121,7 @@ const floorRowSchema = z.object({
   supplierNote: z.string().nullable(),
   // issue 575: stav položky — RUČNE zrkadlí `orderLineState.enumValues`
   // (rovnako ako `orderLineSchema.state`), aby zod prijal každý stav.
-  state: z.enum(["objednane", "caka_sa", "skladom", "nedostupne", "riesit", "objednane_stav"]),
+  state: z.enum(ORDER_LINE_STATES),
   // issue 575: per-položková poznámka.
   comment: z.string().nullable(),
   createdAt: z.string(),
