@@ -6,7 +6,9 @@ const E2E_PREHLAD_EMAIL = "e2e-prehlad@forestshop.sk";
 interface RawOrderLine {
   readonly orderId: string;
   readonly ordered: boolean;
-  readonly state: "objednane" | "caka_sa" | "skladom" | "nedostupne";
+  // issue 579: stav je NULLABLE (NULL = neoznačený východiskový stav, Štěpán);
+  // enum keď je stav zvolený.
+  readonly state: "objednane" | "caka_sa" | "skladom" | "nedostupne" | null;
   readonly placedAt: string;
   readonly quantity: number;
 }
@@ -64,7 +66,10 @@ test("blok 'Prehľad e-shopu' + 'Súhrn o objednávaní' sa zobrazí a čísla z
     fetch("/api/orders/open").then((r) => r.json() as Promise<{ suppliers: readonly RawSupplierGroup[] }>),
   );
   const allLines = suppliers.flatMap((g) => g.lines);
-  const isResolved = (l: RawOrderLine): boolean => l.ordered || l.state !== "objednane";
+  // issue 579: kanonický predikát `isLineResolved` (`apps/web/src/ordersSummary.ts`) —
+  // NULL (neoznačený) aj „objednane" („Nemáme") = NEVYBAVENÉ (na objednanie);
+  // vybavený = odškrtnutý ALEBO stav postúpil ZA „Nemáme".
+  const isResolved = (l: RawOrderLine): boolean => l.ordered || (l.state !== null && l.state !== "objednane");
   const nevybavene = allLines.filter((l) => !isResolved(l));
   // issue 260: "Položiek na objednanie"/"Už objednané" sčítavajú MNOŽSTVÁ
   // (`summarizeOrderLines`), nie počet riadkov — `ocakavaneAffected` ostáva
