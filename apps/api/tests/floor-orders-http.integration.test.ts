@@ -258,13 +258,13 @@ it("vybavený (resolved) zápis → jeho predajňové riadky z Na objednanie zmi
   expect((await board(app, cookie)).some((g) => g.floorRows.some((r) => r.variantCode === "FLOOR-RES"))).toBe(false);
 });
 
-it("sekcia Riešiť NEobsahuje predajňový riadok v INOM stave než riesit (default objednane)", async () => {
+it("sekcia Riešiť NEobsahuje predajňový riadok v INOM stave než riesit (východiskovo NULL)", async () => {
   const { app, cookie, db } = await boot("manazer");
   await insertTestVariant(db, "FLOOR-RIE", "Dod");
   const noteId = await createNote(app, cookie, "Nepatrí do Riešiť");
   await attach(app, cookie, noteId, "FLOOR-RIE");
 
-  // Default stav položky je „objednane" → do „Riešiť" nepatrí (issue 575).
+  // issue 579: východiskový stav položky je NULL (neoznačený) → do „Riešiť" nepatrí.
   const riesit = await board(app, cookie, "/api/orders/riesit");
   expect(riesit.some((g) => g.floorRows.length > 0)).toBe(false);
 });
@@ -286,7 +286,7 @@ it("predajňový riadok v Na objednanie nesie productKey/ourUrl/supplierUrl/stat
   expect(row?.productKey).toBe("FLOOR-FIELDS");
   expect(row?.ourUrl).toBe("https://www.forestshop.sk/produkt/");
   expect(row?.supplierUrl).toBe("https://dodavatel.example/produkt");
-  expect(row?.state).toBe("objednane");
+  expect(row?.state).toBeNull(); // issue 579: nová položka predajne nemá stav (NULL)
   expect(row?.comment).toBe("poznámka k položke");
 });
 

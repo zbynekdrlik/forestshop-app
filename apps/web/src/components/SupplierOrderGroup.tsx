@@ -5,7 +5,7 @@ import { FloorOrderRow } from "./FloorOrderRow.js";
 import { OrderLineRow } from "./OrderLineRow.js";
 import { OrderLinesTableHead } from "./OrderLinesTableHead.js";
 import { SupplierActionsPanel } from "./SupplierActionsPanel.js";
-import type { OrderLine, OrderMailPreview, SupplierOpenOrders } from "../ordersApi.js";
+import type { OrderMailPreview, SupplierOpenOrders } from "../ordersApi.js";
 import type { OrderLineStateValue } from "../orderLineStates.js";
 
 // issue 63 — mechanicky vyňaté z `OrdersSection.tsx` (JEDNA skupina

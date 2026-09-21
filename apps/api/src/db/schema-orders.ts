@@ -314,7 +314,12 @@ export const orderLines = pgTable(
       .notNull()
       .references(() => variants.code),
     quantity: integer("quantity").notNull(),
-    state: orderLineState("state").notNull().default("objednane"),
+    // issue 579 (Štěpán): stav je NULLABLE bez DEFAULT — NULL = neoznačený
+    // východiskový stav („ani jeden stav nie je označený, ja potom začnem
+    // označovať"). Nový riadok sa rodí bez stavu (ingest ho nenastavuje).
+    // Enum sa NEMENÍ. Migrácia 0066 zároveň resetuje existujúce `objednane`
+    // (nikým vedome neklikaný dnešný default) na NULL.
+    state: orderLineState("state"),
     // issue 60: NEZÁVISLÝ príznak od `state` vyššie — "manažér reálne objednal
     // tento riadok u dodávateľa" (stará appka's samostatný `ORDERED` boolean,
     // oddelený od WAITING/INSTOCK/UNAVAIL, `webreview/static/app.js`'s

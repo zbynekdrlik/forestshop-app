@@ -132,3 +132,130 @@ test("Na objednanie: klik na Objednané prepne riadok do 6. stavu (objednane_sta
 
   expect(chyby).toEqual([]);
 });
+
+// issue 579 (Štěpán): východiskový stav riadku je NEOZNAČENÝ (NULL) — žiadne
+// tlačidlo nie je aktívne; „Nemáme" (objednane) je červené; klik ho uloží a po
+// reloade drží. Board je STAVOVO mocknutý cez `localStorage` (POST zapíše stav,
+// reload ho z neho prečíta), takže reload-perzistencia je deterministická bez
+// dotyku zdieľaných seed dát (rovnaký dôvod ako prvý test v tomto súbore).
+const FAKE_LINE_ID_579 = "e2e00000-0000-0000-0000-000000000579";
+
+test("Na objednanie: neoznačený riadok nemá aktívne tlačidlo, „Nemáme“ je červené, klik uloží a drží po reloade, konzola čistá", async ({
+  page,
+}) => {
+  const chyby: string[] = [];
+  page.on("console", (m) => {
+    if (m.type() === "error" || m.type() === "warning") chyby.push(m.text());
+  });
+  page.on("pageerror", (e) => {
+    chyby.push(e.message);
+  });
+
+  await page.addInitScript((lineId: string) => {
+    const puvodny = window.fetch.bind(window);
+    const KEY = "e2e579-state";
+    const readState = (): string | null => {
+      const raw = window.localStorage.getItem(KEY);
+      return raw === null || raw === "null" ? null : raw;
+    };
+    const skupina = () => ({
+      supplier: "DODAVATEL-579",
+      email: null,
+      lines: [
+        {
+          lineId,
+          orderId: "e2e00000-0000-0000-0000-000000005790",
+          externalOrderId: "7579",
+          customerName: "Zákazník 579",
+          comment: null,
+          remark: null,
+          shopRemark: null,
+          adminUrl: "https://www.forestshop.sk/admin/vyhladavanie/?string=7579&src=orders",
+          placedAt: "2026-08-01T00:00:00.000Z",
+          variantCode: "OBJ-579",
+          variantName: "Produkt bez stavu",
+          sizeLabel: null,
+          ourUrl: null,
+          quantity: 1,
+          state: readState(),
+          ordered: false,
+          supplierUrl: null,
+          supplierNote: null,
+          externalCode: null,
+          supplierAssignable: false,
+          manualSupplierOverride: null,
+          customerOpenOrderCount: 1,
+        },
+      ],
+    });
+    const json = (body: unknown, status = 200): Response =>
+      new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+    window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      const cesta = url.replace(/\?.*$/, "");
+      const method = init?.method ?? "GET";
+      if (method === "GET" && cesta.endsWith("/api/orders/open")) {
+        return Promise.resolve(json({ suppliers: [skupina()] }));
+      }
+      if (method !== "GET" && cesta.includes("/api/orders/lines/") && cesta.endsWith("/state")) {
+        const telo = typeof init?.body === "string" ? init.body : "{}";
+        const st = (JSON.parse(telo) as { state?: string }).state ?? "";
+        window.localStorage.setItem(KEY, st);
+        return Promise.resolve(json({ ok: true, state: st }));
+      }
+      return puvodny(input, init);
+    };
+  }, FAKE_LINE_ID_579);
+
+  await page.goto("/?tab=orders");
+  await page.getByLabel("E-mail").fill(E2E_OBJEDNANE_EMAIL);
+  await page.getByLabel("Heslo").fill(E2E_HESLO);
+  await page.getByRole("button", { name: "Prihlásiť sa" }).click();
+  await expect(page.getByRole("heading", { name: "Na objednanie" })).toBeVisible();
+
+  const nemBtn = page.getByTestId(`state-btn-objednane-${FAKE_LINE_ID_579}`);
+  await expect(nemBtn).toBeVisible();
+  await expect(nemBtn).toHaveText("Nemáme");
+
+  // Východiskovo (NULL) NIE JE aktívne žiadne tlačidlo klastra.
+  const aktivnych = await page
+    .getByTestId(`state-select-${FAKE_LINE_ID_579}`)
+    .locator('[aria-checked="true"]')
+    .count();
+  expect(aktivnych).toBe(0);
+
+  // „Nemáme" je červené (`--fs-danger`) už v neoznačenom stave — porovnáme
+  // computed color s hodnotou tokenu prečítanou zo `:root` (nie natvrdo hex).
+  const farby1 = await page.evaluate((id: string) => {
+    const probe = document.createElement("span");
+    probe.style.color = "var(--fs-danger)";
+    document.body.appendChild(probe);
+    const danger = getComputedStyle(probe).color;
+    probe.remove();
+    const btn = document.querySelector(`[data-testid="state-btn-objednane-${id}"]`);
+    return { danger, btn: btn === null ? "" : getComputedStyle(btn).color };
+  }, FAKE_LINE_ID_579);
+  expect(farby1.btn).toBe(farby1.danger);
+
+  // Klik na „Nemáme" → aktívne (exkluzívne), stále červené.
+  await nemBtn.click();
+  await expect(nemBtn).toHaveAttribute("aria-checked", "true");
+
+  // Po reloade stav DRŽÍ (mock ho číta z localStorage) — tlačidlo ostáva aktívne.
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Na objednanie" })).toBeVisible();
+  const nemBtnPoReloade = page.getByTestId(`state-btn-objednane-${FAKE_LINE_ID_579}`);
+  await expect(nemBtnPoReloade).toHaveAttribute("aria-checked", "true");
+  const farby2 = await page.evaluate((id: string) => {
+    const probe = document.createElement("span");
+    probe.style.color = "var(--fs-danger)";
+    document.body.appendChild(probe);
+    const danger = getComputedStyle(probe).color;
+    probe.remove();
+    const btn = document.querySelector(`[data-testid="state-btn-objednane-${id}"]`);
+    return { danger, btn: btn === null ? "" : getComputedStyle(btn).color };
+  }, FAKE_LINE_ID_579);
+  expect(farby2.btn).toBe(farby2.danger);
+
+  expect(chyby).toEqual([]);
+});

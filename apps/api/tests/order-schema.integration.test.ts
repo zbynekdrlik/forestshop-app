@@ -53,7 +53,7 @@ async function insertTestVariant(db: Database, code: string): Promise<void> {
   });
 }
 
-it("uloží objednávku a riadok a prečíta ich späť, s predvoleným stavom 'objednane'", async () => {
+it("uloží objednávku a riadok a prečíta ich späť, s východiskovým stavom NULL (issue 579)", async () => {
   const ctx = await withCleanDb();
   close = ctx.close;
   await insertTestVariant(ctx.db, "40237/XL");
@@ -78,7 +78,8 @@ it("uloží objednávku a riadok a prečíta ich späť, s predvoleným stavom '
   const lines = await ctx.db.select().from(orderLines).where(eq(orderLines.orderId, order.id));
   expect(lines).toHaveLength(1);
   expect(lines[0]?.quantity).toBe(2);
-  expect(lines[0]?.state).toBe("objednane");
+  // issue 579 (Štěpán): nový riadok sa rodí BEZ stavu — NULL = neoznačený.
+  expect(lines[0]?.state).toBeNull();
   expect(lines[0]?.variantCode).toBe("40237/XL");
 
   const readOrder = await ctx.db.select().from(orders).where(eq(orders.id, order.id));

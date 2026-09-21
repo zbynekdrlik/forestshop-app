@@ -8,7 +8,9 @@ import { NEZNAMY_DODAVATEL, type FloorOrderRow, type OrderLine } from "./ordersA
 // teda "vybavený" presne vtedy, keď je odškrtnutý ako objednané ALEBO jeho
 // stav postúpil za predvolený "objednane" (`.claude/rules/orders.md`).
 export function isLineResolved(line: Pick<OrderLine, "ordered" | "state">): boolean {
-  return line.ordered || line.state !== "objednane";
+  // issue 579: NULL = neoznačený východiskový stav (Štěpán) — nevybavené, presne
+  // ako „Nemáme" (objednane). Vybavený = odškrtnutý ALEBO stav postúpil ZA „Nemáme".
+  return line.ordered || (line.state !== null && line.state !== "objednane");
 }
 
 // issue 149 — jediné miesto rozhodujúce, či "skryť vybavené" riadok SKUTOČNE
@@ -29,7 +31,8 @@ export function isLineHiddenByFilter(
 // e-shopový (`isLineResolved`) — objednaný ALEBO stav postúpil za predvolený
 // „objednane" (issue 480 mal len `ordered`, teraz má floor riadok aj stav).
 export function isFloorRowResolved(row: Pick<FloorOrderRow, "ordered" | "state">): boolean {
-  return row.ordered || row.state !== "objednane";
+  // issue 579: NULL = neoznačený stav = nevybavené (rovnako ako `isLineResolved`).
+  return row.ordered || (row.state !== null && row.state !== "objednane");
 }
 
 // issue 480/575: floor riadok skrytý pri prepínači „skryť vybavené" práve keď je

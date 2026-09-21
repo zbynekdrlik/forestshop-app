@@ -200,7 +200,7 @@ it("vráti detail objednávky so všetkými riadkami, 404 pre neznáme id, 400 p
     externalOrderId: "2001",
     customerName: "Zákazník",
     comment: "Zavolať pred doručením",
-    lines: [{ variantCode: "A-1", supplier: "Dodávateľ Alfa", quantity: 3, state: "objednane" }],
+    lines: [{ variantCode: "A-1", supplier: "Dodávateľ Alfa", quantity: 3, state: null }], // issue 579: nový riadok bez stavu = NULL
   });
 
   const neznameRes = await app.request("/api/orders/11111111-1111-1111-1111-111111111111", { headers: { cookie } });

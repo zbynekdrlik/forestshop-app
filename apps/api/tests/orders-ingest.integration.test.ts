@@ -456,7 +456,7 @@ it("re-import ODSTRÁNI riadok produktu, ktorý Shoptet z objednávky vymenil, a
 
   const novyB = noveRiadky.find((l) => l.variantCode === "40238/M");
   expect(novyB).toBeDefined(); // obrazovka MUSÍ ukázať nový produkt B
-  expect(novyB?.state).toBe("objednane"); // nový riadok, predvolený stav — vybavovanie začína odznova
+  expect(novyB?.state).toBeNull(); // issue 579: nový riadok nemá stav (NULL = neoznačený) — vybavovanie začína odznova
   expect(novyB?.ordered).toBe(false);
 
   const zachovanyC = noveRiadky.find((l) => l.variantCode === "40239/S");

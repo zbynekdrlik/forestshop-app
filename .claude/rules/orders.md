@@ -222,9 +222,30 @@ paths:
   do tej istej transakcie s `.for("update")`) je zdokumentovaný v
   `.claude/rules/database.md` (Postgres `FOR UPDATE` bez `OF` zoznamu
   zamyká celý JOIN, nielen primárnu tabuľku).
-- **Kanonická definícia "vybavený riadok" (issue 61) je
-  `apps/web/src/ordersSummary.ts`'s `isLineResolved` — `ordered || state !==
-  "objednane"`.** Priamy náprotivok starej appky's `isHandled` (`ORDERED ||
+- **issue 579 (Štěpán): východiskový stav riadku je NULL (neoznačený), NIE
+  `objednane`.** `order_line.state` a `floor_note_product.state` sú NULLABLE
+  bez DEFAULT (migrácia 0066 — `DROP NOT NULL`/`DROP DEFAULT` + jednorazový
+  `UPDATE … SET state = NULL WHERE state = 'objednane'` reset existujúcich
+  riadkov, Štěpán chcel začať označovať odznova). Nový riadok (ingest
+  `orders/ingest.ts`, floor `floor-notes/service.ts` attach) sa rodí bez stavu
+  — ANI JEDEN kód `state` pri inserte neuvádza, takže NULL prichádza sám po
+  zrušení defaultu. `OrderLine["state"]` typ je odteraz `OrderLineStateValue |
+  null` (web) / `OrderLineState | null` (API interface); settery/POST body
+  ostávajú NON-NULL enum (`OrderLineStateValue`, „odznačiť" je mimo zadania —
+  klik na aktívne tlačidlo ostáva no-op). NULL = neoznačené: `StateButtons`
+  `active = state === s` nemá pri NULL nič aktívne; read-only bunka ukáže „—";
+  `FloorNoteProductChip` ukáže odznak keď `state !== null` (vrátane „Nemáme",
+  červený). Filtre `eq(state, X)` (Riešiť/Nedostupné/`countOpenOrdersByState`)
+  fungujú nezmenené — NULL sa nikdy nerovná konkrétnemu stavu.
+- **„Nemáme" (stav `objednane`) je VŽDY červené** (Štěpán, issue 579) —
+  `.ord-state-btn-objednane` popis + `.ord-state-btn-objednane.active` (výplň)
+  aj `.pill.objednane` (read-only odznak v predajni) používajú `--fs-danger`/
+  `--fs-danger-bg` tokeny (`frontend-design.md`, žiadny nový raw hex, rovnaké
+  ako `nedostupne`).
+- **Kanonická definícia "vybavený riadok" (issue 61, rozšírené issue 579) je
+  `apps/web/src/ordersSummary.ts`'s `isLineResolved` — `ordered || (state !==
+  null && state !== "objednane")`** (NULL aj „Nemáme" = NEvybavené).
+  Priamy náprotivok starej appky's `isHandled` (`ORDERED ||
   WAITING || INSTOCK || UNAVAIL`) — nový `ordered` nahrádza jej `ORDERED`,
   tri ne-predvolené `state` hodnoty nahrádzajú `WAITING`/`INSTOCK`/
   `UNAVAIL`. Ktorákoľvek ĎALŠIA funkcia, čo potrebuje "je tento riadok

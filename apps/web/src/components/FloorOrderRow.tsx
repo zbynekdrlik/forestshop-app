@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type JSX } from "react";
 import { formatSkDate } from "../formatDate.js";
-import type { FloorOrderRow as FloorOrderRowData, OrderLine } from "../ordersApi.js";
+import type { FloorOrderRow as FloorOrderRowData } from "../ordersApi.js";
 import { STATE_LABELS } from "../orderLineStateLabels.js";
 import type { OrderLineStateValue } from "../orderLineStates.js";
 import { StateButtons } from "./OrderLineStateButtons.js";

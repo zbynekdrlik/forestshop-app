@@ -449,14 +449,10 @@ export function OrderLineRow({
           )}
         </td>
         <td>
+          {/* issue 579: NULL = neoznačený východiskový stav → „—" v read-only bunke. */}
           {canChangeState ? (
             <OrderLineStateButtons line={line} busyLineId={busyLineId} onChangeState={onChangeState} />
-          ) : line.state === null ? (
-            // issue 579: NULL = neoznačený východiskový stav → „—" v read-only bunke.
-            "—"
-          ) : (
-            STATE_LABELS[line.state]
-          )}
+          ) : line.state === null ? "—" : STATE_LABELS[line.state]}
         </td>
         <td className="ord-date-cell">
           {formatSkDate(line.placedAt)}

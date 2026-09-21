@@ -21,7 +21,8 @@ export interface FloorNoteProductRow {
   readonly shopUrl: string | null;
   // issue 575: stav + poznámka položky (nastavené v board-e „Na objednanie") —
   // zobrazujú sa na čipe v zázname predajne (read-only odznak + text).
-  readonly state: OrderLineState;
+  // issue 579: NULL = neoznačený východiskový stav (Štěpán).
+  readonly state: OrderLineState | null;
   readonly comment: string | null;
 }
 

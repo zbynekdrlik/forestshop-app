@@ -81,7 +81,8 @@ export interface OpenOrderLine {
    */
   readonly ourUrl: string | null;
   readonly quantity: number;
-  readonly state: OrderLineState;
+  // issue 579: NULL = neoznačený východiskový stav (Štěpán).
+  readonly state: OrderLineState | null;
   // issue 60: nezávislý príznak "objednané u dodávateľa" (viď komentár k
   // `orderLines.ordered` v `schema-orders.ts`) — oddelené od `state` vyššie.
   readonly ordered: boolean;
@@ -149,7 +150,8 @@ export interface FloorOrderRow {
   readonly supplierNote: string | null;
   // issue 575: stav položky — rovnaké možnosti a sémantika ako `order_line.state`
   // (zdieľaný enum).
-  readonly state: OrderLineState;
+  // issue 579: NULL = neoznačený východiskový stav (Štěpán).
+  readonly state: OrderLineState | null;
   // issue 575: per-položková poznámka, `null` keď žiadna.
   readonly comment: string | null;
   // `floor_note.created_at` (dátum zápisu) — ISO 8601 reťazec, rovnaký tvar
@@ -572,7 +574,8 @@ export interface OrderDetailLine {
   readonly sizeLabel: string | null;
   readonly supplier: string;
   readonly quantity: number;
-  readonly state: OrderLineState;
+  // issue 579: NULL = neoznačený východiskový stav (Štěpán).
+  readonly state: OrderLineState | null;
   // issue 60: rovnaký nezávislý príznak ako `OpenOrderLine.ordered`.
   readonly ordered: boolean;
   // issue 70: tretia čítacia cesta zjednotená s `listOpenOrderLinesBySupplier`

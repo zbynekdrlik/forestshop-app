@@ -6,7 +6,6 @@ import {
   setFloorRowState,
   setFloorRowSupplierLink,
   validateSupplierLinkUrl,
-  type OrderLine,
   type SupplierOpenOrders,
 } from "./ordersApi.js";
 import type { OrderLineStateValue } from "./orderLineStates.js";
