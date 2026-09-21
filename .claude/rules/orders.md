@@ -856,3 +856,30 @@ paths:
   option typu `Omit<Deps,"adminBaseUrl">` + `options.adminBaseUrl ?? default`
   za spreadom, existujúci volajúci/testy sa nemenia (rovnako ako
   orders/search/dpd trasy).
+
+## Predajňový riadok v „Na objednanie" má PLNÉ ovládanie (#575)
+
+- **Predajňový (floor) riadok v „Na objednanie" má od issue 575 rovnaké ovládače
+  ako e-shopová objednávka — kód s odkazom, 🔗 odkaz na dodávateľa (+ ✏️ úprava),
+  stavové tlačidlá a per-položkovú poznámku.** Plná mechanika (schéma, API trasy,
+  Riešiť zahrnutie, zdieľané primitívy) je v `.claude/rules/floor-notes.md`
+  (issue 575 blok) — tu len orders-špecifické invarianty:
+  - **Kľúč floor mutácie je `noteId::variantCode`** (nie `lineId` ako order
+    riadok) — `useFloorRowMutations.ts` má štyri nezávislé busy-guardy
+    (`busyFloorRowKey`/`StateKey`/`CommentKey`/`LinkKey`) kľúčované týmto
+    reťazcom. `changeFloorState` zrkadlí order-line `changeState` vrátane
+    `keepOnlyState` (v „Riešiť" sa floor riadok pri odchode zo stavu `riesit`
+    lokálne odstráni).
+  - **Zápis odkazu na dodávateľa je PRODUKTOVÝ** (`POST /api/product-links/
+    :productKey`, kľúč `product.key`) — nie per-riadok. Preto floor board riadok
+    nesie `productKey` (z `variants.productKey → products.key`), a zmena odkazu
+    ovplyvní VŠETKY riadky (objednávkové aj predajňové) toho istého produktu —
+    rovnaká zdieľaná cesta ako `OrderLineRow`'s ✏️ (`.claude/rules/product-links.md`).
+  - **`countOpenOrdersByState` (odznak „Riešiť") ráta order-line DISTINCT
+    objednávky PLUS floor položky v danom stave na nevybavených zápisoch** — obe
+    časti, aby odznak sedel s tým, čo sekcia „Riešiť" (order zoznam + „Predajňa"
+    tabuľka) reálne zobrazuje. Floor časť beží aj bez otvorených stavov.
+  - **`isFloorRowResolved` (`ordersSummary.ts`) je kanonické „vybavený floor
+    riadok"** = `ordered || state !== "objednane"` (zrkadlo `isLineResolved`).
+    KAŽDÝ ďalší „je floor riadok hotový" výpočet nech importuje odtiaľto, nie
+    novú definíciu (riziko rozídenia chip↔panel↔odznak, issue 263).

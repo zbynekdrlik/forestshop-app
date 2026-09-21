@@ -109,3 +109,59 @@ nezmenené — mení sa len obsah obrazovky (`Component` v `nav.ts`), nie jej mi
     `OrdersToolbar` aj hromadné tlačidlo `SupplierActionsPanel` musia floor riadky
     ZAHŕŇAŤ (inak chip↔panel drift, issue 263 invariant). E-mail dodávateľovi
     floor riadky NEZAHŔŇA (`mail.ts` číta len `order_line`).
+- **Stav + poznámka + kód-odkaz + 🔗 na predajňovom riadku (issue 575, Štěpán):**
+  predajňový riadok v „Na objednanie" má TERAZ rovnaké ovládanie ako e-shopová
+  objednávka. Kľúčové body (rozšírenie issue 480 vyššie):
+  - **Schéma (migrácia 0065):** `floor_note_product.state` ZNOVUPOUŽÍVA existujúci
+    pgEnum `order_line_state` (`schema-orders.ts`) — NIE nový typ, NIE `ADD VALUE`
+    (žiadna 55P04 past, `.claude/rules/database.md`), takže sa zdieľajú
+    labely/farby/poradie tlačidiel (`orderLineStateLabels.ts`) a budúca hodnota
+    (napr. `objednane_stav`, issue 493) sa prejaví na oboch miestach naraz.
+    NOT NULL DEFAULT `objednane` backfilne existujúce riadky.
+    `floor_note_product.comment text NULL` = PER-POLOŽKOVÁ poznámka („poznámka len
+    ak sa dá zapísať do objednávky predajne" — Štěpán: viditeľná aj na čipe v
+    „Objednávky predajňa", NIE za celý zápis; `floor_note.text` ostáva textom
+    celého zápisu).
+  - **API (floor-notes modul, vzor `ordered` trasy):**
+    `POST /api/floor-notes/:id/products/:variantCode/state` `{state: enum}` a
+    `PATCH .../comment` `{comment}` — tx + `.for("update")` + audit
+    (`floor_note_product.state.changed` / `.comment.changed`), 404 pre neznámu
+    dvojicu, `requireRole("admin","manazer")`. `state` je NEZÁVISLÝ od `ordered`
+    (rovnako ako `order_line.state` vs `order_line.ordered`), preto sa 🛒
+    NEprepočítava pri zmene stavu. Poznámka: prázdny reťazec → `null`.
+  - **Odkaz na dodávateľa je PRODUKTOVÝ (kľúč `product.key`)** — floor riadok
+    NEMÁ vlastné úložisko, ✏️ úprava ukladá cez existujúci
+    `POST /api/product-links/:productKey` (`setFloorRowSupplierLink` → tá istá
+    zdieľaná cesta `product_supplier_link_override` ako objednávka), takže zmena
+    sa prejaví na VŠETKÝCH riadkoch (objednávkových aj predajňových) toho istého
+    produktu. `listUnresolvedFloorOrderRows` (vyňaté do `floor-order-rows.ts`
+    kvôli eslint `max-lines`) počíta `supplierUrl`/`ourUrl` TOU ISTOU efektívnou
+    cestou ako order line (`resolveEffectiveSupplierLink` + `shop_product_url`
+    leftJoin).
+  - **„Riešiť" ZAHŔŇA floor riadky so `state = riesit`** (na rozdiel od issue 480,
+    ktoré ich vylučovalo úplne): `listOpenOrderLinesBySupplier` pri `stateFilter`
+    pustí floor riadky, ktorých `state === stateFilter`; `countOpenOrdersByState`
+    (odznak „Riešiť") ich RÁTA (aj bez otvorených stavov objednávok — early-return
+    odstránený). `RiesitSection` je od issue 484 PLOCHÝ zoznam OBJEDNÁVOK
+    (`groupRiesitLinesByOrder` číta len `.lines`), takže floor riesit riadky
+    (nemajú `orderId`) sa vykresľujú SAMOSTATNE ako „Predajňa" tabuľka
+    (`riesit-floor`, `FloorOrderRow` s plnými ovládačmi).
+  - **Sémantika „vybavené":** `isFloorRowResolved(row) = row.ordered || row.state
+    !== "objednane"` (zrkadlí `isLineResolved`); `isFloorRowHidden`, odznak „Na
+    objednanie", čipy `OrdersToolbar` aj `SupplierActionsPanel` `done` používajú
+    TÚTO funkciu (issue 263 chip↔panel invariant). ALE `allOrdered` (smer/label
+    hromadného tlačidla „označiť skupinu") ostáva len o `ordered` (checkbox), NIE
+    o stave.
+  - **Nedostupné tovary floor riadky NEZAHŔŇAJÚ** — predajňa nemá e-mail
+    zákazníka, takže návrh náhrady + mail zákazníkovi (`nedostupne`) sa floor
+    riadkov netýka (zámerné, nie medzera).
+  - **Zdieľané primitívy:** `OrderLineStateButtons.tsx` má teraz `StateButtons`
+    (primitívne props `idKey/state/…`) — order line wrapper posiela `lineId`
+    (testidy `state-select-<lineId>` nezmenené), floor riadok posiela
+    `floor-<noteId>-<code>` (`state-btn-<s>-floor-<noteId>-<code>`, nikdy prefix
+    `order-line-`). `OrderSupplierLinkDisplay` berie úzky `data` objekt (OrderLine
+    ho štrukturálne spĺňa). Floor board mutácie sú v `useFloorRowMutations.ts`
+    (vyňaté z `useOrderLinesBoard` kvôli max-lines), kľúč `noteId::variantCode`,
+    hádžu `OrdersUnauthorizedError` (jednotné 401 spracovanie boardu) — preto
+    `setFloorRowState/Comment/SupplierLink` žijú v `ordersApi.ts` vedľa
+    `setFloorRowOrdered`, NIE vo `floorNotesApi.ts`.
