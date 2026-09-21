@@ -1,4 +1,4 @@
-import { and, asc, countDistinct, desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, count, countDistinct, desc, eq, inArray, isNull } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
 import {
   floorNoteProducts,
@@ -16,6 +16,7 @@ import {
 import { extractForeignShopRemark } from "../shoptet-writeback/note-block.js";
 import { customerIdentityKey } from "./customer-identity.js";
 import { resolveEffectiveSupplierLink } from "./effective-supplier-link.js";
+import { listUnresolvedFloorOrderRows } from "./floor-order-rows.js";
 import { listOpenStatusNames } from "./open-statuses.js";
 import { effectiveSupplierSql, normalizedSupplierKeySql, normalizeSupplierKeyJs, pickCanonicalSupplierSpelling } from "./supplier-key.js";
 
@@ -220,77 +221,6 @@ export async function countOpenOrdersByCustomer(
     counts.set(key, (counts.get(key) ?? 0) + 1);
   }
   return counts;
-}
-
-// issue 480: predajňové riadky pre board „Na objednanie" — produkty pripnuté na
-// NEVYBAVENÝCH zápisoch (`floor_note.resolved = false`) s efektívnym
-// dodávateľom počítaným TOU ISTOU cestou ako `order_line`
-// (`effectiveSupplierSql = coalesce(products.supplier, override)`,
-// `supplier-key.ts`). Zámerne SAMOSTATNÝ dopyt (nie JOIN na hlavný riadkový),
-// keďže floor riadky sa zoskupujú per dodávateľ AŽ v JS spolu s riadkami
-// objednávok. Zoradené najnovšie-prvé (zhodne s hlavným dopytom), aby
-// `floorRows[0]` bol najnovší floor riadok skupiny (triedenie skupín nižšie).
-// Vracia `effectiveSupplier` ako surový reťazec (`null` = bez dodávateľa) —
-// normalizáciu/kanonický pravopis rieši volajúci rovnako ako pri order_line.
-async function listUnresolvedFloorOrderRows(
-  db: Pick<Database, "select">,
-): Promise<readonly (FloorOrderRow & { readonly effectiveSupplier: string | null })[]> {
-  const rows = await db
-    .select({
-      noteId: floorNoteProducts.floorNoteId,
-      noteText: floorNotes.text,
-      noteCreatedAt: floorNotes.createdAt,
-      variantCode: floorNoteProducts.variantCode,
-      // issue 575: `product.key` + efektívny odkaz na dodávateľa TOU ISTOU
-      // cestou ako order line (`resolveEffectiveSupplierLink` nad
-      // `products.internal_note` + `product_supplier_link_override`) + naša
-      // adresa (`shop_product_url` leftJoin na variantCode) + stav + poznámka.
-      productKey: products.key,
-      productName: variants.name,
-      sizeLabel: variants.sizeLabel,
-      quantity: floorNoteProducts.quantity,
-      orderedAt: floorNoteProducts.orderedAt,
-      state: floorNoteProducts.state,
-      comment: floorNoteProducts.comment,
-      internalNote: products.internalNote,
-      supplierLinkOverride: productSupplierLinkOverrides.url,
-      ourUrl: shopProductUrl.url,
-      effectiveSupplier: effectiveSupplierSql,
-    })
-    .from(floorNoteProducts)
-    .innerJoin(floorNotes, eq(floorNotes.id, floorNoteProducts.floorNoteId))
-    .innerJoin(variants, eq(variants.code, floorNoteProducts.variantCode))
-    .innerJoin(products, eq(products.key, variants.productKey))
-    .leftJoin(productSupplierOverrides, eq(productSupplierOverrides.productKey, products.key))
-    .leftJoin(productSupplierLinkOverrides, eq(productSupplierLinkOverrides.productKey, products.key))
-    // issue 575: LEFT (ako order line, issue 276) — variant bez záznamu vo
-    // feede NESMIE zo zoznamu vypadnúť, len jeho kód sa vykreslí ako neaktívny.
-    .leftJoin(shopProductUrl, eq(shopProductUrl.code, floorNoteProducts.variantCode))
-    .where(eq(floorNotes.resolved, false))
-    .orderBy(desc(floorNotes.createdAt), desc(floorNoteProducts.id));
-
-  return rows.map((row) => {
-    // issue 575: TÁ ISTÁ efektívna cesta odkazu na dodávateľa ako order line.
-    const supplierLink = resolveEffectiveSupplierLink(row.internalNote, row.supplierLinkOverride);
-    return {
-      noteId: row.noteId,
-      variantCode: row.variantCode,
-      productKey: row.productKey,
-      productName: row.productName,
-      sizeLabel: row.sizeLabel,
-      // Meno zákazníka = prvý riadok textu zápisu, orezaný (zadanie klienta).
-      customerName: (row.noteText.split(/\r?\n/)[0] ?? "").trim(),
-      quantity: row.quantity,
-      ourUrl: row.ourUrl,
-      supplierUrl: supplierLink.url,
-      supplierNote: supplierLink.note,
-      state: row.state,
-      comment: row.comment,
-      createdAt: row.noteCreatedAt.toISOString(),
-      ordered: row.orderedAt !== null,
-      effectiveSupplier: row.effectiveSupplier,
-    };
-  });
 }
 
 export async function listOpenOrderLinesBySupplier(
@@ -612,13 +542,27 @@ export async function listUnresolvedFloorProductIdsForSupplier(
 // kvôli budúcej znovupoužiteľnosti, dnes ho volá len `riesit` count trasa.
 export async function countOpenOrdersByState(db: Database, state: OrderLineState): Promise<number> {
   const openStatuses = await listOpenStatusNames(db);
-  if (openStatuses.length === 0) return 0;
-  const [row] = await db
-    .select({ total: countDistinct(orderLines.orderId) })
-    .from(orderLines)
-    .innerJoin(orders, eq(orders.id, orderLines.orderId))
-    .where(and(inArray(orders.statusName, [...openStatuses]), eq(orderLines.state, state)));
-  return row?.total ?? 0;
+  // Order-line časť: DISTINCT objednávok s aspoň jedným riadkom v danom stave
+  // (issue 484). Bez otvorených stavov ju preskočíme (0), ALE floor časť nižšie
+  // beží aj tak — floor riadky sú od otvorených stavov nezávislé.
+  let orderCount = 0;
+  if (openStatuses.length > 0) {
+    const [row] = await db
+      .select({ total: countDistinct(orderLines.orderId) })
+      .from(orderLines)
+      .innerJoin(orders, eq(orders.id, orderLines.orderId))
+      .where(and(inArray(orders.statusName, [...openStatuses]), eq(orderLines.state, state)));
+    orderCount = row?.total ?? 0;
+  }
+  // issue 575: predajňové položky v danom stave na NEVYBAVENÝCH zápisoch sa
+  // rátajú tiež (aby odznak „Riešiť" sedel s tým, čo sekcia zobrazuje — floor
+  // riadok = jedna „predajňová objednávka").
+  const [floorRow] = await db
+    .select({ total: count() })
+    .from(floorNoteProducts)
+    .innerJoin(floorNotes, eq(floorNotes.id, floorNoteProducts.floorNoteId))
+    .where(and(eq(floorNotes.resolved, false), eq(floorNoteProducts.state, state)));
+  return orderCount + (floorRow?.total ?? 0);
 }
 
 export interface OrderDetailLine {
