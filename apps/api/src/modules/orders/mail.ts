@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, isNull, or } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
 import {
   orderLines,
@@ -91,8 +91,9 @@ export function formatSupplierOrderMailText(
   return { subject: rendered.subject, body: rendered.text };
 }
 
-// Len riadky v stave "objednane" (ešte neposlané/nevybavené dodávateľovi) —
-// rovnaký zámer ako stará appka's `outstandingOf`/`!isHandled`: mail má niesť
+// issue 579: riadky „na objednanie" = NEOZNAČENÝ východiskový stav (NULL) ∪
+// vedome „Nemáme" (objednane) — ešte neposlané/nevybavené dodávateľovi.
+// Rovnaký zámer ako stará appka's `outstandingOf`/`!isHandled`: mail má niesť
 // NOVÉ položky na objednanie, nie tie, čo manažér už predtým ručne posunul
 // ďalej (čaká sa/skladom/nedostupné). Poradie riadkov je deterministické
 // (vzostupne podľa kódu variantu) — stará appka triedila podľa poradia
@@ -122,7 +123,9 @@ async function loadOutstandingLines(db: Database, supplier: string): Promise<Sup
     .innerJoin(products, eq(products.key, variants.productKey))
     .leftJoin(productSupplierOverrides, eq(productSupplierOverrides.productKey, products.key))
     .leftJoin(productSupplierLinkOverrides, eq(productSupplierLinkOverrides.productKey, products.key))
-    .where(and(supplierCondition, eq(orderLines.state, "objednane")))
+    // issue 579: „na objednanie" = NEOZNAČENÝ (NULL) ∪ vedome „Nemáme"
+    // (objednane) — neoznačený riadok ostáva na objednanie ako pred 579.
+    .where(and(supplierCondition, or(isNull(orderLines.state), eq(orderLines.state, "objednane"))))
     .orderBy(asc(orderLines.variantCode));
 
   const byCode = new Map<string, SupplierOrderMailLine>();

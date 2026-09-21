@@ -235,8 +235,19 @@ paths:
   klik na aktívne tlačidlo ostáva no-op). NULL = neoznačené: `StateButtons`
   `active = state === s` nemá pri NULL nič aktívne; read-only bunka ukáže „—";
   `FloorNoteProductChip` ukáže odznak keď `state !== null` (vrátane „Nemáme",
-  červený). Filtre `eq(state, X)` (Riešiť/Nedostupné/`countOpenOrdersByState`)
-  fungujú nezmenené — NULL sa nikdy nerovná konkrétnemu stavu.
+  červený). Filtre `eq(state, X)` na KONKRÉTNY posunutý stav
+  (Riešiť/Nedostupné/`countOpenOrdersByState`) fungujú nezmenené — NULL sa nikdy
+  nerovná konkrétnemu stavu.
+- **Dodávateľský objednávkový mail + hromadná objednávka = NEOZNAČENÝ (NULL) ∪
+  „Nemáme" (objednane), issue 579 (main rozhodnutie).** `mail.ts`'s
+  `loadOutstandingLines` (`or(isNull(orderLines.state), eq(orderLines.state,
+  "objednane"))`) a `SupplierActionsPanel.tsx`'s mail-tlačidlo predikát
+  (`l.state === null || l.state === "objednane"`) zahŕňajú OBA — neoznačený
+  riadok ostáva „na objednanie" presne ako pred 579 (Štěpán žiadal len vizuálny
+  default + červené, nie zúženie toho, čo sa objednáva); „skladom"/„caka_sa"/
+  „nedostupne"/„riesit"/„objednane_stav" (vybavené/posunuté) sa do mailu
+  nedostanú. POZOR: toto je JEDINÝ `objednane`-filter, ktorý po 579 musí
+  zahŕňať aj NULL — sekčné filtre vyššie (konkrétny posunutý stav) NIE.
 - **„Nemáme" (stav `objednane`) je VŽDY červené** (Štěpán, issue 579) —
   `.ord-state-btn-objednane` popis + `.ord-state-btn-objednane.active` (výplň)
   aj `.pill.objednane` (read-only odznak v predajni) používajú `--fs-danger`/

@@ -309,9 +309,9 @@ it("manažér odošle objednávku mailom, audit nesie príjemcu a počet položi
   });
 
   // Odoslanie NEMENÍ stav riadku (návrhové rozhodnutie na tickete #31) —
-  // zostáva vo východiskovom stave "objednane".
+  // zostáva vo východiskovom NEOZNAČENOM stave (issue 579: NULL).
   const [riadok] = await db.select().from(orderLines).where(eq(orderLines.orderId, obj.id));
-  expect(riadok?.state).toBe("objednane");
+  expect(riadok?.state).toBeNull();
 });
 
 it("odoslanie bez nastaveného e-mailu vráti ok:false (200), nič sa neodošle", async () => {

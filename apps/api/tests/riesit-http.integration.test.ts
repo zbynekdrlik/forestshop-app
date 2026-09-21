@@ -241,9 +241,9 @@ it("POST /api/orders/riesit/by-code: zatvorená objednávka vráti 200 {ok:false
   expect(telo.ok).toBe(false);
   expect(telo.error).toContain("nie je otvorená");
 
-  // stav riadku sa nezmenil
+  // stav riadku sa nezmenil (issue 579: východiskovo NEOZNAČENÝ = NULL)
   const [r] = await db.select({ state: orderLines.state }).from(orderLines).where(eq(orderLines.id, zatvorena.lineIds[0] ?? ""));
-  expect(r?.state).toBe("objednane");
+  expect(r?.state).toBeNull();
 });
 
 it("POST /api/orders/riesit/by-code: rola citanie dostane 403 (rovnaká brána ako zmena stavu)", async () => {

@@ -69,13 +69,13 @@ export function SupplierActionsPanel({
   readonly busyFloorRowKey: string | null;
 }): JSX.Element {
   // Riadky, ktoré ešte treba objednať u dodávateľa (rovnaký zámer ako stará
-  // appka's `outstandingOf`/`!isHandled`, #31) — východiskový stav pred tým,
-  // než manažér čokoľvek ručne posunie ďalej. Toto gejtuje LEN tlačidlo
-  // "odoslať objednávku mailom" (server-strana `mail.ts` filtruje rovnako) —
-  // je to NEZÁVISLÉ od `ordered` príznaku (issue 60), mail sa dá
-  // odoslať/skopírovať bez ohľadu na to, či je riadok už odškrtnutý. Jediné
-  // miesto, ktoré túto konštantu po extrakcii (issue 61) potrebuje.
-  const outstandingState = "objednane";
+  // appka's `outstandingOf`/`!isHandled`, #31). Gejtuje LEN tlačidlo "odoslať
+  // objednávku mailom" — NEZÁVISLE od `ordered` príznaku (issue 60), mail sa dá
+  // odoslať/skopírovať bez ohľadu na to, či je riadok už odškrtnutý.
+  // issue 579: „na objednanie" = NEOZNAČENÝ východiskový stav (NULL) ALEBO
+  // vedome „Nemáme" (objednane) — server `mail.ts` filtruje rovnako
+  // (`state IS NULL OR state = 'objednane'`), takže neoznačený riadok gejtuje
+  // mail-tlačidlo presne ako pred 579 (predikát inline nižšie na `disabled`).
   // issue 480: predajňové riadky skupiny (server ich vždy posiela, `?? []`
   // poistka pre staré testové literály bez tohto poľa).
   const floorRows = group.floorRows ?? [];
@@ -197,7 +197,7 @@ export function SupplierActionsPanel({
                 <button
                   type="button"
                   className="btn sm good"
-                  disabled={group.email === null || !group.lines.some((l) => l.state === outstandingState)}
+                  disabled={group.email === null || !group.lines.some((l) => l.state === null || l.state === "objednane")}
                   title={
                     group.email === null ? "Pre odoslanie mailom treba najprv nastaviť e-mail dodávateľa." : undefined
                   }
