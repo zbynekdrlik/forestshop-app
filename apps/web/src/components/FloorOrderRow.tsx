@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type JSX } from "react";
 import { formatSkDate } from "../formatDate.js";
 import type { FloorOrderRow as FloorOrderRowData, OrderLine } from "../ordersApi.js";
 import { STATE_LABELS } from "../orderLineStateLabels.js";
+import type { OrderLineStateValue } from "../orderLineStates.js";
 import { StateButtons } from "./OrderLineStateButtons.js";
 import { OrderSupplierLinkDisplay } from "./OrderSupplierLinkDisplay.js";
 
@@ -54,7 +55,7 @@ export function FloorOrderRow({
   readonly onChangeOrdered: (noteId: string, variantCode: string, ordered: boolean) => void;
   // issue 575: zmena stavu / poznámky predajňového riadku + PRODUKTOVÝ zápis
   // odkazu na dodávateľa (kľúčované `productKey`, zdieľaná cesta s objednávkou).
-  readonly onChangeState: (noteId: string, variantCode: string, newState: OrderLine["state"]) => void;
+  readonly onChangeState: (noteId: string, variantCode: string, newState: OrderLineStateValue) => void;
   readonly onChangeComment: (noteId: string, variantCode: string, comment: string | null) => void;
   // issue 166 vzor: `boolean` — `true` keď vstup prešiel validáciou a zápis sa
   // spustil, `false` keď bol okamžite odmietnutý (editor sa vtedy nezavrie).
@@ -227,6 +228,9 @@ export function FloorOrderRow({
                 onChangeState(row.noteId, row.variantCode, s);
               }}
             />
+          ) : row.state === null ? (
+            // issue 579: NULL = neoznačený východiskový stav → „—" v read-only bunke.
+            "—"
           ) : (
             STATE_LABELS[row.state]
           )}

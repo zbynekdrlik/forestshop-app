@@ -16,3 +16,10 @@ export const ORDER_LINE_STATES = [
   "riesit",
   "objednane_stav",
 ] as const;
+
+// issue 579: non-null hodnota stavu (drôtová hodnota, ktorú posiela POST
+// `…/state`). `OrderLine["state"]` je od issue 579 NULLABLE (NULL = neoznačený
+// východiskový stav, Štěpán), no settery/tlačidlá nikdy neposielajú NULL
+// („odznačiť" je mimo zadania), preto majú tento úzky typ. `STATE_LABELS`/
+// `STATE_DISPLAY_ORDER` sú tiež kľúčované ním (Record nesmie mať `null` kľúč).
+export type OrderLineStateValue = (typeof ORDER_LINE_STATES)[number];

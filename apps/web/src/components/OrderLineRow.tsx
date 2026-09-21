@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type JSX } from "react";
 import { formatSkDate } from "../formatDate.js";
 import type { OrderLine } from "../ordersApi.js";
 import { STATE_LABELS } from "../orderLineStateLabels.js";
+import type { OrderLineStateValue } from "../orderLineStates.js";
 import { formatVariantTotalChip, isStaleOrderLine, orderLineAgeDays, type VariantTotal } from "../ordersSummary.js";
 import { CustomerOrderCountBadge } from "./CustomerOrderCountBadge.js";
 import { CustomerContactRowButton } from "./CustomerContactRowButton.js";
@@ -80,7 +81,7 @@ export function OrderLineRow({
   // neprežije). `undefined`, keď tento riadok nemá rozpísaný koncept —
   // vtedy sa zobrazuje priamo `line.manualSupplierOverride`.
   readonly pendingSupplierDraft: string | undefined;
-  readonly onChangeState: (lineId: string, newState: OrderLine["state"]) => void;
+  readonly onChangeState: (lineId: string, newState: OrderLineStateValue) => void;
   readonly onChangeOrdered: (lineId: string, ordered: boolean) => void;
   readonly onAssignSupplier: (lineId: string, supplier: string) => void;
   // issue 121: manuálny odkaz na dodávateľa — smie sa upraviť pri KAŽDOM
@@ -450,6 +451,9 @@ export function OrderLineRow({
         <td>
           {canChangeState ? (
             <OrderLineStateButtons line={line} busyLineId={busyLineId} onChangeState={onChangeState} />
+          ) : line.state === null ? (
+            // issue 579: NULL = neoznačený východiskový stav → „—" v read-only bunke.
+            "—"
           ) : (
             STATE_LABELS[line.state]
           )}

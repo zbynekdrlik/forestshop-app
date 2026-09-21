@@ -1,4 +1,4 @@
-import type { OrderLine } from "./ordersApi.js";
+import type { OrderLineStateValue } from "./orderLineStates.js";
 
 // issue 60: `objednane` je VÝCHODISKOVÝ stav riadku (pred tým, než sa
 // čokoľvek stane), NIE potvrdenie, že manažér objednal — preto sa nazýva
@@ -10,7 +10,7 @@ import type { OrderLine } from "./ordersApi.js";
 // nahradili 4 tlačidlá (`OrderLineStateButtons.tsx`), ktoré tento zoznam
 // potrebujú TIEŽ; `OrderLineRow.tsx` sám importuje `OrderLineStateButtons`,
 // takže zdieľaná hodnota nesmie žiť ani v jednom z nich (cyklický import).
-export const STATE_LABELS: Record<OrderLine["state"], string> = {
+export const STATE_LABELS: Record<OrderLineStateValue, string> = {
   objednane: "Nemáme",
   caka_sa: "Čaká sa",
   skladom: "Skladom",
@@ -35,7 +35,7 @@ export const STATE_LABELS: Record<OrderLine["state"], string> = {
 // SAMOSTATNÉ pole, nie `Object.keys(STATE_LABELS)` — poradie kľúčov v
 // `STATE_LABELS` nesie iný zámer (východiskový enum poradie) a nesmie diktovať
 // vizuálne poradie tlačidiel.
-export const STATE_DISPLAY_ORDER: readonly OrderLine["state"][] = [
+export const STATE_DISPLAY_ORDER: readonly OrderLineStateValue[] = [
   "objednane",
   "riesit",
   "caka_sa",
@@ -48,8 +48,8 @@ export const STATE_DISPLAY_ORDER: readonly OrderLine["state"][] = [
 // ale zabudol sa doplniť sem, `tsc` padne (nová hodnota by nebola pokrytá
 // `STATE_DISPLAY_ORDER`, takže `Exclude<...>` už nie je `never`). Bráni tichému
 // „stav existuje, ale jeho tlačidlo sa nikde nevykreslí" (recenzia issue 476).
-type _AllStatesInDisplayOrder = Exclude<OrderLine["state"], (typeof STATE_DISPLAY_ORDER)[number]> extends never
+type _AllStatesInDisplayOrder = Exclude<OrderLineStateValue, (typeof STATE_DISPLAY_ORDER)[number]> extends never
   ? true
-  : ["CHÝBA stav v STATE_DISPLAY_ORDER", Exclude<OrderLine["state"], (typeof STATE_DISPLAY_ORDER)[number]>];
+  : ["CHÝBA stav v STATE_DISPLAY_ORDER", Exclude<OrderLineStateValue, (typeof STATE_DISPLAY_ORDER)[number]>];
 const _stateDisplayOrderExhaustive: _AllStatesInDisplayOrder = true;
 void _stateDisplayOrderExhaustive;

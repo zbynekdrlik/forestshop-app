@@ -16,7 +16,8 @@ const productSchema = z.object({
   // issue 575: stav položky (nastavený v board-e „Na objednanie") — v zázname
   // predajne sa zobrazí read-only odznak, keď je stav ≠ „Nemáme". RUČNE
   // zrkadlí `orderLineState.enumValues` (rovnako ako `ordersApi.ts`).
-  state: z.enum(ORDER_LINE_STATES),
+  // issue 579: NULL = neoznačený východiskový stav (Štěpán).
+  state: z.enum(ORDER_LINE_STATES).nullable(),
   // issue 575: per-položková poznámka (nastavená v board-e „Na objednanie") —
   // zobrazí sa v zázname predajne.
   comment: z.string().nullable(),
