@@ -421,7 +421,15 @@ export function restockJob(run: RunRestock | undefined): ScheduledJob {
  * ostáva ako fallback (idempotentný). Reťazený beh nesie `trigger`.
  */
 export function buildRestockAfterSupplierStock(run: RunRestock | undefined): SupplierStockAfterRun {
-  return async (db, now) => {
+  // issue 561 (Nález 2): reťaz sa spúšťa AŽ po dobehnutí supplier-stocku (na
+  // PROD ~2 h po jeho tick-ovom `now`), takže ZÁMERNE ignoruje `now`
+  // supplier-stocku a berie SKUTOČNÝ čas svojho štartu (`new Date()`).
+  // `startRunNow` tento čas zapíše do `job_run.started_at` (run-now.ts) A
+  // odovzdá ho `run(now)`; tick-ové `now` supplier-stocku by spravilo z
+  // reťazeného behu falošný ~2-hodinový beh so zlým „Posledný beh" časom a
+  // zlou hláškou „Beh už prebieha (spustený o …)".
+  return async (db) => {
+    const startedAt = new Date();
     await startRunNow(
       db,
       {
@@ -429,7 +437,7 @@ export function buildRestockAfterSupplierStock(run: RunRestock | undefined): Sup
         lockKey: RESTOCK_RUN_LOCK_KEY,
         run: (n) => runChainedRestock(db, n, run),
       },
-      now,
+      startedAt,
       () => undefined,
     );
   };

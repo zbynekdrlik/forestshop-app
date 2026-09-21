@@ -18,6 +18,14 @@ import {
 import { withCleanDb } from "./helpers/db.js";
 import { waitForJobRunSettled } from "./helpers/job-run.js";
 
+// `NOW` je tick-ový čas supplier-stocku (jeho ŠTART). Reťazený restock ale
+// štartuje AŽ po jeho dobehnutí (~2 h neskôr na PROD), takže jeho vlastný
+// `job_run.started_at` MUSÍ byť jeho SKUTOČNÝ čas štartu (`new Date()`), nie
+// tick-ové `now` supplier-stocku — inak riadok vyzerá ako 2-hodinový beh a
+// „Posledný beh"/„Beh už prebieha (spustený o …)" ukazujú zlý čas (issue 561,
+// Nález 2, meranie 21. 9. 2026: reťazený restock mal started_at 02:20:52 =
+// štart supplier-stocku namiesto ~04:17). `NOW` je zámerne v minulosti, takže
+// skutočný `new Date()` je vždy striktne po ňom.
 const NOW = new Date("2026-09-20T02:24:00Z");
 
 let close: (() => Promise<void>) | undefined;
@@ -48,6 +56,8 @@ describe("buildRestockAfterSupplierStock — issue 561: reťazenie restocku za s
       trigger: RESTOCK_TRIGGER_AFTER_SUPPLIER_STOCK,
     });
     expect(runCalled).toBe(false);
+    // Nález 2: started_at je SKUTOČNÝ čas štartu reťaze, nie tick supplier-stocku.
+    expect(new Date(finalRun.startedAt).getTime()).toBeGreaterThan(NOW.getTime());
   });
 
   it("restock ZAPNUTÝ (enabled=true) → spustí run a zapíše 'restock' job_run riadok s výsledkom + trigger", async () => {
@@ -71,6 +81,10 @@ describe("buildRestockAfterSupplierStock — issue 561: reťazenie restocku za s
       overLimit: 0,
       trigger: RESTOCK_TRIGGER_AFTER_SUPPLIER_STOCK,
     });
-    expect(receivedNow?.toISOString()).toBe(NOW.toISOString());
+    // Nález 2: reťaz posiela do `run` (a do `job_run.started_at`) svoj SKUTOČNÝ
+    // čas štartu (`new Date()`), NIE tick-ové `now` supplier-stocku (`NOW`).
+    expect(receivedNow).toBeDefined();
+    expect(receivedNow?.getTime() ?? 0).toBeGreaterThan(NOW.getTime());
+    expect(new Date(finalRun.startedAt).getTime()).toBeGreaterThan(NOW.getTime());
   });
 });
