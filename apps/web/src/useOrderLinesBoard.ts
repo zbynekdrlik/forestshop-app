@@ -6,9 +6,9 @@ import {
   updateOrderComment,
   updateOrderLineOrdered,
   updateOrderLineState,
-  type OrderLine,
   type SupplierOpenOrders,
 } from "./ordersApi.js";
+import type { OrderLineStateValue } from "./orderLineStates.js";
 import { clearWriteFailure, lineWhere, orderWhere, upsertWriteFailure, type OrderWriteFailure } from "./ordersWriteFailures.js";
 import { useDirtyEditorLineIds } from "./useDirtyEditorLineIds.js";
 import { useFloorRowMutations } from "./useFloorRowMutations.js";
@@ -37,7 +37,7 @@ export interface OrderLinesBoardOptions {
   // presne podľa zadania „zmena stavu na iný → zo sekcie zmizne". „Na
   // objednanie" ho nechá `undefined` → riadok ostane, len zmení stav (1:1
   // pôvodné správanie).
-  readonly keepOnlyState?: OrderLine["state"];
+  readonly keepOnlyState?: OrderLineStateValue;
   // Volané po KAŽDEJ úspešnej zmene stavu — obe sekcie ho použijú na refetch
   // menu odznaku „Riešiť" (zmena stavu môže riesit riadok pridať aj odobrať).
   readonly onStateChanged?: () => void;
@@ -73,12 +73,12 @@ export function useOrderLinesBoard(options: OrderLinesBoardOptions): {
   readonly mail: ReturnType<typeof useSupplierMailActions>;
   readonly setSupplierLink: (lineId: string, url: string) => boolean;
   readonly load: () => void;
-  readonly changeState: (lineId: string, newState: OrderLine["state"]) => void;
+  readonly changeState: (lineId: string, newState: OrderLineStateValue) => void;
   readonly changeOrdered: (lineId: string, ordered: boolean) => void;
   // issue 480: prepnutie „objednané" na predajňovom riadku.
   readonly changeFloorOrdered: (noteId: string, variantCode: string, ordered: boolean) => void;
   // issue 575: zmena stavu / poznámky / odkazu predajňového riadku.
-  readonly changeFloorState: (noteId: string, variantCode: string, newState: OrderLine["state"]) => void;
+  readonly changeFloorState: (noteId: string, variantCode: string, newState: OrderLineStateValue) => void;
   readonly changeFloorComment: (noteId: string, variantCode: string, comment: string | null) => void;
   readonly setFloorLink: (noteId: string, variantCode: string, productKey: string, url: string) => boolean;
   readonly assignSupplier: (lineId: string, supplier: string) => void;
@@ -123,7 +123,7 @@ export function useOrderLinesBoard(options: OrderLinesBoardOptions): {
   useEffect(load, [load]);
 
   const changeState = useCallback(
-    (lineId: string, newState: OrderLine["state"]) => {
+    (lineId: string, newState: OrderLineStateValue) => {
       const failureId = `state:${lineId}`;
       setBusyLineId(lineId);
       updateOrderLineState(lineId, newState)

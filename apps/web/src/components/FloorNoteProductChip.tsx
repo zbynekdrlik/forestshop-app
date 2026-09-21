@@ -105,10 +105,17 @@ export function FloorNoteProductChip({
         </span>
       )}
 
-      {/* issue 575: stav položky (keď postúpil za „Nemáme") + per-položková
-          poznámka, obe nastavené v board-e „Na objednanie" — read-only tu. */}
-      {product.state !== "objednane" && (
-        <StateChip base="pill" testId={`floor-note-product-state-${noteId}-${product.variantCode}`}>
+      {/* issue 575: stav položky + per-položková poznámka, obe nastavené v
+          board-e „Na objednanie" — read-only tu. issue 579: odznak sa zobrazí
+          pri KAŽDOM označenom stave (state !== null), vrátane „Nemáme"
+          (objednane) — ten červený (`.pill.objednane` → `--fs-danger`). NULL =
+          neoznačený → žiadny odznak. */}
+      {product.state !== null && (
+        <StateChip
+          base="pill"
+          modifier={product.state === "objednane" ? "objednane" : ""}
+          testId={`floor-note-product-state-${noteId}-${product.variantCode}`}
+        >
           {STATE_LABELS[product.state]}
         </StateChip>
       )}

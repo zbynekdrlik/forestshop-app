@@ -164,9 +164,10 @@ it("náhľad agreguje množstvo podľa kódu variantu naprieč objednávkami, vy
     .returning();
   if (obj1 === undefined || obj2 === undefined) throw new Error("insert zlyhal");
 
-  // Dve objednávky rovnakého variantu vo východiskovom stave "objednane" —
-  // majú sa SČÍTAŤ (2 + 3 = 5). Tretia objednávka toho istého variantu je už
-  // "skladom" (vybavená) — nemá sa objaviť v maile vôbec.
+  // Dve objednávky rovnakého variantu vo východiskovom NEOZNAČENOM stave
+  // (issue 579: NULL — insert `state` neuvádza) — majú sa SČÍTAŤ (2 + 3 = 5).
+  // Tretia objednávka toho istého variantu je už "skladom" (vybavená) — nemá sa
+  // objaviť v maile vôbec.
   await db.insert(orderLines).values({ orderId: obj1.id, variantCode: "4859/46", quantity: 2 });
   await db.insert(orderLines).values({ orderId: obj2.id, variantCode: "4859/46", quantity: 3 });
 
@@ -189,6 +190,40 @@ it("náhľad agreguje množstvo podľa kódu variantu naprieč objednávkami, vy
   expect(telo.itemCount).toBe(1);
   expect(telo.subject).toBe("Objednávka — Dodávateľ Alfa (1 položka)");
   expect(telo.body).toBe("Objednávka — Dodávateľ Alfa (1 položka)\n4859/46 | 5 ks");
+});
+
+// issue 579 (Štěpán + main): dodávateľský objednávkový mail „na objednanie" =
+// NEOZNAČENÝ (NULL) ∪ „Nemáme" (objednane). Neoznačený riadok ostáva „na
+// objednanie" presne ako pred 579 (Štěpán žiadal len vizuálny default + červené,
+// nie zúženie toho, čo sa objednáva). „skladom" (vybavené) sa nikdy neobjaví.
+it("issue 579: náhľad zahŕňa NEOZNAČENÝ (NULL) aj „Nemáme“ (objednane) riadok, vynecháva skladom", async () => {
+  const { app, cookie, db } = await boot("manazer");
+  await insertTestVariant(db, "NM-NULL", "Dodávateľ Beta");
+  await insertTestVariant(db, "NM-NEMAME", "Dodávateľ Beta");
+  await insertTestVariant(db, "NM-SKLAD", "Dodávateľ Beta");
+  const [o1] = await db
+    .insert(orders)
+    .values({ externalOrderId: "6579", customerName: "Z1", placedAt: new Date("2026-09-01T00:00:00Z") })
+    .returning();
+  if (o1 === undefined) throw new Error("insert zlyhal");
+  // Neoznačený riadok (NULL — insert `state` neuvádza).
+  await db.insert(orderLines).values({ orderId: o1.id, variantCode: "NM-NULL", quantity: 2 });
+  // Vedome označené „Nemáme" (objednane).
+  await db.insert(orderLines).values({ orderId: o1.id, variantCode: "NM-NEMAME", quantity: 4, state: "objednane" });
+  // „skladom" — vybavené, do mailu NEPATRÍ.
+  await db.insert(orderLines).values({ orderId: o1.id, variantCode: "NM-SKLAD", quantity: 9, state: "skladom" });
+
+  await db.insert(supplierContacts).values({ supplier: "Dodávateľ Beta", email: "beta@dodavatel.example" });
+
+  const res = await app.request(`/api/suppliers/${encodeURIComponent("Dodávateľ Beta")}/order-mail`, {
+    headers: { cookie },
+  });
+  expect(res.status).toBe(200);
+  const telo = (await res.json()) as { subject: string; body: string; itemCount: number };
+  expect(telo.itemCount).toBe(2); // NULL + Nemáme, NIE skladom
+  expect(telo.body).toContain("NM-NULL | 2 ks");
+  expect(telo.body).toContain("NM-NEMAME | 4 ks");
+  expect(telo.body).not.toContain("NM-SKLAD");
 });
 
 // issue 67: kód dodávateľa (`externalCode`) a odkaz na tovar u dodávateľa
@@ -274,9 +309,9 @@ it("manažér odošle objednávku mailom, audit nesie príjemcu a počet položi
   });
 
   // Odoslanie NEMENÍ stav riadku (návrhové rozhodnutie na tickete #31) —
-  // zostáva vo východiskovom stave "objednane".
+  // zostáva vo východiskovom NEOZNAČENOM stave (issue 579: NULL).
   const [riadok] = await db.select().from(orderLines).where(eq(orderLines.orderId, obj.id));
-  expect(riadok?.state).toBe("objednane");
+  expect(riadok?.state).toBeNull();
 });
 
 it("odoslanie bez nastaveného e-mailu vráti ok:false (200), nič sa neodošle", async () => {

@@ -91,7 +91,10 @@ export const floorNoteProducts = pgTable(
     // (napr. `objednane_stav`, issue 493) sa prejaví na oboch miestach naraz.
     // `objednane` je VÝCHODISKOVÝ „Nemáme" (issue 577; rovnaká sémantika ako
     // `order_line.state`), NOT NULL DEFAULT ho backfilne pri `ADD COLUMN`.
-    state: orderLineState("state").notNull().default("objednane"),
+    // issue 579 (Štěpán): NULLABLE bez DEFAULT — NULL = neoznačený stav
+    // (rovnako ako `order_line.state`). Nový riadok predajne sa rodí bez stavu;
+    // migrácia 0066 resetuje existujúce `objednane` na NULL.
+    state: orderLineState("state"),
     // issue 575: per-položková poznámka — „poznámka len ak sa dá zapísať do
     // objednávky predajne" (Štěpán): PER POLOŽKA (nie za celý zápis, ten je
     // `floor_note.text`), aby bola viditeľná aj na čipe položky v „Objednávky

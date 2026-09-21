@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ORDER_LINE_STATES } from "./orderLineStates.js";
+import { ORDER_LINE_STATES, type OrderLineStateValue } from "./orderLineStates.js";
 
 // Zrkadlí `OrderLineState`/`OpenOrderLine`/`SupplierOpenOrders` z
 // `apps/api/src/modules/orders/queries.ts` — vlastná zod schéma namiesto
@@ -42,7 +42,8 @@ const orderLineSchema = z.object({
   // odvodené, treba sync na oboch stranách). Bez novej hodnoty by frontend
   // odmietol (zod parse) KAŽDÝ riadok v tom stave a `OrderLine["state"]` typ
   // by ju nepoznal (padne `STATE_LABELS`/`STATE_DISPLAY_ORDER` úplnosť).
-  state: z.enum(ORDER_LINE_STATES),
+  // issue 579: NULL = neoznačený východiskový stav (Štěpán); enum keď je stav zvolený.
+  state: z.enum(ORDER_LINE_STATES).nullable(),
   // issue 60: nezávislý príznak "objednané u dodávateľa" (viď `state.ts`'s
   // komentár) — oddelené od `state` vyššie.
   ordered: z.boolean(),
@@ -121,7 +122,8 @@ const floorRowSchema = z.object({
   supplierNote: z.string().nullable(),
   // issue 575: stav položky — RUČNE zrkadlí `orderLineState.enumValues`
   // (rovnako ako `orderLineSchema.state`), aby zod prijal každý stav.
-  state: z.enum(ORDER_LINE_STATES),
+  // issue 579: NULL = neoznačený východiskový stav (Štěpán); enum keď je stav zvolený.
+  state: z.enum(ORDER_LINE_STATES).nullable(),
   // issue 575: per-položková poznámka.
   comment: z.string().nullable(),
   createdAt: z.string(),
@@ -297,7 +299,7 @@ export async function fetchOrdersOverview(): Promise<OrdersOverview> {
 // primárny kľúč `order_line.id`), netreba aj `orderId`.
 export async function updateOrderLineState(
   lineId: string,
-  state: OrderLine["state"],
+  state: OrderLineStateValue,
 ): Promise<void> {
   const response = await fetch(`/api/orders/lines/${lineId}/state`, {
     method: "POST",
@@ -424,7 +426,7 @@ export async function setFloorRowOrdered(noteId: string, variantCode: string, or
 // `useOrderLinesBoard` — cez zdieľaný `readJson` hádžu `OrdersUnauthorizedError`,
 // takže 401 → session-expired sa spracuje jednotne so všetkými ostatnými board
 // mutáciami (`floorNotesApi.ts`'s vlastný `readJson` hádže inú triedu chyby).
-export async function setFloorRowState(noteId: string, variantCode: string, state: OrderLine["state"]): Promise<void> {
+export async function setFloorRowState(noteId: string, variantCode: string, state: OrderLineStateValue): Promise<void> {
   const response = await fetch(
     `/api/floor-notes/${encodeURIComponent(noteId)}/products/${encodeURIComponent(variantCode)}/state`,
     {

@@ -82,7 +82,9 @@ describe("POST /api/floor-notes/:id/products/:variantCode/state", () => {
       .where(eq(auditEvents.action, "floor_note_product.state.changed"));
     expect(audit).toHaveLength(1);
     expect(audit[0]?.entity).toBe("floor_note_product");
-    expect(audit[0]?.data).toMatchObject({ variantCode: "E2E-ST-1", from: "objednane", to: "riesit" });
+    // issue 579: nová predajňová položka sa rodí BEZ stavu (NULL, žiadny DEFAULT
+    // „objednane"), takže prvá zmena stavu zaznamená from: null (nie „objednane").
+    expect(audit[0]?.data).toMatchObject({ variantCode: "E2E-ST-1", from: null, to: "riesit" });
     expect(productRow).toBeDefined();
   });
 

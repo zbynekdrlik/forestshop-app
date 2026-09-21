@@ -6,9 +6,9 @@ import {
   setFloorRowState,
   setFloorRowSupplierLink,
   validateSupplierLinkUrl,
-  type OrderLine,
   type SupplierOpenOrders,
 } from "./ordersApi.js";
+import type { OrderLineStateValue } from "./orderLineStates.js";
 import { clearWriteFailure, upsertWriteFailure, type OrderWriteFailure } from "./ordersWriteFailures.js";
 
 // issue 480/575: predajňové (floor) riadkové mutácie board-u „Na objednanie"
@@ -25,7 +25,7 @@ export interface FloorRowMutations {
   readonly busyFloorCommentKey: string | null;
   readonly busyFloorLinkKey: string | null;
   readonly changeFloorOrdered: (noteId: string, variantCode: string, ordered: boolean) => void;
-  readonly changeFloorState: (noteId: string, variantCode: string, newState: OrderLine["state"]) => void;
+  readonly changeFloorState: (noteId: string, variantCode: string, newState: OrderLineStateValue) => void;
   readonly changeFloorComment: (noteId: string, variantCode: string, comment: string | null) => void;
   // issue 166 vzor: `boolean` — `true` keď vstup prešiel validáciou a zápis sa
   // spustil, `false` keď bol okamžite odmietnutý (editor sa vtedy nezatvorí).
@@ -38,7 +38,7 @@ export function useFloorRowMutations(deps: {
   // Sekcia „Riešiť" posiela `"riesit"` — floor riadok, ktorého stav sa zmení na
   // čokoľvek INÉ, sa z lokálneho pohľadu ODSTRÁNI (zrkadlí order-line
   // `changeState`'s `keepOnlyState`).
-  readonly keepOnlyState: OrderLine["state"] | undefined;
+  readonly keepOnlyState: OrderLineStateValue | undefined;
   readonly onStateChanged: (() => void) | undefined;
   readonly onSessionExpired: () => void;
   readonly load: () => void;
@@ -92,7 +92,7 @@ export function useFloorRowMutations(deps: {
   // `changeState` (lokálny patch, `keepOnlyState` odstráni riadok pri odchode zo
   // stavu, `onStateChanged` refetchne menu odznak „Riešiť").
   const changeFloorState = useCallback(
-    (noteId: string, variantCode: string, newState: OrderLine["state"]) => {
+    (noteId: string, variantCode: string, newState: OrderLineStateValue) => {
       const rowKey = `${noteId}::${variantCode}`;
       const failureId = `floorState:${rowKey}`;
       setBusyFloorStateKey(rowKey);

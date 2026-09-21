@@ -499,12 +499,12 @@ const [objednavkaBezDodavatela] = await db
     customerName: "E2E Zákazník Bez dodávateľa",
     statusName: DEFAULT_ORDER_OPEN_STATUS,
     // issue 65: zámerne HLBOKO v minulosti (nie len "pred pár dňami") —
-    // objednávka 9002 zostáva vo VÝCHODISKOVOM ("objednane"/nevybavenom)
-    // stave počas CELÉHO e2e behu (žiadny test v `orders.spec.ts` ju
-    // nemení), takže je bezpečný, stále platný kandidát na test upozornenia
-    // na staré objednávky (⚠️, `ordersSummary.ts`'s `isStaleOrderLine`) —
-    // pevný dátum v minulosti zostáva "starý" navždy, bez ohľadu na to,
-    // kedy CI beh skutočne prebehne.
+    // objednávka 9002 zostáva vo VÝCHODISKOVOM (issue 579: NULL = neoznačený,
+    // teda nevybavený) stave počas CELÉHO e2e behu (žiadny test v
+    // `orders.spec.ts` ju nemení), takže je bezpečný, stále platný kandidát na
+    // test upozornenia na staré objednávky (⚠️, `ordersSummary.ts`'s
+    // `isStaleOrderLine` — NULL je nevybavený, teda „stale"), pevný dátum v
+    // minulosti zostáva "starý" navždy, bez ohľadu na to, kedy CI beh prebehne.
     placedAt: new Date("2020-01-01T09:00:00Z"),
   })
   .returning();

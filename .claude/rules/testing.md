@@ -920,3 +920,16 @@ paths:
   regexe súhrnu drž exact. Pri KAŽDEJ ďalšej e2e asercii nad orders boardom over,
   či hodnota nesie floor kusy (čip N, súhrn total/remaining) — ak áno, je
   floor-mutovateľná; exact drž len na skupine bez floor riadkov alebo na rozpise.
+- **E2E spec, čo si NEZÁVISLE počíta očakávanú hodnotu z `/api/orders/open`,
+  má VLASTNÚ kópiu predikátu `isLineResolved` (nevie importovať app zdroj cez
+  `page.evaluate`) — kópia TICHO zastará pri zmene kontraktu (issue 579
+  CI-fix).** `orders-overview.spec.ts`'s in-test `isResolved` = `l.ordered ||
+  l.state !== "objednane"` ostal, keď issue 579 zmenilo kanonický
+  `ordersSummary.ts`'s `isLineResolved` na `ordered || (state !== null &&
+  state !== "objednane")` (NULL = nevybavené). Fixtures bez stavu (NULL) potom
+  appka rátala do „Položiek na objednanie" (9), no test čakal 0 → červený.
+  Rovnaká pasca: typ `RawOrderLine.state` musí povoliť `| null`, inak
+  runtime NULL prejde len vďaka TS-only kontrole. **Pri KAŽDEJ zmene
+  „vybavený riadok" kontraktu (`isLineResolved`/`isFloorRowResolved`,
+  `.claude/rules/orders.md`) grepni `tests/e2e/**` na `state !== "objednane"`
+  a zosúlaď každú kópiu.**

@@ -65,3 +65,22 @@ it("klik na UŽ aktívny stav nepošle zbytočný zápis", () => {
   fireEvent.click(screen.getByTestId(`state-btn-riesit-${LINE.lineId}`));
   expect(onChangeState).not.toHaveBeenCalled();
 });
+
+
+// issue 579 (Štěpán): východiskový stav riadku je NULL (neoznačený) — pri NULL
+// nie je aktívne ŽIADNE tlačidlo (`aria-checked=false` všade), manažér začne
+// označovať odznova. Klik nastaví konkrétny stav.
+it("issue 579: pri NULL stave nie je aktívne žiadne tlačidlo", () => {
+  render(<OrderLineStateButtons line={{ ...LINE, state: null }} busyLineId={null} onChangeState={() => {}} />);
+  const checked = [...document.querySelectorAll(".ord-state-btn")].filter(
+    (b) => b.getAttribute("aria-checked") === "true",
+  );
+  expect(checked).toEqual([]);
+});
+
+it("issue 579: klik na Nemáme pri NULL stave pošle onChangeState so stavom objednane", () => {
+  const onChangeState = vi.fn();
+  render(<OrderLineStateButtons line={{ ...LINE, state: null }} busyLineId={null} onChangeState={onChangeState} />);
+  fireEvent.click(screen.getByTestId(`state-btn-objednane-${LINE.lineId}`));
+  expect(onChangeState).toHaveBeenCalledWith(LINE.lineId, "objednane");
+});

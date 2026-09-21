@@ -56,6 +56,21 @@ it("riadok posunutý za predvolený stav je vybavený, aj bez odškrtnutia", () 
   expect(isLineResolved(line("nedostupne", false))).toBe(true);
 });
 
+// issue 579 (Štěpán): východiskový stav riadku je NULL (neoznačený) — nový
+// riadok sa rodí bez stavu, kým ho manažér neoznačí. NULL aj „Nemáme“
+// (objednane) = NEvybavené; ostatné stavy alebo odškrtnuté = vybavené.
+it("issue 579: riadok bez označeného stavu (NULL) je NEvybavený", () => {
+  expect(isLineResolved({ ordered: false, state: null })).toBe(false);
+});
+
+it("issue 579: riadok bez stavu (NULL) odškrtnutý ako objednané je vybavený", () => {
+  expect(isLineResolved({ ordered: true, state: null })).toBe(true);
+});
+
+it("issue 579: „Nemáme“ (objednane) ostáva NEvybavené aj po zavedení NULL", () => {
+  expect(isLineResolved({ ordered: false, state: "objednane" })).toBe(false);
+});
+
 // issue 149 — priame testy jediného zdieľaného predikátu (`OrdersSection.tsx`'s
 // `visibleLinesCount` a `SupplierOrderGroup.tsx`'s `visibleLines` naň oba
 // spoliehajú), review nález (code review na PR 154): predtým bol overený len
@@ -434,11 +449,20 @@ it("isFloorRowResolved — postúpený stav je vybavený aj bez objednania (issu
   expect(isFloorRowResolved({ ordered: false, state: "nedostupne" })).toBe(true);
 });
 
+// issue 579: floor riadok bez stavu (NULL) je nevybavený, presne ako order line.
+it("isFloorRowResolved — issue 579: floor riadok bez stavu (NULL) je NEvybavený", () => {
+  expect(isFloorRowResolved({ ordered: false, state: null })).toBe(false);
+});
+
+it("isFloorRowResolved — issue 579: floor riadok bez stavu (NULL) odškrtnutý je vybavený", () => {
+  expect(isFloorRowResolved({ ordered: true, state: null })).toBe(true);
+});
+
 it("isFloorRowHidden — skryje vybavený floor riadok len pri „skryť vybavené\"", () => {
   // Postúpený stav sa skryje pri hideResolved (predtým sa skrýval len `ordered`).
   expect(isFloorRowHidden({ ordered: false, state: "skladom" }, true)).toBe(true);
   expect(isFloorRowHidden({ ordered: false, state: "skladom" }, false)).toBe(false);
-  // „Nemáme" (objednane) sa neskryje nikdy.
+  // „Nemáme“ (objednane) sa neskryje nikdy.
   expect(isFloorRowHidden({ ordered: false, state: "objednane" }, true)).toBe(false);
   // Objednaný sa skryje (issue 480 správanie ostáva).
   expect(isFloorRowHidden({ ordered: true, state: "objednane" }, true)).toBe(true);

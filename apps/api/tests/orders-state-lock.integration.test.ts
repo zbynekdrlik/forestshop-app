@@ -50,7 +50,7 @@ it("súbežná zmena stavu čaká na riadkový zámok — audit 'from' odráža 
   if (objednavka === undefined) throw new Error("insert objednávky zlyhal");
   const [riadok] = await db
     .insert(orderLines)
-    .values({ orderId: objednavka.id, variantCode: "A-1", quantity: 1 }) // default state: "objednane"
+    .values({ orderId: objednavka.id, variantCode: "A-1", quantity: 1 }) // issue 579: bez stavu → NULL (neoznačený)
     .returning();
   if (riadok === undefined) throw new Error("insert riadku zlyhal");
 
@@ -91,7 +91,7 @@ it("súbežná zmena stavu čaká na riadkový zámok — audit 'from' odráža 
     const udalost = udalosti.find((e) => e.action === "order_line.state.changed" && e.entityId === riadok.id);
     expect(udalost).toBeDefined();
     // Dôkaz opravy: `from` je "caka_sa" (stav COMMITNUTÝ tesne pred týmto
-    // zápisom), NIE "objednane" (pôvodný, zastaraný stav spred súbežnej
+    // zápisom), NIE NULL (pôvodný, zastaraný neoznačený stav spred súbežnej
     // zmeny) — presne to, čo `.for("update")` zaručuje.
     expect(udalost?.data).toMatchObject({ from: "caka_sa", to: "skladom" });
   } finally {

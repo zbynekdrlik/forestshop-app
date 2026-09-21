@@ -453,3 +453,27 @@ paths:
   breakpointu — over, že migrácia NEOBSAHUJE žiadny CHECK/index/generated-column
   s novou hodnotou (ak áno, platí plná obrana issue 399: `::text` porovnanie
   alebo samostatný deploy len s ADD VALUE pred použitím).
+- **Migrácia s DÁTOVÝM príkazom (`UPDATE`/`DELETE` reset, nie len DDL) sa v
+  integračnom teste NEDÁ overiť cez `withCleanDb()` — ten beží všetky migrácie
+  na ČERSTVEJ DB, kde reset už niet čo zmeniť (0 riadkov).** issue 579 (migrácia
+  0066: `DROP NOT NULL`/`DROP DEFAULT` + `UPDATE … SET state = NULL WHERE state
+  = 'objednane'`). Honest test bez tautológie: PREČÍTAJ skutočné príkazy zo
+  `.sql` súboru migrácie (`readFileSync(new URL("../drizzle/0066_*.sql",
+  import.meta.url))`), rozdeľ na `--> statement-breakpoint`, odfiltruj komentáre
+  (`--`), nechaj len `UPDATE`-y, nasej si riadky v PRED-migračnom stave (napr.
+  explicitne `state: "objednane"` — nový insert dnes dáva NULL) + kontrolný
+  riadok v inom stave, aplikuj `ctx.db.execute(sql.raw(stmt))` a over reset +
+  nedotknuteľnosť iných. Viazané na OBSAH súboru (nie re-typovaná kópia SQL),
+  takže zmena migrácie test rozbije. Vzor: `order-state-reset.integration.test.ts`.
+- **Zmena DEFAULT-u/NOT-NULL stĺpca `state` NEMENÍ len UI — dotkne sa KAŽDÉHO
+  `eq(state, <starý-default>)` filtra v prod kóde, aj tých mimo obrazoviek.**
+  issue 579 (default `objednane` → NULL): okrem sekcií (Riešiť/Nedostupné) to
+  zasiahlo `mail.ts`'s `loadOutstandingLines` (`:125`) a `SupplierActionsPanel
+  .tsx` (`:78`) — OBA gejtujú „objednať u dodávateľa mailom" filtrom
+  `state='objednane'`. Po 579 mail/hromadná objednávka cieli LEN na VEDOME
+  označené „Nemáme" (nie neoznačené NULL) — zámerné (Štěpán označuje, čo
+  objednať), ale je to zmena správania prod funkcie. Pri KAŽDEJ ďalšej zmene
+  východiskového stavu/defaultu: `grep -rn '"<starý-default>"' apps/*/src
+  --include=*.ts --include=*.tsx | grep -v test` a posúď KAŽDÝ výskyt zvlášť
+  (nielen ordersSummary/sekcie), či má cieliť starý default, nový default,
+  alebo oba — a nejasnosť eskaluj ako design-question, nerozhodni ju ticho.

@@ -95,7 +95,7 @@ it("manažér zmení stav riadku objednávky, zápis sa uloží aj do auditu s t
   expect(udalost?.actorUserId).toBe(userId);
   expect(udalost?.entity).toBe("order_line");
   expect(udalost?.entityId).toBe(lineId);
-  expect(udalost?.data).toMatchObject({ orderId, from: "objednane", to: "skladom" });
+  expect(udalost?.data).toMatchObject({ orderId, from: null, to: "skladom" });
 });
 
 // issue 493: šiesty stav „Objednané" (interná hodnota `objednane_stav`, NIE
@@ -134,7 +134,7 @@ it("manažér nastaví stav Objednané (objednane_stav) a potom prepne späť �
   // over KAŽDÚ zmenu podľa jej `to` hodnoty, nie podľa poradia v poli.
   const naObjednane = zmeny.find((e) => (e.data as { to?: string }).to === "objednane_stav");
   const naSkladom = zmeny.find((e) => (e.data as { to?: string }).to === "skladom");
-  expect(naObjednane?.data).toMatchObject({ orderId, from: "objednane", to: "objednane_stav" });
+  expect(naObjednane?.data).toMatchObject({ orderId, from: null, to: "objednane_stav" });
   expect(naSkladom?.data).toMatchObject({ orderId, from: "objednane_stav", to: "skladom" });
 });
 

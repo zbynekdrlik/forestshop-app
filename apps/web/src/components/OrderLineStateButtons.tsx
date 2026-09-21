@@ -1,6 +1,7 @@
 import type { JSX } from "react";
 import type { OrderLine } from "../ordersApi.js";
 import { STATE_DISPLAY_ORDER, STATE_LABELS } from "../orderLineStateLabels.js";
+import type { OrderLineStateValue } from "../orderLineStates.js";
 
 // issue 575: čisto prezentačný klaster stavových tlačidiel s PRIMITÍVNYMI props
 // (idKey/state/ariaLabel/busy/onChange), aby ho vedel použiť AJ predajňový
@@ -19,7 +20,7 @@ export function StateButtons({
   readonly state: OrderLine["state"];
   readonly ariaLabel: string;
   readonly busy: boolean;
-  readonly onChange: (newState: OrderLine["state"]) => void;
+  readonly onChange: (newState: OrderLineStateValue) => void;
 }): JSX.Element {
   return (
     <div className="ord-state-btn-group" role="radiogroup" aria-label={ariaLabel} data-testid={`state-select-${idKey}`}>
@@ -65,7 +66,7 @@ export function OrderLineStateButtons({
 }: {
   readonly line: OrderLine;
   readonly busyLineId: string | null;
-  readonly onChangeState: (lineId: string, newState: OrderLine["state"]) => void;
+  readonly onChangeState: (lineId: string, newState: OrderLineStateValue) => void;
 }): JSX.Element {
   return (
     <StateButtons
