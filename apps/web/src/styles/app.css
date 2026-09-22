@@ -1405,13 +1405,11 @@ tr:last-child td {
   border-width: 2px;
   font-weight: var(--fs-weight-bold);
 }
-/* issue 579 (Štěpán): popis „Nemáme" (stav objednane) je VŽDY červený —
-   vedomá „nemáme to" voľba, nie neutrálny default. Rovnaká špecificita ako
-   `.ord-state-btn` (jedna trieda), deklarované NESKÔR v súbore, takže prebíja
-   základnú `color: var(--fs-ink-muted)`. */
-.ord-state-btn-objednane {
-  color: var(--fs-danger);
-}
+/* issue 581 (Štěpán, spresnenie 579): neaktívne „Nemáme" (stav objednane) padá
+   na základnú `.ord-state-btn` farbu `--fs-ink-muted` — východiskový vzhľad
+   VŠETKÝCH stavových tlačidiel je rovnaký sivý; červená je LEN po kliknutí
+   (aktívny stav nižšie). Predošlé issue-579 pravidlo „popis vždy červený"
+   (`.ord-state-btn-objednane { color: var(--fs-danger) }`) je preto zmazané. */
 /* issue 579: aktívny „Nemáme" = rovnaké červené tokeny ako `nedostupne.active`
    (tri nezávislé signály: plná výplň + hrubší rám + tučné písmo). */
 .ord-state-btn-objednane.active {
