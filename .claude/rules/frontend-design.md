@@ -1525,16 +1525,18 @@ paths:
   pre RIADOK zvolil zelenú `--fs-success`) — pri „daj to červené" over, či to šéf
   myslí naozaj (issue 466: myslel, výslovne zopakoval), a zdôvodnenie napíš na tiket.
 - **Stav „Nemáme" (interná hodnota `objednane`) v klastri stavových tlačidiel
-  „Na objednanie" je VŽDY červený (Štěpán, issue 579)** — `.ord-state-btn-
-  objednane` (popis červený aj keď NEaktívny) + `.ord-state-btn-objednane.active`
-  (plná výplň, rovnaké `--fs-danger`/`--fs-danger-bg` tokeny ako
-  `.ord-state-btn-nedostupne.active`), a `.pill.objednane` pre read-only odznak
-  stavu „Nemáme" v zázname predajne (`FloorNoteProductChip`, vzor `.pill.off`).
-  Žiadny nový raw hex — len existujúce `--fs-danger*` tokeny. POZOR na CSS
-  špecificitu: `.ord-state-btn-objednane` (jedna trieda) prebíja základnú
-  `.ord-state-btn { color: var(--fs-ink-muted) }` len vďaka NESKORŠIEMU poradiu
-  v súbore (rovnaká špecificita → posledné v zdroji vyhráva) — deklaruj ho AŽ
-  za základným `.ord-state-btn`.
+  „Na objednanie" je červený LEN po kliknutí, neaktívny je sivý ako ostatné
+  (Štěpán, issue 581 — spresnenie 579)** — východiskový (neaktívny) vzhľad
+  VŠETKÝCH stavových tlačidiel musí byť rovnaký sivý; červená = zvolená voľba.
+  Ostáva LEN `.ord-state-btn-objednane.active` (plná výplň, rovnaké
+  `--fs-danger`/`--fs-danger-bg` tokeny ako `.ord-state-btn-nedostupne.active`)
+  a `.pill.objednane` pre read-only odznak stavu „Nemáme" v zázname predajne
+  (`FloorNoteProductChip`, vzor `.pill.off`, zobrazuje sa len pri ZVOLENOM
+  stave = „po kliknutí"). Pôvodné issue-579 pravidlo „popis vždy červený"
+  (`.ord-state-btn-objednane { color: var(--fs-danger) }`) bolo ZMAZANÉ —
+  neaktívne „Nemáme" teraz padá na základnú `.ord-state-btn { color:
+  var(--fs-ink-muted) }` ako ostatných 5. Žiadny nový raw hex — len existujúce
+  `--fs-danger*` tokeny.
 - **Východiskový stav riadku je NEOZNAČENÝ (NULL), nie „Nemáme" (issue 579)** —
   pri NULL stave nie je aktívne žiadne stavové tlačidlo (`StateButtons` `active =
   state === s`), read-only bunka ukáže „—", chip stavu sa nekreslí. Detaily +

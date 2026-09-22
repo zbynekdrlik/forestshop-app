@@ -133,14 +133,15 @@ test("Na objednanie: klik na Objednané prepne riadok do 6. stavu (objednane_sta
   expect(chyby).toEqual([]);
 });
 
-// issue 579 (Štěpán): východiskový stav riadku je NEOZNAČENÝ (NULL) — žiadne
-// tlačidlo nie je aktívne; „Nemáme" (objednane) je červené; klik ho uloží a po
-// reloade drží. Board je STAVOVO mocknutý cez `localStorage` (POST zapíše stav,
+// issue 579 + spresnenie 581 (Štěpán): východiskový stav riadku je NEOZNAČENÝ
+// (NULL) — žiadne tlačidlo nie je aktívne a VŠETKY vrátane „Nemáme" (objednane)
+// majú rovnakú sivú farbu; „Nemáme" je červené LEN po kliknutí (aktívne); klik
+// ho uloží a po reloade drží. Board je STAVOVO mocknutý cez `localStorage` (POST zapíše stav,
 // reload ho z neho prečíta), takže reload-perzistencia je deterministická bez
 // dotyku zdieľaných seed dát (rovnaký dôvod ako prvý test v tomto súbore).
 const FAKE_LINE_ID_579 = "e2e00000-0000-0000-0000-000000000579";
 
-test("Na objednanie: neoznačený riadok nemá aktívne tlačidlo, „Nemáme“ je červené, klik uloží a drží po reloade, konzola čistá", async ({
+test("Na objednanie: neoznačený riadok nemá aktívne tlačidlo, neaktívne „Nemáme“ je sivé ako ostatné, po kliknutí červené, klik uloží a drží po reloade, konzola čistá", async ({
   page,
 }) => {
   const chyby: string[] = [];
@@ -224,9 +225,24 @@ test("Na objednanie: neoznačený riadok nemá aktívne tlačidlo, „Nemáme“
     .count();
   expect(aktivnych).toBe(0);
 
-  // „Nemáme" je červené (`--fs-danger`) už v neoznačenom stave — porovnáme
-  // computed color s hodnotou tokenu prečítanou zo `:root` (nie natvrdo hex).
+  // issue 581 (Štěpán): východiskový (NEAKTÍVNY) stav VŠETKÝCH tlačidiel má
+  // rovnakú sivú farbu — „Nemáme" už NIE je vždy červené. Porovnáme computed
+  // `color` neaktívneho „Nemáme" s neaktívnym „Skladom" (oba padajú na základnú
+  // `.ord-state-btn` farbu `--fs-ink-muted`), nie s natvrdo zapísaným hex.
   const farby1 = await page.evaluate((id: string) => {
+    const nem = document.querySelector(`[data-testid="state-btn-objednane-${id}"]`);
+    const skl = document.querySelector(`[data-testid="state-btn-skladom-${id}"]`);
+    return {
+      nem: nem === null ? "" : getComputedStyle(nem).color,
+      skl: skl === null ? "?" : getComputedStyle(skl).color,
+    };
+  }, FAKE_LINE_ID_579);
+  expect(farby1.nem).toBe(farby1.skl);
+
+  // Klik na „Nemáme" → aktívne (exkluzívne) a TERAZ červené (`--fs-danger`).
+  await nemBtn.click();
+  await expect(nemBtn).toHaveAttribute("aria-checked", "true");
+  const farbyAktiv = await page.evaluate((id: string) => {
     const probe = document.createElement("span");
     probe.style.color = "var(--fs-danger)";
     document.body.appendChild(probe);
@@ -235,17 +251,15 @@ test("Na objednanie: neoznačený riadok nemá aktívne tlačidlo, „Nemáme“
     const btn = document.querySelector(`[data-testid="state-btn-objednane-${id}"]`);
     return { danger, btn: btn === null ? "" : getComputedStyle(btn).color };
   }, FAKE_LINE_ID_579);
-  expect(farby1.btn).toBe(farby1.danger);
-
-  // Klik na „Nemáme" → aktívne (exkluzívne), stále červené.
-  await nemBtn.click();
-  await expect(nemBtn).toHaveAttribute("aria-checked", "true");
+  expect(farbyAktiv.btn).toBe(farbyAktiv.danger);
 
   // Po reloade stav DRŽÍ (mock ho číta z localStorage) — tlačidlo ostáva aktívne.
   await page.reload();
   await expect(page.getByRole("heading", { name: "Na objednanie" })).toBeVisible();
   const nemBtnPoReloade = page.getByTestId(`state-btn-objednane-${FAKE_LINE_ID_579}`);
   await expect(nemBtnPoReloade).toHaveAttribute("aria-checked", "true");
+  // Po reloade je „Nemáme" AKTÍVNE (stav drží), takže je stále červené
+  // (`.ord-state-btn-objednane.active` → `--fs-danger`).
   const farby2 = await page.evaluate((id: string) => {
     const probe = document.createElement("span");
     probe.style.color = "var(--fs-danger)";
