@@ -500,6 +500,14 @@ tr:last-child td {
   font-weight: var(--fs-weight-semibold);
   line-height: 1.25rem;
 }
+/* issue 583: červený tón odznaku (`NavTab.badgeTone: "danger"` v `nav.ts`,
+   dnes len Výmena tovaru / Vrátený tovar) — tá istá červená ako aktívne
+   Nedostupné/Nemáme v „Na objednanie" (`--fs-danger`, žiadny nový raw hex);
+   biele číslo dedí z `.tab-badge`. Zložený selektor zámerne: modifikátor má
+   zmysel len NA odznaku a vyhrá nad `.tab-badge` bez ohľadu na poradie. */
+.tab-badge.tab-badge-danger {
+  background: var(--fs-danger);
+}
 
 /* issue 431: odznak s počtom otvorených objednávok zákazníka pri mene v "Na
    objednanie" (signál "zváž zlúčenie"). Vizuál ako Shoptet modrý krúžok —

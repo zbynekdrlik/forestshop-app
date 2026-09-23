@@ -253,8 +253,13 @@ export function Sidebar({
                           // budúcu záložku (viď `badgeCounts` prop vyššie),
                           // takže popis smie použiť len to, čo Sidebar sám
                           // pozná: číslo + názov TEJTO záložky.
+                          // issue 583: tón odznaku prichádza z registra
+                          // (`NavTab.badgeTone`) — Sidebar ho len generický
+                          // premietne na modifikátor `tab-badge-danger`
+                          // (`app.css`), žiadny hardcoded zoznam id; testid a
+                          // aria-label sa tónom nemenia.
                           <span
-                            className="tab-badge"
+                            className={"tab-badge" + (tab.badgeTone === "danger" ? " tab-badge-danger" : "")}
                             data-testid={`nav-badge-${tab.id}`}
                             aria-label={`${tab.label}: ${String(badgeCount)}`}
                           >

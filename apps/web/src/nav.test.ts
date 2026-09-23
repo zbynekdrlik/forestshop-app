@@ -172,3 +172,22 @@ it("isVisibleTabId rozlíši viditeľné (NAV) od skrytých (HIDDEN_TABS)", () =
   expect(HIDDEN_TABS).not.toHaveProperty("nedostupne");
   expect(isVisibleTabId("neexistuje")).toBe(false);
 });
+
+// issue 583: Štěpán (Discord Develop-ÚLOHY, 22. 9. 2026) — počítadlá „Výmena
+// tovaru" a „Vrátený tovar" majú byť červené s bielym číslom (červená ako v
+// „Na objednanie" = `--fs-danger`), „zmen to len pri tychto dvoch položkách".
+// Tón odznaku je vlastnosť ZÁLOŽKY v registri (`NavTab.badgeTone`), nie
+// hardcoded zoznam id v `Sidebar.tsx` — rovnaký princíp ako `wide`/`icon`/
+// `defaultCollapsed` (issue 343, `.claude/rules/frontend-design.md`). Test
+// preto overuje registráciu: presne tie dve záložky nesú `badgeTone: "danger"`,
+// každá iná viditeľná záložka nemá `badgeTone` nastavený vôbec.
+it("badgeTone 'danger' nesú v NAV presne záložky exchange a returned, žiadna iná viditeľná záložka ho nemá", () => {
+  const vsetky = NAV.flatMap((f) => f.tabs);
+  const cervene = vsetky.filter((t) => t.badgeTone === "danger").map((t) => t.id);
+  expect(cervene).toEqual(["exchange", "returned"]);
+  for (const t of vsetky) {
+    if (t.id !== "exchange" && t.id !== "returned") expect(t.badgeTone).toBeUndefined();
+  }
+  expect(findTab("exchange")?.badgeTone).toBe("danger");
+  expect(findTab("returned")?.badgeTone).toBe("danger");
+});
