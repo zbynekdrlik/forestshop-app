@@ -53,6 +53,43 @@ test("Výmena tovaru/Vrátený tovar zobrazia zoznam, Reklamácie umožnia ozna�
   await expect(vrateniOdznak).toBeVisible();
   await expect(vrateniOdznak).toHaveText(/^[1-9]\d*$/);
 
+  // issue 583: Štěpán (Discord Develop-ÚLOHY, 22. 9. 2026) — počítadlá „Výmena
+  // tovaru" a „Vrátený tovar" sú ČERVENÉ s bielym číslom, červená = tá istá,
+  // akú používa „Na objednanie" (`--fs-danger`, aktívne Nedostupné/Nemáme);
+  // „zmen to len pri tychto dvoch položkách" — `nav-badge-orders` ostáva v
+  // brand zelenej (`--fs-brand`). Farby tokenov sa čítajú sondou (vzor
+  // `orders-objednane-state.spec.ts`), nie ako raw hex, aby test prežil zmenu
+  // odtieňa tokenu. Presné čísla sa naďalej NEasertujú (issue 445 disciplína).
+  // Odznak „Na objednanie" príde až po mounte sekcie (context, issue 147) —
+  // najprv počkať, kým existuje, potom čítať farby všetkých troch naraz.
+  await expect(page.getByTestId("nav-badge-orders")).toBeVisible();
+  const farbyOdznakov = await page.evaluate(() => {
+    const sonda = (token: string): string => {
+      const el = document.createElement("span");
+      el.style.color = token;
+      document.body.appendChild(el);
+      const farba = getComputedStyle(el).color;
+      el.remove();
+      return farba;
+    };
+    const odznak = (testid: string): { bg: string; fg: string } => {
+      const el = document.querySelector(`[data-testid="${testid}"]`);
+      return el === null ? { bg: "", fg: "" } : { bg: getComputedStyle(el).backgroundColor, fg: getComputedStyle(el).color };
+    };
+    return {
+      danger: sonda("var(--fs-danger)"),
+      brand: sonda("var(--fs-brand)"),
+      exchange: odznak("nav-badge-exchange"),
+      returned: odznak("nav-badge-returned"),
+      orders: odznak("nav-badge-orders"),
+    };
+  });
+  // Sonda musí rozlíšiť oba tokeny — inak by rovnosť nižšie nič nedokazovala.
+  expect(farbyOdznakov.danger).not.toBe(farbyOdznakov.brand);
+  expect(farbyOdznakov.exchange).toEqual({ bg: farbyOdznakov.danger, fg: "rgb(255, 255, 255)" });
+  expect(farbyOdznakov.returned).toEqual({ bg: farbyOdznakov.danger, fg: "rgb(255, 255, 255)" });
+  expect(farbyOdznakov.orders).toEqual({ bg: farbyOdznakov.brand, fg: "rgb(255, 255, 255)" });
+
   // Výmena tovaru.
   await page.getByRole("button", { name: "Výmena tovaru" }).click();
   await expect(page.getByRole("heading", { name: "Výmena tovaru" })).toBeVisible();

@@ -200,6 +200,45 @@ it("bez badgeCounts (prop vôbec chýba) sa nevykreslí žiadny odznak", () => {
   expect(screen.queryByTestId("nav-badge-orders")).toBeNull();
 });
 
+// issue 583: tón odznaku je vlastnosť záložky v registri (`NavTab.badgeTone`)
+// — Sidebar ju len GENERICKY premietne na modifikátor `tab-badge-danger`
+// (červené pozadie `--fs-danger`, `app.css`), bez akéhokoľvek hardcoded id
+// (rovnaký princíp ako `wide`/`defaultCollapsed`, issue 343). Odznak záložky
+// BEZ `badgeTone` ostáva holé `tab-badge` (zelené), testid aj `aria-label`
+// sa tónom nemenia. Fixtúra je lokálna, aby test nezávisel od toho, ktoré
+// reálne záložky tón práve nesú (to overuje `nav.test.ts`).
+const TABY_S_TONOM = [
+  { id: "orders", label: "Na objednanie", icon: "📦", Component: () => null },
+  { id: "exchange", label: "Výmena tovaru", icon: "🔃", Component: () => null, badgeTone: "danger" as const },
+];
+const FOLDERS_S_TONOM = [{ id: "eshop", label: "Eshop", tabs: TABY_S_TONOM }];
+
+it("odznak dostane triedu tab-badge-danger len pri záložke s badgeTone 'danger', ostatné ostávajú holé tab-badge", () => {
+  render(
+    <Sidebar folders={FOLDERS_S_TONOM} activeTabId="orders" onSelectTab={() => {}} badgeCounts={{ orders: 3, exchange: 2 }} />,
+  );
+
+  const cerveny = screen.getByTestId("nav-badge-exchange");
+  expect(cerveny.className.split(" ")).toEqual(["tab-badge", "tab-badge-danger"]);
+  expect(cerveny.textContent).toBe("2");
+  expect(cerveny.getAttribute("aria-label")).toBe("Výmena tovaru: 2");
+
+  const zeleny = screen.getByTestId("nav-badge-orders");
+  expect(zeleny.className).toBe("tab-badge");
+  expect(zeleny.textContent).toBe("3");
+});
+
+// issue 583 + 343: súhrnný odznak ZBALENÉHO priečinka sčítava všetky záložky
+// (aj tie s tónom), preto ostáva v predvolenej farbe — tón sa naň neprenáša.
+it("súhrnný odznak zbaleného priečinka ostáva holé tab-badge aj keď priečinok obsahuje záložku s badgeTone", () => {
+  const zbalene = [{ id: "eshop", label: "Eshop", tabs: TABY_S_TONOM, defaultCollapsed: true }];
+  render(<Sidebar folders={zbalene} activeTabId="orders" onSelectTab={() => {}} badgeCounts={{ orders: 3, exchange: 2 }} />);
+
+  const suhrn = screen.getByTestId("folder-badge-eshop");
+  expect(suhrn.className).toBe("tab-badge");
+  expect(suhrn.textContent).toBe("5");
+});
+
 // issue 185: `badgeStatus` je rovnaký generický vzor ako `badgeCounts` — over
 // oba stavy ("on"/"off") aj že tab bez kľúča nedostane žiadny odznak.
 it("vykreslí stav 'Beží' pre 'on', 'Zastavené' pre 'off', nič pre záložku bez kľúča v badgeStatus", () => {
