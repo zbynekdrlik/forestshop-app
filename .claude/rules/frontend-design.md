@@ -1137,6 +1137,19 @@ paths:
   rozhodnutie na tickete (šéf žiadal len predvolený stav, nie pamätanie),
   nie technické obmedzenie; ak by niekedy chcel pamätanie, je to jasne
   ohraničené samostatné rozšírenie toho istého `useState`.
+- **Farebný TÓN odznaku počtu (`nav-badge-<id>`) per záložka = `NavTab.badgeTone`
+  v registri (`nav.ts`) + CSS modifikátor `.tab-badge.tab-badge-danger`
+  (`--fs-danger`, biele číslo dedí z `.tab-badge`) — dnes LEN `exchange`/
+  `returned` (Štěpán, 22. 9. 2026, issue 583: „červenú zober zo sekcie Na
+  objednanie, zmeň to len pri týchto dvoch položkách").** `Sidebar.tsx` tón len
+  generický premietne (`tab.badgeTone === "danger"` → trieda), žiadny hardcoded
+  zoznam id (ten istý princíp ako `defaultCollapsed`/`wide` vyššie); testid aj
+  `aria-label` sa tónom nemenia; súhrnný `folder-badge-*` zbaleného priečinka
+  tón NEPREBERÁ (sčítava všetky záložky, ostáva brand zelený). E2E overuje
+  farbu SONDOU tokenu (`span.style.color = "var(--fs-danger)"` →
+  `getComputedStyle`, vzor `orders-objednane-state.spec.ts`) v
+  `order-flags.spec.ts`, nikdy raw `rgb(...)` — test prežije zmenu odtieňa
+  tokenu; presné počty sa naďalej neasertujú (issue 445).
 - **Pridanie ĽUBOVOĽNÉHO nového viditeľného prvku (text, odznak, pilulka)
   DOVNÚTRA tlačidla/hlavičky, ktoré existujúce testy vyhľadávajú cez
   `getByRole("button", {name: "presný text"})`, potrebuje `aria-hidden="true"`
