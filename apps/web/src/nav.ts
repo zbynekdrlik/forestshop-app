@@ -50,6 +50,15 @@ export interface NavTab {
   // (`app.css`), ktorá strop zruší LEN pre túto jednu záložku — ostatné
   // (Sync/Katalóg/Párovanie/Plánovač) ostávajú na pôvodnej čítacej šírke.
   readonly wide?: boolean;
+  // issue 583: vizuálny tón odznaku počtu (`Sidebar.tsx` `nav-badge-<id>`) —
+  // `"danger"` = červené pozadie (`--fs-danger`, tá istá červená ako aktívne
+  // Nedostupné/Nemáme v „Na objednanie") s bielym číslom. Nenastavené =
+  // predvolená brand zelená. Vzhľad per záložka patrí do registra (rovnaký
+  // princíp ako `wide`/`icon`/`defaultCollapsed`, issue 343) — Sidebar tón
+  // len generický premietne na CSS modifikátor, bez hardcoded zoznamu id.
+  // Súhrnný odznak zbaleného priečinka (`folder-badge-*`) tón nepreberá
+  // (sčítava všetky záložky). Štěpán, Discord Develop-ÚLOHY 22. 9. 2026.
+  readonly badgeTone?: "danger";
 }
 
 export interface NavFolder {
@@ -147,8 +156,11 @@ export const NAV: readonly NavFolder[] = [
       // (Reklamácie) — žiadna z nich nezakladá novú kartu na Upozorneniach,
       // rozhodnuté na tickete (`.claude/rules/upozornenia.md`,
       // `order-flags.ts`).
-      { id: "exchange", label: "Výmena tovaru", icon: "🔃", Component: ExchangeOrdersSection, wide: true },
-      { id: "returned", label: "Vrátený tovar", icon: "↩️", Component: ReturnedOrdersSection, wide: true },
+      // issue 583: Štěpán — počítadlá LEN týchto dvoch záložiek červené s
+      // bielym číslom („červenu zober zo sekcie na objednanie"); Reklamácie
+      // a ostatné ostávajú v predvolenej zelenej.
+      { id: "exchange", label: "Výmena tovaru", icon: "🔃", Component: ExchangeOrdersSection, wide: true, badgeTone: "danger" },
+      { id: "returned", label: "Vrátený tovar", icon: "↩️", Component: ReturnedOrdersSection, wide: true, badgeTone: "danger" },
       { id: "claims", label: "Reklamácie", icon: "⚠️", Component: ClaimOrdersSection, wide: true },
       // issue 387 E5: "profesionálne párovanie" — port starej appky
       // (`webreview`), karty (náš produkt vs. dodávateľov navrhnutý kandidát)
