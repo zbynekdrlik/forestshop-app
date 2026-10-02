@@ -974,10 +974,17 @@ paths:
   `buildSizeStockRows`: stránka vymenúva ≥2 veľkosti, ale my pre odkaz nemáme
   žiadnu svoju (variant bez veľkosti, split odkaz) → plošný `unknown`, NIKDY
   štítok/JSON-LD stránky (ten hovorí o jednej predvolenej veľkosti). Navyše
-  huntingshop: výber s menom poľa veľkosti (`variant_id`/`variantIds[]`) na
-  stránke, ale nie pod očakávaným id → `structureError` (premenované id inak
-  vyzerá ako jednoveľkostný produkt a pri JEDNEJ našej veľkosti by prešiel
-  štítok). **„Pamäť ručného vypnutia"** (vylúčiť variant
+  huntingshop: keď sa pod očakávaným id NENÁJDE ANI JEDEN z oboch výberov, ale
+  výber s menom poľa veľkosti (`variant_id`/`variantIds[]`) na stránke je →
+  `structureError` (premenované id inak vyzerá ako jednoveľkostný produkt a pri
+  JEDNEJ našej veľkosti by prešiel štítok). Premenovaný LEN Strážny pes sa číta
+  ako „len Kúpiť" (veľkosti v ňom `available`, ostatné naše `unknown`) — bezpečné,
+  nie chyba. Zber odkazov aj našich veľkostí je od issue 585 v `links.ts`
+  (vyčlenené z `run.ts`, ktorý narazil na `max-lines: 400`); oba čítajú
+  override cez spoločné `loadOverrideMap`. PROD meranie 2. 10. 2026: split
+  odkazy na size-rule doménach = 0; huntingshop odkazov nášho produktu BEZ
+  veľkosti 159, z vzorky 32 má ~4 viacveľkostnú stránku → tie po nasadení
+  prejdú z plošného „skladom" na plošný `unknown` (karta „neviem prečítať"). **„Pamäť ručného vypnutia"** (vylúčiť variant
   s predošlým `restock_event`) bola v návrhu, ale FINDING na tickete ukázal, že by
   zablokovala aj správne prepnutia (61264/L, 61513/S/3XL) — pozastavená do
   rozhodnutia majiteľa, NIE je implementovaná.
