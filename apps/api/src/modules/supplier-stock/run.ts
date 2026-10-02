@@ -175,12 +175,21 @@ export async function countOwnShopLinks(db: Database): Promise<number> {
  */
 async function collectOurSizesByLink(db: Database): Promise<Map<string, readonly string[]>> {
   const rows = await db
-    .select({ internalNote: products.internalNote, sizeLabel: variants.sizeLabel })
+    .select({ productKey: products.key, internalNote: products.internalNote, sizeLabel: variants.sizeLabel })
     .from(variants)
     .innerJoin(products, eq(variants.productKey, products.key));
+  // issue 585 (code review): kľúč je EFEKTÍVNY odkaz (override ∪ internalNote) —
+  // ten istý ako `collectSupplierLinks` aj `restock/queries.ts`. Pred tým sa
+  // naše veľkosti zbierali len z `internalNote`, takže produkt s odkazom z
+  // Párovania/Vyhľadať dostal `ourSizes=[]` → plošný riadok zo štítku pri cene
+  // → restock prepol aj veľkosti, ktoré dodávateľ nemá.
+  const overrideRows = await db
+    .select({ productKey: productSupplierLinkOverrides.productKey, url: productSupplierLinkOverrides.url })
+    .from(productSupplierLinkOverrides);
+  const overrideByProduct = new Map(overrideRows.map((r) => [r.productKey, r.url]));
   const byLink = new Map<string, Set<string>>();
   for (const row of rows) {
-    const url = extractSupplierLink(row.internalNote).url;
+    const url = resolveEffectiveSupplierLink(row.internalNote, overrideByProduct.get(row.productKey) ?? null).url;
     if (url === null || hostOf(url) === "") continue;
     const label = (row.sizeLabel ?? "").trim();
     if (label === "") continue;
@@ -251,6 +260,12 @@ export function buildSizeStockRows(args: {
 }): readonly StockRowInput[] {
   const { ourSizes, sizeList, hostHasSizeRule, page } = args;
   const perSize = sizeList !== null ? ourSizes.length > 0 : hostHasSizeRule && ourSizes.length > 1;
+  if (!perSize && sizeList !== null && sizeList.length > 1) {
+    // issue 585 (code review): stránka vymenúva ≥2 veľkosti, no my pre odkaz
+    // nepoznáme žiadnu svoju (variant bez veľkosti, split odkaz) — štítok/JSON-LD
+    // stránky hovorí len o JEDNEJ (predvolenej) veľkosti, nikdy o celom produkte.
+    return [{ sizeLabel: "", availability: "unknown", availabilityText: "", price: page.price, source: "none" }];
+  }
   if (!perSize) {
     return [
       {

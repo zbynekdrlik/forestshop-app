@@ -23,14 +23,18 @@
 //   - `none`: žiadny výber veľkostí (jednoveľkostný produkt) → plošný riadok
 //     ako doteraz (TEXT pravidlo `huntingshopDetailBadges`).
 //   - `error`: štruktúra, ktorej nerozumieme (formulár Kúpiť bez výberu, hoci
-//     Strážny pes veľkosti má; výber Kúpiť bez čitateľnej možnosti; veľkosť v
-//     Kúpiť, ktorú Strážny pes nepozná; viac výberov naraz) → beh zapíše
-//     chybový riadok (`ok=false`), nikdy plošné „skladom".
+//     Strážny pes veľkosti má; výber s menom poľa veľkosti pod iným id; výber
+//     Kúpiť bez čitateľnej možnosti; veľkosť v Kúpiť, ktorú Strážny pes
+//     nepozná; viac výberov naraz) → beh zapíše chybový riadok (`ok=false`),
+//     nikdy plošné „skladom".
 
 const CART_FORM_RE = /<form\b[^>]*\bid="frm-addToCart-form"[^>]*>/gi;
 const CART_SELECT_RE = /<select\b[^>]*\bid="frm-addToCart-form-variant_id"[^>]*>([\s\S]*?)<\/select>/gi;
 const WATCHDOG_SELECT_RE = /<select\b[^>]*\bid="frm-watchDogForm-form-variantIds"[^>]*>([\s\S]*?)<\/select>/gi;
 const OPTION_RE = /<option\b[^>]*>([\s\S]*?)<\/option>/gi;
+// Výber s menom poľa formulára Kúpiť/Strážneho psa — ak je na stránke, ale nie
+// pod očakávaným id, zmenil sa markup (premenované id) → chyba, nie „bez veľkostí".
+const SIZE_FIELD_SELECT_RE = /<select\b[^>]*\bname="(?:variant_id|variantIds\[\])"/i;
 
 /** Jedna veľkosť dodávateľa (štruktúrne zhodná so `SizeAvailability` v `parse.ts`). */
 interface HuntingshopSize {
@@ -63,7 +67,15 @@ export function readHuntingshopSizes(html: string): HuntingshopSizeRead {
   const cartSelect = cartSelects[0];
 
   if (cartSelect === undefined) {
-    if (watchdog === null || watchdog.length === 0) return { kind: "none" };
+    if (watchdog === null || watchdog.length === 0) {
+      if (SIZE_FIELD_SELECT_RE.test(html)) {
+        return {
+          kind: "error",
+          reason: "huntingshop.eu: výber veľkosti je na stránke pod iným id (zmenená štruktúra stránky)",
+        };
+      }
+      return { kind: "none" };
+    }
     if (cartForms === 0) {
       // Úplne vypredaný produkt: kúpiť nejde nič, Strážny pes ponúka všetky veľkosti.
       return { kind: "sizes", sizes: watchdog.map((sizeLabel) => ({ sizeLabel, availability: "unavailable" })) };
