@@ -150,3 +150,19 @@ export async function setNedostupneResolved(variantCode: string, resolved: boole
   if (response.status === 401) throw new NedostupneUnauthorizedError();
   await readJson(response, "Označenie sa nepodarilo uložiť");
 }
+
+const countSchema = z.object({ count: z.number() });
+
+// issue 586: počet pre menu odznak „Nedostupné tovary" (počet KARIET — ten
+// istý predikát ako výpis, `countNedostupneGroups`). Vzor `fetchRiesitCount`:
+// akákoľvek chyba (sieť, 401 po vypršaní relácie, zlý tvar) = 0, teda žiadny
+// odznak — odznak nikdy nesmie zhodiť appku ani prihlasovaciu obrazovku.
+export async function fetchNedostupneCount(): Promise<number> {
+  try {
+    const response = await fetch("/api/nedostupne/count");
+    if (!response.ok) return 0;
+    return countSchema.parse(await response.json()).count;
+  } catch {
+    return 0;
+  }
+}

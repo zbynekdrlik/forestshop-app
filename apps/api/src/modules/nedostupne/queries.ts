@@ -49,16 +49,16 @@ export interface NedostupneGroup {
 }
 
 /**
- * "Nedostupné tovary" — zoznam zoskupený PODĽA VARIANTU (rovnaká granularita
- * ako `order_line.variant_code`), spárovaný s otvorenými objednávkami
- * (`listOpenStatusNames`, ten istý set ako "Na objednanie"/pripomienky).
- * ŽIADNY `job_run` cache — zoznam sa počíta VŽDY živo (návrhový komentár na
- * issue 176: táto automatizácia nemá žiadny naplánovaný beh).
+ * JEDINÝ predikát sekcie „Nedostupné tovary" — riadky v stave `nedostupne` na
+ * otvorených objednávkach (`listOpenStatusNames`, ten istý set ako "Na
+ * objednanie"/pripomienky), s tými istými INNER JOIN-mi na katalóg ako výpis.
+ * Volá ho výpis (`listNedostupneGroups`) AJ odznak v ľavom menu
+ * (`countNedostupneGroups`, issue 586) — odznak sa tak nikdy nerozíde s
+ * počtom kariet na obrazovke (vzor issue 514/516 pri Výmene/Vrátení).
  */
-export async function listNedostupneGroups(db: Database, adminBaseUrl: string): Promise<readonly NedostupneGroup[]> {
+async function selectNedostupneLineRows(db: Database) {
   const openStatuses = await listOpenStatusNames(db);
   if (openStatuses.length === 0) return [];
-
   const rows = await db
     .select({
       variantCode: orderLines.variantCode,
@@ -84,7 +84,30 @@ export async function listNedostupneGroups(db: Database, adminBaseUrl: string): 
     .leftJoin(shopProductUrl, eq(shopProductUrl.code, orderLines.variantCode))
     .where(and(eq(orderLines.state, "nedostupne"), inArray(orders.statusName, [...openStatuses])))
     .orderBy(desc(orders.placedAt));
+  return rows;
+}
 
+/**
+ * issue 586: odznak „Nedostupné tovary" v ľavom menu = počet KARIET na
+ * obrazovke (jedna karta = jeden variant, `listNedostupneGroups` zoskupuje
+ * podľa `variantCode`). Ide cez ten istý `selectNedostupneLineRows` — žiadny
+ * druhý SQL count. Karta s ručným checkboxom „vyriešené" (issue 531) ostáva
+ * vo výpise, preto sa počíta aj tu.
+ */
+export async function countNedostupneGroups(db: Database): Promise<number> {
+  const rows = await selectNedostupneLineRows(db);
+  return new Set(rows.map((r) => r.variantCode)).size;
+}
+
+/**
+ * "Nedostupné tovary" — zoznam zoskupený PODĽA VARIANTU (rovnaká granularita
+ * ako `order_line.variant_code`), spárovaný s otvorenými objednávkami
+ * (`listOpenStatusNames`, ten istý set ako "Na objednanie"/pripomienky).
+ * ŽIADNY `job_run` cache — zoznam sa počíta VŽDY živo (návrhový komentár na
+ * issue 176: táto automatizácia nemá žiadny naplánovaný beh).
+ */
+export async function listNedostupneGroups(db: Database, adminBaseUrl: string): Promise<readonly NedostupneGroup[]> {
+  const rows = await selectNedostupneLineRows(db);
   if (rows.length === 0) return [];
 
   const sent = await loadSentNedostupne(db);
