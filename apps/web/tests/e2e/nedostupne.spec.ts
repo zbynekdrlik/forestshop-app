@@ -42,6 +42,31 @@ test("ručné odkazy náhrad, prekliky na e-shop/dodávateľa, povinný náhľad
   await expect(group).toBeVisible();
   await expect(group.getByText("E2E Zákazník Nedostupné")).toBeVisible();
 
+  // issue 586: Štěpán (Discord Develop-ÚLOHY, 1. 10. 2026) — počítadlo pri
+  // „Nedostupné tovary" v ľavom menu, „normálne zelené s bielym číslom"
+  // (predvolená `.tab-badge`, `--fs-brand`). Číslo == počet kariet na
+  // obrazovke (ten istý predikát ako výpis). `toPass` + reload: zdieľaná e2e
+  // DB, paralelný spec môže medzi čítaniami zmeniť stav riadku — po reloade sa
+  // výpis aj odznak načítajú znova naraz.
+  const nedostupneOdznak = page.getByTestId("nav-badge-nedostupne");
+  await expect(async () => {
+    await page.reload();
+    await expect(page.getByTestId("nedostupne-group-40287")).toBeVisible();
+    const karty = await page.locator('[data-testid^="nedostupne-group-"]').count();
+    await expect(nedostupneOdznak).toHaveText(String(karty), { timeout: 2000 });
+  }).toPass();
+  const farbaOdznaku = await page.evaluate(() => {
+    const sonda = document.createElement("span");
+    sonda.style.color = "var(--fs-brand)";
+    document.body.appendChild(sonda);
+    const brand = getComputedStyle(sonda).color;
+    sonda.remove();
+    const el = document.querySelector('[data-testid="nav-badge-nedostupne"]');
+    return { brand, bg: el === null ? "" : getComputedStyle(el).backgroundColor, fg: el === null ? "" : getComputedStyle(el).color };
+  });
+  expect(farbaOdznaku).toEqual({ brand: farbaOdznaku.brand, bg: farbaOdznaku.brand, fg: "rgb(255, 255, 255)" });
+  expect(farbaOdznaku.brand).not.toBe("");
+
   // issue 443: skupina má dve nedostupné objednávky toho istého variantu
   // (9008 + 9009, každá 1 ks) — hlavička ukáže celkový súčtový odznak "Σ 2"
   // (rovnaký vizuál ako `Σ N` na "Na objednanie").

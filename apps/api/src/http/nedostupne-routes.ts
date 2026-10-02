@@ -5,7 +5,7 @@ import type { Database } from "../db/client.js";
 import { record } from "../modules/audit/service.js";
 import { EMAIL_TYPES } from "../modules/nedostupne/constants.js";
 import { consumePreviewToken, issuePreviewToken } from "../modules/nedostupne/preview-tokens.js";
-import { listNedostupneGroups } from "../modules/nedostupne/queries.js";
+import { countNedostupneGroups, listNedostupneGroups } from "../modules/nedostupne/queries.js";
 import { addReplacementLink, removeReplacementLink } from "../modules/nedostupne/replacement-links.js";
 import { setVariantResolved } from "../modules/nedostupne/resolved.js";
 import { buildEmailForType, findNedostupneContext, sendNedostupneEmail } from "../modules/nedostupne/send.js";
@@ -87,6 +87,15 @@ export function registerNedostupneRoutes(app: Hono<AppBindings>, db: Database, d
       bccMissing: bccMissing(deps),
       mailNotConfigured: mailNotConfigured(deps),
     });
+  });
+
+  // issue 586: odznak počtu v ľavom menu — počet KARIET (variantov) zo
+  // ZDIEĽANÉHO predikátu výpisu (`countNedostupneGroups`), takže odznak ==
+  // počet kariet na obrazovke. Literal cesta bez `:param` súrodenca (žiadna
+  // kolízia poradia, `.claude/rules/http-routes.md`); `requireUser` ako výpis.
+  app.get("/api/nedostupne/count", requireUser(db), async (c) => {
+    const count = await countNedostupneGroups(db);
+    return c.json({ count });
   });
 
   // Povinný náhľad — POČÍTANÝ ROVNAKOU funkciou (`buildEmailForType`), akú

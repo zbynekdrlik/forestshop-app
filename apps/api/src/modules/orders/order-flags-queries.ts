@@ -114,6 +114,12 @@ export async function listReturnedOrders(db: Database, adminBaseUrl: string): Pr
   return rows.map((r) => toFlagRow(r, adminBaseUrl, r.unresolved));
 }
 
+/** issue 586: JEDINÝ predikát „Reklamácie" — objednávka je aktuálne
+ * označená (`claim_marked_at` nastavené; zrušenie označenia ho vynuluje).
+ * Používa ho výpis (`listClaimOrders`) AJ odznak (`countOrderFlags`), takže
+ * červený odznak v menu == počet riadkov výpisu. */
+const claimMarkedPredicate = isNotNull(orders.claimMarkedAt);
+
 export interface ClaimOrderRow extends OrderFlagRow {
   readonly claimNote: string | null;
   readonly claimMarkedAt: string;
@@ -138,12 +144,12 @@ export async function listClaimOrders(db: Database, adminBaseUrl: string): Promi
       claimMarkedAt: orders.claimMarkedAt,
     })
     .from(orders)
-    .where(isNotNull(orders.claimMarkedAt))
+    .where(claimMarkedPredicate)
     .orderBy(desc(orders.claimMarkedAt));
   return rows.map((r) => ({
     ...toFlagRow(r, adminBaseUrl, true),
     claimNote: r.claimNote,
-    // `where(isNotNull(...))` vyššie zaručuje non-null — `??` len upokojí
+    // `where(claimMarkedPredicate)` vyššie zaručuje non-null — `??` len upokojí
     // TS bez `!` assercie na `Date | null`.
     claimMarkedAt: (r.claimMarkedAt ?? new Date(0)).toISOString(),
   }));
@@ -171,12 +177,14 @@ export interface OrderFlagCounts {
  *   objednávky s otvorenou "vratenie" kartou, čo dávalo 2 pri 3 aktívnych
  *   vráteniach (tretia bez karty) — presne ten rozchod, čo #516 odstránilo,
  *   rovnakým vzorom ako #514 pri výmene.
- * - `claims` = počet AKTUÁLNE OZNAČENÝCH (žiadny ďalší "vybavené" koncept). */
+ * - `claims` = počet AKTUÁLNE OZNAČENÝCH (žiadny ďalší "vybavené" koncept) —
+ *   ten istý `claimMarkedPredicate` ako `listClaimOrders` (issue 586), takže
+ *   červený odznak == dĺžka výpisu. */
 export async function countOrderFlags(db: Database): Promise<OrderFlagCounts> {
   const [exchangeRows, returnedRows, claimRows] = await Promise.all([
     selectFlaggedByStatus(db, isExchangeOrderStatus),
     selectFlaggedByStatus(db, isReturnedOrderStatus),
-    db.select({ id: orders.id }).from(orders).where(isNotNull(orders.claimMarkedAt)),
+    db.select({ id: orders.id }).from(orders).where(claimMarkedPredicate),
   ]);
   return {
     exchange: exchangeRows.length,

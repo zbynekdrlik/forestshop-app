@@ -14,6 +14,7 @@ import { DpdBadgeRefreshContext } from "./dpdBadgeContext.js";
 import { fetchUnresolvedFloorNotesCount } from "./floorNotesApi.js";
 import { FloorNotesBadgeRefreshContext } from "./floorNotesBadgeContext.js";
 import { DEFAULT_TAB_ID, NAV, findTab, isVisibleTabId } from "./nav.js";
+import { fetchNedostupneCount } from "./nedostupneApi.js";
 import { fetchOrderFlagCounts } from "./orderFlagsApi.js";
 import { OrderFlagsBadgeRefreshContext } from "./orderFlagsBadgeContext.js";
 import { fetchOrderMergeCount } from "./orderMergeApi.js";
@@ -293,6 +294,31 @@ export function App(): JSX.Element {
     };
   }, [me, activeTabId]);
 
+  // issue 586: odznak „Nedostupné tovary" — počet KARIET (variantov) zo
+  // zdieľaného predikátu výpisu. Rovnaký PRIAMY vzor ako `riesitCount`
+  // (App.tsx vlastní count, fetchuje pri prihlásení/zmene záložky). Počet sa
+  // mení LEN zmenou stavu riadku („Na objednanie"/„Riešiť") — presne tie isté
+  // udalosti, po ktorých obe sekcie volajú `riesitBadgeRefresh`
+  // (`onStateChanged` = KAŽDÁ zmena stavu, nielen na `riesit`), preto
+  // `riesitRefreshNonce` v závislostiach; checkbox „vyriešené" (#531) ani
+  // e-mail počet kariet nemenia, takže vlastný refresh-context netreba.
+  const [nedostupneCount, setNedostupneCount] = useState<number | null>(null);
+  useEffect(() => {
+    if (me === null) return;
+    let cancelled = false;
+    fetchNedostupneCount()
+      .then((count) => {
+        if (!cancelled) setNedostupneCount(count);
+      })
+      .catch(() => {
+        // `fetchNedostupneCount` interne zachytáva všetky chyby a vždy vráti 0
+        // (`nedostupneApi.ts`) — poistka pre eslint `no-floating-promises`.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [me, activeTabId, riesitRefreshNonce]);
+
   const badgeCounts = useMemo<Readonly<Record<string, number>>>(() => {
     const counts: Record<string, number> = {};
     if (ordersRemainingCount !== null) counts["orders"] = ordersRemainingCount;
@@ -323,6 +349,9 @@ export function App(): JSX.Element {
     // ukazuje AJ pri nule — appka tým hovorí "toto číslo poznám, je 0")
     // tieto tri odznaky sa VÔBEC nezobrazujú pri nule (ticket: "shown only
     // when >0") — chýbajúci kľúč v `badgeCounts`, nie "0" hodnota.
+    // issue 586: „Nedostupné tovary" sa pri nule NEKRESLÍ (zadanie: odznak
+    // pri nule netreba, rovnako ako exchange/returned/claims nižšie).
+    if (nedostupneCount !== null && nedostupneCount > 0) counts["nedostupne"] = nedostupneCount;
     if (orderFlagCounts !== null) {
       if (orderFlagCounts.exchange > 0) counts["exchange"] = orderFlagCounts.exchange;
       if (orderFlagCounts.returned > 0) counts["returned"] = orderFlagCounts.returned;
@@ -335,7 +364,7 @@ export function App(): JSX.Element {
     // istý tvar bugu ako `UpozorneniaSection.tsx`'s `withBusy`), takže lint
     // to nezachytí a stará hodnota (chýbajúce odznaky hneď po prihlásení,
     // kým sa nespustí NEJAKÝ INÝ trigger) prežije bez varovania.
-  }, [ordersRemainingCount, upozorneniaCount, dpdCount, pairingReviewUnreviewedCount, orderFlagCounts, dailyTasksCount, floorNotesCount, riesitCount, orderMergeCount]);
+  }, [ordersRemainingCount, upozorneniaCount, dpdCount, pairingReviewUnreviewedCount, orderFlagCounts, dailyTasksCount, floorNotesCount, riesitCount, orderMergeCount, nedostupneCount]);
 
   // issue 185: stav zapnuté/vypnuté pre "Automatizácie" priečinok v menu.
   // Na rozdiel od `ordersRemainingCount` vyššie (publikované OBRAZOVKOU

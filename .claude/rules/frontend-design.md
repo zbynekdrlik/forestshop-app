@@ -1139,9 +1139,11 @@ paths:
   ohraničené samostatné rozšírenie toho istého `useState`.
 - **Farebný TÓN odznaku počtu (`nav-badge-<id>`) per záložka = `NavTab.badgeTone`
   v registri (`nav.ts`) + CSS modifikátor `.tab-badge.tab-badge-danger`
-  (`--fs-danger`, biele číslo dedí z `.tab-badge`) — dnes LEN `exchange`/
+  (`--fs-danger`, biele číslo dedí z `.tab-badge`) — dnes `exchange`/
   `returned` (Štěpán, 22. 9. 2026, issue 583: „červenú zober zo sekcie Na
-  objednanie, zmeň to len pri týchto dvoch položkách").** `Sidebar.tsx` tón len
+  objednanie") + `claims` (issue 586, 1. 10. 2026). Nový odznak bez slova o
+  farbe = predvolená zelená, NIKDY `badgeTone` (issue 586 „Nedostupné tovary"
+  = „normálne zelené"); `nav.test.ts` vynucuje PRESNÝ zoznam červených id.** `Sidebar.tsx` tón len
   generický premietne (`tab.badgeTone === "danger"` → trieda), žiadny hardcoded
   zoznam id (ten istý princíp ako `defaultCollapsed`/`wide` vyššie); testid aj
   `aria-label` sa tónom nemenia; súhrnný `folder-badge-*` zbaleného priečinka
@@ -1512,6 +1514,15 @@ paths:
   SVIETI a nesie kladné celé číslo (`toHaveText(/^[1-9]\d*$/)`) — presnú
   sémantiku počtu pokrýva API integration test s RIADENÝMI dátami, nie
   e2e proti zdieľanej seed DB. Platí pre KAŽDÝ budúci count badge.
+  **Výnimka — „odznak == počet riadkov výpisu" (issue 586) sa e2e asertovať
+  DÁ, lebo obe čísla čítaš z tej istej zdieľanej DB v tom istom okamihu:**
+  `await expect(async () => { await page.reload(); …; const n = await
+  page.locator('[data-testid^="<prefix>-"]').count(); await
+  expect(badge).toHaveText(String(n), { timeout: 2000 }); }).toPass()` —
+  reload načíta výpis aj odznak naraz, `toPass` pohltí paralelný spec, čo
+  medzi čítaniami zmení dáta. Prefix over grepom, nech nechytí iné testid
+  (`nedostupne-groups` vs. `nedostupne-group-<kód>`). Vzor:
+  `nedostupne.spec.ts`, `order-flags.spec.ts`.
 - **PROD DB sa dá čítať PRIAMO na `forestshop-dev` cez `docker exec` — užitočné
   na živý „pred/po" dôkaz pri overovaní (nielen cez UI).** `docker exec
   forestshop-postgres-1 psql -U forestshop -d forestshop -c "..."` (kontajner

@@ -28,6 +28,10 @@ appkiným `order.claim_marked_at` (Reklamácie). Modul: `order-flags.ts`
   výmena" na „Výmena tovaru"); issue 516 rovnako zúžilo „Vrátený tovar" na
   presne aktívny stav „Vratený tovar" (vypustený „Vybavený Dobropis") jedinou
   zmenou v `isReturnedOrderStatus`.
+- **Reklamácie: výpis (`listClaimOrders`) aj odznak (`countOrderFlags`) idú
+  cez JEDEN `claimMarkedPredicate` (issue 586)** — nikdy znova inline
+  `isNotNull(orders.claimMarkedAt)`. Odznak je od issue 586 ČERVENÝ
+  (`badgeTone: "danger"` v `nav.ts`), rovnako ako exchange/returned (#583).
 - **Menu-odznaky exchange/returned/claims sú UŽ NAPOJENÉ v `App.tsx` (#290)**
   — `fetchOrderFlagCounts` → `orderFlagCounts` → `badgeCounts["exchange"/…]`,
   zobrazené LEN pri `> 0` (skryté pri 0, na rozdiel od orders/upozornenia,

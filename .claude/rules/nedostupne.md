@@ -220,3 +220,16 @@ paths:
   nie len guard.** Pridružený nález: `setResolvedBusy("")` vo `.finally()` musí
   byť FUNKČNÝ clear (`(cur) => cur === variantCode ? "" : cur`) — jediný skalár,
   súbežný toggle iného variantu ho inak vyčistí mid-PUT.
+- **issue 586: odznak „Nedostupné tovary" v ľavom menu = počet KARIET
+  (distinct `variantCode`), nie objednávok/riadkov.** Výpis
+  (`listNedostupneGroups`) aj počet (`countNedostupneGroups`, `GET
+  /api/nedostupne/count`) idú cez JEDINÝ `selectNedostupneLineRows` (stav
+  `nedostupne` + otvorené objednávky + tie isté INNER JOIN-y na katalóg) —
+  zmena toho, čo sekcia ukazuje, sa robí TAM, nikdy druhým SQL count-om.
+  Karta s checkboxom „vyriešené" (#531) ostáva vo výpise, preto sa počíta
+  (odznak == výpis, trieda #516 „3 vs 2"). Zelený (bez `badgeTone`), pri nule
+  sa nekreslí. `App.tsx` refetchuje pri zmene záložky A na
+  `riesitRefreshNonce` — `OrdersSection`/`RiesitSection` volajú
+  `riesitBadgeRefresh` po KAŽDEJ zmene stavu riadku (`onStateChanged`), čo sú
+  presne udalosti, ktoré menia počet kariet. PROD 2. 10. 2026: 13 kariet
+  (2 s „vyriešené").

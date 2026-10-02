@@ -320,3 +320,27 @@ describe("Vrátený tovar — odznak == výpis, len aktívne 'Vratený tovar' (i
     expect(counts.returned).toBe(3);
   });
 });
+
+// issue 586: odznak „Reklamácie" (teraz červený) = počet AKTUÁLNE označených
+// reklamácií — ten istý predikát ako výpis (`claimMarkedPredicate`), takže
+// odznak == dĺžka výpisu; zrušené (vybavené) označenie sa nepočíta.
+describe("Reklamácie — odznak == výpis, zrušené sa nepočíta (issue 586)", () => {
+  it("dve označené, jedna zrušená → výpis aj odznak = 1", async () => {
+    const { app, cookie, db } = await boot("manazer");
+    const aktivna = await insertOrder(db, "Vybavuje sa");
+    const vybavena = await insertOrder(db, "Vybavuje sa");
+    for (const o of [aktivna, vybavena]) {
+      await app.request("/api/order-flags/claims", {
+        method: "POST",
+        headers: { cookie, "content-type": "application/json" },
+        body: JSON.stringify({ orderCode: o.externalOrderId }),
+      });
+    }
+    await app.request(`/api/order-flags/claims/${vybavena.id}/clear`, { method: "POST", headers: { cookie } });
+
+    const list = ((await (await app.request("/api/order-flags/claims", { headers: { cookie } })).json()) as { orders: readonly { externalOrderId: string }[] }).orders;
+    const counts = (await (await app.request("/api/order-flags/counts", { headers: { cookie } })).json()) as { claims: number };
+    expect(list.map((o) => o.externalOrderId)).toEqual([aktivna.externalOrderId]);
+    expect(counts.claims).toBe(list.length);
+  });
+});

@@ -156,12 +156,14 @@ export const NAV: readonly NavFolder[] = [
       // (Reklamácie) — žiadna z nich nezakladá novú kartu na Upozorneniach,
       // rozhodnuté na tickete (`.claude/rules/upozornenia.md`,
       // `order-flags.ts`).
-      // issue 583: Štěpán — počítadlá LEN týchto dvoch záložiek červené s
-      // bielym číslom („červenu zober zo sekcie na objednanie"); Reklamácie
-      // a ostatné ostávajú v predvolenej zelenej.
+      // issue 583: Štěpán — počítadlá týchto dvoch záložiek červené s bielym
+      // číslom („červenu zober zo sekcie na objednanie").
+      // issue 586: Štěpán (1. 10. 2026) — „a aj reklamacie - ale to mi daj
+      // červené s bielym" → aj Reklamácie `danger`; ostatné ostávajú v
+      // predvolenej zelenej (vrátane nového odznaku „Nedostupné tovary").
       { id: "exchange", label: "Výmena tovaru", icon: "🔃", Component: ExchangeOrdersSection, wide: true, badgeTone: "danger" },
       { id: "returned", label: "Vrátený tovar", icon: "↩️", Component: ReturnedOrdersSection, wide: true, badgeTone: "danger" },
-      { id: "claims", label: "Reklamácie", icon: "⚠️", Component: ClaimOrdersSection, wide: true },
+      { id: "claims", label: "Reklamácie", icon: "⚠️", Component: ClaimOrdersSection, wide: true, badgeTone: "danger" },
       // issue 387 E5: "profesionálne párovanie" — port starej appky
       // (`webreview`), karty (náš produkt vs. dodávateľov navrhnutý kandidát)
       // nad tým, čo E3 (gather)/E4 (verify) zozbierali. E6 pridalo
