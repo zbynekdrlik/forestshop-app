@@ -48,8 +48,9 @@ export interface HourlySchedule {
 // miestny čas) z toho istého dôvodu ako `hourly`: v deň prechodu na zimný čas
 // sa miestne okná opakujú, UTC okná nikdy. `minutes` musí byť kladné celé
 // číslo deliace 60 (1, 2, 3, 4, 5, 6, 10, 12, 15, 20, 30, 60) — inak by okná
-// neboli zarovnané na hodinu; `isDue` inú hodnotu odmietne výnimkou (tick ju
-// zaloguje), nikdy ju ticho nezaokrúhli.
+// neboli zarovnané na hodinu; `startScheduler` inú hodnotu odmietne výnimkou
+// PRI ŠTARTE appky (`isDue` to isté overí ako poistku pre priame volania),
+// nikdy ju ticho nezaokrúhli.
 export interface EveryMinutesSchedule {
   readonly kind: "everyMinutes";
   readonly minutes: number;

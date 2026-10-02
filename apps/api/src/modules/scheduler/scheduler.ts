@@ -39,12 +39,21 @@ function assertValidEveryMinutes(minutes: number): void {
   }
 }
 
+// Vyčerpávajúci `switch` (issue 589 review): nový `kind` bez vlastnej vetvy
+// neprejde `tsc` (`never`), namiesto tichého správania „ako hourly".
 function periodKey(schedule: Schedule, d: Date): string {
-  if (schedule.kind === "daily") return zonedDateKey(d);
-  if (schedule.kind === "everyMinutes") {
-    return `m${String(Math.floor(d.getTime() / (schedule.minutes * MINUTE_MS)))}`;
+  switch (schedule.kind) {
+    case "daily":
+      return zonedDateKey(d);
+    case "everyMinutes":
+      return `m${String(Math.floor(d.getTime() / (schedule.minutes * MINUTE_MS)))}`;
+    case "hourly":
+      return `${utcDateKey(d)}T${String(d.getUTCHours()).padStart(2, "0")}`;
+    default: {
+      const unknownKind: never = schedule;
+      throw new Error(`Neznámy druh rozvrhu: ${JSON.stringify(unknownKind)}`);
+    }
   }
-  return `${utcDateKey(d)}T${String(d.getUTCHours()).padStart(2, "0")}`;
 }
 
 // Splatná = aktuálna perióda (deň pri `daily`, deň+hodina pri `hourly`,

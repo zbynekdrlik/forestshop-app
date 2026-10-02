@@ -73,7 +73,12 @@ paths:
 - **Plánovaný beh + retencia + HTTP rozhranie existujú (#22/#28/#23).**
   `ordersImportJob` beží KAŽDÝCH 15 MIN (issue 589, `jobs.ts` `schedule: { kind:
   "everyMinutes", minutes: 15 }`; predtým hodinová :45 od #115, pôvodne denná
-  01:45); `pruneRawOrdersJob` ostáva denný (02:10). Oba registrované v scheduleri
+  01:45); `pruneRawOrdersJob` ostáva denný (02:10). 15-min kadencia = 96
+  stiahnutí exportu (+ XML id-fetch) za deň namiesto 24 — limit volaní na
+  exportných URL Shoptetu nie je zdokumentovaný ani pozorovaný (manuálny beh
+  09:29 a plánovaný 09:45 UTC 2. 10. 2026 oba `success`); prvým signálom
+  prípadného obmedzenia by bol `job_run.status='failure'` pre `orders-import`
+  (non-2xx = throw, `fetcher.ts`) — pri sérii takých zlyhaní najprv over toto. Oba registrované v scheduleri
   (`index.ts`) vedľa katalógových jobov — registrácia
   advisory zámkov aj časov je v `.claude/rules/scheduler.md`. Čítanie/ručný
   refresh ide cez `GET /api/orders/open`, `GET /api/orders/:id`,

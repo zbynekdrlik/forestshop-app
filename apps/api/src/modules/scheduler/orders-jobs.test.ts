@@ -12,7 +12,6 @@ import type { Database } from "../../db/client.js";
 import type { RunOrdersIngest } from "../orders/ingest.js";
 import {
   ORDERS_IMPORT_JOB_NAME,
-  ORDERS_RAW_KEEP_DAYS,
   orderNoteWritebackJob,
   ordersImportJob,
   pruneRawOrdersJob,
@@ -97,11 +96,7 @@ async function exists(file: string): Promise<boolean> {
   }
 }
 
-it("issue 589: retencia surových exportov objednávok je 7 dní (96 behov/deň × 7 ≈ dnešných 30 dní × 24)", () => {
-  expect(ORDERS_RAW_KEEP_DAYS).toBe(7);
-});
-
-it("issue 589: pruneRawOrdersJob bez explicitného keepDays zmaže 8-dňový export a nechá 6-dňový", async () => {
+it("issue 589: pruneRawOrdersJob bez explicitného keepDays (ORDERS_RAW_KEEP_DAYS) zmaže 8-dňový export a nechá 6-dňový", async () => {
   dir = await mkdtemp(join(tmpdir(), "orders-raw-589-"));
   const now = new Date("2026-10-02T00:10:00Z");
   const old = await rawFile(dir, "old.csv.gz", 8, now);
