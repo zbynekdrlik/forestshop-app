@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { computeSyncStatus, type SyncStatus } from "./syncStatus.js";
+import { computeSyncStatus, ORDERS_STALE_AFTER_MS, type SyncStatus } from "./syncStatus.js";
 import type { JobRun } from "./schedulerApi.js";
 
 // #115 (majiteľ: "sync zo shoptetu ma bezat kazdu hodinu, nemoze tam bezat ok
@@ -80,4 +80,35 @@ it("beh, ktorý ešte BEŽÍ ('running'), sa nepovažuje za zastaraný", () => {
   );
   expect(status.kind).toBe("ok");
   expect(status.warningText).toBeNull();
+});
+
+// issue 589: import objednávok beží každých 15 minút — prah zastaranosti
+// ostáva „2× kadencia", teda 30 min (predtým 2 h pri hodinovej kadencii).
+it("issue 589: prah zastaranosti objednávok = 2× 15-min kadencia = 30 minút", () => {
+  expect(ORDERS_STALE_AFTER_MS).toBe(30 * 60 * 1000);
+  const start = "2026-10-02T10:00:00.000Z";
+  const naHranici = computeSyncStatus(run({ startedAt: start }), new Date("2026-10-02T10:30:00Z"), ORDERS_STALE_AFTER_MS);
+  expect(naHranici.kind).toBe("ok");
+  const zaHranicou = computeSyncStatus(
+    run({ startedAt: start }),
+    new Date("2026-10-02T10:30:00.001Z"),
+    ORDERS_STALE_AFTER_MS,
+  );
+  expect(zaHranicou.kind).toBe("stale");
+});
+
+it("issue 589: vek pod hodinu sa vypíše v minútach (nie '0 hodinami')", () => {
+  const status = computeSyncStatus(
+    run({ startedAt: "2026-10-02T10:00:00.000Z" }),
+    new Date("2026-10-02T10:45:00Z"),
+    ORDERS_STALE_AFTER_MS,
+  );
+  expect(status.kind).toBe("stale");
+  expect(status.warningText).toContain("pred 45 minútami");
+  expect(status.warningText).not.toContain("hodin");
+});
+
+it("issue 589: vek presne 1 minúta → 'minútou' (jednotné číslo)", () => {
+  const status = computeSyncStatus(run({ startedAt: "2026-10-02T10:00:00.000Z" }), new Date("2026-10-02T10:01:00Z"), 0);
+  expect(status.warningText).toContain("pred minútou");
 });

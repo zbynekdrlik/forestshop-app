@@ -140,3 +140,60 @@ it("issue 293: denná úloha sa NESPUSTÍ DVAKRÁT v samotný deň prechodu na z
     isDue(DAILY_LOCAL, new Date("2026-10-25T19:00:00Z"), { startedAt: new Date("2026-10-25T06:00:00Z") }),
   ).toBe(false);
 });
+
+// issue 589 (majiteľ: "vie sa to refreshovat kazdych 15 min"): nový tvar
+// rozvrhu `everyMinutes` — perióda = N-minútové okno UTC zarovnané na epochu
+// (pri 15: :00/:15/:30/:45). Úloha je splatná HNEĎ na začiatku okna (žiadna
+// cieľová minúta), ale v tom istom okne LEN RAZ — rovnaké pravidlo „raz za
+// periódu" ako `hourly`/`daily`.
+const EVERY15 = { kind: "everyMinutes" as const, minutes: 15 };
+
+it("issue 589: everyMinutes je splatná, keď ešte nikdy nebežala", () => {
+  expect(isDue(EVERY15, new Date("2026-10-02T10:07:00Z"), null)).toBe(true);
+});
+
+it("issue 589: everyMinutes je splatná v NOVOM 15-min okne, aj keď posledný beh bol pred pár minútami", () => {
+  expect(isDue(EVERY15, new Date("2026-10-02T10:15:00Z"), { startedAt: new Date("2026-10-02T10:14:59Z") })).toBe(
+    true,
+  );
+});
+
+it("issue 589: everyMinutes NIE JE splatná druhýkrát v tom istom 15-min okne", () => {
+  expect(isDue(EVERY15, new Date("2026-10-02T10:29:59Z"), { startedAt: new Date("2026-10-02T10:15:00Z") })).toBe(
+    false,
+  );
+  expect(isDue(EVERY15, new Date("2026-10-02T10:20:00Z"), { startedAt: new Date("2026-10-02T10:19:00Z") })).toBe(
+    false,
+  );
+});
+
+it("issue 589: everyMinutes je znova splatná cez hranicu HODINY (:45 okno → :00 okno ďalšej hodiny)", () => {
+  expect(isDue(EVERY15, new Date("2026-10-02T11:00:00Z"), { startedAt: new Date("2026-10-02T10:50:00Z") })).toBe(
+    true,
+  );
+});
+
+it("issue 589: everyMinutes je znova splatná cez hranicu DŇA (23:45 okno → 00:00 okno ďalšieho UTC dňa)", () => {
+  expect(isDue(EVERY15, new Date("2026-10-03T00:01:00Z"), { startedAt: new Date("2026-10-02T23:58:00Z") })).toBe(
+    true,
+  );
+});
+
+it("issue 589: everyMinutes nie je splatná v tom istom okne ani v deň prechodu na zimný čas (UTC okno, nie miestne)", () => {
+  // 2026-10-25 01:00 UTC = miestne 02:00 (druhýkrát, po skoku 03:00→02:00) —
+  // UTC okná sú jednoznačné, opakovaná miestna hodina nič nezmätie.
+  expect(isDue(EVERY15, new Date("2026-10-25T01:10:00Z"), { startedAt: new Date("2026-10-25T01:00:00Z") })).toBe(
+    false,
+  );
+  expect(isDue(EVERY15, new Date("2026-10-25T01:15:00Z"), { startedAt: new Date("2026-10-25T01:00:00Z") })).toBe(
+    true,
+  );
+});
+
+it("issue 589: everyMinutes s neplatnou dĺžkou okna (0, záporná, neceločíselná) vyhodí, nikdy ticho nebeží v slučke", () => {
+  for (const minutes of [0, -15, 7.5]) {
+    expect(() => isDue({ kind: "everyMinutes", minutes }, new Date("2026-10-02T10:00:00Z"), null)).toThrow(
+      /everyMinutes/,
+    );
+  }
+});
