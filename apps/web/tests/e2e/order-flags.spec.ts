@@ -81,6 +81,7 @@ test("Výmena tovaru/Vrátený tovar zobrazia zoznam, Reklamácie umožnia ozna�
       brand: sonda("var(--fs-brand)"),
       exchange: odznak("nav-badge-exchange"),
       returned: odznak("nav-badge-returned"),
+      claims: odznak("nav-badge-claims"),
       orders: odznak("nav-badge-orders"),
     };
   });
@@ -88,6 +89,9 @@ test("Výmena tovaru/Vrátený tovar zobrazia zoznam, Reklamácie umožnia ozna�
   expect(farbyOdznakov.danger).not.toBe(farbyOdznakov.brand);
   expect(farbyOdznakov.exchange).toEqual({ bg: farbyOdznakov.danger, fg: "rgb(255, 255, 255)" });
   expect(farbyOdznakov.returned).toEqual({ bg: farbyOdznakov.danger, fg: "rgb(255, 255, 255)" });
+  // issue 586: Štěpán (Discord Develop-ÚLOHY, 1. 10. 2026) — aj „Reklamácie"
+  // červené s bielym číslom (fixtúra 9203 garantuje ≥1, odznak je viditeľný).
+  expect(farbyOdznakov.claims).toEqual({ bg: farbyOdznakov.danger, fg: "rgb(255, 255, 255)" });
   expect(farbyOdznakov.orders).toEqual({ bg: farbyOdznakov.brand, fg: "rgb(255, 255, 255)" });
 
   // Výmena tovaru.
@@ -129,6 +133,17 @@ test("Výmena tovaru/Vrátený tovar zobrazia zoznam, Reklamácie umožnia ozna�
   await expect(page.getByTestId("claim-row-9204")).toBeHidden();
   // Vopred označená 9203 ostáva nedotknutá.
   await expect(page.getByTestId("claim-row-9203")).toBeVisible();
+
+  // issue 586: číslo v červenom odznaku == počet riadkov výpisu Reklamácií
+  // (ten istý predikát). `toPass` + reload: zdieľaná e2e DB, iný paralelný
+  // spec by mohol medzi čítaniami pridať/zrušiť reklamáciu — po reloade sa
+  // načítajú výpis aj odznak znova naraz.
+  await expect(async () => {
+    await page.reload();
+    await expect(page.getByTestId("claim-row-9203")).toBeVisible();
+    const riadky = await page.locator('[data-testid^="claim-row-"]').count();
+    await expect(claimsOdznak).toHaveText(String(riadky), { timeout: 2000 });
+  }).toPass();
 
   expect(chyby).toEqual([]);
 });
