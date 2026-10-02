@@ -28,12 +28,36 @@ function utcDateKey(d: Date): string {
 // cesta) sa preto používa LEN pre `daily`.
 // Rovnaký beh v RÔZNYCH periódach (napr. 23:00 včera vs. 01:00 dnes pri
 // `daily`, alebo 10:xx vs. 11:xx pri `hourly`) má rôzny kľúč → znova splatná.
-function periodKey(schedule: Schedule, d: Date): string {
-  if (schedule.kind === "daily") return zonedDateKey(d);
-  return `${utcDateKey(d)}T${String(d.getUTCHours()).padStart(2, "0")}`;
+// `everyMinutes` (issue 589): poradové číslo N-minútového okna od epochy —
+// pri deliteľoch 60 sú okná zarovnané na celé UTC hodiny (aj dni), takže
+// :00/:15/:30/:45 pri 15. Celé číslo, monotónne, bez časového pásma.
+const MINUTE_MS = 60 * 1000;
+
+function assertValidEveryMinutes(minutes: number): void {
+  if (!Number.isInteger(minutes) || minutes <= 0 || 60 % minutes !== 0) {
+    throw new Error(`Neplatný rozvrh everyMinutes: minutes=${String(minutes)} (musí byť celé číslo deliace 60)`);
+  }
 }
 
-// Splatná = aktuálna perióda (deň pri `daily`, deň+hodina pri `hourly`) ešte
+// Vyčerpávajúci `switch` (issue 589 review): nový `kind` bez vlastnej vetvy
+// neprejde `tsc` (`never`), namiesto tichého správania „ako hourly".
+function periodKey(schedule: Schedule, d: Date): string {
+  switch (schedule.kind) {
+    case "daily":
+      return zonedDateKey(d);
+    case "everyMinutes":
+      return `m${String(Math.floor(d.getTime() / (schedule.minutes * MINUTE_MS)))}`;
+    case "hourly":
+      return `${utcDateKey(d)}T${String(d.getUTCHours()).padStart(2, "0")}`;
+    default: {
+      const unknownKind: never = schedule;
+      throw new Error(`Neznámy druh rozvrhu: ${JSON.stringify(unknownKind)}`);
+    }
+  }
+}
+
+// Splatná = aktuálna perióda (deň pri `daily`, deň+hodina pri `hourly`,
+// N-minútové okno pri `everyMinutes`) ešte
 // nemá ŽIADEN riadok (running, success AJ failure sa počítajú — zlyhaný beh
 // sa v tejto perióde už neopakuje, čaká na ďalšiu, presne ako úspešný) A
 // aktuálny čas v rámci periódy dosiahol naplánovanú minútu (`daily` navyše aj
@@ -45,7 +69,10 @@ export function isDue(
   now: Date,
   lastRun: { readonly startedAt: Date } | null,
 ): boolean {
+  if (schedule.kind === "everyMinutes") assertValidEveryMinutes(schedule.minutes);
   if (lastRun !== null && periodKey(schedule, lastRun.startedAt) === periodKey(schedule, now)) return false;
+  // `everyMinutes` nemá cieľovú minútu — splatná hneď v novom okne.
+  if (schedule.kind === "everyMinutes") return true;
   if (schedule.kind === "daily") {
     // issue 293: cieľová aj aktuálna hodina/minúta sa porovnávajú v
     // MIESTNOM (Europe/Bratislava) čase, nie v UTC — `hourLocal`/
@@ -133,6 +160,12 @@ export function startScheduler(
   jobs: readonly ScheduledJob[],
   options: { readonly tickIntervalMs?: number } = {},
 ): SchedulerHandle {
+  // issue 589: chybný `everyMinutes` rozvrh zhodí ŠTART appky (hlasno, pri
+  // deployi), nie až každý tick — výnimka z `isDue` vnútri `tick()` by
+  // zrušila transakciu a zablokovala AJ všetky ostatné (správne) joby.
+  for (const job of jobs) {
+    if (job.schedule.kind === "everyMinutes") assertValidEveryMinutes(job.schedule.minutes);
+  }
   const tickIntervalMs = options.tickIntervalMs ?? 5 * 60 * 1000;
   const timer = setInterval(() => {
     tick(db, jobs, new Date()).catch((error: unknown) => {

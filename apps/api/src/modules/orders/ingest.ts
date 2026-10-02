@@ -557,7 +557,7 @@ export async function ingestOrders(db: Database, options: OrdersIngestOptions): 
       // roky drží existujúci upsert cyklus vyššie v TEJ istej transakcii;
       // tento krok len pridáva ĎALŠIE dotyky `order_line`. Postgres-ov
       // deadlock detektor takú kolíziu bezpečne vyrieši (jedna strana sa
-      // abortne, žiadne poškodené dáta) — import sa zopakuje o hodinu,
+      // abortne, žiadne poškodené dáta) — import sa zopakuje o 15 min (issue 589),
       // manažérov klik dostane chybu a smie ho zopakovať. Vyhradený
       // deterministický regresný test tejto interakcie je #416 (presahuje
       // rozsah tohto bugfixu — concurrency analýza naprieč dvomi inak

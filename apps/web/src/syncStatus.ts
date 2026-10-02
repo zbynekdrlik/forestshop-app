@@ -17,17 +17,18 @@ export interface SyncStatus {
   readonly warningText: string | null;
 }
 
-const HOUR_MS = 60 * 60 * 1000;
+const MINUTE_MS = 60 * 1000;
+const HOUR_MS = 60 * MINUTE_MS;
 const DAY_MS = 24 * HOUR_MS;
 
 // Prah zastaranosti = 2× nakonfigurovaná kadencia danej úlohy
 // (`apps/api/src/modules/scheduler/jobs.ts`) — nie natvrdo zapísané magické
-// číslo odpojené od skutočného rozvrhu. Objednávky: hodinová kadencia (#115)
-// → 2 h (presne príklad z issue). Katalóg: zostáva denná kadencia (#115 ju
-// nemení) → 48 h. Obe "Sync zo Shoptetu" políčka zdieľajú TEN ISTÝ
+// číslo odpojené od skutočného rozvrhu. Objednávky: 15-min kadencia (issue
+// 589, predtým hodinová #115 → 2 h) → 30 min. Katalóg: 48 h (ponechané z
+// #115). Obe "Sync zo Shoptetu" políčka zdieľajú TEN ISTÝ
 // `IngestChannel` komponent, takže rovnaký druh chyby (ignorovanie veku)
 // platil identicky pre oba kanály.
-export const ORDERS_STALE_AFTER_MS = 2 * HOUR_MS;
+export const ORDERS_STALE_AFTER_MS = 30 * MINUTE_MS;
 export const CATALOG_STALE_AFTER_MS = 2 * DAY_MS;
 
 // Jednoduché dvojtvarové skloňovanie (1 vs. viac) — rovnaká úroveň
@@ -36,6 +37,12 @@ export const CATALOG_STALE_AFTER_MS = 2 * DAY_MS;
 // N). Formát "pred 3 dňami" doslovne zodpovedá majiteľovmu vlastnému
 // zneniu v zadaní issue.
 function formatAge(ms: number): string {
+  // issue 589: pri 30-min prahu objednávok môže byť zastaraný beh mladší než
+  // hodina — bez minútovej vetvy by hláška znela „pred 0 hodinami".
+  if (ms < HOUR_MS) {
+    const minutes = Math.floor(ms / MINUTE_MS);
+    return minutes === 1 ? "minútou" : `${String(minutes)} minútami`;
+  }
   const hours = Math.floor(ms / HOUR_MS);
   if (hours < 24) return hours === 1 ? "hodinou" : `${String(hours)} hodinami`;
   const days = Math.floor(ms / DAY_MS);

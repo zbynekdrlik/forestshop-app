@@ -39,7 +39,24 @@ export interface HourlySchedule {
   readonly minuteUtc: number;
 }
 
-export type Schedule = DailySchedule | HourlySchedule;
+// Kadencia kratšia než hodina (issue 589, majiteľ: "vie sa to refreshovat
+// kazdych 15 min") — perióda je N-minútové okno UTC zarovnané na epochu
+// (pri `minutes: 15` okná :00/:15/:30/:45). Úloha je "splatná" HNEĎ na
+// začiatku okna (žiadna cieľová minúta, tú by kratšia kadencia nemala čím
+// vyjadriť) a v tom istom okne LEN RAZ — rovnaké pravidlo „raz za periódu"
+// ako `hourly`/`daily`, rovnaký `job_run` záznam aj prehľad behov. UTC (nie
+// miestny čas) z toho istého dôvodu ako `hourly`: v deň prechodu na zimný čas
+// sa miestne okná opakujú, UTC okná nikdy. `minutes` musí byť kladné celé
+// číslo deliace 60 (1, 2, 3, 4, 5, 6, 10, 12, 15, 20, 30, 60) — inak by okná
+// neboli zarovnané na hodinu; `startScheduler` inú hodnotu odmietne výnimkou
+// PRI ŠTARTE appky (`isDue` to isté overí ako poistku pre priame volania),
+// nikdy ju ticho nezaokrúhli.
+export interface EveryMinutesSchedule {
+  readonly kind: "everyMinutes";
+  readonly minutes: number;
+}
+
+export type Schedule = DailySchedule | HourlySchedule | EveryMinutesSchedule;
 
 export interface JobOutcome {
   readonly detail?: unknown;
