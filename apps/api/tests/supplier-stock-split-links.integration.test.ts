@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "../src/db/client.js";
 import { pairingDecisions, pairingVariantLinks, users } from "../src/db/schema.js";
-import { collectSupplierLinks } from "../src/modules/supplier-stock/run.js";
+import { collectSupplierLinks } from "../src/modules/supplier-stock/links.js";
 import { withCleanDb } from "./helpers/db.js";
 import { insertTestVariantForProduct } from "./helpers/orders.js";
 

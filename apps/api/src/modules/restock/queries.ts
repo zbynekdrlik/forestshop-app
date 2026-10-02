@@ -102,7 +102,7 @@ async function allRestockCandidates(db: Database, now: Date): Promise<readonly R
 
   // issue 565: efektívny odkaz má JEDINÚ definíciu na SQL strane —
   // `effectiveSupplierLinkSql` (`orders/effective-supplier-link.ts`), zhodnú s
-  // `collectSupplierLinks` (`supplier-stock/run.ts`) aj `resolveEffectiveSupplierLink`.
+  // `collectSupplierLinks` (`supplier-stock/links.ts`) aj `resolveEffectiveSupplierLink`.
   // Poradie: split per-veľkosť linka → `product_supplier_link_override.url` →
   // URL z `internal_note`. Predtým tu bola vlastná kópia coalesce BEZ override —
   // produkt s override odkazom (Vyhľadať, issue 239/240) sa scrapoval, ale reštok

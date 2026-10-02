@@ -31,7 +31,7 @@ export function resolveEffectiveSupplierLink(
 // (`restock/queries.ts` kandidátsky výber). JEDINÁ definícia poradia efektívneho
 // odkazu na SQL strane — každý budúci množinový konzument importuje toto, nie
 // vlastnú kópiu coalesce (pred týmto reštok SQL ignoroval override a rozišiel sa
-// s `collectSupplierLinks` — `supplier-stock/run.ts`).
+// s `collectSupplierLinks` — `supplier-stock/links.ts`).
 //
 // Poradie ZHODNÉ s `collectSupplierLinks`/`resolveEffectiveSupplierLink`:
 //   1. split per-veľkosť linka (`pairing_variant_link.url`) — LEN keď je produkt
