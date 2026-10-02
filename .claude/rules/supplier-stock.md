@@ -962,7 +962,22 @@ paths:
   možnosťou (podprsenka 14140). Celá stránka ~0,9 MB, výbery sú pod `MAX_PAGE_BYTES`.
   Samooprava PROD: `isLinkFresh` (`hasSizeAvailabilityRule`) berie existujúce plošné
   huntingshop riadky ako NEčerstvé, takže prvý nočný beh po nasadení ich prepíše
-  per-veľkosť riadkami bez zásahu do DB. **„Pamäť ručného vypnutia"** (vylúčiť variant
+  per-veľkosť riadkami bez zásahu do DB. **Code review issue 585 — dve ďalšie cesty
+  k plošnému „skladom", ktoré platili pre KAŽDÚ size-rule doménu:** (1)
+  `collectOurSizesByLink` (`run.ts`) kľúčoval naše veľkosti LEN podľa
+  `internalNote`, kým `collectSupplierLinks` a `restock/queries.ts` používajú
+  EFEKTÍVNY odkaz (override z Párovania/Vyhľadať) — produkt s odkazom len v
+  `product_supplier_link_override` dostal `ourSizes=[]` → plošný riadok → restock
+  párovanie cez `size_label=''` (na PROD 2. 10. 2026 4 také huntingshop produkty).
+  Teraz `resolveEffectiveSupplierLink` aj tu — **všetky TRI miesta (zber odkazov,
+  zber našich veľkostí, restock SQL) musia mať ten istý kľúč**. (2)
+  `buildSizeStockRows`: stránka vymenúva ≥2 veľkosti, ale my pre odkaz nemáme
+  žiadnu svoju (variant bez veľkosti, split odkaz) → plošný `unknown`, NIKDY
+  štítok/JSON-LD stránky (ten hovorí o jednej predvolenej veľkosti). Navyše
+  huntingshop: výber s menom poľa veľkosti (`variant_id`/`variantIds[]`) na
+  stránke, ale nie pod očakávaným id → `structureError` (premenované id inak
+  vyzerá ako jednoveľkostný produkt a pri JEDNEJ našej veľkosti by prešiel
+  štítok). **„Pamäť ručného vypnutia"** (vylúčiť variant
   s predošlým `restock_event`) bola v návrhu, ale FINDING na tickete ukázal, že by
   zablokovala aj správne prepnutia (61264/L, 61513/S/3XL) — pozastavená do
   rozhodnutia majiteľa, NIE je implementovaná.
