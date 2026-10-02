@@ -25,6 +25,7 @@ import {
   selectEnumerationTargets,
   type SizeAvailability,
   sizeCombinationEnumeratorFor,
+  sizeStructureErrorFor,
   type SupplierAvailability,
   type SupplierStockSource,
 } from "./parse.js";
@@ -387,7 +388,15 @@ export async function runSupplierStockLocked(options: RunSupplierStockOptions): 
     const fetched = await fetchWithDelay(link, false);
     checked += 1;
 
-    if (!fetched.ok) {
+    // issue 585: stránka sa stiahla, ale per-veľkosť pravidlo hosta jej
+    // štruktúre NEROZUMIE (zmenený markup) → zlyhaná kontrola, nikdy plošné
+    // „skladom" zo štítku pri cene.
+    const structureError = fetched.ok ? sizeStructureErrorFor(fetched.html, link) : null;
+    if (structureError !== null) {
+      log.warn({ link, host, reason: structureError }, "Dodávateľský sklad: nerozumiem štruktúre stránky, zapisujem chybový riadok");
+    }
+
+    if (!fetched.ok || structureError !== null) {
       counts.failed += 1;
       // Zlyhaná kontrola vymaže PRÍPADNÉ predošlé per-veľkostné riadky tejto
       // linky a nahradí ich jediným blanket "neviem" riadkom (rovnaká
@@ -400,7 +409,7 @@ export async function runSupplierStockLocked(options: RunSupplierStockOptions): 
         host,
         now,
         ok: false,
-        error: fetched.error,
+        error: structureError ?? fetched.error,
         httpStatus: fetched.httpStatus,
         rows: [{ sizeLabel: "", availability: "unknown", availabilityText: "", price: null, source: "none" }],
       });
