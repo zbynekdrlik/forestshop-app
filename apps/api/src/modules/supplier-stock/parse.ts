@@ -40,6 +40,7 @@ import {
   hostOf,
   type SupplierAvailability,
 } from "./availability-primitives.js";
+import { huntingshopSizeList, huntingshopStructureError } from "./huntingshop-sizes.js";
 import { shoptetMultiVariantSizeList } from "./shoptet-multivariant.js";
 
 export type { CombinationTarget, SupplierAvailability };
@@ -218,6 +219,10 @@ interface SizeAvailabilityRule {
   readonly read: (html: string) => readonly SizeAvailability[];
   // issue 552: enumerácia všetkých veľkostí (dnes len wetland.sk).
   readonly enumerate?: CombinationEnumerator;
+  // issue 585: stránka, ktorej štruktúre pravidlo NEROZUMIE (zmenený markup,
+  // nejednoznačné výbery) → dôvod; `run.ts` zapíše chybový riadok (`ok=false`)
+  // namiesto plošného „skladom". `null` = stránka je v poriadku.
+  readonly structureError?: (html: string) => string | null;
 }
 
 // Živo overené (issue 224 code review): `class="clearfix product-variants-item"`
@@ -368,6 +373,10 @@ const SIZE_AVAILABILITY_RULES: readonly SizeAvailabilityRule[] = Object.freeze([
   // dr-hunter-funkcne-celorocne-termo-ponozky-odlahcene-zelene má veľkosti 37-38/39-41
   // „Momentálne nedostupné" (unavailable) a 42-44/45-47/48-49 „Skladom" (available).
   { host: "soxland.sk", read: shoptetMultiVariantSizeList },
+  // issue 585: huntingshop.eu — výber formulára Kúpiť = veľkosti skladom, výber
+  // Strážneho psa = všetky veľkosti (`huntingshop-sizes.ts`). Nezrozumiteľná
+  // štruktúra → chybový riadok, nikdy plošné „skladom".
+  { host: "huntingshop.eu", read: huntingshopSizeList, structureError: huntingshopStructureError },
   {
     host: "wetland.sk",
     read: wetlandSizeList,
@@ -423,6 +432,16 @@ export function parseSizeAvailability(html: string, url: string): readonly SizeA
   if (rule === null) return null;
   const sizes = rule.read(html);
   return sizes.length > 0 ? sizes : null;
+}
+
+/**
+ * Dôvod, prečo per-veľkosť pravidlo hosta tejto stránke NEROZUMIE (issue 585),
+ * alebo `null` (stránka v poriadku / host pravidlo na štruktúru nemá). `run.ts`
+ * pri ne-`null` zapíše chybový riadok (`ok=false`) — fail-closed, nikdy plošné
+ * „skladom" zo štítku pri cene.
+ */
+export function sizeStructureErrorFor(html: string, url: string): string | null {
+  return sizeAvailabilityRuleFor(url)?.structureError?.(html) ?? null;
 }
 
 /**

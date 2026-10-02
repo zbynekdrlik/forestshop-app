@@ -440,7 +440,7 @@ describe("parseSizeAvailability — issue 227: chiruca.sk zoznam veľkostí v <s
   });
 
   it("stranka bez pravidla (ina domena) vracia null", () => {
-    expect(parseSizeAvailability(CHIRUCA_VELKOSTI, "https://www.huntingshop.eu/p/1")).toBeNull();
+    expect(parseSizeAvailability(CHIRUCA_VELKOSTI, "https://odimon.sk/p/1")).toBeNull();
   });
 });
 
@@ -457,7 +457,7 @@ describe("parseSizeAvailability — issue 224: shop.lasting.eu zoznam veľkostí
   });
 
   it("stranka bez zoznamu velkosti (ina domena) vracia null, nikdy prazdne pole", () => {
-    expect(parseSizeAvailability(LASTING_BONY, "https://www.huntingshop.eu/p/1")).toBeNull();
+    expect(parseSizeAvailability(LASTING_BONY, "https://odimon.sk/p/1")).toBeNull();
   });
 
   it("poddomena patri pod to iste pravidlo ako holy host", () => {

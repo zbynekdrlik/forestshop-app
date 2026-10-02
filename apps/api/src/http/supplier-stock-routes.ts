@@ -13,7 +13,8 @@ import {
   listUnreadableHosts,
 } from "../modules/supplier-stock/queries.js";
 import type { SupplierStockRunResult } from "../modules/supplier-stock/run.js";
-import { countOwnShopLinks, runSupplierStockLocked } from "../modules/supplier-stock/run.js";
+import { countOwnShopLinks } from "../modules/supplier-stock/links.js";
+import { runSupplierStockLocked } from "../modules/supplier-stock/run.js";
 import { requireRole, requireUser, type AppBindings } from "./middleware.js";
 import { requireSameOrigin } from "./origin-check.js";
 

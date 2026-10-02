@@ -933,3 +933,58 @@ paths:
   04:17:27) + fallback 02:50 — obe `nothing_to_do`. Beh ostáva ~2 h (dominuje
   sériový počet requestov ~4200 × ~1,6 s); ďalšie skracovanie (paralelizácia
   hostov = zamietnutý Prístup 3) sa nerobí bez požiadavky majiteľa.
+- **`huntingshop.eu` (Nette, issue 585) — per-veľkosť z DVOCH výberov na stránke,
+  ukotvených na id prvkov (`huntingshop-sizes.ts`, `SIZE_AVAILABILITY_RULES`).**
+  Výber formulára „Kúpiť" (`<select id="frm-addToCart-form-variant_id">`) nesie LEN
+  veľkosti, ktoré sa dajú kúpiť = skladom; výber formulára „Strážny pes"
+  (`frm-watchDogForm-form-variantIds`) nesie VŠETKY veľkosti (aj vypredané) — NIKDY
+  nie je dostupnosť. Veľkosť v Kúpiť → `available`, len v Strážnom psovi →
+  `unavailable`, naša veľkosť mimo oboch → `unknown`. Formulár Kúpiť na stránke VÔBEC
+  nie je (úplne vypredané, štítok „Nie je skladom") + Strážny pes s veľkosťami → všetky
+  `unavailable`. Žiadny výber (jednoveľkostný olej 4796) → plošný riadok cez TEXT
+  pravidlo `huntingshopDetailBadges` ako doteraz. **Štítok pri cene („Skladom viac ako
+  3 kusy") sa pre viacveľkostný produkt NEČÍTA** — vykreslí sa rovnako pre každý
+  `?variantId` (overené na nekúpiteľnej veľkosti 43 produktu 8954). PROD bug 2. 10.
+  2026: bez tohto pravidla sa zapisoval len plošný riadok a restock prepínal 62780/43
+  a /44 (Tracker BOA GTX), ktoré dodávateľ nemá; Štěpán ich ručne vypínal a nočný beh
+  ich zapol znova. **Pasca:** id formulára Kúpiť je aj v inline JS
+  (`getElementById(...)`) na KAŽDEJ stránke — regex ho preto hľadá len ako atribút
+  otváracej `<select>`/`<form>` značky. **Nezrozumiteľná štruktúra = chybový riadok
+  `ok=false`, nikdy plošné „skladom":** SIZE pravidlo má od issue 585 voliteľný
+  `structureError` hák (`sizeStructureErrorFor`, `parse.ts`) — `run.ts` ho volá hneď
+  po úspešnom stiahnutí a pri ne-`null` dôvode zapíše riadok rovnako ako zlyhaný
+  fetch (`counts.failed`, `log.warn`). Huntingshop ho vracia pri: formulár Kúpiť BEZ
+  výberu, hoci Strážny pes veľkosti má (zmenený markup); výber Kúpiť bez čitateľnej
+  možnosti; veľkosť v Kúpiť, ktorú Strážny pes nepozná; viac formulárov/výberov naraz.
+  Ďalšia doména s rovnakým rizikom „zmenený markup → ticho plošné available" dostane
+  ten istý hák. Naživo overené ~50 produktov (2. 10. 2026): výber Kúpiť je vždy
+  podmnožina Strážneho psa, aj posledná jediná veľkosť sa ukáže ako výber s jednou
+  možnosťou (podprsenka 14140). Celá stránka ~0,9 MB, výbery sú pod `MAX_PAGE_BYTES`.
+  Samooprava PROD: `isLinkFresh` (`hasSizeAvailabilityRule`) berie existujúce plošné
+  huntingshop riadky ako NEčerstvé, takže prvý nočný beh po nasadení ich prepíše
+  per-veľkosť riadkami bez zásahu do DB. **Code review issue 585 — dve ďalšie cesty
+  k plošnému „skladom", ktoré platili pre KAŽDÚ size-rule doménu:** (1)
+  `collectOurSizesByLink` (`run.ts`) kľúčoval naše veľkosti LEN podľa
+  `internalNote`, kým `collectSupplierLinks` a `restock/queries.ts` používajú
+  EFEKTÍVNY odkaz (override z Párovania/Vyhľadať) — produkt s odkazom len v
+  `product_supplier_link_override` dostal `ourSizes=[]` → plošný riadok → restock
+  párovanie cez `size_label=''` (na PROD 2. 10. 2026 4 také huntingshop produkty).
+  Teraz `resolveEffectiveSupplierLink` aj tu — **všetky TRI miesta (zber odkazov,
+  zber našich veľkostí, restock SQL) musia mať ten istý kľúč**. (2)
+  `buildSizeStockRows`: stránka vymenúva ≥2 veľkosti, ale my pre odkaz nemáme
+  žiadnu svoju (variant bez veľkosti, split odkaz) → plošný `unknown`, NIKDY
+  štítok/JSON-LD stránky (ten hovorí o jednej predvolenej veľkosti). Navyše
+  huntingshop: keď sa pod očakávaným id NENÁJDE ANI JEDEN z oboch výberov, ale
+  výber s menom poľa veľkosti (`variant_id`/`variantIds[]`) na stránke je →
+  `structureError` (premenované id inak vyzerá ako jednoveľkostný produkt a pri
+  JEDNEJ našej veľkosti by prešiel štítok). Premenovaný LEN Strážny pes sa číta
+  ako „len Kúpiť" (veľkosti v ňom `available`, ostatné naše `unknown`) — bezpečné,
+  nie chyba. Zber odkazov aj našich veľkostí je od issue 585 v `links.ts`
+  (vyčlenené z `run.ts`, ktorý narazil na `max-lines: 400`); oba čítajú
+  override cez spoločné `loadOverrideMap`. PROD meranie 2. 10. 2026: split
+  odkazy na size-rule doménach = 0; huntingshop odkazov nášho produktu BEZ
+  veľkosti 159, z vzorky 32 má ~4 viacveľkostnú stránku → tie po nasadení
+  prejdú z plošného „skladom" na plošný `unknown` (karta „neviem prečítať"). **„Pamäť ručného vypnutia"** (vylúčiť variant
+  s predošlým `restock_event`) bola v návrhu, ale FINDING na tickete ukázal, že by
+  zablokovala aj správne prepnutia (61264/L, 61513/S/3XL) — pozastavená do
+  rozhodnutia majiteľa, NIE je implementovaná.

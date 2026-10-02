@@ -13,7 +13,7 @@ import { resolveEffectiveSupplierLink } from "../orders/effective-supplier-link.
 //
 // Dostupnosť u dodávateľa sa páruje VÝHRADNE podľa linky extrahovanej z
 // `internalNote` (`extractSupplierLink`) — TEN ISTÝ zdroj, aký používa
-// scraper (`supplier-stock/run.ts`'s `collectSupplierLinks`) aj
+// scraper (`supplier-stock/links.ts`'s `collectSupplierLinks`) aj
 // `restock/queries.ts`. Scraper manažérov OVERRIDE nesleduje vôbec — to je
 // EXISTUJÚCE správanie (mimo rozsahu tohto ticketu, zapísané v návrhovom
 // komentári na #240), táto obrazovka ho len zobrazuje tak, ako je.
