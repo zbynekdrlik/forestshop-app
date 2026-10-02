@@ -132,4 +132,30 @@ describe("huntingshop.eu per-veľkosť — issue 585", () => {
       ["44", "unknown"],
     ]);
   });
+
+  // Code review issue 585 — zvyšné cesty k plošnému „skladom".
+  // Reálny inline JS z živej stránky (je na KAŽDEJ huntingshop stránke, aj jednoveľkostnej).
+  const INLINE_JS = '<script>var $variantSel = document.getElementById("frm-addToCart-form-variant_id");</script>';
+
+  it("id formulára Kúpiť v inline JS sa neráta ako výber (jednoveľkostný ostáva plošný, 8954 nie je nejednoznačné)", () => {
+    expect(parseSizeAvailability(OLEJ_4796 + INLINE_JS, URL_4796)).toBeNull();
+    expect(sizeStructureErrorFor(OLEJ_4796 + INLINE_JS, URL_4796)).toBeNull();
+    expect(parseSizeAvailability(TRACKER_8954 + INLINE_JS, URL_8954)).toHaveLength(12);
+    expect(sizeStructureErrorFor(TRACKER_8954 + INLINE_JS, URL_8954)).toBeNull();
+  });
+
+  it("premenované id OBOCH výberov (výbery podľa name stále na stránke) → chyba, nikdy plošné available pre jednu našu veľkosť", () => {
+    const html = TRACKER_8954.replace('id="frm-addToCart-form-variant_id"', 'id="novy-kosik"').replace(
+      'id="frm-watchDogForm-form-variantIds"',
+      'id="novy-pes"',
+    );
+    expect(parseSizeAvailability(html, URL_8954)).toBeNull();
+    expect(sizeStructureErrorFor(html, URL_8954)).toMatch(/zmenená štruktúra/);
+  });
+
+  it("stránka so zoznamom ≥2 veľkostí, ale bez NAŠICH veľkostí → plošný unknown, nikdy štítok pri cene", () => {
+    const rows = rowsFor(TRACKER_8954, URL_8954, []);
+    expect(rows).toEqual([{ sizeLabel: "", availability: "unknown", availabilityText: "", price: null, source: "none" }]);
+  });
 });
+

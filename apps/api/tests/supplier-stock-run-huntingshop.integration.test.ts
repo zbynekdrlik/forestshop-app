@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { and, eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Database } from "../src/db/client.js";
-import { supplierStock, variants } from "../src/db/schema.js";
+import { productSupplierLinkOverrides, supplierStock, variants } from "../src/db/schema.js";
 import { selectRestockCandidates } from "../src/modules/restock/queries.js";
 import type { PageFetchResult } from "../src/modules/supplier-stock/page-fetcher.js";
 import { runSupplierStock } from "../src/modules/supplier-stock/run.js";
@@ -128,5 +128,30 @@ describe("beh dodávateľského skladu — issue 585: huntingshop.eu per-veľkos
     expect(rows[0]?.availability).toBe("unknown");
     expect(rows[0]?.error).toMatch(/bez výberu veľkosti/);
     expect((await selectRestockCandidates(db, NOW)).picked).toHaveLength(0);
+  });
+
+  // Code review issue 585: odkaz z Párovania/Vyhľadať (`product_supplier_link_override`)
+  // je pre zber aj restock EFEKTÍVNY odkaz — naše veľkosti sa preň musia zbierať
+  // rovnako, inak `ourSizes=[]` → plošný riadok zo štítku pri cene → restock
+  // prepne aj 43/44. Na PROD má takýto odkaz 4 huntingshop produkty (2. 10. 2026).
+  it("odkaz LEN z product_supplier_link_override (poznámka bez URL) → per-veľkosť, 43/44 sa neprepnú", async () => {
+    for (const size of ["42", "43", "44"]) {
+      await insertTestVariantForProduct(db, "62780ovr", `62780ovr/${size}`, { sizeLabel: size, internalNote: "betalov" });
+      await db
+        .update(variants)
+        .set({ state: "out_of_stock", stock: 0, availabilityText: "Vypredané" })
+        .where(eq(variants.code, `62780ovr/${size}`));
+    }
+    await db.insert(productSupplierLinkOverrides).values({ productKey: "62780ovr", url: TRACKER, updatedAt: NOW });
+
+    const result = await runSupplierStock({ db, now: NOW, sleep: noSleep, fetchPage });
+    expect(result.checked).toBe(1);
+
+    expect(await availabilityOf(TRACKER, "")).toBeUndefined();
+    expect(await availabilityOf(TRACKER, "43")).toBe("unavailable");
+    expect(await availabilityOf(TRACKER, "44")).toBe("unavailable");
+    expect(await availabilityOf(TRACKER, "42")).toBe("available");
+    const { picked } = await selectRestockCandidates(db, NOW);
+    expect(picked.map((c) => c.variantCode)).toEqual(["62780ovr/42"]);
   });
 });
