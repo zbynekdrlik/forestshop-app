@@ -18,7 +18,7 @@ import {
   pruneRawOrdersJob,
   shoptetWritebackJob,
 } from "./jobs.js";
-import { isDue } from "./scheduler.js";
+import { isDue, startScheduler } from "./scheduler.js";
 
 const DB = {} as Database;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -54,6 +54,17 @@ it("issue 589: ordersImportJob stále volá injektovaný ingest a jeho výsledok
   const outcome = await ordersImportJob(runOrdersIngest).run(DB, now);
   expect(calls).toEqual([now]);
   expect(outcome.detail).toEqual({ status: "accepted" });
+});
+
+it("issue 589: startScheduler odmietne chybný everyMinutes rozvrh hneď pri štarte (nie až v ticku)", () => {
+  const zly = { name: "zly", schedule: { kind: "everyMinutes" as const, minutes: 7 }, run: () => Promise.resolve({}) };
+  expect(() => startScheduler(DB, [zly])).toThrow(/everyMinutes/);
+});
+
+it("issue 589: startScheduler so zaregistrovaným ordersImportJob naštartuje bez chyby", () => {
+  expect(() => {
+    startScheduler(DB, [ordersImportJob(undefined)]).stop();
+  }).not.toThrow();
 });
 
 it("issue 589: spätné zápisy :50 (issue 122) a :55 (issue 123) ostávajú hodinové, nezmenené", () => {

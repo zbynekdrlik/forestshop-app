@@ -10,9 +10,9 @@ paths:
 # Objednávky zo Shoptetu (F3, #21)
 
 - **Hlásenie „appka nesedí so Shoptetom / Dnes: 0" — NAJPRV latencia, až
-  potom stratené dáta (#436, 14. 8. 2026).** Import beží každú hodinu o :45;
-  objednávka vzniknutá PO poslednom behu je v appke až o ďalšiu hodinu —
-  rozdiel do ~1 h je normálny. Diagnostika v poradí: (1) `job_run` pre
+  potom stratené dáta (#436, 14. 8. 2026).** Import beží každých 15 min (issue 589,
+  predtým každú hodinu o :45); objednávka vzniknutá PO poslednom behu je v appke
+  až po ďalšom behu — rozdiel do ~20 min (15-min okno + 5-min tick) je normálny. Diagnostika v poradí: (1) `job_run` pre
   `orders-import` (status má byť `accepted`, `detail.orderCount`); (2) živý
   feed vs. DB `max(placed_at)` — chýba objednávka STARŠIA než posledný beh?
   Až to je skutočný bug. Pozor na dve neškodné anomálie: `orderCount` cez
@@ -71,9 +71,9 @@ paths:
 - **Advisory zámok kľúč `787_878_003`** (`INGEST_ORDERS_ADVISORY_LOCK_KEY`)
   — ďalší v registri `.claude/rules/scheduler.md`, nikdy nehádaj nový.
 - **Plánovaný beh + retencia + HTTP rozhranie existujú (#22/#28/#23).**
-  `ordersImportJob` beží KAŽDÚ HODINU o :45 UTC (hodinová kadencia od #115,
-  pôvodne denná 01:45 — `jobs.ts` `schedule: { kind: "hourly", minuteUtc: 45 }`);
-  `pruneRawOrdersJob` ostáva denný (02:00). Oba registrované v scheduleri
+  `ordersImportJob` beží KAŽDÝCH 15 MIN (issue 589, `jobs.ts` `schedule: { kind:
+  "everyMinutes", minutes: 15 }`; predtým hodinová :45 od #115, pôvodne denná
+  01:45); `pruneRawOrdersJob` ostáva denný (02:10). Oba registrované v scheduleri
   (`index.ts`) vedľa katalógových jobov — registrácia
   advisory zámkov aj časov je v `.claude/rules/scheduler.md`. Čítanie/ručný
   refresh ide cez `GET /api/orders/open`, `GET /api/orders/:id`,
@@ -94,6 +94,15 @@ paths:
   (pozri vyššie), takže neexistuje DB riadok, cez ktorý by sa dala pohnať. Na
   rozdiel od katalógu preto NEEXISTUJE výnimka "posledný prijatý sa nikdy
   nemaže" — každý súbor sa posudzuje rovnako, len podľa veku.
+  **Retencia je 7 dní (`ORDERS_RAW_KEEP_DAYS`, `jobs.ts`; issue 589, predtým
+  30).** Zmerané na PROD 2. 10. 2026: 730 súborov / 134 MB pri 24 behoch/deň ×
+  30 dní (~185 KB/súbor). 15-min kadencia = 96 súborov/deň ≈ 18 MB/deň; pri 30
+  dňoch by to bolo ~2 880 súborov ≈ 530 MB, pri 7 dňoch 672 súborov ≈ 124 MB =
+  dnešná úroveň. Zamietnuté „ukladať len zmenený export“ — sha256 sa mení takmer
+  pri každom behu (Shoptet regeneruje stavové polia, viď bod o latencii vyššie),
+  úspora by bola nulová. Surové súbory appka nikdy nečíta (len ich píše
+  `ingestOrders` pre ladenie), týždeň histórie stačí. Pri ďalšej zmene kadencie
+  prepočítaj `ORDERS_RAW_KEEP_DAYS` tak, aby `behy/deň × dni` ostalo ~700.
 - **`scripts/e2e-setup.ts` má VLASTNÝ, SAMOSTATNÝ `TRUNCATE` zoznam od
   `apps/api/tests/helpers/db.ts`** (#24) — pridanie novej "koreňovej"
   tabuľky (`.claude/rules/testing.md`'s `order`/`order_line` pravidlo,

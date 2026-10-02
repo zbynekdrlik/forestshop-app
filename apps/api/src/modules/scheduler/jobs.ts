@@ -126,11 +126,14 @@ export function sessionCleanupJob(): ScheduledJob {
 export function ordersImportJob(runOrdersIngest: RunOrdersIngest | undefined): ScheduledJob {
   return {
     name: ORDERS_IMPORT_JOB_NAME,
-    // #115 (majiteľ: "sync zo shoptetu ma bezat kazdu hodinu"): predtým raz
-    // denne o 01:45 (`kind: "daily"`), teraz KAŽDÚ hodinu o :45 — `isDue()`
-    // (`scheduler.ts`) periodizuje `hourly` podľa UTC dňa+hodiny, takže sa v
-    // tej istej hodine nezopakuje, ale v ĎALŠEJ hodine áno.
-    schedule: { kind: "hourly", minuteUtc: 45 },
+    // Kadencia: #22 denne 01:45 → #115 každú hodinu o :45 → issue 589
+    // (majiteľ: "vie sa to refreshovat kazdych 15 min") každých 15 minút.
+    // `isDue()` (`scheduler.ts`) periodizuje `everyMinutes` podľa 15-min
+    // okna UTC (:00/:15/:30/:45), takže v tom istom okne sa nezopakuje.
+    // Beh trvá 3–4 s (PROD, 2. 10. 2026) — kolízia s :50/:55 spätnými
+    // zápismi (issue 122/123, ostávajú hodinové) nevadí, každý má vlastný
+    // zámok a tick ich púšťa postupne.
+    schedule: { kind: "everyMinutes", minutes: 15 },
     async run(_db, now) {
       if (runOrdersIngest === undefined) throw new Error(ORDERS_EXPORT_URL_NOT_CONFIGURED);
       const result = await runOrdersIngest(now);
@@ -145,15 +148,22 @@ export function ordersImportJob(runOrdersIngest: RunOrdersIngest | undefined): S
  * snapshotovú tabuľku, na rozdiel od katalógu). Žiadny DB prístup, teda ani
  * žiadny advisory lock.
  */
-export function pruneRawOrdersJob(rawDir: string, keepDays = 30): ScheduledJob {
+// Retencia surových exportov objednávok (issue 589): 30 → 7 dní. Import
+// beží od issue 589 každých 15 min (96 súborov/deň, ~185 KB každý ≈ 18 MB/deň);
+// pri pôvodných 30 dňoch by `/data/orders-raw` narástol zo 134 MB (24/deň ×
+// 30) na ~530 MB. 7 dní = 672 súborov ≈ 124 MB, teda dnešná úroveň. Surové
+// súbory appka NIKDY nečíta (len ich zapisuje `ingestOrders` pre ladenie),
+// týždeň histórie na diagnostiku stačí — katalóg má 14 dní pri hodinovej
+// kadencii (issue 184), objednávky majú 4× viac súborov za deň.
+export const ORDERS_RAW_KEEP_DAYS = 7;
+
+export function pruneRawOrdersJob(rawDir: string, keepDays = ORDERS_RAW_KEEP_DAYS): ScheduledJob {
   return {
     name: PRUNE_RAW_ORDERS_JOB_NAME,
-    // Zostáva DENNÁ (nie hodinová) — mazanie starých surových exportov
-    // netreba spúšťať častejšie. #115: `ordersImportJob` je odteraz hodinová
-    // (:45 každú hodinu), takže tento denný beh o 02:00 sa s ním bude
-    // prekrývať KAŽDÝ deň (nie len raz), nie iba pri tomto jednom sedení —
-    // neprekáža, `pruneRawOrders` nemá žiadny DB advisory zámok (viď komentár
-    // vyššie), takže si nekonkuruje.
+    // Zostáva DENNÁ — mazanie starých surových exportov netreba spúšťať
+    // častejšie (ani po issue 589, keď import beží každých 15 min). Súbeh s
+    // importom neprekáža, `pruneRawOrders` nemá žiadny DB advisory zámok (viď
+    // komentár vyššie), takže si nekonkuruje.
     // issue 293 review finding: `hourLocal: 2, minuteLocal: 0` je PRESNE
     // okamih jarného prechodu na letný čas v Europe/Bratislava (miestne
     // 02:00 v tú noc VÔBEC NEEXISTUJE — hodiny skočia z 01:59 rovno na

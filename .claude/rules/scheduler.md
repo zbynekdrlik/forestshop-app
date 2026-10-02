@@ -28,8 +28,16 @@ paths:
   sám žiadnu doménovú logiku nemá a nemá ju ani získať. `run()` nikdy
   nezachytáva vlastné výnimky — necháva ich prejsť, `scheduler.ts`'s
   `executeJob` ich odchytí a zapíše ako `job_run.status = "failure"`.
-- **Rozvrh je diskriminovaná únia `Schedule = DailySchedule | HourlySchedule`
-  (`kind: "daily" | "hourly"`, `types.ts`), žiadny cron výraz.** `isDue()`
+- **Rozvrh je diskriminovaná únia `Schedule = DailySchedule | HourlySchedule |
+  EveryMinutesSchedule` (`kind: "daily" | "hourly" | "everyMinutes"`,
+  `types.ts`), žiadny cron výraz.** **`everyMinutes` (issue 589):** perióda =
+  N-minútové okno UTC zarovnané na epochu (`minutes: 15` → :00/:15/:30/:45),
+  `periodKey` = poradové číslo okna; splatná HNEĎ v novom okne (žiadna cieľová
+  minúta), v tom istom okne len raz. `minutes` MUSÍ byť celé číslo deliace 60 —
+  inak `startScheduler` vyhodí PRI ŠTARTE appky (zámerne nie až v `tick()`: výnimka
+  z `isDue` vnútri jeho transakcie by zablokovala AJ ostatné joby). Tick beží
+  každých 5 min, takže 15-min job sa reálne spustí v prvom ticku okna (posun
+  0-5 min, rovnako ako `hourly`). `isDue()`
   (`scheduler.ts`) je čistá funkcia — periodizuje podľa `kind`. **`daily`:
   MIESTNY (Europe/Bratislava) kalendárny deň + miestna hodina/minúta (issue
   293 — predtým doslovné UTC, appka aj kontajner bežali bez nastaveného
@@ -52,12 +60,15 @@ paths:
   01:00 — zmerané trvanie behu 19.5-22.9 s, zanedbateľné), 01:15 mazanie
   surových exportov katalógu (`daily`, retencia skrátená z 30 na 14 dní v
   issue 184 — hodinový import produkuje viac snapshotov, box je na 98 %
-  disku), 01:30 mazanie relácií (`daily`), :45 KAŽDÚ hodinu import
-  objednávok (`ordersImportJob`, `hourly` od #115, pôvodne `daily` #22),
+  disku), 01:30 mazanie relácií (`daily`), KAŽDÝCH 15 MIN import
+  objednávok (`ordersImportJob`, `everyMinutes: 15` od issue 589, predtým
+  `hourly` :45 #115, pôvodne `daily` #22),
   02:10 mazanie surových exportov objednávok (`pruneRawOrdersJob`, `daily`,
   #28 — NIE 02:00, pozri poznámku o jarnom prechode nižšie), :50 KAŽDÚ
   hodinu spätný zápis odkazov na dodávateľa do Shoptetu
-  (`shoptetWritebackJob`, `hourly`, issue 122 — mimo kolízie s `:45`), :55
+  (`shoptetWritebackJob`, `hourly`, issue 122 — pôvodne mimo kolízie s `:45`;
+  od issue 589 sa s 15-min importom stretne v okne :45, neprekáža — 3-4 s beh,
+  vlastné zámky, tick ich púšťa postupne), :55
   KAŽDÚ hodinu spätný zápis poznámky objednávky do Shoptetu
   (`orderNoteWritebackJob`, `hourly`, issue 123 — mimo kolízie s `:45`/`:50`).
   `:20` (katalóg) je zámerne aspoň 25 min od každého suseda (25 min k
