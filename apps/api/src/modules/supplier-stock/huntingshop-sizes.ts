@@ -56,7 +56,7 @@ export function readHuntingshopSizes(html: string): HuntingshopSizeRead {
   if (cartForms > 1 || cartSelects.length > 1 || watchdogSelects.length > 1) {
     return {
       kind: "error",
-      reason: `huntingshop.eu: nejednoznačná stránka (formulárov Kúpiť ${cartForms}, výberov Kúpiť ${cartSelects.length}, výberov Strážny pes ${watchdogSelects.length})`,
+      reason: `huntingshop.eu: nejednoznačná stránka (formulárov Kúpiť ${String(cartForms)}, výberov Kúpiť ${String(cartSelects.length)}, výberov Strážny pes ${String(watchdogSelects.length)})`,
     };
   }
   const watchdog = watchdogSelects[0] === undefined ? null : optionLabels(watchdogSelects[0][1] ?? "");
