@@ -135,7 +135,9 @@ describe("huntingshop.eu per-veľkosť — issue 585", () => {
 
   // Code review issue 585 — zvyšné cesty k plošnému „skladom".
   // Reálny inline JS z živej stránky (je na KAŽDEJ huntingshop stránke, aj jednoveľkostnej).
-  const INLINE_JS = '<script>var $variantSel = document.getElementById("frm-addToCart-form-variant_id");</script>';
+  const INLINE_JS =
+    '<script>var $variantSel = document.getElementById("frm-addToCart-form-variant_id");' +
+    " const variantSelect = document.querySelector('select[name=\"variant_id\"]');</script>";
 
   it("id formulára Kúpiť v inline JS sa neráta ako výber (jednoveľkostný ostáva plošný, 8954 nie je nejednoznačné)", () => {
     expect(parseSizeAvailability(OLEJ_4796 + INLINE_JS, URL_4796)).toBeNull();

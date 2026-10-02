@@ -61,7 +61,7 @@ describe("parseSizeAvailability — issue 551: wetland.sk vráti JEDNU kombinác
   });
 
   it("iná doména (bez wetland pravidla) → null", () => {
-    expect(parseSizeAvailability(ERIC, "https://www.huntingshop.eu/p/1")).toBeNull();
+    expect(parseSizeAvailability(ERIC, "https://odimon.sk/p/1")).toBeNull();
   });
 
   it("code review issue 551: FARBA v kombinácii sa NEDOSTANE do kandidátov (len veľkostná skupina)", () => {

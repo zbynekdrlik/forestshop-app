@@ -76,7 +76,7 @@ describe("parseCombinationResponse — issue 552: rozbalí action=refresh JSON a
   });
 
   it("iná doména bez enumeračného pravidla → prázdno", () => {
-    expect(parseCombinationResponse(REFRESH_52, "https://www.huntingshop.eu/p/1")).toEqual([]);
+    expect(parseCombinationResponse(REFRESH_52, "https://odimon.sk/p/1")).toEqual([]);
   });
 });
 
@@ -130,7 +130,7 @@ describe("sizeCombinationEnumeratorFor — issue 552: len wetland má enumeráci
     expect(sizeCombinationEnumeratorFor("https://shop.lasting.eu/bony-cepica")).toBeNull();
   });
 
-  it("doména bez size-rule (huntingshop.eu) → null", () => {
-    expect(sizeCombinationEnumeratorFor("https://www.huntingshop.eu/p/1")).toBeNull();
+  it("doména bez size-rule (odimon.sk) → null", () => {
+    expect(sizeCombinationEnumeratorFor("https://odimon.sk/p/1")).toBeNull();
   });
 });
