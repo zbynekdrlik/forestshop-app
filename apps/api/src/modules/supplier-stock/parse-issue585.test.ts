@@ -160,4 +160,3 @@ describe("huntingshop.eu per-veľkosť — issue 585", () => {
     expect(rows).toEqual([{ sizeLabel: "", availability: "unknown", availabilityText: "", price: null, source: "none" }]);
   });
 });
-

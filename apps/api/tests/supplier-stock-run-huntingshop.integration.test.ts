@@ -154,4 +154,16 @@ describe("beh dodávateľského skladu — issue 585: huntingshop.eu per-veľkos
     const { picked } = await selectRestockCandidates(db, NOW);
     expect(picked.map((c) => c.variantCode)).toEqual(["62780ovr/42"]);
   });
+
+  // Re-review issue 585: náš produkt BEZ veľkosti odkázaný na viacveľkostnú stránku
+  // (PROD vzorka 2. 10. 2026: ~4 z 32 takých huntingshop odkazov) — nevieme, ktorú
+  // veľkosť predávame, takže plošný unknown, nikdy štítok pri cene.
+  it("náš produkt bez veľkosti na viacveľkostnej stránke → plošný unknown, nie je kandidát", async () => {
+    await seedOutOfStock("nosize8954", "nosize8954", null, TRACKER);
+
+    await runSupplierStock({ db, now: NOW, sleep: noSleep, fetchPage });
+
+    expect(await availabilityOf(TRACKER, "")).toBe("unknown");
+    expect((await selectRestockCandidates(db, NOW)).picked).toHaveLength(0);
+  });
 });
