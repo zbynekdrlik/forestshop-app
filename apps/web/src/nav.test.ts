@@ -179,15 +179,20 @@ it("isVisibleTabId rozlíši viditeľné (NAV) od skrytých (HIDDEN_TABS)", () =
 // Tón odznaku je vlastnosť ZÁLOŽKY v registri (`NavTab.badgeTone`), nie
 // hardcoded zoznam id v `Sidebar.tsx` — rovnaký princíp ako `wide`/`icon`/
 // `defaultCollapsed` (issue 343, `.claude/rules/frontend-design.md`). Test
-// preto overuje registráciu: presne tie dve záložky nesú `badgeTone: "danger"`,
-// každá iná viditeľná záložka nemá `badgeTone` nastavený vôbec.
-it("badgeTone 'danger' nesú v NAV presne záložky exchange a returned, žiadna iná viditeľná záložka ho nemá", () => {
+// preto overuje registráciu: presne vymenované záložky nesú `badgeTone:
+// "danger"`, každá iná viditeľná záložka nemá `badgeTone` nastavený vôbec.
+// issue 586: Štěpán (1. 10. 2026) rozšíril zadanie — „a aj reklamacie - ale to
+// mi daj červené s bielym" → `claims` pribudlo do červených; nový odznak
+// „Nedostupné tovary" je výslovne „normálne zelené", teda BEZ `badgeTone`.
+it("badgeTone 'danger' nesú v NAV presne záložky exchange, returned a claims; Nedostupné tovary ostávajú zelené", () => {
   const vsetky = NAV.flatMap((f) => f.tabs);
   const cervene = vsetky.filter((t) => t.badgeTone === "danger").map((t) => t.id);
-  expect(cervene).toEqual(["exchange", "returned"]);
+  expect(cervene).toEqual(["exchange", "returned", "claims"]);
   for (const t of vsetky) {
-    if (t.id !== "exchange" && t.id !== "returned") expect(t.badgeTone).toBeUndefined();
+    if (!cervene.includes(t.id)) expect(t.badgeTone).toBeUndefined();
   }
   expect(findTab("exchange")?.badgeTone).toBe("danger");
   expect(findTab("returned")?.badgeTone).toBe("danger");
+  expect(findTab("claims")?.badgeTone).toBe("danger");
+  expect(findTab("nedostupne")?.badgeTone).toBeUndefined();
 });
