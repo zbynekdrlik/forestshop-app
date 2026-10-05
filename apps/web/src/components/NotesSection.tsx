@@ -45,11 +45,12 @@ export function NotesSection({ onSessionExpired }: { readonly onSessionExpired: 
   const [drafts, setDrafts] = useState<Readonly<Record<string, string>>>({});
   const editingIdRef = useRef<string | null>(null);
   // issue 593: polia na písanie rastú s obsahom (CSS `.write-field` +
-  // fallback hook pre prehliadače bez `field-sizing`, napr. Firefox).
+  // fallback hook pre prehliadače bez `field-sizing`, starší Firefox/Safari).
+  // `editingId` ako resetKey: prepnutie úpravy na inú poznámku = nový element.
   const editInputRef = useRef<HTMLTextAreaElement>(null);
   const editingValue = editingId === null ? "" : (drafts[editingId] ?? rows?.find((r) => r.id === editingId)?.body ?? "");
   useAutoGrowTextarea(newBodyRef, newBody);
-  useAutoGrowTextarea(editInputRef, editingValue, editingId !== null);
+  useAutoGrowTextarea(editInputRef, editingValue, editingId !== null, editingId);
 
   const load = useCallback(() => {
     fetchNotes()

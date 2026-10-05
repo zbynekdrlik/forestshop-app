@@ -2,16 +2,20 @@ import { useLayoutEffect, type RefObject } from "react";
 import { autoResizeTextarea } from "../autoResizeTextarea.js";
 
 // issue 593: pole na písanie (Poznámky + Objednávky predajňa, CSS `.write-field`)
-// rastie PRESNE na obsah. Prehliadač s `field-sizing: content` (Chromium) to
-// robí sám v CSS; ostatné (Firefox — Štěpánov prehliadač) potrebujú JS
-// fallback cez `autoResizeTextarea`. Hook ho spúšťa:
+// rastie PRESNE na obsah. Prehliadač s `field-sizing: content` (Chromium,
+// Firefox 153+) to robí sám v CSS; prehliadač bez neho (starší Firefox/Safari)
+// potrebuje JS fallback cez `autoResizeTextarea`. Hook ho spúšťa:
 // - pri KAŽDEJ zmene hodnoty (písanie, Enter, vloženie, emoji, ale aj
 //   vyprázdnenie po uložení → pole sa vráti na `rows={3}`),
-// - pri pripojení poľa (otvorenie úpravy dlhého textu má hneď celú výšku —
+// - pri pripojení poľa a pri zmene `resetKey` (otvorenie úpravy dlhého textu,
+//   aj prepnutie úpravy na inú poznámku s rovnakým textom = nový element) —
 //   predtým sa výška menila len v `onChange`, takže pri otvorení ostal text
-//   skrytý pod `overflow: hidden`),
-// - pri zmene šírky okna (text sa inak zalomí a výška by nesedela).
+//   skrytý pod `overflow: hidden`,
+// - pri zmene ŠÍRKY poľa (`ResizeObserver` — okno aj zbalenie bočného panela;
+//   text sa inak zalomí inak a výška by nesedela).
 // `active` = pole je práve zobrazené (úprava otvorená); keď nie, nič nerobí.
+// Prázdne pole na OBOCH cestách zruší inline výšku — aj výšku po ručnom
+// ťahaní úchytom (`resize: vertical`), ktorú by `field-sizing` inak držal.
 
 export function supportsFieldSizing(): boolean {
   return typeof CSS !== "undefined" && typeof CSS.supports === "function" && CSS.supports("field-sizing", "content");
@@ -28,21 +32,39 @@ function fit(el: HTMLTextAreaElement): void {
   autoResizeTextarea(el);
 }
 
-export function useAutoGrowTextarea(ref: RefObject<HTMLTextAreaElement | null>, value: string, active = true): void {
+export function useAutoGrowTextarea(ref: RefObject<HTMLTextAreaElement | null>, value: string, active = true, resetKey: unknown = null): void {
   useLayoutEffect(() => {
-    if (!active || supportsFieldSizing()) return;
     const el = ref.current;
-    if (el) fit(el);
-  }, [ref, value, active]);
+    if (!active || el === null) return;
+    if (value === "") {
+      el.style.height = "";
+      return;
+    }
+    if (!supportsFieldSizing()) fit(el);
+  }, [ref, value, active, resetKey]);
 
   useLayoutEffect(() => {
-    if (!active || supportsFieldSizing()) return;
-    const onResize = (): void => {
-      if (ref.current) fit(ref.current);
-    };
-    window.addEventListener("resize", onResize);
+    const el = ref.current;
+    if (!active || el === null || supportsFieldSizing()) return;
+    let lastWidth: number | null = null;
+    let frame = 0;
+    // Prepočet až v ďalšej snímke — zmena výšky priamo v callbacku by
+    // vyvolala „ResizeObserver loop completed…" chybu v konzole.
+    const observer = new ResizeObserver((entries) => {
+      const width = entries[entries.length - 1]?.contentRect.width ?? null;
+      if (width === lastWidth) return;
+      const first = lastWidth === null;
+      lastWidth = width;
+      if (first) return; // úvodné hlásenie pri observe — výšku už nastavil efekt vyššie
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        fit(el);
+      });
+    });
+    observer.observe(el);
     return () => {
-      window.removeEventListener("resize", onResize);
+      observer.disconnect();
+      cancelAnimationFrame(frame);
     };
-  }, [ref, active]);
+  }, [ref, active, resetKey]);
 }

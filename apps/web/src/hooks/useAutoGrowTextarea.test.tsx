@@ -4,7 +4,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { useAutoGrowTextarea } from "./useAutoGrowTextarea.js";
 
 // issue 593: JS fallback cesty (prehliadač BEZ CSS `field-sizing: content` —
-// Firefox, Štěpánov prehliadač). `CSS.supports` sa stubuje EXPLICITNE (nie
+// starší Firefox/Safari). `CSS.supports` sa stubuje EXPLICITNE (nie
 // spoliehať na to, čo jsdom vráti), jsdom nemá layout, preto sa `scrollHeight`
 // mockuje podľa počtu riadkov
 // (20px/riadok + 4px padding, aspoň `rows` riadkov ako reálny prehliadač pri

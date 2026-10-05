@@ -1,12 +1,11 @@
 // issue 410: "Objednávky predajňa" — voľná textarea, ktorá RASTIE pri Enter
 // aj Shift+Enter (ticket). `<textarea>` samo osebe pri OBOCH klávesách len
 // pridá nový riadok a NIKDY neodošle formulár (na rozdiel od `<input>`u) —
-// appka preto nezachytáva žiadnu klávesu, len RUČNE prispôsobí výšku
-// obsahu pri každej zmene (žiadny CSS-only `field-sizing: content` — nie je
-// isté, že appka smie spoliehať len na prehliadače, čo ho podporujú).
+// appka preto nezachytáva žiadnu klávesu.
 //
-// issue 593: volá ho hook `useAutoGrowTextarea` (fallback pre prehliadače bez
-// CSS `field-sizing: content`). Pole má `overflow-y: auto` (CSS `.write-field`
+// issue 593: rast primárne robí CSS `field-sizing: content` (`.write-field`);
+// táto funkcia je JS fallback pre prehliadače bez neho (starší Firefox/Safari),
+// volá ju hook `useAutoGrowTextarea`. Pole má `overflow-y: auto` (CSS `.write-field`
 // — strop `50vh`, za ním sa posúva) a appka má globálne `box-sizing: border-box`.
 // `scrollHeight` je obsah + padding BEZ rámika, takže výška musí rámik
 // (`offsetHeight − clientHeight`) pripočítať — inak by pod stropom chýbali
