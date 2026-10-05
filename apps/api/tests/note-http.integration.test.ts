@@ -207,18 +207,20 @@ describe("PATCH /api/notes/:id/text", () => {
   it("zmení text poznámky; autor, čas vytvorenia aj stav vybavenia ostávajú", async () => {
     const { app, cookie } = await bootUser("sef@forestshop.sk", "sef");
     const id = await createOne(app, cookie, "objednat sacky");
-    const before = (await (await app.request("/api/notes", { headers: { cookie } })).json()) as { rows: readonly { createdAt: string }[] };
+    const before = (await (await app.request("/api/notes", { headers: { cookie } })).json()) as { rows: readonly { createdAt: string; updatedAt: string }[] };
 
     const res = await app.request(`/api/notes/${id}/text`, { method: "PATCH", headers: { cookie, "content-type": "application/json" }, body: JSON.stringify({ body: "  Objednať sáčky u dodávateľa  " }) });
     expect(res.status).toBe(200);
     expect((await res.json()) as { ok: boolean; updated: boolean }).toEqual({ ok: true, updated: true });
 
     const list = await app.request("/api/notes", { headers: { cookie } });
-    const after = (await list.json()) as { rows: readonly { id: string; body: string; authorName: string; createdAt: string; resolvedAt: string | null }[] };
+    const after = (await list.json()) as { rows: readonly { id: string; body: string; authorName: string; createdAt: string; updatedAt: string; resolvedAt: string | null }[] };
     expect(after.rows).toHaveLength(1);
     // Text je orezaný (rovnaký `trim()` ako pri vytvorení).
     expect(after.rows[0]).toMatchObject({ id, body: "Objednať sáčky u dodávateľa", authorName: "sef@forestshop.sk", resolvedAt: null });
     expect(after.rows[0]?.createdAt).toBe(before.rows[0]?.createdAt);
+    // `updatedAt` sa posunie (ISO reťazce v UTC sa dajú porovnať lexikograficky).
+    expect((after.rows[0]?.updatedAt ?? "") > (before.rows[0]?.updatedAt ?? "")).toBe(true);
   });
 
   it("ZDIEĽANÉ — INÝ používateľ smie upraviť cudziu poznámku", async () => {

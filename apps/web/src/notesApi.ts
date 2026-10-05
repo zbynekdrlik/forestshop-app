@@ -65,15 +65,23 @@ export async function setNoteResolved(id: string, resolved: boolean): Promise<bo
   return body.updated;
 }
 
+// issue 591: poznámku medzitým niekto zmazal (server 404) — UI zavrie úpravu a
+// obnoví zoznam namiesto „skúste znova", ktoré by nikdy neprešlo.
+export class NoteNotFoundError extends Error {
+  constructor() {
+    super("Poznámka nenájdená");
+  }
+}
+
 // issue 591: oprava textu uloženej poznámky (`PATCH /api/notes/:id/text`).
-export async function updateNoteText(id: string, body: string): Promise<boolean> {
+export async function updateNoteText(id: string, body: string): Promise<void> {
   const response = await fetch(`/api/notes/${encodeURIComponent(id)}/text`, {
     method: "PATCH",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ body }),
   });
-  const result = (await readJson(response, "Poznámku sa nepodarilo upraviť")) as { readonly updated: boolean };
-  return result.updated;
+  if (response.status === 404) throw new NoteNotFoundError();
+  await readJson(response, "Poznámku sa nepodarilo upraviť");
 }
 
 export async function deleteNote(id: string): Promise<void> {

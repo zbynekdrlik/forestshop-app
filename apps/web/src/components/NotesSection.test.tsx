@@ -18,7 +18,7 @@ vi.mock("../notesApi.js", async (importOriginal) => {
   return { ...actual, fetchNotes, createNote, setNoteResolved, deleteNote, updateNoteText };
 });
 
-const { NotesUnauthorizedError } = await import("../notesApi.js");
+const { NoteNotFoundError, NotesUnauthorizedError } = await import("../notesApi.js");
 
 function note(overrides: Partial<NoteRow> & Pick<NoteRow, "id" | "body">): NoteRow {
   return {
@@ -129,6 +129,8 @@ it("klik na text otvorí úpravu, Enter uloží orezaný text cez updateNoteText
   expect(editor.value).toBe("objednat sacky"); // predvyplnené pôvodným textom
   fireEvent.change(editor, { target: { value: "  Objednať sáčky  " } });
   fireEvent.keyDown(editor, { key: "Enter" });
+  // Prehliadač po Enter vystrelí blur (pole sa počas zápisu vypne) — nesmie uložiť druhýkrát.
+  fireEvent.blur(editor);
 
   await waitFor(() => {
     expect(updateNoteText).toHaveBeenCalledWith("n-1", "Objednať sáčky");
@@ -213,6 +215,44 @@ it("zlyhaná úprava ukáže chybu a nechá rozpísaný text v poli", async () =
 
   expect((await screen.findByRole("alert")).textContent).toContain("nepodarilo");
   expect(screen.getByTestId<HTMLTextAreaElement>("poznamka-edit-input-n-1").value).toBe("opravené");
+});
+
+it("zlyhané blur-uloženie poznámky A po kliknutí na poznámku B nestratí text A — po znovuotvorení A sa vráti", async () => {
+  fetchNotes.mockResolvedValue([note({ id: "n-a", body: "pôvodné A" }), note({ id: "n-b", body: "pôvodné B" })]);
+  updateNoteText.mockRejectedValue(new Error("boom"));
+  render(<NotesSection onSessionExpired={() => {}} />);
+
+  fireEvent.click(await screen.findByTestId("poznamka-body-n-a"));
+  const editorA = screen.getByTestId<HTMLTextAreaElement>("poznamka-edit-input-n-a");
+  fireEvent.change(editorA, { target: { value: "opravené A" } });
+  fireEvent.blur(editorA); // klik na B najprv opustí pole A
+  fireEvent.click(screen.getByTestId("poznamka-body-n-b"));
+
+  expect((await screen.findByRole("alert")).textContent).toContain("otvor ju znova");
+  expect(screen.getByTestId("poznamka-edit-input-n-b")).toBeDefined(); // B ostáva otvorená
+  fireEvent.keyDown(screen.getByTestId("poznamka-edit-input-n-b"), { key: "Escape" });
+
+  // Zápis A doběhol (riadok A už nie je „busy"), až potom ju znova otvor.
+  await waitFor(() => {
+    expect(screen.getByTestId<HTMLInputElement>("poznamka-resolve-n-a").disabled).toBe(false);
+  });
+  fireEvent.click(screen.getByTestId("poznamka-body-n-a"));
+  expect(screen.getByTestId<HTMLTextAreaElement>("poznamka-edit-input-n-a").value).toBe("opravené A");
+});
+
+it("poznámku medzitým niekto zmazal (404) — úprava sa zavrie, zobrazí sa hláška a zoznam sa obnoví", async () => {
+  fetchNotes.mockResolvedValueOnce([note({ id: "n-1", body: "pôvodné" })]).mockResolvedValue([]);
+  updateNoteText.mockRejectedValue(new NoteNotFoundError());
+  render(<NotesSection onSessionExpired={() => {}} />);
+
+  fireEvent.click(await screen.findByTestId("poznamka-body-n-1"));
+  const editor = screen.getByTestId<HTMLTextAreaElement>("poznamka-edit-input-n-1");
+  fireEvent.change(editor, { target: { value: "opravené" } });
+  fireEvent.keyDown(editor, { key: "Enter" });
+
+  expect((await screen.findByRole("alert")).textContent).toContain("niekto zmazal");
+  expect(await screen.findByTestId("poznamky-empty")).toBeDefined();
+  expect(screen.queryByTestId("poznamka-edit-input-n-1")).toBeNull();
 });
 
 it("vypršaná relácia (401) pri úprave zavolá onSessionExpired", async () => {

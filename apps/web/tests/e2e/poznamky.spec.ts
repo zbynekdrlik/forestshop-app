@@ -73,8 +73,8 @@ test("mobil (375px): napísať poznámku, vidieť ju v zozname, vybaviť — zdi
 // `.fill()` keydown nespustí, `.claude/rules/testing.md` issue 150) → po
 // obnovení stránky ostáva opravený text. Potom ✏️ + Esc: rozpísaná zmena sa
 // zahodí. Riadok sa hľadá cez VLASTNÉ id (testid), nie `hasText` — počas úpravy
-// je text v `<textarea>` a `hasText` by riadok nenašiel (issue 342 pasca), a
-// `note` je zdieľaná tabuľka, ktorú paralelne mení aj iný test v súbore.
+// je text v `<textarea>` a `hasText` by riadok nenašiel (issue 342 pasca); test
+// po sebe svoju poznámku zmaže, ostatné testy súboru tak začínajú od prázdna.
 test("upraviť text uloženej poznámky — klik na text, Enter uloží, po obnovení ostáva; ✏️ + Esc zruší; konzola čistá", async ({ page }) => {
   const chyby: string[] = [];
   page.on("console", (m) => {
