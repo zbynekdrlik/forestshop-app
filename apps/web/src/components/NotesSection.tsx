@@ -205,7 +205,7 @@ export function NotesSection({ onSessionExpired }: { readonly onSessionExpired: 
     <div className="poznamky-add">
       <textarea
         ref={newBodyRef}
-        className="poznamka-new-input"
+        className="poznamka-new-input write-field"
         value={newBody}
         onChange={(e) => {
           setNewBody(e.target.value);
@@ -213,7 +213,7 @@ export function NotesSection({ onSessionExpired }: { readonly onSessionExpired: 
         aria-label="Nová poznámka"
         placeholder="Napíš poznámku…"
         data-testid="poznamka-new-input"
-        rows={3}
+        rows={5}
         disabled={creating}
       />
       <div className="poznamka-add-actions">
@@ -270,7 +270,7 @@ export function NotesSection({ onSessionExpired }: { readonly onSessionExpired: 
                   <div className="poznamka-content">
                     {editingId === row.id ? (
                       <textarea
-                        className="poznamka-edit-input"
+                        className="poznamka-edit-input write-field"
                         value={drafts[row.id] ?? row.body}
                         onChange={(e) => {
                           const value = e.target.value;
@@ -297,7 +297,7 @@ export function NotesSection({ onSessionExpired }: { readonly onSessionExpired: 
                         }}
                         aria-label="Text upravovanej poznámky"
                         data-testid={`poznamka-edit-input-${row.id}`}
-                        rows={3}
+                        rows={5}
                         disabled={busy}
                         autoFocus
                       />

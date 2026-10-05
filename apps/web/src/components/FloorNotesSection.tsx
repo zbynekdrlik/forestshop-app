@@ -220,6 +220,8 @@ export function FloorNotesSection({ role, onSessionExpired }: { readonly role: M
   const addRow = canEdit && (
     <div className="floor-note-add-row">
       <textarea
+        className="write-field"
+        rows={5}
         value={newText}
         onChange={(e) => {
           setNewText(e.target.value);

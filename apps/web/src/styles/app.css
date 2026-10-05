@@ -3030,7 +3030,21 @@ a.upozornenie-title:hover {
   border-radius: var(--fs-radius-sm);
   padding: var(--fs-space-2) var(--fs-space-3);
   resize: vertical;
-  min-height: 4.5rem;
+  --write-field-pad-y: var(--fs-space-2);
+}
+/* issue 593 (Štěpán): ZDIEĽANÉ pravidlo pre polia na písanie (Poznámky +
+   Objednávky predajňa) — prázdne aspoň 5 riadkov, rastúce pole
+   (`autoResizeTextarea`) rastie najviac na ~15 riadkov, za tým sa POSÚVA
+   (`overflow-y: auto`; predtým `overflow: hidden` text skrylo). Globálne
+   `box-sizing: border-box` → výšky musia pripočítať zvislý padding + rámik
+   (1px hore aj dole); pole, čo má iný padding než prehliadačový (2px), si
+   ho nastaví cez `--write-field-pad-y`. Nové pole na písanie dostane triedu
+   `write-field` + `rows={5}` — nič iné (žiadne vlastné min/max/overflow). */
+.write-field {
+  --write-field-chrome: calc(2 * var(--write-field-pad-y, 2px) + 2px);
+  min-height: calc(5lh + var(--write-field-chrome));
+  max-height: calc(15lh + var(--write-field-chrome));
+  overflow-y: auto;
 }
 /* Uložiť zarovnané doprava pod poľom — na telefóne dosť veľký tap-target
    (`.btn` predvolený padding), nezaberá celú šírku. */
@@ -4050,9 +4064,7 @@ a.upozornenie-title:hover {
   margin-bottom: var(--fs-space-4);
 }
 .floor-note-add-row textarea {
-  min-height: 3rem;
   resize: vertical;
-  overflow: hidden;
 }
 .floor-notes-list {
   display: flex;
@@ -4133,10 +4145,9 @@ a.upozornenie-title:hover {
 }
 .floor-note-textarea {
   width: 100%;
-  min-height: 3rem;
   resize: vertical;
-  overflow: hidden;
   padding: var(--fs-space-1) var(--fs-space-2);
+  --write-field-pad-y: var(--fs-space-1);
 }
 .floor-note-products {
   display: flex;

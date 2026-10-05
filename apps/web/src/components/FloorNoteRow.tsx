@@ -125,7 +125,8 @@ export function FloorNoteRow({
       {editingText && canEdit ? (
         <div className="floor-note-edit">
           <textarea
-            className="floor-note-textarea"
+            className="floor-note-textarea write-field"
+            rows={5}
             value={textDraft}
             autoFocus
             onChange={(e) => {
