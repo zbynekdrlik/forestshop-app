@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type JSX } from "react";
-import { createNote, deleteNote, fetchNotes, NoteNotFoundError, NotesUnauthorizedError, setNoteResolved, updateNoteText, type NoteRow } from "../notesApi.js";
+import { createNote, deleteNote, fetchNotes, NotesUnauthorizedError, setNoteResolved, updateNoteText, type NoteRow } from "../notesApi.js";
 import { EmojiPickerButton } from "./EmojiPickerButton.js";
 import { IconButton } from "./section/IconButton.js";
 import { SectionShell } from "./section/SectionShell.js";
@@ -170,22 +170,19 @@ export function NotesSection({ onSessionExpired }: { readonly onSessionExpired: 
         setEditingId((current) => (current === row.id ? null : current));
       };
       updateNoteText(row.id, body)
-        .then(() => {
-          // Uložený text hneď v riadku (bez bliknutia starého textu do refetchu).
-          setRows((current) => current?.map((r) => (r.id === row.id ? { ...r, body } : r)) ?? current);
+        .then((updated) => {
           dropDraft(row.id);
           closeThis();
+          if (updated) {
+            // Uložený text hneď v riadku (bez bliknutia starého textu do refetchu).
+            setRows((current) => current?.map((r) => (r.id === row.id ? { ...r, body } : r)) ?? current);
+          } else {
+            // Poznámku medzitým niekto zmazal — niet čo upravovať, zoznam sa obnoví.
+            setError("Poznámku medzitým niekto zmazal — úprava sa neuložila.");
+          }
           load();
         })
         .catch((err: unknown) => {
-          if (err instanceof NoteNotFoundError) {
-            // Poznámku medzitým niekto zmazal — niet čo upravovať, zoznam sa obnoví.
-            dropDraft(row.id);
-            closeThis();
-            setError("Poznámku medzitým niekto zmazal — úprava sa neuložila.");
-            load();
-            return;
-          }
           if (editingIdRef.current === null) {
             // Úprava ostáva otvorená s rozpísaným textom, nech sa dá skúsiť znova.
             editingIdRef.current = row.id;

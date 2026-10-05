@@ -18,12 +18,11 @@ paths:
 - **Úprava textu (issue 591) = `PATCH /api/notes/:id/text`, telo `{ body }`** —
   stĺpec je `note.body`, preto JSON kľúč `body` (nie `text` ako pri Úlohách) a
   ZDIEĽANÁ zod schéma `createBody` (trim, min 1, max 2000) — validácia úpravy sa
-  nesmie rozísť s vytvorením. Neznáme id → **404** (na rozdiel od resolve/delete,
-  ktoré vracajú 200 `{updated|removed:false}`): ticho stratená oprava by bola
-  strata práce, UI musí vedieť, že sa neuložila. Stane sa to len keď poznámku
-  medzitým niekto zmazal — vtedy Chromium zaloguje 4xx do konzoly, čo je v
-  tomto výnimočnom prípade prijateľné (bežný omyl používateľa to nie je,
-  `testing.md` issue 476 pravidlo sa týka bežných omylov).
+  nesmie rozísť s vytvorením. Neznáme (medzitým zmazané) id → **200
+  `{updated:false}`**, rovnako ako resolve/delete a súrodenecké `/text` trasy
+  (Úlohy, Predajňa) — NIKDY 4xx: Chromium loguje každú 4xx do konzoly
+  (`testing.md` issue 476). Prvá verzia vracala 404 podľa dizajnu ticketu,
+  koordinátor to zvrátil v prospech tohto pravidla.
 - **Inline editor (`NotesSection.tsx`) — klik na text ALEBO ✏️ otvorí `<textarea
   class="poznamka-edit-input">` (rovnaký vzhľad ako pole novej poznámky, zdieľané
   CSS pravidlo), Enter uloží, Shift+Enter = nový riadok (poznámky sú
@@ -46,9 +45,9 @@ paths:
   - Hodnota sa berie z udalosti (`e.currentTarget.value`), nie zo stavu — Enter
     hneď po písaní nikdy neuloží zastaraný text. Enter počas IME skladania
     (`nativeEvent.isComposing`) neukladá.
-  - 404 → klient hodí `NoteNotFoundError`, UI úpravu zavrie, ukáže „Poznámku
-    medzitým niekto zmazal" a obnoví zoznam (nie „skúste znova", ktoré by nikdy
-    neprešlo).
+  - `updated:false` (poznámku medzitým niekto zmazal) → UI úpravu zavrie, ukáže
+    „Poznámku medzitým niekto zmazal" a obnoví zoznam (nie „skúste znova", ktoré
+    by nikdy neprešlo).
   - Klik na text NEotvorí úpravu, keď je riadok `busy` alebo je v okne označený
     text (`window.getSelection()`), aby sa dal skopírovať telefón/adresa.
   - Vedomé obmedzenie: klik na 🗑/checkbox TOHO ISTÉHO riadku počas úpravy so

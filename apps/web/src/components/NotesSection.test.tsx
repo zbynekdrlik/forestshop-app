@@ -18,7 +18,7 @@ vi.mock("../notesApi.js", async (importOriginal) => {
   return { ...actual, fetchNotes, createNote, setNoteResolved, deleteNote, updateNoteText };
 });
 
-const { NoteNotFoundError, NotesUnauthorizedError } = await import("../notesApi.js");
+const { NotesUnauthorizedError } = await import("../notesApi.js");
 
 function note(overrides: Partial<NoteRow> & Pick<NoteRow, "id" | "body">): NoteRow {
   return {
@@ -240,9 +240,9 @@ it("zlyhané blur-uloženie poznámky A po kliknutí na poznámku B nestratí te
   expect(screen.getByTestId<HTMLTextAreaElement>("poznamka-edit-input-n-a").value).toBe("opravené A");
 });
 
-it("poznámku medzitým niekto zmazal (404) — úprava sa zavrie, zobrazí sa hláška a zoznam sa obnoví", async () => {
+it("poznámku medzitým niekto zmazal (updated:false) — úprava sa zavrie, zobrazí sa hláška a zoznam sa obnoví", async () => {
   fetchNotes.mockResolvedValueOnce([note({ id: "n-1", body: "pôvodné" })]).mockResolvedValue([]);
-  updateNoteText.mockRejectedValue(new NoteNotFoundError());
+  updateNoteText.mockResolvedValue(false);
   render(<NotesSection onSessionExpired={() => {}} />);
 
   fireEvent.click(await screen.findByTestId("poznamka-body-n-1"));

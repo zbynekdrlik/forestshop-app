@@ -55,9 +55,8 @@ export interface UpdateNoteTextInput {
 // napísal"). ZDIEĽANÁ nástenka — upraviť smie KTOKOĽVEK prihlásený, rovnako
 // ako vybaviť/zmazať (vlastníctvo sa ZÁMERNE nevynucuje). Autor, čas
 // vytvorenia aj stav vybavenia ostávajú; mení sa len `body` + `updatedAt`.
-// Neznámu/medzitým zmazanú poznámku vráti ako `false` — trasa z toho spraví
-// 404, aby UI vedelo, že oprava sa neuložila (na rozdiel od resolve/delete,
-// kde je no-op neškodný, tu by ticho stratená oprava bola strata práce).
+// Neznámu/medzitým zmazanú poznámku vráti ako `false` (trasa 200
+// `{updated:false}`, UI z toho ukáže „niekto ju zmazal" a obnoví zoznam).
 export async function updateNoteText(db: Database, input: UpdateNoteTextInput): Promise<boolean> {
   const result = await db
     .update(note)

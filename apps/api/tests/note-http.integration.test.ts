@@ -195,9 +195,9 @@ describe("DELETE /api/notes/:id", () => {
 // issue 591: Štěpán „poznamka sa neda editovať oprav to aby som vedel opraviť
 // čo som napísal". Zrkadlí `PATCH /api/daily-tasks/:id/text` — rovnaká
 // validácia ako pri vytvorení (prázdne/priveľké → 400), ZDIEĽANÉ ako
-// resolve/delete (upraviť smie ktokoľvek prihlásený). Na rozdiel od
-// resolve/delete vracia neznáme id 404 (dizajn ticketu): úprava NEEXISTUJÚCEJ
-// poznámky (medzitým ju niekto zmazal) musí UI povedať, že text sa neuložil.
+// resolve/delete (upraviť smie ktokoľvek prihlásený). Neznáme (medzitým
+// zmazané) id → 200 `{updated:false}` ako resolve/delete, nikdy 4xx (Chromium
+// loguje 4xx do konzoly, `testing.md` issue 476); UI z toho povie, že sa neuložil.
 describe("PATCH /api/notes/:id/text", () => {
   async function createOne(app: ReturnType<typeof createApp>, cookie: string, body: string): Promise<string> {
     const res = await app.request("/api/notes", { method: "POST", headers: { cookie, "content-type": "application/json" }, body: JSON.stringify({ body }) });
@@ -253,10 +253,17 @@ describe("PATCH /api/notes/:id/text", () => {
     expect(res.status).toBe(400);
   });
 
-  it("neznáme id vráti 404", async () => {
+  it("neznáme (medzitým zmazané) id vráti 200 {updated:false}, nikdy 4xx", async () => {
     const { app, cookie } = await bootUser("sef@forestshop.sk", "sef");
-    const res = await app.request("/api/notes/00000000-0000-0000-0000-000000000000/text", { method: "PATCH", headers: { cookie, "content-type": "application/json" }, body: JSON.stringify({ body: "Nový text" }) });
-    expect(res.status).toBe(404);
+    const id = await createOne(app, cookie, "Na zmazanie");
+    await app.request(`/api/notes/${id}`, { method: "DELETE", headers: { cookie } });
+
+    const res = await app.request(`/api/notes/${id}/text`, { method: "PATCH", headers: { cookie, "content-type": "application/json" }, body: JSON.stringify({ body: "Nový text" }) });
+    expect(res.status).toBe(200);
+    expect((await res.json()) as { ok: boolean; updated: boolean }).toEqual({ ok: true, updated: false });
+    // Zápis nič nevzkriesil — zoznam ostáva prázdny.
+    const list = await app.request("/api/notes", { headers: { cookie } });
+    expect(((await list.json()) as { rows: readonly unknown[] }).rows).toEqual([]);
   });
 
   it("požiadavka z cudzieho pôvodu (bez same-origin) je odmietnutá (403) a text sa nezmení", async () => {

@@ -39,12 +39,13 @@ export function registerNoteRoutes(app: Hono<AppBindings>, db: Database): void {
 
   // issue 591: oprava textu — zrkadlí `PATCH /api/daily-tasks/:id/text`, s
   // TOU ISTOU validáciou ako vytvorenie (`createBody`: orezané, neprázdne,
-  // max 2000). Sekcia nič neaudituje, preto ani úprava. Neznáme id → 404.
+  // max 2000). Sekcia nič neaudituje, preto ani úprava. Neznáme (medzitým
+  // zmazané) id → 200 `{updated:false}`, NIE 4xx — Chromium loguje každú 4xx do
+  // konzoly (`testing.md` issue 476), rovnako ako súrodenecké `/text` trasy.
   app.patch("/api/notes/:id/text", requireSameOrigin(), requireUser(db), zValidator("param", idParam), zValidator("json", createBody), async (c) => {
     const { id } = c.req.valid("param");
     const { body } = c.req.valid("json");
     const updated = await updateNoteText(db, { id, body, now: new Date() });
-    if (!updated) return c.json({ error: "Poznámka nenájdená." }, 404);
     return c.json({ ok: true as const, updated });
   });
 
