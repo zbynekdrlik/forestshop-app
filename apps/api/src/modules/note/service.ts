@@ -45,6 +45,28 @@ export async function setNoteResolved(db: Database, input: SetNoteResolvedInput)
   return result.length > 0;
 }
 
+export interface UpdateNoteTextInput {
+  readonly id: string;
+  readonly body: string;
+  readonly now: Date;
+}
+
+// issue 591: oprava textu uloženej poznámky („aby som vedel opraviť čo som
+// napísal"). ZDIEĽANÁ nástenka — upraviť smie KTOKOĽVEK prihlásený, rovnako
+// ako vybaviť/zmazať (vlastníctvo sa ZÁMERNE nevynucuje). Autor, čas
+// vytvorenia aj stav vybavenia ostávajú; mení sa len `body` + `updatedAt`.
+// Neznámu/medzitým zmazanú poznámku vráti ako `false` — trasa z toho spraví
+// 404, aby UI vedelo, že oprava sa neuložila (na rozdiel od resolve/delete,
+// kde je no-op neškodný, tu by ticho stratená oprava bola strata práce).
+export async function updateNoteText(db: Database, input: UpdateNoteTextInput): Promise<boolean> {
+  const result = await db
+    .update(note)
+    .set({ body: input.body, updatedAt: input.now })
+    .where(eq(note.id, input.id))
+    .returning({ id: note.id });
+  return result.length > 0;
+}
+
 export interface DeleteNoteInput {
   readonly id: string;
 }

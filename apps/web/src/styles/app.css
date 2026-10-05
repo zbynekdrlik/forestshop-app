@@ -3018,7 +3018,10 @@ a.upozornenie-title:hover {
    (tento súbor, riadok ~161), takže `textarea` dostáva vzhľad tu explicitne.
    `resize: vertical` — používateľ si vie pole zväčšiť pre dlhšiu poznámku,
    nikdy do šírky (rozbilo by layout). */
-.poznamka-new-input {
+/* issue 591: `.poznamka-edit-input` (úprava uloženej poznámky v riadku) má
+   ZÁMERNE rovnaký vzhľad ako pole na novú poznámku — žiadny nový vzor. */
+.poznamka-new-input,
+.poznamka-edit-input {
   width: 100%;
   font: inherit;
   color: var(--fs-ink);
