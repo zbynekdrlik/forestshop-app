@@ -65,6 +65,18 @@ export async function setNoteResolved(id: string, resolved: boolean): Promise<bo
   return body.updated;
 }
 
+// issue 591: oprava textu uloženej poznámky (`PATCH /api/notes/:id/text`).
+// `false` = poznámku medzitým niekto zmazal (server 200 `{updated:false}`).
+export async function updateNoteText(id: string, body: string): Promise<boolean> {
+  const response = await fetch(`/api/notes/${encodeURIComponent(id)}/text`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ body }),
+  });
+  const result = (await readJson(response, "Poznámku sa nepodarilo upraviť")) as { readonly updated: boolean };
+  return result.updated;
+}
+
 export async function deleteNote(id: string): Promise<void> {
   const response = await fetch(`/api/notes/${encodeURIComponent(id)}`, { method: "DELETE" });
   await readJson(response, "Poznámku sa nepodarilo odstrániť");

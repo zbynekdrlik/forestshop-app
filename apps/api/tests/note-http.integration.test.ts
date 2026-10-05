@@ -191,3 +191,96 @@ describe("DELETE /api/notes/:id", () => {
     expect((await res.json()) as { ok: boolean; removed: boolean }).toEqual({ ok: true, removed: false });
   });
 });
+
+// issue 591: Štěpán „poznamka sa neda editovať oprav to aby som vedel opraviť
+// čo som napísal". Zrkadlí `PATCH /api/daily-tasks/:id/text` — rovnaká
+// validácia ako pri vytvorení (prázdne/priveľké → 400), ZDIEĽANÉ ako
+// resolve/delete (upraviť smie ktokoľvek prihlásený). Neznáme (medzitým
+// zmazané) id → 200 `{updated:false}` ako resolve/delete, nikdy 4xx (Chromium
+// loguje 4xx do konzoly, `testing.md` issue 476); UI z toho povie, že sa neuložil.
+describe("PATCH /api/notes/:id/text", () => {
+  async function createOne(app: ReturnType<typeof createApp>, cookie: string, body: string): Promise<string> {
+    const res = await app.request("/api/notes", { method: "POST", headers: { cookie, "content-type": "application/json" }, body: JSON.stringify({ body }) });
+    return ((await res.json()) as { id: string }).id;
+  }
+
+  it("zmení text poznámky; autor, čas vytvorenia aj stav vybavenia ostávajú", async () => {
+    const { app, cookie } = await bootUser("sef@forestshop.sk", "sef");
+    const id = await createOne(app, cookie, "objednat sacky");
+    const before = (await (await app.request("/api/notes", { headers: { cookie } })).json()) as { rows: readonly { createdAt: string; updatedAt: string }[] };
+
+    const res = await app.request(`/api/notes/${id}/text`, { method: "PATCH", headers: { cookie, "content-type": "application/json" }, body: JSON.stringify({ body: "  Objednať sáčky u dodávateľa  " }) });
+    expect(res.status).toBe(200);
+    expect((await res.json()) as { ok: boolean; updated: boolean }).toEqual({ ok: true, updated: true });
+
+    const list = await app.request("/api/notes", { headers: { cookie } });
+    const after = (await list.json()) as { rows: readonly { id: string; body: string; authorName: string; createdAt: string; updatedAt: string; resolvedAt: string | null }[] };
+    expect(after.rows).toHaveLength(1);
+    // Text je orezaný (rovnaký `trim()` ako pri vytvorení).
+    expect(after.rows[0]).toMatchObject({ id, body: "Objednať sáčky u dodávateľa", authorName: "sef@forestshop.sk", resolvedAt: null });
+    expect(after.rows[0]?.createdAt).toBe(before.rows[0]?.createdAt);
+    // `updatedAt` sa posunie (ISO reťazce v UTC sa dajú porovnať lexikograficky).
+    expect((after.rows[0]?.updatedAt ?? "") > (before.rows[0]?.updatedAt ?? "")).toBe(true);
+  });
+
+  it("ZDIEĽANÉ — INÝ používateľ smie upraviť cudziu poznámku", async () => {
+    const { app, cookie, db } = await bootUser("sef@forestshop.sk", "sef");
+    const id = await createOne(app, cookie, "Šéfova poznámka");
+
+    const other = await secondLogin(app, db, "zamestnanec@forestshop.sk", "manazer");
+    const res = await app.request(`/api/notes/${id}/text`, { method: "PATCH", headers: { cookie: other.cookie, "content-type": "application/json" }, body: JSON.stringify({ body: "Opravená poznámka" }) });
+    expect(res.status).toBe(200);
+
+    const list = await app.request("/api/notes", { headers: { cookie } });
+    expect(((await list.json()) as { rows: readonly { body: string; authorName: string }[] }).rows[0]).toMatchObject({ body: "Opravená poznámka", authorName: "sef@forestshop.sk" });
+  });
+
+  it("prázdny text je odmietnutý (400) a pôvodný text ostáva", async () => {
+    const { app, cookie } = await bootUser("sef@forestshop.sk", "sef");
+    const id = await createOne(app, cookie, "Pôvodný text");
+
+    const res = await app.request(`/api/notes/${id}/text`, { method: "PATCH", headers: { cookie, "content-type": "application/json" }, body: JSON.stringify({ body: "   " }) });
+    expect(res.status).toBe(400);
+
+    const list = await app.request("/api/notes", { headers: { cookie } });
+    expect(((await list.json()) as { rows: readonly { body: string }[] }).rows[0]?.body).toBe("Pôvodný text");
+  });
+
+  it("príliš dlhý text (>2000 znakov) je odmietnutý (400)", async () => {
+    const { app, cookie } = await bootUser("sef@forestshop.sk", "sef");
+    const id = await createOne(app, cookie, "Pôvodný text");
+    const res = await app.request(`/api/notes/${id}/text`, { method: "PATCH", headers: { cookie, "content-type": "application/json" }, body: JSON.stringify({ body: "x".repeat(2001) }) });
+    expect(res.status).toBe(400);
+  });
+
+  it("neznáme (medzitým zmazané) id vráti 200 {updated:false}, nikdy 4xx", async () => {
+    const { app, cookie } = await bootUser("sef@forestshop.sk", "sef");
+    const id = await createOne(app, cookie, "Na zmazanie");
+    await app.request(`/api/notes/${id}`, { method: "DELETE", headers: { cookie } });
+
+    const res = await app.request(`/api/notes/${id}/text`, { method: "PATCH", headers: { cookie, "content-type": "application/json" }, body: JSON.stringify({ body: "Nový text" }) });
+    expect(res.status).toBe(200);
+    expect((await res.json()) as { ok: boolean; updated: boolean }).toEqual({ ok: true, updated: false });
+    // Zápis nič nevzkriesil — zoznam ostáva prázdny.
+    const list = await app.request("/api/notes", { headers: { cookie } });
+    expect(((await list.json()) as { rows: readonly unknown[] }).rows).toEqual([]);
+  });
+
+  it("požiadavka z cudzieho pôvodu (bez same-origin) je odmietnutá (403) a text sa nezmení", async () => {
+    const { app, cookie } = await bootUser("sef@forestshop.sk", "sef");
+    const id = await createOne(app, cookie, "Pôvodný text");
+
+    const res = await app.request(`/api/notes/${id}/text`, { method: "PATCH", headers: { cookie, "content-type": "application/json", "sec-fetch-site": "cross-site" }, body: JSON.stringify({ body: "Podvrhnutý text" }) });
+    expect(res.status).toBe(403);
+
+    const list = await app.request("/api/notes", { headers: { cookie } });
+    expect(((await list.json()) as { rows: readonly { body: string }[] }).rows[0]?.body).toBe("Pôvodný text");
+  });
+
+  it("bez prihlásenia vráti 401", async () => {
+    const { app, cookie } = await bootUser("sef@forestshop.sk", "sef");
+    const id = await createOne(app, cookie, "Pôvodný text");
+    const res = await app.request(`/api/notes/${id}/text`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ body: "Nový text" }) });
+    expect(res.status).toBe(401);
+  });
+});

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type JSX } from "react";
-import { createNote, deleteNote, fetchNotes, NotesUnauthorizedError, setNoteResolved, type NoteRow } from "../notesApi.js";
+import { createNote, deleteNote, fetchNotes, NotesUnauthorizedError, setNoteResolved, updateNoteText, type NoteRow } from "../notesApi.js";
 import { EmojiPickerButton } from "./EmojiPickerButton.js";
 import { IconButton } from "./section/IconButton.js";
 import { SectionShell } from "./section/SectionShell.js";
@@ -31,6 +31,18 @@ export function NotesSection({ onSessionExpired }: { readonly onSessionExpired: 
   const [busyId, setBusyId] = useState("");
   // issue 440: emoji picker vkladá na pozíciu kurzora tohto poľa.
   const newBodyRef = useRef<HTMLTextAreaElement>(null);
+  // issue 591: úprava textu uloženej poznámky v riadku (API vzor Úloh na dnes).
+  // Naraz je otvorená najviac JEDNA úprava (`editingId`), rozpísané texty sa
+  // však držia PER POZNÁMKA (`drafts`) — keď zlyhá blur-uloženie poznámky A,
+  // ktoré prebehlo práve preto, že používateľ klikol na poznámku B, text A sa
+  // nestratí a po znovuotvorení A sa vráti (seed-if-absent, `frontend-design.md`
+  // issue 381). `editingIdRef` zapisujú VÝHRADNE obsluhy (otvor/zruš/ulož), nie
+  // render: `saveEdit`/`cancelEdit` ho synchrónne vynulujú, takže `onBlur`, ktorý
+  // prehliadač vystrelí po Enter, počas zápisu (pole je `disabled`), po Esc alebo
+  // pri odmontovaní, nájde `null` a neuloží druhýkrát ani zrušenú zmenu.
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [drafts, setDrafts] = useState<Readonly<Record<string, string>>>({});
+  const editingIdRef = useRef<string | null>(null);
 
   const load = useCallback(() => {
     fetchNotes()
@@ -117,6 +129,76 @@ export function NotesSection({ onSessionExpired }: { readonly onSessionExpired: 
     [load, handleActionError],
   );
 
+  const dropDraft = useCallback((id: string) => {
+    setDrafts((d) => Object.fromEntries(Object.entries(d).filter(([key]) => key !== id)));
+  }, []);
+
+  const openEditor = useCallback((row: NoteRow) => {
+    editingIdRef.current = row.id;
+    setDrafts((d) => (row.id in d ? d : { ...d, [row.id]: row.body }));
+    setEditingId(row.id);
+  }, []);
+
+  const cancelEdit = useCallback(
+    (id: string) => {
+      editingIdRef.current = null;
+      setEditingId(null);
+      dropDraft(id);
+    },
+    [dropDraft],
+  );
+
+  // Hodnotu berie z udalosti (živý DOM), nie zo stavu — Enter hneď po písaní
+  // tak nikdy neuloží zastaraný text. Prázdny alebo nezmenený text sa neposiela
+  // (server by prázdny aj tak odmietol) — úprava sa len zavrie.
+  const saveEdit = useCallback(
+    (row: NoteRow, value: string) => {
+      if (editingIdRef.current !== row.id) return;
+      editingIdRef.current = null;
+      const body = value.trim();
+      if (body === "" || body === row.body) {
+        setEditingId(null);
+        dropDraft(row.id);
+        return;
+      }
+      setDrafts((d) => ({ ...d, [row.id]: value }));
+      setBusyId(row.id);
+      setError("");
+      // Zavrie LEN túto úpravu — medzitým mohla byť otvorená iná (blur-uloženie
+      // prebieha práve vtedy, keď používateľ klikol na inú poznámku).
+      const closeThis = () => {
+        setEditingId((current) => (current === row.id ? null : current));
+      };
+      updateNoteText(row.id, body)
+        .then((updated) => {
+          dropDraft(row.id);
+          closeThis();
+          if (updated) {
+            // Uložený text hneď v riadku (bez bliknutia starého textu do refetchu).
+            setRows((current) => current?.map((r) => (r.id === row.id ? { ...r, body } : r)) ?? current);
+          } else {
+            // Poznámku medzitým niekto zmazal — niet čo upravovať, zoznam sa obnoví.
+            setError("Poznámku medzitým niekto zmazal — úprava sa neuložila.");
+          }
+          load();
+        })
+        .catch((err: unknown) => {
+          if (editingIdRef.current === null) {
+            // Úprava ostáva otvorená s rozpísaným textom, nech sa dá skúsiť znova.
+            editingIdRef.current = row.id;
+            handleActionError(err, "Poznámku sa nepodarilo upraviť — skúste to znova.");
+            return;
+          }
+          // Medzitým je otvorená iná poznámka — text tejto ostal v `drafts`.
+          handleActionError(err, "Úpravu poznámky sa nepodarilo uložiť — otvor ju znova, rozpísaný text ostal zachovaný.");
+        })
+        .finally(() => {
+          setBusyId("");
+        });
+    },
+    [load, handleActionError, dropDraft],
+  );
+
   const intro = <p>Zdieľané poznámky — napíš myšlienku, ako ťa napadne. Vidia ich všetci prihlásení, spracujte ich spoločne.</p>;
 
   const addRow = (
@@ -186,14 +268,71 @@ export function NotesSection({ onSessionExpired }: { readonly onSessionExpired: 
                   />
 
                   <div className="poznamka-content">
-                    <div className="poznamka-body" data-testid={`poznamka-body-${row.id}`}>
-                      {row.body}
-                    </div>
+                    {editingId === row.id ? (
+                      <textarea
+                        className="poznamka-edit-input"
+                        value={drafts[row.id] ?? row.body}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setDrafts((d) => ({ ...d, [row.id]: value }));
+                        }}
+                        onKeyDown={(e) => {
+                          // Enter uloží, Shift+Enter = nový riadok (poznámka je viacriadková),
+                          // Esc zruší. Enter počas skladania znaku (IME, Android klávesnica) nie.
+                          if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                            e.preventDefault();
+                            saveEdit(row, e.currentTarget.value);
+                          } else if (e.key === "Escape") {
+                            e.preventDefault();
+                            cancelEdit(row.id);
+                          }
+                        }}
+                        onFocus={(e) => {
+                          // Kurzor na koniec textu — oprava sa najčastejšie dopisuje.
+                          const end = e.currentTarget.value.length;
+                          e.currentTarget.setSelectionRange(end, end);
+                        }}
+                        onBlur={(e) => {
+                          saveEdit(row, e.currentTarget.value);
+                        }}
+                        aria-label="Text upravovanej poznámky"
+                        data-testid={`poznamka-edit-input-${row.id}`}
+                        rows={3}
+                        disabled={busy}
+                        autoFocus
+                      />
+                    ) : (
+                      <div
+                        className="poznamka-body"
+                        data-testid={`poznamka-body-${row.id}`}
+                        onClick={() => {
+                          // Označenie textu (skopírovať telefón/adresu) úpravu neotvorí.
+                          if (busy || (window.getSelection()?.toString() ?? "") !== "") return;
+                          openEditor(row);
+                        }}
+                      >
+                        {row.body}
+                      </div>
+                    )}
                     <div className="poznamka-meta" data-testid={`poznamka-meta-${row.id}`}>
                       {row.authorName} · {formatCas(row.createdAt)}
                     </div>
                   </div>
 
+                  {editingId !== row.id && (
+                    <IconButton
+                      className="poznamka-icon-btn"
+                      disabled={busy}
+                      onClick={() => {
+                        openEditor(row);
+                      }}
+                      title="Upraviť text"
+                      ariaLabel={`Upraviť text poznámky ${row.body}`}
+                      testId={`poznamka-edit-${row.id}`}
+                    >
+                      ✏️
+                    </IconButton>
+                  )}
                   <IconButton
                     className="poznamka-icon-btn"
                     disabled={busy}

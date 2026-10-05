@@ -67,6 +67,75 @@ test("mobil (375px): napísať poznámku, vidieť ju v zozname, vybaviť — zdi
   expect(chyby).toEqual([]);
 });
 
+// issue 591: Štěpán „poznamka sa neda editovať oprav to aby som vedel opraviť čo
+// som napísal". Reálny prehliadač: napísať poznámku s preklepom → klik na text
+// prepne riadok do úpravy → nový text + REÁLNY Enter (`press`, nie `.fill()` —
+// `.fill()` keydown nespustí, `.claude/rules/testing.md` issue 150) → po
+// obnovení stránky ostáva opravený text. Potom ✏️ + Esc: rozpísaná zmena sa
+// zahodí. Riadok sa hľadá cez VLASTNÉ id (testid), nie `hasText` — počas úpravy
+// je text v `<textarea>` a `hasText` by riadok nenašiel (issue 342 pasca); test
+// po sebe svoju poznámku zmaže, ostatné testy súboru tak začínajú od prázdna.
+test("upraviť text uloženej poznámky — klik na text, Enter uloží, po obnovení ostáva; ✏️ + Esc zruší; konzola čistá", async ({ page }) => {
+  const chyby: string[] = [];
+  page.on("console", (m) => {
+    if (m.type() === "error" || m.type() === "warning") chyby.push(m.text());
+  });
+  page.on("pageerror", (e) => {
+    chyby.push(e.message);
+  });
+
+  await page.goto("/?tab=poznamky");
+  await page.getByLabel("E-mail").fill(E2E_POZNAMKY_EMAIL);
+  await page.getByLabel("Heslo").fill(E2E_HESLO);
+  await page.getByRole("button", { name: "Prihlásiť sa" }).click();
+  await expect(page.getByRole("heading", { name: "Poznámky" })).toBeVisible();
+
+  await page.getByTestId("poznamka-new-input").fill("Zavolat dodavatelovy kvoli sackom");
+  await page.getByTestId("poznamka-new-save").click();
+  const riadok = page.locator(".poznamka-row").filter({ hasText: "Zavolat dodavatelovy kvoli sackom" });
+  await expect(riadok).toBeVisible();
+  const testId = await riadok.getAttribute("data-testid");
+  const id = (testId ?? "").replace("poznamka-row-", "");
+  expect(id).not.toBe("");
+
+  // Klik na text → úprava v riadku, predvyplnená pôvodným textom.
+  await page.getByTestId(`poznamka-body-${id}`).click();
+  const editor = page.getByTestId(`poznamka-edit-input-${id}`);
+  await expect(editor).toBeFocused();
+  await expect(editor).toHaveValue("Zavolat dodavatelovy kvoli sackom");
+  await editor.fill("Zavolať dodávateľovi kvôli sáčkom");
+  await editor.press("Enter");
+  // Úprava sa zavrie AŽ po potvrdenom zápise — čaká na dokončenie PATCH pred reloadom.
+  await expect(editor).toHaveCount(0);
+  await expect(page.getByTestId(`poznamka-body-${id}`)).toHaveText("Zavolať dodávateľovi kvôli sáčkom");
+
+  // Po obnovení stránky je uložený opravený text (zo servera, nie z pamäte).
+  await page.reload();
+  await expect(page.getByTestId(`poznamka-body-${id}`)).toHaveText("Zavolať dodávateľovi kvôli sáčkom");
+
+  // ✏️ otvorí úpravu, Esc ju zruší — rozpísaná zmena sa neuloží.
+  await page.getByTestId(`poznamka-edit-${id}`).click();
+  await expect(editor).toBeFocused();
+  await editor.fill("toto sa neuloží");
+  await editor.press("Escape");
+  await expect(editor).toHaveCount(0);
+  await expect(page.getByTestId(`poznamka-body-${id}`)).toHaveText("Zavolať dodávateľovi kvôli sáčkom");
+  await page.reload();
+  await expect(page.getByTestId(`poznamka-body-${id}`)).toHaveText("Zavolať dodávateľovi kvôli sáčkom");
+
+  // Úzky riadok (375px pri rozbalenom bočnom paneli z desktopu): ✏️ ako tretí pevný
+  // prvok vedľa checkboxu a 🗑 nesmie stlačiť text poznámky na 0px (CI PR 592).
+  await page.setViewportSize({ width: 375, height: 800 });
+  await expect(page.getByTestId(`poznamka-body-${id}`)).toBeVisible();
+  expect((await page.getByTestId(`poznamka-body-${id}`).boundingBox())?.width ?? 0).toBeGreaterThan(40);
+
+  // Upratanie po teste.
+  await page.getByTestId(`poznamka-delete-${id}`).click();
+  await expect(page.getByTestId(`poznamka-row-${id}`)).toHaveCount(0);
+
+  expect(chyby).toEqual([]);
+});
+
 // issue 440: emoji picker — vloženie emoji do textu poznámky cez tlačidlo (na
 // pozíciu kurzora), uloženie, zobrazenie v zozname. Desktop AJ mobilný viewport
 // (zadanie: "desktop aj mobilný viewport pri Poznámkach"). Emoji sa ukladá a
