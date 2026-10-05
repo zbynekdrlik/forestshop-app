@@ -49,8 +49,11 @@ it("rastie pri zmene hodnoty a po vyprázdnení (uložení) sa vráti na 3 riadk
   expect(getByTestId("pole").style.height).toBe("64px");
   rerender(<Field value={sixLines} />);
   expect(getByTestId("pole").style.height).toBe("124px");
+  // Prázdne pole: inline výška sa ZRUŠÍ (výšku dá `rows={3}` + CSS
+  // `min-height`), nemeria sa `scrollHeight` — Chromium/WebKit doň rátajú aj
+  // zalomený PLACEHOLDER (na 375px by prázdne pole malo 5 riadkov).
   rerender(<Field value="" />);
-  expect(getByTestId("pole").style.height).toBe("64px");
+  expect(getByTestId("pole").style.height).toBe("");
 });
 
 it("po zmene šírky okna (iné zalomenie) prepočíta výšku", () => {
