@@ -1774,7 +1774,12 @@ paths:
   `.write-field` ticho prebil). Rast: CSS `field-sizing: content` (Chromium aj
   Firefox 153); hook je fallback pre prehliadač bez neho (starší Firefox/Safari)
   — veľkosť pri mounte (otvorená úprava dlhého textu), pri KAŽDEJ zmene hodnoty
-  (aj reset na "" po uložení) a pri `resize` okna. Pasce: (1) `field-sizing`
+  (aj reset na "" po uložení), pri zmene `resetKey` (iná poznámka v úprave s
+  rovnakým textom = nový element) a pri zmene ŠÍRKY poľa cez `ResizeObserver`
+  (window `resize` NESTAČÍ — zbalenie bočného panela mení šírku bez neho;
+  prepočet v `requestAnimationFrame`, zmena výšky priamo v RO callbacku hodí
+  „ResizeObserver loop" chybu do konzoly). Prázdne pole zruší inline výšku na
+  OBOCH cestách (aj po ručnom ťahaní úchytom pri `field-sizing`). Pasce: (1) `field-sizing`
   meria aj PLACEHOLDER → `.write-field:placeholder-shown { field-sizing: fixed }`,
   inak je prázdne pole na 375px 5 riadkov; (2) rovnaký placeholder je v
   Chromiu aj v `scrollHeight` prázdneho poľa → hook pri `value === ""` inline
