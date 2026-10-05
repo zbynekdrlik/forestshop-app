@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type JSX } from "react";
 import { createNote, deleteNote, fetchNotes, NotesUnauthorizedError, setNoteResolved, updateNoteText, type NoteRow } from "../notesApi.js";
+import { useAutoGrowTextarea } from "../hooks/useAutoGrowTextarea.js";
 import { EmojiPickerButton } from "./EmojiPickerButton.js";
 import { IconButton } from "./section/IconButton.js";
 import { SectionShell } from "./section/SectionShell.js";
@@ -43,6 +44,13 @@ export function NotesSection({ onSessionExpired }: { readonly onSessionExpired: 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Readonly<Record<string, string>>>({});
   const editingIdRef = useRef<string | null>(null);
+  // issue 593: polia na písanie rastú s obsahom (CSS `.write-field` +
+  // fallback hook pre prehliadače bez `field-sizing`, starší Firefox/Safari).
+  // `editingId` ako resetKey: prepnutie úpravy na inú poznámku = nový element.
+  const editInputRef = useRef<HTMLTextAreaElement>(null);
+  const editingValue = editingId === null ? "" : (drafts[editingId] ?? rows?.find((r) => r.id === editingId)?.body ?? "");
+  useAutoGrowTextarea(newBodyRef, newBody);
+  useAutoGrowTextarea(editInputRef, editingValue, editingId !== null, editingId);
 
   const load = useCallback(() => {
     fetchNotes()
@@ -205,7 +213,7 @@ export function NotesSection({ onSessionExpired }: { readonly onSessionExpired: 
     <div className="poznamky-add">
       <textarea
         ref={newBodyRef}
-        className="poznamka-new-input"
+        className="poznamka-new-input write-field"
         value={newBody}
         onChange={(e) => {
           setNewBody(e.target.value);
@@ -270,7 +278,8 @@ export function NotesSection({ onSessionExpired }: { readonly onSessionExpired: 
                   <div className="poznamka-content">
                     {editingId === row.id ? (
                       <textarea
-                        className="poznamka-edit-input"
+                        ref={editInputRef}
+                        className="poznamka-edit-input write-field"
                         value={drafts[row.id] ?? row.body}
                         onChange={(e) => {
                           const value = e.target.value;

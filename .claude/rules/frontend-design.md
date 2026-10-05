@@ -1766,3 +1766,29 @@ paths:
     (~73 výskytov vs. 9× `lg`, VŠETKY v tých 4 súboroch) — pri „zjednoť tlačidlá"
     over `grep -rnoE 'className="btn[^"]*lg'` a KAŽDÝ výskyt posúď zvlášť
     (modál/CTA = nechať, sekčný rad = na `sm`), nikdy paušálne všetky na `sm`.
+- **Pole na písanie (textarea pre voľný text) = trieda `.write-field` +
+  `rows={3}` + hook `hooks/useAutoGrowTextarea.ts` (issue 593, ROZHODNUTÉ
+  majiteľa: auto-grow, nie pevná výška).** Prázdne 3 riadky, rastie PRESNE na
+  obsah, strop `max-height: 50vh`, nad ním `overflow-y: auto` — NIKDY vlastné
+  `min-height`/`overflow: hidden` na poli (špecifickejší `.x textarea` by
+  `.write-field` ticho prebil). Rast: CSS `field-sizing: content` (Chromium aj
+  Firefox 153); hook je fallback pre prehliadač bez neho (starší Firefox/Safari)
+  — veľkosť pri mounte (otvorená úprava dlhého textu), pri KAŽDEJ zmene hodnoty
+  (aj reset na "" po uložení), pri zmene `resetKey` (iná poznámka v úprave s
+  rovnakým textom = nový element) a pri zmene ŠÍRKY poľa cez `ResizeObserver`
+  (window `resize` NESTAČÍ — zbalenie bočného panela mení šírku bez neho;
+  prepočet v `requestAnimationFrame`, zmena výšky priamo v RO callbacku hodí
+  „ResizeObserver loop" chybu do konzoly). Prázdne pole zruší inline výšku na
+  OBOCH cestách (aj po ručnom ťahaní úchytom pri `field-sizing`). Pasce: (1) `field-sizing`
+  meria aj PLACEHOLDER → `.write-field:placeholder-shown { field-sizing: fixed }`,
+  inak je prázdne pole na 375px 5 riadkov; (2) rovnaký placeholder je v
+  Chromiu aj v `scrollHeight` prázdneho poľa → hook pri `value === ""` inline
+  výšku ZRUŠÍ, nemeria; (3) globálne `border-box` → `autoResizeTextarea`
+  pripočíta rámik (`offsetHeight − clientHeight`; Firefox UA rámik 2px, Chromium
+  1px), inak chýba pár px a text sa oreže/posunie (`scrollTop=2`). E2E:
+  `tests/e2e/writingField.ts` (výšku riadku MERIA — `line-height: normal` je
+  NaN). JS fallback v reálnom prehliadači sa dá vynútiť dočasným specom:
+  `addInitScript` (`CSS.supports("field-sizing")` → false) +
+  `addStyleTag(".write-field{field-sizing:fixed!important}")`; Firefox pre
+  Playwright: `playwright install firefox` + `--browser=firefox` (config nemá
+  projekty, CI je len Chromium).

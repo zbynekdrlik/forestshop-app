@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { expectCappedAndScrollable, expectEmptyAboutThreeLines, expectGrowsWhileTyping, expectNothingHidden, fieldMetrics, lines } from "./writingField.js";
 
 const E2E_HESLO = "e2e-test-heslo"; // účet existuje len v testovacej databáze
 const E2E_POZNAMKY_EMAIL = "e2e-poznamky@forestshop.sk"; // musí sa zhodovať s hodnotou v scripts/e2e-setup.ts
@@ -182,6 +183,72 @@ test("emoji picker (desktop + mobil): vloží emoji cez tlačidlo, uloží, vidn
   await expect(p2).toHaveCount(0);
   await p1.getByRole("button", { name: "Odstrániť poznámku" }).click();
   await expect(p1).toHaveCount(0);
+
+  expect(chyby).toEqual([]);
+});
+
+// issue 593 (Štěpán + ROZHODNUTÉ majiteľa 5. 10. 2026 — auto-grow): pole novej
+// poznámky AJ pole úpravy — prázdne ~3 riadky, pri písaní s Enter (v úprave
+// Shift+Enter, Enter ukladá) narastie na obsah bez skrytého textu, 60 riadkov
+// = strop 50vh + posúvanie s dosiahnuteľným posledným riadkom, po uložení späť
+// na 3 riadky, otvorenie úpravy DLHEJ poznámky má hneď výšku podľa textu.
+// Desktop AJ 375px (prepnutie 1280→375 nechá bočný panel rozbalený = najužší
+// riadok, `notes.md` 375px pasca). Jedno prihlásenie (rate-limit účtu).
+test("pole na písanie rastie s textom: prázdne 3 riadky, Enter rastie, strop 50vh s posúvaním, po uložení späť, dlhá úprava hneď celá — desktop aj 375px; konzola čistá", async ({ page }) => {
+  const chyby: string[] = [];
+  page.on("console", (m) => {
+    if (m.type() === "error" || m.type() === "warning") chyby.push(m.text());
+  });
+  page.on("pageerror", (e) => {
+    chyby.push(e.message);
+  });
+
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/?tab=poznamky");
+  await page.getByLabel("E-mail").fill(E2E_POZNAMKY_EMAIL);
+  await page.getByLabel("Heslo").fill(E2E_HESLO);
+  await page.getByRole("button", { name: "Prihlásiť sa" }).click();
+  await expect(page.getByRole("heading", { name: "Poznámky" })).toBeVisible();
+  const nova = page.getByTestId("poznamka-new-input");
+
+  for (const width of [1280, 375]) {
+    await page.setViewportSize({ width, height: 900 });
+    const prazdna = await expectEmptyAboutThreeLines(nova);
+    const narastla = await expectGrowsWhileTyping(nova, "Enter");
+    const strop = await expectCappedAndScrollable(nova);
+    console.log(`issue 593 poznamka-new-input @${String(width)}px: prázdne ${JSON.stringify(prazdna)} 6 riadkov ${JSON.stringify(narastla)} 60 riadkov ${JSON.stringify(strop)}`);
+
+    // Uloženie 8-riadkovej poznámky → pole sa vráti na ~3 riadky.
+    const text = lines(8, `pozn593w${String(width)}`);
+    await nova.fill(text);
+    await page.getByTestId("poznamka-new-save").click();
+    const riadok = page.locator(".poznamka-row").filter({ hasText: `pozn593w${String(width)} 8` });
+    await expect(riadok).toBeVisible();
+    await expectEmptyAboutThreeLines(nova);
+    const id = ((await riadok.getAttribute("data-testid")) ?? "").replace("poznamka-row-", "");
+    expect(id).not.toBe("");
+
+    // Otvorenie úpravy DLHEJ poznámky → výška hneď podľa textu, nič skryté.
+    await page.getByTestId(`poznamka-edit-${id}`).click();
+    const editor = page.getByTestId(`poznamka-edit-input-${id}`);
+    await expect(editor).toBeFocused();
+    await expect(editor).toHaveValue(text);
+    const dlha = await expectNothingHidden(editor);
+    expect(dlha.contentHeight + 2).toBeGreaterThanOrEqual(8 * dlha.lineHeight);
+    console.log(`issue 593 poznamka-edit-input @${String(width)}px otvorená 8 riadkov: ${JSON.stringify(dlha)}`);
+
+    await editor.fill("");
+    await expectEmptyAboutThreeLines(editor);
+    await expectGrowsWhileTyping(editor, "Shift+Enter");
+    await expectCappedAndScrollable(editor);
+    // Esc zruší úpravu — nič sa neuloží.
+    await editor.press("Escape");
+    await expect(editor).toHaveCount(0);
+    expect((await fieldMetrics(nova)).overflowY).toBe("auto");
+
+    await page.getByTestId(`poznamka-delete-${id}`).click();
+    await expect(page.getByTestId(`poznamka-row-${id}`)).toHaveCount(0);
+  }
 
   expect(chyby).toEqual([]);
 });

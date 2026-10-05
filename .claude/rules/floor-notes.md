@@ -5,6 +5,7 @@ paths:
   - "apps/api/src/http/floor-notes-routes.ts"
   - "apps/web/src/floorNotesApi.ts"
   - "apps/web/src/autoResizeTextarea.ts"
+  - "apps/web/src/hooks/useAutoGrowTextarea*.ts*"
   - "apps/web/src/components/FloorNotesSection.tsx"
   - "apps/web/src/components/FloorNoteRow.tsx"
   - "apps/web/src/components/FloorNoteProductChip.tsx"
@@ -45,9 +46,10 @@ nezmenené — mení sa len obsah obrazovky (`Component` v `nav.ts`), nie jej mi
 - **Rastúca textarea (Enter/Shift+Enter len pridá nový riadok, formulár sa NIKDY neodošle Enterom)
   je takmer ZADARMO** — `<textarea>` už sama osebe pri OBOCH klávesách len vloží nový riadok a
   NIKDY neodošle formulár (na rozdiel od `<input>`u), appka preto nezachytáva žiadnu klávesu vôbec.
-  `autoResizeTextarea.ts` len RUČNE prispôsobí `style.height` pri `onChange` (žiadny CSS-only
-  `field-sizing: content` — nie je isté, že appka smie spoliehať len na prehliadače, čo ho
-  podporujú). Test na tento helper MUSÍ mockovať `scrollHeight` (`Object.defineProperty`) — jsdom ho
+  Rast od issue 593: CSS `.write-field` (`field-sizing: content`, strop 50vh, posúvanie) + hook
+  `useAutoGrowTextarea` (fallback cez `autoResizeTextarea.ts`, aj pri mounte a resete) — detaily a
+  pasce v `frontend-design.md` (bod „Pole na písanie"). Pôvodne len `onChange` + `overflow: hidden`:
+  otvorená úprava dlhého zápisu ukázala 3 riadky a zvyšok skryla. Test na tento helper MUSÍ mockovať `scrollHeight` (`Object.defineProperty`) — jsdom ho
   vždy vráti `0`, skutočný rast sa dokazuje AŽ e2e testom.
 - **E2E fixtúra (`scripts/e2e-fixtures-floor-notes.ts`) seeduje DVA varianty naschvál — jeden SO
   `shop_product_url` riadkom, jeden BEZ neho** — jediný spôsob, ako v jednom e2e behu dokázať OBE

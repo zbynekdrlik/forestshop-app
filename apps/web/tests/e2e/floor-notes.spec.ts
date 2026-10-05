@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { expectCappedAndScrollable, expectEmptyAboutThreeLines, expectGrowsWhileTyping, expectNothingHidden, lines } from "./writingField.js";
 
 const E2E_HESLO = "e2e-test-heslo"; // účet existuje len v testovacej databáze
 const E2E_PREDAJNA_EMAIL = "e2e-predajna@forestshop.sk"; // musí sa zhodovať s hodnotou v scripts/e2e-fixtures-floor-notes.ts
@@ -132,6 +133,69 @@ test("napísať zápis, pripnúť produkt (priama aj náhradná adresa), prepnú
   // vlastný zápis, viď komentár vyššie).
   await page.getByTestId(`floor-note-delete-${noteId}`).click();
   await expect(page.getByTestId(`floor-note-row-${noteId}`)).toHaveCount(0);
+
+  expect(chyby).toEqual([]);
+});
+
+// issue 593 (Štěpán + ROZHODNUTÉ majiteľa 5. 10. 2026 — auto-grow): pole
+// „Nový zápis" AJ pole úpravy zápisu — prázdne ~3 riadky, pri písaní s Enter
+// narastie na obsah (nič skryté — predtým `overflow: hidden` + výška bez
+// rámika orezávala text), 60 riadkov = strop 50vh + posúvanie, po pridaní
+// zápisu späť na 3 riadky, otvorenie úpravy DLHÉHO zápisu má hneď výšku podľa
+// textu (predtým 3 riadky a zvyšok skrytý). Desktop AJ 375px. Zúžené na
+// VLASTNÝ zápis (paralelný spec, viď prvý test). Jedno prihlásenie.
+test("pole na písanie rastie s textom: prázdne 3 riadky, Enter rastie, strop 50vh s posúvaním, po pridaní späť, dlhá úprava hneď celá — desktop aj 375px; konzola čistá", async ({ page }) => {
+  const chyby: string[] = [];
+  page.on("console", (m) => {
+    if (m.type() === "error" || m.type() === "warning") chyby.push(m.text());
+  });
+  page.on("pageerror", (e) => {
+    chyby.push(e.message);
+  });
+
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/?tab=floor-orders");
+  await page.getByLabel("E-mail").fill(E2E_PREDAJNA_EMAIL);
+  await page.getByLabel("Heslo").fill(E2E_HESLO);
+  await page.getByRole("button", { name: "Prihlásiť sa" }).click();
+  await expect(page.getByRole("heading", { name: "Objednávky predajňa" })).toBeVisible();
+  const nova = page.getByTestId("floor-note-new-input");
+
+  for (const width of [1280, 375]) {
+    await page.setViewportSize({ width, height: 900 });
+    const prazdny = await expectEmptyAboutThreeLines(nova);
+    const narastol = await expectGrowsWhileTyping(nova, "Enter");
+    const strop = await expectCappedAndScrollable(nova);
+    console.log(`issue 593 floor-note-new-input @${String(width)}px: prázdne ${JSON.stringify(prazdny)} 6 riadkov ${JSON.stringify(narastol)} 60 riadkov ${JSON.stringify(strop)}`);
+
+    // Pridanie 8-riadkového zápisu → pole sa vráti na ~3 riadky.
+    const text = lines(8, `zapis593w${String(width)}`);
+    await nova.fill(text);
+    await page.getByTestId("floor-note-new-add").click();
+    const riadok = page.locator('[data-testid^="floor-note-row-"]').filter({ hasText: `zapis593w${String(width)} 8` });
+    await expect(riadok).toHaveCount(1);
+    await expectEmptyAboutThreeLines(nova);
+    const noteId = ((await riadok.getAttribute("data-testid")) ?? "").replace("floor-note-row-", "");
+    expect(noteId).not.toBe("");
+
+    // Otvorenie úpravy DLHÉHO zápisu → výška hneď podľa textu, nič skryté.
+    await page.getByTestId(`floor-note-edit-${noteId}`).click();
+    const editor = page.getByTestId(`floor-note-edit-input-${noteId}`);
+    await expect(editor).toHaveValue(text);
+    const dlhy = await expectNothingHidden(editor);
+    expect(dlhy.contentHeight + 2).toBeGreaterThanOrEqual(8 * dlhy.lineHeight);
+    console.log(`issue 593 floor-note-edit-input @${String(width)}px otvorená 8 riadkov: ${JSON.stringify(dlhy)}`);
+
+    await editor.fill("");
+    await expectEmptyAboutThreeLines(editor);
+    await expectGrowsWhileTyping(editor, "Enter");
+    await expectCappedAndScrollable(editor);
+    await page.getByTestId(`floor-note-edit-cancel-${noteId}`).click();
+    await expect(editor).toHaveCount(0);
+
+    await page.getByTestId(`floor-note-delete-${noteId}`).click();
+    await expect(page.getByTestId(`floor-note-row-${noteId}`)).toHaveCount(0);
+  }
 
   expect(chyby).toEqual([]);
 });

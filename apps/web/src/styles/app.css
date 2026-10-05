@@ -3030,7 +3030,34 @@ a.upozornenie-title:hover {
   border-radius: var(--fs-radius-sm);
   padding: var(--fs-space-2) var(--fs-space-3);
   resize: vertical;
-  min-height: 4.5rem;
+  --write-field-pad-y: var(--fs-space-2);
+}
+/* issue 593 (Štěpán; ROZHODNUTÉ majiteľa 5. 10. 2026 — auto-grow): ZDIEĽANÉ
+   pravidlo pre polia na písanie (Poznámky nové + úprava, Objednávky predajňa
+   nový + úprava). Prázdne pole = 3 riadky, pri písaní/Enter/vložení rastie
+   PRESNE na obsah, strop `50vh`, nad ním sa POSÚVA (`overflow-y: auto` —
+   predtým `overflow: hidden` text skrylo). Rast robí `field-sizing: content`
+   (Chromium, Firefox 153+); prehliadače bez neho (starší Firefox/Safari)
+   dostanú JS fallback cez hook `useAutoGrowTextarea` (`autoResizeTextarea`).
+   `min-height` je pre `field-sizing` cestu (tam sa `rows` ignoruje) — globálne
+   `border-box`, preto + zvislý padding (`--write-field-pad-y`, default 2px =
+   prehliadačový) + rámik 1px hore/dole. (Floor-note polia majú prehliadačový
+   rámik — vo Firefoxe 2px, takže VYPRÁZDNENÁ úprava zápisu tam má o 2px menej
+   než 3 riadky; vedome ponechané, explicitný rámik by bol zmenou vzhľadu.) Nové pole na písanie = trieda `write-field` + `rows={3}` +
+   hook — NIKDY vlastné min/max/overflow na poli (špecifickejší selektor by
+   toto pravidlo ticho prebil). */
+.write-field {
+  field-sizing: content;
+  min-height: calc(3lh + 2 * var(--write-field-pad-y, 2px) + 2px);
+  max-height: 50vh;
+  overflow-y: auto;
+}
+/* `field-sizing: content` meria aj PLACEHOLDER — dlhý placeholder „Nového
+   zápisu" sa na úzkom okne (375px) zalomí na 5 riadkov a prázdne pole by
+   bolo vyššie než 3 riadky. Kým je vidno placeholder (pole je prázdne),
+   výšku dá `rows={3}`; od prvého znaku rastie s obsahom. */
+.write-field:placeholder-shown {
+  field-sizing: fixed;
 }
 /* Uložiť zarovnané doprava pod poľom — na telefóne dosť veľký tap-target
    (`.btn` predvolený padding), nezaberá celú šírku. */
@@ -4050,9 +4077,7 @@ a.upozornenie-title:hover {
   margin-bottom: var(--fs-space-4);
 }
 .floor-note-add-row textarea {
-  min-height: 3rem;
   resize: vertical;
-  overflow: hidden;
 }
 .floor-notes-list {
   display: flex;
@@ -4133,10 +4158,9 @@ a.upozornenie-title:hover {
 }
 .floor-note-textarea {
   width: 100%;
-  min-height: 3rem;
   resize: vertical;
-  overflow: hidden;
   padding: var(--fs-space-1) var(--fs-space-2);
+  --write-field-pad-y: var(--fs-space-1);
 }
 .floor-note-products {
   display: flex;
