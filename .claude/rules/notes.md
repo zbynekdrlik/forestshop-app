@@ -60,3 +60,14 @@ paths:
   `toHaveCount(0)` editora (zatvára sa až po potvrdenom PATCH) PRED `reload()`.
   Účet `e2e-poznamky@forestshop.sk` (vlastný, rate-limit priestor) má v súbore 3
   prihlásenia.
+- **Pridanie ďalšieho pevného (`flex:0 0 auto`) prvku do `.poznamka-row` (✏️, issue
+  591) zhodilo text na 0px pri ÚZKOM riadku** — 375px okno s RUČNE rozbaleným
+  sidebarom (emoji e2e prepína 1280→375, sidebar ostane rozbalený): `<main>` 125px,
+  riadok 77px, checkbox+✏️+🗑+gapy 78px > 65px obsahu → `.poznamka-content`
+  (jediný flexibilný, `min-width:0`) namerane 0px, `toBeVisible` „hidden" (CI PR
+  592). Fix v `@media (max-width:36rem)` ZA základnými pravidlami: `flex-wrap:wrap`
+  + `.poznamka-content { flex:1 1 0%; min-width:min(10rem,100%) }`. `flex-basis`
+  MUSÍ byť `0%`, nie `auto` (2000-znaková poznámka by pri `auto` zalomila obsah pod
+  checkbox aj v rail-móde). Overené meraním: desktop 547px nezmenené, rail-mód
+  162px v jednom riadku, rozbalený 375px → 65px na vlastnom riadku. Ďalšia ikona
+  v riadku: zmeraj `getBoundingClientRect` obsahu pri 375px s rozbaleným sidebarom.

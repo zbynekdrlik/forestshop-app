@@ -123,6 +123,12 @@ test("upraviť text uloženej poznámky — klik na text, Enter uloží, po obno
   await page.reload();
   await expect(page.getByTestId(`poznamka-body-${id}`)).toHaveText("Zavolať dodávateľovi kvôli sáčkom");
 
+  // Úzky riadok (375px pri rozbalenom bočnom paneli z desktopu): ✏️ ako tretí pevný
+  // prvok vedľa checkboxu a 🗑 nesmie stlačiť text poznámky na 0px (CI PR 592).
+  await page.setViewportSize({ width: 375, height: 800 });
+  await expect(page.getByTestId(`poznamka-body-${id}`)).toBeVisible();
+  expect((await page.getByTestId(`poznamka-body-${id}`).boundingBox())?.width ?? 0).toBeGreaterThan(40);
+
   // Upratanie po teste.
   await page.getByTestId(`poznamka-delete-${id}`).click();
   await expect(page.getByTestId(`poznamka-row-${id}`)).toHaveCount(0);

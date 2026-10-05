@@ -3200,6 +3200,31 @@ a.upozornenie-title:hover {
   flex: 0 0 auto;
   margin-left: auto;
 }
+@media (max-width: 36rem) {
+  /* issue 591: rovnaká trieda ako `.uloha-row` vyššie, na `.poznamka-row`
+     (`@media 36rem` blok pri Úlohách). MUSÍ stáť AŽ ZA základným
+     `.poznamka-content` (rovnaká špecificita — inak ho základ prebije).
+     ✏️ (tretí pevný `flex:0 0 auto` prvok vedľa checkboxu a 🗑) zjedol
+     zvyšok šírky: pri RUČNE ROZBALENOM sidebari na 375px okne je `<main>`
+     125px, riadok 77px (obsah 65px) a checkbox 18 + ✏️ 21 + 🗑 21 + 3×6px gap
+     = 78px > 65px → `.poznamka-content` (jediný flexibilný, `min-width:0`)
+     NAMERANÝ 0px, text „hidden" (`poznamky.spec.ts` emoji test, CI PR 592).
+     Fix: zalomenie + `min(10rem,100%)` floor (vzor `.uloha-text`) — v
+     úzkom riadku dostane obsah vlastný riadok, ikony skočia pod neho.
+     `flex-basis: 0%` (NIE `auto` ako `.uloha-text`): poznámka má až 2000
+     znakov, `auto` = max-content šírka dlhého textu by pri `flex-wrap`
+     zalomila obsah POD checkbox aj v bežnom rail-móde (issue 105 pasca —
+     o zalomení rozhoduje flex-basis). V rail-móde (~258px obsah) sa nič
+     nezalomí: 18 + 160 + 21 + 21 + 3×6 = 238px. Desktop (mimo tejto
+     media query) nezmenený. */
+  .poznamka-row {
+    flex-wrap: wrap;
+  }
+  .poznamka-content {
+    flex: 1 1 0%;
+    min-width: min(10rem, 100%);
+  }
+}
 
 /* ---------------- MODÁLNY DIALÓG (issue 191) ----------------
    Náhľad e-mailu pred odoslaním sa už nerozbaľuje na spodku stránky —
