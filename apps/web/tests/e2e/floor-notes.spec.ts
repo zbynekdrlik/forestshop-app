@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { expectWritingField } from "./writingField.js";
 
 const E2E_HESLO = "e2e-test-heslo"; // účet existuje len v testovacej databáze
 const E2E_PREDAJNA_EMAIL = "e2e-predajna@forestshop.sk"; // musí sa zhodovať s hodnotou v scripts/e2e-fixtures-floor-notes.ts
@@ -130,6 +131,56 @@ test("napísať zápis, pripnúť produkt (priama aj náhradná adresa), prepnú
   // Zmazať zápis — okamžite, bez potvrdzovacieho dialógu. Overuje sa, že
   // zmizol PRÁVE TENTO zápis (nie globálna prázdnota — paralelný spec môže mať
   // vlastný zápis, viď komentár vyššie).
+  await page.getByTestId(`floor-note-delete-${noteId}`).click();
+  await expect(page.getByTestId(`floor-note-row-${noteId}`)).toHaveCount(0);
+
+  expect(chyby).toEqual([]);
+});
+
+// issue 593 (Štěpán): pole „Nový zápis" AJ pole úpravy zápisu — prázdne ≥ 5
+// riadkov, rastie (autoResizeTextarea) bez zbytočného posuvníka, pri 20
+// riadkoch je zastropené a POSÚVATEĽNÉ (predtým `overflow: hidden` = text
+// nebolo vidno), posledný riadok dosiahnuteľný — desktop AJ 375px. Zúžené na
+// VLASTNÝ zápis (paralelný spec, viď prvý test). Jedno prihlásenie.
+test("pole na písanie: prázdne 5 riadkov, dlhý text sa dá posúvať — desktop aj 375px, nový aj úprava; konzola čistá", async ({ page }) => {
+  const chyby: string[] = [];
+  page.on("console", (m) => {
+    if (m.type() === "error" || m.type() === "warning") chyby.push(m.text());
+  });
+  page.on("pageerror", (e) => {
+    chyby.push(e.message);
+  });
+
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/?tab=floor-orders");
+  await page.getByLabel("E-mail").fill(E2E_PREDAJNA_EMAIL);
+  await page.getByLabel("Heslo").fill(E2E_HESLO);
+  await page.getByRole("button", { name: "Prihlásiť sa" }).click();
+  await expect(page.getByRole("heading", { name: "Objednávky predajňa" })).toBeVisible();
+
+  const nova = page.getByTestId("floor-note-new-input");
+  await nova.fill("Pole na pisanie issue 593");
+  await page.getByTestId("floor-note-new-add").click();
+  const riadok = page.locator('[data-testid^="floor-note-row-"]').filter({ hasText: "Pole na pisanie issue 593" });
+  await expect(riadok).toHaveCount(1);
+  const noteId = ((await riadok.getAttribute("data-testid")) ?? "").replace("floor-note-row-", "");
+  expect(noteId).not.toBe("");
+  const editor = page.getByTestId(`floor-note-edit-input-${noteId}`);
+
+  for (const width of [1280, 375]) {
+    await page.setViewportSize({ width, height: 900 });
+    const prazdny = await expectWritingField(nova, { grows: true });
+    console.log(`issue 593 floor-note-new-input @${String(width)}px: ${JSON.stringify(prazdny)}`);
+
+    await page.getByTestId(`floor-note-edit-${noteId}`).click();
+    await expect(editor).toBeVisible();
+    const uprava = await expectWritingField(editor, { grows: true });
+    console.log(`issue 593 floor-note-edit-input @${String(width)}px: ${JSON.stringify(uprava)}`);
+    await page.getByTestId(`floor-note-edit-cancel-${noteId}`).click();
+    await expect(editor).toHaveCount(0);
+    await expect(page.getByTestId(`floor-note-text-${noteId}`)).toHaveText("Pole na pisanie issue 593");
+  }
+
   await page.getByTestId(`floor-note-delete-${noteId}`).click();
   await expect(page.getByTestId(`floor-note-row-${noteId}`)).toHaveCount(0);
 

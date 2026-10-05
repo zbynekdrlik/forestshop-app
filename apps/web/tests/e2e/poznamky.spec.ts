@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { expectWritingField } from "./writingField.js";
 
 const E2E_HESLO = "e2e-test-heslo"; // účet existuje len v testovacej databáze
 const E2E_POZNAMKY_EMAIL = "e2e-poznamky@forestshop.sk"; // musí sa zhodovať s hodnotou v scripts/e2e-setup.ts
@@ -182,6 +183,60 @@ test("emoji picker (desktop + mobil): vloží emoji cez tlačidlo, uloží, vidn
   await expect(p2).toHaveCount(0);
   await p1.getByRole("button", { name: "Odstrániť poznámku" }).click();
   await expect(p1).toHaveCount(0);
+
+  expect(chyby).toEqual([]);
+});
+
+// issue 593 (Štěpán): „to okno do ktorého sa píše … nech je na 5 riadkov … neda
+// sa to skrolovať". Pole novej poznámky AJ pole úpravy uloženej poznámky:
+// prázdne ≥ 5 riadkov, pri 20 riadkoch zastropené a posúvateľné, posledný
+// riadok dosiahnuteľný — desktop AJ 375px (prepnutie 1280→375 nechá bočný
+// panel rozbalený = najužší riadok, `notes.md` 375px pasca). Jedno prihlásenie
+// (rate-limit priestor účtu `e2e-poznamky`, `frontend-design.md`).
+test("pole na písanie: prázdne 5 riadkov, dlhý text sa dá posúvať — desktop aj 375px, nová aj úprava; konzola čistá", async ({ page }) => {
+  const chyby: string[] = [];
+  page.on("console", (m) => {
+    if (m.type() === "error" || m.type() === "warning") chyby.push(m.text());
+  });
+  page.on("pageerror", (e) => {
+    chyby.push(e.message);
+  });
+
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/?tab=poznamky");
+  await page.getByLabel("E-mail").fill(E2E_POZNAMKY_EMAIL);
+  await page.getByLabel("Heslo").fill(E2E_HESLO);
+  await page.getByRole("button", { name: "Prihlásiť sa" }).click();
+  await expect(page.getByRole("heading", { name: "Poznámky" })).toBeVisible();
+
+  // Uložená poznámka pre pole úpravy (krátky text — pole sa otvorí s ním).
+  const nova = page.getByTestId("poznamka-new-input");
+  await nova.fill("Pole na pisanie issue 593");
+  await page.getByTestId("poznamka-new-save").click();
+  const riadok = page.locator(".poznamka-row").filter({ hasText: "Pole na pisanie issue 593" });
+  await expect(riadok).toBeVisible();
+  const id = ((await riadok.getAttribute("data-testid")) ?? "").replace("poznamka-row-", "");
+  expect(id).not.toBe("");
+  const editor = page.getByTestId(`poznamka-edit-input-${id}`);
+
+  for (const width of [1280, 375]) {
+    await page.setViewportSize({ width, height: 900 });
+    const prazdna = await expectWritingField(nova, { grows: false });
+    console.log(`issue 593 poznamka-new-input @${String(width)}px: ${JSON.stringify(prazdna)}`);
+
+    await page.getByTestId(`poznamka-edit-${id}`).click();
+    await expect(editor).toBeFocused();
+    const uprava = await expectWritingField(editor, { grows: false });
+    console.log(`issue 593 poznamka-edit-input @${String(width)}px: ${JSON.stringify(uprava)}`);
+    // Esc zruší úpravu — nič sa neuloží (prázdny text by sa aj tak neuložil).
+    await editor.press("Escape");
+    await expect(editor).toHaveCount(0);
+    await expect(page.getByTestId(`poznamka-body-${id}`)).toHaveText("Pole na pisanie issue 593");
+  }
+
+  // Upratanie po teste.
+  await page.getByTestId(`poznamka-delete-${id}`).click();
+  await expect(page.getByTestId(`poznamka-row-${id}`)).toHaveCount(0);
 
   expect(chyby).toEqual([]);
 });
