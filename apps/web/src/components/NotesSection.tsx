@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type JSX } from "react";
 import { createNote, deleteNote, fetchNotes, NotesUnauthorizedError, setNoteResolved, updateNoteText, type NoteRow } from "../notesApi.js";
+import { useAutoGrowTextarea } from "../hooks/useAutoGrowTextarea.js";
 import { EmojiPickerButton } from "./EmojiPickerButton.js";
 import { IconButton } from "./section/IconButton.js";
 import { SectionShell } from "./section/SectionShell.js";
@@ -43,6 +44,12 @@ export function NotesSection({ onSessionExpired }: { readonly onSessionExpired: 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Readonly<Record<string, string>>>({});
   const editingIdRef = useRef<string | null>(null);
+  // issue 593: polia na písanie rastú s obsahom (CSS `.write-field` +
+  // fallback hook pre prehliadače bez `field-sizing`, napr. Firefox).
+  const editInputRef = useRef<HTMLTextAreaElement>(null);
+  const editingValue = editingId === null ? "" : (drafts[editingId] ?? rows?.find((r) => r.id === editingId)?.body ?? "");
+  useAutoGrowTextarea(newBodyRef, newBody);
+  useAutoGrowTextarea(editInputRef, editingValue, editingId !== null);
 
   const load = useCallback(() => {
     fetchNotes()
@@ -213,7 +220,7 @@ export function NotesSection({ onSessionExpired }: { readonly onSessionExpired: 
         aria-label="Nová poznámka"
         placeholder="Napíš poznámku…"
         data-testid="poznamka-new-input"
-        rows={5}
+        rows={3}
         disabled={creating}
       />
       <div className="poznamka-add-actions">
@@ -270,6 +277,7 @@ export function NotesSection({ onSessionExpired }: { readonly onSessionExpired: 
                   <div className="poznamka-content">
                     {editingId === row.id ? (
                       <textarea
+                        ref={editInputRef}
                         className="poznamka-edit-input write-field"
                         value={drafts[row.id] ?? row.body}
                         onChange={(e) => {
@@ -297,7 +305,7 @@ export function NotesSection({ onSessionExpired }: { readonly onSessionExpired: 
                         }}
                         aria-label="Text upravovanej poznámky"
                         data-testid={`poznamka-edit-input-${row.id}`}
-                        rows={5}
+                        rows={3}
                         disabled={busy}
                         autoFocus
                       />

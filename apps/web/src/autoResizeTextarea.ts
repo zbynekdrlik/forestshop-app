@@ -5,8 +5,9 @@
 // obsahu pri každej zmene (žiadny CSS-only `field-sizing: content` — nie je
 // isté, že appka smie spoliehať len na prehliadače, čo ho podporujú).
 //
-// issue 593: pole má `overflow-y: auto` (CSS `.write-field` — strop ~15
-// riadkov, za ním sa posúva) a appka má globálne `box-sizing: border-box`.
+// issue 593: volá ho hook `useAutoGrowTextarea` (fallback pre prehliadače bez
+// CSS `field-sizing: content`). Pole má `overflow-y: auto` (CSS `.write-field`
+// — strop `50vh`, za ním sa posúva) a appka má globálne `box-sizing: border-box`.
 // `scrollHeight` je obsah + padding BEZ rámika, takže výška musí rámik
 // (`offsetHeight − clientHeight`) pripočítať — inak by pod stropom chýbali
 // 2px a zobrazil sa zbytočný posuvník. Strop drží CSS `max-height`.

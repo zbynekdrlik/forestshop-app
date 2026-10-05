@@ -1,6 +1,6 @@
-import { useState, type JSX } from "react";
-import { autoResizeTextarea } from "../autoResizeTextarea.js";
+import { useRef, useState, type JSX } from "react";
 import { formatSkDateTime } from "../formatDate.js";
+import { useAutoGrowTextarea } from "../hooks/useAutoGrowTextarea.js";
 import type { ProductSearchHit } from "../searchApi.js";
 import type { FloorNoteRow as FloorNoteRowData } from "../floorNotesApi.js";
 import { FloorNoteProductChip } from "./FloorNoteProductChip.js";
@@ -45,6 +45,10 @@ export function FloorNoteRow({
 }): JSX.Element {
   const [editingText, setEditingText] = useState(false);
   const [textDraft, setTextDraft] = useState(row.text);
+  // issue 593: úprava dlhého zápisu má hneď výšku podľa textu a rastie s ním
+  // (CSS `.write-field` + fallback hook pre prehliadače bez `field-sizing`).
+  const textInputRef = useRef<HTMLTextAreaElement>(null);
+  useAutoGrowTextarea(textInputRef, textDraft, editingText && canEdit);
   const [searchOpen, setSearchOpen] = useState(false);
 
   const attached = new Set(row.products.map((p) => p.variantCode));
@@ -125,13 +129,13 @@ export function FloorNoteRow({
       {editingText && canEdit ? (
         <div className="floor-note-edit">
           <textarea
+            ref={textInputRef}
             className="floor-note-textarea write-field"
-            rows={5}
+            rows={3}
             value={textDraft}
             autoFocus
             onChange={(e) => {
               setTextDraft(e.target.value);
-              autoResizeTextarea(e.target);
             }}
             aria-label={`Upraviť text zápisu ${row.id}`}
             data-testid={`floor-note-edit-input-${row.id}`}

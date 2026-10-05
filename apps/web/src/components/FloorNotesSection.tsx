@@ -1,6 +1,5 @@
-import { useCallback, useContext, useEffect, useState, type JSX } from "react";
+import { useCallback, useContext, useEffect, useRef, useState, type JSX } from "react";
 import type { Me } from "../api.js";
-import { autoResizeTextarea } from "../autoResizeTextarea.js";
 import {
   attachFloorNoteProduct,
   createFloorNote,
@@ -16,6 +15,7 @@ import {
   type FloorNoteRow as FloorNoteRowData,
 } from "../floorNotesApi.js";
 import { FloorNotesBadgeRefreshContext } from "../floorNotesBadgeContext.js";
+import { useAutoGrowTextarea } from "../hooks/useAutoGrowTextarea.js";
 import type { ProductSearchHit } from "../searchApi.js";
 import { FloorNoteRow } from "./FloorNoteRow.js";
 import { SectionShell } from "./section/SectionShell.js";
@@ -37,6 +37,10 @@ export function FloorNotesSection({ role, onSessionExpired }: { readonly role: M
   const [rows, setRows] = useState<readonly FloorNoteRowData[] | null>(null);
   const [error, setError] = useState("");
   const [newText, setNewText] = useState("");
+  // issue 593: pole rastie s obsahom (CSS `.write-field` + fallback hook) a po
+  // pridaní zápisu (`newText` = "") sa vráti na 3 riadky.
+  const newTextRef = useRef<HTMLTextAreaElement>(null);
+  useAutoGrowTextarea(newTextRef, newText);
   const [creating, setCreating] = useState(false);
   const [busyId, setBusyId] = useState("");
   const canEdit = CAN_EDIT_ROLES.has(role);
@@ -220,12 +224,12 @@ export function FloorNotesSection({ role, onSessionExpired }: { readonly role: M
   const addRow = canEdit && (
     <div className="floor-note-add-row">
       <textarea
+        ref={newTextRef}
         className="write-field"
-        rows={5}
+        rows={3}
         value={newText}
         onChange={(e) => {
           setNewText(e.target.value);
-          autoResizeTextarea(e.target);
         }}
         aria-label="Nový zápis"
         placeholder="Meno, telefón, adresa, čo si zákazník praje…"
