@@ -6,6 +6,7 @@ import pg from "pg";
 import { afterEach, expect, it } from "vitest";
 import { orderLines, orderOpenStatuses, orders } from "../src/db/schema.js";
 import { backfillOpenOrders, type BackfillExportWindow } from "../src/modules/orders/backfill-open.js";
+import { upsertOrdersAndLines } from "../src/modules/orders/ingest-materialize.js";
 import type { OrderIdsFetcher } from "../src/modules/orders/fetcher.js";
 import { INGEST_ORDERS_ADVISORY_LOCK_KEY, ingestOrders, type OrdersExportFetcher } from "../src/modules/orders/ingest.js";
 import { insertTestVariant } from "./helpers/orders.js";
@@ -257,4 +258,31 @@ it("existenciu v DB overuje AŽ PO advisory zámku importu (787_878_003) — sú
   } finally {
     await lockHolder.end();
   }
+});
+
+it("upsertOrdersAndLines 'insert-only': existujúcu objednávku NEprepíše — zhodí transakciu (fail-loud)", async () => {
+  const { db, dir } = await boot();
+  await seedExisting(db, dir);
+  const prepis = {
+    customerName: "Prepis",
+    placedAt: new Date("2026-04-30T13:45:25Z"),
+    statusName: "Vybavuje sa",
+    remark: null,
+    shopRemark: null,
+    totalPriceWithVat: null,
+  };
+
+  await expect(
+    db.transaction((tx) =>
+      upsertOrdersAndLines(tx, {
+        orderInfo: new Map([["9300", prepis]]),
+        orderExtraByCode: new Map(),
+        orderIdsByCode: new Map(),
+        lines: [],
+        conflict: "insert-only",
+      }),
+    ),
+  ).rejects.toThrow("9300");
+  const [row] = await db.select().from(orders).where(eq(orders.externalOrderId, "9300"));
+  expect(row?.customerName).toBe("Prva");
 });

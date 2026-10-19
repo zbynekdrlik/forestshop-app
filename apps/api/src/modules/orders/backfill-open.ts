@@ -15,6 +15,7 @@ import {
   upsertOrdersAndLines,
   type OrderInfo,
 } from "./ingest-materialize.js";
+import { findOldestOrder } from "./backfill.js";
 import { listOpenStatusNames } from "./open-statuses.js";
 
 // issue 595: JEDNORAZOVÝ doimport OTVORENÝCH objednávok starších než úplne prvý
@@ -78,12 +79,7 @@ export type BackfillOpenOrdersResult =
     }
   | { readonly status: "rejected"; readonly reason: string; readonly rawPath: string | null };
 
-async function oldestOrderPlacedAt(db: Pick<Database, "select">): Promise<Date | null> {
-  const [row] = await db.select({ oldest: sql<string | null>`min(${orders.placedAt})` }).from(orders);
-  // `min()` cez raw `sql` neprejde drizzle-ovým stĺpcovým mapperom — pg vracia
-  // ISO reťazec (rovnaká poznámka ako `backfill.ts`'s `oldestOpenOrderPlacedAt`).
-  return row?.oldest === null || row?.oldest === undefined ? null : new Date(row.oldest);
-}
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 function reject(reason: string, rawPath: string | null, detail: Record<string, unknown>): BackfillOpenOrdersResult {
   log.warn({ ...detail, reason, rawPath }, "doimport otvorených objednávok odmietnutý — databáza zostáva nezmenená");
@@ -91,7 +87,7 @@ function reject(reason: string, rawPath: string | null, detail: Record<string, u
 }
 
 export async function backfillOpenOrders(db: Database, options: BackfillOpenOrdersOptions): Promise<BackfillOpenOrdersResult> {
-  const oldest = await oldestOrderPlacedAt(db);
+  const oldest = await findOldestOrder(db);
   if (oldest === null) {
     return reject(
       `V databáze nie je žiadna objednávka — na prvý import použite bežný import objednávok (orders-ingest). ${ORDERS_UNCHANGED_CONSEQUENCE}`,
@@ -107,7 +103,12 @@ export async function backfillOpenOrders(db: Database, options: BackfillOpenOrde
     );
   }
 
-  const window: BackfillExportWindow = { dateFrom: options.from, dateUntil: oldest };
+  // `dateUntil` = najstaršia objednávka + 1 deň: Shoptet berie `dateUntil` ako
+  // kalendárny dátum a `formatDateParam` ho formátuje z UTC dňa — objednávka z
+  // prvých ~2 h miestneho dňa (CEST) by inak padla na predošlý UTC deň a jej
+  // miestny deň by z exportu vypadol. Prekryv s už naimportovanými objednávkami
+  // odfiltruje kontrola "už v DB" nižšie.
+  const window: BackfillExportWindow = { dateFrom: options.from, dateUntil: new Date(oldest.getTime() + MS_PER_DAY) };
   log.info(
     { dateFrom: window.dateFrom.toISOString(), dateUntil: window.dateUntil.toISOString(), hasXmlIds: options.createOrderIdsFetcher !== undefined },
     "doimport otvorených objednávok: sťahujem export staršieho obdobia",
@@ -140,6 +141,15 @@ export async function backfillOpenOrders(db: Database, options: BackfillOpenOrde
     await tx.execute(sql`select pg_advisory_xact_lock(${INGEST_ORDERS_ADVISORY_LOCK_KEY})`);
 
     const openStatuses = new Set(await listOpenStatusNames(tx));
+    if (openStatuses.size === 0) {
+      // Bez nastaveného otvoreného stavu by doimport hlásil "0 vložených", čo
+      // by vyzeralo ako "nič nechýba" — v skutočnosti nemá podľa čoho vyberať.
+      return reject(
+        `V nastaveniach nie je žiadny otvorený stav objednávky — doimport nemá podľa čoho vyberať. ${ORDERS_UNCHANGED_CONSEQUENCE}`,
+        rawPath,
+        { readOrderCount: parsed.orderInfo.size },
+      );
+    }
     const open = [...parsed.orderInfo].filter(([, info]) => openStatuses.has(info.statusName));
 
     const present = new Set<string>();
@@ -159,6 +169,7 @@ export async function backfillOpenOrders(db: Database, options: BackfillOpenOrde
       orderExtraByCode: parsed.orderExtraByCode,
       orderIdsByCode,
       lines,
+      conflict: "insert-only",
     });
 
     for (const [externalOrderId, info] of toInsert) {
@@ -167,7 +178,7 @@ export async function backfillOpenOrders(db: Database, options: BackfillOpenOrde
           externalOrderId,
           placedAt: info.placedAt.toISOString(),
           statusName: info.statusName,
-          lineCount: lines.filter((line) => line.externalOrderId === externalOrderId).length,
+          lineCount: parsed.lineTotals.get(externalOrderId)?.size ?? 0,
           shoptetOrderId: orderIdsByCode.get(externalOrderId) ?? null,
         },
         "doimport otvorených objednávok: objednávka zapísaná",

@@ -209,17 +209,8 @@ export async function ingestOrders(db: Database, options: OrdersIngestOptions): 
         return { status: "rejected", reason: rejectionReason, rawPath };
       }
 
-      // issue 595: zápis objednávok + riadkov (COALESCE polia, `comment`/`state`
-      // mimo `set`, preskočenie neznámeho variantu) je zdieľaný s doimportom —
-      // plné odôvodnenie každého poľa je pri `upsertOrdersAndLines`
-      // (`ingest-materialize.ts`).
-      const { orderIdByExternalId, insertedLineCount, skippedItemCount } = await upsertOrdersAndLines(tx, {
-        orderInfo,
-        orderExtraByCode,
-        orderIdsByCode,
-        lines: allLines,
-      });
-
+      // Beží PRED zápisom riadkov (review, issue 595): zachová poradie zamykania
+      // `order` → `order_line`, na ktoré sa spolieha poznámka issue 416 nižšie.
       // issue 132: `orderIdsByCode` (best-effort XML fetch, `dateFrom`
       // ROZŠÍRENÝ za predvolené okno cez `backfill.ts`'s `computeOrderIdsWindowStart`
       // — pozri `index.ts`/`cli/orders-ingest.ts`) môže poznať objednávku,
@@ -230,13 +221,13 @@ export async function ingestOrders(db: Database, options: OrdersIngestOptions): 
       // zvyčajne teraz nesie aj CSV) — ponechaná ZÁMERNE ako obrana pre prípad,
       // že by XML poznal objednávku mimo CSV obsahu (napr. zmazaná/vymenená
       // v CSV, ale ešte v XML histórii). Bez tohto kroku by
-      // upsert cyklus vyššie (ktorý ide LEN cez `orderInfo`, postavené z CSV)
+      // upsert cyklus nižšie (ktorý ide LEN cez `orderInfo`, postavené z CSV)
       // taký záznam nikdy nenavštívil, takže jeho `shoptetOrderId` by sa
       // nikdy nezapísal, hoci XML mapa ho pozná. Priamy `UPDATE` namiesto
       // upsertu — objednávka MUSÍ už v DB existovať (z predošlého importu),
       // tento krok jej nikdy nezakladá nový riadok len z XML dát (tie
       // nenesú `customerName` ani ostatné povinné polia). `COALESCE` chráni
-      // už zistené id rovnako ako hlavný upsert vyššie.
+      // už zistené id rovnako ako hlavný upsert nižšie.
       for (const [externalOrderId, shoptetOrderId] of orderIdsByCode) {
         if (orderInfo.has(externalOrderId)) continue;
         await tx
@@ -245,6 +236,16 @@ export async function ingestOrders(db: Database, options: OrdersIngestOptions): 
           .where(eq(orders.externalOrderId, externalOrderId));
       }
 
+      // issue 595: zápis objednávok + riadkov (COALESCE polia, `comment`/`state`
+      // mimo `set`, preskočenie neznámeho variantu) je zdieľaný s doimportom —
+      // plné odôvodnenie každého poľa je pri `upsertOrdersAndLines`
+      // (`ingest-materialize.ts`).
+      const { orderIdByExternalId, insertedLineCount, skippedItemCount } = await upsertOrdersAndLines(tx, {
+        orderInfo,
+        orderExtraByCode,
+        orderIdsByCode,
+        lines: allLines,
+      });
 
       // issue 412: zosúladenie riadkov EXISTUJÚCEJ objednávky s AKTUÁLNYM
       // exportom — Shoptet dovolí zmeniť produkt na už prijatej objednávke

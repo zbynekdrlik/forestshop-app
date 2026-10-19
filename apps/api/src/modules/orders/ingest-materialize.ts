@@ -204,6 +204,9 @@ export interface UpsertOrdersInput {
   readonly orderExtraByCode: ReadonlyMap<string, OrderLevelExtra>;
   readonly orderIdsByCode: ReadonlyMap<string, number>;
   readonly lines: readonly OrderLineTotal[];
+  // "update" (predvolené, bežný import): existujúca objednávka sa osvieži.
+  // "insert-only" (doimport, issue 595): existujúca objednávka = chyba, nikdy prepis.
+  readonly conflict?: "update" | "insert-only";
 }
 
 export interface UpsertOrdersResult {
@@ -225,8 +228,9 @@ export async function upsertOrdersAndLines(
   const { orderInfo, orderExtraByCode, orderIdsByCode } = input;
   const allLines = input.lines;
   const orderIdByExternalId = new Map<string, string>();
+  const insertOnly = input.conflict === "insert-only";
   for (const batch of chunk([...orderInfo.entries()], ORDERS_INGEST_BATCH_SIZE)) {
-    const inserted = await tx
+    const insertQuery = tx
       .insert(orders)
       .values(
         batch.map(([externalOrderId, info]) => {
@@ -256,68 +260,82 @@ export async function upsertOrdersAndLines(
             priceToPay: extra.priceToPay,
           };
         }),
-      )
-      .onConflictDoUpdate({
-        target: orders.externalOrderId,
-        // `comment` sa ZÁMERNE nedáva do SET — je to manažérovo vlastné
-        // pole (nikdy nepochádza zo Shoptetu, `schema-orders.ts`), re-import
-        // ho nesmie prepísať/vynulovať. `status_name` (issue 59) je presný
-        // OPAK — je to VŽDY Shoptetovo pole, re-import ho preto MUSÍ
-        // osviežiť (objednávka prejde "Vybavuje sa" → "Vybavená" len tak,
-        // že ju appka pri ďalšom importe znova uvidí). `remark` (issue 65,
-        // zákaznícky odkaz) je rovnaká rodina ako `status_name` — VŽDY
-        // Shoptetovo pole, re-import ho preto tiež osvieži. `shop_remark`
-        // (issue 164, interná poznámka e-shopu) je TIEŽ tá istá rodina —
-        // VŽDY Shoptetovo pole, ukladá sa SUROVO (rozdelenie na naše/cudzie
-        // sa robí až na čítacej strane, `queries.ts`) — appka pri IMPORTE
-        // do neho nikdy nezapisuje, takže tu niet čo stratiť/prepísať.
-        // `email`/`phone`/`package_number`/`shipping_carrier_name` (issue
-        // 172) sú Shoptetove polia, ale na rozdiel od `status_name`/
-        // `remark`/`shop_remark` vyššie sú NAVYŠE COALESCE-ované — rovnaký
-        // dôvod ako `shoptet_order_id` (review, PR 177): extrahujú sa z
-        // KAŽDÉHO riadku objednávky (`extractOrderLevelExtra`), takže
-        // jeden pokazený/inak tvarovaný export cyklus, kde niektorý z
-        // týchto stĺpcov na VŠETKÝCH riadkoch danej objednávky vyjde
-        // prázdny, by priamym prepísaním TICHO vynuloval už zistenú
-        // hodnotu — a "Nevyzdvihnuté zásielky" (`posta-uncollected/
-        // orders-source.ts`) by tú objednávku odvtedy prestalo sledovať
-        // bez akéhokoľvek varovania. `coalesce` necháva predtým zistenú
-        // hodnotu prežiť presne taký výpadok, zatiaľ čo skutočná NOVÁ
-        // hodnota (bežný prípad — zásielka dostane číslo AŽ po prvom
-        // importe) sa aj tak zapíše normálne.
-        set: {
-          customerName: sql`excluded.customer_name`,
-          statusName: sql`excluded.status_name`,
-          remark: sql`excluded.remark`,
-          shopRemark: sql`excluded.shop_remark`,
-          // issue 237: rovnaká rodina ako `status_name`/`remark`/
-          // `shop_remark` vyššie — VŽDY Shoptetovo pole, priamo prepísané
-          // (nie COALESCE-ované), re-import ho musí osviežiť na aktuálnu
-          // sumu (napr. dodatočná zľava/storno položky v Shoptete).
-          totalPriceWithVat: sql`excluded.total_price_with_vat`,
-          placedAt: sql`excluded.placed_at`,
-          shoptetOrderId: sql`coalesce(excluded.shoptet_order_id, "order"."shoptet_order_id")`,
-          email: sql`coalesce(excluded.email, "order"."email")`,
-          phone: sql`coalesce(excluded.phone, "order"."phone")`,
-          packageNumber: sql`coalesce(excluded.package_number, "order"."package_number")`,
-          shippingCarrierName: sql`coalesce(excluded.shipping_carrier_name, "order"."shipping_carrier_name")`,
-          // issue 292: rovnaká rodina/dôvod ako `email`/`phone`/
-          // `package_number`/`shipping_carrier_name` vyššie — COALESCE
-          // chráni už zistenú doručovaciu adresu/hmotnosť/spôsob platby
-          // pred tichým vynulovaním jedným pokazeným importovým cyklom.
-          deliveryFullName: sql`coalesce(excluded.delivery_full_name, "order"."delivery_full_name")`,
-          deliveryCompany: sql`coalesce(excluded.delivery_company, "order"."delivery_company")`,
-          deliveryStreet: sql`coalesce(excluded.delivery_street, "order"."delivery_street")`,
-          deliveryHouseNumber: sql`coalesce(excluded.delivery_house_number, "order"."delivery_house_number")`,
-          deliveryCity: sql`coalesce(excluded.delivery_city, "order"."delivery_city")`,
-          deliveryZip: sql`coalesce(excluded.delivery_zip, "order"."delivery_zip")`,
-          deliveryCountryName: sql`coalesce(excluded.delivery_country_name, "order"."delivery_country_name")`,
-          weight: sql`coalesce(excluded.weight, "order"."weight")`,
-          paymentMethodName: sql`coalesce(excluded.payment_method_name, "order"."payment_method_name")`,
-          priceToPay: sql`coalesce(excluded.price_to_pay, "order"."price_to_pay")`,
-        },
-      })
-      .returning({ id: orders.id, externalOrderId: orders.externalOrderId });
+      );
+    // issue 595: doimport (`backfill-open.ts`) zapisuje LEN objednávky, ktoré v DB
+    // ešte nie sú — `insert-only` zaručí, že ani neočakávaný konflikt (iný
+    // zapisovateľ `order` bez zámku 787_878_003) existujúcu objednávku NEPREPÍŠE:
+    // konflikt sa preskočí a nižšie zhodí celú transakciu (fail-loud, nič sa nezapíše).
+    const inserted = insertOnly
+      ? await insertQuery
+          .onConflictDoNothing({ target: orders.externalOrderId })
+          .returning({ id: orders.id, externalOrderId: orders.externalOrderId })
+      : await insertQuery
+          .onConflictDoUpdate({
+            target: orders.externalOrderId,
+            // `comment` sa ZÁMERNE nedáva do SET — je to manažérovo vlastné
+            // pole (nikdy nepochádza zo Shoptetu, `schema-orders.ts`), re-import
+            // ho nesmie prepísať/vynulovať. `status_name` (issue 59) je presný
+            // OPAK — je to VŽDY Shoptetovo pole, re-import ho preto MUSÍ
+            // osviežiť (objednávka prejde "Vybavuje sa" → "Vybavená" len tak,
+            // že ju appka pri ďalšom importe znova uvidí). `remark` (issue 65,
+            // zákaznícky odkaz) je rovnaká rodina ako `status_name` — VŽDY
+            // Shoptetovo pole, re-import ho preto tiež osvieži. `shop_remark`
+            // (issue 164, interná poznámka e-shopu) je TIEŽ tá istá rodina —
+            // VŽDY Shoptetovo pole, ukladá sa SUROVO (rozdelenie na naše/cudzie
+            // sa robí až na čítacej strane, `queries.ts`) — appka pri IMPORTE
+            // do neho nikdy nezapisuje, takže tu niet čo stratiť/prepísať.
+            // `email`/`phone`/`package_number`/`shipping_carrier_name` (issue
+            // 172) sú Shoptetove polia, ale na rozdiel od `status_name`/
+            // `remark`/`shop_remark` vyššie sú NAVYŠE COALESCE-ované — rovnaký
+            // dôvod ako `shoptet_order_id` (review, PR 177): extrahujú sa z
+            // KAŽDÉHO riadku objednávky (`extractOrderLevelExtra`), takže
+            // jeden pokazený/inak tvarovaný export cyklus, kde niektorý z
+            // týchto stĺpcov na VŠETKÝCH riadkoch danej objednávky vyjde
+            // prázdny, by priamym prepísaním TICHO vynuloval už zistenú
+            // hodnotu — a "Nevyzdvihnuté zásielky" (`posta-uncollected/
+            // orders-source.ts`) by tú objednávku odvtedy prestalo sledovať
+            // bez akéhokoľvek varovania. `coalesce` necháva predtým zistenú
+            // hodnotu prežiť presne taký výpadok, zatiaľ čo skutočná NOVÁ
+            // hodnota (bežný prípad — zásielka dostane číslo AŽ po prvom
+            // importe) sa aj tak zapíše normálne.
+            set: {
+              customerName: sql`excluded.customer_name`,
+              statusName: sql`excluded.status_name`,
+              remark: sql`excluded.remark`,
+              shopRemark: sql`excluded.shop_remark`,
+              // issue 237: rovnaká rodina ako `status_name`/`remark`/
+              // `shop_remark` vyššie — VŽDY Shoptetovo pole, priamo prepísané
+              // (nie COALESCE-ované), re-import ho musí osviežiť na aktuálnu
+              // sumu (napr. dodatočná zľava/storno položky v Shoptete).
+              totalPriceWithVat: sql`excluded.total_price_with_vat`,
+              placedAt: sql`excluded.placed_at`,
+              shoptetOrderId: sql`coalesce(excluded.shoptet_order_id, "order"."shoptet_order_id")`,
+              email: sql`coalesce(excluded.email, "order"."email")`,
+              phone: sql`coalesce(excluded.phone, "order"."phone")`,
+              packageNumber: sql`coalesce(excluded.package_number, "order"."package_number")`,
+              shippingCarrierName: sql`coalesce(excluded.shipping_carrier_name, "order"."shipping_carrier_name")`,
+              // issue 292: rovnaká rodina/dôvod ako `email`/`phone`/
+              // `package_number`/`shipping_carrier_name` vyššie — COALESCE
+              // chráni už zistenú doručovaciu adresu/hmotnosť/spôsob platby
+              // pred tichým vynulovaním jedným pokazeným importovým cyklom.
+              deliveryFullName: sql`coalesce(excluded.delivery_full_name, "order"."delivery_full_name")`,
+              deliveryCompany: sql`coalesce(excluded.delivery_company, "order"."delivery_company")`,
+              deliveryStreet: sql`coalesce(excluded.delivery_street, "order"."delivery_street")`,
+              deliveryHouseNumber: sql`coalesce(excluded.delivery_house_number, "order"."delivery_house_number")`,
+              deliveryCity: sql`coalesce(excluded.delivery_city, "order"."delivery_city")`,
+              deliveryZip: sql`coalesce(excluded.delivery_zip, "order"."delivery_zip")`,
+              deliveryCountryName: sql`coalesce(excluded.delivery_country_name, "order"."delivery_country_name")`,
+              weight: sql`coalesce(excluded.weight, "order"."weight")`,
+              paymentMethodName: sql`coalesce(excluded.payment_method_name, "order"."payment_method_name")`,
+              priceToPay: sql`coalesce(excluded.price_to_pay, "order"."price_to_pay")`,
+            },
+          })
+          .returning({ id: orders.id, externalOrderId: orders.externalOrderId });
+    if (insertOnly && inserted.length !== batch.length) {
+      const insertedCodes = new Set(inserted.map((row) => row.externalOrderId));
+      const conflicting = batch.map(([code]) => code).filter((code) => !insertedCodes.has(code));
+      throw new Error(`Objednávky už v databáze existujú, doimport ich neprepíše: ${conflicting.join(", ")}`);
+    }
     for (const row of inserted) orderIdByExternalId.set(row.externalOrderId, row.id);
   }
 
