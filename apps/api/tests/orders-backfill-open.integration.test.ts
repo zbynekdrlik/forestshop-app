@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { asc, eq } from "drizzle-orm";
 import pg from "pg";
 import { afterEach, expect, it } from "vitest";
-import { orderLines, orders } from "../src/db/schema.js";
+import { orderLines, orderOpenStatuses, orders } from "../src/db/schema.js";
 import { backfillOpenOrders, type BackfillExportWindow } from "../src/modules/orders/backfill-open.js";
 import type { OrderIdsFetcher } from "../src/modules/orders/fetcher.js";
 import { INGEST_ORDERS_ADVISORY_LOCK_KEY, ingestOrders, type OrdersExportFetcher } from "../src/modules/orders/ingest.js";
@@ -109,10 +109,13 @@ it("doimportuje LEN starú OTVORENÚ objednávku, uzavretú vynechá a existujú
     createOrderIdsFetcher: ids,
   });
 
-  // okno exportu = [--from, najstaršia objednávka v DB]
+  // okno exportu = [--from, najstaršia objednávka v DB + 1 deň] — Shoptet berie
+  // `dateUntil` ako kalendárny dátum (formatDateParam = UTC deň), takže +1 deň
+  // pokryje celý miestny deň najstaršej objednávky aj okolo polnoci; prekryv s už
+  // naimportovanými objednávkami odfiltruje "už v DB" (review, issue 595).
   expect(windows).toHaveLength(1);
   expect(windows[0]?.dateFrom.toISOString()).toBe(FROM.toISOString());
-  expect(windows[0]?.dateUntil.toISOString()).toBe(oldest?.placedAt.toISOString());
+  expect(windows[0]?.dateUntil.toISOString()).toBe(new Date((oldest?.placedAt.getTime() ?? 0) + 86_400_000).toISOString());
 
   expect(result).toMatchObject({
     status: "accepted",
@@ -209,6 +212,18 @@ it("poškodený export (počet polí nesedí) → odmietnuté, DB bez zmeny", as
   expect(await db.select({ id: orders.id }).from(orders)).toHaveLength(2);
 });
 
+it("žiadny nastavený otvorený stav → odmietnuté (nie zavádzajúce 'nič nechýba'), DB bez zmeny", async () => {
+  const { db, dir } = await boot();
+  await seedExisting(db, dir);
+  await db.delete(orderOpenStatuses);
+
+  const result = await backfillOpenOrders(db, { from: FROM, now: NOW, rawDir: dir, createExportFetcher: recordingFetcher(OLD_EXPORT, []) });
+
+  expect(result.status).toBe("rejected");
+  expect(result.status === "rejected" && result.reason).toContain("otvorený stav");
+  expect(await db.select({ id: orders.id }).from(orders)).toHaveLength(2);
+});
+
 it("existenciu v DB overuje AŽ PO advisory zámku importu (787_878_003) — súbežne vložená objednávka sa neprepíše", async () => {
   const { db, dir } = await boot();
   await seedExisting(db, dir);
@@ -220,7 +235,17 @@ it("existenciu v DB overuje AŽ PO advisory zámku importu (787_878_003) — sú
 
   try {
     const pending = backfillOpenOrders(db, { from: FROM, now: NOW, rawDir: dir, createExportFetcher: recordingFetcher(OLD_EXPORT, []) });
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    // Deterministicky (nie len časovaním): počkaj, kým doimport naozaj ČAKÁ na zámok.
+    let waiting = false;
+    for (let attempt = 0; attempt < 100 && !waiting; attempt += 1) {
+      const res = await lockHolder.query<{ n: string }>(
+        "select count(*)::text as n from pg_locks where locktype = 'advisory' and objid = $1 and not granted",
+        [INGEST_ORDERS_ADVISORY_LOCK_KEY],
+      );
+      waiting = res.rows[0]?.n !== "0";
+      if (!waiting) await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    expect(waiting).toBe(true);
     // simuluje bežný import, ktorý 20260707 medzitým zapísal
     await db.insert(orders).values({ externalOrderId: "20260707", customerName: "Z importu", placedAt: new Date("2026-04-24T09:12:00Z") });
     await lockHolder.query("select pg_advisory_unlock($1)", [INGEST_ORDERS_ADVISORY_LOCK_KEY]);
