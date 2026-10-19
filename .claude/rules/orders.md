@@ -4,6 +4,7 @@ paths:
   - "apps/api/src/modules/mail/**"
   - "apps/api/src/http/supplier-routes.ts"
   - "apps/api/src/cli/orders-ingest.ts"
+  - "apps/api/src/cli/orders-backfill-open.ts"
   - "scripts/orders-ingest.ts"
 ---
 
@@ -462,6 +463,33 @@ paths:
   dní ~1,9 MB) je zanedbateľný. Známa hranica: objednávka otvorená v appke, ktorá už
   v Shoptete NEEXISTUJE (zmazaná), by okno držala predĺžené donekonečna — extrémne
   zriedkavé, download aj tak malý (rovnaká trieda rizika, akú #132 vedome prijalo).
+- **Hranica issue 492: okno sa predlžuje LEN po otvorenú objednávku, ktorá UŽ JE v DB —
+  otvorená objednávka STARŠIA než úplne prvý import sa nikdy nenačíta (issue 595,
+  20260707 Šulcová 24. 4. 2026, najstaršia v DB 30. 4.).** Na to je jednorazový CLI
+  `apps/api/src/cli/orders-backfill-open.ts` (`modules/orders/backfill-open.ts`):
+  ```bash
+  ssh admin@forestshop-dev.newlevel.media \
+    'docker exec forestshop-app-1 node apps/api/dist/cli/orders-backfill-open.js --from 2025-01-01'
+  ```
+  (na samotnom `forestshop-dev` bez `ssh` prefixu). Stiahne export za `[--from,
+  najstaršia objednávka v DB]` a zapíše LEN objednávky v stave z `listOpenStatusNames()`,
+  ktoré v DB ešte NIE SÚ — pod tým istým zámkom `787_878_003` ako 15-min import.
+  Nespúšťa akceptačnú bránu, mazanie riadkov (#412), XML-only doplnenie id ani
+  Upozornenia; existujúcu objednávku nikdy neprepíše. Opakovaný beh vloží 0 (exit 1 =
+  odmietnuté: prázdna DB, `--from` nie je starší, poškodený export). Vypíše prečítané /
+  otvorené / už v DB / vložené. Po doimporte objednávku ďalej udržiava okno z #492
+  (je otvorená a v DB), takže Upozornenia aj osvieženie stavu zbehnú pri ďalšom bežnom
+  behu. **Kedy znova:** keď sa zoznam otvorených stavov rozšíri o stav, v ktorom visia
+  aj staršie objednávky, alebo pri novom „objednávka v appke vôbec nie je" hlásení s
+  dátumom pred najstaršou objednávkou v DB. **Prečo NIE trvalo širšie okno:** export
+  1. 1. 2025 – 1. 5. 2026 má ~3700 uzavretých objednávok — zaplavili by sekcie a
+  počítadlá nad `status_name` (Vrátený tovar, Výmena, štatistiky). Parsovanie a zápis
+  sú zdieľané v `ingest-materialize.ts` (`parseOrdersExport`, `structuralRejectionReason`,
+  `upsertOrdersAndLines`) — ďalší import-podobný nástroj ich volá, nekopíruje.
+  Okno siaha po najstaršiu objednávku + 1 deň (`dateUntil` je kalendárny UTC dátum,
+  objednávka z prvých ~2 h miestneho dňa by inak vypadla); prekryv rieši "už v DB".
+  Zápis ide v režime `conflict: "insert-only"` — neočakávaný konflikt (iný zapisovateľ
+  `order` bez zámku) zhodí celú transakciu, nikdy neprepíše existujúcu objednávku.
 - **`fixtures/orders-sample.csv` je RUČNE vyrobená (nie výrez reálneho
   exportu ako katalógova fixtúra), takže sa smie prepísať CELÁ pythonom —
   žiadny byte-for-byte jeden-riadok postup ako `.claude/rules/catalog.md`

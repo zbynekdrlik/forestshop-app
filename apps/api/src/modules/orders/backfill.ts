@@ -54,6 +54,18 @@ async function oldestOpenOrderPlacedAt(
 }
 
 /**
+ * issue 595: najstaršia objednávka v DB BEZ ohľadu na stav — horná hranica okna
+ * jednorazového doimportu otvorených objednávok (`backfill-open.ts`). `null` = DB
+ * je prázdna.
+ */
+export async function findOldestOrder(db: Pick<Database, "select">): Promise<Date | null> {
+  const [row] = await db.select({ oldest: sql<string | null>`min(${orders.placedAt})` }).from(orders);
+  // Rovnaká poznámka ako `oldestOpenOrderPlacedAt` vyššie: `min()` cez raw `sql`
+  // vracia ISO reťazec, nie `Date`.
+  return row?.oldest === null || row?.oldest === undefined ? null : new Date(row.oldest);
+}
+
+/**
  * issue 132: najstaršia OTVORENÁ objednávka, ktorej chýba `shoptet_order_id`
  * (podmnožina otvorených). Pre XML id-fetch okno.
  */
