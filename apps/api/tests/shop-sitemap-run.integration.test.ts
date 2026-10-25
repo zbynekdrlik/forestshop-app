@@ -65,7 +65,19 @@ describe("runShopSitemap", () => {
       },
       fetchCandidate: () => Promise.resolve(null),
     });
-    expect(result).toEqual({ missingProducts: 0, resolvedBySitemap: 0, resolvedByProbe: 0, codesAttempted: 0, totalStored: 0, stoppedEarly: false });
+    // issue 598: výsledok nesie aj počty sondy (požiadavky/produkty/ochranná doba) a dôvod zastavenia.
+    expect(result).toEqual({
+      missingProducts: 0,
+      resolvedBySitemap: 0,
+      resolvedByProbe: 0,
+      codesAttempted: 0,
+      totalStored: 0,
+      stoppedEarly: false,
+      stoppedReason: null,
+      probedProducts: 0,
+      probeRequests: 0,
+      skippedCooldown: 0,
+    });
     expect(fetchCalled).toBe(false);
   });
 
