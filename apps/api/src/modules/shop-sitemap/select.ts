@@ -5,6 +5,7 @@
 import { inArray, sql } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
 import { products, shopProductUrl, shopSitemapProbeAttempt, variants } from "../../db/schema.js";
+import { DB_WRITE_CHUNK } from "./constants.js";
 import { slug } from "./slug.js";
 
 export interface MissingProduct {
@@ -109,9 +110,8 @@ export async function selectProbeAttempts(db: Database): Promise<ReadonlyMap<str
 
 /** issue 598: zapíše neúspešný pokus sondy (upsert — novší pokus prepíše starší čas). */
 export async function recordProbeAttempts(db: Database, productKeys: readonly string[], now: Date): Promise<void> {
-  const CHUNK = 500;
-  for (let i = 0; i < productKeys.length; i += CHUNK) {
-    const chunk = productKeys.slice(i, i + CHUNK).map((productKey) => ({ productKey, attemptedAt: now }));
+  for (let i = 0; i < productKeys.length; i += DB_WRITE_CHUNK) {
+    const chunk = productKeys.slice(i, i + DB_WRITE_CHUNK).map((productKey) => ({ productKey, attemptedAt: now }));
     await db
       .insert(shopSitemapProbeAttempt)
       .values(chunk)

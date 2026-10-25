@@ -111,7 +111,7 @@ export class RestockBlockRetry {
         return;
       }
       if (!isShoptetBlockedError(outcome.error)) return;
-      await this.handleBlocked(this.now(), this.intervalMs);
+      await this.handleBlocked(this.now(), this.intervalMs, "observed");
     } catch (error) {
       // Hák nikdy nesmie zhodiť samotný beh restocku ani plánovač.
       const rawErrorMessage = error instanceof Error ? error.message : String(error);
@@ -128,13 +128,24 @@ export class RestockBlockRetry {
     if (zonedDateKey(failedAt) !== zonedDateKey(now)) return;
     const remainingMs = Math.max(0, failedAt.getTime() + this.intervalMs - now.getTime());
     log.info({ failedAt: failedAt.toISOString(), remainingMs }, "restock: po štarte appky obnovujem opakovanie po bloku Shoptetu");
-    await this.handleBlocked(now, remainingMs);
+    await this.handleBlocked(now, remainingMs, "resume");
   }
 
-  private async handleBlocked(now: Date, delayMs: number): Promise<void> {
+  /**
+   * `source: "observed"` = práve skončil (zablokovaný) beh, jeho `job_run` riadok
+   * ešte NIE JE zapísaný ako failure; `"resume"` = po reštarte appky, keď okno
+   * opakovaní už uplynulo, kartu založil beh, ktorý ho ukončil — znova ju
+   * nezakladáme (každý popoludňajší deploy by ju inak obnovil, po vybavení
+   * majiteľom dokonca založil NOVÚ).
+   */
+  private async handleBlocked(now: Date, delayMs: number, source: "observed" | "resume"): Promise<void> {
     const nextAttempt = new Date(now.getTime() + delayMs);
     const withinWindow = zonedDateKey(nextAttempt) === zonedDateKey(now) && getZonedDateParts(nextAttempt).hour < this.cutoffHourLocal;
     if (!withinWindow) {
+      if (source === "resume") {
+        log.info("restock: po štarte appky je okno opakovaní po bloku už za nami — nič neplánujem");
+        return;
+      }
       await this.raiseCard(now);
       return;
     }
@@ -167,7 +178,7 @@ export class RestockBlockRetry {
         // vypnutý restock (`skip`) nesmie zatvoriť kartu ako „prešlo".
         () => undefined,
       );
-      // „busy" = iný restock práve beží; jeho vlastný výsledok prejde cez `observe`.
+      // „busy" = iný restock (aj ručný) práve beží; jeho vlastný výsledok prejde cez `observe`.
       log.info({ start: start.status }, "restock: opakovanie po bloku Shoptetu spustené");
     } catch (error) {
       const rawErrorMessage = error instanceof Error ? error.message : String(error);
@@ -208,8 +219,8 @@ export class RestockBlockRetry {
       .where(and(eq(jobRuns.jobName, RESTOCK_JOB_NAME), gte(jobRuns.startedAt, new Date(now.getTime() - 24 * 60 * 60_000))))
       .orderBy(desc(jobRuns.startedAt));
     const today = zonedDateKey(now);
-    const count = rows.filter((r) => r.status === "failure" && isShoptetBlockedMessage(r.errorMessage) && zonedDateKey(r.startedAt) === today).length;
-    // Volané aj z behu, ktorého `job_run` riadok ešte nie je zapísaný ako failure.
-    return Math.max(count, 1);
+    const earlier = rows.filter((r) => r.status === "failure" && isShoptetBlockedMessage(r.errorMessage) && zonedDateKey(r.startedAt) === today).length;
+    // + práve pozorovaný beh — `observe` beží PRED zápisom jeho `job_run` riadku ako failure.
+    return earlier + 1;
   }
 }

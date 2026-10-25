@@ -198,6 +198,12 @@ const runRestockLockedFn =
           config: shoptetImportConfigFromBaseUrl(env.SHOPTET_ADMIN_BASE_URL, shoptetAdminUser, shoptetAdminPassword),
         });
 
+// issue 598: Shoptet WAF od 21. 10. 2026 ráno blokuje IP servera — zablokovaný
+// restock (04:50 / reťazený / opakovanie) (aj ručné „Spustiť teraz") naplánuje opakovanie o 60 min cez
+// `startRunNow` (preto ODOMKNUTÝ `runRestockLockedFn`) a po vyčerpaní do obeda
+// založí kartu na Upozorneniach. `resume()` nižšie obnoví budík po reštarte.
+const restockBlockRetry = new RestockBlockRetry({ db, run: runRestockLockedFn });
+
 // issue 123: spätný zápis appkinej poznámky k objednávke — zdieľa TIE ISTÉ
 // nepovinné premenné ako #122 vyššie (žiadne nové), len iná Playwright
 // automatizácia (per-objednávka, nie hromadný CSV import).
@@ -310,7 +316,10 @@ const app = createApp(db, {
   orderMerge: orderMergeDeps,
   orderCustomerContact: orderCustomerContactDeps,
   fetchSupplierPage,
-  restock: { config: shoptetImportConfigFromBaseUrl(env.SHOPTET_ADMIN_BASE_URL, shoptetAdminUser ?? "", shoptetAdminPassword ?? "") },
+  restock: {
+    config: shoptetImportConfigFromBaseUrl(env.SHOPTET_ADMIN_BASE_URL, shoptetAdminUser ?? "", shoptetAdminPassword ?? ""),
+    observe: restockBlockRetry.observe,
+  },
   dpd: dpdDeps,
   dailyTasks: dailyTasksDeps,
   ...(nextEventService === undefined ? {} : { nextEvent: nextEventService }),
@@ -327,12 +336,6 @@ const app = createApp(db, {
 // predvolenú hodnotu v kóde — premenná prostredia je len poistka pre prípad,
 // že by Shoptet adresu zmenil.
 const fetchShopFeed = createHttpShopFeedFetcher(env.SHOP_FEED_URL ?? DEFAULT_SHOP_FEED_URL);
-
-// issue 598: Shoptet WAF od 21. 10. 2026 ráno blokuje IP servera — zablokovaný
-// restock (04:50 / reťazený / opakovanie) naplánuje opakovanie o 60 min cez
-// `startRunNow` (preto ODOMKNUTÝ `runRestockLockedFn`) a po vyčerpaní do obeda
-// založí kartu na Upozorneniach. `resume()` nižšie obnoví budík po reštarte.
-const restockBlockRetry = new RestockBlockRetry({ db, run: runRestockLockedFn });
 
 const scheduler = startScheduler(db, [
   catalogImportJob(runIngest),
@@ -398,7 +401,18 @@ const server = serve({ fetch: app.fetch, port: env.PORT });
 console.log(JSON.stringify({ msg: "api beží", port: env.PORT, version: appVersion() }));
 
 // issue 78 — plné vysvetlenie prečo toto existuje je v shutdown.ts.
-const shutdown = createShutdownHandler({ server, pool, scheduler });
+// issue 598 (review): budík opakovania restocku sa zastaví spolu s plánovačom —
+// inak by počas graceful shutdownu vedel spustiť Playwright beh a zdržať `pool.end()`.
+const shutdown = createShutdownHandler({
+  server,
+  pool,
+  scheduler: {
+    stop: () => {
+      scheduler.stop();
+      restockBlockRetry.stop();
+    },
+  },
+});
 process.on("SIGTERM", () => {
   shutdown("SIGTERM");
 });

@@ -5,6 +5,9 @@
 
 export const SHOP_SITEMAP_JOB_NAME = "shop-sitemap";
 
+// Veľkosť dávky pri hromadnom zápise (`shop_product_url`, `shop_sitemap_probe_attempt`).
+export const DB_WRITE_CHUNK = 500;
+
 // Verejná adresa sitemapy — NIE je to prihlasovací údaj, smie byť v
 // repozitári (rovnaká úvaha ako `shop-feed/constants.ts`'s `DEFAULT_SHOP_
 // FEED_URL`). Prepísateľná premennou prostredia pre prípad zmeny.

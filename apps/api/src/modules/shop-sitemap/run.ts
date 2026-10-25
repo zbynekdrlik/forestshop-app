@@ -11,6 +11,7 @@ import { log } from "../../logger.js";
 import { isShoptetBlockedError } from "../shoptet-http/blocked.js";
 import { candidateSlugs, resolveProbe, type ProbeFetch } from "./candidates.js";
 import {
+  DB_WRITE_CHUNK,
   MAX_PROBE_REQUESTS_PER_RUN,
   MIN_SITEMAP_LOCS,
   PROBE_COOLDOWN_DAYS,
@@ -72,7 +73,6 @@ export interface RunShopSitemapOptions {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-const CHUNK = 500;
 
 /**
  * Vonkajší obal berúci `SHOP_SITEMAP_RUN_LOCK_KEY` — tento job MÁ manuálny
@@ -171,12 +171,22 @@ export async function runShopSitemapLocked(options: RunShopSitemapOptions): Prom
   const probedResults: ResolveResult[] = [];
   const probedProducts: MissingProduct[] = [];
   let stoppedReason: ProbeStopReason | null = null;
+  const oversizeKeys: string[] = [];
   for (const p of queue) {
     if (clock() >= deadline) {
       stoppedReason = "time_budget";
       break;
     }
-    if (probeRequests + candidateSlugs(p.name).length > maxProbeRequests) {
+    const candidates = candidateSlugs(p.name).length;
+    if (candidates > maxProbeRequests) {
+      // Do stropu sa nezmestí NIKDY — keby beh zastavil, tento produkt (nikdy
+      // neskúšaný ide vždy prvý) by navždy zablokoval celú frontu. Zapíše sa
+      // ako skúšaný (ochranná doba) a ide sa ďalej.
+      log.warn({ productKey: p.productKey, candidates, maxProbeRequests }, "shop-sitemap: produkt má viac kandidátov než strop sondy — preskočený");
+      oversizeKeys.push(p.productKey);
+      continue;
+    }
+    if (probeRequests + candidates > maxProbeRequests) {
       stoppedReason = "request_cap";
       break;
     }
@@ -194,7 +204,7 @@ export async function runShopSitemapLocked(options: RunShopSitemapOptions): Prom
 
   const probeDeduped = dedup([...probedResults, ...lockedForProbe]);
   let resolvedByProbe = 0;
-  const failedProbeKeys: string[] = [];
+  const failedProbeKeys: string[] = [...oversizeKeys];
   probedProducts.forEach((p, i) => {
     const url = probeDeduped.get(i) ?? null;
     if (url !== null) {
@@ -207,8 +217,8 @@ export async function runShopSitemapLocked(options: RunShopSitemapOptions): Prom
 
   // --- Zápis: LEN kódy bez existujúceho riadku, NIKDY neprepíše (aj pri race) ---
   if (toWrite.length > 0) {
-    for (let i = 0; i < toWrite.length; i += CHUNK) {
-      const chunk = toWrite.slice(i, i + CHUNK).map((row) => ({ code: row.code, url: row.url, source: row.source, fetchedAt: now }));
+    for (let i = 0; i < toWrite.length; i += DB_WRITE_CHUNK) {
+      const chunk = toWrite.slice(i, i + DB_WRITE_CHUNK).map((row) => ({ code: row.code, url: row.url, source: row.source, fetchedAt: now }));
       await db.insert(shopProductUrl).values(chunk).onConflictDoNothing({ target: shopProductUrl.code });
     }
   }
