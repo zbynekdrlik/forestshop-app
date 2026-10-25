@@ -161,11 +161,12 @@ describe("restock pri bloku Shoptetu (issue 598)", () => {
     expect(card?.source).toBe("appka");
     expect(card?.title).toContain("Vypredané → Skladom");
     expect(card?.details).toContain("Access temporarily blocked");
-    expect(card?.details).toContain("2");
+    // 2 skoršie zablokované behy dnes + práve pozorovaný (jeho riadok ešte nie je zapísaný ako failure).
+    expect(card?.details).toContain("dnes skúšalo 3-krát");
     expect(card?.link).toBe("/?tab=restock");
   });
 
-  it("opakované vyčerpanie v ďalší deň karty nezdvojí (jedna otvorená karta, obnovená)", async () => {
+  it("dvojité vyčerpanie v ten istý deň karty nezdvojí (jedna otvorená karta, obnovená)", async () => {
     const ctx = await withCleanDb();
     close = ctx.close;
     const { setTimer } = fakeTimers();
@@ -173,6 +174,34 @@ describe("restock pri bloku Shoptetu (issue 598)", () => {
     await retry.observe({ ok: false, error: new ShoptetBlockedError("x") });
     await retry.observe({ ok: false, error: new ShoptetBlockedError("x") });
     expect(await openCards(ctx.db)).toHaveLength(1);
+  });
+
+  it("vyčerpanie v ďalší deň po zatvorenej karte založí NOVÚ kartu (znova-ohlásiteľná kategória)", async () => {
+    const ctx = await withCleanDb();
+    close = ctx.close;
+    let now = AT_1130;
+    const { setTimer } = fakeTimers();
+    retry = new RestockBlockRetry({ db: ctx.db, run: blockedRun, setTimer, now: () => now });
+    await retry.observe({ ok: false, error: new ShoptetBlockedError("x") });
+    await retry.observe({ ok: true });
+    now = new Date(AT_1130.getTime() + 24 * 60 * 60_000);
+    await retry.observe({ ok: false, error: new ShoptetBlockedError("x") });
+
+    const all = await ctx.db.select().from(upozornenie).where(eq(upozornenie.dedupKey, RESTOCK_BLOCKED_DEDUP_KEY));
+    expect(all).toHaveLength(2);
+    expect(await openCards(ctx.db)).toHaveLength(1);
+  });
+
+  it("resume po reštarte až po obede kartu znova NEZAKLADÁ (založil ju už beh, ktorý okno ukončil)", async () => {
+    const ctx = await withCleanDb();
+    close = ctx.close;
+    await seedBlockedRun(ctx.db, AT_1130);
+    const { timers, setTimer } = fakeTimers();
+    const afternoon = new Date(AT_1130.getTime() + 90 * 60_000); // 13:00
+    retry = new RestockBlockRetry({ db: ctx.db, run: blockedRun, setTimer, now: () => afternoon });
+    await retry.resume();
+    expect(timers).toEqual([]);
+    expect(await ctx.db.select().from(upozornenie)).toEqual([]);
   });
 
   it("úspešný beh restocku po bloku kartu automaticky zatvorí", async () => {

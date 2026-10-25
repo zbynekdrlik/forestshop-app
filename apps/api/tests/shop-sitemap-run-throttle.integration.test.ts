@@ -152,6 +152,32 @@ describe("runShopSitemap — šetrenie e-shopu (issue 598)", () => {
     expect(result.stoppedEarly).toBe(true);
   });
 
+  it("produkt, ktorého kandidáti sa do stropu NIKDY nezmestia, frontu nezablokuje — zapíše sa ako skúšaný a ide sa ďalej", async () => {
+    await seedProduct("p-1", "Bunda Mnohokandidatna", "O1"); // GEN slovo → 5 kandidátov
+    await seedProduct("p-2", "Kratky Nazov", "O2"); // 4 kandidáti
+    const oversize = candidateSlugs("Bunda Mnohokandidatna").length;
+    const fits = candidateSlugs("Kratky Nazov").length;
+    expect(oversize).toBeGreaterThan(fits);
+
+    const probed: string[] = [];
+    const result = await runShopSitemap({
+      db,
+      now: NOW,
+      fetchSitemap: () => Promise.resolve(sitemapWith([])),
+      fetchCandidate: (c) => {
+        probed.push(c);
+        return Promise.resolve(null);
+      },
+      maxProbeRequests: fits,
+    });
+
+    expect(probed).toHaveLength(fits);
+    expect(probed.every((c) => c.includes("kratky-nazov"))).toBe(true);
+    expect(result.probedProducts).toBe(1);
+    const attempts = await db.select().from(shopSitemapProbeAttempt);
+    expect(attempts.map((a) => a.productKey).sort()).toEqual(["p-1", "p-2"]);
+  });
+
   it("vyriešený produkt (probe trafil) sa do pamäte pokusov NEZAPÍŠE — má už svoj riadok", async () => {
     await seedProduct("p-ok", "Trafeny Produkt", "T1");
     const result = await runShopSitemap({
