@@ -3,7 +3,8 @@
 // fetcher.ts` — strop musí platiť POČAS čítania, nie až po zbufferovaní
 // celého tela).
 
-import { readBounded } from "../catalog/fetcher.js";
+import { readBounded } from "../../read-bounded.js";
+import { shoptetFetch } from "../shoptet-http/fetch.js";
 import { DEFAULT_SITEMAP_URL, MAX_SITEMAP_BYTES, REQUEST_TIMEOUT_MS } from "./constants.js";
 
 /** Stiahne surové telo sitemapy. Vstrekované, aby testy nikdy nešli na živý e-shop. */
@@ -16,7 +17,7 @@ export function createHttpSitemapFetcher(url: string = DEFAULT_SITEMAP_URL): Sit
       controller.abort();
     }, REQUEST_TIMEOUT_MS);
     try {
-      const response = await fetch(url, { signal: controller.signal });
+      const response = await shoptetFetch(url, { signal: controller.signal }, "sitemapa e-shopu");
       if (!response.ok) {
         throw new Error(`Sitemapa ${url} vrátila HTTP ${String(response.status)}`);
       }

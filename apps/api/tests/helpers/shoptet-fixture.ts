@@ -126,7 +126,7 @@ export async function startShoptetFixture(options: ShoptetFixtureOptions): Promi
 
   if (options.blocked === true) {
     const blockPage = readFileSync(new URL("../../src/modules/shoptet-http/fixtures/shoptet-block-page.html", import.meta.url), "utf8");
-    app.use("*", (c) => c.html(blockPage, 403));
+    app.use("*", (c) => Promise.resolve(c.html(blockPage, 403)));
   }
 
   app.get("/admin/", (c) => {

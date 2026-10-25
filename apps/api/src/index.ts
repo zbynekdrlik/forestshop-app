@@ -50,6 +50,7 @@ import { orderNoteWritebackConfigFromBaseUrl, shoptetImportConfigFromBaseUrl } f
 import { dpdPortalConfigFromBaseUrl } from "./modules/dpd/config.js";
 import { runOrderNoteWritebackJob } from "./modules/shoptet-writeback/run-order-note-writeback.js";
 import { runShoptetWritebackSequence } from "./modules/shoptet-writeback/run-writeback-sequence.js";
+import { RestockBlockRetry } from "./modules/scheduler/restock-block-retry.js";
 import { cleanOrphanedJobRuns } from "./modules/scheduler/startup-cleanup.js";
 import { createShutdownHandler } from "./shutdown.js";
 import { appVersion } from "./version.js";
@@ -327,6 +328,12 @@ const app = createApp(db, {
 // že by Shoptet adresu zmenil.
 const fetchShopFeed = createHttpShopFeedFetcher(env.SHOP_FEED_URL ?? DEFAULT_SHOP_FEED_URL);
 
+// issue 598: Shoptet WAF od 21. 10. 2026 ráno blokuje IP servera — zablokovaný
+// restock (04:50 / reťazený / opakovanie) naplánuje opakovanie o 60 min cez
+// `startRunNow` (preto ODOMKNUTÝ `runRestockLockedFn`) a po vyčerpaní do obeda
+// založí kartu na Upozorneniach. `resume()` nižšie obnoví budík po reštarte.
+const restockBlockRetry = new RestockBlockRetry({ db, run: runRestockLockedFn });
+
 const scheduler = startScheduler(db, [
   catalogImportJob(runIngest),
   pruneRawExportsJob(),
@@ -345,9 +352,9 @@ const scheduler = startScheduler(db, [
   // včerajškom). `restockJob(runRestockFn)` 04:50 OSTÁVA ako fallback.
   supplierStockJob(
     (db2, now) => runSupplierStock({ db: db2, now, fetchPage: fetchSupplierPage }),
-    buildRestockAfterSupplierStock(runRestockLockedFn),
+    buildRestockAfterSupplierStock(runRestockLockedFn, restockBlockRetry.observe),
   ),
-  restockJob(runRestockFn),
+  restockJob(runRestockFn, restockBlockRetry.observe),
   // issue 387 E3: žiadne prihlasovacie údaje potrebné (verejné vyhľadávacie
   // stránky dodávateľov) — na rozdiel od `restockJob`/`shoptetWritebackJob`
   // vyššie sa `run` tu nikdy nezostavuje ako `undefined`. Automatika je
@@ -355,6 +362,12 @@ const scheduler = startScheduler(db, [
   // `pairingSearchJob`'s vlastná kontrola pred behom, nie chýbajúca konfigurácia.
   pairingSearchJob((db2, now) => runPairingSearch({ db: db2, now })),
 ]);
+// issue 598: dnešný posledný restock zablokovaný Shoptetom (napr. deploy počas
+// okna opakovaní) → budík sa obnoví z `job_run`, nikdy sa ticho nestratí.
+restockBlockRetry.resume().catch((error: unknown) => {
+  const rawErrorMessage = error instanceof Error ? error.message : String(error);
+  log.error({ rawErrorMessage }, "restock: obnovenie opakovania po bloku Shoptetu po štarte zlyhalo");
+});
 
 // `@hono/node-server`'s `serveStatic` prints its OWN `console.error` on every
 // call whose `root` doesn't exist — unconditionally, once per process start.

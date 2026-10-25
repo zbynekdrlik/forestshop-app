@@ -14,6 +14,7 @@ import type { ShoptetWritebackSequenceResult } from "../shoptet-writeback/run-wr
 import { RESTOCK_JOB_NAME, RESTOCK_RUN_LOCK_KEY } from "../restock/constants.js";
 import type { RestockRunResult } from "../restock/run.js";
 import { isRestockEnabled } from "../restock/run.js";
+import type { RestockRunObserver } from "./restock-block-retry.js";
 import { SHOP_FEED_JOB_NAME } from "../shop-feed/constants.js";
 import type { ShopFeedRunResult } from "../shop-feed/run.js";
 import { SHOP_SITEMAP_JOB_NAME } from "../shop-sitemap/constants.js";
@@ -408,14 +409,38 @@ export async function decideRestockRun(db: Database, run: RunRestock | undefined
   return { action: "run", run };
 }
 
-export function restockJob(run: RunRestock | undefined): ScheduledJob {
+/**
+ * issue 598: spustí restock a jeho výsledok odovzdá `observe` (opakovanie po
+ * bloku Shoptetu + karta na Upozorneniach, `restock-block-retry.ts`). Chyba sa
+ * vždy šíri ďalej (job_run `failure`); `observe` sám nikdy nevyhodí. Volajú ho
+ * VŠETKY tri cesty restocku (04:50, reťaz po supplier-stocku, opakovanie po
+ * bloku), takže sa nemôžu rozísť. Vypnutý restock (`skip`) sa nepozoruje.
+ */
+export async function runObservedRestock(
+  db: Database,
+  now: Date,
+  run: RunRestock,
+  observe: RestockRunObserver | undefined,
+): Promise<RestockRunResult> {
+  let result: RestockRunResult;
+  try {
+    result = await run(db, now);
+  } catch (error) {
+    await observe?.({ ok: false, error });
+    throw error;
+  }
+  await observe?.({ ok: true });
+  return result;
+}
+
+export function restockJob(run: RunRestock | undefined, observe?: RestockRunObserver): ScheduledJob {
   return {
     name: RESTOCK_JOB_NAME,
     schedule: { kind: "daily", hourLocal: 4, minuteLocal: 50 },
     async run(db, now) {
       const decision = await decideRestockRun(db, run);
       if (decision.action === "skip") return { detail: decision.detail };
-      return { detail: await decision.run(db, now) };
+      return { detail: await runObservedRestock(db, now, decision.run, observe) };
     },
   };
 }
@@ -430,7 +455,7 @@ export function restockJob(run: RunRestock | undefined): ScheduledJob {
  * (viď `run-now.ts` modulový komentár). Naplánovaný `restockJob` (04:50)
  * ostáva ako fallback (idempotentný). Reťazený beh nesie `trigger`.
  */
-export function buildRestockAfterSupplierStock(run: RunRestock | undefined): SupplierStockAfterRun {
+export function buildRestockAfterSupplierStock(run: RunRestock | undefined, observe?: RestockRunObserver): SupplierStockAfterRun {
   // issue 561 (Nález 2): reťaz sa spúšťa AŽ po dobehnutí supplier-stocku (na
   // PROD ~2 h po jeho tick-ovom `now`), takže ZÁMERNE ignoruje `now`
   // supplier-stocku a berie SKUTOČNÝ čas svojho štartu (`new Date()`).
@@ -445,7 +470,7 @@ export function buildRestockAfterSupplierStock(run: RunRestock | undefined): Sup
       {
         jobName: RESTOCK_JOB_NAME,
         lockKey: RESTOCK_RUN_LOCK_KEY,
-        run: (n) => runChainedRestock(db, n, run),
+        run: (n) => runChainedRestock(db, n, run, observe),
       },
       startedAt,
       () => undefined,
@@ -457,12 +482,13 @@ async function runChainedRestock(
   db: Database,
   now: Date,
   run: RunRestock | undefined,
+  observe: RestockRunObserver | undefined,
 ): Promise<Record<string, unknown>> {
   const decision = await decideRestockRun(db, run);
   if (decision.action === "skip") {
     return { ...decision.detail, trigger: RESTOCK_TRIGGER_AFTER_SUPPLIER_STOCK };
   }
-  const result = await decision.run(db, now);
+  const result = await runObservedRestock(db, now, decision.run, observe);
   return { ...result, trigger: RESTOCK_TRIGGER_AFTER_SUPPLIER_STOCK };
 }
 

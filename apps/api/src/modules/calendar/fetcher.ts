@@ -7,7 +7,7 @@
 // teda nič neskryl. Preto sa URL NIKDY neinterpoluje do žiadnej chybovej
 // hlášky (ani prekrytá) — chyby nesú len status kód/typ zlyhania.
 
-import { readBounded } from "../catalog/fetcher.js";
+import { readBounded } from "../../read-bounded.js";
 import { ICS_FETCH_TIMEOUT_MS, MAX_ICS_BYTES } from "./constants.js";
 
 export type IcsFetcher = () => Promise<string>;

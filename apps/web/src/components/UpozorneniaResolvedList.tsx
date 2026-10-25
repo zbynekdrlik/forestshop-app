@@ -19,6 +19,8 @@ const TYPE_LABELS: Readonly<Record<ResolvedUpozornenieRow["type"], string>> = {
   vratena_zasielka: "Vrátená zásielka",
   // issue 301: objednávka dlho visiaca v nevybavenom stave.
   objednavka_visi: "Objednávka visí",
+  // issue 598: Vypredané → Skladom nebežalo, Shoptet blokoval IP servera.
+  shoptet_blokovanie: "Shoptet blokuje server",
 };
 
 export function UpozorneniaResolvedList({

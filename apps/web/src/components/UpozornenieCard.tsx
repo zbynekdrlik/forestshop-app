@@ -42,6 +42,8 @@ const TYPE_LABELS: Readonly<Record<UpozornenieRow["type"], string>> = {
   vratena_zasielka: "Vrátená zásielka",
   // issue 301: objednávka dlho visiaca v nevybavenom stave.
   objednavka_visi: "Objednávka visí",
+  // issue 598: Vypredané → Skladom nebežalo, Shoptet blokoval IP servera.
+  shoptet_blokovanie: "Shoptet blokuje server",
 };
 
 // Code review (issue 269, druhé kolo, finding 10): štítok odkazu sa odvodzuje
@@ -64,6 +66,8 @@ const LINK_LABELS: Readonly<Partial<Record<UpozornenieRow["type"], string>>> = {
   // vyššie (obe sú "otvoriť objednávku v administrácii"), preto rovnaký
   // štítok.
   objednavka_visi: "Otvoriť objednávku v Shoptete",
+  // issue 598: odkaz vedie na obrazovku Vypredané → Skladom (`/?tab=restock`).
+  shoptet_blokovanie: "Otvoriť Vypredané → Skladom",
 };
 const DEFAULT_LINK_LABEL = "Otvoriť odkaz";
 

@@ -3,6 +3,7 @@ import type { Database } from "../../db/client.js";
 import { jobRuns } from "../../db/schema.js";
 import { log } from "../../logger.js";
 import { getZonedDateParts } from "../../timezone.js";
+import { attachShoptetRequestTally, newShoptetRequestTally, runWithShoptetRequestTally } from "../shoptet-http/request-tally.js";
 import { getLatestJobRun } from "./queries.js";
 
 /**
@@ -156,12 +157,14 @@ export async function startRunNow<T>(
   // Fire-and-forget — HTTP handler NIKDY nečaká na toto (issue 413's hlavná
   // oprava). `lockClient` zostáva pripojený/zamknutý po CELÝ beh, uvoľní sa
   // AŽ v poslednom `.finally()` nižšie.
-  void job
-    .run(now)
+  // issue 598: VLASTNÉ počítadlo požiadaviek na forestshop.sk (nový kontext —
+  // reťaz volaná zvnútra iného behu, napr. supplier-stock, sa nezapočíta jemu).
+  const tally = newShoptetRequestTally();
+  void runWithShoptetRequestTally(tally, () => job.run(now))
     .then(
       async (result) => {
         if (runId !== undefined) {
-          await writeTerminalOutcome(db, job.jobName, runId, { status: "success", finishedAt: new Date(), detail: result });
+          await writeTerminalOutcome(db, job.jobName, runId, { status: "success", finishedAt: new Date(), detail: attachShoptetRequestTally(result, tally) });
         }
         await onSettled({ status: "success", result });
       },
@@ -169,7 +172,12 @@ export async function startRunNow<T>(
         const rawErrorMessage = error instanceof Error ? error.message : String(error);
         log.error({ jobName: job.jobName, rawErrorMessage }, "run-now: beh na pozadí zlyhal");
         if (runId !== undefined) {
-          await writeTerminalOutcome(db, job.jobName, runId, { status: "failure", finishedAt: new Date(), errorMessage: rawErrorMessage });
+          await writeTerminalOutcome(db, job.jobName, runId, {
+            status: "failure",
+            finishedAt: new Date(),
+            errorMessage: rawErrorMessage,
+            detail: attachShoptetRequestTally(null, tally),
+          });
         }
         await onSettled({ status: "failure", error });
       },

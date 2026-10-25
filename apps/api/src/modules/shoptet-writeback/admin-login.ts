@@ -1,4 +1,5 @@
 import type { Page } from "playwright";
+import { isShoptetBlockPage, ShoptetBlockedError } from "../shoptet-http/blocked.js";
 
 /** Zdieľané prihlásenie do Shoptet admina — extrahované z #122's
  * `playwright-import.ts`'s `login()` (issue 123 potrebuje to isté, len na
@@ -11,7 +12,16 @@ export interface AdminLoginConfig {
 }
 
 export async function loginToShoptetAdmin(page: Page, config: AdminLoginConfig): Promise<void> {
-  await page.goto(config.loginUrl, { waitUntil: "domcontentloaded" });
+  const response = await page.goto(config.loginUrl, { waitUntil: "domcontentloaded" });
+  // issue 598: Shoptet WAF od 21. 10. 2026 každé ráno vráti namiesto
+  // prihlasovacej stránky blokovú stránku (403) — bez tejto kontroly to padalo
+  // až o 30 s neskôr na nezrozumiteľnom „locator.fill: Timeout … E-mail".
+  // Chyba sa k rodičovi dostáva cez IPC len ako TEXT správy, preto ju
+  // `isShoptetBlockedError` (`shoptet-http/blocked.ts`) rozpozná podľa predpony.
+  if (response !== null && response.status() === 403) {
+    const body = await response.text().catch(() => "");
+    if (isShoptetBlockPage(403, body)) throw new ShoptetBlockedError("prihlásenie do Shoptet administrácie");
+  }
   await page.getByPlaceholder("E-mail").fill(config.user);
   await page.getByPlaceholder("Vaše heslo").fill(config.password);
   await page.getByRole("button", { name: "Prihlásenie" }).click();

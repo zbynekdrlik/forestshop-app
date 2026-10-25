@@ -22,10 +22,24 @@ export const MAX_SITEMAP_BYTES = 50 * 1024 * 1024;
 // množina než feed — pokrýva len publikované produkty, nie všetky varianty).
 export const MIN_SITEMAP_LOCS = 500;
 
-// Throttle medzi HTTP sondami kandidátnych slugov — rovnaký rád veľkosti ako
-// `pairing-search/client.ts`'s 0,7 s (slušné správanie voči cudziemu
-// serveru), o niečo kratšie, keďže sondujeme VLASTNÝ e-shop, nie tretiu stranu.
-export const PROBE_THROTTLE_MS = 300;
+// Throttle medzi HTTP sondami kandidátnych slugov. issue 598: pôvodne 300 ms
+// („vlastný e-shop, nie tretia strana") — lenže e-shop beží na Shoptete, ktorého
+// WAF od 21. 10. 2026 blokuje IP servera ako útok. 300 ms + ~0,1–0,5 s odozva
+// = ~2 požiadavky/s po celých 15 minút. Teraz 1 s (rovnaký rád ako
+// `pairing-search/client.ts`'s 0,7 s voči cudzím serverom).
+export const PROBE_THROTTLE_MS = 1000;
+
+// issue 598: tvrdý strop HTTP sond na JEDEN beh (nezávisle od času). S
+// throttlom 1 s je to ~5 min a ~60 produktov (4–5 kandidátov na produkt) za
+// noc. Populácia bez adresy (PROD 25. 10. 2026: 1 291 produktov) sa tak prejde
+// postupne za ~3 týždne a potom ju drží `PROBE_COOLDOWN_DAYS`.
+export const MAX_PROBE_REQUESTS_PER_RUN = 300;
+
+// issue 598: produkt, pre ktorý sonda nenašla živú stránku, sa znova skúsi
+// najskôr po toľkých dňoch (`shop_sitemap_probe_attempt`). Nový produkt v
+// katalógu (žiadny pokus) ide vždy prvý. Sitemap prechod (1 požiadavka, celá
+// sitemapa) beží pre VŠETKY chýbajúce produkty každú noc bez ohľadu na toto.
+export const PROBE_COOLDOWN_DAYS = 30;
 
 // Časový (nie počtový) strop JEDNÉHO behu — rovnaký dôvod ako `pairing-
 // search/constants.ts`'s `RUN_TIME_BUDGET_MS`: nákladový faktor je sieťový

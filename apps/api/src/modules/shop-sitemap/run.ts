@@ -7,10 +7,24 @@
 import { sql } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
 import { shopProductUrl } from "../../db/schema.js";
-import { resolveProbe, type ProbeFetch } from "./candidates.js";
-import { MIN_SITEMAP_LOCS, RUN_TIME_BUDGET_MS, SHOP_SITEMAP_RUN_LOCK_KEY } from "./constants.js";
+import { log } from "../../logger.js";
+import { isShoptetBlockedError } from "../shoptet-http/blocked.js";
+import { candidateSlugs, resolveProbe, type ProbeFetch } from "./candidates.js";
+import {
+  MAX_PROBE_REQUESTS_PER_RUN,
+  MIN_SITEMAP_LOCS,
+  PROBE_COOLDOWN_DAYS,
+  RUN_TIME_BUDGET_MS,
+  SHOP_SITEMAP_RUN_LOCK_KEY,
+} from "./constants.js";
 import { createHttpProbeFetcher } from "./probe-fetcher.js";
-import { selectExistingSitemapProbeUrls, selectMissingProducts, type MissingProduct } from "./select.js";
+import {
+  recordProbeAttempts,
+  selectExistingSitemapProbeUrls,
+  selectMissingProducts,
+  selectProbeAttempts,
+  type MissingProduct,
+} from "./select.js";
 import { createHttpSitemapFetcher, parseSitemapSlugs, type SitemapFetcher } from "./sitemap-fetcher.js";
 import { slug } from "./slug.js";
 import { buildIndex, dedup, resolve, STRENGTH_EXISTING, type ResolveResult } from "./url-resolver.js";
@@ -26,9 +40,19 @@ export interface ShopSitemapRunResult {
   readonly codesAttempted: number;
   /** Koľko riadkov je v mape PO tomto behu — rovnaký tvar ako `shop-feed`'s `stored`. */
   readonly totalStored: number;
-  /** `true` = probe prechod sa zastavil na časovom rozpočte PRED spracovaním celého zvyšku — pokračuje nasledujúcu noc (populácia bez riadku ostáva rovnaká, `select.ts`). */
+  /** `true` = probe prechod sa zastavil PRED spracovaním celého zvyšku (`stoppedReason`) — pokračuje nasledujúcu noc. */
   readonly stoppedEarly: boolean;
+  /** issue 598: prečo sa probe prechod zastavil skôr — časový rozpočet, strop požiadaviek, alebo bloková stránka Shoptetu; `null` = prešiel celý zvyšok. */
+  readonly stoppedReason: ProbeStopReason | null;
+  /** issue 598: koľko produktov probe prechod skutočne sondoval. */
+  readonly probedProducts: number;
+  /** issue 598: koľko HTTP sond (kandidátnych adries) odišlo na e-shop. */
+  readonly probeRequests: number;
+  /** issue 598: koľko produktov sa preskočilo, lebo ich sonda neúspešne skúšala v posledných `PROBE_COOLDOWN_DAYS` dňoch. */
+  readonly skippedCooldown: number;
 }
+
+export type ProbeStopReason = "time_budget" | "request_cap" | "shoptet_blocked";
 
 export interface RunShopSitemapOptions {
   readonly db: Database;
@@ -40,7 +64,13 @@ export interface RunShopSitemapOptions {
   /** Vstrekovateľné pre testy (`RUN_TIME_BUDGET_MS`'s deterministický test, rovnaký vzor ako `pairing-search/run.ts`). */
   readonly clock?: () => number;
   readonly timeBudgetMs?: number;
+  /** issue 598: strop HTTP sond na beh (predvolene `MAX_PROBE_REQUESTS_PER_RUN`). */
+  readonly maxProbeRequests?: number;
+  /** issue 598: ochranná doba po neúspešnom pokuse (predvolene `PROBE_COOLDOWN_DAYS`). */
+  readonly cooldownDays?: number;
 }
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 const CHUNK = 500;
 
@@ -75,11 +105,24 @@ export async function runShopSitemapLocked(options: RunShopSitemapOptions): Prom
   const clock = options.clock ?? Date.now;
   const timeBudgetMs = options.timeBudgetMs ?? RUN_TIME_BUDGET_MS;
   const deadline = clock() + timeBudgetMs;
+  const maxProbeRequests = options.maxProbeRequests ?? MAX_PROBE_REQUESTS_PER_RUN;
+  const cooldownDays = options.cooldownDays ?? PROBE_COOLDOWN_DAYS;
 
   const missing = await selectMissingProducts(db);
   if (missing.length === 0) {
     const [count] = await db.select({ value: sql<number>`count(*)::int` }).from(shopProductUrl);
-    return { missingProducts: 0, resolvedBySitemap: 0, resolvedByProbe: 0, codesAttempted: 0, totalStored: count?.value ?? 0, stoppedEarly: false };
+    return {
+      missingProducts: 0,
+      resolvedBySitemap: 0,
+      resolvedByProbe: 0,
+      codesAttempted: 0,
+      totalStored: count?.value ?? 0,
+      stoppedEarly: false,
+      stoppedReason: null,
+      probedProducts: 0,
+      probeRequests: 0,
+      skippedCooldown: 0,
+    };
   }
 
   // Poistka PRED zápisom (rovnaký princíp ako `shop-feed/run.ts`'s
@@ -118,26 +161,47 @@ export async function runShopSitemapLocked(options: RunShopSitemapOptions): Prom
   });
   const resolvedBySitemap = missing.length - remainder.length;
 
-  // --- Probe prechod (časovo rozpočtovaný) ---
+  // --- Probe prechod (časovo rozpočtovaný + strop požiadaviek, issue 598) ---
+  const { queue, skippedCooldown } = orderProbeQueue(remainder, await selectProbeAttempts(db), now, cooldownDays);
+  let probeRequests = 0;
+  const countedFetch: ProbeFetch = (candidate) => {
+    probeRequests += 1;
+    return fetchCandidate(candidate);
+  };
   const probedResults: ResolveResult[] = [];
   const probedProducts: MissingProduct[] = [];
-  let stoppedEarly = false;
-  for (const p of remainder) {
+  let stoppedReason: ProbeStopReason | null = null;
+  for (const p of queue) {
     if (clock() >= deadline) {
-      stoppedEarly = true;
+      stoppedReason = "time_budget";
       break;
     }
-    probedResults.push(await resolveProbe(p.name, fetchCandidate));
+    if (probeRequests + candidateSlugs(p.name).length > maxProbeRequests) {
+      stoppedReason = "request_cap";
+      break;
+    }
+    try {
+      probedResults.push(await resolveProbe(p.name, countedFetch));
+    } catch (error) {
+      if (!isShoptetBlockedError(error)) throw error;
+      // Prerušený produkt sa NEZAPÍŠE ako skúšaný — dostane šancu znova.
+      stoppedReason = "shoptet_blocked";
+      log.warn({ probeRequests, probedProducts: probedProducts.length }, "shop-sitemap: Shoptet zablokoval IP — probe prechod sa zastavuje");
+      break;
+    }
     probedProducts.push(p);
   }
 
   const probeDeduped = dedup([...probedResults, ...lockedForProbe]);
   let resolvedByProbe = 0;
+  const failedProbeKeys: string[] = [];
   probedProducts.forEach((p, i) => {
     const url = probeDeduped.get(i) ?? null;
     if (url !== null) {
       resolvedByProbe += 1;
       for (const code of p.missingCodes) toWrite.push({ code, url, source: "probe" });
+    } else {
+      failedProbeKeys.push(p.productKey);
     }
   });
 
@@ -149,13 +213,49 @@ export async function runShopSitemapLocked(options: RunShopSitemapOptions): Prom
     }
   }
 
+  await recordProbeAttempts(db, failedProbeKeys, now);
+
   const [count] = await db.select({ value: sql<number>`count(*)::int` }).from(shopProductUrl);
-  return {
+  const result: ShopSitemapRunResult = {
     missingProducts: missing.length,
     resolvedBySitemap,
     resolvedByProbe,
     codesAttempted: toWrite.length,
     totalStored: count?.value ?? 0,
-    stoppedEarly,
+    stoppedEarly: stoppedReason !== null,
+    stoppedReason,
+    probedProducts: probedProducts.length,
+    probeRequests,
+    skippedCooldown,
   };
+  log.info({ ...result, queue: queue.length, maxProbeRequests, cooldownDays }, "shop-sitemap: beh dobehol");
+  return result;
+}
+
+/**
+ * issue 598: poradie probe prechodu. Pred touto zmenou sa sondoval zvyšok v
+ * pevnom poradí `productKey` a každú noc od začiatku — beh narazil na časový
+ * rozpočet vždy na TOM ISTOM mieste a ku koncu zoznamu sa nikdy nedostal.
+ * Teraz: produkty neúspešne skúšané v posledných `cooldownDays` dňoch sa
+ * vynechajú, NIKDY neskúšané idú prvé (stabilne podľa `productKey`), potom
+ * najdávnejšie skúšané.
+ */
+function orderProbeQueue(
+  remainder: readonly MissingProduct[],
+  attempts: ReadonlyMap<string, Date>,
+  now: Date,
+  cooldownDays: number,
+): { readonly queue: readonly MissingProduct[]; readonly skippedCooldown: number } {
+  const cooldownStart = now.getTime() - cooldownDays * DAY_MS;
+  const never: MissingProduct[] = [];
+  const stale: { readonly product: MissingProduct; readonly at: number }[] = [];
+  let skippedCooldown = 0;
+  for (const p of remainder) {
+    const attemptedAt = attempts.get(p.productKey);
+    if (attemptedAt === undefined) never.push(p);
+    else if (attemptedAt.getTime() > cooldownStart) skippedCooldown += 1;
+    else stale.push({ product: p, at: attemptedAt.getTime() });
+  }
+  stale.sort((a, b) => a.at - b.at || a.product.productKey.localeCompare(b.product.productKey));
+  return { queue: [...never, ...stale.map((s) => s.product)], skippedCooldown };
 }

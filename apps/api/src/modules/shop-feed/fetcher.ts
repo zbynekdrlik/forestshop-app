@@ -6,7 +6,8 @@
 // zbufferovaní celého tela, inak by pokazený server vyčerpal pamäť kontajnera
 // skôr, než sa strop stihne skontrolovať.
 
-import { readBounded } from "../catalog/fetcher.js";
+import { readBounded } from "../../read-bounded.js";
+import { shoptetFetch } from "../shoptet-http/fetch.js";
 import { MAX_FEED_BYTES, REQUEST_TIMEOUT_MS } from "./constants.js";
 import type { ShopFeedFetcher } from "./run.js";
 
@@ -17,7 +18,7 @@ export function createHttpShopFeedFetcher(url: string): ShopFeedFetcher {
       controller.abort();
     }, REQUEST_TIMEOUT_MS);
     try {
-      const response = await fetch(url, { signal: controller.signal });
+      const response = await shoptetFetch(url, { signal: controller.signal }, "feed pre porovnávače (google.xml)");
       if (!response.ok) {
         throw new Error(`Feed ${url} vrátil HTTP ${String(response.status)}`);
       }

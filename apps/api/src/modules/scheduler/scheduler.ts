@@ -3,6 +3,7 @@ import type { Database } from "../../db/client.js";
 import { jobRuns } from "../../db/schema.js";
 import { log } from "../../logger.js";
 import { getZonedDateParts, zonedDateKey } from "../../timezone.js";
+import { attachShoptetRequestTally, newShoptetRequestTally, runWithShoptetRequestTally } from "../shoptet-http/request-tally.js";
 import type { Schedule, ScheduledJob } from "./types.js";
 
 // Zámok naplánovaných úloh — VLASTNÝ, samostatný kľúč (advisory zámky zdieľajú
@@ -126,21 +127,23 @@ export async function tick(db: Database, jobs: readonly ScheduledJob[], now: Dat
 }
 
 async function executeJob(db: Database, job: ScheduledJob, runId: string, startedAt: Date): Promise<void> {
+  // issue 598: počet požiadaviek na forestshop.sk za TENTO beh → detail (aj pri zlyhaní).
+  const tally = newShoptetRequestTally();
   try {
-    const outcome = await job.run(db, startedAt);
+    const outcome = await runWithShoptetRequestTally(tally, () => job.run(db, startedAt));
     await db
       .update(jobRuns)
-      .set({ status: "success", finishedAt: new Date(), detail: outcome.detail ?? null })
+      .set({ status: "success", finishedAt: new Date(), detail: attachShoptetRequestTally(outcome.detail, tally) })
       .where(eq(jobRuns.id, runId));
     log.info({ jobName: job.name, runId }, "naplánovaná úloha dobehla úspešne");
   } catch (error) {
     // Rovnaká disciplína ako `catalog-routes.ts`'s fetch-failure vetva —
     // surová chyba sa loguje samostatne, nikdy sa neinterpoluje inam.
     const rawErrorMessage = error instanceof Error ? error.message : String(error);
-    log.error({ jobName: job.name, runId, rawErrorMessage }, "naplánovaná úloha zlyhala");
+    log.error({ jobName: job.name, runId, rawErrorMessage, shoptetRequests: tally.requests, shoptetBlocked: tally.blocked }, "naplánovaná úloha zlyhala");
     await db
       .update(jobRuns)
-      .set({ status: "failure", finishedAt: new Date(), errorMessage: rawErrorMessage })
+      .set({ status: "failure", finishedAt: new Date(), errorMessage: rawErrorMessage, detail: attachShoptetRequestTally(null, tally) })
       .where(eq(jobRuns.id, runId));
   }
 }

@@ -42,3 +42,17 @@ export const shopProductUrl = pgTable("shop_product_url", {
   // späť, ak ho odteraz pokrýva).
   source: shopProductUrlSource("source").notNull().default("feed"),
 });
+
+// issue 598: pamäť NEÚSPEŠNÝCH pokusov HTTP sondy `shop-sitemap`u (produkt,
+// pre ktorý žiadny kandidátny slug nenašiel živú stránku). Pred touto tabuľkou
+// sonda skúšala každú noc TIE ISTÉ prvé produkty (poradie podľa `productKey`),
+// narazila na 15-min rozpočet a k zvyšku sa nikdy nedostala — 900 s denne na
+// forestshop.sk s výsledkom 0 (PROD 12.–25. 10. 2026, `missingProducts` 1291),
+// a od 21. 10. Shoptet WAF blokuje IP servera. Produkt skúšaný v posledných
+// `PROBE_COOLDOWN_DAYS` dňoch sa preskočí; nikdy neskúšané idú prvé. Plochá
+// tabuľka bez FK (rovnako ako `shop_product_url`) — produkt, čo z katalógu
+// zmizne, tu nechá len neškodný riadok.
+export const shopSitemapProbeAttempt = pgTable("shop_sitemap_probe_attempt", {
+  productKey: text("product_key").primaryKey(),
+  attemptedAt: timestamp("attempted_at", { withTimezone: true }).notNull(),
+});

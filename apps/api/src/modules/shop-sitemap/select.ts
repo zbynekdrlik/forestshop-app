@@ -2,9 +2,9 @@
 // `pairing-search/select.ts`/`product-links/queries.ts` (celý katalóg sa
 // načíta a zoskupí v pamäti, žiadny SQL JOIN so vstavaným slugify-om).
 
-import { inArray } from "drizzle-orm";
+import { inArray, sql } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
-import { products, shopProductUrl, variants } from "../../db/schema.js";
+import { products, shopProductUrl, shopSitemapProbeAttempt, variants } from "../../db/schema.js";
 import { slug } from "./slug.js";
 
 export interface MissingProduct {
@@ -99,4 +99,22 @@ export async function selectExistingSitemapProbeUrls(db: Database): Promise<read
     out.push({ url: row.url, nameSlug: slug(name) });
   }
   return out;
+}
+
+/** issue 598: kedy sa ktorý produkt naposledy NEÚSPEŠNE sondoval (`shop_sitemap_probe_attempt`). */
+export async function selectProbeAttempts(db: Database): Promise<ReadonlyMap<string, Date>> {
+  const rows = await db.select({ productKey: shopSitemapProbeAttempt.productKey, attemptedAt: shopSitemapProbeAttempt.attemptedAt }).from(shopSitemapProbeAttempt);
+  return new Map(rows.map((r) => [r.productKey, r.attemptedAt]));
+}
+
+/** issue 598: zapíše neúspešný pokus sondy (upsert — novší pokus prepíše starší čas). */
+export async function recordProbeAttempts(db: Database, productKeys: readonly string[], now: Date): Promise<void> {
+  const CHUNK = 500;
+  for (let i = 0; i < productKeys.length; i += CHUNK) {
+    const chunk = productKeys.slice(i, i + CHUNK).map((productKey) => ({ productKey, attemptedAt: now }));
+    await db
+      .insert(shopSitemapProbeAttempt)
+      .values(chunk)
+      .onConflictDoUpdate({ target: shopSitemapProbeAttempt.productKey, set: { attemptedAt: sql`excluded.attempted_at` } });
+  }
 }
