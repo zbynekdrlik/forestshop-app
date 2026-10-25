@@ -115,4 +115,5 @@ Per-area rules live in `.claude/rules/<area>.md` with `paths:` frontmatter.
 - Eshop → Objednávky predajňa (#410 — nahradilo Shoptet-viazané #345 vlastnými zápismi z predajne, `floor_note`/`floor_note_product` kľúčované variant.code, zdieľaná Vyhľadať/shop_product_url cesta, vizuálne odlíšený náhradný odkaz ako #402) → `.claude/rules/floor-notes.md`
 - SLAVOSPORT → Úhrady (#543 — skeny FA bytea, popis on-blur, in-app confirm mazania) → `.claude/rules/uhrady.md`
 - Úlohy na dnes + hlasová poznámka (#342/#487/#519 — zdieľaný zoznam, bytea audio na riadku, Whisper prepis + audio-only fallback, MediaRecorder hook, mobil-vs-desktop čisto CSS) → `.claude/rules/daily-tasks.md`
+- Požiadavky na forestshop.sk + blok Shoptetu (#598 — `shoptetFetch` pre každý fetcher na e-shop, `shoptet_blocked` predpona cez IPC, počet požiadaviek v `job_run.detail`, restock opakovanie po bloku + karta) → `.claude/rules/shoptet-http.md`
 - Poznámky (#437/#440/#591 — zdieľaná nástenka, PATCH úprava textu, zmazaná → 200 {updated:false}, inline editor Enter/blur/Esc + editingIdRef proti dvojitému uloženiu) → `.claude/rules/notes.md`

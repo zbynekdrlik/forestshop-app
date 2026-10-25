@@ -395,3 +395,10 @@ paths:
   keď nahrané CSV obsahuje daný `code`; keď ho oprava odfiltruje, prejde. Tak sa
   end-to-end testom preukáže, že otrávený produkt neblokuje sync zdravého
   súrodenca. Helper `insertTestVariantForProduct` má `missingSince?: Date|null`.
+- **`loginToShoptetAdmin` (`admin-login.ts`) po `page.goto` kontroluje blokovú
+  stránku Shoptetu (403 + „Access temporarily blocked“) a vyhodí
+  `ShoptetBlockedError` (`shoptet_blocked: …`) HNEĎ (issue 598).** Predtým čakal
+  30 s na `getByPlaceholder("E-mail")` a restock 23.–25. 10. 2026 padal na
+  nezrozumiteľnom „locator.fill: Timeout". Predpona správy prežije IPC z dieťa
+  procesu. Fixtúra: `startShoptetFixture({ blocked: true })`. Plné pravidlá:
+  `.claude/rules/shoptet-http.md`.

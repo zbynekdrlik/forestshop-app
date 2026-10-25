@@ -402,3 +402,14 @@ paths:
   len live status glance (rovnaká úvaha ako `posta-uncollected`'s
   "Spustiť teraz" vzor) — ak druhé, patrí do vlastného modulu, nie do
   `upozornenie` tabuľky.
+- **Issue 598: ŠIESTA pgEnum hodnota `shoptet_blokovanie` (migrácia 0067, `ADD
+  VALUE` bez použitia v tej istej migrácii — `database.md` issue 399).** Karta
+  „Vypredané → Skladom dnes nebežalo — Shoptet blokuje server", keď restock
+  zablokovaný Shoptetom neprešiel ani posledným opakovaním pred 12:00
+  (`scheduler/restock-block-retry.ts`, `.claude/rules/shoptet-http.md`).
+  ZNOVA-OHLÁSITEĽNÁ kategória (#268 rodina): jeden konštantný dedupKey
+  `restock:shoptet-blokovane`, ďalší deň sa otvorená karta len obnoví, úspešný
+  restock ju zatvorí (`autoResolveByDedupKey`), ďalší blok po vyriešení = nová
+  karta. Štítky vo webe: `TYPE_LABELS` (Card aj ResolvedList) + `LINK_LABELS`
+  („Otvoriť Vypredané → Skladom", odkaz `/?tab=restock`) + `upozorneniaApi.ts`
+  Zod enum — pri ĎALŠOM type všetky štyri miesta naraz (tsc vynúti len `Record`).
