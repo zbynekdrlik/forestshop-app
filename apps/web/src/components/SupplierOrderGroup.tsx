@@ -193,6 +193,27 @@ export function SupplierOrderGroup({
               (zdieľané s rozrolovaním sekcie „Riešiť") — DOM bajt-identický. */}
           <OrderLinesTableHead />
           <tbody>
+            {/* issue 480 + 599: predajňové riadky NAD riadkami objednávok tej istej
+                skupiny dodávateľa (Štěpán: dole sa na ne zabúda) — v tej istej
+                tabuľke (rovnaké stĺpce), s 🛍️ namiesto čísla objednávky. */}
+            {visibleFloorRows.map((row) => (
+              <FloorOrderRow
+                key={`${row.noteId}::${row.variantCode}`}
+                row={row}
+                canChangeState={canChangeState}
+                busyFloorRowKey={busyFloorRowKey}
+                busyFloorStateKey={busyFloorStateKey}
+                busyFloorCommentKey={busyFloorCommentKey}
+                busyFloorLinkKey={busyFloorLinkKey}
+                // Review of PR 75/76 (issue 60) obojsmerný busy-guard: kým beží
+                // hromadná akcia skupiny, jednotlivý floor riadok sa nedá meniť.
+                supplierBusy={busyOrderedSupplier === group.supplier}
+                onChangeOrdered={onChangeFloorOrdered}
+                onChangeState={onChangeFloorState}
+                onChangeComment={onChangeFloorComment}
+                onSetSupplierLink={onSetFloorLink}
+              />
+            ))}
             {visibleLines.map((line) => (
               <OrderLineRow
                 key={line.lineId}
@@ -218,27 +239,6 @@ export function SupplierOrderGroup({
                 onEditorActivityChange={onEditorActivityChange}
                 onSupplierDraftChange={supplierDrafts.setDraft}
                 onOpenCustomerContact={onOpenCustomerContact}
-              />
-            ))}
-            {/* issue 480: predajňové riadky POD riadkami objednávok tej istej
-                skupiny dodávateľa — v tej istej tabuľke (rovnaké stĺpce), bez
-                stavových tlačidiel, s 🛍️ namiesto čísla objednávky. */}
-            {visibleFloorRows.map((row) => (
-              <FloorOrderRow
-                key={`${row.noteId}::${row.variantCode}`}
-                row={row}
-                canChangeState={canChangeState}
-                busyFloorRowKey={busyFloorRowKey}
-                busyFloorStateKey={busyFloorStateKey}
-                busyFloorCommentKey={busyFloorCommentKey}
-                busyFloorLinkKey={busyFloorLinkKey}
-                // Review of PR 75/76 (issue 60) obojsmerný busy-guard: kým beží
-                // hromadná akcia skupiny, jednotlivý floor riadok sa nedá meniť.
-                supplierBusy={busyOrderedSupplier === group.supplier}
-                onChangeOrdered={onChangeFloorOrdered}
-                onChangeState={onChangeFloorState}
-                onChangeComment={onChangeFloorComment}
-                onSetSupplierLink={onSetFloorLink}
               />
             ))}
           </tbody>
