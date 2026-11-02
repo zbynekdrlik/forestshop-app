@@ -198,6 +198,21 @@ it("hromadné Označiť skupinu ako objednané zahŕňa aj predajňové riadky",
   expect(await screen.findByRole("button", { name: "↺ Zrušiť označenie skupiny" })).toBeDefined();
 });
 
+it("issue 599: predajňový riadok je v tabuľke dodávateľa NAD riadkami objednávok", async () => {
+  fetchOpenOrders.mockResolvedValue([
+    { supplier: "Dodávateľ Alfa", lines: [ORDER_LINE], floorRows: [floorRow()], email: null },
+  ]);
+
+  render(<OrdersSection role="manazer" onSessionExpired={() => {}} />);
+
+  const checkbox = await screen.findByTestId(CHECKBOX);
+  const rows = [...(checkbox.closest("tbody")?.children ?? [])];
+  const floorIndex = rows.findIndex((row) => row.contains(checkbox));
+  const orderIndex = rows.findIndex((row) => row.getAttribute("data-testid")?.startsWith("order-line-") === true);
+  expect(orderIndex).toBeGreaterThanOrEqual(0);
+  expect(floorIndex).toBeLessThan(orderIndex);
+});
+
 it("skupina LEN s predajňovými riadkami (bez objednávok) sa vykreslí, nie prázdny stav", async () => {
   fetchOpenOrders.mockResolvedValue([{ supplier: "Len Predajňa", lines: [], floorRows: [floorRow()], email: null }]);
 

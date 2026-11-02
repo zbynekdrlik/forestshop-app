@@ -78,6 +78,9 @@ nezmenené — mení sa len obsah obrazovky (`Component` v `nav.ts`), nie jej mi
 - **Predajňové položky (🛍️) v board-e „Na objednanie" (issue 480):** produkty
   pripnuté na NEVYBAVENÝCH zápisoch sa zobrazia aj v „Na objednanie" pod svojím
   dodávateľom, aby sa objednali spolu s e-shopovými. Kľúčové body:
+  - **Poradie (issue 599, Štěpán):** v tabuľke dodávateľa sú predajňové riadky NAD
+    e-shopovými (`SupplierOrderGroup.tsx`) — dole sa na ne zabúdalo. Zoskupenie po
+    dodávateľoch ostáva.
   - **Zoskupenie:** `orders/queries.ts`'s `listOpenOrderLinesBySupplier` pridáva
     `floorRows` do KAŽDEJ dodávateľskej skupiny cez TÚ ISTÚ efektívnu cestu ako
     `order_line` (`effectiveSupplierSql` = coalesce `products.supplier`,
