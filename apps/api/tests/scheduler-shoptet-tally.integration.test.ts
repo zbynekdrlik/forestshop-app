@@ -11,6 +11,7 @@ import { jobRuns } from "../src/db/schema.js";
 import { startRunNow } from "../src/modules/scheduler/run-now.js";
 import { tick } from "../src/modules/scheduler/scheduler.js";
 import type { ScheduledJob } from "../src/modules/scheduler/types.js";
+import { resetShoptetBackoff } from "../src/modules/shoptet-http/backoff.js";
 import { shoptetFetch } from "../src/modules/shoptet-http/fetch.js";
 import { withCleanDb } from "./helpers/db.js";
 import { waitForJobRunSettled } from "./helpers/job-run.js";
@@ -21,6 +22,7 @@ const TEST_RUN_NOW_TALLY_LOCK_KEY = 787_878_102;
 
 let close: (() => Promise<void>) | undefined;
 afterEach(async () => {
+  resetShoptetBackoff();
   vi.unstubAllGlobals();
   await close?.();
   close = undefined;

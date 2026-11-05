@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { resetShoptetBackoff } from "../shoptet-http/backoff.js";
 import { ShoptetBlockedError } from "../shoptet-http/blocked.js";
 import { PROBE_THROTTLE_MS } from "./constants.js";
 import { createHttpProbeFetcher } from "./probe-fetcher.js";
@@ -16,6 +17,7 @@ function stubFetch(impl: (url: string) => { ok: boolean; url: string }): void {
 
 describe("createHttpProbeFetcher", () => {
   afterEach(() => {
+    resetShoptetBackoff();
     vi.unstubAllGlobals();
   });
 

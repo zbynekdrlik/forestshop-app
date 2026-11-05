@@ -4,6 +4,7 @@
 
 import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { resetShoptetBackoff } from "./backoff.js";
 import { ShoptetBlockedError } from "./blocked.js";
 import { shoptetFetch } from "./fetch.js";
 import { attachShoptetRequestTally, newShoptetRequestTally, noteShoptetAdminSession, runWithShoptetRequestTally } from "./request-tally.js";
@@ -20,6 +21,7 @@ function stubFetchResponse(make: () => Response): void {
 describe("shoptetFetch", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+    resetShoptetBackoff();
   });
 
   it("bloková stránka (403 + text) → vyhodí ShoptetBlockedError s kontextom", async () => {
@@ -45,6 +47,7 @@ describe("shoptetFetch", () => {
 describe("počítadlo požiadaviek na forestshop.sk (job_run.detail)", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+    resetShoptetBackoff();
   });
 
   it("každá požiadavka (aj zablokovaná) sa započíta do počítadla AKTUÁLNEHO behu", async () => {
