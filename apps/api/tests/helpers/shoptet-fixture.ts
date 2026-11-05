@@ -1,6 +1,7 @@
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { getCookie, setCookie } from "hono/cookie";
+import { readFileSync } from "node:fs";
 import type { AddressInfo } from "node:net";
 
 /**
@@ -27,6 +28,14 @@ export interface ShoptetFixtureOptions {
    * `playwright-import.ts` odmietne pokračovať namiesto tichého importu bez
    * neho (fail-closed). */
   readonly omitSafeRadio?: boolean;
+  /** issue 598: KAŽDÁ požiadavka dostane 403 so SKUTOČNOU blokovou stránkou
+   * Shoptetu (WAF „Access temporarily blocked", fixtúra stiahnutá z
+   * forestshop.sk 25. 10. 2026) — presne to, čo od 21. 10. 2026 dostáva
+   * server FClaude každé ráno namiesto prihlasovacej stránky. */
+  readonly blocked?: boolean;
+  /** issue 598: prihlásenie prejde, ale stránky importu a Logu dostanú blokovú
+   * stránku — blok, ktorý začal až uprostred relácie. */
+  readonly blockedAfterLogin?: boolean;
 }
 
 export interface ShoptetFixture {
@@ -117,6 +126,16 @@ export async function startShoptetFixture(options: ShoptetFixtureOptions): Promi
   let outcome: FixtureOutcomeMode = "success";
   let failNextImportForm = false; // issue 387 E7 — one-shot, see failNextImportFormOnce() below
   let rejectCodeInCsv: string | null = null; // issue 465 — see failImportWhenCsvContainsCode() below
+
+  if (options.blocked === true) {
+    const blockPage = readFileSync(new URL("../../src/modules/shoptet-http/fixtures/shoptet-block-page.html", import.meta.url), "utf8");
+    app.use("*", (c) => Promise.resolve(c.html(blockPage, 403)));
+  }
+
+  if (options.blockedAfterLogin === true) {
+    const blockPage = readFileSync(new URL("../../src/modules/shoptet-http/fixtures/shoptet-block-page.html", import.meta.url), "utf8");
+    app.use("/admin/import-produktov/*", (c) => Promise.resolve(c.html(blockPage, 403)));
+  }
 
   app.get("/admin/", (c) => {
     const cookie = getCookie(c, COOKIE_NAME);

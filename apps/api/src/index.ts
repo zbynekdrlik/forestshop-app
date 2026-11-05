@@ -50,6 +50,7 @@ import { orderNoteWritebackConfigFromBaseUrl, shoptetImportConfigFromBaseUrl } f
 import { dpdPortalConfigFromBaseUrl } from "./modules/dpd/config.js";
 import { runOrderNoteWritebackJob } from "./modules/shoptet-writeback/run-order-note-writeback.js";
 import { runShoptetWritebackSequence } from "./modules/shoptet-writeback/run-writeback-sequence.js";
+import { RestockBlockRetry } from "./modules/scheduler/restock-block-retry.js";
 import { cleanOrphanedJobRuns } from "./modules/scheduler/startup-cleanup.js";
 import { createShutdownHandler } from "./shutdown.js";
 import { appVersion } from "./version.js";
@@ -197,6 +198,12 @@ const runRestockLockedFn =
           config: shoptetImportConfigFromBaseUrl(env.SHOPTET_ADMIN_BASE_URL, shoptetAdminUser, shoptetAdminPassword),
         });
 
+// issue 598: Shoptet WAF od 21. 10. 2026 ráno blokuje IP servera — zablokovaný
+// restock (04:50 / reťazený / opakovanie) (aj ručné „Spustiť teraz") naplánuje opakovanie o 60 min cez
+// `startRunNow` (preto ODOMKNUTÝ `runRestockLockedFn`) a po vyčerpaní do obeda
+// založí kartu na Upozorneniach. `resume()` nižšie obnoví budík po reštarte.
+const restockBlockRetry = new RestockBlockRetry({ db, run: runRestockLockedFn });
+
 // issue 123: spätný zápis appkinej poznámky k objednávke — zdieľa TIE ISTÉ
 // nepovinné premenné ako #122 vyššie (žiadne nové), len iná Playwright
 // automatizácia (per-objednávka, nie hromadný CSV import).
@@ -309,7 +316,10 @@ const app = createApp(db, {
   orderMerge: orderMergeDeps,
   orderCustomerContact: orderCustomerContactDeps,
   fetchSupplierPage,
-  restock: { config: shoptetImportConfigFromBaseUrl(env.SHOPTET_ADMIN_BASE_URL, shoptetAdminUser ?? "", shoptetAdminPassword ?? "") },
+  restock: {
+    config: shoptetImportConfigFromBaseUrl(env.SHOPTET_ADMIN_BASE_URL, shoptetAdminUser ?? "", shoptetAdminPassword ?? ""),
+    observe: restockBlockRetry.observe,
+  },
   dpd: dpdDeps,
   dailyTasks: dailyTasksDeps,
   ...(nextEventService === undefined ? {} : { nextEvent: nextEventService }),
@@ -345,9 +355,9 @@ const scheduler = startScheduler(db, [
   // včerajškom). `restockJob(runRestockFn)` 04:50 OSTÁVA ako fallback.
   supplierStockJob(
     (db2, now) => runSupplierStock({ db: db2, now, fetchPage: fetchSupplierPage }),
-    buildRestockAfterSupplierStock(runRestockLockedFn),
+    buildRestockAfterSupplierStock(runRestockLockedFn, restockBlockRetry.observe),
   ),
-  restockJob(runRestockFn),
+  restockJob(runRestockFn, restockBlockRetry.observe),
   // issue 387 E3: žiadne prihlasovacie údaje potrebné (verejné vyhľadávacie
   // stránky dodávateľov) — na rozdiel od `restockJob`/`shoptetWritebackJob`
   // vyššie sa `run` tu nikdy nezostavuje ako `undefined`. Automatika je
@@ -355,6 +365,12 @@ const scheduler = startScheduler(db, [
   // `pairingSearchJob`'s vlastná kontrola pred behom, nie chýbajúca konfigurácia.
   pairingSearchJob((db2, now) => runPairingSearch({ db: db2, now })),
 ]);
+// issue 598: dnešný posledný restock zablokovaný Shoptetom (napr. deploy počas
+// okna opakovaní) → budík sa obnoví z `job_run`, nikdy sa ticho nestratí.
+restockBlockRetry.resume().catch((error: unknown) => {
+  const rawErrorMessage = error instanceof Error ? error.message : String(error);
+  log.error({ rawErrorMessage }, "restock: obnovenie opakovania po bloku Shoptetu po štarte zlyhalo");
+});
 
 // `@hono/node-server`'s `serveStatic` prints its OWN `console.error` on every
 // call whose `root` doesn't exist — unconditionally, once per process start.
@@ -385,7 +401,18 @@ const server = serve({ fetch: app.fetch, port: env.PORT });
 console.log(JSON.stringify({ msg: "api beží", port: env.PORT, version: appVersion() }));
 
 // issue 78 — plné vysvetlenie prečo toto existuje je v shutdown.ts.
-const shutdown = createShutdownHandler({ server, pool, scheduler });
+// issue 598 (review): budík opakovania restocku sa zastaví spolu s plánovačom —
+// inak by počas graceful shutdownu vedel spustiť Playwright beh a zdržať `pool.end()`.
+const shutdown = createShutdownHandler({
+  server,
+  pool,
+  scheduler: {
+    stop: () => {
+      scheduler.stop();
+      restockBlockRetry.stop();
+    },
+  },
+});
 process.on("SIGTERM", () => {
   shutdown("SIGTERM");
 });

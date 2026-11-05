@@ -105,7 +105,9 @@ paths:
   `787_878_100` (`TEST_DB_ISOLATION_LOCK_KEY`, `tests/helpers/db.ts`),
   `787_878_101` (`TEST_RUN_NOW_LOCK_KEY`, `tests/run-now.integration.test.ts`,
   issue 413 — vlastný testovací kľúč pre `startRunNow`u priame testy, mimo
-  produkčného rozsahu presne ako `787_878_100`),
+  produkčného rozsahu presne ako `787_878_100`), `787_878_102`
+  (`TEST_RUN_NOW_TALLY_LOCK_KEY`, `tests/scheduler-shoptet-tally.integration.test.ts`,
+  issue 598), `787_878_010` (`SHOP_SITEMAP_RUN_LOCK_KEY`, issue 402),
   `787_878_004` (`POSTA_UNCOLLECTED_RUN_LOCK_KEY`, `posta-uncollected/run.ts`,
   issue 172 — pozri nižšie), `787_878_005` (`ORDER_REMINDER_RUN_LOCK_KEY`,
   `order-reminder/constants.ts`, issue 173), `787_878_006`
@@ -262,3 +264,10 @@ paths:
   `job_run.started_at` joba B a odovzdá ho `run(now)`. S tick-ovým `now` joba A
   by riadok B vyzeral ako falošný ~2-hodinový beh (started_at = štart A) → zlý
   „Posledný beh" čas + zlá hláška „Beh už prebieha (spustený o …)".
+- **`executeJob` (`scheduler.ts`) aj `startRunNow` (`run-now.ts`) obalia `run()`
+  počítadlom požiadaviek na forestshop.sk (issue 598, `AsyncLocalStorage`,
+  `modules/shoptet-http/request-tally.ts`) a nenulové počty pripíšu do
+  `job_run.detail` — aj pri `failure` (vtedy `detail` = len počty).** Úloha, čo na
+  e-shop nechodí, má detail bezo zmeny. Restock pri bloku Shoptetu plánuje vlastné
+  opakovanie cez `startRunNow` (`restock-block-retry.ts`, `.claude/rules/shoptet-http.md`)
+  — tretí spôsob spustenia restocku vedľa 04:50 slotu a reťaze po supplier-stocku.

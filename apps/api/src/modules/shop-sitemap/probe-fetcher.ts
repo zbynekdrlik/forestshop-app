@@ -6,6 +6,8 @@
 // `pairing-search/client.ts`, len kratší interval — sondujeme vlastný
 // server, nie tretiu stranu).
 
+import { isShoptetBlockedError } from "../shoptet-http/blocked.js";
+import { shoptetFetch } from "../shoptet-http/fetch.js";
 import { BASE_URL } from "./url-resolver.js";
 import type { ProbeFetch } from "./candidates.js";
 import { PROBE_THROTTLE_MS, REQUEST_TIMEOUT_MS } from "./constants.js";
@@ -27,7 +29,9 @@ export interface HttpProbeFetcherOptions {
  * KONČÍ presne na kandidátovom slugu (rovnaká dvojitá kontrola ako stará
  * appky `make_fetch`). Sieťová/timeout chyba sa NIKDY nešíri ďalej von —
  * jeden pokazený kandidát nesmie zhodiť celý probe prechod (rovnaký princíp
- * ako `pairing-search/adapters/url.ts`'s `resolveAndStripFragment`).
+ * ako `pairing-search/adapters/url.ts`'s `resolveAndStripFragment`). JEDINÁ
+ * výnimka (issue 598): bloková stránka Shoptetu sa šíri ako
+ * `ShoptetBlockedError` — vtedy nemá zmysel skúšať ďalšieho kandidáta.
  */
 export function createHttpProbeFetcher(options: HttpProbeFetcherOptions = {}): ProbeFetch {
   const baseUrl = options.baseUrl ?? BASE_URL;
@@ -42,14 +46,18 @@ export function createHttpProbeFetcher(options: HttpProbeFetcherOptions = {}): P
       controller.abort();
     }, timeoutMs);
     try {
-      const response = await fetch(url, { signal: controller.signal, redirect: "follow" });
+      const response = await shoptetFetch(url, { signal: controller.signal, redirect: "follow" }, "sonda adresy produktu");
       if (!response.ok) return null;
       const finalUrl = response.url;
       if (finalUrl.includes("/vyhladavanie")) return null;
       const trimmed = finalUrl.replace(/\/+$/, "");
       if (!trimmed.endsWith("/" + candidateSlug) && !trimmed.endsWith(candidateSlug)) return null;
       return finalUrl;
-    } catch {
+    } catch (error) {
+      // issue 598: bloková stránka Shoptetu NIE JE „kandidát neexistuje" —
+      // prepadne von, aby `run.ts` probe prechod HNEĎ zastavil (inak by
+      // pokračoval stovkami ďalších požiadaviek do zablokovaného e-shopu).
+      if (isShoptetBlockedError(error)) throw error;
       return null;
     } finally {
       clearTimeout(timer);

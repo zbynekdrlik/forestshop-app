@@ -1,3 +1,5 @@
+import { readBounded } from "../../read-bounded.js";
+import { shoptetFetch } from "../shoptet-http/fetch.js";
 import type { OrdersExportDownload, OrdersExportFetcher } from "./ingest.js";
 import { extractOrderIdsFromXml } from "./parser.js";
 
@@ -77,34 +79,6 @@ function withDateWindow(url: string, dateFrom: Date, dateUntil: Date): string {
   return parsed.toString();
 }
 
-/**
- * Rovnaká implementácia ako `catalog/fetcher.ts`'s `readBounded` — číta telo
- * odpovede PO ČASTIACH a priebežne sčitáva veľkosť, nikdy
- * `Buffer.from(await response.arrayBuffer())` (to by celé telo najprv
- * zbufferovalo bez ohľadu na strop).
- */
-async function readBounded(response: Response, maxBytes: number): Promise<Buffer> {
-  const reader = response.body?.getReader() as ReadableStreamDefaultReader<Uint8Array> | undefined;
-  if (reader === undefined) {
-    return Buffer.from(await response.arrayBuffer());
-  }
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    total += value.byteLength;
-    if (total > maxBytes) {
-      await reader.cancel();
-      throw new Error(
-        `Stiahnutý export objednávok prekročil povolenú veľkosť ${String(maxBytes)} bajtov — stiahnutie bolo zastavené.`,
-      );
-    }
-    chunks.push(value);
-  }
-  return Buffer.concat(chunks);
-}
-
 export interface HttpOrdersExportFetcherOptions {
   readonly url: string;
   readonly dateFrom: Date;
@@ -123,7 +97,7 @@ export function createHttpOrdersExportFetcher(
       controller.abort();
     }, options.timeoutMs ?? 180_000);
     try {
-      const response = await fetch(url, { signal: controller.signal });
+      const response = await shoptetFetch(url, { signal: controller.signal }, "export objednávok");
       if (!response.ok) {
         throw new Error(`Stiahnutie exportu objednávok zlyhalo so stavom ${String(response.status)}`);
       }
@@ -168,7 +142,7 @@ export function createHttpOrderIdsFetcher(options: HttpOrderIdsFetcherOptions): 
       controller.abort();
     }, options.timeoutMs ?? 180_000);
     try {
-      const response = await fetch(url, { signal: controller.signal });
+      const response = await shoptetFetch(url, { signal: controller.signal }, "export interných id objednávok");
       if (!response.ok) {
         throw new Error(`Stiahnutie interných Shoptet id objednávok zlyhalo so stavom ${String(response.status)}`);
       }

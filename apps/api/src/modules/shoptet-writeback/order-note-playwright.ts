@@ -2,6 +2,8 @@ import { chromium, type Browser, type Page } from "playwright";
 import { log } from "../../logger.js";
 import { buildShoptetAdminOrderUrl } from "../orders/queries.js";
 import { loginToShoptetAdmin } from "./admin-login.js";
+import { guardShoptetAdminSession } from "../shoptet-http/backoff.js";
+import { noteShoptetAdminSession } from "../shoptet-http/request-tally.js";
 import { DEFAULT_TIMEOUT_MS, runInChildProcess } from "./child-runner.js";
 import type { OrderNoteWritebackConfig } from "./config.js";
 import { mergeShopRemark } from "./note-block.js";
@@ -93,8 +95,11 @@ function orderNoteTimeoutMs(orderCount: number): number {
 export function runOrderNoteWritebackIsolated(
   options: RunOrderNoteWritebackOptions,
 ): Promise<readonly OrderNoteWriteResult[]> {
-  return runInChildProcess(new URL("./order-note-worker.js", import.meta.url), options, {
-    timeoutMs: orderNoteTimeoutMs(options.orders.length),
+  return guardShoptetAdminSession("poznámky objednávok v administrácii", () => {
+    noteShoptetAdminSession(); // issue 598: počet relácií do administrácie → job_run.detail
+    return runInChildProcess(new URL("./order-note-worker.js", import.meta.url), options, {
+      timeoutMs: orderNoteTimeoutMs(options.orders.length),
+    });
   });
 }
 

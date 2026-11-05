@@ -1,9 +1,13 @@
+import { and, eq, isNull } from "drizzle-orm";
 import { afterEach, expect, it } from "vitest";
-import { users } from "../src/db/schema.js";
+import { upozornenie, users } from "../src/db/schema.js";
 import { createApp } from "../src/http/app.js";
 import { resetLoginRateLimit } from "../src/http/login-rate-limit.js";
 import { hashPassword } from "../src/modules/auth/passwords.js";
 import { RESTOCK_JOB_NAME } from "../src/modules/restock/constants.js";
+import { RESTOCK_BLOCKED_DEDUP_KEY, RestockBlockRetry } from "../src/modules/scheduler/restock-block-retry.js";
+import { ShoptetBlockedError } from "../src/modules/shoptet-http/blocked.js";
+import { shoptetImportConfigFromBaseUrl } from "../src/modules/shoptet-writeback/config.js";
 import { withCleanDb } from "./helpers/db.js";
 import { waitForJobRunSettled } from "./helpers/job-run.js";
 
@@ -79,4 +83,45 @@ it("druhý POST PRESNE počas prebiehajúceho behu vráti 200 {ok:false,error} '
   const firstResponse = await first;
   expect(firstResponse.status).toBe(202);
   await waitForJobRunSettled(db, RESTOCK_JOB_NAME);
+});
+
+// issue 598 (review): ručné „Spustiť teraz" ide cez ten istý pozorovateľ ako
+// naplánované behy — úspešný ručný beh zatvorí kartu „Shoptet blokuje server"
+// (a zablokovaný ručný beh by naplánoval opakovanie).
+it("ručný úspešný beh zatvorí kartu o bloku Shoptetu (pozorovateľ je zapojený aj do run-now)", async () => {
+  const ctx = await withCleanDb();
+  close = ctx.close;
+  await ctx.db.insert(users).values({
+    email: "pouzivatel@forestshop.sk",
+    passwordHash: await hashPassword(HESLO),
+    displayName: "Test",
+    role: "manazer",
+  });
+  const retry = new RestockBlockRetry({
+    db: ctx.db,
+    run: undefined,
+    setTimer: () => ({ cancel: () => undefined }),
+    now: () => new Date("2026-10-26T10:30:00Z"), // 11:30 → vyčerpané → karta
+  });
+  await retry.observe({ ok: false, error: new ShoptetBlockedError("prihlásenie do administrácie") });
+  const openBefore = await ctx.db.select().from(upozornenie).where(and(eq(upozornenie.dedupKey, RESTOCK_BLOCKED_DEDUP_KEY), isNull(upozornenie.resolvedAt)));
+  expect(openBefore).toHaveLength(1);
+
+  const app = createApp(ctx.db, {
+    cookieSecure: false,
+    restock: { config: shoptetImportConfigFromBaseUrl("https://www.forestshop.sk", "", ""), observe: retry.observe },
+  });
+  const login = await app.request("/api/login", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ email: "pouzivatel@forestshop.sk", password: HESLO }),
+  });
+  const cookie = (login.headers.get("set-cookie") ?? "").split(";")[0] ?? "";
+  const res = await app.request("/api/restock/run-now", { method: "POST", headers: { cookie } });
+  expect(res.status).toBe(202);
+  const finished = await waitForJobRunSettled(ctx.db, RESTOCK_JOB_NAME);
+  expect(finished.status).toBe("success");
+
+  const openAfter = await ctx.db.select().from(upozornenie).where(and(eq(upozornenie.dedupKey, RESTOCK_BLOCKED_DEDUP_KEY), isNull(upozornenie.resolvedAt)));
+  expect(openAfter).toEqual([]);
 });

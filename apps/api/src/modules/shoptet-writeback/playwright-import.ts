@@ -4,7 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { chromium, type Browser, type Page } from "playwright";
 import { log } from "../../logger.js";
-import { loginToShoptetAdmin } from "./admin-login.js";
+import { loginToShoptetAdmin, throwIfShoptetBlockPage } from "./admin-login.js";
+import { guardShoptetAdminSession } from "../shoptet-http/backoff.js";
+import { noteShoptetAdminSession } from "../shoptet-http/request-tally.js";
 import { runInChildProcess } from "./child-runner.js";
 import type { ShoptetImportConfig } from "./config.js";
 import { entryKey, hasLogEntries, parseImportLog, pickResultRow, resultExitCode } from "./log-attribution.js";
@@ -136,6 +138,7 @@ export async function runShoptetImport(options: RunShoptetImportOptions): Promis
   const { config, csv, expectedRows } = options;
   const executablePath = options.executablePath ?? resolveChromiumExecutablePath();
   let browser: Browser | undefined;
+  let page: Page | undefined;
   const tmpDir = await mkdtemp(join(tmpdir(), "shoptet-writeback-"));
   const csvPath = join(tmpDir, "import.csv");
   try {
@@ -153,7 +156,7 @@ export async function runShoptetImport(options: RunShoptetImportOptions): Promis
       args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
     });
     const context = await browser.newContext({ acceptDownloads: false });
-    const page = await context.newPage();
+    page = await context.newPage();
 
     await loginToShoptetAdmin(page, config);
     const baseline = await captureBaseline(page, config);
@@ -200,6 +203,9 @@ export async function runShoptetImport(options: RunShoptetImportOptions): Promis
       "shoptet write-back: výsledok importu prečítaný",
     );
     return { ok, processed: parsed.processed, updated: parsed.updated, failed: parsed.failed, errorDetail: parsed.errorDetail, rawResultText: resultText };
+  } catch (error) {
+    if (page !== undefined) await throwIfShoptetBlockPage(page);
+    throw error;
   } finally {
     await browser?.close();
     await rm(tmpDir, { recursive: true, force: true });
@@ -226,6 +232,12 @@ export interface ImportWorkerInput extends Omit<RunShoptetImportOptions, "csv"> 
  */
 export function runShoptetImportIsolated(options: RunShoptetImportOptions): Promise<ShoptetImportOutcome> {
   const { csv, ...rest } = options;
-  const input: ImportWorkerInput = { ...rest, csvBase64: csv.toString("base64") };
-  return runInChildProcess(new URL("./import-worker.js", import.meta.url), input);
+  // issue 598: počet relácií do administrácie → `job_run.detail` (beží v dieťa
+  // procese, takže jednotlivé požiadavky prehliadača tu nevidno).
+  // Pauza po bloku (`backoff.ts`) sa stráži tu v rodičovi, dieťa proces ju nevidí.
+  return guardShoptetAdminSession("CSV import do administrácie", () => {
+    noteShoptetAdminSession();
+    const input: ImportWorkerInput = { ...rest, csvBase64: csv.toString("base64") };
+    return runInChildProcess(new URL("./import-worker.js", import.meta.url), input);
+  });
 }
