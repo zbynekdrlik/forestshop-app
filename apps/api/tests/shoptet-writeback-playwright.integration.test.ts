@@ -48,6 +48,36 @@ describe("runShoptetImport (proti fixture, nikdy proti reálnemu Shoptetu)", () 
     TEST_TIMEOUT_MS,
   );
 
+  // issue 598: od 21. 10. 2026 Shoptet WAF každé ráno vráti namiesto
+  // prihlasovacej stránky blokovú stránku (403) — restock potom padal na
+  // nezrozumiteľný „locator.fill: Timeout … getByPlaceholder('E-mail')".
+  it(
+    "bloková stránka Shoptetu pri prihlásení → zrozumiteľná chyba shoptet_blocked, nie timeout lokátora",
+    async () => {
+      fixture = await startShoptetFixture({ user: "manager", password: "tajneheslo", blocked: true });
+      const csv = buildWritebackCsv([{ code: "A", pairCode: "", internalNote: "https://x.example/a" }]);
+      const startedAt = Date.now();
+
+      await expect(
+        runShoptetImport({
+          config: {
+            loginUrl: `${fixture.baseUrl}/admin/`,
+            importUrl: `${fixture.baseUrl}/admin/import-produktov/`,
+            logUrl: `${fixture.baseUrl}/admin/import-produktov/log/`,
+            user: "manager",
+            password: "tajneheslo",
+          },
+          csv,
+          expectedRows: 1,
+        }),
+      ).rejects.toThrow(/^shoptet_blocked:/);
+      // Hneď po načítaní stránky, nie až po 30 s čakania na lokátor.
+      expect(Date.now() - startedAt).toBeLessThan(25_000);
+      expect(fixture.logEntryCount()).toBe(0);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
   it(
     "throws when the credentials are wrong — never silently 'succeeds'",
     async () => {

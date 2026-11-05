@@ -1,4 +1,6 @@
+import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { ShoptetBlockedError } from "../shoptet-http/blocked.js";
 import { PROBE_THROTTLE_MS } from "./constants.js";
 import { createHttpProbeFetcher } from "./probe-fetcher.js";
 
@@ -75,5 +77,35 @@ describe("createHttpProbeFetcher", () => {
     const result = await fetchCandidate("bunda-forest");
     expect(result).toBeNull();
     expect(sleepCalls).toEqual([PROBE_THROTTLE_MS]);
+  });
+
+  // issue 598: bloková stránka Shoptetu NESMIE splynúť s „kandidát neexistuje"
+  // (null) — inak probe prechod pokračuje ďalšími stovkami požiadaviek do
+  // zablokovaného e-shopu (PROD 21.–25. 10. 2026).
+  it("bloková stránka Shoptetu (403 + „Access temporarily blocked“) → vyhodí ShoptetBlockedError, throttle sa aj tak spustí", async () => {
+    const blockPage = readFileSync(new URL("../shoptet-http/fixtures/shoptet-block-page.html", import.meta.url), "utf8");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => Promise.resolve(new Response(blockPage, { status: 403 }))),
+    );
+    const sleepCalls: number[] = [];
+    const fetchCandidate = createHttpProbeFetcher({
+      baseUrl: "http://test/",
+      sleep: (ms) => {
+        sleepCalls.push(ms);
+        return Promise.resolve();
+      },
+    });
+    await expect(fetchCandidate("bunda-forest")).rejects.toBeInstanceOf(ShoptetBlockedError);
+    expect(sleepCalls).toEqual([PROBE_THROTTLE_MS]);
+  });
+
+  it("bežná 403 bez blokového textu → null (nie je to blok)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => Promise.resolve(new Response("Forbidden", { status: 403 }))),
+    );
+    const fetchCandidate = createHttpProbeFetcher({ baseUrl: "http://test/", sleep: () => Promise.resolve() });
+    expect(await fetchCandidate("bunda-forest")).toBeNull();
   });
 });

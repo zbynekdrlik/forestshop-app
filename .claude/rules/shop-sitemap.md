@@ -85,3 +85,22 @@ kandidátnych slugov (časovo rozpočtovaná) pre zvyšok.
   boxe lokálne VYNECHÁVA, keď je súbežná záťaž vysoká (`ps aux | grep
   vitest|playwright` + `cat /proc/loadavg`) — CI ju aj tak spustí
   bezpodmienečne.
+- **issue 598 — sonda každú noc 900 s s výsledkom 0, spúšťač bloku Shoptetu.**
+  PROD 12.–25. 10. 2026: `missingProducts` 1291, `resolvedBySitemap` 0,
+  `resolvedByProbe` 0, `stoppedEarly: true` presne o 900 s. Príčina: zvyšok sa
+  sondoval v pevnom poradí `productKey` bez pamäte pokusov → každú noc TIE ISTÉ
+  prvé produkty (4–5 kandidátnych adries každý, 300 ms throttle ≈ 2 req/s,
+  odhad ~1 500–2 500 požiadaviek za noc, horná hranica 900 s / 0,3 s = 3 000) a
+  k zvyšku sa beh nikdy nedostal; od 04:15 dostával už len 403 (rýchle, ~0,09 s)
+  a sondoval ďalej. Oprava: tabuľka `shop_sitemap_probe_attempt` (migrácia 0067,
+  bez FK, v OBOCH TRUNCATE zoznamoch) — neúspešne sondovaný produkt sa vynechá
+  `PROBE_COOLDOWN_DAYS` (30) dní, nikdy neskúšané idú prvé, potom najdávnejšie;
+  strop `MAX_PROBE_REQUESTS_PER_RUN` (300 sond, produkt, ktorého kandidáti by ho
+  prekročili, sa už nezačne; produkt s viac kandidátmi než CELÝ strop sa zapíše
+  ako skúšaný a preskočí — inak by ako nikdy neskúšaný navždy blokoval frontu); throttle 1 s; prvá bloková stránka (`ShoptetBlockedError`
+  z `probe-fetcher.ts` — jediná chyba, čo sa nemení na `null`) zastaví prechod,
+  prerušený produkt sa ako skúšaný NEZAPÍŠE. Výsledok nesie `stoppedReason`
+  (`time_budget`/`request_cap`/`shoptet_blocked`), `probedProducts`,
+  `probeRequests`, `skippedCooldown`; `job_run.detail` navyše `shoptetRequests`
+  (`.claude/rules/shoptet-http.md`). Sitemap prechod (1 požiadavka) beží pre
+  VŠETKY chýbajúce produkty každú noc bez ohľadu na ochrannú dobu.

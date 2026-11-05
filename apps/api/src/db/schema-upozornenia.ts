@@ -28,6 +28,11 @@ export const upozornenieType = pgEnum("upozornenie_type", [
   "vratenie",
   "vratena_zasielka",
   "objednavka_visi",
+  // issue 598: „Vypredané → Skladom" dnes nebežalo, lebo Shoptet blokoval IP
+  // servera (WAF „Access temporarily blocked") aj počas všetkých opakovaní
+  // (`scheduler/restock-block-retry.ts`). ZNOVA-OHLÁSITEĽNÁ kategória (#268
+  // rodina) — úspešný beh restocku kartu automaticky zatvorí.
+  "shoptet_blokovanie",
 ]);
 export const upozornenieSource = pgEnum("upozornenie_source", ["vlastne", "appka"]);
 

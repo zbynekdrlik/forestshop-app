@@ -1,3 +1,4 @@
+import { shoptetFetch } from "../shoptet-http/fetch.js";
 import type { OrdersExportDownload, OrdersExportFetcher } from "./ingest.js";
 import { extractOrderIdsFromXml } from "./parser.js";
 
@@ -123,7 +124,7 @@ export function createHttpOrdersExportFetcher(
       controller.abort();
     }, options.timeoutMs ?? 180_000);
     try {
-      const response = await fetch(url, { signal: controller.signal });
+      const response = await shoptetFetch(url, { signal: controller.signal }, "export objednávok");
       if (!response.ok) {
         throw new Error(`Stiahnutie exportu objednávok zlyhalo so stavom ${String(response.status)}`);
       }
@@ -168,7 +169,7 @@ export function createHttpOrderIdsFetcher(options: HttpOrderIdsFetcherOptions): 
       controller.abort();
     }, options.timeoutMs ?? 180_000);
     try {
-      const response = await fetch(url, { signal: controller.signal });
+      const response = await shoptetFetch(url, { signal: controller.signal }, "export interných id objednávok");
       if (!response.ok) {
         throw new Error(`Stiahnutie interných Shoptet id objednávok zlyhalo so stavom ${String(response.status)}`);
       }

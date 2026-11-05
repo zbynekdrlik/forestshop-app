@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <title>Access temporarily blocked</title>
+        <meta http-equiv="content-type" content="text/html; charset=utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="robots" content="noindex, nofollow" />
+        <style type="text/css">
+            html, body { min-height: 100%; box-sizing: border-box; margin: 0; padding: 0; }
+            body { background: #fff; color: #646464; font-family: Inter, Arial, sans-serif; font-size: 16px; line-height: 1.5em; }
+            .content { width: 100%; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+            .inner { max-width: 640px; padding: 30px; text-align: center; }
+            h1 { color: #3b3b3b; font-size: 40px; line-height: 1.2em; word-break: break-word; }
+            h2 { color: #3b3b3b; font-size: 22px; }
+            .ref { margin-top: 2em; font-size: 13px; color: #8a8a8a; }
+            a { color: #3b3b3b; }
+        </style>
+    </head>
+    <body>
+        <div class="content">
+            <div class="inner">
+                <h1 id="nameOfShop"></h1>
+                <h2 id="heading">Access temporarily blocked</h2>
+                <p id="text">Your IP address has been temporarily blocked because of suspicious activity that looked like an attack. The block will be lifted automatically within a few hours.</p>
+                <p id="contact">If you think this is a mistake, please contact support at <a href="mailto:info@shoptet.cz">info@shoptet.cz</a> and include the details below.</p>
+                <p class="ref"><span id="refLabel">Details for support</span>:<br />IP <strong>203.0.113.7</strong> &middot; <span id="refHost"></span> &middot; <span id="refTime"></span></p>
+            </div>
+        </div>
+        <script>
+            var i18n = {
+                "cs": {
+                    "heading": "Přístup dočasně zablokován",
+                    "text": "Vaše IP adresa byla dočasně zablokována kvůli podezřelé aktivitě, která vypadala jako útok. Blokace se během několika hodin sama zruší.",
+                    "contact": "Pokud si myslíte, že k zablokování došlo neprávem, kontaktujte prosím podporu na <a href=\"mailto:info@shoptet.cz\">info@shoptet.cz</a> a uveďte údaje níže.",
+                    "refLabel": "Údaje pro podporu"
+                },
+                "sk": {
+                    "heading": "Prístup dočasne zablokovaný",
+                    "text": "Vaša IP adresa bola dočasne zablokovaná pre podozrivú aktivitu, ktorá vyzerala ako útok. Blokácia sa v priebehu niekoľkých hodín sama zruší.",
+                    "contact": "Ak si myslíte, že k zablokovaniu došlo neprávom, kontaktujte, prosím, podporu na <a href=\"mailto:info@shoptet.cz\">info@shoptet.cz</a> a uveďte údaje nižšie.",
+                    "refLabel": "Údaje pre podporu"
+                },
+                "hu": {
+                    "heading": "A hozzáférés ideiglenesen blokkolva",
+                    "text": "Az Ön IP-címét ideiglenesen blokkoltuk egy támadásnak tűnő gyanús tevékenység miatt. A blokkolás néhány órán belül automatikusan megszűnik.",
+                    "contact": "Ha úgy gondolja, hogy a blokkolás tévedés, kérjük, vegye fel a kapcsolatot az ügyfélszolgálattal a <a href=\"mailto:info@shoptet.cz\">info@shoptet.cz</a> címen, és adja meg az alábbi adatokat.",
+                    "refLabel": "Adatok az ügyfélszolgálat számára"
+                },
+                "pl": {
+                    "heading": "Dostęp tymczasowo zablokowany",
+                    "text": "Twój adres IP został tymczasowo zablokowany z powodu podejrzanej aktywności, która wyglądała na atak. Blokada zostanie automatycznie zniesiona w ciągu kilku godzin.",
+                    "contact": "Jeśli uważasz, że blokada jest błędem, skontaktuj się z pomocą techniczną pod adresem <a href=\"mailto:info@shoptet.cz\">info@shoptet.cz</a> i podaj poniższe dane.",
+                    "refLabel": "Dane dla pomocy technicznej"
+                },
+                "de": {
+                    "heading": "Zugriff vorübergehend gesperrt",
+                    "text": "Ihre IP-Adresse wurde wegen verdächtiger Aktivität, die wie ein Angriff aussah, vorübergehend gesperrt. Die Sperre wird innerhalb weniger Stunden automatisch aufgehoben.",
+                    "contact": "Wenn Sie glauben, dass die Sperre ein Fehler ist, wenden Sie sich bitte an den Support unter <a href=\"mailto:info@shoptet.cz\">info@shoptet.cz</a> und geben Sie die folgenden Angaben an.",
+                    "refLabel": "Angaben für den Support"
+                },
+                "ro": {
+                    "heading": "Acces blocat temporar",
+                    "text": "Adresa dumneavoastră IP a fost blocată temporar din cauza unei activități suspecte care părea un atac. Blocarea va fi ridicată automat în câteva ore.",
+                    "contact": "Dacă considerați că blocarea este o greșeală, vă rugăm să contactați asistența la <a href=\"mailto:info@shoptet.cz\">info@shoptet.cz</a> și să menționați datele de mai jos.",
+                    "refLabel": "Date pentru asistență"
+                }
+            };
+
+            var locale = [].concat(window.navigator.languages || [], window.navigator.language, window.navigator.userLanguage)
+                .filter(Boolean)
+                .map(function (language) { return language.substr(0, 2).toLowerCase(); })
+                .filter(function (language) { return language === "en" || i18n.hasOwnProperty(language); })[0] || "en";
+
+            if (locale !== "en") {
+                document.documentElement.lang = locale;
+                document.title = i18n[locale].heading;
+                ["heading", "text", "contact", "refLabel"].forEach(function (id) {
+                    document.getElementById(id).innerHTML = i18n[locale][id];
+                });
+            }
+
+            document.getElementById("nameOfShop").textContent = window.location.hostname;
+            document.getElementById("refHost").textContent = window.location.hostname;
+            document.getElementById("refTime").textContent = new Date().toISOString().replace("T", " ").substr(0, 19) + " UTC";
+        </script>
+    </body>
+</html>

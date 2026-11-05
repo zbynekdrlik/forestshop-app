@@ -9,7 +9,9 @@ import { MAX_PER_RUN, RESTOCK_JOB_NAME, RESTOCK_RUN_LOCK_KEY } from "../modules/
 import { listRestockEvents, listRestockWaiting, selectRestockCandidates } from "../modules/restock/queries.js";
 import type { RestockRunResult, RunRestockOptions } from "../modules/restock/run.js";
 import { isRestockEnabled, runRestockLocked, setRestockEnabled } from "../modules/restock/run.js";
+import { runObservedRestock } from "../modules/scheduler/jobs.js";
 import { getLatestJobRun } from "../modules/scheduler/queries.js";
+import type { RestockRunObserver } from "../modules/scheduler/restock-block-retry.js";
 import { startRunNow, type RunNowStart } from "../modules/scheduler/run-now.js";
 import { requireRole, requireUser, type AppBindings } from "./middleware.js";
 import { requireSameOrigin } from "./origin-check.js";
@@ -26,7 +28,10 @@ const waitingQuery = z.object({
 
 // HTTP vrstva dodá `db`/`now`; zvyšok (prihlasovacie údaje do Shoptetu)
 // zostavuje `index.ts` raz pri štarte — rovnaký vzor ako ostatné automatizácie.
-export type RestockRunDeps = Omit<RunRestockOptions, "db" | "now">;
+// issue 598: `observe` = ten istý pozorovateľ ako naplánované behy
+// (`scheduler/restock-block-retry.ts`) — zablokovaný ručný beh naplánuje
+// opakovanie, úspešný zatvorí kartu „Shoptet blokuje server".
+export type RestockRunDeps = Omit<RunRestockOptions, "db" | "now"> & { readonly observe?: RestockRunObserver };
 
 function isRunResult(detail: unknown): detail is RestockRunResult {
   return typeof detail === "object" && detail !== null && "status" in detail;
@@ -37,6 +42,7 @@ function isRunResult(detail: unknown): detail is RestockRunResult {
 // odpoveď BEZ čakania na celý beh, viď design komentár na tikete.
 
 export function registerRestockRoutes(app: Hono<AppBindings>, db: Database, deps: RestockRunDeps): void {
+  const { observe, ...runDeps } = deps;
   app.get("/api/restock", requireUser(db), async (c) => {
     const now = new Date();
     const [enabled, lastRun, candidates, events, feedConflicts] = await Promise.all([
@@ -132,7 +138,7 @@ export function registerRestockRoutes(app: Hono<AppBindings>, db: Database, deps
           {
             jobName: RESTOCK_JOB_NAME,
             lockKey: RESTOCK_RUN_LOCK_KEY,
-            run: (runNow) => runRestockLocked({ db, now: runNow, ...deps }),
+            run: (runNow) => runObservedRestock(db, runNow, (d, n) => runRestockLocked({ db: d, now: n, ...runDeps }), observe),
           },
           now,
           async (settled) => {
