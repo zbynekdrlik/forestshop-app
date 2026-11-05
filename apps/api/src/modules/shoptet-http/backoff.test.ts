@@ -92,6 +92,24 @@ describe("ochranná pauza po bloku Shoptetu", () => {
     expect(isShoptetBackoffActive()).toBe(true);
   });
 
+  it("odmietnutie počas pauzy netvrdí, že Shoptet práve vrátil 403", async () => {
+    noteShoptetBlocked();
+    const error = await shoptetFetch(URL_A, {}, "export katalógu").catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ShoptetBlockedError);
+    const { message } = error as ShoptetBlockedError;
+    expect(message).toMatch(/^shoptet_blocked:/);
+    expect(message).toContain("neposlala");
+    expect(message).not.toContain("HTTP 403");
+  });
+
+  it("blok z relácie do administrácie sa započíta do job_run.detail", async () => {
+    const tally = newShoptetRequestTally();
+    await runWithShoptetRequestTally(tally, async () => {
+      await expect(guardShoptetAdminSession("x", () => Promise.reject(new Error("shoptet_blocked: z dieťaťa")))).rejects.toThrow();
+    });
+    expect(tally.blocked).toBe(1);
+  });
+
   it("CSV import cez dieťa proces sa počas pauzy vôbec nespustí", async () => {
     noteShoptetBlocked();
     await expect(

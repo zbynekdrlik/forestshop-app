@@ -33,6 +33,9 @@ export interface ShoptetFixtureOptions {
    * forestshop.sk 25. 10. 2026) — presne to, čo od 21. 10. 2026 dostáva
    * server FClaude každé ráno namiesto prihlasovacej stránky. */
   readonly blocked?: boolean;
+  /** issue 598: prihlásenie prejde, ale stránky importu a Logu dostanú blokovú
+   * stránku — blok, ktorý začal až uprostred relácie. */
+  readonly blockedAfterLogin?: boolean;
 }
 
 export interface ShoptetFixture {
@@ -127,6 +130,11 @@ export async function startShoptetFixture(options: ShoptetFixtureOptions): Promi
   if (options.blocked === true) {
     const blockPage = readFileSync(new URL("../../src/modules/shoptet-http/fixtures/shoptet-block-page.html", import.meta.url), "utf8");
     app.use("*", (c) => Promise.resolve(c.html(blockPage, 403)));
+  }
+
+  if (options.blockedAfterLogin === true) {
+    const blockPage = readFileSync(new URL("../../src/modules/shoptet-http/fixtures/shoptet-block-page.html", import.meta.url), "utf8");
+    app.use("/admin/import-produktov/*", (c) => Promise.resolve(c.html(blockPage, 403)));
   }
 
   app.get("/admin/", (c) => {

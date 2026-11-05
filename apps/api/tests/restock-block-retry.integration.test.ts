@@ -21,6 +21,7 @@ import {
   RestockBlockRetry,
   type RetryTimer,
 } from "../src/modules/scheduler/restock-block-retry.js";
+import { backoffRejection } from "../src/modules/shoptet-http/backoff.js";
 import { ShoptetBlockedError } from "../src/modules/shoptet-http/blocked.js";
 import { withCleanDb } from "./helpers/db.js";
 import { waitForJobRunSettled } from "./helpers/job-run.js";
@@ -164,6 +165,43 @@ describe("restock pri bloku Shoptetu (issue 598)", () => {
     // 2 skoršie zablokované behy dnes + práve pozorovaný (jeho riadok ešte nie je zapísaný ako failure).
     expect(card?.details).toContain("dnes skúšalo 3-krát");
     expect(card?.link).toBe("/?tab=restock");
+  });
+
+  it("beh po hranici obeda, keď opakovanie ešte čaká, kartu nezaloží", async () => {
+    const ctx = await withCleanDb();
+    close = ctx.close;
+    let now = AT_1030;
+    const { timers, setTimer } = fakeTimers();
+    retry = new RestockBlockRetry({ db: ctx.db, run: blockedRun, setTimer, now: () => now });
+    await retry.observe({ ok: false, error: new ShoptetBlockedError("prihlásenie do administrácie") });
+    expect(timers).toHaveLength(1);
+
+    now = AT_1130;
+    await retry.observe({ ok: false, error: backoffRejection("CSV import do administrácie") });
+
+    expect(timers).toHaveLength(1);
+    expect(timers[0]?.cancelled).toBe(false);
+    expect(await openCards(ctx.db)).toEqual([]);
+  });
+
+  it("počet pokusov na karte nezahŕňa behy odmietnuté ochrannou pauzou", async () => {
+    const ctx = await withCleanDb();
+    close = ctx.close;
+    await seedBlockedRun(ctx.db, AT_0450);
+    await ctx.db.insert(jobRuns).values({
+      jobName: RESTOCK_JOB_NAME,
+      startedAt: AT_1000,
+      finishedAt: AT_1000,
+      status: "failure",
+      errorMessage: backoffRejection("CSV import do administrácie").message,
+    });
+    const { setTimer } = fakeTimers();
+    retry = new RestockBlockRetry({ db: ctx.db, run: blockedRun, setTimer, now: () => AT_1130 });
+
+    await retry.observe({ ok: false, error: new ShoptetBlockedError("prihlásenie do administrácie") });
+
+    const [card] = await openCards(ctx.db);
+    expect(card?.details).toContain("dnes skúšalo 2-krát");
   });
 
   it("dvojité vyčerpanie v ten istý deň karty nezdvojí (jedna otvorená karta, obnovená)", async () => {

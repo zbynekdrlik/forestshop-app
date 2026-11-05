@@ -78,6 +78,31 @@ describe("runShoptetImport (proti fixture, nikdy proti reálnemu Shoptetu)", () 
     TEST_TIMEOUT_MS,
   );
 
+  // issue 598: blok, ktorý začne až po prihlásení, nesmie skončiť všeobecnou
+  // chybou — restock by bez predpony shoptet_blocked nenaplánoval opakovanie.
+  it(
+    "bloková stránka až po prihlásení → chyba shoptet_blocked, nie „Nenašiel som import formulár“",
+    async () => {
+      fixture = await startShoptetFixture({ user: "manager", password: "tajneheslo", blockedAfterLogin: true });
+      const csv = buildWritebackCsv([{ code: "A", pairCode: "", internalNote: "https://x.example/a" }]);
+
+      await expect(
+        runShoptetImport({
+          config: {
+            loginUrl: `${fixture.baseUrl}/admin/`,
+            importUrl: `${fixture.baseUrl}/admin/import-produktov/`,
+            logUrl: `${fixture.baseUrl}/admin/import-produktov/log/`,
+            user: "manager",
+            password: "tajneheslo",
+          },
+          csv,
+          expectedRows: 1,
+        }),
+      ).rejects.toThrow(/^shoptet_blocked:/);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
   it(
     "throws when the credentials are wrong — never silently 'succeeds'",
     async () => {
