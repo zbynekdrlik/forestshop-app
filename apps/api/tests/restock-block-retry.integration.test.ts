@@ -204,6 +204,20 @@ describe("restock pri bloku Shoptetu (issue 598)", () => {
     expect(card?.details).toContain("dnes skúšalo 2-krát");
   });
 
+  it("pozorovaný beh odmietnutý pauzou sa do počtu na karte nezaráta a neuvedie sa ako posledný pokus", async () => {
+    const ctx = await withCleanDb();
+    close = ctx.close;
+    await seedBlockedRun(ctx.db, AT_0450);
+    const { setTimer } = fakeTimers();
+    retry = new RestockBlockRetry({ db: ctx.db, run: blockedRun, setTimer, now: () => AT_1130 });
+
+    await retry.observe({ ok: false, error: backoffRejection("CSV import do administrácie") });
+
+    const [card] = await openCards(ctx.db);
+    expect(card?.details).toContain("dnes skúšalo 1-krát");
+    expect(card?.details).not.toContain("naposledy o 11:30");
+  });
+
   it("dvojité vyčerpanie v ten istý deň karty nezdvojí (jedna otvorená karta, obnovená)", async () => {
     const ctx = await withCleanDb();
     close = ctx.close;
