@@ -38,6 +38,17 @@ paths:
   nepredlžuje, predĺži ju až nová skutočná bloková stránka. Platí aj pre ručné
   „Spustiť teraz". Stav je v pamäti procesu a reštart ho zmaže. Testy, ktoré v
   jednom súbore vyvolajú blok cez `shoptetFetch`, volajú `resetShoptetBackoff()`.
+  Odmietnutie nesie predponu `shoptet_blocked:` (restock zopakuje), ale text hovorí
+  „požiadavka sa neposlala" (`isShoptetBackoffMessage`) a do počtu pokusov na karte
+  sa neráta. Čakajúce opakovanie má prednosť pred hranicou 12:00: karta vznikne až
+  keď žiadne opakovanie nečaká.
+- **Blok uprostred relácie:** `runShoptetImport` pri zlyhaní po prihlásení volá
+  `throwIfShoptetBlockPage`, takže aj taký beh dostane `shoptet_blocked:` a opakovanie.
+  Poznámky objednávok majú vlastnú slučku po objednávkach a túto kontrolu nemajú;
+  najbližší hodinový beh narazí na blok už pri prihlásení.
+- **Shoptet writeback pri bloku končí `job_run.status = success` s `status: failed`
+  v detaile** (chybu mení na výsledok, aby linkový krok nezastavil stavový, viď
+  `shoptet-writeback.md`). Blok v ňom ukáže `detail.shoptetBlocked`.
 - **`job_run.detail` nesie `shoptetRequests` / `shoptetBlocked` /
   `shoptetAdminSessions`** (len nenulové; aj pri `failure`). Počítadlo je
   `AsyncLocalStorage` (`request-tally.ts`) — `scheduler.ts`'s `executeJob` aj

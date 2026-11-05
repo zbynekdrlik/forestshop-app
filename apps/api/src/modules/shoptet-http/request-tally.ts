@@ -40,6 +40,14 @@ export function noteShoptetAdminSession(): void {
   tally.adminSessions += 1;
 }
 
+/** Relácia do administrácie narazila na blok. Bez toho by v `job_run.detail` nebol
+ * viditeľný blok v úlohách, ktoré chybu premenia na výsledok (Shoptet writeback). */
+export function noteShoptetAdminSessionBlocked(): void {
+  const tally = storage.getStore();
+  if (tally === undefined) return;
+  tally.blocked += 1;
+}
+
 /**
  * Pridá nenulové počty k `job_run.detail`. Prázdne počítadlo detail NEMENÍ
  * (úloha, čo na e-shop nechodí, má detail presne ako doteraz). Objektový

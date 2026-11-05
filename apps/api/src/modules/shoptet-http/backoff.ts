@@ -9,6 +9,7 @@
 // navyše a tá pauzu hneď obnoví.
 
 import { isShoptetBlockedError, ShoptetBlockedError } from "./blocked.js";
+import { noteShoptetAdminSessionBlocked } from "./request-tally.js";
 
 export const SHOPTET_BLOCK_BACKOFF_MS = 60 * 60 * 1000;
 
@@ -28,7 +29,7 @@ export function resetShoptetBackoff(): void {
 }
 
 export function backoffRejection(context: string): ShoptetBlockedError {
-  return new ShoptetBlockedError(`${context}; požiadavka sa neposlala, beží ochranná pauza po bloku`);
+  return new ShoptetBlockedError(context, { notSent: true });
 }
 
 /**
@@ -40,7 +41,10 @@ export async function guardShoptetAdminSession<T>(context: string, run: () => Pr
   try {
     return await run();
   } catch (error) {
-    if (isShoptetBlockedError(error)) noteShoptetBlocked();
+    if (isShoptetBlockedError(error)) {
+      noteShoptetBlocked();
+      noteShoptetAdminSessionBlocked();
+    }
     throw error;
   }
 }

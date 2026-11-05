@@ -27,7 +27,7 @@ import { log } from "../../logger.js";
 import { getZonedDateParts, zonedDateKey } from "../../timezone.js";
 import { RESTOCK_JOB_NAME, RESTOCK_RUN_LOCK_KEY } from "../restock/constants.js";
 import type { RestockRunResult } from "../restock/run.js";
-import { isShoptetBlockedError, isShoptetBlockedMessage } from "../shoptet-http/blocked.js";
+import { isShoptetBackoffMessage, isShoptetBlockedError, isShoptetBlockedMessage } from "../shoptet-http/blocked.js";
 import { autoResolveByDedupKey, upsertUpozornenie } from "../upozornenia/service.js";
 import { decideRestockRun, runObservedRestock, type RunRestock } from "./jobs.js";
 import { getLatestJobRun } from "./queries.js";
@@ -139,6 +139,12 @@ export class RestockBlockRetry {
    * majiteľom dokonca založil NOVÚ).
    */
   private async handleBlocked(now: Date, delayMs: number, source: "observed" | "resume"): Promise<void> {
+    // Čakajúce opakovanie má prednosť pred hranicou obeda: beh odmietnutý pauzou
+    // po 11:00 inak založil kartu „ďalší pokus zajtra", hoci opakovanie ešte príde.
+    if (this.pending !== null) {
+      log.info("restock: zablokovaný beh — opakovanie je už naplánované, ďalšie nepridávam");
+      return;
+    }
     const nextAttempt = new Date(now.getTime() + delayMs);
     const withinWindow = zonedDateKey(nextAttempt) === zonedDateKey(now) && getZonedDateParts(nextAttempt).hour < this.cutoffHourLocal;
     if (!withinWindow) {
@@ -147,10 +153,6 @@ export class RestockBlockRetry {
         return;
       }
       await this.raiseCard(now);
-      return;
-    }
-    if (this.pending !== null) {
-      log.info("restock: zablokovaný beh — opakovanie je už naplánované, ďalšie nepridávam");
       return;
     }
     log.warn({ nextAttemptLocal: formatLocalTime(nextAttempt), delayMs }, "restock: Shoptet blokuje IP — naplánované opakovanie");
@@ -219,7 +221,7 @@ export class RestockBlockRetry {
       .where(and(eq(jobRuns.jobName, RESTOCK_JOB_NAME), gte(jobRuns.startedAt, new Date(now.getTime() - 24 * 60 * 60_000))))
       .orderBy(desc(jobRuns.startedAt));
     const today = zonedDateKey(now);
-    const earlier = rows.filter((r) => r.status === "failure" && isShoptetBlockedMessage(r.errorMessage) && zonedDateKey(r.startedAt) === today).length;
+    const earlier = rows.filter((r) => r.status === "failure" && isShoptetBlockedMessage(r.errorMessage) && !isShoptetBackoffMessage(r.errorMessage) && zonedDateKey(r.startedAt) === today).length;
     // + práve pozorovaný beh — `observe` beží PRED zápisom jeho `job_run` riadku ako failure.
     return earlier + 1;
   }

@@ -30,12 +30,19 @@ export function isShoptetBlockPage(status: number, body: string): boolean {
   return BLOCK_PAGE_MARKERS.some((marker) => body.includes(marker));
 }
 
+// Odmietnutie ochrannou pauzou (`backoff.ts`): na e-shop nič neodišlo. Predpona
+// ostáva `shoptet_blocked:`, aby restock naplánoval opakovanie, ale text sa nesmie
+// tváriť, že Shoptet práve vrátil 403, a do počtu pokusov na karte sa nepočíta.
+const NOT_SENT_MARKER = "požiadavka sa neposlala";
+
 export class ShoptetBlockedError extends Error {
   readonly code = SHOPTET_BLOCKED_CODE;
 
-  constructor(context: string) {
+  constructor(context: string, options: { readonly notSent?: boolean } = {}) {
     super(
-      `${SHOPTET_BLOCKED_CODE}: Shoptet dočasne zablokoval IP adresu servera (HTTP 403 „Access temporarily blocked“) — ${context}. Blok sa zvyčajne sám zruší o niekoľko hodín.`,
+      options.notSent === true
+        ? `${SHOPTET_BLOCKED_CODE}: ${NOT_SENT_MARKER}, beží ochranná pauza po bloku Shoptetu (najviac 60 min) — ${context}.`
+        : `${SHOPTET_BLOCKED_CODE}: Shoptet dočasne zablokoval IP adresu servera (HTTP 403 „Access temporarily blocked“) — ${context}. Blok sa zvyčajne sám zruší o niekoľko hodín.`,
     );
     this.name = "ShoptetBlockedError";
   }
@@ -52,4 +59,9 @@ export function isShoptetBlockedError(error: unknown): boolean {
 /** Pre `job_run.error_message` (čítané z DB, môže byť `null`). */
 export function isShoptetBlockedMessage(message: string | null): boolean {
   return message !== null && message.startsWith(`${SHOPTET_BLOCKED_CODE}:`);
+}
+
+/** `true` pre beh odmietnutý ochrannou pauzou, teda bez požiadavky na e-shop. */
+export function isShoptetBackoffMessage(message: string | null): boolean {
+  return isShoptetBlockedMessage(message) && message !== null && message.includes(NOT_SENT_MARKER);
 }
