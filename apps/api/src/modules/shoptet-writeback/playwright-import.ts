@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { chromium, type Browser, type Page } from "playwright";
 import { log } from "../../logger.js";
 import { loginToShoptetAdmin } from "./admin-login.js";
+import { guardShoptetAdminSession } from "../shoptet-http/backoff.js";
 import { noteShoptetAdminSession } from "../shoptet-http/request-tally.js";
 import { runInChildProcess } from "./child-runner.js";
 import type { ShoptetImportConfig } from "./config.js";
@@ -229,7 +230,10 @@ export function runShoptetImportIsolated(options: RunShoptetImportOptions): Prom
   const { csv, ...rest } = options;
   // issue 598: počet relácií do administrácie → `job_run.detail` (beží v dieťa
   // procese, takže jednotlivé požiadavky prehliadača tu nevidno).
-  noteShoptetAdminSession();
-  const input: ImportWorkerInput = { ...rest, csvBase64: csv.toString("base64") };
-  return runInChildProcess(new URL("./import-worker.js", import.meta.url), input);
+  // Pauza po bloku (`backoff.ts`) sa stráži tu v rodičovi, dieťa proces ju nevidí.
+  return guardShoptetAdminSession("CSV import do administrácie", () => {
+    noteShoptetAdminSession();
+    const input: ImportWorkerInput = { ...rest, csvBase64: csv.toString("base64") };
+    return runInChildProcess(new URL("./import-worker.js", import.meta.url), input);
+  });
 }

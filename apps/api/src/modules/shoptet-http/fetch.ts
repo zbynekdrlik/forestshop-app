@@ -6,13 +6,15 @@
 //    → `ShoptetBlockedError` so zrozumiteľnou správou `shoptet_blocked: …`,
 //    nikdy „HTTP 403" ani tiché `null`;
 // 2. započíta požiadavku do počítadla aktuálneho behu (`request-tally.ts`) →
-//    `job_run.detail.shoptetRequests`.
+//    `job_run.detail.shoptetRequests`;
+// 3. po bloku drží ochrannú pauzu (`backoff.ts`): 60 min neodíde žiadna požiadavka.
 //
 // URL sa NIKDY neloguje — exporty nesú prihlasovací údaj v query (`hash=`),
 // do logu ide len `context` od volajúceho (napr. „export objednávok").
 
 import { readBounded } from "../../read-bounded.js";
 import { log } from "../../logger.js";
+import { backoffRejection, isShoptetBackoffActive, noteShoptetBlocked } from "./backoff.js";
 import { isShoptetBlockPage, ShoptetBlockedError } from "./blocked.js";
 import { noteShoptetRequest } from "./request-tally.js";
 
@@ -34,6 +36,10 @@ async function readBlockCandidate(response: Response): Promise<string> {
 }
 
 export async function shoptetFetch(url: string, init: RequestInit, context: string): Promise<Response> {
+  if (isShoptetBackoffActive()) {
+    log.info({ context }, "shoptet-http: požiadavka sa neposlala, beží ochranná pauza po bloku");
+    throw backoffRejection(context);
+  }
   let response: Response;
   try {
     response = await fetch(url, init);
@@ -45,6 +51,7 @@ export async function shoptetFetch(url: string, init: RequestInit, context: stri
   const blocked = response.status === 403 && isShoptetBlockPage(403, await readBlockCandidate(response));
   noteShoptetRequest(blocked);
   if (blocked) {
+    noteShoptetBlocked();
     log.warn({ context, status: response.status }, "shoptet-http: Shoptet vrátil blokovú stránku (IP servera dočasne zablokovaná)");
     throw new ShoptetBlockedError(context);
   }

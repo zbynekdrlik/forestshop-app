@@ -31,6 +31,13 @@ paths:
   procese (`child-runner.ts`) a chyba k rodičovi prichádza len ako text. Rovnaká
   predpona v `job_run.error_message` je to, z čoho `restock-block-retry.ts`
   odvodzuje „posledný beh bol zablokovaný".
+- **Ochranná pauza 60 min po bloku (`shoptet-http/backoff.ts`):** po skutočnej
+  blokovej stránke `shoptetFetch` ani `guardShoptetAdminSession` (obal
+  `runShoptetImportIsolated` a `runOrderNoteWritebackIsolated`, dieťa proces pauzu
+  nevidí) nič neposielajú a hneď vyhodia `shoptet_blocked:`. Odmietnutie pauzu
+  nepredlžuje, predĺži ju až nová skutočná bloková stránka. Platí aj pre ručné
+  „Spustiť teraz". Stav je v pamäti procesu a reštart ho zmaže. Testy, ktoré v
+  jednom súbore vyvolajú blok cez `shoptetFetch`, volajú `resetShoptetBackoff()`.
 - **`job_run.detail` nesie `shoptetRequests` / `shoptetBlocked` /
   `shoptetAdminSessions`** (len nenulové; aj pri `failure`). Počítadlo je
   `AsyncLocalStorage` (`request-tally.ts`) — `scheduler.ts`'s `executeJob` aj
