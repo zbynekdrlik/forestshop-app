@@ -42,8 +42,11 @@ paths:
   „požiadavka sa neposlala" (`isShoptetBackoffMessage`) a do počtu pokusov na karte
   sa neráta. Čakajúce opakovanie má prednosť pred hranicou 12:00: karta vznikne až
   keď žiadne opakovanie nečaká.
-- **Blok uprostred relácie:** `runShoptetImport` pri zlyhaní po prihlásení volá
+- **Blok uprostred relácie:** `runShoptetImport` pri zlyhaní po prihlásení aj pri
+  prázdnom výsledku z Logu (bloková stránka v Logu nespadne, len nemá riadky) volá
   `throwIfShoptetBlockPage`, takže aj taký beh dostane `shoptet_blocked:` a opakovanie.
+  Blok je len stav 403 poslednej navigácie (`watchMainFrameStatus`) s textom bloku,
+  ten istý text na stránke so stavom 200 pauzu nespustí.
   Poznámky objednávok majú vlastnú slučku po objednávkach a túto kontrolu nemajú;
   najbližší hodinový beh narazí na blok už pri prihlásení.
 - **Shoptet writeback pri bloku končí `job_run.status = success` s `status: failed`

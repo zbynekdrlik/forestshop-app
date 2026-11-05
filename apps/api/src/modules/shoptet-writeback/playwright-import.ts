@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { chromium, type Browser, type Page } from "playwright";
 import { log } from "../../logger.js";
-import { loginToShoptetAdmin, throwIfShoptetBlockPage } from "./admin-login.js";
+import { loginToShoptetAdmin, throwIfShoptetBlockPage, watchMainFrameStatus } from "./admin-login.js";
 import { guardShoptetAdminSession } from "../shoptet-http/backoff.js";
 import { noteShoptetAdminSession } from "../shoptet-http/request-tally.js";
 import { runInChildProcess } from "./child-runner.js";
@@ -138,7 +138,7 @@ export async function runShoptetImport(options: RunShoptetImportOptions): Promis
   const { config, csv, expectedRows } = options;
   const executablePath = options.executablePath ?? resolveChromiumExecutablePath();
   let browser: Browser | undefined;
-  let page: Page | undefined;
+  let checkBlockPage: (() => Promise<void>) | undefined;
   const tmpDir = await mkdtemp(join(tmpdir(), "shoptet-writeback-"));
   const csvPath = join(tmpDir, "import.csv");
   try {
@@ -156,7 +156,9 @@ export async function runShoptetImport(options: RunShoptetImportOptions): Promis
       args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
     });
     const context = await browser.newContext({ acceptDownloads: false });
-    page = await context.newPage();
+    const page = await context.newPage();
+    const navigationStatus = watchMainFrameStatus(page);
+    checkBlockPage = () => throwIfShoptetBlockPage(page, navigationStatus());
 
     await loginToShoptetAdmin(page, config);
     const baseline = await captureBaseline(page, config);
@@ -196,6 +198,8 @@ export async function runShoptetImport(options: RunShoptetImportOptions): Promis
       options.resultPollRetries ?? 6,
       options.resultPollWaitMs ?? 2000,
     );
+    // Bloková stránka v Logu nespadne, len nemá riadky a výsledok je `null`.
+    if (resultText === null) await checkBlockPage();
     const parsed = parseImportLog(resultText);
     const ok = resultText !== null && resultExitCode(parsed) === 0;
     log.info(
@@ -204,7 +208,7 @@ export async function runShoptetImport(options: RunShoptetImportOptions): Promis
     );
     return { ok, processed: parsed.processed, updated: parsed.updated, failed: parsed.failed, errorDetail: parsed.errorDetail, rawResultText: resultText };
   } catch (error) {
-    if (page !== undefined) await throwIfShoptetBlockPage(page);
+    await checkBlockPage?.();
     throw error;
   } finally {
     await browser?.close();

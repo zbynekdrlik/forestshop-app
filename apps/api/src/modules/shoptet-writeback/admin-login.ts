@@ -12,19 +12,29 @@ export interface AdminLoginConfig {
   readonly password: string;
 }
 
+/** Stav poslednej navigácie hlavného rámca. Po presmerovaní platí stav cieľovej stránky. */
+export function watchMainFrameStatus(page: Page): () => number | null {
+  let status: number | null = null;
+  page.on("response", (response) => {
+    if (response.request().isNavigationRequest() && response.frame() === page.mainFrame()) status = response.status();
+  });
+  return () => status;
+}
+
 /**
- * Volá sa pri zlyhaní po prihlásení: otvorená bloková stránka je skutočná príčina,
- * nie chýbajúci prvok. Bez nej by restock nedostal predponu `shoptet_blocked:` a
- * nenaplánoval opakovanie. Status poslednej navigácie tu nie je k dispozícii, preto
- * sa rozhoduje podľa textu stránky.
+ * Volá sa, keď relácia po prihlásení nedopadla: otvorená bloková stránka je
+ * skutočná príčina, nie chýbajúci prvok. Bez nej by restock nedostal predponu
+ * `shoptet_blocked:` a nenaplánoval opakovanie. Blok je len 403 s textom bloku,
+ * ten istý text na bežnej stránke (napr. riadok Logu) pauzu nesmie spustiť.
  */
-export async function throwIfShoptetBlockPage(page: Page): Promise<void> {
+export async function throwIfShoptetBlockPage(page: Page, status: number | null): Promise<void> {
+  if (status !== 403) return;
   const html = await page.content().catch((error: unknown) => {
     const rawErrorMessage = error instanceof Error ? error.message : String(error);
     log.warn({ rawErrorMessage }, "shoptet admin: stránku sa po zlyhaní nedalo prečítať");
     return "";
   });
-  if (isShoptetBlockPage(403, html)) throw new ShoptetBlockedError("relácia v Shoptet administrácii");
+  if (isShoptetBlockPage(status, html)) throw new ShoptetBlockedError("relácia v Shoptet administrácii");
 }
 
 export async function loginToShoptetAdmin(page: Page, config: AdminLoginConfig): Promise<void> {
