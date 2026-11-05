@@ -111,7 +111,8 @@ export class RestockBlockRetry {
         return;
       }
       if (!isShoptetBlockedError(outcome.error)) return;
-      await this.handleBlocked(this.now(), this.intervalMs, "observed");
+      const observedSent = !(outcome.error instanceof Error && isShoptetBackoffMessage(outcome.error.message));
+      await this.handleBlocked(this.now(), this.intervalMs, "observed", observedSent);
     } catch (error) {
       // Hák nikdy nesmie zhodiť samotný beh restocku ani plánovač.
       const rawErrorMessage = error instanceof Error ? error.message : String(error);
@@ -128,7 +129,7 @@ export class RestockBlockRetry {
     if (zonedDateKey(failedAt) !== zonedDateKey(now)) return;
     const remainingMs = Math.max(0, failedAt.getTime() + this.intervalMs - now.getTime());
     log.info({ failedAt: failedAt.toISOString(), remainingMs }, "restock: po štarte appky obnovujem opakovanie po bloku Shoptetu");
-    await this.handleBlocked(now, remainingMs, "resume");
+    await this.handleBlocked(now, remainingMs, "resume", false);
   }
 
   /**
@@ -138,7 +139,7 @@ export class RestockBlockRetry {
    * nezakladáme (každý popoludňajší deploy by ju inak obnovil, po vybavení
    * majiteľom dokonca založil NOVÚ).
    */
-  private async handleBlocked(now: Date, delayMs: number, source: "observed" | "resume"): Promise<void> {
+  private async handleBlocked(now: Date, delayMs: number, source: "observed" | "resume", observedSent: boolean): Promise<void> {
     // Čakajúce opakovanie má prednosť pred hranicou obeda: beh odmietnutý pauzou
     // po 11:00 inak založil kartu „ďalší pokus zajtra", hoci opakovanie ešte príde.
     if (this.pending !== null) {
@@ -152,7 +153,7 @@ export class RestockBlockRetry {
         log.info("restock: po štarte appky je okno opakovaní po bloku už za nami — nič neplánujem");
         return;
       }
-      await this.raiseCard(now);
+      await this.raiseCard(now, observedSent);
       return;
     }
     log.warn({ nextAttemptLocal: formatLocalTime(nextAttempt), delayMs }, "restock: Shoptet blokuje IP — naplánované opakovanie");
@@ -195,11 +196,12 @@ export class RestockBlockRetry {
     return { ...result, trigger: RESTOCK_TRIGGER_BLOCK_RETRY };
   }
 
-  private async raiseCard(now: Date): Promise<void> {
-    const blockedToday = await this.countBlockedRunsToday(now);
+  private async raiseCard(now: Date, observedSent: boolean): Promise<void> {
+    const blockedToday = await this.countBlockedRunsToday(now, observedSent);
+    const lastAttempt = observedSent ? `, naposledy o ${formatLocalTime(now)},` : "";
     const details = [
       "Shoptet dočasne zablokoval IP adresu servera FClaude (stránka „Access temporarily blocked“ — podozrivá aktivita, ktorá vyzerala ako útok).",
-      `Prepnutie vypredaných produktov späť na „Skladom" sa dnes skúšalo ${String(blockedToday)}-krát, naposledy o ${formatLocalTime(now)}, a ani raz sa nedalo prihlásiť do administrácie.`,
+      `Prepnutie vypredaných produktov späť na „Skladom" sa dnes skúšalo ${String(blockedToday)}-krát${lastAttempt} a ani raz sa nedalo prihlásiť do administrácie.`,
       "Ďalší pokus príde s najbližším naplánovaným behom (zajtra ráno). Ak blokovanie pretrváva, treba kontaktovať podporu Shoptetu (info@shoptet.cz).",
     ].join("\n");
     await upsertUpozornenie(this.db, {
@@ -214,7 +216,7 @@ export class RestockBlockRetry {
     log.error({ blockedToday }, "restock: ani posledný pokus pred obedom neprešiel (blok Shoptetu) — karta na Upozorneniach");
   }
 
-  private async countBlockedRunsToday(now: Date): Promise<number> {
+  private async countBlockedRunsToday(now: Date, observedSent: boolean): Promise<number> {
     const rows = await this.db
       .select({ startedAt: jobRuns.startedAt, status: jobRuns.status, errorMessage: jobRuns.errorMessage })
       .from(jobRuns)
@@ -223,6 +225,7 @@ export class RestockBlockRetry {
     const today = zonedDateKey(now);
     const earlier = rows.filter((r) => r.status === "failure" && isShoptetBlockedMessage(r.errorMessage) && !isShoptetBackoffMessage(r.errorMessage) && zonedDateKey(r.startedAt) === today).length;
     // + práve pozorovaný beh — `observe` beží PRED zápisom jeho `job_run` riadku ako failure.
-    return earlier + 1;
+    // Beh odmietnutý ochrannou pauzou na e-shop nič neposlal, takže sa nepočíta.
+    return observedSent ? earlier + 1 : earlier;
   }
 }

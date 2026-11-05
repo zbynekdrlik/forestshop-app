@@ -78,6 +78,54 @@ describe("runShoptetImport (proti fixture, nikdy proti reálnemu Shoptetu)", () 
     TEST_TIMEOUT_MS,
   );
 
+  it(
+    "blok počas čítania výsledku z Logu → chyba shoptet_blocked, nie ok:false bez popisu",
+    async () => {
+      fixture = await startShoptetFixture({ user: "manager", password: "tajneheslo", blockedAfterImport: true });
+      const csv = buildWritebackCsv([{ code: "A", pairCode: "", internalNote: "https://x.example/a" }]);
+
+      await expect(
+        runShoptetImport({
+          config: {
+            loginUrl: `${fixture.baseUrl}/admin/`,
+            importUrl: `${fixture.baseUrl}/admin/import-produktov/`,
+            logUrl: `${fixture.baseUrl}/admin/import-produktov/log/`,
+            user: "manager",
+            password: "tajneheslo",
+          },
+          csv,
+          expectedRows: 1,
+          resultPollRetries: 1,
+          resultPollWaitMs: 10,
+        }),
+      ).rejects.toThrow(/^shoptet_blocked:/);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "text blokovej stránky na stránke so stavom 200 nie je blok, ostane pôvodná chyba",
+    async () => {
+      fixture = await startShoptetFixture({ user: "manager", password: "tajneheslo", importPageMentionsBlockText: true });
+      const csv = buildWritebackCsv([{ code: "A", pairCode: "", internalNote: "https://x.example/a" }]);
+
+      await expect(
+        runShoptetImport({
+          config: {
+            loginUrl: `${fixture.baseUrl}/admin/`,
+            importUrl: `${fixture.baseUrl}/admin/import-produktov/`,
+            logUrl: `${fixture.baseUrl}/admin/import-produktov/log/`,
+            user: "manager",
+            password: "tajneheslo",
+          },
+          csv,
+          expectedRows: 1,
+        }),
+      ).rejects.toThrow(/Nenašiel som import formulár/);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
   // issue 598: blok, ktorý začne až po prihlásení, nesmie skončiť všeobecnou
   // chybou — restock by bez predpony shoptet_blocked nenaplánoval opakovanie.
   it(

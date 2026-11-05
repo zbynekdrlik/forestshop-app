@@ -36,6 +36,10 @@ export interface ShoptetFixtureOptions {
   /** issue 598: prihlásenie prejde, ale stránky importu a Logu dostanú blokovú
    * stránku — blok, ktorý začal až uprostred relácie. */
   readonly blockedAfterLogin?: boolean;
+  /** issue 598: po odoslaní importu dostane Log blokovú stránku (blok počas čítania výsledku). */
+  readonly blockedAfterImport?: boolean;
+  /** issue 598: stránka importu so stavom 200 obsahuje text blokovej stránky, ale formulár chýba. */
+  readonly importPageMentionsBlockText?: boolean;
 }
 
 export interface ShoptetFixture {
@@ -137,6 +141,19 @@ export async function startShoptetFixture(options: ShoptetFixtureOptions): Promi
     app.use("/admin/import-produktov/*", (c) => Promise.resolve(c.html(blockPage, 403)));
   }
 
+  let importSubmitted = false;
+  if (options.blockedAfterImport === true) {
+    const blockPage = readFileSync(new URL("../../src/modules/shoptet-http/fixtures/shoptet-block-page.html", import.meta.url), "utf8");
+    app.use("/admin/import-produktov/log/*", async (c, next) => {
+      if (importSubmitted) return c.html(blockPage, 403);
+      await next();
+      return undefined;
+    });
+  }
+  if (options.importPageMentionsBlockText === true) {
+    app.get("/admin/import-produktov/", (c) => c.html("<html><body><p>Access temporarily blocked</p></body></html>"));
+  }
+
   app.get("/admin/", (c) => {
     const cookie = getCookie(c, COOKIE_NAME);
     return c.html(cookie === "ok" ? dashboardPage() : loginPage(false));
@@ -168,6 +185,7 @@ export async function startShoptetFixture(options: ShoptetFixtureOptions): Promi
   });
 
   app.post("/admin/import-produktov/do-import", async (c) => {
+    importSubmitted = true;
     if (getCookie(c, COOKIE_NAME) !== "ok") return c.redirect("/admin/", 303);
     const body = await c.req.parseBody();
     const file = body["file"];
