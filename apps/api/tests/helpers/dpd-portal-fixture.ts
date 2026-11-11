@@ -35,6 +35,8 @@ export interface DpdFixtureOptions {
    * zachytáva kliky na polia/tlačidlá formulára (na overenie, že robot
    * banner najprv zatvorí, inak by `Pokračovať`/`Uložiť` klik zlyhal). */
   readonly showInfoBanner?: boolean;
+  /** issue 603: toast bez zatváracieho tlačidla — robot musí zlyhať zrozumiteľne. */
+  readonly showUnclosableBanner?: boolean;
   /** Po uložení zásielky NEUKÁŽE toast — núti appku ísť záložnou cestou
    * (zoznam Zásielky filtrovaný podľa referencie), na overenie, že táto
    * cesta naozaj nájde SKUTOČNÉ číslo zásielky, nie appka's vlastnú
@@ -76,7 +78,59 @@ function loginPage(): string {
   </body></html>`;
 }
 
-function shipmentFormPage(stuckDisabled: boolean, skipToast: boolean): string {
+// issue 451/491/603: info toasty DPD portálu (`shp-newsfeed-toast`) v overlayi cez
+// celú stránku — na formulári zvozu aj zásielky (naživo 11. 11. 2026 oba po 2).
+function infoBannerMarkup(): string {
+  return `<div id="toast-container" class="toast-center-center toast-container" style="position:fixed;top:0;left:0;right:0;bottom:0;z-index:2147483647;background:rgba(0,0,0,0.4)">
+        <shp-newsfeed-toast class="toast-info toast newsfeed-toast">
+          <div class="toast-title">Nové pravidlá v doručovaní do Holandska</div>
+          <div class="newsfeed-toast__buttons">
+            <button type="button" class="newsfeed-toast__button" data-role="close"><span class="ic-close-circle"></span><span class="newsfeed-toast__label">Zatvoriť</span></button>
+            <button type="button" class="newsfeed-toast__button" data-role="content"><span class="ic-view-add"></span><span class="newsfeed-toast__label">Obsah správy</span></button>
+          </div>
+        </shp-newsfeed-toast>
+        <shp-newsfeed-toast class="toast-info toast newsfeed-toast">
+          <div class="toast-title">Aktuálne obmedzenia a možné oneskorenia pri doručovaní zásielok</div>
+          <div class="newsfeed-toast__buttons">
+            <button type="button" class="newsfeed-toast__button" data-role="close"><span class="ic-close-circle"></span><span class="newsfeed-toast__label">Zatvoriť</span></button>
+            <button type="button" class="newsfeed-toast__button" data-role="content"><span class="ic-view-add"></span><span class="newsfeed-toast__label">Obsah správy</span></button>
+          </div>
+        </shp-newsfeed-toast>
+        <!-- issue 603: skutočný toast z 11. 11. 2026 má NEPREložené popisky
+             („close" / „button_i_understand"); zatváracie tlačidlo spoznať len
+             podľa ikony ic-close-circle. „button_i_understand" toast neodstráni. -->
+        <shp-newsfeed-toast class="toast-info toast newsfeed-toast">
+          <div class="toast-title">Obmedzenie doručovania a zvozov v okolí Banskej Štiavnice 16. 11.</div>
+          <div class="newsfeed-toast__buttons">
+            <button type="button" class="newsfeed-toast__button" data-role="close"><span class="ic-close-circle"></span><span class="newsfeed-toast__label line-0">close</span></button>
+            <button type="button" class="newsfeed-toast__button" data-role="content"><span class="ic-check-circle-2"></span><span class="newsfeed-toast__label line-1">button_i_understand</span></button>
+          </div>
+        </shp-newsfeed-toast>
+      </div>
+      <script>
+        Array.prototype.forEach.call(document.querySelectorAll('shp-newsfeed-toast'), function (t) {
+          t.querySelector('[data-role=close]').addEventListener('click', function () {
+            t.remove();
+            var c = document.getElementById('toast-container');
+            if (c && c.querySelectorAll('shp-newsfeed-toast').length === 0) c.remove();
+          });
+          // "Obsah správy" (data-role=content) = DECOY: overlay zámerne NEODstráni
+        });
+      </script>`;
+}
+
+function unclosableBannerMarkup(): string {
+  return `<div id="toast-container" class="toast-center-center toast-container" style="position:fixed;top:0;left:0;right:0;bottom:0;z-index:2147483647;background:rgba(0,0,0,0.4)">
+        <shp-newsfeed-toast class="toast-info toast newsfeed-toast">
+          <div class="toast-title">Hláška bez zatváracieho tlačidla</div>
+          <div class="newsfeed-toast__buttons">
+            <button type="button" class="newsfeed-toast__button"><span class="ic-view-add"></span><span class="newsfeed-toast__label">Obsah správy</span></button>
+          </div>
+        </shp-newsfeed-toast>
+      </div>`;
+}
+
+function shipmentFormPage(stuckDisabled: boolean, skipToast: boolean, showInfoBanner = false, showUnclosableBanner = false): string {
   const disabledAttr = "disabled";
   const enableScript = stuckDisabled
     ? ""
@@ -90,7 +144,7 @@ function shipmentFormPage(stuckDisabled: boolean, skipToast: boolean): string {
   const afterSaveScript = skipToast
     ? ""
     : `document.body.insertAdjacentHTML('beforeend', '<div id="toast-container"><div>Zásielka uložená, číslo 99900000123</div></div>');`;
-  return `<!doctype html><html><body>
+  return `<!doctype html><html><body>${showInfoBanner ? infoBannerMarkup() : ""}${showUnclosableBanner ? unclosableBannerMarkup() : ""}
     <input type="radio" id="product_Home" ${disabledAttr} />
     <input type="text" id="referential-info1" />
     <shp-universal-number-input name="parcelWeight"><input placeholder="Hmotnosť" /></shp-universal-number-input>
@@ -160,7 +214,7 @@ function shipmentsListPage(reference: string | null): string {
   return `<!doctype html><html><body><table>${row}</table></body></html>`;
 }
 
-function pickupFormPage(showInfoBanner: boolean, pickupSaveHangs: boolean): string {
+function pickupFormPage(showInfoBanner: boolean, pickupSaveHangs: boolean, showUnclosableBanner = false): string {
   // issue 491 (reálny tvar, naživo domapované 26.8.2026): `/pickup-orders/0` je
   // JEDEN `<form class="data">` s `#pickup-date` (wj-input-date, vnútorný
   // `input[wj-part="input"]`) a `#button-confirmation` „Pokračovať". Klik
@@ -176,35 +230,9 @@ function pickupFormPage(showInfoBanner: boolean, pickupSaveHangs: boolean): stri
   // naň overlay NEODstráni; implementácia, čo klikne na VŠETKY
   // `.newsfeed-toast__button` (alebo hádaný ✕/aria-label/close), by decoy
   // klikla / netrafila „Zatvoriť" → overlay zostane → klik na formulár zlyhá.
-  const infoBanner = showInfoBanner
-    ? `<div id="toast-container" class="toast-center-center toast-container" style="position:fixed;top:0;left:0;right:0;bottom:0;z-index:2147483647;background:rgba(0,0,0,0.4)">
-        <shp-newsfeed-toast class="toast-info toast newsfeed-toast">
-          <div class="toast-title">Nové pravidlá v doručovaní do Holandska</div>
-          <div class="newsfeed-toast__buttons">
-            <button type="button" class="newsfeed-toast__button" data-role="close"><span class="newsfeed-toast__label">Zatvoriť</span></button>
-            <button type="button" class="newsfeed-toast__button" data-role="content"><span class="newsfeed-toast__label">Obsah správy</span></button>
-          </div>
-        </shp-newsfeed-toast>
-        <shp-newsfeed-toast class="toast-info toast newsfeed-toast">
-          <div class="toast-title">Aktuálne obmedzenia a možné oneskorenia pri doručovaní zásielok</div>
-          <div class="newsfeed-toast__buttons">
-            <button type="button" class="newsfeed-toast__button" data-role="close"><span class="newsfeed-toast__label">Zatvoriť</span></button>
-            <button type="button" class="newsfeed-toast__button" data-role="content"><span class="newsfeed-toast__label">Obsah správy</span></button>
-          </div>
-        </shp-newsfeed-toast>
-      </div>
-      <script>
-        Array.prototype.forEach.call(document.querySelectorAll('shp-newsfeed-toast'), function (t) {
-          t.querySelector('[data-role=close]').addEventListener('click', function () {
-            t.remove();
-            var c = document.getElementById('toast-container');
-            if (c && c.querySelectorAll('shp-newsfeed-toast').length === 0) c.remove();
-          });
-          // "Obsah správy" (data-role=content) = DECOY: overlay zámerne NEODstráni
-        });
-      </script>`
-    : "";
-  return `<!doctype html><html><body>
+  const infoBanner = showInfoBanner ? infoBannerMarkup() : "";
+  const unclosableBanner = showUnclosableBanner ? unclosableBannerMarkup() : "";
+  return `<!doctype html><html><body>${unclosableBanner}
     <div class="content-panel pickup-order-editor">
       <form id="pickup-step1" class="data ng-untouched ng-pristine ng-valid" novalidate="">
         <div class="panel"><h2>Podrobnosti</h2>
@@ -270,7 +298,7 @@ export async function startDpdFixture(options: DpdFixtureOptions): Promise<DpdFi
   );
 
   app.get("/shipments/0", (c) =>
-    getCookie(c, COOKIE_NAME) === "ok" ? c.html(shipmentFormPage(options.stuckDisabled ?? false, options.shipmentSkipToast ?? false)) : c.html(loginPage()),
+    getCookie(c, COOKIE_NAME) === "ok" ? c.html(shipmentFormPage(options.stuckDisabled ?? false, options.shipmentSkipToast ?? false, options.showInfoBanner ?? false, options.showUnclosableBanner ?? false)) : c.html(loginPage()),
   );
 
   app.post("/test/shipment-submit", async (c) => {
@@ -280,7 +308,7 @@ export async function startDpdFixture(options: DpdFixtureOptions): Promise<DpdFi
 
   app.get("/pickup-orders/0", (c) =>
     getCookie(c, COOKIE_NAME) === "ok"
-      ? c.html(pickupFormPage(options.showInfoBanner ?? false, options.pickupSaveHangs ?? false))
+      ? c.html(pickupFormPage(options.showInfoBanner ?? false, options.pickupSaveHangs ?? false, options.showUnclosableBanner ?? false))
       : c.html(loginPage()),
   );
 

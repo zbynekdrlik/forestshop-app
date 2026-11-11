@@ -3,7 +3,7 @@ import { log } from "../../logger.js";
 import { runInChildProcess } from "../shoptet-writeback/child-runner.js";
 import type { DpdPortalConfig } from "./config.js";
 import { DEFAULT_PARCEL_HEIGHT_CM, DEFAULT_PARCEL_LENGTH_CM, DEFAULT_PARCEL_WIDTH_CM, type DpdShipmentPreview } from "./preview.js";
-import { assertSlovakDeliveryCountry, normalizePhoneForDpd, runOnDpdPortalPage, typeInto, waitUntilEnabled } from "./portal-fill.js";
+import { assertSlovakDeliveryCountry, dismissInfoBanners, normalizePhoneForDpd, runOnDpdPortalPage, typeInto, waitUntilEnabled } from "./portal-fill.js";
 
 /**
  * issue 292: Playwright robot na `dpdshipper.sk` — rovnaký izolovaný
@@ -162,6 +162,8 @@ export async function runCreateDpdShipment(options: RunCreateDpdShipmentOptions)
     const parcelNumber = await runOnDpdPortalPage(options.config, options, async (page) => {
       await page.goto(options.config.newShipmentUrl, { waitUntil: "domcontentloaded" });
       await page.waitForLoadState("networkidle");
+      // issue 603: info hlášky portálu sú aj na formulári zásielky (naživo 11. 11. 2026).
+      await dismissInfoBanners(page);
       return fillShipmentFields(page, options.shipment);
     });
     return { ok: true, parcelNumber, errorDetail: null };

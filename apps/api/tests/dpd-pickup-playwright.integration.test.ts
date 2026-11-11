@@ -66,6 +66,23 @@ describe("runOrderDpdPickup (proti fixture, nikdy proti reálnemu DPD)", () => {
   );
 
   it(
+    "issue 603: hláška, ktorú sa nedá zavrieť → ok:false s názvom hlášky, nie timeout lokátora",
+    async () => {
+      fixture = await startDpdFixture({ user: USER, password: PASSWORD, showUnclosableBanner: true });
+      const outcome = await runOrderDpdPickup({
+        config: dpdPortalConfigFromBaseUrl(fixture.baseUrl, USER, PASSWORD),
+        pickupDate: "2026-08-10",
+      });
+
+      expect(outcome.ok).toBe(false);
+      expect(outcome.errorDetail).toContain("Hláška bez zatváracieho tlačidla");
+      expect(outcome.errorDetail).not.toMatch(/locator\.click/);
+      expect(fixture.lastPickupDate()).toBeNull();
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
     "vráti ok:false s chybovou správou z portálu, keď zvoz odmietne — nikdy tiché ok:true",
     async () => {
       fixture = await startDpdFixture({ user: USER, password: PASSWORD, pickupSaveFails: true });

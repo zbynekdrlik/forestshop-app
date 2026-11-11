@@ -39,6 +39,39 @@ describe("runCreateDpdShipment (proti fixture, nikdy proti reálnemu DPD)", () =
   });
 
   it(
+    "issue 603: zavrie info hlášky portálu (aj s nepreloženým close) pred vyplnením zásielky",
+    async () => {
+      fixture = await startDpdFixture({ user: USER, password: PASSWORD, showInfoBanner: true });
+      const outcome = await runCreateDpdShipment({
+        config: dpdPortalConfigFromBaseUrl(fixture.baseUrl, USER, PASSWORD),
+        shipment: preview(),
+      });
+
+      expect(outcome.errorDetail).toBeNull();
+      expect(outcome.ok).toBe(true);
+      expect(fixture.lastShipmentSubmission()).not.toBeNull();
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "issue 603: hláška, ktorú sa nedá zavrieť → ok:false s názvom hlášky, bez zmienky o zvoze",
+    async () => {
+      fixture = await startDpdFixture({ user: USER, password: PASSWORD, showUnclosableBanner: true });
+      const outcome = await runCreateDpdShipment({
+        config: dpdPortalConfigFromBaseUrl(fixture.baseUrl, USER, PASSWORD),
+        shipment: preview(),
+      });
+
+      expect(outcome.ok).toBe(false);
+      expect(outcome.errorDetail).toContain("Hláška bez zatváracieho tlačidla");
+      expect(outcome.errorDetail).not.toMatch(/zvoz|locator\./);
+      expect(fixture.lastShipmentSubmission()).toBeNull();
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
     "vyplní príjemcu, hmotnosť aj predvolené rozmery presne podľa náhľadu a prečíta číslo zásielky z notifikácie",
     async () => {
       fixture = await startDpdFixture({ user: USER, password: PASSWORD });
