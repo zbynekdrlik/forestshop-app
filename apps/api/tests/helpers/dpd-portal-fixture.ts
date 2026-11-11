@@ -119,7 +119,18 @@ function infoBannerMarkup(): string {
       </script>`;
 }
 
-function shipmentFormPage(stuckDisabled: boolean, skipToast: boolean, showInfoBanner = false): string {
+function unclosableBannerMarkup(): string {
+  return `<div id="toast-container" class="toast-center-center toast-container" style="position:fixed;top:0;left:0;right:0;bottom:0;z-index:2147483647;background:rgba(0,0,0,0.4)">
+        <shp-newsfeed-toast class="toast-info toast newsfeed-toast">
+          <div class="toast-title">Hláška bez zatváracieho tlačidla</div>
+          <div class="newsfeed-toast__buttons">
+            <button type="button" class="newsfeed-toast__button"><span class="ic-view-add"></span><span class="newsfeed-toast__label">Obsah správy</span></button>
+          </div>
+        </shp-newsfeed-toast>
+      </div>`;
+}
+
+function shipmentFormPage(stuckDisabled: boolean, skipToast: boolean, showInfoBanner = false, showUnclosableBanner = false): string {
   const disabledAttr = "disabled";
   const enableScript = stuckDisabled
     ? ""
@@ -133,7 +144,7 @@ function shipmentFormPage(stuckDisabled: boolean, skipToast: boolean, showInfoBa
   const afterSaveScript = skipToast
     ? ""
     : `document.body.insertAdjacentHTML('beforeend', '<div id="toast-container"><div>Zásielka uložená, číslo 99900000123</div></div>');`;
-  return `<!doctype html><html><body>${showInfoBanner ? infoBannerMarkup() : ""}
+  return `<!doctype html><html><body>${showInfoBanner ? infoBannerMarkup() : ""}${showUnclosableBanner ? unclosableBannerMarkup() : ""}
     <input type="radio" id="product_Home" ${disabledAttr} />
     <input type="text" id="referential-info1" />
     <shp-universal-number-input name="parcelWeight"><input placeholder="Hmotnosť" /></shp-universal-number-input>
@@ -220,16 +231,7 @@ function pickupFormPage(showInfoBanner: boolean, pickupSaveHangs: boolean, showU
   // `.newsfeed-toast__button` (alebo hádaný ✕/aria-label/close), by decoy
   // klikla / netrafila „Zatvoriť" → overlay zostane → klik na formulár zlyhá.
   const infoBanner = showInfoBanner ? infoBannerMarkup() : "";
-  const unclosableBanner = showUnclosableBanner
-    ? `<div id="toast-container" class="toast-center-center toast-container" style="position:fixed;top:0;left:0;right:0;bottom:0;z-index:2147483647;background:rgba(0,0,0,0.4)">
-        <shp-newsfeed-toast class="toast-info toast newsfeed-toast">
-          <div class="toast-title">Hláška bez zatváracieho tlačidla</div>
-          <div class="newsfeed-toast__buttons">
-            <button type="button" class="newsfeed-toast__button"><span class="ic-view-add"></span><span class="newsfeed-toast__label">Obsah správy</span></button>
-          </div>
-        </shp-newsfeed-toast>
-      </div>`
-    : "";
+  const unclosableBanner = showUnclosableBanner ? unclosableBannerMarkup() : "";
   return `<!doctype html><html><body>${unclosableBanner}
     <div class="content-panel pickup-order-editor">
       <form id="pickup-step1" class="data ng-untouched ng-pristine ng-valid" novalidate="">
@@ -296,7 +298,7 @@ export async function startDpdFixture(options: DpdFixtureOptions): Promise<DpdFi
   );
 
   app.get("/shipments/0", (c) =>
-    getCookie(c, COOKIE_NAME) === "ok" ? c.html(shipmentFormPage(options.stuckDisabled ?? false, options.shipmentSkipToast ?? false, options.showInfoBanner ?? false)) : c.html(loginPage()),
+    getCookie(c, COOKIE_NAME) === "ok" ? c.html(shipmentFormPage(options.stuckDisabled ?? false, options.shipmentSkipToast ?? false, options.showInfoBanner ?? false, options.showUnclosableBanner ?? false)) : c.html(loginPage()),
   );
 
   app.post("/test/shipment-submit", async (c) => {

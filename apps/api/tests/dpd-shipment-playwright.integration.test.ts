@@ -55,6 +55,23 @@ describe("runCreateDpdShipment (proti fixture, nikdy proti reálnemu DPD)", () =
   );
 
   it(
+    "issue 603: hláška, ktorú sa nedá zavrieť → ok:false s názvom hlášky, bez zmienky o zvoze",
+    async () => {
+      fixture = await startDpdFixture({ user: USER, password: PASSWORD, showUnclosableBanner: true });
+      const outcome = await runCreateDpdShipment({
+        config: dpdPortalConfigFromBaseUrl(fixture.baseUrl, USER, PASSWORD),
+        shipment: preview(),
+      });
+
+      expect(outcome.ok).toBe(false);
+      expect(outcome.errorDetail).toContain("Hláška bez zatváracieho tlačidla");
+      expect(outcome.errorDetail).not.toMatch(/zvoz|locator\./);
+      expect(fixture.lastShipmentSubmission()).toBeNull();
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
     "vyplní príjemcu, hmotnosť aj predvolené rozmery presne podľa náhľadu a prečíta číslo zásielky z notifikácie",
     async () => {
       fixture = await startDpdFixture({ user: USER, password: PASSWORD });
