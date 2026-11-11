@@ -121,7 +121,7 @@ export function assertSlovakDeliveryCountry(countryName: string): void {
 // tlačidlo má v každom toaste ikonu `.ic-close-circle` (decoy „Obsah správy" má
 // `ic-view-add`, „button_i_understand" `ic-check-circle-2`) — rozhoduje ikona, nie text.
 const NEWSFEED_TOAST_SELECTOR = "shp-newsfeed-toast";
-const NEWSFEED_CLOSE_SELECTOR = `${NEWSFEED_TOAST_SELECTOR} button.newsfeed-toast__button:has(.ic-close-circle)`;
+const NEWSFEED_CLOSE_SELECTOR = `${NEWSFEED_TOAST_SELECTOR} button:has(.ic-close-circle)`;
 
 /**
  * Štěpánov krok 2 (issue 451/491/603): zatvorí prekrývajúce info toasty PRED
@@ -133,7 +133,7 @@ const NEWSFEED_CLOSE_SELECTOR = `${NEWSFEED_TOAST_SELECTOR} button.newsfeed-toas
  * vyhľadaj — bezpečne zavrie VIACERO toastov bez index-shift problému `.all()`.
  */
 export async function dismissInfoBanners(page: Page): Promise<void> {
-  for (let attempt = 0; attempt < 8; attempt++) {
+  for (let attempt = 0; attempt < 20; attempt++) {
     const closer = page.locator(NEWSFEED_CLOSE_SELECTOR).first();
     const visible = await closer.isVisible().catch(() => false);
     if (!visible) break;
@@ -146,7 +146,7 @@ export async function dismissInfoBanners(page: Page): Promise<void> {
   if (!(await remaining.isVisible().catch(() => false))) return;
   const title = (await remaining.locator(".toast-title").first().textContent({ timeout: 1000 }).catch(() => null))?.trim() ?? "";
   throw new Error(
-    `DPD portál ukazuje hlášku, ktorú appka nevie zavrieť${title === "" ? "" : ` („${title}")`} — zvoz sa neobjednal, pošli túto chybu do Develop-ÚLOHY`,
+    `DPD portál ukazuje hlášku, ktorú appka nevie zavrieť${title === "" ? "" : ` („${title}")`} — robot preto nepokračoval a v portáli nič neodoslal`,
   );
 }
 
