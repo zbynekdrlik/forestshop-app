@@ -132,7 +132,18 @@ const NEWSFEED_CLOSE_SELECTOR = `${NEWSFEED_TOAST_SELECTOR} button:has(.ic-close
  * Loop-close-first (bounded): klik na PRVÝ viditeľný zatvárač, počkaj, znovu
  * vyhľadaj — bezpečne zavrie VIACERO toastov bez index-shift problému `.all()`.
  */
+// Portál kreslí hlášky asynchrónne aj po `networkidle` — krátko počkaj, či nejaká
+// príde, inak by sa objavila až nad formulárom (review issue 603).
+const NEWSFEED_APPEAR_WAIT_MS = 2000;
+
 export async function dismissInfoBanners(page: Page): Promise<void> {
+  await page
+    .locator(NEWSFEED_TOAST_SELECTOR)
+    .first()
+    .waitFor({ state: "visible", timeout: NEWSFEED_APPEAR_WAIT_MS })
+    .catch(() => {
+      // žiadna hláška neprišla — bežný stav
+    });
   for (let attempt = 0; attempt < 20; attempt++) {
     const closer = page.locator(NEWSFEED_CLOSE_SELECTOR).first();
     const visible = await closer.isVisible().catch(() => false);
