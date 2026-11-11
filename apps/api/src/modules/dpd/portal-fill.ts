@@ -114,32 +114,40 @@ export function assertSlovakDeliveryCountry(countryName: string): void {
 // ZÚŽENÉ podľa skutočného DOM (predtým hádaný ŠIROKÝ zoznam aria-label/✕/close
 // nezavrel NIČ) — druhé tlačidlo toastu „Obsah správy" je DECOY, ktoré
 // `:has-text("Zatvoriť")` NIKDY netrafí (otvorilo by správu namiesto zatvorenia).
-const NEWSFEED_CLOSE_SELECTOR = 'shp-newsfeed-toast button:has-text("Zatvoriť")';
+//
+// issue 603 (naživo 11. 11. 2026): toast „Obmedzenie doručovania a zvozov v okolí
+// Banskej Štiavnice" mal NEPREložené popisky „close" / „button_i_understand", takže
+// selektor na text „Zatvoriť" ho minul a overlay zachytil klik na dátum. Zatváracie
+// tlačidlo má v každom toaste ikonu `.ic-close-circle` (decoy „Obsah správy" má
+// `ic-view-add`, „button_i_understand" `ic-check-circle-2`) — rozhoduje ikona, nie text.
+const NEWSFEED_TOAST_SELECTOR = "shp-newsfeed-toast";
+const NEWSFEED_CLOSE_SELECTOR = `${NEWSFEED_TOAST_SELECTOR} button.newsfeed-toast__button:has(.ic-close-circle)`;
 
 /**
- * Štěpánov krok 2 (issue 451/491): zatvorí prekrývajúce info toasty PRED
- * vyplnením formulára. Zámerne BEST-EFFORT a fail-SOFT, NIE fail-loud —
- * chýbajúci toast je NORMÁLNY stav (na rozdiel od povinného poľa, ktoré
- * appka MUSÍ vyplniť), takže absencia = no-op, nikdy throw. Ak by prekrytie
- * predsa zostalo, klik na formulár/`checkForPortalError` po Uložení aj tak
- * zlyhá nahlas — táto pomôcka teda nič nezhoršuje, len odstráni bežnú prekážku.
- * Volá sa LEN z pickup vetvy (`pickup-playwright.ts`), shipment vetva ostáva
- * nedotknutá.
+ * Štěpánov krok 2 (issue 451/491/603): zatvorí prekrývajúce info toasty PRED
+ * vyplnením formulára. Chýbajúci toast je normálny stav (no-op). Keď však po
+ * zatváraní toast OSTANE viditeľný, vyhodí zrozumiteľnú chybu s jeho nadpisom —
+ * inak by robot o 10 s padol na nič nehovoriacom „locator.click: Timeout".
  *
- * Loop-close-first (bounded): klik na PRVÝ viditeľný „Zatvoriť", počkaj, znovu
- * vyhľadaj — bezpečne zavrie VIACERO toastov bez index-shift problému `.all()`
- * (po odstránení prvého toastu by sa handle druhého rozpadol).
+ * Loop-close-first (bounded): klik na PRVÝ viditeľný zatvárač, počkaj, znovu
+ * vyhľadaj — bezpečne zavrie VIACERO toastov bez index-shift problému `.all()`.
  */
 export async function dismissInfoBanners(page: Page): Promise<void> {
   for (let attempt = 0; attempt < 8; attempt++) {
     const closer = page.locator(NEWSFEED_CLOSE_SELECTOR).first();
     const visible = await closer.isVisible().catch(() => false);
-    if (!visible) return;
+    if (!visible) break;
     await closer.click({ timeout: 1500 }).catch(() => {
       // best-effort: tento toast sa medzitým mohol sám zavrieť/odísť
     });
     await page.waitForTimeout(200);
   }
+  const remaining = page.locator(NEWSFEED_TOAST_SELECTOR).first();
+  if (!(await remaining.isVisible().catch(() => false))) return;
+  const title = (await remaining.locator(".toast-title").first().textContent({ timeout: 1000 }).catch(() => null))?.trim() ?? "";
+  throw new Error(
+    `DPD portál ukazuje hlášku, ktorú appka nevie zavrieť${title === "" ? "" : ` („${title}")`} — zvoz sa neobjednal, pošli túto chybu do Develop-ÚLOHY`,
+  );
 }
 
 export interface RunOnDpdPortalPageOptions {
