@@ -311,3 +311,14 @@ paths:
     empiricky RED na starom kóde (5/5 testov padlo, `#step2` timeout / decoy),
     GREEN na novom (5/5). Kontakt sa STÁLE nevyberá (jediný predvyplnený,
     fungovalo naživo).
+- **Info hlášky portálu sa zatvárajú podľa IKONY `.ic-close-circle`, nie podľa textu
+  (issue 603, naživo 11. 11. 2026).** Toast „Obmedzenie doručovania a zvozov v okolí
+  Banskej Štiavnice" mal nepreložené popisky `close` / `button_i_understand`, takže
+  starý selektor na „Zatvoriť" ho minul a overlay zachytil klik na dátum zvozu
+  („intercepts pointer events"). Decoy tlačidlá majú iné ikony (`ic-view-add`,
+  `ic-check-circle-2`). Ostane po zatváraní toast viditeľný, `dismissInfoBanners`
+  vyhodí chybu s jeho nadpisom (nie timeout lokátora). Hlášky sú aj na
+  `/shipments/0`, preto ich zatvára aj tok zásielky. Read-only sonda: `.mjs` v
+  `/app/apps/api/` (vzor z `shoptet-writeback.md`) — prihlásiť, otvoriť formulár,
+  vypísať `.overlay-container`, nič nevypĺňať ani neodosielať.
+
