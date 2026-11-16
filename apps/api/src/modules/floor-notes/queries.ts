@@ -49,11 +49,12 @@ export async function listFloorNotes(db: Database): Promise<readonly FloorNoteRo
       updatedAt: floorNotes.updatedAt,
     })
     .from(floorNotes)
-    // Najnovšie hore — zadanie tiketu. `id` je tie-breaker (rovnaký vzor ako
-    // `floor-orders-queries.ts`/`catalog/queries.ts`) — `createdAt` samo
-    // osebe by pri dvoch zápisoch v TEJ ISTEJ milisekunde bolo
-    // nedeterministické.
-    .orderBy(desc(floorNotes.createdAt), desc(floorNotes.id));
+    // Issue 607 (Štěpán): nevybavené hore, vybavené (✅) pod nimi — `false`
+    // sa v Postgrese radí pred `true`. V každej skupine najnovšie hore
+    // (pôvodné zadanie issue 410). `id` je tie-breaker (rovnaký vzor ako
+    // `catalog/queries.ts`) — `createdAt` samo osebe by pri dvoch zápisoch v
+    // TEJ ISTEJ milisekunde bolo nedeterministické.
+    .orderBy(asc(floorNotes.resolved), desc(floorNotes.createdAt), desc(floorNotes.id));
 
   if (notes.length === 0) return [];
 

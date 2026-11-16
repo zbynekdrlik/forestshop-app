@@ -48,7 +48,10 @@ kandidátnych slugov (časovo rozpočtovaná) pre zvyšok.
   pred pridaním ĎALŠIEHO (playbook môže zaostávať, `.claude/rules/
   scheduler.md`'s vlastná poučka). Potrebný, lebo job MÁ manuálny "Spustiť
   teraz" (`POST /api/shop-sitemap/run-now`) na TÚ ISTÚ prácu ako nočný beh.
-- **Scheduler slot je 04:05, NIE 04:20** (pôvodný dispatch navrhol 04:20 —
+- **Od issue 598 (16. 11. 2026) je slot 08:35** — Shoptet ráno 04:05–08:15 blokuje IP
+  servera, sitemap o 04:05 sa zastavoval po ~20 požiadavkách. Zrušené ranné okno stráži
+  `scheduler/jobs-morning-window.test.ts`. Bod nižšie je historický dôvod pôvodného 04:05.
+- **(historické) Scheduler slot bol 04:05, NIE 04:20** (pôvodný dispatch navrhol 04:20 —
   ten už patrí `supplierStockJob`u). 04:05 = 15 min PO `shop-feed`e (03:50)
   A 15 min PRED `supplierStockJob`om (04:20), spĺňa "aspoň 15 min od
   suseda" (`.claude/rules/scheduler.md`).

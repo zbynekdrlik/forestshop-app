@@ -271,3 +271,10 @@ paths:
   e-shop nechodí, má detail bezo zmeny. Restock pri bloku Shoptetu plánuje vlastné
   opakovanie cez `startRunNow` (`restock-block-retry.ts`, `.claude/rules/shoptet-http.md`)
   — tretí spôsob spustenia restocku vedľa 04:50 slotu a reťaze po supplier-stocku.
+
+- **Ranné okno bloku Shoptetu 04:00–08:30 (issue 598, ROZHODNUTÉ 16. 11. 2026):** denné joby,
+  čo chodia na forestshop.sk alebo reťazia zápis do Shoptetu, v ňom nesmú štartovať —
+  `supplier-stock` 01:00 (reťazený restock ~03:00), `shop-sitemap` 08:35, `restock` fallback
+  08:40. `orders-import`/`catalog-import` (periodické) ostali, počas bloku ich drží ochranná
+  pauza (`shoptet-http.md`). Nový denný job dotýkajúci sa e-shopu pridaj aj do
+  `jobs-morning-window.test.ts`.

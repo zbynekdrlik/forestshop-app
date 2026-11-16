@@ -36,6 +36,10 @@ nezmenené — mení sa len obsah obrazovky (`Component` v `nav.ts`), nie jej mi
   fallback` (tlmená farba + prerušovaná čiara) + explicitnú poznámku "🔎 hľadať na eshope", presne
   ten istý vzor ako `PairingReviewCard.tsx` po issue 402 — NIKDY plain-vyzerajúci odkaz, keď priama
   adresa nie je známa.
+- **Poradie zoznamu (issue 607, Štěpán): `ORDER BY resolved ASC, created_at DESC, id DESC`**
+  — nevybavené hore, vybavené (✅) pod nimi, v každej skupine najnovšie hore. Radí API
+  (`listFloorNotes`), frontend NEtriedi — po prepnutí ✅ volá `load()`, takže zápis sa presunie
+  hneď. Nová obrazovka nad `floor_note` má brať poradie z API, nie si ho triediť sama.
 - **Zápis je gejtovaný `requireRole("admin","manazer")` na KAŽDEJ zapisovacej trase** (vytvoriť/
   upraviť text/prepnúť značku ×3/pripnúť-odopnúť produkt/zmazať), čítanie len `requireUser` —
   rovnaký štandard ako 53+ iných zapisovacích trás v tejto appke. Frontend (`FloorNotesSection.tsx`'s

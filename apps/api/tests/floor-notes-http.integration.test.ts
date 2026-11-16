@@ -93,6 +93,33 @@ describe("GET /api/floor-notes", () => {
     expect(body.rows.map((r) => r.text)).toEqual(["druhý zápis", "prvý zápis"]);
   });
 
+  it("issue 607: vybavené zápisy (✅) sú pod nevybavenými, v každej skupine najnovšie hore", async () => {
+    const { app, cookie } = await bootUser("manazer@forestshop.sk", "manazer");
+    const najstarsi = await createNote(app, cookie, "najstarší nevybavený");
+    const vybaveny = await createNote(app, cookie, "vybavený stredný");
+    await createNote(app, cookie, "najnovší nevybavený");
+    const vybavenyNovy = await createNote(app, cookie, "vybavený najnovší");
+    await setMarker(app, cookie, vybaveny, "resolved", true);
+    await setMarker(app, cookie, vybavenyNovy, "resolved", true);
+    expect(najstarsi).not.toBe("");
+
+    const res = await app.request("/api/floor-notes", { headers: { cookie } });
+    const body = (await res.json()) as { rows: readonly { text: string }[] };
+    expect(body.rows.map((r) => r.text)).toEqual(["najnovší nevybavený", "najstarší nevybavený", "vybavený najnovší", "vybavený stredný"]);
+  });
+
+  it("issue 607: zrušenie ✅ vráti zápis medzi nevybavené na jeho miesto podľa času", async () => {
+    const { app, cookie } = await bootUser("manazer@forestshop.sk", "manazer");
+    const prvy = await createNote(app, cookie, "prvý");
+    await createNote(app, cookie, "druhý");
+    await setMarker(app, cookie, prvy, "resolved", true);
+    await setMarker(app, cookie, prvy, "resolved", false);
+
+    const res = await app.request("/api/floor-notes", { headers: { cookie } });
+    const body = (await res.json()) as { rows: readonly { text: string }[] };
+    expect(body.rows.map((r) => r.text)).toEqual(["druhý", "prvý"]);
+  });
+
   it("rola 'citanie' vidí zoznam (čítanie nie je gejtované)", async () => {
     const { app, cookie } = await bootUser("citac@forestshop.sk", "citanie");
     const res = await app.request("/api/floor-notes", { headers: { cookie } });

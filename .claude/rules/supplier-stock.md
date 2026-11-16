@@ -988,3 +988,8 @@ paths:
   s predošlým `restock_event`) bola v návrhu, ale FINDING na tickete ukázal, že by
   zablokovala aj správne prepnutia (61264/L, 61513/S/3XL) — pozastavená do
   rozhodnutia majiteľa, NIE je implementovaná.
+
+- **Od issue 598 (16. 11. 2026) štartuje supplier-stock o 01:00, nie 04:20, a naplánovaný
+  restock fallback o 08:40, nie 04:50** — reťazený restock (`after-supplier-stock`) tak zapisuje
+  do Shoptetu ~03:00, pred ranným blokom IP (04:05–08:15). Zmienky o 04:20/04:50 vyššie sú
+  historické; aktuálne sloty drží `scheduler/jobs-morning-window.test.ts`.
