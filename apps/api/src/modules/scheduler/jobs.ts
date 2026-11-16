@@ -324,7 +324,9 @@ export function orderReminderJob(run: RunOrderReminder): ScheduledJob {
 export type RunSupplierStock = (db: Database, now: Date) => Promise<SupplierStockRunResult>;
 
 /**
- * "Dodávateľský sklad" (issue 212) — denne o 04:20 Europe/Bratislava (issue
+ * "Dodávateľský sklad" (issue 212) — denne o 01:00 Europe/Bratislava (issue 598:
+ * presunuté zo 04:20 — beh trvá ~1,5–2 h a reťazený restock musí zapísať do
+ * Shoptetu PRED ranným blokom IP 04:05–08:15, `jobs-morning-window.test.ts`; issue
  * 293: predtým sa `hourLocal`/`minuteLocal` reálne interpretovali ako UTC,
  * appka teraz behá o 1-2 hodiny SKÔR, než predtým — poradie a rozostup
  * medzi nočnými jobmi nižšie ostávajú NEZMENENÉ), teda dostatočne PRED
@@ -345,7 +347,7 @@ export type SupplierStockAfterRun = (db: Database, now: Date) => Promise<void>;
 export function supplierStockJob(run: RunSupplierStock, afterRun?: SupplierStockAfterRun): ScheduledJob {
   return {
     name: SUPPLIER_STOCK_JOB_NAME,
-    schedule: { kind: "daily", hourLocal: 4, minuteLocal: 20 },
+    schedule: { kind: "daily", hourLocal: 1, minuteLocal: 0 },
     async run(db, now) {
       // `run` vyhodí pri zlyhaní scrapera → afterRun sa NIKDY nespustí (reťaz
       // nemá bežať nad neúplnými dátami), chybu prevezme scheduler.ts.
@@ -369,7 +371,9 @@ export function supplierStockJob(run: RunSupplierStock, afterRun?: SupplierStock
 export type RunRestock = (db: Database, now: Date) => Promise<RestockRunResult>;
 
 /**
- * "Vypredané → Skladom" (issue 213) — denne o 04:50 Europe/Bratislava (issue
+ * "Vypredané → Skladom" (issue 213) — denne o 08:40 Europe/Bratislava (issue 598:
+ * presunuté zo 04:50 mimo ranného bloku IP Shoptetu; hlavná cesta je reťaz po
+ * supplier-stocku ~03:00, toto je fallback; issue
  * 293 — pozri poznámku na `supplierStockJob` vyššie), teda 30 minút PO
  * `supplierStockJob` (04:20), aby pracovalo s potvrdeniami z tejto noci.
  *
@@ -436,7 +440,7 @@ export async function runObservedRestock(
 export function restockJob(run: RunRestock | undefined, observe?: RestockRunObserver): ScheduledJob {
   return {
     name: RESTOCK_JOB_NAME,
-    schedule: { kind: "daily", hourLocal: 4, minuteLocal: 50 },
+    schedule: { kind: "daily", hourLocal: 8, minuteLocal: 40 },
     async run(db, now) {
       const decision = await decideRestockRun(db, run);
       if (decision.action === "skip") return { detail: decision.detail };
@@ -521,7 +525,9 @@ export type RunShopSitemap = (db: Database, now: Date) => Promise<ShopSitemapRun
 
 /**
  * "Adresy z sitemapy + HTTP sonda" (issue 402) — doplnok `shopFeedJob`u pre
- * kódy, čo `google.xml` feed nepokrýva. Denne o **04:05** Europe/Bratislava
+ * kódy, čo `google.xml` feed nepokrýva. Denne o **08:35** Europe/Bratislava
+ * (issue 598: presunuté zo 04:05 — Shoptet ráno 04:05–08:15 blokuje IP servera,
+ * sitemap sa zastavoval po ~20 požiadavkách; pôvodná úvaha nižšie platila pre 04:05)
  * — NIE 04:20, ako navrhoval pôvodný dispatch (ten slot patrí
  * `supplierStockJob`u, viď nižšie) — 04:05 je presne 15 min PO
  * `shopFeedJob`e (03:50, aby pracoval s čerstvou feed mapou z tejto noci) A
@@ -539,7 +545,7 @@ export type RunShopSitemap = (db: Database, now: Date) => Promise<ShopSitemapRun
 export function shopSitemapJob(run: RunShopSitemap): ScheduledJob {
   return {
     name: SHOP_SITEMAP_JOB_NAME,
-    schedule: { kind: "daily", hourLocal: 4, minuteLocal: 5 },
+    schedule: { kind: "daily", hourLocal: 8, minuteLocal: 35 },
     async run(db, now) {
       return { detail: await run(db, now) };
     },

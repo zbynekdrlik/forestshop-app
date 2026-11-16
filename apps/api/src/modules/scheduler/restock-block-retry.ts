@@ -41,7 +41,7 @@ export const RESTOCK_BLOCKED_DEDUP_KEY = "restock:shoptet-blokovane";
 const RESTOCK_TAB_LINK = "/?tab=restock";
 
 export type RestockRunOutcome = { readonly ok: true } | { readonly ok: false; readonly error: unknown };
-/** Hák, ktorý dostane výsledok KAŽDÉHO restock behu (naplánovaný 04:50, reťazený, opakovanie). Nikdy nevyhodí. */
+/** Hák, ktorý dostane výsledok KAŽDÉHO restock behu (naplánovaný 08:40, reťazený, opakovanie). Nikdy nevyhodí. */
 export type RestockRunObserver = (outcome: RestockRunOutcome) => Promise<void>;
 
 export interface RetryTimer {
