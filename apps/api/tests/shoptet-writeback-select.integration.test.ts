@@ -75,6 +75,26 @@ describe("selectChangedSupplierLinks", () => {
     expect(result.rows).toEqual([{ code: "P2", pairCode: "", internalNote: "https://dodavatel.example/p2" }]);
   });
 
+  it("keeps the rest of the product's internalNote and replaces ONLY the line holding the link", async () => {
+    await insertTestVariantForProduct(db, "PN", "PN", {
+      internalNote: "Objednávať cez e-mail.\n\nhttps://dodavatel.example/old\n\nCena 12 €.",
+    });
+    await db.insert(productSupplierLinkOverrides).values({
+      productKey: "PN",
+      url: "https://dodavatel.example/new",
+      updatedAt: new Date("2026-01-02T00:00:00Z"),
+    });
+
+    const result = await selectChangedSupplierLinks(db);
+    expect(result.rows).toEqual([
+      {
+        code: "PN",
+        pairCode: "",
+        internalNote: "Objednávať cez e-mail.\n\nhttps://dodavatel.example/new\n\nCena 12 €.",
+      },
+    ]);
+  });
+
   it("excludes an override already synced AFTER its last update (nothing changed since)", async () => {
     await insertTestVariantForProduct(db, "P3", "P3", {});
     await db.insert(productSupplierLinkOverrides).values({

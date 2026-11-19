@@ -1,7 +1,8 @@
 import { and, count, eq, isNull, lt, ne, or } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
-import { pairingDecisions, pairingVariantLinks, productSupplierLinkOverrides, variants } from "../../db/schema.js";
+import { pairingDecisions, pairingVariantLinks, products, productSupplierLinkOverrides, variants } from "../../db/schema.js";
 import { log } from "../../logger.js";
+import { setSupplierLinkInNote } from "../catalog/supplier-link.js";
 import type { WritebackRow } from "./csv.js";
 
 export interface SelectedWriteback {
@@ -46,11 +47,16 @@ export async function selectChangedSupplierLinks(db: Database): Promise<Selected
     .select({
       code: variants.code,
       pairCode: variants.pairCode,
-      internalNote: productSupplierLinkOverrides.url,
+      url: productSupplierLinkOverrides.url,
+      existingNote: products.internalNote,
       productKey: productSupplierLinkOverrides.productKey,
     })
     .from(productSupplierLinkOverrides)
     .innerJoin(variants, eq(variants.productKey, productSupplierLinkOverrides.productKey))
+    // Poznámka smie niesť ľubovoľný text — do Shoptetu ide celá pôvodná
+    // poznámka produktu, v ktorej sa zmení LEN riadok s odkazom
+    // (`setSupplierLinkInNote`), nie holý odkaz, ktorý by zvyšok zmazal.
+    .innerJoin(products, eq(products.key, productSupplierLinkOverrides.productKey))
     // issue 423: `pairing_variant_link` per variantovom `code`,
     // `pairing_decision` per produkte — spolu určujú, či je variant
     // split-riadený (a teda vylúčený z produktovej cesty). LEFT JOINy
@@ -140,6 +146,10 @@ export async function selectChangedSupplierLinks(db: Database): Promise<Selected
 
   return {
     productKeys,
-    rows: rows.map((r) => ({ code: r.code, pairCode: r.pairCode ?? "", internalNote: r.internalNote })),
+    rows: rows.map((r) => ({
+      code: r.code,
+      pairCode: r.pairCode ?? "",
+      internalNote: setSupplierLinkInNote(r.existingNote, r.url),
+    })),
   };
 }

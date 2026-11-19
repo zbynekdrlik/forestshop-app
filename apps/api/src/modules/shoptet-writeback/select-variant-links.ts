@@ -1,6 +1,7 @@
 import { and, eq, isNull, lt, or } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
-import { pairingDecisions, pairingVariantLinks, variants } from "../../db/schema.js";
+import { pairingDecisions, pairingVariantLinks, products, variants } from "../../db/schema.js";
+import { setSupplierLinkInNote } from "../catalog/supplier-link.js";
 import type { WritebackRow } from "./csv.js";
 
 export interface SelectedVariantLinkWriteback {
@@ -39,9 +40,13 @@ export async function selectChangedVariantLinks(db: Database): Promise<SelectedV
       code: pairingVariantLinks.code,
       pairCode: variants.pairCode,
       url: pairingVariantLinks.url,
+      existingNote: products.internalNote,
     })
     .from(pairingVariantLinks)
     .innerJoin(variants, eq(variants.code, pairingVariantLinks.code))
+    // Rovnako ako `select-changes.ts`: zvyšok poznámky (katalóg ju drží na
+    // produkte, varianty ju zdieľajú) ostáva, mení sa LEN riadok s odkazom.
+    .innerJoin(products, eq(products.key, variants.productKey))
     .innerJoin(pairingDecisions, eq(pairingDecisions.productKey, variants.productKey))
     .where(
       and(
@@ -61,6 +66,10 @@ export async function selectChangedVariantLinks(db: Database): Promise<SelectedV
 
   return {
     codes: rows.map((r) => r.code),
-    rows: rows.map((r) => ({ code: r.code, pairCode: r.pairCode ?? "", internalNote: r.url })),
+    rows: rows.map((r) => ({
+      code: r.code,
+      pairCode: r.pairCode ?? "",
+      internalNote: setSupplierLinkInNote(r.existingNote, r.url),
+    })),
   };
 }
