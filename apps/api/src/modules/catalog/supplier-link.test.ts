@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extractSupplierLink } from "./supplier-link.js";
+import { extractSupplierLink, setSupplierLinkInNote } from "./supplier-link.js";
 
 // Tri tvary `internalNote` z reálneho exportu (issue 67) + hranice (prázdne,
 // biele znaky).
@@ -119,5 +119,74 @@ describe("extractSupplierLink", () => {
       url: "https://shop.example.com/a(b",
       note: "https://shop.example.com/a(b",
     });
+  });
+});
+
+// Poznámka smie niesť ľubovoľný text; odkaz na dodávateľa stojí sám na
+// vlastnom riadku (okolo prázdne riadky alebo iný text).
+describe("extractSupplierLink — odkaz na vlastnom riadku", () => {
+  it("text pred aj za odkazom, prázdne riadky okolo → vytiahne odkaz z jeho riadku", () => {
+    const note = "Objednávať cez e-mail.\n\nhttps://dodavatel.example/produkt\n\nCena bez DPH 12 €.";
+    expect(extractSupplierLink(note)).toEqual({ url: "https://dodavatel.example/produkt", note });
+  });
+
+  it("iný odkaz vnútri vety PRED riadkom s odkazom → vyhrá riadok s odkazom", () => {
+    const note = "Návod: https://vyrobca.example/navod.pdf\nhttps://dodavatel.example/produkt";
+    expect(extractSupplierLink(note).url).toBe("https://dodavatel.example/produkt");
+  });
+
+  it("medzery okolo odkazu na riadku a CRLF konce riadkov", () => {
+    const note = "Poznámka\r\n   https://dodavatel.example/produkt  \r\nĎalší text";
+    expect(extractSupplierLink(note).url).toBe("https://dodavatel.example/produkt");
+  });
+
+  it("viac riadkov s odkazom → prvý", () => {
+    expect(extractSupplierLink("https://a.example/1\nhttps://b.example/2").url).toBe("https://a.example/1");
+  });
+
+  it("koncová interpunkcia na riadku s odkazom sa oreže", () => {
+    expect(extractSupplierLink("Text\nhttps://dodavatel.example/produkt.\nText").url).toBe(
+      "https://dodavatel.example/produkt",
+    );
+  });
+
+  it("žiadny riadok s odkazom → staré správanie (prvý odkaz v texte)", () => {
+    expect(extractSupplierLink("Dodávateľ: Trigona - https://trigona.sk/c199\nďalší riadok").url).toBe(
+      "https://trigona.sk/c199",
+    );
+  });
+});
+
+describe("setSupplierLinkInNote", () => {
+  it("prázdna alebo null poznámka → iba odkaz", () => {
+    expect(setSupplierLinkInNote(null, "https://new.example/p")).toBe("https://new.example/p");
+    expect(setSupplierLinkInNote("  \n ", "https://new.example/p")).toBe("https://new.example/p");
+  });
+
+  it("holý odkaz → nahradí sa", () => {
+    expect(setSupplierLinkInNote("https://old.example/p", "https://new.example/p")).toBe("https://new.example/p");
+  });
+
+  it("text okolo riadku s odkazom ostáva presne taký, aký bol", () => {
+    const note = "Objednávať cez e-mail.\r\n\r\n  https://old.example/p  \r\n\r\nCena 12 €.";
+    expect(setSupplierLinkInNote(note, "https://new.example/p")).toBe(
+      "Objednávať cez e-mail.\r\n\r\nhttps://new.example/p\r\n\r\nCena 12 €.",
+    );
+  });
+
+  it("odkaz vo vete sa nemení; nový odkaz ide na nový riadok na koniec a pri čítaní vyhrá", () => {
+    const merged = setSupplierLinkInNote("Dodávateľ: X - https://old.example/p\n\n", "https://new.example/p");
+    expect(merged).toBe("Dodávateľ: X - https://old.example/p\nhttps://new.example/p");
+    expect(extractSupplierLink(merged).url).toBe("https://new.example/p");
+  });
+
+  it("text bez odkazu → odkaz sa pripojí na nový riadok", () => {
+    expect(setSupplierLinkInNote("Soxland", "https://new.example/p")).toBe("Soxland\nhttps://new.example/p");
+  });
+
+  it("odkaz so znakmi $ sa vloží doslovne (žiadne nahradzovacie vzory)", () => {
+    expect(setSupplierLinkInNote("A\nhttps://old.example/p\nB", "https://new.example/p?x=$1&y=$&")).toBe(
+      "A\nhttps://new.example/p?x=$1&y=$&\nB",
+    );
   });
 });

@@ -224,6 +224,17 @@ paths:
   produktu alebo variantu: over na reálnych dátach (`python3` + `csv.DictReader`
   nad `parovanie_produktov/data/backups/export_*.csv`, READ-ONLY), nikdy
   nehádaj z názvu stĺpca.
+- **`internalNote` smie niesť ĽUBOVOĽNÝ text — odkaz na dodávateľa je ten,
+  ktorý stojí SÁM na vlastnom riadku** (pred ním aj za ním prázdne riadky
+  alebo iný text). `extractSupplierLink` berie prvý taký riadok
+  (`OWN_LINE_URL_RE`), až bez neho prvý odkaz kdekoľvek (staré tvary
+  `Dodávateľ: X - https://...`). SQL náprotivok `supplierLinkFromTextSql`
+  (`orders/effective-supplier-link.ts`, `(?n)` riadkový režim) MUSÍ ostať
+  zhodný, inak sa rozíde kľúč `supplier_stock.link`. Zápis späť do Shoptetu
+  (`select-changes.ts`, `select-variant-links.ts`) posiela CELÚ poznámku
+  produktu, v ktorej `setSupplierLinkInNote` zmení LEN riadok s odkazom
+  (bez neho odkaz pripojí na nový riadok na koniec) — nikdy holý odkaz,
+  ktorý by zvyšok poznámky zmazal.
 - **Orezávanie koncovej interpunkcie z extrahovanej URL (`supplier-link.ts`)
   NESMIE orezať zatváraciu zátvorku naslepo — tá môže byť SÚČASŤOU samotnej
   URL** (issue 72: `https://shop.example.com/a_(b)` je reálny tvar URL, nie

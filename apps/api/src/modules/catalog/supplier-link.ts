@@ -10,6 +10,14 @@
 //  - holý odkaz (`https://www.huntingshop.eu/fairfax-fz-mikina`).
 //  - text s popisom OBSAHUJÚCI odkaz (`Dodávateľ: Trigona - https://trigona.sk/...`).
 //  - text BEZ odkazu, len poznámka (`Soxland`) — zobrazí sa ako obyčajný text.
+//
+// Poznámka smie niesť ĽUBOVOĽNÝ text (viac riadkov, iné odkazy). Odkaz na
+// dodávateľa je ten, ktorý stojí SÁM na vlastnom riadku (pred ním aj za ním
+// smú byť prázdne riadky alebo iný text) — `OWN_LINE_URL_RE`. Až keď taký
+// riadok nie je, platí pôvodné správanie: prvý odkaz kdekoľvek v texte
+// (`URL_RE`), aby staré poznámky tvaru `Dodávateľ: X - https://...` fungovali
+// ďalej. Zápis späť do Shoptetu (`setSupplierLinkInNote`) mení LEN tento
+// riadok, zvyšok poznámky ostáva.
 
 export interface SupplierLink {
   /** Extrahovaný odkaz, alebo `null`, keď v pôvodnom texte žiadny nie je. */
@@ -22,6 +30,12 @@ export interface SupplierLink {
 }
 
 const URL_RE = /https?:\/\/\S+/i;
+
+// Riadok, na ktorom je LEN odkaz (okolo neho iba medzery/tabulátory). `m` —
+// `^`/`$` platia na hraniciach riadkov (LF aj CRLF: `$` stojí aj pred `\r`).
+// Bez `/g`: berie sa PRVÝ taký riadok a objekt sa používa iba cez `exec`/
+// `replace` bez stavu `lastIndex`. SQL náprotivok: `effective-supplier-link.ts`.
+const OWN_LINE_URL_RE = /^[ \t]*(https?:\/\/\S+)[ \t]*$/im;
 
 // `internalNote` je ručne písaný voľný text (issue 70) — URL v ňom je bežne
 // nasledovaná koncovou interpunkciou ("...produkt.") alebo uzatvorená v
@@ -94,8 +108,24 @@ function trimTrailingPunctuation(candidate: string): string {
 export function extractSupplierLink(internalNote: string | null): SupplierLink {
   const raw = (internalNote ?? "").trim();
   if (raw === "") return { url: null, note: null };
-  const match = URL_RE.exec(raw);
-  if (match === null) return { url: null, note: raw };
-  const url = trimTrailingPunctuation(match[0]);
-  return { url, note: raw };
+  const ownLine = OWN_LINE_URL_RE.exec(raw);
+  const candidate = ownLine?.[1] ?? URL_RE.exec(raw)?.[0] ?? null;
+  if (candidate === null) return { url: null, note: raw };
+  return { url: trimTrailingPunctuation(candidate), note: raw };
+}
+
+/**
+ * Nová hodnota `internalNote` pri zápise odkazu `url` do Shoptetu: zvyšok
+ * poznámky ostáva presne taký, aký bol.
+ * - prázdna/`null` poznámka → iba `url`;
+ * - poznámka má riadok s odkazom (`OWN_LINE_URL_RE`) → nahradí sa LEN prvý
+ *   taký riadok;
+ * - inak → `url` sa pripojí na nový riadok na koniec (starý odkaz v texte,
+ *   ak nejaký je, ostáva ako text; pri čítaní vyhrá riadok s odkazom).
+ */
+export function setSupplierLinkInNote(existingNote: string | null, url: string): string {
+  const existing = existingNote ?? "";
+  if (existing.trim() === "") return url;
+  if (OWN_LINE_URL_RE.test(existing)) return existing.replace(OWN_LINE_URL_RE, () => url);
+  return `${existing.replace(/\s+$/, "")}\n${url}`;
 }

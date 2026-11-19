@@ -1,4 +1,4 @@
-import { sql, type SQL } from "drizzle-orm";
+import { sql, type SQL, type SQLWrapper } from "drizzle-orm";
 import { pairingDecisions, pairingVariantLinks, products, productSupplierLinkOverrides } from "../../db/schema.js";
 import { extractSupplierLink, type SupplierLink } from "../catalog/supplier-link.js";
 
@@ -39,7 +39,8 @@ export function resolveEffectiveSupplierLink(
 //   2. `product_supplier_link_override.url` — manažérov ručný odkaz z Vyhľadať
 //      (issue 239/240), braný DOSLOVNE (bez extrakcie/orezania), presne ako ho
 //      `collectSupplierLinks` zapíše do kľúča `supplier_stock.link`;
-//   3. prvá `http(s)://…` URL z `product.internal_note`.
+//   3. URL z `product.internal_note`: prvý riadok, na ktorom stojí LEN odkaz,
+//      inak prvá `http(s)://…` URL kdekoľvek (zhodné s `extractSupplierLink`).
 // Split linka aj `internal_note` sa extrahujú tým istým `substring`+orezaním
 // koncovej interpunkcie ako scraper (`supplier-link.ts`), aby sa kľúč na
 // `supplier_stock` nemohol rozísť. Override sa NEorezáva — je to čistá URL, nie
@@ -48,6 +49,12 @@ export function resolveEffectiveSupplierLink(
 // Tabuľky, na ktoré fragment odkazuje (`pairing_decision`, `pairing_variant_link`,
 // `product_supplier_link_override`, `product`), musia byť v JOIN zozname dopytu
 // PRED miestom použitia (v `restock` ON klauzule `supplier_stock` innerJoinu).
-const productLinkSql = sql<string>`trim(both from regexp_replace(substring(${products.internalNote} from 'https?://[^[:space:]]+'), '[.,;:)\\]]+$', ''))`;
-const variantLinkSql = sql<string>`trim(both from regexp_replace(substring(${pairingVariantLinks.url} from 'https?://[^[:space:]]+'), '[.,;:)\\]]+$', ''))`;
+// `(?n)` = riadkovo citlivý režim: `^`/`$` platia na hraniciach riadkov (JS
+// `OWN_LINE_URL_RE` s príznakom `m`); `[[:space:]]*$` pohltí aj `\r` z CRLF.
+// `substring` so zátvorkovou skupinou vráti obsah skupiny (samotný odkaz).
+function supplierLinkFromTextSql(text: SQLWrapper): SQL<string> {
+  return sql<string>`trim(both from regexp_replace(coalesce(substring(${text} from '(?n)^[[:blank:]]*(https?://[^[:space:]]+)[[:space:]]*$'), substring(${text} from 'https?://[^[:space:]]+')), '[.,;:)\\]]+$', ''))`;
+}
+const productLinkSql = supplierLinkFromTextSql(products.internalNote);
+const variantLinkSql = supplierLinkFromTextSql(pairingVariantLinks.url);
 export const effectiveSupplierLinkSql: SQL<string> = sql`coalesce(case when ${pairingDecisions.status} = 'split' then ${variantLinkSql} end, ${productSupplierLinkOverrides.url}, ${productLinkSql})`;
