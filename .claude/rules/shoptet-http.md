@@ -15,11 +15,14 @@ paths:
   temporarily blocked — … suspicious activity that looked like an attack“.**
   Okno ~04:15–08:00, 25. 10. ešte o 08:56. Spúšťač bol náš `shop-sitemap`
   (900 s sond každú noc, viď `shop-sitemap.md`), nie zmena našej prevádzky — Shoptet
-  21. 10. sprísnil prah. Skutočná stránka je fixtúra
+  21. 10. sprísnil prah. **Dôkaz (17.–20. 11. 2026):** po presune sitemapy na 08:35
+  sa blok posunul s ňou (začiatok 08:36–08:48, koniec ~12:30–13:00; stačilo ~15 jej
+  požiadaviek), pred ňou všetko bez bloku → sitemap 20. 11. ODSTRÁNENÝ. Hádanie adries
+  (sonda neexistujúcich stránok) Shoptet berie ako útok — nový fetcher nesmie
+  skúšať/hádať adresy na forestshop.sk. Skutočná stránka je fixtúra
   `modules/shoptet-http/fixtures/shoptet-block-page.html` (IP nahradená 203.0.113.7).
 - **KAŽDÝ HTTP fetcher na forestshop.sk ide cez `shoptetFetch(url, init, context)`
-  (`modules/shoptet-http/fetch.ts`), nikdy priamy `fetch()`.** Dnes: sitemap,
-  sonda kandidátov, feed `google.xml`, export katalógu, oba exporty objednávok.
+  (`modules/shoptet-http/fetch.ts`), nikdy priamy `fetch()`.** Dnes: feed `google.xml`, export katalógu, oba exporty objednávok.
   `shoptetFetch` (1) zmení blokovú stránku na `ShoptetBlockedError` so správou
   `shoptet_blocked: …` (bežnú 403/404 vráti nezmenenú — telo číta cez `clone()`,
   volajúci ho vie čítať ďalej), (2) započíta požiadavku do počítadla behu. URL sa

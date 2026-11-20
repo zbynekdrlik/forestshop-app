@@ -1,5 +1,7 @@
 import { pgEnum, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 
+// issue 598 (20. 11. 2026): job `shop-sitemap` je ODSTRÁNENÝ (spúšťal blok IP Shoptetom);
+// existujúce riadky `sitemap`/`probe` ostávajú, nové už nepribúdajú. Pôvodný popis nižšie.
 // issue 402: odkiaľ POCHÁDZA riadok — `feed` (google.xml, `shop-feed/
 // run.ts`) je AUTORITATÍVNY zdroj a smie prepísať čokoľvek; `sitemap`/
 // `probe` (`shop-sitemap/run.ts`) zapisuje LEN kódy, ktoré `feed` nepokrýva,

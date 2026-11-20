@@ -111,7 +111,7 @@ Per-area rules live in `.claude/rules/<area>.md` with `paths:` frontmatter.
 - Preprava DPD (#292 — per-zásielkový Playwright robot na dpdshipper.sk, appka-vlastný `dpd_shipment`/`dpd_pickup_request` záznam, náhľad pred odoslaním, fail-loud nedomapovaný formulár) → `.claude/rules/dpd.md`
 - Google kalendár — najbližšia udalosť (#309 — samostatný modul od `upozornenia` (žiadny dedupKey/resolve), krátkodobá in-memory cache namiesto scheduler jobu, node-ical proces-TZ past pri celodenných udalostiach) → `.claude/rules/calendar.md`
 - Profesionálne párovanie produktov (#387 E1+ — port starej appky @60b6164, rapidfuzz case-sensitive token_set_ratio, viac-kódová adaptácia, nahradilo `restock-links.md` v E8) → `.claude/rules/pairing-search.md`
-- Adresy z sitemapy + HTTP sonda (#402 — doplnok k shop-feed.md, byte-for-byte port url_resolver.py/resolve_urls.py, source stĺpec feed|sitemap|probe, karta vizuálne odlíši vyhľadávací fallback) → `.claude/rules/shop-sitemap.md`
+- Adresy z sitemapy + HTTP sonda (#402 — ODSTRÁNENÉ 20. 11. 2026 v #598, spúšťalo blok Shoptetu; ostali riadky source sitemap|probe) → `.claude/rules/shop-sitemap.md`
 - Eshop → Objednávky predajňa (#410 — nahradilo Shoptet-viazané #345 vlastnými zápismi z predajne, `floor_note`/`floor_note_product` kľúčované variant.code, zdieľaná Vyhľadať/shop_product_url cesta, vizuálne odlíšený náhradný odkaz ako #402) → `.claude/rules/floor-notes.md`
 - SLAVOSPORT → Úhrady (#543 — skeny FA bytea, popis on-blur, in-app confirm mazania) → `.claude/rules/uhrady.md`
 - Úlohy na dnes + hlasová poznámka (#342/#487/#519 — zdieľaný zoznam, bytea audio na riadku, Whisper prepis + audio-only fallback, MediaRecorder hook, mobil-vs-desktop čisto CSS) → `.claude/rules/daily-tasks.md`

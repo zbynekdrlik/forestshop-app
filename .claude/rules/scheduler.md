@@ -274,7 +274,9 @@ paths:
 
 - **Ranné okno bloku Shoptetu 04:00–08:30 (issue 598, ROZHODNUTÉ 16. 11. 2026):** denné joby,
   čo chodia na forestshop.sk alebo reťazia zápis do Shoptetu, v ňom nesmú štartovať —
-  `supplier-stock` 01:00 (reťazený restock ~03:00), `shop-sitemap` 08:35, `restock` fallback
-  08:40. `orders-import`/`catalog-import` (periodické) ostali, počas bloku ich drží ochranná
+  `supplier-stock` 01:00 (reťazený restock ~03:00), `restock` fallback 08:40. `shop-sitemap`
+  je od 20. 11. 2026 ODSTRÁNENÝ (možnosť 1 — blok sa posunul s ním na 08:36, bol spúšťačom);
+  jeho história v `job_run` ostáva, `listLatestJobRuns` ho skrýva cez `RETIRED_JOB_NAMES`
+  (rovnako treba pridať každý ďalší odstránený job, inak Plánovač navždy ukazuje jeho posledný beh). `orders-import`/`catalog-import` (periodické) ostali, počas bloku ich drží ochranná
   pauza (`shoptet-http.md`). Nový denný job dotýkajúci sa e-shopu pridaj aj do
   `jobs-morning-window.test.ts`.

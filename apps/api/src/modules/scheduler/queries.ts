@@ -1,4 +1,4 @@
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, notInArray } from "drizzle-orm";
 import type { Database } from "../../db/client.js";
 import { jobRuns } from "../../db/schema.js";
 
@@ -15,6 +15,11 @@ export interface JobRunSummary {
 // jeden riadok na úlohu, vždy jej NAJNOVŠÍ beh. Postgres-špecifické (celý
 // projekt beží výlučne na Postgrese, rovnaká voľba ako `pg_advisory_xact_lock`
 // inde v repe).
+// Joby odstránené z rozvrhu — ich história v `job_run` ostáva, no Plánovač
+// ich už neukazuje ako živé úlohy. `shop-sitemap`: issue 598 (20. 11. 2026),
+// spúšťal blok IP servera Shoptetom.
+const RETIRED_JOB_NAMES = ["shop-sitemap"];
+
 export async function listLatestJobRuns(db: Database): Promise<readonly JobRunSummary[]> {
   const rows = await db
     .selectDistinctOn([jobRuns.jobName], {
@@ -26,6 +31,7 @@ export async function listLatestJobRuns(db: Database): Promise<readonly JobRunSu
       errorMessage: jobRuns.errorMessage,
     })
     .from(jobRuns)
+    .where(notInArray(jobRuns.jobName, RETIRED_JOB_NAMES))
     .orderBy(jobRuns.jobName, desc(jobRuns.startedAt));
 
   return rows.map((row) => ({
