@@ -36,7 +36,6 @@ import { registerPostaUncollectedRoutes, type PostaUncollectedRunDeps } from "./
 import { registerProductLinksRoutes } from "./product-links-routes.js";
 import { registerProductDetailRoutes } from "./product-detail-routes.js";
 import { registerSearchRoutes } from "./search-routes.js";
-import { registerShopSitemapRoutes } from "./shop-sitemap-routes.js";
 import type { PageFetcher, PageFetchResult } from "../modules/supplier-stock/page-fetcher.js";
 import { registerSupplierStockRoutes } from "./supplier-stock-routes.js";
 import { registerRestockRoutes, type RestockRunDeps } from "./restock-routes.js";
@@ -243,7 +242,6 @@ export function createApp(
   registerPairingSearchRoutes(app, db);
   // issue 402: "Adresy z sitemapy + HTTP sonda" — doplnok `shop-feed`u,
   // žiadne prihlasovacie údaje (verejná sitemapa + sonda VLASTNÉHO webu).
-  registerShopSitemapRoutes(app, db);
   // issue 387 E5: "Eshop → Párovanie" — LEN čítanie nad tým, čo E3/E4
   // zozbierali/overili (karty + filtre). Rozhodnutia (E6) ešte neexistujú —
   // žiadna zapisovacia trasa tu, samostatné od `registerPairingRoutes`

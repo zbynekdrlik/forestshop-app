@@ -27,7 +27,6 @@ import {
   orderReminderJob,
   pairingSearchJob,
   shopFeedJob,
-  shopSitemapJob,
   supplierStockJob,
   restockJob,
   buildRestockAfterSupplierStock,
@@ -41,7 +40,6 @@ import { runPairingSearch } from "./modules/pairing-search/run.js";
 import { DEFAULT_SHOP_FEED_URL } from "./modules/shop-feed/constants.js";
 import { createHttpShopFeedFetcher } from "./modules/shop-feed/fetcher.js";
 import { runShopFeed } from "./modules/shop-feed/run.js";
-import { runShopSitemap } from "./modules/shop-sitemap/run.js";
 import { fetchSupplierPage } from "./modules/supplier-stock/page-fetcher.js";
 import { runSupplierStock } from "./modules/supplier-stock/run.js";
 import { runRestock, runRestockLocked } from "./modules/restock/run.js";
@@ -348,7 +346,6 @@ const scheduler = startScheduler(db, [
   postaUncollectedJob((db2, now) => runPostaUncollected({ db: db2, now, ...postaUncollectedDeps })),
   orderReminderJob((db2, now) => runOrderReminder({ db: db2, now, ...orderReminderDeps })),
   shopFeedJob((db2, now) => runShopFeed({ db: db2, now, fetchFeed: fetchShopFeed })),
-  shopSitemapJob((db2, now) => runShopSitemap({ db: db2, now })),
   // issue 561: supplier-stock po úspechu REŤAZÍ restock (aby prepnutie
   // Vypredané → Skladom bežalo nad ČERSTVÝMI dátami z tejto noci, nie 24 h
   // staré — celý beh od #552 trvá > 2 h, takže pevný slot 04:50 bežal nad

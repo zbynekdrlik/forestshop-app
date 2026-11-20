@@ -125,3 +125,17 @@ it("dva súbežné tick() volania sa navzájom serializujú cez pg_advisory_xact
     await lockHolder.end();
   }
 });
+
+// issue 598 (ROZHODNUTÉ 20. 11. 2026): odstránený job `shop-sitemap` má v
+// `job_run` históriu — Plánovač ho nesmie ďalej ukazovať ako živú úlohu.
+it("listLatestJobRuns neukazuje odstránený job shop-sitemap", async () => {
+  const ctx = await withCleanDb();
+  close = ctx.close;
+  await ctx.db.insert(jobRuns).values([
+    { jobName: "shop-sitemap", startedAt: NOW, finishedAt: NOW, status: "success", detail: {} },
+    { jobName: "shop-feed", startedAt: NOW, finishedAt: NOW, status: "success", detail: {} },
+  ]);
+
+  const names = (await listLatestJobRuns(ctx.db)).map((r) => r.jobName);
+  expect(names).toEqual(["shop-feed"]);
+});
